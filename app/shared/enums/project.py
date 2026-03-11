@@ -47,3 +47,17 @@ class UnitType(str, Enum):
     RETAIL = "retail"
     OFFICE = "office"
     PENTHOUSE = "penthouse"
+
+
+class LandParcelStatus(str, Enum):
+    DRAFT = "draft"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    ARCHIVED = "archived"
+
+
+class LandScenarioType(str, Enum):
+    BASE = "base"
+    UPSIDE = "upside"
+    DOWNSIDE = "downside"
+    INVESTOR = "investor"

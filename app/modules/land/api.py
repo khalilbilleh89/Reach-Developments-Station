@@ -1,8 +1,119 @@
 """
-land.api module.
+land.api
 
-To be implemented. See:
-- docs/02-product/module-scope-mvp.md
-- docs/03-technical/backend-architecture.md
-- docs/01-domain/
+CRUD API router for the Land Underwriting domain.
+Endpoints for LandParcel, LandAssumptions, and LandValuation.
 """
+
+from typing import Annotated, List, Optional
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_db
+from app.modules.land.schemas import (
+    LandAssumptionCreate,
+    LandAssumptionResponse,
+    LandParcelCreate,
+    LandParcelList,
+    LandParcelResponse,
+    LandParcelUpdate,
+    LandValuationCreate,
+    LandValuationResponse,
+)
+from app.modules.land.service import LandService
+
+router = APIRouter(prefix="/land", tags=["land"])
+
+
+def get_service(db: Session = Depends(get_db)) -> LandService:
+    return LandService(db)
+
+
+# ---------------------------------------------------------------------------
+# Parcel endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/parcels", response_model=LandParcelResponse, status_code=201)
+def create_parcel(
+    data: LandParcelCreate,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandParcelResponse:
+    """Create a new land parcel."""
+    return service.create_parcel(data)
+
+
+@router.get("/parcels", response_model=LandParcelList)
+def list_parcels(
+    service: Annotated[LandService, Depends(get_service)],
+    project_id: Optional[str] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> LandParcelList:
+    """List land parcels, optionally filtered by project."""
+    return service.list_parcels(project_id=project_id, skip=skip, limit=limit)
+
+
+@router.get("/parcels/{parcel_id}", response_model=LandParcelResponse)
+def get_parcel(
+    parcel_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandParcelResponse:
+    """Get a land parcel by ID."""
+    return service.get_parcel(parcel_id)
+
+
+@router.patch("/parcels/{parcel_id}", response_model=LandParcelResponse)
+def update_parcel(
+    parcel_id: str,
+    data: LandParcelUpdate,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandParcelResponse:
+    """Update a land parcel."""
+    return service.update_parcel(parcel_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Assumptions endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/parcels/{parcel_id}/assumptions", response_model=LandAssumptionResponse, status_code=201)
+def create_assumptions(
+    parcel_id: str,
+    data: LandAssumptionCreate,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandAssumptionResponse:
+    """Add development assumptions to a land parcel."""
+    return service.create_assumptions(parcel_id, data)
+
+
+@router.get("/parcels/{parcel_id}/assumptions", response_model=List[LandAssumptionResponse])
+def get_assumptions(
+    parcel_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> List[LandAssumptionResponse]:
+    """Get all development assumptions for a land parcel."""
+    return service.get_assumptions(parcel_id)
+
+
+# ---------------------------------------------------------------------------
+# Valuation endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/parcels/{parcel_id}/valuations", response_model=LandValuationResponse, status_code=201)
+def create_valuation(
+    parcel_id: str,
+    data: LandValuationCreate,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandValuationResponse:
+    """Create a valuation scenario for a land parcel."""
+    return service.create_valuation(parcel_id, data)
+
+
+@router.get("/parcels/{parcel_id}/valuations", response_model=List[LandValuationResponse])
+def list_valuations(
+    parcel_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> List[LandValuationResponse]:
+    """List all valuation scenarios for a land parcel."""
+    return service.list_valuations(parcel_id)
