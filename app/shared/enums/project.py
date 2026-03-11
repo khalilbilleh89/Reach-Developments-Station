@@ -16,6 +16,19 @@ class PhaseStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class BuildingStatus(str, Enum):
+    PLANNED = "planned"
+    UNDER_CONSTRUCTION = "under_construction"
+    COMPLETED = "completed"
+    ON_HOLD = "on_hold"
+
+
+class FloorStatus(str, Enum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+
+
 class UnitStatus(str, Enum):
     AVAILABLE = "available"
     RESERVED = "reserved"
