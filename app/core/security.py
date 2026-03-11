@@ -1,5 +1,7 @@
 """
 Core security module.
 
-To be implemented. See docs/03-technical/backend-architecture.md for structure.
+Reserved for future authentication, JWT, and RBAC implementation.
+Auth middleware, token handling, and permission resolution will be added
+in a later PR once the security requirements are finalized.
 """
