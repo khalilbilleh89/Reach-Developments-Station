@@ -193,6 +193,38 @@ def test_update_reservation(client: TestClient):
     assert resp.json()["expiry_date"] == "2026-05-01"
 
 
+def test_reservation_date_fields_are_iso_strings_in_response(client: TestClient):
+    """Date fields must serialize as ISO date strings (YYYY-MM-DD) in JSON responses."""
+    _, unit_id = _create_priced_unit(client, "PRJ-RDSER")
+    buyer_id = _create_buyer(client, "rdser@example.com")
+
+    resp = client.post(
+        "/api/v1/sales/reservations",
+        json={"unit_id": unit_id, "buyer_id": buyer_id, **_RESERVATION_DATES},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["reservation_date"] == "2026-03-13"
+    assert data["expiry_date"] == "2026-04-13"
+
+
+def test_reservation_invalid_date_range_returns_422(client: TestClient):
+    """expiry_date before reservation_date must be rejected with 422."""
+    _, unit_id = _create_priced_unit(client, "PRJ-INVDT")
+    buyer_id = _create_buyer(client, "invdt@example.com")
+
+    resp = client.post(
+        "/api/v1/sales/reservations",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "reservation_date": "2026-04-01",
+            "expiry_date": "2026-03-01",  # before reservation_date
+        },
+    )
+    assert resp.status_code == 422
+
+
 def test_cancel_reservation(client: TestClient):
     _, unit_id = _create_priced_unit(client, "PRJ-CXRES")
     buyer_id = _create_buyer(client, "cxres@example.com")
@@ -230,6 +262,8 @@ def test_create_contract(client: TestClient):
     assert data["unit_id"] == unit_id
     assert data["contract_price"] == pytest.approx(500_000.0)
     assert data["status"] == "draft"
+    # contract_date must serialize as ISO date string
+    assert data["contract_date"] == "2026-03-13"
 
 
 def test_create_contract_invalid_unit_returns_404(client: TestClient):
@@ -287,6 +321,9 @@ def test_duplicate_active_contract_returns_409(client: TestClient):
         },
     )
     assert resp.status_code == 409
+    # Error message must mention the actual blocking statuses
+    detail = resp.json()["detail"].lower()
+    assert "draft" in detail or "active" in detail
 
 
 def test_get_contract(client: TestClient):

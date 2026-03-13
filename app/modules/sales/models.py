@@ -4,9 +4,10 @@ sales.models
 ORM models for the Sales domain: Buyer, Reservation, SalesContract.
 """
 
+from datetime import date
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import Date, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -52,8 +53,8 @@ class Reservation(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    reservation_date: Mapped[str] = mapped_column(String(30), nullable=False)
-    expiry_date: Mapped[str] = mapped_column(String(30), nullable=False)
+    reservation_date: Mapped[date] = mapped_column(Date, nullable=False)
+    expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -70,7 +71,7 @@ class Reservation(Base, TimestampMixin):
 class SalesContract(Base, TimestampMixin):
     """Formal sale commitment for a unit.
 
-    Only one active contract per unit is allowed at any time.
+    Only one draft-or-active contract per unit is allowed at any time.
     """
 
     __tablename__ = "sales_contracts"
@@ -91,10 +92,10 @@ class SalesContract(Base, TimestampMixin):
         String(36),
         ForeignKey("reservations.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
+        unique=True,
     )
     contract_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    contract_date: Mapped[str] = mapped_column(String(30), nullable=False)
+    contract_date: Mapped[date] = mapped_column(Date, nullable=False)
     contract_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     status: Mapped[str] = mapped_column(
         String(50),

@@ -4,10 +4,10 @@ sales.schemas
 Pydantic request/response schemas for buyers, reservations, and sales contracts.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.shared.enums.sales import ContractStatus, ReservationStatus
 
@@ -57,13 +57,19 @@ class BuyerListResponse(BaseModel):
 class ReservationCreate(BaseModel):
     unit_id: str
     buyer_id: str
-    reservation_date: str = Field(..., description="ISO date string, e.g. 2026-03-13")
-    expiry_date: str = Field(..., description="ISO date string, e.g. 2026-04-13")
+    reservation_date: date
+    expiry_date: date
     notes: Optional[str] = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def expiry_not_before_reservation(self) -> "ReservationCreate":
+        if self.expiry_date < self.reservation_date:
+            raise ValueError("expiry_date must be on or after reservation_date")
+        return self
 
 
 class ReservationUpdate(BaseModel):
-    expiry_date: Optional[str] = None
+    expiry_date: Optional[date] = None
     notes: Optional[str] = Field(default=None, max_length=1000)
 
 
@@ -71,8 +77,8 @@ class ReservationResponse(BaseModel):
     id: str
     unit_id: str
     buyer_id: str
-    reservation_date: str
-    expiry_date: str
+    reservation_date: date
+    expiry_date: date
     status: ReservationStatus
     notes: Optional[str]
     created_at: datetime
@@ -95,13 +101,13 @@ class SalesContractCreate(BaseModel):
     buyer_id: str
     reservation_id: Optional[str] = None
     contract_number: str = Field(..., min_length=1, max_length=100)
-    contract_date: str = Field(..., description="ISO date string, e.g. 2026-03-13")
+    contract_date: date
     contract_price: float = Field(..., gt=0)
     notes: Optional[str] = Field(default=None, max_length=1000)
 
 
 class SalesContractUpdate(BaseModel):
-    contract_date: Optional[str] = None
+    contract_date: Optional[date] = None
     contract_price: Optional[float] = Field(default=None, gt=0)
     notes: Optional[str] = Field(default=None, max_length=1000)
 
@@ -112,7 +118,7 @@ class SalesContractResponse(BaseModel):
     buyer_id: str
     reservation_id: Optional[str]
     contract_number: str
-    contract_date: str
+    contract_date: date
     contract_price: float
     status: ContractStatus
     notes: Optional[str]

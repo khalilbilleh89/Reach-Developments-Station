@@ -8,6 +8,16 @@ Creates the sales domain persistence layer:
   buyers
   reservations
   sales_contracts
+
+DB-level integrity notes:
+  - reservations.unit_id has a PostgreSQL partial unique index (WHERE status = 'active')
+    to prevent concurrent duplicate active reservations at the DB layer.
+  - sales_contracts.unit_id has a PostgreSQL partial unique index
+    (WHERE status IN ('draft', 'active')) to prevent concurrent open contracts at the DB layer.
+  - sales_contracts.reservation_id is nullable-unique to enforce the one-to-one
+    reservation→contract relationship.
+  These partial indexes are PostgreSQL-only and not enforced by SQLite (used in tests);
+  service-layer checks cover all environments.
 """
 
 from typing import Sequence, Union
@@ -51,8 +61,8 @@ def upgrade() -> None:
             sa.ForeignKey("buyers.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("reservation_date", sa.String(30), nullable=False),
-        sa.Column("expiry_date", sa.String(30), nullable=False),
+        sa.Column("reservation_date", sa.Date, nullable=False),
+        sa.Column("expiry_date", sa.Date, nullable=False),
         sa.Column("status", sa.String(50), nullable=False),
         sa.Column("notes", sa.String(1000), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -81,9 +91,10 @@ def upgrade() -> None:
             sa.String(36),
             sa.ForeignKey("reservations.id", ondelete="SET NULL"),
             nullable=True,
+            unique=True,
         ),
         sa.Column("contract_number", sa.String(100), nullable=False, unique=True),
-        sa.Column("contract_date", sa.String(30), nullable=False),
+        sa.Column("contract_date", sa.Date, nullable=False),
         sa.Column("contract_price", sa.Numeric(14, 2), nullable=False),
         sa.Column("status", sa.String(50), nullable=False),
         sa.Column("notes", sa.String(1000), nullable=True),
@@ -92,11 +103,34 @@ def upgrade() -> None:
     )
     op.create_index("ix_sales_contracts_unit_id", "sales_contracts", ["unit_id"])
     op.create_index("ix_sales_contracts_buyer_id", "sales_contracts", ["buyer_id"])
-    op.create_index("ix_sales_contracts_reservation_id", "sales_contracts", ["reservation_id"])
+
+    # PostgreSQL-only: enforce one active reservation per unit at the DB level.
+    # Prevents concurrent requests from bypassing the service-layer check.
+    # Not enforced by SQLite (tests rely on service-layer checks in that environment).
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "uq_reservations_active_unit_id",
+            "reservations",
+            ["unit_id"],
+            unique=True,
+            postgresql_where=sa.text("status = 'active'"),
+        )
+        op.create_index(
+            "uq_sales_contracts_open_unit_id",
+            "sales_contracts",
+            ["unit_id"],
+            unique=True,
+            postgresql_where=sa.text("status IN ('draft', 'active')"),
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_sales_contracts_reservation_id", table_name="sales_contracts")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.drop_index("uq_sales_contracts_open_unit_id", table_name="sales_contracts")
+        op.drop_index("uq_reservations_active_unit_id", table_name="reservations")
+
     op.drop_index("ix_sales_contracts_buyer_id", table_name="sales_contracts")
     op.drop_index("ix_sales_contracts_unit_id", table_name="sales_contracts")
     op.drop_table("sales_contracts")

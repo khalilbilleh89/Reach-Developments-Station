@@ -153,15 +153,16 @@ class SalesService:
                 detail=f"Contract number '{data.contract_number}' is already in use.",
             )
 
-        # Block if an active contract already exists for this unit
-        active_contract = self.contract_repo.get_active_by_unit(data.unit_id)
-        if active_contract:
+        # Block if a draft or active contract already exists for this unit
+        open_contract = self.contract_repo.get_open_by_unit(data.unit_id)
+        if open_contract:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Unit '{data.unit_id}' already has an active contract.",
+                detail=f"Unit '{data.unit_id}' already has a contract in 'draft' or 'active' status.",
             )
 
-        # If a reservation_id is supplied, validate and convert it
+        # If a reservation_id is supplied, validate it before touching anything
+        reservation = None
         if data.reservation_id:
             reservation = self._require_reservation(data.reservation_id)
             if reservation.unit_id != data.unit_id:
@@ -181,12 +182,13 @@ class SalesService:
                            f"and cannot be converted to a contract.",
                 )
 
-        contract = self.contract_repo.create(data)
-
-        # Mark the linked reservation as converted
-        if data.reservation_id:
+        # Atomic: create contract and convert reservation in a single commit
+        contract = SalesContract(**data.model_dump())
+        self._db.add(contract)
+        if reservation is not None:
             reservation.status = ReservationStatus.CONVERTED.value
-            self.reservation_repo.save(reservation)
+        self._db.commit()
+        self._db.refresh(contract)
 
         return SalesContractResponse.model_validate(contract)
 

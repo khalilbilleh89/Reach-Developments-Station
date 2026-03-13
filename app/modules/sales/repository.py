@@ -157,8 +157,8 @@ class SalesContractRepository:
             query = query.filter(SalesContract.buyer_id == buyer_id)
         return query.count()
 
-    def get_active_by_unit(self, unit_id: str) -> Optional[SalesContract]:
-        """Return the active contract for a unit, if any."""
+    def get_open_by_unit(self, unit_id: str) -> Optional[SalesContract]:
+        """Return the open (draft or active) contract for a unit, if any."""
         return (
             self.db.query(SalesContract)
             .filter(

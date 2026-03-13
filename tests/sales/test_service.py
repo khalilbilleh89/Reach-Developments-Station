@@ -5,6 +5,7 @@ Validates business rules for buyer, reservation, and contract workflows.
 """
 
 import pytest
+from datetime import date
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -79,14 +80,19 @@ def _make_buyer(db: Session, email: str = "buyer@example.com") -> str:
     return buyer.id
 
 
+_RES_DATE = date(2026, 3, 13)
+_EXP_DATE = date(2026, 4, 13)
+
 _RESERVATION_DATES = {
-    "reservation_date": "2026-03-13",
-    "expiry_date": "2026-04-13",
+    "reservation_date": _RES_DATE,
+    "expiry_date": _EXP_DATE,
 }
+
+_CONTRACT_DATE = date(2026, 3, 13)
 
 _CONTRACT_BASE = {
     "contract_number": "CNT-001",
-    "contract_date": "2026-03-13",
+    "contract_date": _CONTRACT_DATE,
     "contract_price": 500_000.0,
 }
 
@@ -145,6 +151,33 @@ def test_create_reservation(db_session: Session):
     assert res.unit_id == unit_id
     assert res.buyer_id == buyer_id
     assert res.status == ReservationStatus.ACTIVE
+    assert res.reservation_date == _RES_DATE
+    assert res.expiry_date == _EXP_DATE
+
+
+def test_reservation_date_types_are_date(db_session: Session):
+    """Reservation date fields must be date objects, not strings."""
+    unit_id = _make_unit(db_session, "PRJ-RDTYPE")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "rdtype@example.com")
+
+    svc = SalesService(db_session)
+    res = svc.create_reservation(
+        ReservationCreate(unit_id=unit_id, buyer_id=buyer_id, **_RESERVATION_DATES)
+    )
+    assert isinstance(res.reservation_date, date)
+    assert isinstance(res.expiry_date, date)
+
+
+def test_reservation_invalid_date_range_raises(db_session: Session):
+    """expiry_date before reservation_date must be rejected at schema level."""
+    with pytest.raises(Exception):
+        ReservationCreate(
+            unit_id="any",
+            buyer_id="any",
+            reservation_date=date(2026, 4, 1),
+            expiry_date=date(2026, 3, 1),  # earlier than reservation_date
+        )
 
 
 def test_reserve_unit_without_pricing_raises_422(db_session: Session):
@@ -255,6 +288,20 @@ def test_create_contract_directly(db_session: Session):
     assert contract.buyer_id == buyer_id
     assert contract.contract_price == pytest.approx(500_000.0)
     assert contract.status == ContractStatus.DRAFT
+    assert isinstance(contract.contract_date, date)
+    assert contract.contract_date == _CONTRACT_DATE
+
+
+def test_contract_date_type_is_date(db_session: Session):
+    """contract_date must be a date object in the response."""
+    unit_id = _make_unit(db_session, "PRJ-CDTYPE")
+    buyer_id = _make_buyer(db_session, "cdtype@example.com")
+
+    svc = SalesService(db_session)
+    contract = svc.create_contract(
+        SalesContractCreate(unit_id=unit_id, buyer_id=buyer_id, **_CONTRACT_BASE)
+    )
+    assert isinstance(contract.contract_date, date)
 
 
 def test_duplicate_active_contract_blocked(db_session: Session):
@@ -271,11 +318,13 @@ def test_duplicate_active_contract_blocked(db_session: Session):
                 unit_id=unit_id,
                 buyer_id=buyer_id,
                 contract_number="CNT-002",
-                contract_date="2026-03-14",
+                contract_date=date(2026, 3, 14),
                 contract_price=500_000.0,
             )
         )
     assert exc_info.value.status_code == 409
+    # Confirm error message reflects the actual rule
+    assert "draft" in exc_info.value.detail.lower() or "active" in exc_info.value.detail.lower()
 
 
 def test_duplicate_contract_number_blocked(db_session: Session):
@@ -338,6 +387,72 @@ def test_create_contract_from_reservation(db_session: Session):
     assert updated_res.status == ReservationStatus.CONVERTED
 
 
+def test_conversion_is_atomic(db_session: Session):
+    """After a successful conversion, reservation must be CONVERTED — never left as active."""
+    unit_id = _make_unit(db_session, "PRJ-ATOMIC")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "atomic@example.com")
+
+    svc = SalesService(db_session)
+    res = svc.create_reservation(
+        ReservationCreate(unit_id=unit_id, buyer_id=buyer_id, **_RESERVATION_DATES)
+    )
+    contract = svc.create_contract(
+        SalesContractCreate(
+            unit_id=unit_id,
+            buyer_id=buyer_id,
+            reservation_id=res.id,
+            **_CONTRACT_BASE,
+        )
+    )
+    # Both changes committed — contract exists and reservation is converted
+    assert contract.id
+    updated_res = svc.get_reservation(res.id)
+    assert updated_res.status == ReservationStatus.CONVERTED
+    # The unit must not have another active reservation (conversion freed it from that state)
+    assert svc.reservation_repo.get_active_by_unit(unit_id) is None
+
+
+def test_reservation_id_cannot_back_two_contracts(db_session: Session):
+    """A converted reservation must not be linkable to a second contract."""
+    unit_id = _make_unit(db_session, "PRJ-RESDUP")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "resdup@example.com")
+
+    svc = SalesService(db_session)
+    res = svc.create_reservation(
+        ReservationCreate(unit_id=unit_id, buyer_id=buyer_id, **_RESERVATION_DATES)
+    )
+    # First contract converts the reservation
+    first_contract = svc.create_contract(
+        SalesContractCreate(
+            unit_id=unit_id,
+            buyer_id=buyer_id,
+            reservation_id=res.id,
+            contract_number="CNT-RESDUP-1",
+            contract_date=_CONTRACT_DATE,
+            contract_price=500_000.0,
+        )
+    )
+    # Cancel first contract so the unit is no longer blocked by an open contract
+    svc.cancel_contract(first_contract.id)
+
+    # Now try linking the same (already-converted) reservation to a second contract:
+    # blocked because reservation status is 'converted', not 'active' → 409
+    with pytest.raises(HTTPException) as exc_info:
+        svc.create_contract(
+            SalesContractCreate(
+                unit_id=unit_id,
+                buyer_id=buyer_id,
+                reservation_id=res.id,
+                contract_number="CNT-RESDUP-2",
+                contract_date=_CONTRACT_DATE,
+                contract_price=500_000.0,
+            )
+        )
+    assert exc_info.value.status_code == 409
+
+
 def test_convert_reservation_endpoint(db_session: Session):
     unit_id = _make_unit(db_session, "PRJ-CVRE")
     _set_pricing(db_session, unit_id)
@@ -354,7 +469,7 @@ def test_convert_reservation_endpoint(db_session: Session):
             buyer_id=buyer_id,
             reservation_id=res.id,
             contract_number="CNT-CONV",
-            contract_date="2026-03-15",
+            contract_date=date(2026, 3, 15),
             contract_price=450_000.0,
         ),
     )
