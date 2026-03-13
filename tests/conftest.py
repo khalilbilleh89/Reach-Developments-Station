@@ -22,6 +22,7 @@ import app.modules.units.models  # noqa: F401
 import app.modules.land.models  # noqa: F401
 import app.modules.feasibility.models  # noqa: F401
 import app.modules.pricing.models  # noqa: F401
+import app.modules.sales.models  # noqa: F401
 
 from app.main import app
 
