@@ -15,6 +15,7 @@ from app.db.base import Base, TimestampMixin
 from app.shared.enums.project import ProjectStatus
 
 if TYPE_CHECKING:
+    from app.modules.land.models import LandParcel
     from app.modules.phases.models import Phase
 
 
@@ -34,3 +35,4 @@ class Project(Base, TimestampMixin):
     )
 
     phases: Mapped[List["Phase"]] = relationship("Phase", back_populates="project", cascade="all, delete-orphan")
+    parcels: Mapped[List["LandParcel"]] = relationship("LandParcel", back_populates="project", cascade="all, delete-orphan")
