@@ -86,6 +86,20 @@ class PaymentScheduleRepository:
             .all()
         )
 
+    def replace_for_contract(self, contract_id: str, rows: List[dict]) -> None:
+        """Atomically delete existing schedule rows and insert new rows.
+
+        Both operations share the same transaction; the commit only happens
+        after the inserts succeed, so the contract is never left without a
+        schedule due to a mid-operation failure.
+        """
+        self.db.query(PaymentSchedule).filter(
+            PaymentSchedule.contract_id == contract_id
+        ).delete()
+        if rows:
+            self.db.bulk_save_objects([PaymentSchedule(**row) for row in rows])
+        self.db.commit()
+
     def delete_by_contract(self, contract_id: str) -> None:
         """Remove all schedule rows for a contract (used during regeneration)."""
         self.db.query(PaymentSchedule).filter(

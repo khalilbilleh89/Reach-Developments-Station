@@ -13,7 +13,7 @@ PaymentSchedule — individual installment lines generated from a template for
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Boolean, Integer
+from sqlalchemy import Date, ForeignKey, Numeric, String, Boolean, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -51,6 +51,13 @@ class PaymentSchedule(Base, TimestampMixin):
     """Single installment line generated for a specific contract."""
 
     __tablename__ = "payment_schedules"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_id",
+            "installment_number",
+            name="uq_payment_schedules_contract_installment",
+        ),
+    )
 
     contract_id: Mapped[str] = mapped_column(
         String(36),

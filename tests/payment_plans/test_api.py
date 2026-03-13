@@ -382,3 +382,124 @@ def test_regenerate_schedule_mismatched_contract_id_returns_400(client: TestClie
         },
     )
     assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests: duplicate generation, safe regeneration, plan type, allocation
+# ---------------------------------------------------------------------------
+
+
+def test_generate_returns_409_if_schedule_already_exists(client: TestClient):
+    """Second call to generate for the same contract must return 409."""
+    contract_id = _create_contract(
+        client, "PRJ-DUP-API", 500_000.0, "CNT-DUP-001", "dup@test.com"
+    )
+    template_id = _create_template(client)
+
+    payload = {
+        "contract_id": contract_id,
+        "template_id": template_id,
+        "start_date": "2026-01-01",
+    }
+    first = client.post("/api/v1/payment-plans/generate", json=payload)
+    assert first.status_code == 201
+
+    second = client.post("/api/v1/payment-plans/generate", json=payload)
+    assert second.status_code == 409
+    detail = second.json()["detail"].lower()
+    assert "already" in detail or "regenerate" in detail
+
+
+def test_create_template_unsupported_plan_type_returns_422(client: TestClient):
+    """Creating a template with an unsupported plan type must return 422."""
+    payload = {**_TEMPLATE_PAYLOAD, "plan_type": "milestone"}
+    resp = client.post("/api/v1/payment-plans/templates", json=payload)
+    assert resp.status_code == 422
+
+
+def test_create_template_post_handover_plan_type_returns_422(client: TestClient):
+    """post_handover plan type is not yet implemented — must return 422."""
+    payload = {**_TEMPLATE_PAYLOAD, "plan_type": "post_handover"}
+    resp = client.post("/api/v1/payment-plans/templates", json=payload)
+    assert resp.status_code == 422
+
+
+def test_create_template_custom_plan_type_returns_422(client: TestClient):
+    """custom plan type is not yet implemented — must return 422."""
+    payload = {**_TEMPLATE_PAYLOAD, "plan_type": "custom"}
+    resp = client.post("/api/v1/payment-plans/templates", json=payload)
+    assert resp.status_code == 422
+
+
+def test_update_template_unsupported_plan_type_returns_422(client: TestClient):
+    """Patching plan_type to an unsupported value must return 422."""
+    template_id = _create_template(client)
+    resp = client.patch(
+        f"/api/v1/payment-plans/templates/{template_id}",
+        json={"plan_type": "milestone"},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_template_invalid_allocation_both_fields_returns_422(client: TestClient):
+    """Both percent fields in the PATCH payload totalling > 100 must return 422."""
+    template_id = _create_template(client)
+    resp = client.patch(
+        f"/api/v1/payment-plans/templates/{template_id}",
+        json={"down_payment_percent": 70.0, "handover_percent": 40.0},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_template_invalid_merged_allocation_returns_422(client: TestClient):
+    """Updating only handover when existing down_payment pushes total > 100 must return 422."""
+    # Create template with 70% down payment
+    template_id = _create_template(
+        client,
+        {
+            "name": "High Down API",
+            "down_payment_percent": 70.0,
+            "number_of_installments": 6,
+            "installment_frequency": "monthly",
+        },
+    )
+    # Patch handover to 40%; merged total = 70 + 40 = 110 → invalid
+    resp = client.patch(
+        f"/api/v1/payment-plans/templates/{template_id}",
+        json={"handover_percent": 40.0},
+    )
+    assert resp.status_code == 422
+
+
+def test_regenerate_preserves_schedule_on_invalid_template(client: TestClient):
+    """If regeneration fails, the original schedule must remain intact."""
+    contract_id = _create_contract(
+        client, "PRJ-SAFE-API", 500_000.0, "CNT-SAFE-001", "safe@test.com"
+    )
+    template_id = _create_template(client)
+
+    client.post(
+        "/api/v1/payment-plans/generate",
+        json={
+            "contract_id": contract_id,
+            "template_id": template_id,
+            "start_date": "2026-01-01",
+        },
+    )
+    original = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/schedule").json()
+    original_total = original["total"]
+
+    # Attempt regeneration with a non-existent template → 404
+    resp = client.post(
+        f"/api/v1/payment-plans/contracts/{contract_id}/regenerate",
+        json={
+            "contract_id": contract_id,
+            "template_id": "no-such-template",
+        },
+    )
+    assert resp.status_code == 404
+
+    # Original schedule must still be intact
+    after = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/schedule").json()
+    assert after["total"] == original_total
+    assert abs(after["total_due"] - 500_000.0) < 0.02

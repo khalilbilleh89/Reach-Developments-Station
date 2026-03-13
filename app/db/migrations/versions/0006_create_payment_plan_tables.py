@@ -14,6 +14,11 @@ Indexes
   payment_schedules.due_date    — cashflow ordering
   payment_schedules.status      — filtering by schedule status
 
+Unique constraints
+------------------
+  (contract_id, installment_number) — prevents duplicate installment rows
+    for the same contract even if service-layer checks are bypassed
+
 FK relationships
 ----------------
   payment_schedules.contract_id → sales_contracts.id  (CASCADE)
@@ -75,9 +80,19 @@ def upgrade() -> None:
     op.create_index("ix_payment_schedules_due_date", "payment_schedules", ["due_date"])
     op.create_index("ix_payment_schedules_status", "payment_schedules", ["status"])
     op.create_index("ix_payment_schedules_template_id", "payment_schedules", ["template_id"])
+    op.create_unique_constraint(
+        "uq_payment_schedules_contract_installment",
+        "payment_schedules",
+        ["contract_id", "installment_number"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "uq_payment_schedules_contract_installment",
+        "payment_schedules",
+        type_="unique",
+    )
     op.drop_index("ix_payment_schedules_template_id", table_name="payment_schedules")
     op.drop_index("ix_payment_schedules_status", table_name="payment_schedules")
     op.drop_index("ix_payment_schedules_due_date", table_name="payment_schedules")

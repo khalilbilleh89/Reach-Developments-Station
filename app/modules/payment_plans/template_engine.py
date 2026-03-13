@@ -22,7 +22,7 @@ Installment numbering
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from typing import List, Optional

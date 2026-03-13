@@ -54,6 +54,23 @@ class PaymentPlanTemplateUpdate(BaseModel):
     handover_percent: Optional[float] = Field(None, ge=0.0, le=100.0)
     is_active: Optional[bool] = None
 
+    @model_validator(mode="after")
+    def validate_allocation_if_both_provided(self) -> "PaymentPlanTemplateUpdate":
+        """When both percent fields are present in the payload, validate total ≤ 100.
+
+        If only one is present the service must merge with the stored value and
+        re-validate the effective total.
+        """
+        if self.down_payment_percent is not None and self.handover_percent is not None:
+            total = self.down_payment_percent + self.handover_percent
+            if total > 100.0:
+                raise ValueError(
+                    f"down_payment_percent ({self.down_payment_percent}) + "
+                    f"handover_percent ({self.handover_percent}) must not exceed 100. "
+                    f"Got {total}."
+                )
+        return self
+
 
 class PaymentPlanTemplateResponse(BaseModel):
     """Response shape for a payment plan template."""
