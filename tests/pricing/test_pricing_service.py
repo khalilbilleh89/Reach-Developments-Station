@@ -218,3 +218,100 @@ def test_calculate_project_price_summary_no_priced_units(db_session: Session):
     assert summary.total_units_priced == 0
     assert summary.total_value == pytest.approx(0.0)
     assert summary.items == []
+
+
+def test_project_summary_skips_units_with_incomplete_attributes(db_session: Session):
+    """Units with missing pricing attributes must be skipped in project summary."""
+    from app.modules.projects.models import Project
+    from app.modules.phases.models import Phase
+    from app.modules.buildings.models import Building
+    from app.modules.floors.models import Floor
+    from app.modules.units.models import Unit
+
+    project = Project(name="Skip Test Project", code="PRJ-SKIP")
+    db_session.add(project)
+    db_session.flush()
+
+    phase = Phase(project_id=project.id, name="Phase 1", sequence=1)
+    db_session.add(phase)
+    db_session.flush()
+
+    building = Building(phase_id=phase.id, name="Block A", code="BLK-A")
+    db_session.add(building)
+    db_session.flush()
+
+    floor = Floor(building_id=building.id, level=1)
+    db_session.add(floor)
+    db_session.flush()
+
+    # unit1: fully priced; unit2: partially priced (missing fields stored as None)
+    unit1 = Unit(floor_id=floor.id, unit_number="101", unit_type="studio", internal_area=100.0)
+    unit2 = Unit(floor_id=floor.id, unit_number="102", unit_type="studio", internal_area=80.0)
+    db_session.add_all([unit1, unit2])
+    db_session.commit()
+    db_session.refresh(unit1)
+    db_session.refresh(unit2)
+
+    service = PricingService(db_session)
+
+    # Set complete attributes for unit1 only
+    complete_attrs = UnitPricingAttributesCreate(
+        base_price_per_sqm=5000.0,
+        floor_premium=0.0,
+        view_premium=0.0,
+        corner_premium=0.0,
+        size_adjustment=0.0,
+        custom_adjustment=0.0,
+    )
+    service.set_pricing_attributes(unit1.id, complete_attrs)
+
+    # Manually insert an incomplete record for unit2 (base_price_per_sqm is None)
+    from app.modules.pricing.models import UnitPricingAttributes
+    incomplete = UnitPricingAttributes(unit_id=unit2.id)
+    db_session.add(incomplete)
+    db_session.commit()
+
+    summary = service.calculate_project_price_summary(project.id)
+    # Only unit1 should be included; unit2 must be skipped
+    assert summary.total_units_priced == 1
+    assert summary.total_value == pytest.approx(500_000.0)
+    priced_ids = [item.unit_id for item in summary.items]
+    assert unit1.id in priced_ids
+    assert unit2.id not in priced_ids
+
+
+def test_unit_price_and_summary_produce_consistent_outputs(db_session: Session):
+    """Direct unit price and project summary must produce identical outputs for the same unit."""
+    unit_id = _make_unit(db_session, "PRJ-CONS")
+    service = PricingService(db_session)
+
+    attrs = UnitPricingAttributesCreate(
+        base_price_per_sqm=5000.0,
+        floor_premium=10_000.0,
+        view_premium=15_000.0,
+        corner_premium=5_000.0,
+        size_adjustment=2_000.0,
+        custom_adjustment=-1_000.0,
+    )
+    service.set_pricing_attributes(unit_id, attrs)
+
+    direct = service.calculate_unit_price(unit_id)
+
+    from app.modules.projects.models import Project
+    from app.modules.units.models import Unit
+    from app.modules.floors.models import Floor
+    from app.modules.buildings.models import Building
+    from app.modules.phases.models import Phase
+
+    unit = db_session.query(Unit).filter(Unit.id == unit_id).first()
+    floor = db_session.query(Floor).filter(Floor.id == unit.floor_id).first()
+    building = db_session.query(Building).filter(Building.id == floor.building_id).first()
+    phase = db_session.query(Phase).filter(Phase.id == building.phase_id).first()
+
+    summary = service.calculate_project_price_summary(phase.project_id)
+    assert summary.total_units_priced == 1
+    summary_item = summary.items[0]
+
+    assert direct.base_unit_price == pytest.approx(summary_item.base_unit_price)
+    assert direct.premium_total == pytest.approx(summary_item.premium_total)
+    assert direct.final_unit_price == pytest.approx(summary_item.final_unit_price)

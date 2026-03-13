@@ -10,7 +10,7 @@ from typing import List
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.modules.pricing.engines.pricing_engine import PricingInputs, PricingOutputs, run_pricing
+from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
 from app.modules.pricing.repository import UnitPricingAttributesRepository
 from app.modules.pricing.schemas import (
     ProjectPriceSummaryItem,
@@ -73,20 +73,39 @@ class PricingService:
 
     def _validate_pricing_attributes(self, attrs, unit_id: str) -> None:
         """Raise 422 if any required pricing attribute is missing."""
-        required_fields = [
-            "base_price_per_sqm",
-            "floor_premium",
-            "view_premium",
-            "corner_premium",
-            "size_adjustment",
-            "custom_adjustment",
-        ]
-        for field in required_fields:
+        for field in self._REQUIRED_PRICING_FIELDS:
             if getattr(attrs, field) is None:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Pricing attribute '{field}' is required but missing for unit '{unit_id}'.",
                 )
+
+    _REQUIRED_PRICING_FIELDS = (
+        "base_price_per_sqm",
+        "floor_premium",
+        "view_premium",
+        "corner_premium",
+        "size_adjustment",
+        "custom_adjustment",
+    )
+
+    def _has_complete_pricing_attributes(self, attrs) -> bool:
+        """Return True if all required pricing attributes are present, False otherwise."""
+        return all(getattr(attrs, field) is not None for field in self._REQUIRED_PRICING_FIELDS)
+
+    def _run_pricing_for_area(self, unit_area: float, attrs):
+        """Build PricingInputs from a unit area and stored attributes and run the engine."""
+        return run_pricing(
+            PricingInputs(
+                unit_area=unit_area,
+                base_price_per_sqm=float(attrs.base_price_per_sqm),
+                floor_premium=float(attrs.floor_premium),
+                view_premium=float(attrs.view_premium),
+                corner_premium=float(attrs.corner_premium),
+                size_adjustment=float(attrs.size_adjustment),
+                custom_adjustment=float(attrs.custom_adjustment),
+            )
+        )
 
     def calculate_unit_price(self, unit_id: str) -> UnitPriceResponse:
         """Calculate the final price for a single unit."""
@@ -105,17 +124,7 @@ class PricingService:
         self._validate_pricing_attributes(attrs, unit_id)
 
         unit_area = self._resolve_unit_area(unit)
-        outputs = run_pricing(
-            PricingInputs(
-                unit_area=unit_area,
-                base_price_per_sqm=float(attrs.base_price_per_sqm),
-                floor_premium=float(attrs.floor_premium),
-                view_premium=float(attrs.view_premium),
-                corner_premium=float(attrs.corner_premium),
-                size_adjustment=float(attrs.size_adjustment),
-                custom_adjustment=float(attrs.custom_adjustment),
-            )
-        )
+        outputs = self._run_pricing_for_area(unit_area, attrs)
         return UnitPriceResponse(
             unit_id=unit_id,
             unit_area=unit_area,
@@ -161,23 +170,11 @@ class PricingService:
         for uid, attrs in attrs_by_unit.items():
             unit = units_by_id[uid]
             # Skip units with incomplete attributes
-            try:
-                self._validate_pricing_attributes(attrs, uid)
-            except HTTPException:
+            if not self._has_complete_pricing_attributes(attrs):
                 continue
 
             unit_area = self._resolve_unit_area(unit)
-            outputs = run_pricing(
-                PricingInputs(
-                    unit_area=unit_area,
-                    base_price_per_sqm=float(attrs.base_price_per_sqm),
-                    floor_premium=float(attrs.floor_premium),
-                    view_premium=float(attrs.view_premium),
-                    corner_premium=float(attrs.corner_premium),
-                    size_adjustment=float(attrs.size_adjustment),
-                    custom_adjustment=float(attrs.custom_adjustment),
-                )
-            )
+            outputs = self._run_pricing_for_area(unit_area, attrs)
             items.append(
                 ProjectPriceSummaryItem(
                     unit_id=uid,
@@ -195,3 +192,4 @@ class PricingService:
             total_value=total_value,
             items=items,
         )
+
