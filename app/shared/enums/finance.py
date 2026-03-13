@@ -21,3 +21,35 @@ class FeasibilityScenarioType(str, Enum):
     UPSIDE = "upside"
     DOWNSIDE = "downside"
     INVESTOR = "investor"
+
+
+# ---------------------------------------------------------------------------
+# Payment plan enumerations
+# ---------------------------------------------------------------------------
+
+
+class PaymentPlanType(str, Enum):
+    """Classification of the payment plan structure."""
+
+    STANDARD_INSTALLMENTS = "standard_installments"
+    MILESTONE = "milestone"
+    POST_HANDOVER = "post_handover"
+    CUSTOM = "custom"
+
+
+class InstallmentFrequency(str, Enum):
+    """Frequency at which installment due dates are generated."""
+
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    CUSTOM = "custom"
+
+
+class PaymentScheduleStatus(str, Enum):
+    """Status of a single payment schedule line."""
+
+    PENDING = "pending"
+    DUE = "due"
+    PAID = "paid"
+    OVERDUE = "overdue"
+    CANCELLED = "cancelled"
