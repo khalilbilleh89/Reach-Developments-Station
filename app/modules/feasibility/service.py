@@ -5,7 +5,7 @@ Application-layer orchestration for feasibility workflows.
 Validates domain invariants and coordinates repository and engine calls.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -65,14 +65,8 @@ class FeasibilityService:
             runs = self.run_repo.list_by_project(project_id, skip=skip, limit=limit)
             total = self.run_repo.count_by_project(project_id)
         else:
-            # List all runs across projects (reuse repository query)
-            from app.modules.feasibility.models import FeasibilityRun
-            from sqlalchemy.orm import Session as _Session
-
-            db: _Session = self.run_repo.db
-            query = db.query(FeasibilityRun)
-            total = query.count()
-            runs = query.offset(skip).limit(limit).all()
+            runs = self.run_repo.list_all(skip=skip, limit=limit)
+            total = self.run_repo.count_all()
         return FeasibilityRunList(
             items=[FeasibilityRunResponse.model_validate(r) for r in runs],
             total=total,

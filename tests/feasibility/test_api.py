@@ -223,3 +223,85 @@ def test_result_payload_is_serializable(client: TestClient):
     for field in required_fields:
         assert field in data, f"Missing field: {field}"
         assert data[field] is not None, f"Field is None: {field}"
+
+
+# ---------------------------------------------------------------------------
+# PATCH null-safety regression tests
+# ---------------------------------------------------------------------------
+
+def test_patch_with_explicit_null_scenario_name_is_ignored(client: TestClient):
+    """PATCH with explicit null for a required field must not corrupt the DB record."""
+    project_id = _create_project(client, code="PRJ-PNULL")
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Original Name"},
+    ).json()["id"]
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}",
+        json={"scenario_name": None},
+    )
+    # Must not 500; should succeed and keep the original non-null value intact
+    assert resp.status_code == 200
+    assert resp.json()["scenario_name"] == "Original Name"
+
+
+def test_patch_with_explicit_null_scenario_type_is_ignored(client: TestClient):
+    """PATCH with explicit null for scenario_type must not corrupt the DB record."""
+    project_id = _create_project(client, code="PRJ-PNULL2")
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Base", "scenario_type": "upside"},
+    ).json()["id"]
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}",
+        json={"scenario_type": None},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["scenario_type"] == "upside"
+
+
+def test_patch_updates_valid_field_while_ignoring_null_fields(client: TestClient):
+    """PATCH should apply valid fields and skip nulls in the same payload."""
+    project_id = _create_project(client, code="PRJ-PMIX")
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Old Name", "scenario_type": "base"},
+    ).json()["id"]
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}",
+        json={"scenario_name": "New Name", "scenario_type": None},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["scenario_name"] == "New Name"
+    assert data["scenario_type"] == "base"
+
+
+# ---------------------------------------------------------------------------
+# List-all regression tests (no project_id filter)
+# ---------------------------------------------------------------------------
+
+def test_list_all_runs_no_filter(client: TestClient):
+    """GET /api/v1/feasibility/runs without project_id should return all runs."""
+    project_id_a = _create_project(client, code="PRJ-FALL-A")
+    project_id_b = _create_project(client, code="PRJ-FALL-B")
+    client.post("/api/v1/feasibility/runs", json={"project_id": project_id_a, "scenario_name": "Run A1"})
+    client.post("/api/v1/feasibility/runs", json={"project_id": project_id_b, "scenario_name": "Run B1"})
+    client.post("/api/v1/feasibility/runs", json={"project_id": project_id_b, "scenario_name": "Run B2"})
+    resp = client.get("/api/v1/feasibility/runs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 3
+    assert len(data["items"]) == 3
+
+
+def test_list_all_runs_pagination(client: TestClient):
+    """GET /api/v1/feasibility/runs with pagination should respect skip/limit."""
+    project_id = _create_project(client, code="PRJ-FPAG")
+    for i in range(5):
+        client.post("/api/v1/feasibility/runs", json={"project_id": project_id, "scenario_name": f"Run {i}"})
+    resp = client.get("/api/v1/feasibility/runs?skip=2&limit=2")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 5
+    assert len(data["items"]) == 2

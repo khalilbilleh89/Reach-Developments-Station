@@ -40,6 +40,7 @@ class FeasibilityRunRepository:
         return (
             self.db.query(FeasibilityRun)
             .filter(FeasibilityRun.project_id == project_id)
+            .order_by(FeasibilityRun.created_at.asc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -48,10 +49,22 @@ class FeasibilityRunRepository:
     def count_by_project(self, project_id: str) -> int:
         return self.db.query(FeasibilityRun).filter(FeasibilityRun.project_id == project_id).count()
 
+    def list_all(self, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
+        return (
+            self.db.query(FeasibilityRun)
+            .order_by(FeasibilityRun.created_at.asc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count_all(self) -> int:
+        return self.db.query(FeasibilityRun).count()
+
     def update(self, run: FeasibilityRun, data: FeasibilityRunUpdate) -> FeasibilityRun:
-        update_data = data.model_dump(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True, exclude_none=True)
         for field, value in update_data.items():
-            if field == "scenario_type" and value is not None:
+            if field == "scenario_type":
                 setattr(run, field, value.value if hasattr(value, "value") else value)
             else:
                 setattr(run, field, value)
