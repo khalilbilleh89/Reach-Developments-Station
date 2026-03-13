@@ -9,7 +9,7 @@ Responsibilities:
   - No business logic; callers are responsible for validation
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.modules.collections.models import PaymentReceipt
 from app.modules.collections.schemas import PaymentReceiptCreate
 from app.modules.payment_plans.models import PaymentSchedule
+from app.shared.enums.finance import ReceiptStatus
 
 
 class PaymentReceiptRepository:
@@ -59,11 +60,33 @@ class PaymentReceiptRepository:
             self.db.query(func.coalesce(func.sum(PaymentReceipt.amount_received), 0))
             .filter(
                 PaymentReceipt.payment_schedule_id == payment_schedule_id,
-                PaymentReceipt.status == "recorded",
+                PaymentReceipt.status == ReceiptStatus.RECORDED.value,
             )
             .scalar()
         )
         return float(result)
+
+    def totals_by_schedule_line_for_contract(
+        self, contract_id: str
+    ) -> Dict[str, float]:
+        """Return {schedule_id: total_received} for all recorded receipts on a contract.
+
+        Fetches all aggregated totals in a single GROUP BY query, avoiding N+1
+        when building the receivables view for a contract.
+        """
+        rows = (
+            self.db.query(
+                PaymentReceipt.payment_schedule_id,
+                func.sum(PaymentReceipt.amount_received),
+            )
+            .filter(
+                PaymentReceipt.contract_id == contract_id,
+                PaymentReceipt.status == ReceiptStatus.RECORDED.value,
+            )
+            .group_by(PaymentReceipt.payment_schedule_id)
+            .all()
+        )
+        return {row[0]: float(row[1]) for row in rows}
 
 
 class ReceivableRepository:

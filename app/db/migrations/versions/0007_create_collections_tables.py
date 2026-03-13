@@ -53,7 +53,12 @@ def upgrade() -> None:
         sa.Column("payment_method", sa.String(50), nullable=True),
         sa.Column("reference_number", sa.String(100), nullable=True),
         sa.Column("notes", sa.String(1000), nullable=True),
-        sa.Column("status", sa.String(50), nullable=False, server_default="recorded"),
+        sa.Column(
+            "status",
+            sa.String(50),
+            nullable=False,
+            server_default=sa.text("'recorded'"),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -68,9 +73,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_payment_receipts_receipt_date", "payment_receipts", ["receipt_date"]
     )
-    op.create_index(
-        "ix_payment_receipts_status", "payment_receipts", ["status"]
-    )
+    op.create_index("ix_payment_receipts_status", "payment_receipts", ["status"])
 
 
 def downgrade() -> None:

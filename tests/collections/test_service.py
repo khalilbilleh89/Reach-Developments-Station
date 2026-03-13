@@ -445,3 +445,143 @@ def test_receipts_for_contract_invalid_contract(db_session: Session):
     with pytest.raises(HTTPException) as exc:
         svc.get_receipts_for_contract("no-such-contract")
     assert exc.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Hardening: cent-normalized overpayment + transaction-safe flow
+# ---------------------------------------------------------------------------
+
+
+def test_overpayment_rejected_with_cent_precision(db_session: Session):
+    """Overpayment check must be correct at cent precision (no float drift)."""
+    svc = CollectionsService(db_session)
+    # Use a price that produces non-trivial fractional amounts in the schedule.
+    contract_id = _make_contract(db_session, "PRJ-CENT-OVR", contract_price=333_333.33)
+    schedule = _make_schedule(db_session, contract_id, start_date=date(2030, 1, 1))
+    first_line = schedule[0]
+    due = first_line.due_amount
+
+    # Record exact due amount (should succeed)
+    svc.record_receipt(
+        PaymentReceiptCreate(
+            contract_id=contract_id,
+            payment_schedule_id=first_line.id,
+            receipt_date=date(2026, 1, 5),
+            amount_received=due,
+        )
+    )
+
+    # Even 1 cent over the due amount must be rejected
+    with pytest.raises(HTTPException) as exc:
+        svc.record_receipt(
+            PaymentReceiptCreate(
+                contract_id=contract_id,
+                payment_schedule_id=first_line.id,
+                receipt_date=date(2026, 1, 6),
+                amount_received=0.01,
+            )
+        )
+    assert exc.value.status_code == 422
+
+
+def test_partial_payments_sum_to_exact_due_without_float_error(db_session: Session):
+    """Two partial receipts that exactly sum to due_amount must both be accepted."""
+    svc = CollectionsService(db_session)
+    contract_id = _make_contract(db_session, "PRJ-CENT-SUM", contract_price=100_000.0)
+    schedule = _make_schedule(db_session, contract_id, start_date=date(2030, 1, 1))
+    first_line = schedule[0]
+    due = first_line.due_amount
+    half = round(due / 2, 2)
+    remainder = round(due - half, 2)
+
+    # First half
+    svc.record_receipt(
+        PaymentReceiptCreate(
+            contract_id=contract_id,
+            payment_schedule_id=first_line.id,
+            receipt_date=date(2026, 1, 5),
+            amount_received=half,
+        )
+    )
+    # Second half (may differ by 1 cent due to rounding; must still be accepted)
+    svc.record_receipt(
+        PaymentReceiptCreate(
+            contract_id=contract_id,
+            payment_schedule_id=first_line.id,
+            receipt_date=date(2026, 1, 6),
+            amount_received=remainder,
+        )
+    )
+
+    result = svc.get_receivables_for_contract(contract_id)
+    assert result.items[0].receivable_status == ReceivableStatus.PAID
+    assert result.items[0].outstanding_amount == pytest.approx(0.0, abs=0.01)
+
+
+def test_record_receipt_after_refactor_still_persists(db_session: Session):
+    """After the transaction-safe refactor, receipts are still correctly stored."""
+    svc = CollectionsService(db_session)
+    contract_id = _make_contract(db_session, "PRJ-TXN-SAFE")
+    schedule = _make_schedule(db_session, contract_id)
+    first_line = schedule[0]
+
+    receipt = svc.record_receipt(
+        PaymentReceiptCreate(
+            contract_id=contract_id,
+            payment_schedule_id=first_line.id,
+            receipt_date=date(2026, 3, 1),
+            amount_received=first_line.due_amount,
+            payment_method=PaymentMethod.CHEQUE,
+            reference_number="CHQ-2026-001",
+        )
+    )
+
+    # Retrieve by ID to confirm it was committed
+    fetched = svc.get_receipt(receipt.id)
+    assert fetched.contract_id == contract_id
+    assert fetched.payment_schedule_id == first_line.id
+    assert fetched.amount_received == pytest.approx(first_line.due_amount)
+    assert fetched.payment_method == PaymentMethod.CHEQUE
+    assert fetched.reference_number == "CHQ-2026-001"
+
+
+# ---------------------------------------------------------------------------
+# Hardening: N+1 elimination — verify batch aggregation is correct
+# ---------------------------------------------------------------------------
+
+
+def test_receivables_batch_aggregation_matches_per_line_values(db_session: Session):
+    """Receivables totals from batch query must match expected per-line values."""
+    svc = CollectionsService(db_session)
+    contract_id = _make_contract(db_session, "PRJ-BATCH-AGG", contract_price=300_000.0)
+    schedule = _make_schedule(
+        db_session, contract_id, start_date=date(2030, 1, 1), number_of_installments=4
+    )
+    n = len(schedule)  # down payment + 4 installments = 5 lines
+
+    # Pay the first and third lines fully; leave the rest unpaid.
+    for line in [schedule[0], schedule[2]]:
+        svc.record_receipt(
+            PaymentReceiptCreate(
+                contract_id=contract_id,
+                payment_schedule_id=line.id,
+                receipt_date=date(2026, 1, 10),
+                amount_received=line.due_amount,
+            )
+        )
+
+    result = svc.get_receivables_for_contract(contract_id)
+
+    assert len(result.items) == n
+    assert result.items[0].receivable_status == ReceivableStatus.PAID
+    assert result.items[0].outstanding_amount == pytest.approx(0.0)
+    assert result.items[1].total_received == 0.0
+    assert result.items[2].receivable_status == ReceivableStatus.PAID
+    assert result.items[2].outstanding_amount == pytest.approx(0.0)
+    # Lines beyond the paid ones are unpaid
+    for item in result.items[3:]:
+        assert item.total_received == 0.0
+
+    expected_received = sum(float(schedule[i].due_amount) for i in [0, 2])
+    assert result.total_received == pytest.approx(expected_received, abs=0.02)
+    assert abs(result.total_due - 300_000.0) < 0.02
