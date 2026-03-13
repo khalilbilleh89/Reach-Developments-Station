@@ -14,3 +14,10 @@ class MilestoneTriggerType(str, Enum):
     TIME_BASED = "time_based"
     CONSTRUCTION_MILESTONE = "construction_milestone"
     SALES_MILESTONE = "sales_milestone"
+
+
+class FeasibilityScenarioType(str, Enum):
+    BASE = "base"
+    UPSIDE = "upside"
+    DOWNSIDE = "downside"
+    INVESTOR = "investor"

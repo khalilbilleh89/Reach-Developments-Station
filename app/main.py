@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.database import check_db_connection
 from app.core.logging import logger
 from app.modules.buildings.api import router as buildings_router
+from app.modules.feasibility.api import router as feasibility_router
 from app.modules.floors.api import router as floors_router
 from app.modules.land.api import router as land_router
 from app.modules.phases.api import router as phases_router
@@ -48,6 +49,7 @@ app.include_router(buildings_router, prefix=_API_PREFIX)
 app.include_router(floors_router, prefix=_API_PREFIX)
 app.include_router(units_router, prefix=_API_PREFIX)
 app.include_router(land_router, prefix=_API_PREFIX)
+app.include_router(feasibility_router, prefix=_API_PREFIX)
 
 
 @app.get("/health", tags=["health"])
