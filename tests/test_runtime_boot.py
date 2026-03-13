@@ -25,15 +25,46 @@ def test_app_has_title():
 
 
 def test_root_endpoint_returns_200():
-    """GET / should return HTTP 200 with basic service info."""
+    """GET / should return HTTP 200 with basic service info in all modes."""
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
     assert "app" in data
-    assert "env" in data
     assert "status" in data
     assert data["status"] == "running"
+
+
+def test_root_endpoint_production_omits_debug_fields():
+    """GET / in production mode (APP_DEBUG=False) must not expose env or docs."""
+    from unittest.mock import patch
+
+    with patch("app.main.settings") as mock_settings:
+        mock_settings.APP_NAME = "Reach Developments Station"
+        mock_settings.APP_ENV = "production"
+        mock_settings.APP_DEBUG = False
+        client = TestClient(app)
+        response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "env" not in data
+    assert "docs" not in data
+
+
+def test_root_endpoint_debug_includes_debug_fields():
+    """GET / in debug mode (APP_DEBUG=True) should include env and docs fields."""
+    from unittest.mock import patch
+
+    with patch("app.main.settings") as mock_settings:
+        mock_settings.APP_NAME = "Reach Developments Station"
+        mock_settings.APP_ENV = "development"
+        mock_settings.APP_DEBUG = True
+        client = TestClient(app)
+        response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "env" in data
+    assert "docs" in data
 
 
 def test_health_endpoint_returns_200():

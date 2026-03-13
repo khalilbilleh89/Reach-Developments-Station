@@ -45,24 +45,40 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 ---
 
-## Required Environment Variables
+## Environment Variables
 
-The following environment variables must be set in the Render service dashboard (or equivalent):
+### Required (Production)
+
+These must be set in the Render service dashboard. The service will not function correctly in production without them.
 
 | Variable | Purpose | Example |
 |---|---|---|
-| `APP_NAME` | Application display name | `Reach Developments Station` |
-| `APP_ENV` | Runtime environment | `production` |
-| `APP_DEBUG` | Debug mode flag | `false` |
-| `APP_HOST` | Host binding (informational) | `0.0.0.0` |
-| `APP_PORT` | Port (informational; Render injects `$PORT`) | `8000` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://...` |
-| `LOG_LEVEL` | Logging verbosity | `INFO` |
-| `API_V1_PREFIX` | API route prefix | `/api/v1` |
-
-See `.env.example` for the local development template.
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
 
 `DATABASE_URL` on Render is sourced automatically from the attached managed database (`reach-developments-db`).
+
+### Optional / Recommended
+
+These have application-level defaults (defined in `app/core/config.py`) and will work without being explicitly set. Setting them is recommended in production for clarity and correctness.
+
+| Variable | Default | Purpose | Recommended Production Value |
+|---|---|---|---|
+| `APP_NAME` | `Reach Developments Station` | Application display name | *(leave as default)* |
+| `APP_ENV` | `development` | Runtime environment label | `production` |
+| `APP_DEBUG` | `false` | Debug mode flag | `false` |
+| `LOG_LEVEL` | `INFO` | Logging verbosity | `INFO` |
+| `API_V1_PREFIX` | `/api/v1` | API route prefix | `/api/v1` |
+
+### Informational Only
+
+These variables exist in config but are **not used** by the actual runtime binding. Render injects `$PORT` directly into the uvicorn start command. They do not need to be set in Render.
+
+| Variable | Note |
+|---|---|
+| `APP_HOST` | Not read by uvicorn at runtime; Render controls binding via the start command |
+| `APP_PORT` | Not read by uvicorn at runtime; Render injects `$PORT` |
+
+See `.env.example` for the local development template.
 
 ---
 
@@ -118,6 +134,6 @@ This is already set in `infrastructure/render/render.yaml`. Do not change it.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /` | Lightweight root liveness check (returns app name, env, status) |
+| `GET /` | Lightweight root liveness check (returns app name and status; debug fields included when `APP_DEBUG=true`) |
 | `GET /health` | Application health check |
 | `GET /health/db` | Database connectivity check |

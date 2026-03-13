@@ -63,12 +63,14 @@ app.include_router(collections_router, prefix=_API_PREFIX)
 @app.get("/", tags=["root"])
 async def root() -> dict:
     """Lightweight root endpoint for liveness visibility on Render."""
-    return {
+    response: dict = {
         "app": settings.APP_NAME,
-        "env": settings.APP_ENV,
         "status": "running",
-        "docs": "/docs",
     }
+    if settings.APP_DEBUG:
+        response["env"] = settings.APP_ENV
+        response["docs"] = "/docs"
+    return response
 
 
 @app.get("/health", tags=["health"])
