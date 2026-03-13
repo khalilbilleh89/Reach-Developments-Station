@@ -60,6 +60,17 @@ app.include_router(payment_plans_router, prefix=_API_PREFIX)
 app.include_router(collections_router, prefix=_API_PREFIX)
 
 
+@app.get("/", tags=["root"])
+async def root() -> dict:
+    """Lightweight root endpoint for liveness visibility on Render."""
+    return {
+        "app": settings.APP_NAME,
+        "env": settings.APP_ENV,
+        "status": "running",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health", tags=["health"])
 async def health_check() -> JSONResponse:
     """Application health check endpoint."""

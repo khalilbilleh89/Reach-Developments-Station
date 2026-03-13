@@ -92,6 +92,24 @@ See [`docs/03-technical/backend-architecture.md`](docs/03-technical/backend-arch
 
 ---
 
+## Current Runtime Status
+
+| Property | Value |
+|---|---|
+| Backend API | ✅ Deployed and live on Render |
+| Deployment target | [Render](https://render.com) |
+| ASGI entrypoint | `app.main:app` |
+| Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Scope | Backend / API-first — no frontend UI |
+| Liveness endpoint | `GET /health` |
+| Root endpoint | `GET /` returns service name, env, and status |
+
+> **Note:** The root path `/` returns a simple JSON status response. All domain APIs are served under `/api/v1/`.
+>
+> See [`infrastructure/render/render.yaml`](infrastructure/render/render.yaml) and [`docs/03-technical/deployment-architecture.md`](docs/03-technical/deployment-architecture.md) for full deployment details.
+
+---
+
 ## Setup Orientation
 
 This repository uses Python (FastAPI). A local development environment can be set up using a virtual environment:
@@ -100,9 +118,10 @@ This repository uses Python (FastAPI). A local development environment can be se
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
-> **Note:** No production backend exists yet. See [`docs/00-overview/implementation-roadmap.md`](docs/00-overview/implementation-roadmap.md) for implementation phases.
+Copy `.env.example` to `.env` and configure variables before starting the server.
 
 ---
 
