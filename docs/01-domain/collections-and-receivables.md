@@ -2,67 +2,113 @@
 
 ## Purpose
 
-The Collections module manages the tracking, matching, and aging of all receivables arising from sales contracts. It ensures that all payment obligations are monitored, that receipts are correctly matched to schedule lines, and that overdue accounts trigger appropriate escalation alerts.
+The Collections module manages the recording of payment receipts against sales
+contract payment schedules and the derivation of receivable status for each
+installment line.  It provides the factual collections ledger that finance
+summaries and cashflow reporting will rely on.
 
 ## Scope
 
-**In scope:**
-- Payment receipt recording
-- Receipt-to-schedule-line matching
-- Aging analysis (current, 30, 60, 90, 90+ days overdue)
-- Collection alerts and escalation triggers
-- Outstanding receivables reporting
+**In scope (implemented — MVP):**
+- Payment receipt recording against a specific payment schedule line
+- Overpayment prevention (total receipts cannot exceed the due amount for a line)
+- Cross-contract validation (a receipt must belong to the same contract as its schedule line)
+- Receivable status derivation per schedule line: `pending`, `partially_paid`, `paid`, `overdue`
+- Contract-level receivables summary (total due / received / outstanding)
+- REST API for recording receipts and querying receivables
+
+**Planned but not yet implemented:**
+- Receipt reversal
+- Aging analysis buckets (current, 1-30, 31-60, 61-90, 90+ days)
+- Automated collection alerts and escalation triggers
+- Collections officer contact log
 
 **Out of scope:**
 - Payment plan schedule generation (handled by Payment Plans module)
 - Revenue recognition (handled by Revenue Recognition module)
+- Finance summary and cashflow forecasting (future modules)
 - Legal enforcement actions (external process)
 
-## Key Concepts
+## Receipt Recording
 
-**Receipt:** A payment received from a buyer, recorded with date, amount, method, and reference.
+A `PaymentReceipt` records a single cash/bank receipt applied against one
+`PaymentSchedule` row.
 
-**Receipt Matching:** The process of allocating a receipt to one or more open payment schedule lines.
+**Input fields:**
 
-**Aging:** The classification of outstanding receivables by how many days they are overdue. Standard buckets: Current, 1-30 days, 31-60 days, 61-90 days, 90+ days.
+| Field | Required | Notes |
+|---|---|---|
+| `contract_id` | ✅ | Must be an existing contract |
+| `payment_schedule_id` | ✅ | Must belong to the same contract |
+| `receipt_date` | ✅ | Date the payment was received |
+| `amount_received` | ✅ | Must be > 0 |
+| `payment_method` | Optional | `bank_transfer`, `cash`, `cheque`, `other` |
+| `reference_number` | Optional | Bank reference or cheque number |
+| `notes` | Optional | Free-text notes |
 
-**Collection Alert:** A system-generated notification triggered when a payment schedule line becomes overdue or when a defined aging threshold is crossed.
+## Schedule Settlement Logic
 
-## Business Rules
+Each payment schedule line maintains a running total of `recorded` receipts.
+A line is considered settled when `total_received >= due_amount`.
 
-- Receipts must be matched to specific payment schedule lines before they are considered settled
-- Partial receipts are allowed — a line is only marked as settled when fully matched
-- Aging is calculated daily against the due dates in the payment schedule
-- Alerts are triggered automatically: first alert at 7 days overdue, escalation alert at 30 days overdue
-- Collections officers must log contact attempts and resolution notes against overdue accounts
+Partial payments are allowed — multiple receipts may be recorded against the
+same schedule line as long as the cumulative total does not exceed `due_amount`.
 
-## Data Entities
+Overpayment is forbidden in the MVP.  The service will return HTTP 422 if a
+new receipt would push `total_received` above `due_amount`.
 
-See [`../00-overview/core-data-model.md`](../00-overview/core-data-model.md) — Collections section:
-- `PaymentReceipt`
-- `ReceiptAllocation`
-- `AgingBucket`
-- `CollectionAlert`
+## Receivable Status Derivation
 
-## Workflows
+Receivable status is derived on-the-fly from the schedule and receipts — it is
+not stored redundantly in the database.
 
-1. Payment due date arrives — schedule line becomes active target
-2. Buyer makes payment — receipt recorded
-3. Receipt matched to schedule line(s)
-4. If unmatched or partially matched by due date — aging begins
-5. Alert triggered at 7 days overdue
-6. Escalation alert triggered at 30 days overdue
-7. Collections officer logs contact and resolution
-8. Receipt fully matched — schedule line closed
+| Condition | Status |
+|---|---|
+| `total_received >= due_amount` | `paid` |
+| `outstanding > 0` and `due_date < today` | `overdue` |
+| `total_received > 0` and outstanding remains | `partially_paid` |
+| No receipts and `due_date >= today` | `pending` |
 
-## Integration Points
+The derivation order above is applied in sequence: `paid` is checked first,
+then `overdue`, then `partially_paid`, then `pending`.
+
+## Due vs Paid Formula
+
+```
+outstanding_amount = due_amount - total_received
+```
+
+Where `total_received` is the sum of all receipts with status `recorded`
+(excluding reversed receipts) for that schedule line.
+
+## API Endpoints
+
+All endpoints are under `/api/v1/collections/`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/receipts` | Record a payment receipt |
+| GET | `/receipts/{receipt_id}` | Get a receipt by ID |
+| GET | `/contracts/{contract_id}/receipts` | List all receipts for a contract |
+| GET | `/contracts/{contract_id}/receivables` | Get receivables summary for a contract |
+
+## Relationship to Other Modules
 
 | Module | Relationship |
 |---|---|
-| Payment Plans | Payment schedule lines are the collection targets |
-| Finance | Outstanding receivables feed into project financial summary |
-| Revenue Recognition | Collected amounts inform recognition events |
-| Sales | Contract status may be affected by severe overdue positions |
+| Payment Plans | `PaymentSchedule` rows are the collection targets |
+| Finance | Outstanding receivables will feed into project financial summary (future) |
+| Revenue Recognition | Collected amounts will inform recognition events (future) |
+| Sales | Contract must exist before any receipt can be recorded |
+
+## Non-Goals
+
+This module does **not**:
+- Generate or modify payment schedules
+- Perform revenue recognition or accounting journal entries
+- Calculate cashflow forecasts
+- Produce collections analytics dashboards
+- Implement registration workflows
 
 ## Open Questions
 

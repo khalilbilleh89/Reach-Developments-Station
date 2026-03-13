@@ -53,3 +53,33 @@ class PaymentScheduleStatus(str, Enum):
     PAID = "paid"
     OVERDUE = "overdue"
     CANCELLED = "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Collections / receivables enumerations
+# ---------------------------------------------------------------------------
+
+
+class ReceiptStatus(str, Enum):
+    """Lifecycle status of a payment receipt."""
+
+    RECORDED = "recorded"
+    REVERSED = "reversed"
+
+
+class ReceivableStatus(str, Enum):
+    """Computed status of a receivable schedule line."""
+
+    PENDING = "pending"
+    PARTIALLY_PAID = "partially_paid"
+    PAID = "paid"
+    OVERDUE = "overdue"
+
+
+class PaymentMethod(str, Enum):
+    """Method used to settle a payment receipt."""
+
+    BANK_TRANSFER = "bank_transfer"
+    CASH = "cash"
+    CHEQUE = "cheque"
+    OTHER = "other"

@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.database import check_db_connection
 from app.core.logging import logger
 from app.modules.buildings.api import router as buildings_router
+from app.modules.collections.api import router as collections_router
 from app.modules.feasibility.api import router as feasibility_router
 from app.modules.floors.api import router as floors_router
 from app.modules.land.api import router as land_router
@@ -56,6 +57,7 @@ app.include_router(feasibility_router, prefix=_API_PREFIX)
 app.include_router(pricing_router, prefix=_API_PREFIX)
 app.include_router(sales_router, prefix=_API_PREFIX)
 app.include_router(payment_plans_router, prefix=_API_PREFIX)
+app.include_router(collections_router, prefix=_API_PREFIX)
 
 
 @app.get("/health", tags=["health"])
