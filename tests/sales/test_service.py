@@ -171,7 +171,7 @@ def test_reservation_date_types_are_date(db_session: Session):
 
 def test_reservation_invalid_date_range_raises(db_session: Session):
     """expiry_date before reservation_date must be rejected at schema level."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         ReservationCreate(
             unit_id="any",
             buyer_id="any",
