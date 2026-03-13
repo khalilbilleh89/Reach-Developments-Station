@@ -343,3 +343,39 @@ To maintain modularity discipline:
 - Authorization is RBAC (role and permission checked in FastAPI dependencies)
 
 See [`api-design.md`](api-design.md) for full API design standards.
+
+---
+
+## Runtime Entry Point
+
+### Canonical ASGI path
+
+```
+app.main:app
+```
+
+This resolves to the `app` FastAPI instance defined in `app/main.py`.
+
+### Why not a root `main.py`?
+
+The application code lives inside the `app/` package. A root-level `main.py` would sit outside the package boundary and would conflict with the module import path. The `app/` prefix is **required** for the ASGI server to locate the module correctly.
+
+### Implications for Render and local startup
+
+Always use the fully-qualified path:
+
+```bash
+# Local development
+uvicorn app.main:app --reload
+
+# Production (Render)
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Using `uvicorn main:app` (without the `app.` prefix) will cause a startup failure:
+
+```
+Error loading ASGI app. Could not import module "main".
+```
+
+See [`deployment-architecture.md`](deployment-architecture.md) for the full deployment reference.

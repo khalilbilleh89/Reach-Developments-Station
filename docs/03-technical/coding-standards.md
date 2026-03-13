@@ -38,6 +38,12 @@ These coding standards apply to all Python code in the `app/` directory.
 - All public functions and classes must have docstrings
 - Architecture decisions must be recorded in `docs/04-decisions/`
 
+### Deployment Entrypoints
+
+- All deployment entrypoints, start commands, and infrastructure commands must be recorded in repo config and docs — not left as manual or chat-only knowledge.
+- Changes to deployment configuration (start command, build command, environment variables) must be reflected in `infrastructure/render/render.yaml` and `docs/03-technical/deployment-architecture.md` before merging.
+- This is especially important for agent-driven development workflows where runtime knowledge must be traceable to the codebase.
+
 ## Open Questions
 
 - Async vs. sync service layer: use async throughout for consistency with FastAPI
