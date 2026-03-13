@@ -23,6 +23,7 @@ from app.modules.floors.api import router as floors_router
 from app.modules.land.api import router as land_router
 from app.modules.phases.api import router as phases_router
 from app.modules.projects.api import router as projects_router
+from app.modules.pricing.api import router as pricing_router
 from app.modules.units.api import router as units_router
 
 
@@ -50,6 +51,7 @@ app.include_router(floors_router, prefix=_API_PREFIX)
 app.include_router(units_router, prefix=_API_PREFIX)
 app.include_router(land_router, prefix=_API_PREFIX)
 app.include_router(feasibility_router, prefix=_API_PREFIX)
+app.include_router(pricing_router, prefix=_API_PREFIX)
 
 
 @app.get("/health", tags=["health"])
