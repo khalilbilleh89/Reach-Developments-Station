@@ -5,6 +5,7 @@
  */
 import React from "react";
 import { render, screen, act } from "@testing-library/react";
+import ProtectedLayout from "@/app/(protected)/layout";
 import "@testing-library/jest-dom";
 
 // ---------- Mocks --------------------------------------------------------
@@ -75,13 +76,6 @@ function withoutToken() {
     writable: true,
   });
 }
-
-// ---------- Test target --------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ProtectedLayout = require("@/app/(protected)/layout").default as React.FC<{
-  children: React.ReactNode;
-}>;
 
 // ---------- Tests --------------------------------------------------------
 
