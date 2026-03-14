@@ -95,15 +95,7 @@ export default function SalesWorkflowDetailPage({
             pricing={detail.pricing}
             hasApprovedException={hasApprovedException}
             contractStatus={detail.contractAction.contractStatus}
-            readiness={
-              hasApprovedException && detail.contractAction.contractStatus !== "active"
-                ? "ready"
-                : detail.contractAction.contractStatus === "active"
-                  ? "under_contract"
-                  : detail.pricing === null
-                    ? "missing_pricing"
-                    : "ready"
-            }
+            readiness={detail.readiness}
           />
 
           {/* Contract action panel */}

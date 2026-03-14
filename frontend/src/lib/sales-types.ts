@@ -47,6 +47,8 @@ export interface SalesWorkflowDetail {
   approvedExceptions: ApprovedSalesException[];
   contractAction: ContractActionState;
   paymentPlanPreview: PaymentPlanPreview | null;
+  /** Derived commercial readiness — computed once in the API layer. */
+  readiness: SalesReadinessStatus;
 }
 
 // ---------- Readiness ----------------------------------------------------

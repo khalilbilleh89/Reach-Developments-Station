@@ -158,7 +158,11 @@ async function fetchUnitContract(unitId: string): Promise<ContractItem | null> {
     if (data.items.length === 0) return null;
     // Prefer active contracts; fall back to most recently created
     const active = data.items.find((c) => c.status === "active");
-    return active ?? data.items[data.items.length - 1];
+    if (active) return active;
+    const sorted = [...data.items].sort((a, b) =>
+      b.created_at.localeCompare(a.created_at),
+    );
+    return sorted[0];
   } catch (err: unknown) {
     if (isNotFoundError(err)) return null;
     throw err;
@@ -325,6 +329,12 @@ export async function getUnitSaleWorkflow(
     ),
     contractAction,
     paymentPlanPreview,
+    readiness: deriveReadiness(
+      unit,
+      pricing,
+      exceptions.some((ex) => ex.approval_status === "approved"),
+      contract ? contract.status : null,
+    ),
   };
 }
 

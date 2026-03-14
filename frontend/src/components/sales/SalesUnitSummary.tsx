@@ -78,7 +78,7 @@ export function SalesUnitSummary({ unit, pricing }: SalesUnitSummaryProps) {
           <div className={styles.summaryItem}>
             <span className={styles.summaryItemLabel}>Price / sqm</span>
             <span className={styles.summaryItemValue}>
-              AED {Math.round(pricePerSqm).toLocaleString()}
+              {formatCurrency(Math.round(pricePerSqm))}
             </span>
           </div>
         )}

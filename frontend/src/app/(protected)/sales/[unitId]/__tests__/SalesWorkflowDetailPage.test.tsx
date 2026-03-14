@@ -117,6 +117,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: mockContractAction,
       paymentPlanPreview: null,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -131,6 +132,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: mockContractAction,
       paymentPlanPreview: null,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -153,6 +155,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [mockApprovedException],
       contractAction: mockContractAction,
       paymentPlanPreview: null,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -169,6 +172,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: mockContractAction,
       paymentPlanPreview: null,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -185,6 +189,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: mockContractAction,
       paymentPlanPreview: null,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -206,6 +211,7 @@ describe("SalesWorkflowDetailPage", () => {
         contractStatus: "active",
       },
       paymentPlanPreview: null,
+      readiness: "under_contract",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -221,6 +227,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: mockContractAction,
       paymentPlanPreview: mockPaymentPlan,
+      readiness: "ready",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
@@ -237,6 +244,7 @@ describe("SalesWorkflowDetailPage", () => {
       approvedExceptions: [],
       contractAction: { kind: "unavailable", contractId: null, contractNumber: null, contractStatus: null },
       paymentPlanPreview: null,
+      readiness: "missing_pricing",
     });
     render(<SalesWorkflowDetailPage params={{ unitId: "unit-1" }} />);
     await waitFor(() =>
