@@ -1,0 +1,690 @@
+/* ============================================================
+   Sales Workflow — layout and visual rules
+   ============================================================ */
+
+/* --- Filter bar ------------------------------------------- */
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+  margin-bottom: var(--space-6);
+  padding: var(--card-padding);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 140px;
+}
+
+.filterLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.filterSelect,
+.filterInput {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-3);
+  min-width: 120px;
+}
+
+.filterSelect:focus,
+.filterInput:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.filterReset {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  align-self: flex-end;
+}
+
+.filterReset:hover {
+  background: var(--color-border);
+}
+
+/* --- Sales candidates table -------------------------------- */
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--color-border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  background: var(--color-surface);
+}
+
+.tableHead {
+  background: var(--color-bg);
+}
+
+.tableHead th {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sortableHeader {
+  cursor: default;
+}
+
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortBtn:hover {
+  color: var(--color-text);
+}
+
+.sortBtn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.sortIndicator {
+  display: inline-block;
+  margin-left: var(--space-1);
+  opacity: 0.7;
+}
+
+.tableBody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s;
+}
+
+.tableBody tr:last-child {
+  border-bottom: none;
+}
+
+.tableBody tr:hover {
+  background: var(--color-bg);
+}
+
+.tableBody td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.unitNumber {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.actionBtn {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--card-radius);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* --- Status badges ---------------------------------------- */
+
+.statusBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+  text-transform: capitalize;
+}
+
+.statusAvailable {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.statusReserved {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.statusUnderContract {
+  background: #bee3f8;
+  color: #2a4365;
+}
+
+.statusRegistered {
+  background: #e9d8fd;
+  color: #44337a;
+}
+
+/* --- Readiness badge -------------------------------------- */
+
+.readinessBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+}
+
+.readinessReady {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.readinessNeedsException {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.readinessUnderContract {
+  background: #bee3f8;
+  color: #2a4365;
+}
+
+.readinessMissingPricing {
+  background: #fed7d7;
+  color: #9b2335;
+}
+
+.readinessBlocked {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+/* --- Exception badge -------------------------------------- */
+
+.exceptionBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+}
+
+.exceptionYes {
+  background: #fed7d7;
+  color: #9b2335;
+}
+
+.exceptionNo {
+  background: #e2e8f0;
+  color: #718096;
+}
+
+/* --- Readiness card --------------------------------------- */
+
+.readinessCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.readinessCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.readinessStatusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.readinessStatusLabel {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.readinessChecklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.readinessCheckItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.checkPass {
+  color: #276749;
+}
+
+.checkFail {
+  color: #9b2335;
+}
+
+/* --- Unit summary card ------------------------------------ */
+
+.summaryCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.summaryCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.summaryUnitNumber {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  line-height: var(--line-height-tight);
+  margin-bottom: var(--space-4);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summaryItemLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.summaryItemValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.summaryPrice {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* --- Exception panel -------------------------------------- */
+
+.exceptionPanel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.exceptionPanelTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.exceptionEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.exceptionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.exceptionItem {
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-4);
+  background: var(--color-bg);
+}
+
+.exceptionItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.exceptionItemType {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.exceptionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.exceptionField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exceptionFieldLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exceptionFieldValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+/* --- Contract action panel -------------------------------- */
+
+.contractPanel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.contractPanelTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.contractStatus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.contractStatusLabel {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.contractMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.contractMetaRow {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.contractMetaKey {
+  color: var(--color-text-muted);
+  min-width: 120px;
+}
+
+.contractMetaValue {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.contractAvailableNote {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-3);
+  background: #f0fff4;
+  border: 1px solid #9ae6b4;
+  border-radius: var(--card-radius);
+}
+
+.contractUnavailableNote {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+}
+
+/* --- Payment plan preview --------------------------------- */
+
+.paymentPlanPanel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.paymentPlanTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.paymentPlanEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.paymentPlanGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.paymentPlanItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paymentPlanItemLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.paymentPlanItemValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.paymentPlanTotal {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* --- Detail page layout ----------------------------------- */
+
+.detailLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+@media (max-width: 768px) {
+  .detailLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detailFullWidth {
+  grid-column: 1 / -1;
+}
+
+/* --- Project selector row --------------------------------- */
+
+.selectorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.selectorLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.selectorSelect {
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-4);
+  min-width: 220px;
+  cursor: pointer;
+}
+
+.selectorSelect:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* --- Empty / loading / error states ----------------------- */
+
+.loadingState {
+  padding: var(--space-12) 0;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.emptyState {
+  padding: var(--space-12) 0;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.emptyStateTitle {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-2);
+}
+
+.emptyStateBody {
+  font-size: var(--font-size-sm);
+}
+
+.errorState {
+  padding: var(--space-6);
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: var(--card-radius);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Back link -------------------------------------------- */
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  text-decoration: none;
+  margin-bottom: var(--space-6);
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+/* --- Results count --------------------------------------- */
+
+.resultsCount {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
