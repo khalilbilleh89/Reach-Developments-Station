@@ -25,5 +25,12 @@ class Settings(BaseSettings):
 
     API_V1_PREFIX: str = "/api/v1"
 
+    # JWT settings
+    # SECRET_KEY must be overridden in production via the SECRET_KEY environment variable.
+    # A short default is provided for local development only.
+    SECRET_KEY: str = "change-me-in-production-use-a-long-random-secret"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
 
 settings = Settings()

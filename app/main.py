@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import check_db_connection
 from app.core.logging import logger
+from app.modules.auth.api import router as auth_router
 from app.modules.buildings.api import router as buildings_router
 from app.modules.collections.api import router as collections_router
 from app.modules.feasibility.api import router as feasibility_router
@@ -48,6 +49,7 @@ app = FastAPI(
 
 # Asset hierarchy routers
 _API_PREFIX = settings.API_V1_PREFIX
+app.include_router(auth_router, prefix=_API_PREFIX)
 app.include_router(projects_router, prefix=_API_PREFIX)
 app.include_router(phases_router, prefix=_API_PREFIX)
 app.include_router(buildings_router, prefix=_API_PREFIX)
