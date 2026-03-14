@@ -5,7 +5,7 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
-// Mock Next.js navigation — includig useSearchParams for projectId
+// Mock Next.js navigation — including useSearchParams for projectId
 let mockSearchParams = new URLSearchParams("projectId=proj-1");
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),

@@ -55,7 +55,7 @@ async function runWithConcurrencyLimit<T>(
   limit: number,
 ): Promise<T[]> {
   if (tasks.length === 0) return [];
-  const results: T[] = new Array(tasks.length);
+  const results: T[] = Array(tasks.length).fill(undefined);
   let next = 0;
 
   async function worker(): Promise<void> {
