@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { InstallmentRow } from "@/lib/payment-plans-types";
-import { receivableStatusLabel } from "@/lib/payment-plans-types";
+import { installmentStatusLabel } from "@/lib/payment-plans-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/payment-plans.module.css";
 
@@ -10,7 +10,7 @@ interface InstallmentScheduleTableProps {
   rows: InstallmentRow[];
 }
 
-/** Map a receivable status to its CSS class. */
+/** Map an installment UI status to its CSS class. */
 function statusClass(status: string): string {
   switch (status) {
     case "paid":
@@ -19,8 +19,11 @@ function statusClass(status: string): string {
       return styles.statusPartiallyPaid;
     case "overdue":
       return styles.statusOverdue;
+    case "due":
+      return styles.statusDue;
+    case "cancelled":
+      return styles.statusCancelled;
     case "pending":
-      return styles.statusPending;
     default:
       return styles.statusPending;
   }
@@ -33,8 +36,9 @@ function statusClass(status: string): string {
  * Columns: installment #, due date, scheduled amount, collected amount,
  * remaining amount, status.
  *
- * Status values reflect backend receivable_status facts:
- *   Paid / Partially Paid / Upcoming / Overdue
+ * Status values cover both receivable statuses (when a receivable exists) and
+ * payment schedule statuses (when no receivable exists yet):
+ *   Paid / Partially Paid / Due / Upcoming / Overdue / Cancelled
  *
  * All values sourced from backend via props. No calculations performed here.
  */
@@ -84,7 +88,7 @@ export function InstallmentScheduleTable({ rows }: InstallmentScheduleTableProps
                 <span
                   className={`${styles.statusBadge} ${statusClass(row.status)}`}
                 >
-                  {receivableStatusLabel(row.status)}
+                  {installmentStatusLabel(row.status)}
                 </span>
               </td>
             </tr>

@@ -24,6 +24,7 @@ import type { Project } from "./units-types";
 import type {
   CollectionSummary,
   InstallmentRow,
+  InstallmentStatus,
   OverdueInstallment,
   PaymentPlanDetail,
   PaymentPlanFiltersState,
@@ -167,9 +168,18 @@ async function fetchReceivables(
 /**
  * Derive days overdue for display purposes only.
  * Calculated from due date vs. current date — not an accounting truth.
+ *
+ * Parses YYYY-MM-DD strings as local dates to avoid UTC-vs-local off-by-one
+ * errors that occur when new Date("YYYY-MM-DD") is interpreted as midnight UTC.
  */
 function daysOverdueFromDueDate(dueDate: string): number {
-  const due = new Date(dueDate);
+  // Parse as local date by splitting the YYYY-MM-DD string explicitly
+  const parts = dueDate.split("-");
+  const due = new Date(
+    parseInt(parts[0], 10),
+    parseInt(parts[1], 10) - 1,
+    parseInt(parts[2], 10),
+  );
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   due.setHours(0, 0, 0, 0);
@@ -178,9 +188,34 @@ function daysOverdueFromDueDate(dueDate: string): number {
 }
 
 /**
+ * Map a raw backend payment schedule status to a UI-facing InstallmentStatus.
+ *
+ * Schedule statuses (pending/due/paid/overdue/cancelled) are a superset of
+ * receivable statuses (pending/partially_paid/paid/overdue). This function
+ * provides an explicit, lossless mapping instead of a blind type cast, so
+ * the UI renders correct labels and styles for every backend value.
+ */
+function mapScheduleStatusToUiStatus(status: string): InstallmentStatus {
+  switch (status) {
+    case "paid":
+      return "paid";
+    case "overdue":
+      return "overdue";
+    case "due":
+      return "due";
+    case "cancelled":
+      return "cancelled";
+    case "pending":
+    default:
+      return "pending";
+  }
+}
+
+/**
  * Build installment rows by combining schedule items with receivable lines.
  * When receivables are available they are matched by installment number;
- * otherwise schedule-only rows are returned with zero collected amounts.
+ * otherwise schedule-only rows are returned with zero collected amounts and
+ * an explicitly mapped UI status (no blind casts).
  */
 function buildInstallmentRows(
   schedule: ScheduleListResponse,
@@ -197,9 +232,11 @@ function buildInstallmentRows(
     const receivable = receivableMap.get(item.installment_number);
     const collected = receivable ? receivable.total_received : 0;
     const outstanding = receivable ? receivable.outstanding_amount : item.due_amount;
-    const status: ReceivableStatus = receivable
-      ? receivable.receivable_status
-      : (item.status as ReceivableStatus) ?? "pending";
+    // When a receivable exists use its authoritative status (can be partially_paid);
+    // when only a schedule entry exists, map the schedule status explicitly.
+    const status: InstallmentStatus = receivable
+      ? (receivable.receivable_status as InstallmentStatus)
+      : mapScheduleStatusToUiStatus(item.status);
 
     return {
       installmentNumber: item.installment_number,
@@ -259,8 +296,10 @@ function buildOverdueInstallments(
 /**
  * Fetch the payment plan list for a project.
  *
- * Loads all units for the project, finds their active/draft contracts, then
- * fetches receivables for each contract to build the queue items.
+ * Loads all units for the project, finds contracts in any status
+ * (active, draft, completed, cancelled), then fetches receivables for each
+ * contract to build the queue items. This ensures filter options in the UI
+ * (completed, cancelled) can return results.
  *
  * Performance: concurrency-bounded to avoid request storms.
  */
@@ -276,7 +315,6 @@ export async function getPaymentPlans(
     if (contracts.length === 0) return [];
 
     const contractTasks = contracts
-      .filter((c) => c.status === "active" || c.status === "draft")
       .map((contract) => async (): Promise<PaymentPlanListItem | null> => {
         const receivables = await fetchReceivables(contract.id);
 

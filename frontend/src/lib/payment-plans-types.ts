@@ -9,18 +9,23 @@
  *   GET /api/v1/sales/contracts?unit_id=             → contract list
  *   GET /api/v1/payment-plans/contracts/{id}/schedule → payment schedule
  *   GET /api/v1/collections/contracts/{id}/receivables → receivables summary
- *   GET /api/v1/collections/contracts/{id}/receipts  → receipt list
  */
 
 // ---------- Installment status -------------------------------------------
 
 /**
- * Status of a single payment schedule line as returned by the backend.
+ * UI status for a single installment row.
+ *
+ * Covers both payment schedule statuses (pending/due/paid/overdue/cancelled)
+ * and receivable statuses (partially_paid). When a receivable exists the
+ * receivable_status is used; otherwise the schedule status is mapped to a
+ * UI-safe value via mapScheduleStatusToUiStatus() in the API layer.
  */
 export type InstallmentStatus =
   | "pending"
   | "due"
   | "paid"
+  | "partially_paid"
   | "overdue"
   | "cancelled";
 
@@ -30,6 +35,7 @@ export function installmentStatusLabel(status: InstallmentStatus | string): stri
     pending: "Upcoming",
     due: "Due",
     paid: "Paid",
+    partially_paid: "Partially Paid",
     overdue: "Overdue",
     cancelled: "Cancelled",
   };
@@ -84,8 +90,13 @@ export interface InstallmentRow {
   scheduledAmount: number;
   collectedAmount: number;
   remainingAmount: number;
-  /** Receivable status from the collections module. */
-  status: ReceivableStatus;
+  /**
+   * UI-facing installment status. When a receivable exists this reflects the
+   * receivable_status (which can be partially_paid); when only a payment
+   * schedule entry exists the schedule status is explicitly mapped via
+   * mapScheduleStatusToUiStatus() in the API layer.
+   */
+  status: InstallmentStatus;
 }
 
 // ---------- Collection summary -------------------------------------------

@@ -28,8 +28,9 @@ const DEFAULT_FILTERS: PaymentPlanFiltersState = {
  * CollectionsPage — collections-focused queue page.
  *
  * Provides a simplified filtered view over the same underlying payment and
- * collection data as the payment plans queue. Defaults to showing items with
- * any collection activity.
+ * collection data as the payment plans queue. Shows all contracts that have
+ * receivable data; use the filter controls to narrow by collection status or
+ * contract status.
  *
  * For deeper collections operations, see the payment plan detail page
  * (/payment-plans/[contractId]).

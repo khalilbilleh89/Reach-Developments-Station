@@ -189,7 +189,8 @@ All financial values are sourced from the backend. No business logic calculation
 - The payment plans queue requires at least one contract with receivables data to show results. Contracts without a generated schedule will not appear.
 - Buyer name is not yet displayed (buyer_id is shown instead). A buyer lookup endpoint is not yet available.
 - Project name is passed from the list page to enrich list items. On the detail page, project is not re-fetched (it shows blank unless passed via navigation).
-- Days overdue is derived from due date vs. current date (display only) and resets each browser session.
+- Days overdue is derived from due date vs. the local calendar date at render time (display only). It changes daily and is timezone-dependent; it is not an accounting truth.
+- The payment plans queue includes contracts in all statuses (active, draft, completed, cancelled). Use the Contract Status filter to narrow results.
 
 ---
 
@@ -197,7 +198,7 @@ All financial values are sourced from the backend. No business logic calculation
 
 | File | Coverage |
 |---|---|
-| `components/payment-plans/__tests__/PaymentPlansTable.test.tsx` | Table rendering, sorting, overdue display, progress bar, empty state |
-| `components/payment-plans/__tests__/InstallmentScheduleTable.test.tsx` | All status labels, empty state, remaining amount display |
+| `components/payment-plans/__tests__/PaymentPlansTable.test.tsx` | Table rendering, sort order assertion, overdue display, progress bar clamping, empty state |
+| `components/payment-plans/__tests__/InstallmentScheduleTable.test.tsx` | All status labels (paid/partially_paid/overdue/due/cancelled/pending), empty state, remaining amount |
 | `app/(protected)/payment-plans/__tests__/PaymentPlansPage.test.tsx` | Project loading, plan loading, project switching, error states |
 | `app/(protected)/payment-plans/[contractId]/__tests__/PaymentPlanDetailPage.test.tsx` | Contract render, overdue panel visibility, error state, missing fields |

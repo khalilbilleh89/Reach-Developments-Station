@@ -184,7 +184,14 @@ export function PaymentPlansTable({ items }: PaymentPlansTableProps) {
           </tr>
         </thead>
         <tbody className={styles.tableBody}>
-          {sorted.map((item) => (
+          {sorted.map((item) => {
+            // Clamp collection percent to [0, 100] for progress bar, ARIA,
+            // and label so they remain consistent when over-collected.
+            const displayPercent = Math.min(
+              100,
+              Math.max(0, Math.round(item.collectionPercent)),
+            );
+            return (
             <tr key={item.contractId}>
               <td>
                 <Link
@@ -228,20 +235,20 @@ export function PaymentPlansTable({ items }: PaymentPlansTableProps) {
                   <div
                     className={styles.progressBar}
                     role="progressbar"
-                    aria-valuenow={Math.round(item.collectionPercent)}
+                    aria-valuenow={displayPercent}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`Collection progress: ${Math.round(item.collectionPercent)}%`}
+                    aria-label={`Collection progress: ${displayPercent}%`}
                   >
                     <div
                       className={styles.progressFill}
                       style={{
-                        width: `${Math.min(100, item.collectionPercent)}%`,
+                        width: `${displayPercent}%`,
                       }}
                     />
                   </div>
                   <span className={styles.progressLabel}>
-                    {Math.round(item.collectionPercent)}%
+                    {displayPercent}%
                   </span>
                 </div>
               </td>
@@ -255,7 +262,8 @@ export function PaymentPlansTable({ items }: PaymentPlansTableProps) {
                 </Link>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

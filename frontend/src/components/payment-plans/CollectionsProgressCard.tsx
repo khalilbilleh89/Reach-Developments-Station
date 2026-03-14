@@ -24,6 +24,10 @@ export function CollectionsProgressCard({ summary }: CollectionsProgressCardProp
       ? (summary.totalReceived / summary.totalDue) * 100
       : 0;
 
+  // Clamp to [0, 100] for progress bar, ARIA, and label so that they remain
+  // consistent even when over-collected (totalReceived > totalDue).
+  const displayPercent = Math.min(100, Math.max(0, Math.round(collectionPercent)));
+
   return (
     <div className={styles.collectionsCard}>
       <p className={styles.collectionsCardTitle}>Collections Progress</p>
@@ -31,19 +35,19 @@ export function CollectionsProgressCard({ summary }: CollectionsProgressCardProp
       <div className={styles.collectionsProgressRow}>
         <div className={styles.collectionsProgressLabel}>
           <span>Collection progress</span>
-          <span>{Math.round(collectionPercent)}%</span>
+          <span>{displayPercent}%</span>
         </div>
         <div
           className={styles.progressBar}
           role="progressbar"
-          aria-valuenow={Math.round(collectionPercent)}
+          aria-valuenow={displayPercent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Collection progress: ${Math.round(collectionPercent)}%`}
+          aria-label={`Collection progress: ${displayPercent}%`}
         >
           <div
             className={styles.progressFill}
-            style={{ width: `${Math.min(100, collectionPercent)}%` }}
+            style={{ width: `${displayPercent}%` }}
           />
         </div>
       </div>

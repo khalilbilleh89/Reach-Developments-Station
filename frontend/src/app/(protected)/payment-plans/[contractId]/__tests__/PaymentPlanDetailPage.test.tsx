@@ -159,7 +159,7 @@ describe("PaymentPlanDetailPage", () => {
     render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
     await waitFor(() =>
       expect(
-        screen.getByRole("alert", { name: /overdue installments/i }),
+        screen.getByRole("region", { name: /overdue installments/i }),
       ).toBeInTheDocument(),
     );
   });

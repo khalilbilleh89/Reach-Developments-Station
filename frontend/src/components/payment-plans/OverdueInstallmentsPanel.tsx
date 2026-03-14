@@ -27,9 +27,15 @@ export function OverdueInstallmentsPanel({
     return null;
   }
 
+  const headingId = "overdue-installments-heading";
+
   return (
-    <div className={styles.overduePanel} role="alert" aria-label="Overdue installments">
-      <p className={styles.overduePanelTitle}>
+    <div
+      className={styles.overduePanel}
+      role="region"
+      aria-labelledby={headingId}
+    >
+      <p id={headingId} className={styles.overduePanelTitle}>
         ⚠ Overdue Installments ({overdueInstallments.length})
       </p>
       <div className={styles.tableWrapper}>

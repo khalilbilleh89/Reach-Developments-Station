@@ -108,19 +108,40 @@ describe("PaymentPlansTable", () => {
     expect(screen.getByText(/no payment plans found/i)).toBeInTheDocument();
   });
 
-  it("sorts items when header is clicked", () => {
+  it("sorts items ascending by contract number by default", () => {
     render(<PaymentPlansTable items={mockItems} />);
-    const contractHeader = screen.getAllByRole("button", { name: /^contract$/i })[0];
-    fireEvent.click(contractHeader);
-    // After click, descending sort
-    fireEvent.click(contractHeader);
-    expect(screen.getByText("CNT-001")).toBeInTheDocument();
-    expect(screen.getByText("CNT-002")).toBeInTheDocument();
+    const rows = screen.getAllByRole("row");
+    // Row 0 is the header; rows 1+ are data rows
+    expect(rows[1]).toHaveTextContent("CNT-001");
+    expect(rows[2]).toHaveTextContent("CNT-002");
+  });
+
+  it("sorts items descending then ascending by contract number on repeated clicks", () => {
+    render(<PaymentPlansTable items={mockItems} />);
+    // First click: toggle to descending
+    fireEvent.click(screen.getAllByRole("button", { name: /^contract$/i })[0]);
+    let rows = screen.getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("CNT-002");
+    expect(rows[2]).toHaveTextContent("CNT-001");
+    // Second click: toggle back to ascending
+    fireEvent.click(screen.getAllByRole("button", { name: /^contract$/i })[0]);
+    rows = screen.getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("CNT-001");
+    expect(rows[2]).toHaveTextContent("CNT-002");
   });
 
   it("renders progress bar for collection percent", () => {
     render(<PaymentPlansTable items={[mockItems[0]]} />);
     const progressbar = screen.getByRole("progressbar");
     expect(progressbar).toHaveAttribute("aria-valuenow", "25");
+  });
+
+  it("clamps progress bar aria-valuenow to 100 when collection exceeds total due", () => {
+    const overCollected = { ...mockItems[0], collectionPercent: 120 };
+    render(<PaymentPlansTable items={[overCollected]} />);
+    const progressbar = screen.getByRole("progressbar");
+    expect(progressbar).toHaveAttribute("aria-valuenow", "100");
+    expect(progressbar).toHaveAttribute("aria-valuemax", "100");
+    expect(screen.getByText("100%")).toBeInTheDocument();
   });
 });

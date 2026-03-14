@@ -49,6 +49,22 @@ const mockRows: InstallmentRow[] = [
     remainingAmount: 100_000,
     status: "pending",
   },
+  {
+    installmentNumber: 5,
+    dueDate: "2025-11-01",
+    scheduledAmount: 100_000,
+    collectedAmount: 0,
+    remainingAmount: 100_000,
+    status: "due",
+  },
+  {
+    installmentNumber: 6,
+    dueDate: "2025-12-01",
+    scheduledAmount: 100_000,
+    collectedAmount: 0,
+    remainingAmount: 100_000,
+    status: "cancelled",
+  },
 ];
 
 describe("InstallmentScheduleTable", () => {
@@ -87,6 +103,16 @@ describe("InstallmentScheduleTable", () => {
   it("shows Upcoming status for pending installment", () => {
     render(<InstallmentScheduleTable rows={[mockRows[3]]} />);
     expect(screen.getByText("Upcoming")).toBeInTheDocument();
+  });
+
+  it("shows Due status for due installment (schedule-only status)", () => {
+    render(<InstallmentScheduleTable rows={[mockRows[4]]} />);
+    expect(screen.getByText("Due")).toBeInTheDocument();
+  });
+
+  it("shows Cancelled status for cancelled installment (schedule-only status)", () => {
+    render(<InstallmentScheduleTable rows={[mockRows[5]]} />);
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
   });
 
   it("shows dash for remaining when fully paid", () => {
