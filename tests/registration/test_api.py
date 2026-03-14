@@ -251,6 +251,7 @@ def test_list_project_cases_not_found(client: TestClient):
 
 
 def test_get_project_summary(client: TestClient):
+    """A unit with an open registration case is in the pipeline — not 'sold_not_registered'."""
     project_id, unit_id = _create_hierarchy(client, "PRJ-RSUMM")
     buyer_id = _create_buyer(client, "rsumm@example.com")
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RSUMM-001")
@@ -263,8 +264,52 @@ def test_get_project_summary(client: TestClient):
     assert data["total_sold_units"] == 1
     assert data["registration_cases_open"] == 1
     assert data["registration_cases_completed"] == 0
-    assert data["sold_not_registered"] == 1
+    # Unit already has an open case → it is in the pipeline, not "not registered"
+    assert data["sold_not_registered"] == 0
     assert data["registration_completion_ratio"] == pytest.approx(0.0)
+
+
+def test_summary_sold_no_case_counts_as_not_registered(client: TestClient):
+    """A sold unit with no registration case at all must appear in sold_not_registered."""
+    project_id, unit_id = _create_hierarchy(client, "PRJ-RSNO")
+    buyer_id = _create_buyer(client, "rsno@example.com")
+    _create_contract(client, unit_id, buyer_id, "CNT-RSNO-001")
+    # No case opened
+
+    resp = client.get(f"/api/v1/registration/projects/{project_id}/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_sold_units"] == 1
+    assert data["registration_cases_open"] == 0
+    assert data["registration_cases_completed"] == 0
+    assert data["sold_not_registered"] == 1
+
+
+def test_summary_completed_case_not_counted_as_not_registered(client: TestClient):
+    """A sold unit with a completed case must not appear in sold_not_registered."""
+    project_id, unit_id = _create_hierarchy(client, "PRJ-RSCMP")
+    buyer_id = _create_buyer(client, "rscmp@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RSCMP-001")
+    case_id = _create_case(client, project_id, unit_id, contract_id)
+
+    # Complete all milestones, then complete the case
+    milestones = client.get(f"/api/v1/registration/cases/{case_id}/milestones").json()
+    for ms in milestones:
+        client.patch(
+            f"/api/v1/registration/cases/{case_id}/milestones/{ms['id']}",
+            json={"status": "completed"},
+        )
+    client.patch(
+        f"/api/v1/registration/cases/{case_id}",
+        json={"status": "completed"},
+    )
+
+    resp = client.get(f"/api/v1/registration/projects/{project_id}/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["registration_cases_completed"] == 1
+    assert data["sold_not_registered"] == 0
+    assert data["registration_completion_ratio"] == pytest.approx(1.0)
 
 
 def test_get_project_summary_not_found(client: TestClient):

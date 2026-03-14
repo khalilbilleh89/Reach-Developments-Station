@@ -36,6 +36,10 @@ from app.modules.registration.schemas import (
 )
 from app.modules.sales.models import SalesContract
 from app.modules.projects.models import Project
+from app.modules.units.models import Unit
+from app.modules.floors.models import Floor
+from app.modules.buildings.models import Building
+from app.modules.phases.models import Phase
 from app.shared.enums.registration import CaseStatus
 
 
@@ -73,7 +77,7 @@ class RegistrationService:
         # Guard: contract must belong to the supplied unit
         if contract.unit_id != data.unit_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="The sale contract does not belong to the specified unit.",
             )
 
@@ -217,12 +221,6 @@ class RegistrationService:
         open_cases = self.case_repo.count_open_by_project(project_id)
 
         # Count sold units in project via a sales contract count
-        from app.modules.sales.models import SalesContract
-        from app.modules.units.models import Unit
-        from app.modules.floors.models import Floor
-        from app.modules.buildings.models import Building
-        from app.modules.phases.models import Phase
-
         total_sold = (
             self._db.query(SalesContract)
             .join(Unit, SalesContract.unit_id == Unit.id)
@@ -233,7 +231,11 @@ class RegistrationService:
             .count()
         )
 
-        sold_not_registered = max(0, total_sold - completed)
+        # Units already in the registration pipeline (open or completed cases)
+        # should not be counted as "sold but not registered".
+        # open_cases excludes cancelled cases (see repository).
+        active_pipeline = open_cases + completed
+        sold_not_registered = max(0, total_sold - active_pipeline)
         ratio = round(completed / total_sold, 6) if total_sold > 0 else 0.0
 
         return RegistrationSummaryResponse(
