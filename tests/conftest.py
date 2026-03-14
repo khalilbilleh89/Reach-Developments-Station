@@ -26,6 +26,7 @@ import app.modules.sales.models  # noqa: F401
 import app.modules.payment_plans.models  # noqa: F401
 import app.modules.collections.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
+import app.modules.registration.models  # noqa: F401
 
 from app.main import app
 
