@@ -41,11 +41,14 @@ from app.modules.cashflow.api import router as cashflow_router
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown events."""
     logger.info("Starting %s [env=%s]", settings.APP_NAME, settings.APP_ENV)
-    try:
-        with SessionLocal() as db:
-            seed_admin_user(db)
-    except Exception:
-        logger.exception("Bootstrap: admin seed failed — application startup continues.")
+    _is_test_env = (settings.APP_ENV or "").lower() == "test"
+    _has_credentials = bool(settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD)
+    if not _is_test_env and _has_credentials:
+        try:
+            with SessionLocal() as db:
+                seed_admin_user(db)
+        except Exception:
+            logger.exception("Bootstrap: admin seed failed — application startup continues.")
     yield
 
 
