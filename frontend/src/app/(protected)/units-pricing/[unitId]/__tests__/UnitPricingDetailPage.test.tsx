@@ -9,6 +9,7 @@ import "@testing-library/jest-dom";
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => "/units-pricing/unit-1",
+  useParams: () => ({ unitId: "unit-1" }),
 }));
 
 jest.mock("next/link", () => {
@@ -88,7 +89,7 @@ describe("UnitPricingDetailPage", () => {
 
   it("renders loading state initially", () => {
     mockGetUnitPricingDetail.mockReturnValue(new Promise(() => {}));
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     expect(screen.getByText(/loading unit details/i)).toBeInTheDocument();
   });
 
@@ -98,7 +99,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("Unit A101")).toBeInTheDocument(),
     );
@@ -110,7 +111,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getAllByText(/950,000/).length).toBeGreaterThanOrEqual(1),
     );
@@ -122,7 +123,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getAllByText("A101").length).toBeGreaterThanOrEqual(1),
     );
@@ -135,7 +136,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: null,
       attributes: null,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getByText(/not priced/i)).toBeInTheDocument(),
     );
@@ -143,7 +144,7 @@ describe("UnitPricingDetailPage", () => {
 
   it("renders error state when fetch fails", async () => {
     mockGetUnitPricingDetail.mockRejectedValue(new Error("Unit not found"));
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("Unit not found")).toBeInTheDocument(),
     );
@@ -155,7 +156,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     expect(
       screen.getByRole("link", { name: /back to units/i }),
     ).toBeInTheDocument();
@@ -167,7 +168,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage params={{ unitId: "unit-1" }} />);
+    render(<UnitPricingDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("Pricing Breakdown")).toBeInTheDocument(),
     );

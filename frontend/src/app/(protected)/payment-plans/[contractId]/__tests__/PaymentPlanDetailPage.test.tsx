@@ -9,6 +9,7 @@ import "@testing-library/jest-dom";
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => "/payment-plans/contract-1",
+  useParams: () => ({ contractId: "contract-1" }),
 }));
 
 jest.mock("next/link", () => {
@@ -96,19 +97,19 @@ describe("PaymentPlanDetailPage", () => {
   });
 
   it("shows loading state initially", () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     expect(screen.getByText(/loading payment plan/i)).toBeInTheDocument();
   });
 
   it("renders contract number in page title after loading", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getAllByText(/CNT-001/i).length).toBeGreaterThan(0),
     );
   });
 
   it("renders contract header details", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("A101")).toBeInTheDocument(),
     );
@@ -116,7 +117,7 @@ describe("PaymentPlanDetailPage", () => {
   });
 
   it("renders installment schedule", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(
         screen.getByRole("table", { name: /installment schedule/i }),
@@ -125,14 +126,14 @@ describe("PaymentPlanDetailPage", () => {
   });
 
   it("renders collections progress card", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getByText(/collections progress/i)).toBeInTheDocument(),
     );
   });
 
   it("does NOT render overdue panel when no overdue installments", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     // Wait for loading to complete
     await waitFor(() =>
       expect(screen.queryByText(/loading payment plan/i)).not.toBeInTheDocument(),
@@ -156,7 +157,7 @@ describe("PaymentPlanDetailPage", () => {
         overdueInstallments: 1,
       },
     });
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(
         screen.getByRole("region", { name: /overdue installments/i }),
@@ -166,14 +167,14 @@ describe("PaymentPlanDetailPage", () => {
 
   it("shows error state when API fails", async () => {
     mockGetContractPaymentPlan.mockRejectedValue(new Error("Not found"));
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("Not found")).toBeInTheDocument(),
     );
   });
 
   it("renders back link to payment plans", async () => {
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     const backLink = screen.getByRole("link", { name: /back to payment plans/i });
     expect(backLink).toHaveAttribute("href", "/payment-plans");
   });
@@ -183,7 +184,7 @@ describe("PaymentPlanDetailPage", () => {
       ...mockDetail,
       project: "",
     });
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getByText("CNT-001")).toBeInTheDocument(),
     );
@@ -194,7 +195,7 @@ describe("PaymentPlanDetailPage", () => {
       ...mockDetail,
       schedule: [],
     });
-    render(<PaymentPlanDetailPage params={{ contractId: "contract-1" }} />);
+    render(<PaymentPlanDetailPage />);
     await waitFor(() =>
       expect(screen.getByText(/no installment schedule/i)).toBeInTheDocument(),
     );

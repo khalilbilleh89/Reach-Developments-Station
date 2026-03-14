@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { ContractPaymentHeader } from "@/components/payment-plans/ContractPaymentHeader";
 import { InstallmentScheduleTable } from "@/components/payment-plans/InstallmentScheduleTable";
@@ -11,10 +12,6 @@ import { getContractPaymentPlan } from "@/lib/payment-plans-api";
 import type { PaymentPlanDetail } from "@/lib/payment-plans-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/payment-plans.module.css";
-
-interface PaymentPlanDetailPageProps {
-  params: { contractId: string };
-}
 
 /**
  * PaymentPlanDetailPage — contract-level payment plan detail page.
@@ -29,10 +26,8 @@ interface PaymentPlanDetailPageProps {
  * All data is sourced from the backend via getContractPaymentPlan().
  * No business logic or calculations are performed on the frontend.
  */
-export default function PaymentPlanDetailPage({
-  params,
-}: PaymentPlanDetailPageProps) {
-  const { contractId } = params;
+export default function PaymentPlanDetailPage() {
+  const { contractId } = useParams<{ contractId: string }>();
 
   const [detail, setDetail] = useState<PaymentPlanDetail | null>(null);
   const [loading, setLoading] = useState(true);

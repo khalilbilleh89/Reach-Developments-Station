@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { UnitPricingSummaryCard } from "@/components/units/UnitPricingSummaryCard";
 import { UnitPricingBreakdown } from "@/components/units/UnitPricingBreakdown";
@@ -9,10 +10,6 @@ import { UnitAttributesPanel } from "@/components/units/UnitAttributesPanel";
 import { getUnitPricingDetail } from "@/lib/units-api";
 import type { UnitPricingDetail } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
-
-interface UnitPricingDetailPageProps {
-  params: { unitId: string };
-}
 
 /**
  * UnitPricingDetailPage — full pricing inspection view for a single unit.
@@ -25,10 +22,8 @@ interface UnitPricingDetailPageProps {
  * All data is sourced from backend endpoints via getUnitPricingDetail().
  * No pricing calculations are performed on the frontend.
  */
-export default function UnitPricingDetailPage({
-  params,
-}: UnitPricingDetailPageProps) {
-  const { unitId } = params;
+export default function UnitPricingDetailPage() {
+  const { unitId } = useParams<{ unitId: string }>();
   const [detail, setDetail] = useState<UnitPricingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

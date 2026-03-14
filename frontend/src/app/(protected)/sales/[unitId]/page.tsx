@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { SalesUnitSummary } from "@/components/sales/SalesUnitSummary";
 import { SalesReadinessCard } from "@/components/sales/SalesReadinessCard";
@@ -12,10 +12,6 @@ import { PaymentPlanPreview } from "@/components/sales/PaymentPlanPreview";
 import { getUnitSaleWorkflow } from "@/lib/sales-api";
 import type { SalesWorkflowDetail } from "@/lib/sales-types";
 import styles from "@/styles/sales-workflow.module.css";
-
-interface SalesWorkflowDetailPageProps {
-  params: { unitId: string };
-}
 
 /**
  * SalesWorkflowDetailPage — guided sale workflow page for a specific unit.
@@ -35,10 +31,8 @@ interface SalesWorkflowDetailPageProps {
  * All data is sourced from the backend via getUnitSaleWorkflow().
  * No business logic or calculations are performed on the frontend.
  */
-export default function SalesWorkflowDetailPage({
-  params,
-}: SalesWorkflowDetailPageProps) {
-  const { unitId } = params;
+export default function SalesWorkflowDetailPage() {
+  const { unitId } = useParams<{ unitId: string }>();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") ?? "";
 
