@@ -16,12 +16,14 @@ import { getFinancialSummary } from "@/lib/dashboard-api";
 const mockGetFinancialSummary = getFinancialSummary as jest.Mock;
 
 const mockSummary = {
+  project_id: "proj-1",
   total_contract_value: 5_000_000,
   total_collected: 3_000_000,
   total_receivable: 2_000_000,
   collection_ratio: 0.6,
   units_sold: 30,
   total_units: 50,
+  units_available: 20,
   average_unit_price: 166_667,
 };
 

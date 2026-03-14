@@ -59,22 +59,24 @@ const mockGetSalesExceptionsSummary = getSalesExceptionsSummary as jest.Mock;
 import DashboardPage from "@/app/(protected)/dashboard/page";
 
 const mockProjects = [
-  { id: "proj-1", name: "Marina Tower" },
-  { id: "proj-2", name: "Palm Villa" },
+  { id: "proj-1", name: "Marina Tower", code: "MT-01", status: "active" },
+  { id: "proj-2", name: "Palm Villa", code: "PV-01", status: "active" },
 ];
 
 const mockFinancial = {
+  project_id: "proj-1",
   total_contract_value: 10_000_000,
   total_collected: 6_000_000,
   total_receivable: 4_000_000,
   collection_ratio: 0.6,
   units_sold: 40,
   total_units: 60,
+  units_available: 20,
   average_unit_price: 250_000,
 };
 
 const mockRegistration = {
-  total_cases: 40,
+  total_cases: 35,
   registered: 25,
   in_progress: 10,
   pending: 5,
@@ -90,8 +92,11 @@ const mockCashflow = {
 
 const mockExceptions = {
   total_exceptions: 5,
+  pending_exceptions: 2,
+  approved_exceptions: 3,
+  rejected_exceptions: 0,
   total_discount_amount: 150_000,
-  average_discount_pct: 3.2,
+  total_incentive_value: 25_000,
 };
 
 describe("DashboardPage", () => {
@@ -160,8 +165,10 @@ describe("DashboardPage", () => {
     await waitFor(() =>
       expect(screen.getByText("Sales Exception Impact")).toBeInTheDocument(),
     );
-    // "5" appears for both total_exceptions and registration pending count
+    // total_exceptions = 5; "5" appears in multiple places, use getAllByText
     expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
+    // Approved/pending breakdown subtitle
+    expect(screen.getByText(/3 approved/i)).toBeInTheDocument();
   });
 
   it("updates dashboard when project is switched", async () => {

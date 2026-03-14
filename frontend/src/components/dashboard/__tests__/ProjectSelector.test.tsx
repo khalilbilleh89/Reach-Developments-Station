@@ -30,8 +30,8 @@ describe("ProjectSelector", () => {
 
   it("renders project options after load", async () => {
     mockGetProjects.mockResolvedValue([
-      { id: "1", name: "Marina Tower" },
-      { id: "2", name: "Palm Villa" },
+      { id: "1", name: "Marina Tower", code: "MT-01", status: "active" },
+      { id: "2", name: "Palm Villa", code: "PV-01", status: "active" },
     ]);
     const onSelect = jest.fn();
     render(<ProjectSelector onSelect={onSelect} />);
@@ -46,8 +46,8 @@ describe("ProjectSelector", () => {
 
   it("calls onSelect with the first project on initial load", async () => {
     const projects = [
-      { id: "1", name: "Marina Tower" },
-      { id: "2", name: "Palm Villa" },
+      { id: "1", name: "Marina Tower", code: "MT-01", status: "active" },
+      { id: "2", name: "Palm Villa", code: "PV-01", status: "active" },
     ];
     mockGetProjects.mockResolvedValue(projects);
     const onSelect = jest.fn();
@@ -58,8 +58,8 @@ describe("ProjectSelector", () => {
 
   it("calls onSelect when selection changes", async () => {
     const projects = [
-      { id: "1", name: "Marina Tower" },
-      { id: "2", name: "Palm Villa" },
+      { id: "1", name: "Marina Tower", code: "MT-01", status: "active" },
+      { id: "2", name: "Palm Villa", code: "PV-01", status: "active" },
     ];
     mockGetProjects.mockResolvedValue(projects);
     const onSelect = jest.fn();

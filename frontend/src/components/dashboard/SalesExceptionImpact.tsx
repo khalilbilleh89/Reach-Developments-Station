@@ -17,7 +17,7 @@ interface SalesExceptionImpactProps {
  * SalesExceptionImpact — shows the commercial impact of manual sales exceptions.
  *
  * Fetches /sales-exceptions/projects/{id}/summary and renders the aggregate
- * discount metrics to give commercial visibility over approved exceptions.
+ * discount and incentive metrics to give commercial visibility over exceptions.
  */
 export function SalesExceptionImpact({ projectId }: SalesExceptionImpactProps) {
   const [summary, setSummary] = useState<SalesExceptionsSummary | null>(null);
@@ -56,7 +56,7 @@ export function SalesExceptionImpact({ projectId }: SalesExceptionImpactProps) {
         <MetricCard
           title="Total Exceptions"
           value={summary.total_exceptions}
-          subtitle="Approved manual exceptions"
+          subtitle={`${summary.approved_exceptions} approved · ${summary.pending_exceptions} pending`}
           icon="⚠️"
         />
         <MetricCard
@@ -73,12 +73,13 @@ export function SalesExceptionImpact({ projectId }: SalesExceptionImpactProps) {
           }}
         />
         <MetricCard
-          title="Avg Discount %"
-          value={`${summary.average_discount_pct.toFixed(1)}%`}
-          subtitle="Average per exception"
-          icon="📉"
+          title="Incentive Value"
+          value={formatCurrency(summary.total_incentive_value)}
+          subtitle="Total approved incentives"
+          icon="🎁"
         />
       </div>
     </div>
   );
 }
+
