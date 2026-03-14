@@ -12,11 +12,11 @@
  *   GET /api/v1/payment-plans/contracts/{contractId}/schedule
  */
 
-import type { UnitListItem, UnitPrice } from "./units-types";
+import type { UnitListItem, UnitPrice, UnitStatus, UnitType } from "./units-types";
 
 // ---------- Re-exports for consumer convenience --------------------------
 
-export type { UnitListItem, UnitPrice };
+export type { UnitListItem, UnitPrice, UnitStatus, UnitType };
 
 // ---------- Sales candidate (queue item) --------------------------------
 
@@ -49,6 +49,8 @@ export interface SalesWorkflowDetail {
   paymentPlanPreview: PaymentPlanPreview | null;
   /** Derived commercial readiness — computed once in the API layer. */
   readiness: SalesReadinessStatus;
+  /** Whether any pending (non-approved) exceptions exist for this unit. */
+  hasPendingException: boolean;
 }
 
 // ---------- Readiness ----------------------------------------------------
@@ -79,7 +81,9 @@ export function readinessLabel(status: SalesReadinessStatus): string {
 // ---------- Approved sales exception ------------------------------------
 
 /**
- * A sales exception that is relevant to the unit sale.
+ * A sales exception that has been approved and is relevant to the unit sale.
+ * Displayed in ApprovedExceptionPanel. Only exceptions with
+ * approval_status === "approved" are passed here.
  * Reflects the backend SalesExceptionResponse schema.
  */
 export interface ApprovedSalesException {
@@ -157,8 +161,8 @@ export interface PaymentPlanPreview {
 
 /** UI filter state for the sales queue listing page. */
 export interface SalesFiltersState {
-  status: string;
-  unit_type: string;
+  status: UnitStatus | "";
+  unit_type: UnitType | "";
   has_approved_exception: "" | "yes" | "no";
   contract_status: ContractStatus | "";
   readiness: SalesReadinessStatus | "";

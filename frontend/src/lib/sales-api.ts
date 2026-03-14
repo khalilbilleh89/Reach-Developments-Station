@@ -12,7 +12,7 @@
  *   GET /projects                                        → project list
  *   GET /units/{unitId}                                  → unit detail
  *   GET /pricing/unit/{unitId}                           → unit price
- *   GET /sales-exceptions/projects/{projectId}           → exceptions list
+ *   GET /sales-exceptions/projects/{projectId}           → exceptions list (once per project)
  *   GET /sales/contracts?unit_id={unitId}                → contract list
  *   GET /payment-plans/contracts/{contractId}/schedule   → payment schedule
  */
@@ -43,6 +43,35 @@ import type {
 // ---------- Re-export project/unit helpers for page convenience ----------
 
 export { getProjectsFromUnitsApi as getProjects };
+
+// ---------- Concurrency limiter ------------------------------------------
+
+/**
+ * Run tasks with bounded concurrency.
+ * Prevents unbounded Promise.all fan-out for large project unit lists.
+ */
+async function runWithConcurrencyLimit<T>(
+  tasks: (() => Promise<T>)[],
+  limit: number,
+): Promise<T[]> {
+  if (tasks.length === 0) return [];
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, tasks.length) }, worker),
+  );
+  return results;
+}
+
+const ENRICHMENT_CONCURRENCY = 5;
 
 // ---------- Raw backend response types (internal) ------------------------
 
@@ -113,37 +142,79 @@ function isNotFoundError(err: unknown): boolean {
 // ---------- Internal helpers ---------------------------------------------
 
 /**
- * Fetch approved sales exceptions for a specific unit within a project.
- * Returns all exceptions for the project filtered to the given unit ID.
- * Returns [] when none exist.
+ * Fetch all sales exceptions for a project and index them by unit_id.
+ *
+ * Called once per project in getSalesCandidates() to avoid fetching the full
+ * project exception list once per unit (which would be O(N) requests).
+ *
+ * Returns an empty map when projectId is empty (guard against malformed URL)
+ * or when no exceptions exist (404).
  */
-async function fetchUnitExceptions(
+async function fetchProjectExceptionsByUnit(
   projectId: string,
-  unitId: string,
-): Promise<ApprovedSalesException[]> {
+): Promise<Map<string, SalesExceptionItem[]>> {
+  if (!projectId) return new Map();
   try {
     const data = await apiFetch<SalesExceptionListResponse>(
       `/sales-exceptions/projects/${projectId}?limit=500`,
     );
-    return data.items
-      .filter((ex) => ex.unit_id === unitId)
-      .map((ex) => ({
-        id: ex.id,
-        exception_type: ex.exception_type,
-        approval_status: ex.approval_status,
-        base_price: ex.base_price,
-        requested_price: ex.requested_price,
-        discount_amount: ex.discount_amount,
-        discount_percentage: ex.discount_percentage,
-        incentive_value: ex.incentive_value,
-        incentive_description: ex.incentive_description,
-        requested_by: ex.requested_by,
-        approved_by: ex.approved_by,
-      }));
+    const map = new Map<string, SalesExceptionItem[]>();
+    for (const item of data.items) {
+      const existing = map.get(item.unit_id) ?? [];
+      existing.push(item);
+      map.set(item.unit_id, existing);
+    }
+    return map;
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return new Map();
+    throw err;
+  }
+}
+
+/**
+ * Fetch sales exceptions for a specific unit within a project.
+ *
+ * Used on the unit-detail workflow page where project context is available.
+ * Guards against empty projectId — returns [] rather than building a
+ * malformed URL.
+ *
+ * Returns all exception records for the unit (all approval statuses).
+ * Callers are responsible for filtering to the statuses they need.
+ */
+async function fetchUnitExceptions(
+  projectId: string,
+  unitId: string,
+): Promise<SalesExceptionItem[]> {
+  if (!projectId) return [];
+  try {
+    const data = await apiFetch<SalesExceptionListResponse>(
+      `/sales-exceptions/projects/${projectId}?limit=500`,
+    );
+    return data.items.filter((ex) => ex.unit_id === unitId);
   } catch (err: unknown) {
     if (isNotFoundError(err)) return [];
     throw err;
   }
+}
+
+/**
+ * Map an internal SalesExceptionItem to the display-oriented ApprovedSalesException.
+ * Only call this for items that have already been filtered to approved status.
+ */
+function toApprovedSalesException(ex: SalesExceptionItem): ApprovedSalesException {
+  return {
+    id: ex.id,
+    exception_type: ex.exception_type,
+    approval_status: ex.approval_status,
+    base_price: ex.base_price,
+    requested_price: ex.requested_price,
+    discount_amount: ex.discount_amount,
+    discount_percentage: ex.discount_percentage,
+    incentive_value: ex.incentive_value,
+    incentive_description: ex.incentive_description,
+    requested_by: ex.requested_by,
+    approved_by: ex.approved_by,
+  };
 }
 
 /**
@@ -204,11 +275,19 @@ async function fetchPaymentPlanPreview(
 /**
  * Derive the commercial readiness status from available backend data.
  * All values come from the backend — no business logic is added here.
+ *
+ * Priority order (highest to lowest):
+ *   1. under_contract  — unit already has an active contract
+ *   2. blocked         — unit is registered (terminal state)
+ *   3. missing_pricing — pricing not yet configured
+ *   4. needs_exception_approval — pending (non-approved) exceptions exist
+ *   5. ready           — unit is available/reserved, priced, and no blockers
  */
 function deriveReadiness(
   unit: UnitListItem,
   pricing: UnitPrice | null,
   hasApprovedException: boolean,
+  hasPendingException: boolean,
   contractStatus: ContractStatus | null,
 ): SalesReadinessStatus {
   if (unit.status === "under_contract" || contractStatus === "active") {
@@ -220,11 +299,10 @@ function deriveReadiness(
   if (!pricing) {
     return "missing_pricing";
   }
-  if (hasApprovedException) {
-    // A resolved approved exception is informational — unit can still proceed
-    return "ready";
+  if (hasPendingException) {
+    return "needs_exception_approval";
   }
-  if (unit.status === "available" || unit.status === "reserved") {
+  if (hasApprovedException || unit.status === "available" || unit.status === "reserved") {
     return "ready";
   }
   return "blocked";
@@ -263,45 +341,54 @@ function deriveContractAction(
  * Fetch a project's unit list enriched with sales-relevant data, suitable
  * for rendering the sales candidates queue.
  *
- * Enrichment is done in parallel per unit. Individual pricing/exception
- * failures for "not found" are tolerated; unexpected errors propagate.
+ * Performance characteristics:
+ *   - Project exceptions are fetched ONCE and indexed by unit_id.
+ *   - Pricing and contract fetches are bounded by ENRICHMENT_CONCURRENCY
+ *     to prevent request storms on large projects.
  */
 export async function getSalesCandidates(
   projectId: string,
 ): Promise<SalesCandidate[]> {
-  const units = await getUnitsByProject(projectId);
+  const [units, exceptionsByUnit] = await Promise.all([
+    getUnitsByProject(projectId),
+    fetchProjectExceptionsByUnit(projectId),
+  ]);
   if (units.length === 0) return [];
 
-  // Fetch pricing and contracts for all units in parallel
-  const enriched = await Promise.all(
-    units.map(async (unit): Promise<SalesCandidate> => {
-      const [pricing, exceptions, contract] = await Promise.all([
-        getUnitPricing(unit.id),
-        fetchUnitExceptions(projectId, unit.id),
-        fetchUnitContract(unit.id),
-      ]);
+  const tasks = units.map((unit) => async (): Promise<SalesCandidate> => {
+    const [pricing, contract] = await Promise.all([
+      getUnitPricing(unit.id),
+      fetchUnitContract(unit.id),
+    ]);
 
-      const hasApprovedException = exceptions.some(
-        (ex) => ex.approval_status === "approved",
-      );
-      const contractStatus = contract ? contract.status : null;
-      const readiness = deriveReadiness(
-        unit,
-        pricing,
-        hasApprovedException,
-        contractStatus,
-      );
+    const unitExceptions = exceptionsByUnit.get(unit.id) ?? [];
+    const hasApprovedException = unitExceptions.some(
+      (ex) => ex.approval_status === "approved",
+    );
+    const hasPendingException = unitExceptions.some(
+      (ex) => ex.approval_status === "pending",
+    );
+    const contractStatus = contract ? contract.status : null;
+    const readiness = deriveReadiness(
+      unit,
+      pricing,
+      hasApprovedException,
+      hasPendingException,
+      contractStatus,
+    );
 
-      return { unit, pricing, hasApprovedException, contractStatus, readiness };
-    }),
-  );
+    return { unit, pricing, hasApprovedException, contractStatus, readiness };
+  });
 
-  return enriched;
+  return runWithConcurrencyLimit(tasks, ENRICHMENT_CONCURRENCY);
 }
 
 /**
  * Fetch all sales-relevant data for a single unit.
  * Used by the guided sales workflow detail page.
+ *
+ * Requires a valid projectId for exception loading. When projectId is empty,
+ * approved exceptions are skipped rather than issuing a malformed request.
  */
 export async function getUnitSaleWorkflow(
   projectId: string,
@@ -321,18 +408,27 @@ export async function getUnitSaleWorkflow(
     paymentPlanPreview = await fetchPaymentPlanPreview(contract.id);
   }
 
+  const hasApprovedException = exceptions.some(
+    (ex) => ex.approval_status === "approved",
+  );
+  const hasPendingException = exceptions.some(
+    (ex) => ex.approval_status === "pending",
+  );
+
   return {
     unit,
     pricing,
-    approvedExceptions: exceptions.filter(
-      (ex) => ex.approval_status === "approved",
-    ),
+    approvedExceptions: exceptions
+      .filter((ex) => ex.approval_status === "approved")
+      .map(toApprovedSalesException),
     contractAction,
     paymentPlanPreview,
+    hasPendingException,
     readiness: deriveReadiness(
       unit,
       pricing,
-      exceptions.some((ex) => ex.approval_status === "approved"),
+      hasApprovedException,
+      hasPendingException,
       contract ? contract.status : null,
     ),
   };

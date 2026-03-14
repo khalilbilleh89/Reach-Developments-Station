@@ -122,7 +122,7 @@ describe("SalesCandidatesTable", () => {
     expect(screen.getByText("No units found")).toBeInTheDocument();
   });
 
-  it("sorts by unit number when header clicked", () => {
+  it("renders candidates in default ascending order by unit number", () => {
     const candidates = [
       makeCandidate({ unit: { ...makeCandidate().unit, id: "u2", unit_number: "B201" } }),
       makeCandidate({ unit: { ...makeCandidate().unit, id: "u1", unit_number: "A101" } }),
@@ -130,10 +130,26 @@ describe("SalesCandidatesTable", () => {
     render(
       <SalesCandidatesTable candidates={candidates} onSelectUnit={jest.fn()} />,
     );
-    // Default ascending: A101 before B201
+    // Default sort is ascending by unit_number: A101 before B201
     const rows = screen.getAllByRole("row");
     expect(rows[1]).toHaveTextContent("A101");
     expect(rows[2]).toHaveTextContent("B201");
+  });
+
+  it("reverses sort order when unit number header is clicked again", () => {
+    const candidates = [
+      makeCandidate({ unit: { ...makeCandidate().unit, id: "u1", unit_number: "A101" } }),
+      makeCandidate({ unit: { ...makeCandidate().unit, id: "u2", unit_number: "B201" } }),
+    ];
+    render(
+      <SalesCandidatesTable candidates={candidates} onSelectUnit={jest.fn()} />,
+    );
+    // Click the Unit column header sort button to reverse the default ascending sort
+    const unitHeader = screen.getByRole("columnheader", { name: "Unit" });
+    fireEvent.click(unitHeader.querySelector("button")!);
+    const rows = screen.getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("B201");
+    expect(rows[2]).toHaveTextContent("A101");
   });
 
   it("renders contract status when present", () => {

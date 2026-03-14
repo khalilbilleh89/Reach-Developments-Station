@@ -106,9 +106,9 @@ export default function SalesPage() {
 
   const handleSelectUnit = useCallback(
     (unitId: string) => {
-      router.push(`/sales/${unitId}`);
+      router.push(`/sales/${unitId}?projectId=${selectedProjectId}`);
     },
-    [router],
+    [router, selectedProjectId],
   );
 
   const filtered = filterSalesCandidates(candidates, filters);

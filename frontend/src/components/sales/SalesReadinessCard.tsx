@@ -10,6 +10,8 @@ interface SalesReadinessCardProps {
   unit: UnitListItem;
   pricing: UnitPrice | null;
   hasApprovedException: boolean;
+  /** Whether any non-approved (pending) exceptions exist for this unit. */
+  hasPendingException?: boolean;
   contractStatus: ContractStatus | null;
   readiness: SalesReadinessStatus;
 }
@@ -48,6 +50,7 @@ export function SalesReadinessCard({
   unit,
   pricing,
   hasApprovedException,
+  hasPendingException = false,
   contractStatus,
   readiness,
 }: SalesReadinessCardProps) {
@@ -65,6 +68,13 @@ export function SalesReadinessCard({
       pass: contractStatus !== "active",
     },
   ];
+
+  if (hasPendingException) {
+    checks.push({
+      label: "Pending exception awaiting approval",
+      pass: false,
+    });
+  }
 
   if (hasApprovedException) {
     checks.push({

@@ -6,8 +6,9 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // Mock Next.js navigation
+const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
   usePathname: () => "/sales",
 }));
 
@@ -90,6 +91,7 @@ const mockCandidates = [
 describe("SalesPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPush.mockReset();
     mockGetProjects.mockResolvedValue(mockProjects);
     mockGetSalesCandidates.mockResolvedValue(mockCandidates);
     mockFilterSalesCandidates.mockImplementation((c: unknown[]) => c);
@@ -162,6 +164,19 @@ describe("SalesPage", () => {
     render(<SalesPage />);
     await waitFor(() =>
       expect(screen.getByText("Server error")).toBeInTheDocument(),
+    );
+  });
+
+  it("navigates to unit detail with projectId query param", async () => {
+    render(<SalesPage />);
+    await waitFor(() =>
+      expect(screen.getByText("A101")).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /open sales workflow/i }),
+    );
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.stringMatching(/\/sales\/unit-1\?projectId=proj-1/),
     );
   });
 });

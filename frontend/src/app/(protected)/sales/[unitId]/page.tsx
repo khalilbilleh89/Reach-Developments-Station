@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { SalesUnitSummary } from "@/components/sales/SalesUnitSummary";
 import { SalesReadinessCard } from "@/components/sales/SalesReadinessCard";
@@ -26,17 +27,21 @@ interface SalesWorkflowDetailPageProps {
  *   - Contract action panel
  *   - Payment plan preview (read-only)
  *
+ * Project context is received via the `?projectId=` query parameter, which
+ * the sales queue page injects when navigating here. Without a valid
+ * projectId, approved exceptions will not load (the API layer returns [] and
+ * shows an informational warning instead of issuing a malformed request).
+ *
  * All data is sourced from the backend via getUnitSaleWorkflow().
  * No business logic or calculations are performed on the frontend.
- *
- * Note: The projectId is extracted from the referrer/session context.
- * For now we pass an empty string and let the API wrapper handle graceful
- * fallbacks when project context is unavailable at the URL level.
  */
 export default function SalesWorkflowDetailPage({
   params,
 }: SalesWorkflowDetailPageProps) {
   const { unitId } = params;
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? "";
+
   const [detail, setDetail] = useState<SalesWorkflowDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +49,7 @@ export default function SalesWorkflowDetailPage({
   useEffect(() => {
     setLoading(true);
     setError(null);
-    // Project context: pass an empty string; the API layer fetches exceptions
-    // using the unit's project_id which is embedded in the exception records.
-    // When no project_id is known at this route level, exceptions fall back
-    // to an empty list gracefully.
-    getUnitSaleWorkflow("", unitId)
+    getUnitSaleWorkflow(projectId, unitId)
       .then(setDetail)
       .catch((err: unknown) => {
         setError(
@@ -56,7 +57,7 @@ export default function SalesWorkflowDetailPage({
         );
       })
       .finally(() => setLoading(false));
-  }, [unitId]);
+  }, [projectId, unitId]);
 
   const title = detail
     ? `Unit ${detail.unit.unit_number} — Sales Workflow`
@@ -76,6 +77,13 @@ export default function SalesWorkflowDetailPage({
         ← Back to Sales
       </Link>
 
+      {!projectId && (
+        <div className={styles.errorState}>
+          No project context available. Navigate here from the sales queue to
+          load approved exceptions and full readiness data.
+        </div>
+      )}
+
       {loading && (
         <div className={styles.loadingState}>Loading sales workflow…</div>
       )}
@@ -94,6 +102,7 @@ export default function SalesWorkflowDetailPage({
             unit={detail.unit}
             pricing={detail.pricing}
             hasApprovedException={hasApprovedException}
+            hasPendingException={detail.hasPendingException}
             contractStatus={detail.contractAction.contractStatus}
             readiness={detail.readiness}
           />

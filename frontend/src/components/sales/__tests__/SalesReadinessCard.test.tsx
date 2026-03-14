@@ -125,4 +125,37 @@ describe("SalesReadinessCard", () => {
     );
     expect(screen.getByText("Blocked")).toBeInTheDocument();
   });
+
+  it("shows 'Needs Exception Approval' badge when hasPendingException is true", () => {
+    render(
+      <SalesReadinessCard
+        unit={mockUnit}
+        pricing={mockPricing}
+        hasApprovedException={false}
+        hasPendingException={true}
+        contractStatus={null}
+        readiness="needs_exception_approval"
+      />,
+    );
+    expect(screen.getByText("Needs Exception Approval")).toBeInTheDocument();
+    expect(
+      screen.getByText("Pending exception awaiting approval"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show pending exception check when hasPendingException is false", () => {
+    render(
+      <SalesReadinessCard
+        unit={mockUnit}
+        pricing={mockPricing}
+        hasApprovedException={false}
+        hasPendingException={false}
+        contractStatus={null}
+        readiness="ready"
+      />,
+    );
+    expect(
+      screen.queryByText("Pending exception awaiting approval"),
+    ).not.toBeInTheDocument();
+  });
 });

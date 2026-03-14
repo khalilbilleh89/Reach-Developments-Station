@@ -56,11 +56,11 @@ interface SalesFiltersProps {
  */
 export function SalesFilters({ filters, onChange }: SalesFiltersProps) {
   const handleStatus = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange({ ...filters, status: e.target.value });
+    onChange({ ...filters, status: e.target.value as UnitStatus | "" });
   };
 
   const handleType = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange({ ...filters, unit_type: e.target.value });
+    onChange({ ...filters, unit_type: e.target.value as UnitType | "" });
   };
 
   const handleException = (e: React.ChangeEvent<HTMLSelectElement>) => {
