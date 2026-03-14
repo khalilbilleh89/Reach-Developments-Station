@@ -33,6 +33,7 @@ from app.modules.registration.api import router as registration_router
 from app.modules.sales_exceptions.api import router as sales_exceptions_router
 from app.modules.units.api import router as units_router
 from app.modules.commission.api import router as commission_router
+from app.modules.cashflow.api import router as cashflow_router
 
 
 @asynccontextmanager
@@ -68,6 +69,7 @@ app.include_router(finance_router, prefix=_API_PREFIX)
 app.include_router(registration_router, prefix=_API_PREFIX)
 app.include_router(sales_exceptions_router, prefix=_API_PREFIX)
 app.include_router(commission_router, prefix=_API_PREFIX)
+app.include_router(cashflow_router, prefix=_API_PREFIX)
 
 
 @app.get("/", tags=["root"])
