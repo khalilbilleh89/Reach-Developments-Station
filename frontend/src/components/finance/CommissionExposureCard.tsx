@@ -54,6 +54,7 @@ export function CommissionExposureCard({
   }
 
   const pendingPayouts =
+    // Payouts not yet approved = total minus approved (includes draft + calculated)
     commission.total_payouts - commission.approved_payouts;
 
   return (

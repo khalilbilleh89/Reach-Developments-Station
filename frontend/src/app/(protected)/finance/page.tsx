@@ -90,19 +90,19 @@ export default function FinanceDashboardPage() {
 
     getProjectFinanceSummary(id)
       .then(({ collections: c }) => setCollections(c))
-      .catch(() => {/* section renders its own error */});
+      .catch((err: unknown) => { console.error("Failed to load collections:", err); });
 
     getProjectCashflowSummary(id)
       .then(setCashflow)
-      .catch(() => {/* section renders its own error */});
+      .catch((err: unknown) => { console.error("Failed to load cashflow:", err); });
 
     getProjectSalesExceptionsSummary(id)
       .then(setExceptions)
-      .catch(() => {/* section renders its own error */});
+      .catch((err: unknown) => { console.error("Failed to load exceptions:", err); });
 
     getProjectRegistrationSummary(id)
       .then(setRegistration)
-      .catch(() => {/* section renders its own error */});
+      .catch((err: unknown) => { console.error("Failed to load registration:", err); });
   }, [selectedProject]);
 
   const handleProjectChange = useCallback(
