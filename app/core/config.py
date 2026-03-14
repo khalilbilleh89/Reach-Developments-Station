@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Bootstrap admin credentials (optional).
+    # When both are set, the application will create an initial administrator
+    # account on startup if one does not already exist.
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
+
     @model_validator(mode="after")
     def _reject_default_secret_in_production(self) -> "Settings":
         if (self.APP_ENV or "").lower() == "production" and self.SECRET_KEY == _DEFAULT_SECRET:
