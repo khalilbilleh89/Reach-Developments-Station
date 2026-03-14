@@ -1,0 +1,595 @@
+/* ============================================================
+   Payment Plans & Collections — layout and visual rules
+   ============================================================ */
+
+/* --- Filter bar ------------------------------------------- */
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+  margin-bottom: var(--space-6);
+  padding: var(--card-padding);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 140px;
+}
+
+.filterLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+}
+
+.filterSelect,
+.filterInput {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-3);
+  min-width: 120px;
+}
+
+.filterSelect:focus,
+.filterInput:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.filterReset {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  align-self: flex-end;
+}
+
+.filterReset:hover {
+  background: var(--color-border);
+}
+
+/* --- Table ------------------------------------------------- */
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--color-border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  background: var(--color-surface);
+}
+
+.tableHead {
+  background: var(--color-bg);
+}
+
+.tableHead th {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sortableHeader {
+  cursor: default;
+}
+
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortBtn:hover {
+  color: var(--color-text);
+}
+
+.sortBtn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.sortIndicator {
+  display: inline-block;
+  margin-left: var(--space-1);
+  opacity: 0.7;
+}
+
+.tableBody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s;
+}
+
+.tableBody tr:last-child {
+  border-bottom: none;
+}
+
+.tableBody tr:hover {
+  background: var(--color-bg);
+}
+
+.tableBody td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* --- Action button ---------------------------------------- */
+
+.actionBtn {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--card-radius);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* --- Contract number / unit link -------------------------- */
+
+.contractLink {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.contractLink:hover {
+  text-decoration: underline;
+}
+
+/* --- Progress bar ----------------------------------------- */
+
+.progressBarWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 120px;
+}
+
+.progressBar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: width 0.2s;
+}
+
+.progressLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* --- Installment status badges ----------------------------- */
+
+.statusBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+}
+
+.statusPaid {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.statusPartiallyPaid {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.statusDue {
+  background: #bee3f8;
+  color: #2a4365;
+}
+
+.statusPending {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.statusOverdue {
+  background: #fed7d7;
+  color: #9b2335;
+}
+
+.statusCancelled {
+  background: #e2e8f0;
+  color: #718096;
+}
+
+/* --- Contract status badge -------------------------------- */
+
+.contractStatusBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+}
+
+.contractActive {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.contractDraft {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.contractCancelled {
+  background: #fed7d7;
+  color: #9b2335;
+}
+
+.contractCompleted {
+  background: #e9d8fd;
+  color: #44337a;
+}
+
+/* --- Overdue highlight ------------------------------------ */
+
+.overdueAmount {
+  color: #9b2335;
+  font-weight: var(--font-weight-semibold);
+}
+
+.overdueBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-medium);
+  background: #fed7d7;
+  color: #9b2335;
+}
+
+/* --- Summary card ----------------------------------------- */
+
+.summaryCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.summaryCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summaryItemLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.summaryItemValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.summaryItemValueLarge {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* --- Collections progress card ---------------------------- */
+
+.collectionsCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.collectionsCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.collectionsProgressRow {
+  margin-bottom: var(--space-4);
+}
+
+.collectionsProgressLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.collectionsMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+}
+
+.collectionsMetricItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.collectionsMetricLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.collectionsMetricValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+/* --- Overdue panel ---------------------------------------- */
+
+.overduePanel {
+  background: var(--color-surface);
+  border: 1px solid #feb2b2;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.overduePanelTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: #9b2335;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.overdueEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* --- Contract header -------------------------------------- */
+
+.contractHeader {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+}
+
+.contractHeaderTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-4);
+}
+
+.contractHeaderNumber {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin-bottom: var(--space-4);
+}
+
+.contractHeaderGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+}
+
+.contractHeaderField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contractHeaderFieldLabel {
+  font-size: calc(var(--font-size-sm) * 0.875);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.contractHeaderFieldValue {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+/* --- Detail page layout ----------------------------------- */
+
+.detailLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+@media (max-width: 768px) {
+  .detailLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detailFullWidth {
+  grid-column: 1 / -1;
+}
+
+/* --- Project selector row --------------------------------- */
+
+.selectorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.selectorLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.selectorSelect {
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  padding: var(--space-2) var(--space-4);
+  min-width: 220px;
+  cursor: pointer;
+}
+
+.selectorSelect:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* --- Empty / loading / error states ----------------------- */
+
+.loadingState {
+  padding: var(--space-12) 0;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.emptyState {
+  padding: var(--space-12) 0;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.emptyStateTitle {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-2);
+}
+
+.emptyStateBody {
+  font-size: var(--font-size-sm);
+}
+
+.errorState {
+  padding: var(--space-6);
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: var(--card-radius);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Back link -------------------------------------------- */
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  text-decoration: none;
+  margin-bottom: var(--space-6);
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+/* --- Results count --------------------------------------- */
+
+.resultsCount {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
