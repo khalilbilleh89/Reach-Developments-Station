@@ -41,6 +41,32 @@ def _create_hierarchy(client: TestClient, proj_code: str) -> tuple[str, str]:
     return project_id, unit_id
 
 
+def _create_buyer(client: TestClient, email: str) -> str:
+    resp = client.post(
+        "/api/v1/sales/buyers",
+        json={"full_name": "Test Buyer", "email": email, "phone": "+9620000001"},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def _create_contract(
+    client: TestClient, unit_id: str, buyer_id: str, contract_number: str
+) -> str:
+    resp = client.post(
+        "/api/v1/sales/contracts",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "contract_number": contract_number,
+            "contract_date": "2026-03-01",
+            "contract_price": 220_000.0,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
 def _make_exception(
     client: TestClient,
     project_id: str,
@@ -49,17 +75,18 @@ def _make_exception(
     base_price: float = 220_000.0,
     requested_price: float = 205_000.0,
     exception_type: str = "discount",
+    sale_contract_id: str | None = None,
 ) -> dict:
-    resp = client.post(
-        "/api/v1/sales-exceptions",
-        json={
-            "project_id": project_id,
-            "unit_id": unit_id,
-            "exception_type": exception_type,
-            "base_price": base_price,
-            "requested_price": requested_price,
-        },
-    )
+    payload: dict = {
+        "project_id": project_id,
+        "unit_id": unit_id,
+        "exception_type": exception_type,
+        "base_price": base_price,
+        "requested_price": requested_price,
+    }
+    if sale_contract_id is not None:
+        payload["sale_contract_id"] = sale_contract_id
+    resp = client.post("/api/v1/sales-exceptions", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -145,6 +172,75 @@ def test_create_exception_invalid_project_returns_404(client: TestClient):
     assert resp.status_code == 404
 
 
+def test_create_exception_unit_not_in_project_returns_422(client: TestClient):
+    """Unit from a different project must be rejected (hierarchy integrity)."""
+    project_a_id, _ = _create_hierarchy(client, "SE-HA")
+    project_b_id, unit_b_id = _create_hierarchy(client, "SE-HB")
+
+    resp = client.post(
+        "/api/v1/sales-exceptions",
+        json={
+            "project_id": project_a_id,
+            "unit_id": unit_b_id,  # belongs to project B, not A
+            "exception_type": "discount",
+            "base_price": 200_000.0,
+            "requested_price": 195_000.0,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_create_exception_with_valid_contract(client: TestClient):
+    """sale_contract_id pointing to the correct unit must be accepted."""
+    project_id, unit_id = _create_hierarchy(client, "SE-CV")
+    buyer_id = _create_buyer(client, "cv@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-CV-001")
+
+    data = _make_exception(
+        client, project_id, unit_id, sale_contract_id=contract_id
+    )
+    assert data["sale_contract_id"] == contract_id
+
+
+def test_create_exception_contract_not_found_returns_404(client: TestClient):
+    """Non-existent sale_contract_id must return 404."""
+    project_id, unit_id = _create_hierarchy(client, "SE-CNF")
+    resp = client.post(
+        "/api/v1/sales-exceptions",
+        json={
+            "project_id": project_id,
+            "unit_id": unit_id,
+            "exception_type": "discount",
+            "base_price": 200_000.0,
+            "requested_price": 195_000.0,
+            "sale_contract_id": "no-such-contract",
+        },
+    )
+    assert resp.status_code == 404
+
+
+def test_create_exception_contract_unit_mismatch_returns_422(client: TestClient):
+    """sale_contract_id linked to a different unit must be rejected."""
+    project_id, unit_a_id = _create_hierarchy(client, "SE-CM-A")
+    _, unit_b_id = _create_hierarchy(client, "SE-CM-B")
+    buyer_id = _create_buyer(client, "cm@example.com")
+    # contract belongs to unit_a
+    contract_id = _create_contract(client, unit_a_id, buyer_id, "CNT-CM-001")
+
+    resp = client.post(
+        "/api/v1/sales-exceptions",
+        json={
+            "project_id": project_id,
+            "unit_id": unit_b_id,  # different unit
+            "exception_type": "discount",
+            "base_price": 200_000.0,
+            "requested_price": 195_000.0,
+            "sale_contract_id": contract_id,
+        },
+    )
+    assert resp.status_code == 422
+
+
 def test_create_exception_all_types(client: TestClient):
     """All valid ExceptionType values should be accepted."""
     project_id, unit_id = _create_hierarchy(client, "SE-CT")
@@ -211,6 +307,21 @@ def test_update_approved_exception_returns_409(client: TestClient):
     assert resp.status_code == 409
 
 
+def test_update_cannot_change_sale_contract_id(client: TestClient):
+    """sale_contract_id must not be updatable via PATCH."""
+    project_id, unit_id = _create_hierarchy(client, "SE-UNC")
+    exc = _make_exception(client, project_id, unit_id)
+
+    resp = client.patch(
+        f"/api/v1/sales-exceptions/{exc['id']}",
+        json={"sale_contract_id": "some-contract-id"},
+    )
+    # Field is stripped from schema — the response must still have the original
+    # (None) sale_contract_id; any non-null value passed is silently ignored.
+    assert resp.status_code == 200
+    assert resp.json()["sale_contract_id"] is None
+
+
 # ---------------------------------------------------------------------------
 # Approve / Reject tests
 # ---------------------------------------------------------------------------
@@ -263,7 +374,7 @@ def test_approve_already_rejected_returns_409(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
-# Project list and summary tests
+# Project list and summary tests (new URL structure)
 # ---------------------------------------------------------------------------
 
 def test_list_project_exceptions(client: TestClient):
@@ -271,7 +382,7 @@ def test_list_project_exceptions(client: TestClient):
     _make_exception(client, project_id, unit_id)
     _make_exception(client, project_id, unit_id, requested_price=210_000.0)
 
-    resp = client.get(f"/api/v1/projects/{project_id}/sales-exceptions")
+    resp = client.get(f"/api/v1/sales-exceptions/projects/{project_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 2
@@ -279,13 +390,13 @@ def test_list_project_exceptions(client: TestClient):
 
 
 def test_list_project_exceptions_not_found(client: TestClient):
-    resp = client.get("/api/v1/projects/no-such-project/sales-exceptions")
+    resp = client.get("/api/v1/sales-exceptions/projects/no-such-project")
     assert resp.status_code == 404
 
 
 def test_project_summary_empty(client: TestClient):
     project_id, _ = _create_hierarchy(client, "SE-S0")
-    resp = client.get(f"/api/v1/projects/{project_id}/sales-exceptions/summary")
+    resp = client.get(f"/api/v1/sales-exceptions/projects/{project_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["total_exceptions"] == 0
@@ -302,7 +413,7 @@ def test_project_summary_counts_and_sums(client: TestClient):
     client.post(f"/api/v1/sales-exceptions/{exc1['id']}/approve", json={})
     client.post(f"/api/v1/sales-exceptions/{exc2['id']}/reject", json={})
 
-    resp = client.get(f"/api/v1/projects/{project_id}/sales-exceptions/summary")
+    resp = client.get(f"/api/v1/sales-exceptions/projects/{project_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["total_exceptions"] == 2
@@ -314,5 +425,5 @@ def test_project_summary_counts_and_sums(client: TestClient):
 
 
 def test_project_summary_not_found(client: TestClient):
-    resp = client.get("/api/v1/projects/no-such-project/sales-exceptions/summary")
+    resp = client.get("/api/v1/sales-exceptions/projects/no-such-project/summary")
     assert resp.status_code == 404

@@ -4,11 +4,15 @@ sales_exceptions.service
 Application-layer orchestration for the SalesException domain.
 
 Core rules enforced here:
-  1. Exception must reference a valid unit (unit must exist).
-  2. Discount must be non-negative  (requested_price ≤ base_price).
-  3. Discount must not exceed the configured maximum (MAX_DISCOUNT_PERCENTAGE).
-  4. Once approved or rejected, an exception becomes immutable
-     (status cannot be changed again).
+  1. Exception must reference a valid project.
+  2. Exception must reference a valid unit, and that unit must belong to
+     the supplied project (Unit → Floor → Building → Phase → Project).
+  3. If sale_contract_id is provided, the contract must exist and must be
+     linked to the same unit to prevent cross-unit links.
+  4. Discount must be non-negative (requested_price ≤ base_price).
+  5. Discount must not exceed the configured maximum
+     (_MAX_DISCOUNT_PERCENTAGE).
+  6. Once approved or rejected, an exception becomes immutable.
 
 Derived calculations performed here:
   discount_amount      = base_price - requested_price
@@ -20,6 +24,10 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.modules.buildings.models import Building
+from app.modules.floors.models import Floor
+from app.modules.phases.models import Phase
+from app.modules.sales.models import SalesContract
 from app.modules.sales_exceptions.models import SalesException
 from app.modules.sales_exceptions.repository import SalesExceptionRepository
 from app.modules.sales_exceptions.schemas import (
@@ -30,6 +38,7 @@ from app.modules.sales_exceptions.schemas import (
     SalesExceptionSummary,
     SalesExceptionUpdate,
 )
+from app.modules.units.models import Unit
 from app.modules.units.repository import UnitRepository
 from app.modules.projects.repository import ProjectRepository
 from app.shared.enums.sales_exceptions import ApprovalStatus
@@ -51,7 +60,11 @@ class SalesExceptionService:
 
     def create_exception(self, data: SalesExceptionCreate) -> SalesExceptionResponse:
         self._require_project(data.project_id)
-        self._require_unit(data.unit_id)
+        unit = self._require_unit(data.unit_id)
+        self._require_unit_in_project(unit, data.project_id)
+
+        if data.sale_contract_id is not None:
+            self._require_contract_for_unit(data.sale_contract_id, data.unit_id)
 
         discount_amount = round(data.base_price - data.requested_price, 2)
         discount_pct = round(discount_amount / data.base_price, 4)
@@ -124,7 +137,7 @@ class SalesExceptionService:
         )
 
     # ------------------------------------------------------------------
-    # Update (pending only)
+    # Update (pending only — sale_contract_id is not updatable)
     # ------------------------------------------------------------------
 
     def update_exception(
@@ -181,7 +194,7 @@ class SalesExceptionService:
             )
         return project
 
-    def _require_unit(self, unit_id: str):
+    def _require_unit(self, unit_id: str) -> Unit:
         unit = self._unit_repo.get_by_id(unit_id)
         if not unit:
             raise HTTPException(
@@ -189,6 +202,48 @@ class SalesExceptionService:
                 detail=f"Unit '{unit_id}' not found.",
             )
         return unit
+
+    def _require_unit_in_project(self, unit: Unit, project_id: str) -> None:
+        """Verify the unit belongs to the given project via the hierarchy join."""
+        exists = (
+            self._db.query(Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Unit.id == unit.id, Phase.project_id == project_id)
+            .first()
+        )
+        if not exists:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Unit '{unit.id}' does not belong to project '{project_id}'."
+                ),
+            )
+
+    def _require_contract_for_unit(
+        self, sale_contract_id: str, unit_id: str
+    ) -> SalesContract:
+        """Verify the contract exists and is linked to unit_id."""
+        contract = (
+            self._db.query(SalesContract)
+            .filter(SalesContract.id == sale_contract_id)
+            .first()
+        )
+        if not contract:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"SalesContract '{sale_contract_id}' not found.",
+            )
+        if contract.unit_id != unit_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"SalesContract '{sale_contract_id}' belongs to unit "
+                    f"'{contract.unit_id}', not '{unit_id}'."
+                ),
+            )
+        return contract
 
     def _require_exception(self, exception_id: str) -> SalesException:
         exc = self._repo.get_by_id(exception_id)

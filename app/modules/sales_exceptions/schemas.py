@@ -36,9 +36,12 @@ class SalesExceptionCreate(BaseModel):
 
 
 class SalesExceptionUpdate(BaseModel):
-    """Fields that may be changed while the exception is still pending."""
+    """Fields that may be changed while the exception is still pending.
 
-    sale_contract_id: Optional[str] = None
+    sale_contract_id is intentionally excluded — it is set on creation and
+    treated as immutable to prevent cross-unit link corruption.
+    """
+
     incentive_value: Optional[float] = Field(default=None, ge=0)
     incentive_description: Optional[str] = Field(default=None, max_length=500)
     notes: Optional[str] = Field(default=None, max_length=2000)
