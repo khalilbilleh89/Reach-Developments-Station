@@ -14,8 +14,9 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.core.bootstrap import seed_admin_user
 from app.core.config import settings
-from app.core.database import check_db_connection
+from app.core.database import SessionLocal, check_db_connection
 from app.core.logging import logger
 from app.modules.auth.api import router as auth_router
 from app.modules.buildings.api import router as buildings_router
@@ -40,6 +41,11 @@ from app.modules.cashflow.api import router as cashflow_router
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown events."""
     logger.info("Starting %s [env=%s]", settings.APP_NAME, settings.APP_ENV)
+    try:
+        with SessionLocal() as db:
+            seed_admin_user(db)
+    except Exception:
+        logger.exception("Bootstrap: admin seed failed — application startup continues.")
     yield
 
 
