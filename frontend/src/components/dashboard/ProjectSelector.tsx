@@ -36,9 +36,9 @@ export function ProjectSelector({ onSelect, selectedId }: ProjectSelectorProps) 
         setError(message);
       })
       .finally(() => setLoading(false));
-    // onSelect is intentionally omitted — we only run this once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // selectedId is intentionally omitted — we only run this once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onSelect]);
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const project = projects.find((p) => p.id === e.target.value);

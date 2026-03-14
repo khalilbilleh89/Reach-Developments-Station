@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { ProjectSelector } from "@/components/dashboard/ProjectSelector";
@@ -24,13 +24,17 @@ import styles from "@/styles/dashboard.module.css";
 export default function DashboardPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
+  const handleProjectSelect = useCallback((project: Project) => {
+    setSelectedProject(project);
+  }, []);
+
   return (
     <PageContainer
       title="Dashboard"
       subtitle="Project financial and operational overview."
     >
       <ProjectSelector
-        onSelect={setSelectedProject}
+        onSelect={handleProjectSelect}
         selectedId={selectedProject?.id}
       />
 

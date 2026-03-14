@@ -2,22 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { getFinancialSummary, type FinancialSummary } from "@/lib/dashboard-api";
+import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "./MetricCard";
 import styles from "@/styles/dashboard.module.css";
 
 interface FinancialSummaryGridProps {
   projectId: string;
-}
-
-/** Format a number as a compact currency string (e.g. 1 500 000 → AED 1.5M). */
-function formatCurrency(value: number): string {
-  if (value >= 1_000_000) {
-    return `AED ${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `AED ${(value / 1_000).toFixed(0)}K`;
-  }
-  return `AED ${value.toLocaleString()}`;
 }
 
 /** Format a ratio as a percentage string. */

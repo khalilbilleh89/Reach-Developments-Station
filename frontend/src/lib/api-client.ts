@@ -5,13 +5,10 @@
  * The base URL is read from NEXT_PUBLIC_API_URL (defaults to localhost).
  */
 
+import { getToken } from "./auth";
+
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("reach_access_token");
-}
 
 function authHeaders(): HeadersInit {
   const token = getToken();

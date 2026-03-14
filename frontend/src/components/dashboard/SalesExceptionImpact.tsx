@@ -5,21 +5,12 @@ import {
   getSalesExceptionsSummary,
   type SalesExceptionsSummary,
 } from "@/lib/dashboard-api";
+import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "./MetricCard";
 import styles from "@/styles/dashboard.module.css";
 
 interface SalesExceptionImpactProps {
   projectId: string;
-}
-
-function formatCurrency(value: number): string {
-  if (value >= 1_000_000) {
-    return `AED ${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `AED ${(value / 1_000).toFixed(0)}K`;
-  }
-  return `AED ${value.toLocaleString()}`;
 }
 
 /**
