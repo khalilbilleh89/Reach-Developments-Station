@@ -1,41 +1,23 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectFinanceSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { FinanceKpis } from "@/lib/finance-dashboard-types";
 import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface FinanceKpiGridProps {
-  projectId: string;
+  kpis: FinanceKpis | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * FinanceKpiGrid — headline finance KPI card grid.
  *
- * Fetches /finance/projects/{id}/summary and renders the six top-level
- * financial metrics. No calculations are performed here — values come
- * directly from the backend summary endpoint.
+ * Purely presentational. Receives pre-fetched KPI data from the parent page.
+ * The parent is responsible for all data fetching and loading state.
+ * No financial calculations are performed here — values come from the backend.
  */
-export function FinanceKpiGrid({ projectId }: FinanceKpiGridProps) {
-  const [kpis, setKpis] = useState<FinanceKpis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectFinanceSummary(projectId)
-      .then(({ kpis: data }) => setKpis(data))
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Failed to load financial data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
+export function FinanceKpiGrid({ kpis, loading, error }: FinanceKpiGridProps) {
   if (loading) {
     return (
       <div className={styles.loadingState}>Loading financial summary…</div>

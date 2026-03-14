@@ -1,41 +1,27 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectCashflowSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { CashflowHealth } from "@/lib/finance-dashboard-types";
 import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface CashflowHealthCardProps {
-  projectId: string;
+  cashflow: CashflowHealth | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * CashflowHealthCard — cashflow forecast posture.
  *
- * Fetches /cashflow/projects/{id}/cashflow-summary and renders the four
- * key cashflow metrics. Net position direction is derived purely from the
- * backend-returned net_cashflow value — no financial math in the browser.
+ * Purely presentational. Receives pre-fetched cashflow data from the parent
+ * page. Net position direction is derived purely from the backend-returned
+ * net_cashflow value — no financial math in the browser.
  */
-export function CashflowHealthCard({ projectId }: CashflowHealthCardProps) {
-  const [cashflow, setCashflow] = useState<CashflowHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectCashflowSummary(projectId)
-      .then(setCashflow)
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Failed to load cashflow data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
+export function CashflowHealthCard({
+  cashflow,
+  loading,
+  error,
+}: CashflowHealthCardProps) {
   if (loading) {
     return <div className={styles.loadingState}>Loading cashflow data…</div>;
   }

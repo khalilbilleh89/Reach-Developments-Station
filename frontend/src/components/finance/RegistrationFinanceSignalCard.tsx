@@ -1,43 +1,25 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectRegistrationSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { RegistrationFinanceSignal } from "@/lib/finance-dashboard-types";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface RegistrationFinanceSignalCardProps {
-  projectId: string;
+  signal: RegistrationFinanceSignal | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * RegistrationFinanceSignalCard — commercial vs legal completion signal.
  *
- * Fetches /registration/projects/{id}/summary and surfaces the key
- * registration metrics. Sold-but-not-registered units represent a gap
- * between commercial and legal completion that finance teams need to track.
+ * Purely presentational. Receives pre-fetched registration data from the parent
+ * page. Sold-but-not-registered units represent a gap between commercial and
+ * legal completion that finance teams need to track.
  */
 export function RegistrationFinanceSignalCard({
-  projectId,
+  signal,
+  loading,
+  error,
 }: RegistrationFinanceSignalCardProps) {
-  const [signal, setSignal] = useState<RegistrationFinanceSignal | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectRegistrationSummary(projectId)
-      .then(setSignal)
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load registration data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
   if (loading) {
     return (
       <div className={styles.loadingState}>Loading registration data…</div>

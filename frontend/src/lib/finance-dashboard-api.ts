@@ -206,6 +206,10 @@ export async function getProjectRegistrationSummary(
  * Fetch project commission summary.
  *
  * Backend endpoint: GET /commission/projects/{projectId}/summary
+ *
+ * Pending exposure is computed by the display component as:
+ *   draft_payouts + calculated_payouts
+ * Cancelled payouts are NOT included — they are dead, not pending.
  */
 export async function getProjectCommissionSummary(
   projectId: string,
@@ -215,8 +219,10 @@ export async function getProjectCommissionSummary(
   );
   return {
     total_payouts: raw.total_payouts,
-    approved_payouts: raw.approved_payouts,
+    draft_payouts: raw.draft_payouts,
     calculated_payouts: raw.calculated_payouts,
+    approved_payouts: raw.approved_payouts,
+    cancelled_payouts: raw.cancelled_payouts,
     total_gross_value: raw.total_gross_value,
     total_commission_pool: raw.total_commission_pool,
   };

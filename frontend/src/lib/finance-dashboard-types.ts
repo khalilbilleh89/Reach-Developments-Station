@@ -40,8 +40,14 @@ export interface CashflowHealth {
 
 export interface CommissionExposure {
   total_payouts: number;
-  approved_payouts: number;
+  /** Payouts in draft state (not yet submitted for calculation). */
+  draft_payouts: number;
+  /** Payouts calculated but not yet approved. */
   calculated_payouts: number;
+  /** Payouts that have been approved and released. */
+  approved_payouts: number;
+  /** Payouts that have been cancelled — excluded from pending exposure. */
+  cancelled_payouts: number;
   total_gross_value: number;
   total_commission_pool: number;
 }

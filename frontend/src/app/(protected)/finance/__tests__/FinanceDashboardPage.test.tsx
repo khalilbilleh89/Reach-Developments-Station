@@ -110,10 +110,13 @@ const mockRegistration = {
   completion_ratio: 0.875,
 };
 
+// Commission mock includes all backend fields: draft + calculated = pending; cancelled excluded
 const mockCommission = {
-  total_payouts: 5,
-  approved_payouts: 3,
+  total_payouts: 7,
+  draft_payouts: 1,
   calculated_payouts: 2,
+  approved_payouts: 3,
+  cancelled_payouts: 1,
   total_gross_value: 5_000_000,
   total_commission_pool: 250_000,
 };
@@ -161,6 +164,22 @@ describe("FinanceDashboardPage", () => {
     expect(screen.getByText("Finance Health Summary")).toBeInTheDocument();
   });
 
+  it("fetches each summary endpoint exactly once per project selection", async () => {
+    render(<FinanceDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Finance KPIs")).toBeInTheDocument(),
+    );
+
+    // Each endpoint called exactly once for the auto-selected proj-1
+    expect(mockGetProjectFinanceSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectFinanceSummary).toHaveBeenCalledWith("proj-1");
+    expect(mockGetProjectCashflowSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectSalesExceptionsSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectRegistrationSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectCommissionSummary).toHaveBeenCalledTimes(1);
+  });
+
   it("renders correct KPI values for selected project", async () => {
     render(<FinanceDashboardPage />);
 
@@ -201,6 +220,19 @@ describe("FinanceDashboardPage", () => {
     expect(screen.getByText(/Cashflow positive/)).toBeInTheDocument();
   });
 
+  it("renders commission pending exposure excluding cancelled payouts", async () => {
+    render(<FinanceDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Commission Exposure")).toBeInTheDocument(),
+    );
+    // pending = draft(1) + calculated(2) = 3; cancelled(1) is excluded
+    // approved = 3 → also "3", so both appear
+    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(2);
+    // Pending subtitle confirms semantics
+    expect(screen.getByText(/Draft \+ calculated, awaiting approval/i)).toBeInTheDocument();
+  });
+
   it("updates dashboard sections when project is switched", async () => {
     render(<FinanceDashboardPage />);
 
@@ -215,7 +247,35 @@ describe("FinanceDashboardPage", () => {
     await waitFor(() => {
       expect(mockGetProjectFinanceSummary).toHaveBeenCalledWith("proj-2");
       expect(mockGetProjectCashflowSummary).toHaveBeenCalledWith("proj-2");
+      expect(mockGetProjectCommissionSummary).toHaveBeenCalledWith("proj-2");
     });
+  });
+
+  it("fetches each endpoint exactly once after project switch", async () => {
+    render(<FinanceDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox")).toBeInTheDocument(),
+    );
+
+    jest.clearAllMocks();
+    mockGetProjectFinanceSummary.mockResolvedValue(mockFinanceSummary);
+    mockGetProjectCashflowSummary.mockResolvedValue(mockCashflow);
+    mockGetProjectSalesExceptionsSummary.mockResolvedValue(mockExceptions);
+    mockGetProjectRegistrationSummary.mockResolvedValue(mockRegistration);
+    mockGetProjectCommissionSummary.mockResolvedValue(mockCommission);
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "proj-2" },
+    });
+
+    await waitFor(() =>
+      expect(mockGetProjectFinanceSummary).toHaveBeenCalledTimes(1),
+    );
+    expect(mockGetProjectCashflowSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectSalesExceptionsSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectRegistrationSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectCommissionSummary).toHaveBeenCalledTimes(1);
   });
 
   it("handles project list error gracefully", async () => {
@@ -237,17 +297,7 @@ describe("FinanceDashboardPage", () => {
     expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders commission section correctly", async () => {
-    render(<FinanceDashboardPage />);
-
-    await waitFor(() =>
-      expect(screen.getByText("Commission Exposure")).toBeInTheDocument(),
-    );
-    // approved_payouts = 3
-    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("handles individual section errors without crashing the page", async () => {
+  it("handles cashflow section error without crashing the rest of the page", async () => {
     mockGetProjectCashflowSummary.mockRejectedValue(new Error("Cashflow unavailable"));
     render(<FinanceDashboardPage />);
 
@@ -299,8 +349,10 @@ describe("FinanceDashboardPage", () => {
     });
     mockGetProjectCommissionSummary.mockResolvedValue({
       total_payouts: 0,
-      approved_payouts: 0,
+      draft_payouts: 0,
       calculated_payouts: 0,
+      approved_payouts: 0,
+      cancelled_payouts: 0,
       total_gross_value: 0,
       total_commission_pool: 0,
     });

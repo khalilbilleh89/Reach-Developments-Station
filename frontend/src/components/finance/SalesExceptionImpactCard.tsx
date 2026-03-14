@@ -1,45 +1,26 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectSalesExceptionsSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { SalesExceptionImpact } from "@/lib/finance-dashboard-types";
 import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface SalesExceptionImpactCardProps {
-  projectId: string;
+  exceptions: SalesExceptionImpact | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * SalesExceptionImpactCard — discount and incentive impact from sales exceptions.
  *
- * Fetches /sales-exceptions/projects/{id}/summary and renders the aggregate
- * exception counts and financial impact. No calculations are performed —
- * all values come directly from the backend.
+ * Purely presentational. Receives pre-fetched exception data from the parent
+ * page. No calculations are performed — all values come directly from the backend.
  */
 export function SalesExceptionImpactCard({
-  projectId,
+  exceptions,
+  loading,
+  error,
 }: SalesExceptionImpactCardProps) {
-  const [exceptions, setExceptions] = useState<SalesExceptionImpact | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectSalesExceptionsSummary(projectId)
-      .then(setExceptions)
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Failed to load exception data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
   if (loading) {
     return <div className={styles.loadingState}>Loading exception data…</div>;
   }

@@ -88,39 +88,47 @@ No IRR, NPV, or other financial calculations are performed in the browser.
 ## Data Flow
 
 ```
-page.tsx
-  ├── getProjects()                       → project selector
-  ├── getProjectFinanceSummary(id)        → KPIs + Collections + Health Summary
-  ├── getProjectCashflowSummary(id)       → Cashflow + Health Summary
-  ├── getProjectSalesExceptionsSummary(id) → Exceptions + Health Summary
-  └── getProjectRegistrationSummary(id)   → Registration + Health Summary
+page.tsx (single data orchestrator)
+  ├── getProjects()                         → project selector
+  ├── getProjectFinanceSummary(id)          → kpis + collections + health summary (once)
+  ├── getProjectCashflowSummary(id)         → cashflow + health summary (once)
+  ├── getProjectSalesExceptionsSummary(id)  → exceptions + health summary (once)
+  ├── getProjectRegistrationSummary(id)     → registration + health summary (once)
+  └── getProjectCommissionSummary(id)       → commission (once)
 
-FinanceKpiGrid
-  └── getProjectFinanceSummary(id)
-
-CollectionsHealthCard
-  └── getProjectFinanceSummary(id)
-
-CashflowHealthCard
-  └── getProjectCashflowSummary(id)
-
-CommissionExposureCard
-  └── getProjectCommissionSummary(id)
-
-SalesExceptionImpactCard
-  └── getProjectSalesExceptionsSummary(id)
-
-RegistrationFinanceSignalCard
-  └── getProjectRegistrationSummary(id)
+Presentational child components (no fetching):
+  FinanceKpiGrid           ← receives kpis, loading, error props
+  CollectionsHealthCard    ← receives collections, loading, error props
+  CashflowHealthCard       ← receives cashflow, loading, error props
+  CommissionExposureCard   ← receives commission, loading, error props
+  SalesExceptionImpactCard ← receives exceptions, loading, error props
+  RegistrationFinanceSignalCard ← receives signal, loading, error props
+  FinanceHealthSummary     ← receives collections, cashflow, exceptions, registration props
 ```
 
-Note: `getProjectFinanceSummary` is called twice per project selection — once by the page (for health summary derivation) and once by `FinanceKpiGrid` / `CollectionsHealthCard`. Each component manages its own fetch lifecycle independently.
+Each backend endpoint is called **exactly once per project selection**. All fetches run in parallel via `Promise.allSettled`. The page owns all data, loading, and error state; child cards are purely presentational.
+
+---
+
+## Commission Pending Exposure Semantics
+
+Pending commission exposure is computed as:
+
+```
+pending_payouts = draft_payouts + calculated_payouts
+```
+
+**Cancelled payouts are explicitly excluded.** A cancelled payout is not pending — it is dead. Including cancelled payouts in the pending count would misrepresent the true exposure.
+
+The backend `CommissionSummaryResponse` exposes `draft_payouts`, `calculated_payouts`, `approved_payouts`, and `cancelled_payouts` separately. All four fields are mapped through `CommissionExposure` and available to the UI.
 
 ---
 
 ## Section Error Handling
 
-Each section manages its own loading and error states. If one section's API call fails, it renders an inline error message without crashing the rest of the dashboard. The Finance Health Summary defaults all sections to "healthy" when data is null.
+The page tracks a per-section error state. If one fetch fails, only that section shows an inline error message; all other sections remain unaffected. The shared `dataLoading` flag clears via `Promise.allSettled` after all fetches have settled (resolved or rejected).
+
+The Finance Health Summary defaults all dimensions to "healthy" when section data is null (e.g., still loading or failed).
 
 ---
 
@@ -135,7 +143,6 @@ Each section manages its own loading and error states. If one section's API call
 
 ## Known Current Limitations
 
-- `getProjectFinanceSummary` is fetched both by the page (for health summary) and by the individual section cards. A future optimization could hoist and cache this response.
 - No chart-based visualization — metrics are displayed as numeric cards only. Advanced charts are deferred to a later PR.
 - No export/download functionality — out of scope for this PR.
 - Commission section requires the `/commission/projects/{id}/summary` endpoint to be available. If it returns an error, the section shows an inline error message.

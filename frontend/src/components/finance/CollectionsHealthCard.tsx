@@ -1,52 +1,34 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectFinanceSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { CollectionsHealth } from "@/lib/finance-dashboard-types";
 import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface CollectionsHealthCardProps {
-  projectId: string;
+  collections: CollectionsHealth | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * CollectionsHealthCard — receivables and collections performance.
  *
- * Fetches /finance/projects/{id}/summary and surfaces the three key
- * collections metrics. No calculations are performed — all values
- * come directly from the backend.
+ * Purely presentational. Receives pre-fetched collections data from the parent
+ * page. No data fetching or financial calculations are performed here — all
+ * values come directly from the backend.
  */
 export function CollectionsHealthCard({
-  projectId,
+  collections,
+  loading,
+  error,
 }: CollectionsHealthCardProps) {
-  const [health, setHealth] = useState<CollectionsHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectFinanceSummary(projectId)
-      .then(({ collections }) => setHealth(collections))
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load collections data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
   if (loading) {
     return (
       <div className={styles.loadingState}>Loading collections data…</div>
     );
   }
 
-  if (error || !health) {
+  if (error || !collections) {
     return (
       <div className={styles.loadingState}>
         {error ?? "Collections data unavailable."}
@@ -54,7 +36,7 @@ export function CollectionsHealthCard({
     );
   }
 
-  const collectionPct = `${(health.collection_ratio * 100).toFixed(1)}%`;
+  const collectionPct = `${(collections.collection_ratio * 100).toFixed(1)}%`;
 
   return (
     <div className={styles.sectionCard}>
@@ -62,19 +44,21 @@ export function CollectionsHealthCard({
       <div className={styles.metricsRow}>
         <MetricCard
           title="Collected"
-          value={formatCurrency(health.total_collected)}
+          value={formatCurrency(collections.total_collected)}
           subtitle="Cash received to date"
           icon="✅"
         />
         <MetricCard
           title="Outstanding"
-          value={formatCurrency(health.total_receivable)}
+          value={formatCurrency(collections.total_receivable)}
           subtitle="Receivables remaining"
           icon="📋"
           trend={{
-            direction: health.total_receivable > 0 ? "down" : "neutral",
+            direction: collections.total_receivable > 0 ? "down" : "neutral",
             label:
-              health.total_receivable > 0 ? "Receivable pressure" : "Cleared",
+              collections.total_receivable > 0
+                ? "Receivable pressure"
+                : "Cleared",
           }}
         />
         <MetricCard

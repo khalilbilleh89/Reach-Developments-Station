@@ -1,44 +1,29 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-import { getProjectCommissionSummary } from "@/lib/finance-dashboard-api";
+import React from "react";
 import type { CommissionExposure } from "@/lib/finance-dashboard-types";
 import { formatCurrency } from "@/lib/format-utils";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
 interface CommissionExposureCardProps {
-  projectId: string;
+  commission: CommissionExposure | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
  * CommissionExposureCard — commission burden and payout exposure.
  *
- * Fetches /commission/projects/{id}/summary and renders the payout and
- * value metrics. No commission math is performed in the browser.
+ * Purely presentational. Receives pre-fetched commission data from the parent
+ * page. No commission math is performed in the browser.
+ *
+ * Pending exposure = draft_payouts + calculated_payouts.
+ * Cancelled payouts are explicitly excluded — cancelled is not pending.
  */
 export function CommissionExposureCard({
-  projectId,
+  commission,
+  loading,
+  error,
 }: CommissionExposureCardProps) {
-  const [commission, setCommission] = useState<CommissionExposure | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getProjectCommissionSummary(projectId)
-      .then(setCommission)
-      .catch((err: unknown) => {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load commission data.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
   if (loading) {
     return (
       <div className={styles.loadingState}>Loading commission data…</div>
@@ -53,9 +38,8 @@ export function CommissionExposureCard({
     );
   }
 
-  const pendingPayouts =
-    // Payouts not yet approved = total minus approved (includes draft + calculated)
-    commission.total_payouts - commission.approved_payouts;
+  // Pending = draft + calculated. Approved and cancelled are excluded.
+  const pendingPayouts = commission.draft_payouts + commission.calculated_payouts;
 
   return (
     <div className={styles.sectionCard}>
@@ -82,7 +66,7 @@ export function CommissionExposureCard({
         <MetricCard
           title="Pending Exposure"
           value={pendingPayouts}
-          subtitle="Payouts awaiting approval"
+          subtitle="Draft + calculated, awaiting approval"
           icon="⏳"
           trend={{
             direction: pendingPayouts > 0 ? "down" : "neutral",
