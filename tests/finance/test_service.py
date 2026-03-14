@@ -385,3 +385,38 @@ def test_average_unit_price_zero_with_no_contracts(db_session: Session):
     summary = service.get_project_summary(project_id)
 
     assert summary.average_unit_price == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Over-collection safety (clamping)
+# ---------------------------------------------------------------------------
+
+
+def test_total_receivable_clamped_to_zero_on_over_collection(db_session: Session):
+    """When total_collected exceeds total_contract_value, total_receivable is 0."""
+    project_id = _make_project(db_session, "PRJ-FIN-OVR1")
+    unit_id = _make_unit(db_session, project_id)
+    contract_id = _make_contract(db_session, unit_id, 100_000.0)
+    schedule_id = _make_schedule_line(db_session, contract_id, 110_000.0)
+    # Record more than the contract value (simulating adjusted/dirty data)
+    _make_receipt(db_session, contract_id, schedule_id, 110_000.0)
+
+    service = FinanceSummaryService(db_session)
+    summary = service.get_project_summary(project_id)
+
+    assert summary.total_receivable == 0.0
+
+
+def test_collection_ratio_clamped_to_one_on_over_collection(db_session: Session):
+    """When total_collected > total_contract_value, collection_ratio does not exceed 1.0."""
+    project_id = _make_project(db_session, "PRJ-FIN-OVR2")
+    unit_id = _make_unit(db_session, project_id)
+    contract_id = _make_contract(db_session, unit_id, 100_000.0)
+    schedule_id = _make_schedule_line(db_session, contract_id, 120_000.0)
+    _make_receipt(db_session, contract_id, schedule_id, 120_000.0)
+
+    service = FinanceSummaryService(db_session)
+    summary = service.get_project_summary(project_id)
+
+    assert summary.collection_ratio <= 1.0
+    assert summary.total_receivable >= 0.0
