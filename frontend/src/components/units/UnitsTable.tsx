@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import type { UnitListItem, UnitPrice } from "@/lib/units-types";
+import { unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -15,27 +16,20 @@ interface UnitsTableProps {
   onViewUnit: (unitId: string) => void;
 }
 
-/** Map a UnitStatus string to the corresponding CSS module class. */
+/** Map a backend UnitStatus value to the corresponding CSS module class. */
 function statusClass(status: string): string {
   switch (status) {
     case "available":
       return styles.statusAvailable;
     case "reserved":
       return styles.statusReserved;
-    case "sold":
-      return styles.statusSold;
-    case "blocked":
-      return styles.statusBlocked;
-    case "under_offer":
-      return styles.statusUnderOffer;
+    case "under_contract":
+      return styles.statusUnderContract;
+    case "registered":
+      return styles.statusRegistered;
     default:
       return "";
   }
-}
-
-/** Human-readable status label. */
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
 }
 
 /**
@@ -46,6 +40,11 @@ function statusLabel(status: string): string {
  *
  * Explicitly does NOT compute pricing formulas — all pricing values
  * are sourced from the backend pricing engine via the pricing prop.
+ *
+ * Price / sqm uses `pricing.unit_area` (which reflects the backend pricing
+ * engine's resolved area — gross_area when set, otherwise internal_area)
+ * rather than raw `unit.internal_area`, keeping the UI consistent with how
+ * `final_unit_price` was derived on the backend.
  */
 export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
@@ -92,6 +91,31 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
     );
   };
 
+  const SortHeader = ({
+    field,
+    children,
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+  }) => (
+    <th
+      scope="col"
+      className={styles.sortableHeader}
+      aria-sort={
+        sortField === field ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button
+        type="button"
+        className={styles.sortBtn}
+        onClick={() => handleSort(field)}
+      >
+        {children}
+        {indicator(field)}
+      </button>
+    </th>
+  );
+
   if (units.length === 0) {
     return (
       <div className={styles.emptyState}>
@@ -108,41 +132,11 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
       <table className={styles.table} aria-label="Units list">
         <thead className={styles.tableHead}>
           <tr>
-            <th
-              scope="col"
-              onClick={() => handleSort("unit_number")}
-              aria-sort={sortField === "unit_number" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              Unit {indicator("unit_number")}
-            </th>
-            <th
-              scope="col"
-              onClick={() => handleSort("unit_type")}
-              aria-sort={sortField === "unit_type" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              Type {indicator("unit_type")}
-            </th>
-            <th
-              scope="col"
-              onClick={() => handleSort("internal_area")}
-              aria-sort={sortField === "internal_area" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              Area (sqm) {indicator("internal_area")}
-            </th>
-            <th
-              scope="col"
-              onClick={() => handleSort("status")}
-              aria-sort={sortField === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              Status {indicator("status")}
-            </th>
-            <th
-              scope="col"
-              onClick={() => handleSort("final_unit_price")}
-              aria-sort={sortField === "final_unit_price" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              Final Price {indicator("final_unit_price")}
-            </th>
+            <SortHeader field="unit_number">Unit</SortHeader>
+            <SortHeader field="unit_type">Type</SortHeader>
+            <SortHeader field="internal_area">Area (sqm)</SortHeader>
+            <SortHeader field="status">Status</SortHeader>
+            <SortHeader field="final_unit_price">Final Price</SortHeader>
             <th scope="col">Price / sqm</th>
             <th scope="col">Outdoor Area</th>
             <th scope="col" aria-label="Actions" />
@@ -156,9 +150,12 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
               (unit.terrace_area ?? 0) +
               (unit.roof_garden_area ?? 0) +
               (unit.front_garden_area ?? 0);
+            // Use backend-resolved unit_area (which accounts for gross_area) for
+            // price/sqm, falling back to internal_area when pricing is not available.
+            const effectiveArea = p ? p.unit_area : unit.internal_area;
             const pricePerSqm =
-              p && unit.internal_area > 0
-                ? p.final_unit_price / unit.internal_area
+              p && effectiveArea > 0
+                ? p.final_unit_price / effectiveArea
                 : null;
 
             return (
@@ -166,15 +163,13 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
                 <td>
                   <span className={styles.unitNumber}>{unit.unit_number}</span>
                 </td>
-                <td style={{ textTransform: "capitalize" }}>
-                  {unit.unit_type.replace(/_/g, " ")}
-                </td>
+                <td>{unitTypeLabel(unit.unit_type)}</td>
                 <td>{unit.internal_area.toFixed(1)}</td>
                 <td>
                   <span
                     className={`${styles.statusBadge} ${statusClass(unit.status)}`}
                   >
-                    {statusLabel(unit.status)}
+                    {unitStatusLabel(unit.status)}
                   </span>
                 </td>
                 <td>

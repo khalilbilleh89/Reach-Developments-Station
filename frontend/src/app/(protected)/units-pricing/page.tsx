@@ -69,9 +69,13 @@ export default function UnitsPricingPage() {
       .finally(() => setProjectsLoading(false));
   }, []);
 
-  // Load units whenever the selected project changes
+  // Load units whenever the selected project changes, with stale response guard
   useEffect(() => {
     if (!selectedProjectId) return;
+
+    // Increment the request sequence. Any earlier in-flight request that
+    // resolves after this point will be discarded.
+    let isCurrent = true;
 
     setUnitsLoading(true);
     setUnitsError(null);
@@ -80,14 +84,16 @@ export default function UnitsPricingPage() {
 
     getUnitsByProject(selectedProjectId)
       .then(async (unitList) => {
+        if (!isCurrent) return;
         setUnits(unitList);
-        // Fetch pricing for all units in parallel; tolerate individual failures
+        // Fetch pricing for all units; tolerate individual "not priced" responses
         const pricingEntries = await Promise.all(
           unitList.map(async (u) => {
             const p = await getUnitPricing(u.id);
             return p ? ([u.id, p] as [string, UnitPrice]) : null;
           }),
         );
+        if (!isCurrent) return;
         const pricingMap: Record<string, UnitPrice> = {};
         for (const entry of pricingEntries) {
           if (entry) pricingMap[entry[0]] = entry[1];
@@ -95,11 +101,18 @@ export default function UnitsPricingPage() {
         setPricing(pricingMap);
       })
       .catch((err: unknown) => {
+        if (!isCurrent) return;
         setUnitsError(
           err instanceof Error ? err.message : "Failed to load units.",
         );
       })
-      .finally(() => setUnitsLoading(false));
+      .finally(() => {
+        if (isCurrent) setUnitsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [selectedProjectId]);
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -118,8 +131,10 @@ export default function UnitsPricingPage() {
     [router],
   );
 
-  // Apply client-side price filters
+  // Apply all client-side filters: status, unit_type, and price range
   const filteredUnits = units.filter((u) => {
+    if (filters.status !== "" && u.status !== filters.status) return false;
+    if (filters.unit_type !== "" && u.unit_type !== filters.unit_type) return false;
     if (filters.min_price !== "") {
       const min = parseFloat(filters.min_price);
       const p = pricing[u.id];

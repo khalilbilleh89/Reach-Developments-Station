@@ -18,7 +18,7 @@ const mockUnits: UnitListItem[] = [
     id: "unit-1",
     floor_id: "floor-1",
     unit_number: "A101",
-    unit_type: "apartment",
+    unit_type: "one_bedroom",
     status: "available",
     internal_area: 85.5,
     balcony_area: 10,
@@ -32,7 +32,7 @@ const mockUnits: UnitListItem[] = [
     floor_id: "floor-2",
     unit_number: "B202",
     unit_type: "penthouse",
-    status: "sold",
+    status: "under_contract",
     internal_area: 200.0,
     balcony_area: null,
     terrace_area: 50,
@@ -103,18 +103,38 @@ describe("UnitsTable", () => {
     expect(onViewUnit).toHaveBeenCalledWith("unit-1");
   });
 
-  it("sorts by internal_area when area column header is clicked", () => {
+  it("renders unit type label correctly", () => {
     render(
       <UnitsTable units={mockUnits} pricing={mockPricing} onViewUnit={jest.fn()} />,
     );
-    // Click "Area" header once for ascending sort
-    fireEvent.click(screen.getByText(/area \(sqm\)/i));
+    // one_bedroom → "1 Bedroom"
+    expect(screen.getByText("1 Bedroom")).toBeInTheDocument();
+    // penthouse → "Penthouse"
+    expect(screen.getByText("Penthouse")).toBeInTheDocument();
+  });
+
+  it("renders status badge with correct label for backend enum values", () => {
+    render(
+      <UnitsTable units={mockUnits} pricing={mockPricing} onViewUnit={jest.fn()} />,
+    );
+    // available → "Available"
+    expect(screen.getByText("Available")).toBeInTheDocument();
+    // under_contract → "Under Contract"
+    expect(screen.getByText("Under Contract")).toBeInTheDocument();
+  });
+
+  it("sorts by internal_area when area column sort button is clicked", () => {
+    render(
+      <UnitsTable units={mockUnits} pricing={mockPricing} onViewUnit={jest.fn()} />,
+    );
+    // Sort buttons are inside <th> elements — click the button for Area
+    fireEvent.click(screen.getByRole("button", { name: /area \(sqm\)/i }));
     const rows = screen.getAllByRole("row");
     // First data row should be A101 (85.5 sqm — smaller)
     expect(rows[1]).toHaveTextContent("A101");
 
     // Click again for descending
-    fireEvent.click(screen.getByText(/area \(sqm\)/i));
+    fireEvent.click(screen.getByRole("button", { name: /area \(sqm\)/i }));
     const rowsDesc = screen.getAllByRole("row");
     expect(rowsDesc[1]).toHaveTextContent("B202");
   });

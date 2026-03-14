@@ -14,24 +14,71 @@
 
 // ---------- Unit types ---------------------------------------------------
 
-/** Possible commercial statuses for a unit, mirroring backend UnitStatus enum. */
+/**
+ * Possible commercial statuses for a unit.
+ * Values mirror the backend UnitStatus enum in app/shared/enums/project.py.
+ */
 export type UnitStatus =
   | "available"
   | "reserved"
-  | "sold"
-  | "blocked"
-  | "under_offer";
+  | "under_contract"
+  | "registered";
 
-/** Possible unit types, mirroring backend UnitType enum. */
+/**
+ * Possible unit types.
+ * Values mirror the backend UnitType enum in app/shared/enums/project.py.
+ */
 export type UnitType =
-  | "apartment"
-  | "penthouse"
-  | "townhouse"
-  | "villa"
   | "studio"
+  | "one_bedroom"
+  | "two_bedroom"
+  | "three_bedroom"
+  | "four_bedroom"
+  | "villa"
+  | "townhouse"
   | "retail"
   | "office"
-  | "other";
+  | "penthouse";
+
+/** Human-readable label for a UnitStatus value. */
+export function unitStatusLabel(status: UnitStatus | string): string {
+  const labels: Record<string, string> = {
+    available: "Available",
+    reserved: "Reserved",
+    under_contract: "Under Contract",
+    registered: "Registered",
+  };
+  return (
+    labels[status] ??
+    status
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
+/** Human-readable label for a UnitType value. */
+export function unitTypeLabel(type: UnitType | string): string {
+  const labels: Record<string, string> = {
+    studio: "Studio",
+    one_bedroom: "1 Bedroom",
+    two_bedroom: "2 Bedroom",
+    three_bedroom: "3 Bedroom",
+    four_bedroom: "4 Bedroom",
+    villa: "Villa",
+    townhouse: "Townhouse",
+    retail: "Retail",
+    office: "Office",
+    penthouse: "Penthouse",
+  };
+  return (
+    labels[type] ??
+    type
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
 
 /** A unit as returned by GET /api/v1/units (list item). */
 export interface UnitListItem {

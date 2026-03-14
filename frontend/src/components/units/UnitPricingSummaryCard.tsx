@@ -1,5 +1,6 @@
 import React from "react";
 import type { UnitListItem, UnitPrice } from "@/lib/units-types";
+import { unitStatusLabel } from "@/lib/units-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -8,19 +9,17 @@ interface UnitPricingSummaryCardProps {
   pricing: UnitPrice | null;
 }
 
-/** Map a status string to its CSS class. */
+/** Map a backend UnitStatus value to its CSS class. */
 function statusClass(status: string): string {
   switch (status) {
     case "available":
       return styles.statusAvailable;
     case "reserved":
       return styles.statusReserved;
-    case "sold":
-      return styles.statusSold;
-    case "blocked":
-      return styles.statusBlocked;
-    case "under_offer":
-      return styles.statusUnderOffer;
+    case "under_contract":
+      return styles.statusUnderContract;
+    case "registered":
+      return styles.statusRegistered;
     default:
       return "";
   }
@@ -32,8 +31,11 @@ function statusClass(status: string): string {
  * Displays total price, price per sqm, internal area, outdoor area,
  * and commercial status. Reusable in both the list and detail page.
  *
- * Pricing values are sourced directly from the backend; no calculations
- * are performed here beyond simple presentation formatting.
+ * Price / sqm uses `pricing.unit_area` (the backend-resolved effective area)
+ * when available, falling back to `unit.internal_area` only when pricing is
+ * absent, keeping the UI consistent with backend pricing truth.
+ *
+ * No pricing calculations are performed here beyond display formatting.
  */
 export function UnitPricingSummaryCard({
   unit,
@@ -45,9 +47,11 @@ export function UnitPricingSummaryCard({
     (unit.roof_garden_area ?? 0) +
     (unit.front_garden_area ?? 0);
 
+  // Use backend-resolved unit_area (may use gross_area) for price/sqm.
+  const effectiveArea = pricing ? pricing.unit_area : unit.internal_area;
   const pricePerSqm =
-    pricing && unit.internal_area > 0
-      ? pricing.final_unit_price / unit.internal_area
+    pricing && effectiveArea > 0
+      ? pricing.final_unit_price / effectiveArea
       : null;
 
   return (
@@ -91,7 +95,7 @@ export function UnitPricingSummaryCard({
             className={`${styles.statusBadge} ${statusClass(unit.status)}`}
             style={{ display: "inline-block" }}
           >
-            {unit.status.replace(/_/g, " ")}
+            {unitStatusLabel(unit.status)}
           </span>
         </div>
       </div>

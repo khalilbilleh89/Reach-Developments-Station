@@ -94,12 +94,39 @@
   font-size: calc(var(--font-size-sm) * 0.875);
   white-space: nowrap;
   border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-  user-select: none;
 }
 
-.tableHead th:hover {
+/* Only sortable column headers show a pointer cursor */
+.sortableHeader {
+  cursor: default;
+}
+
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: calc(var(--font-size-sm) * 0.875);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortBtn:hover {
   color: var(--color-text);
+}
+
+.sortBtn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .sortIndicator {
@@ -170,17 +197,12 @@
   color: #744210;
 }
 
-.statusSold {
+.statusUnderContract {
   background: #bee3f8;
   color: #2a4365;
 }
 
-.statusBlocked {
-  background: #fed7d7;
-  color: #742a2a;
-}
-
-.statusUnderOffer {
+.statusRegistered {
   background: #e9d8fd;
   color: #44337a;
 }

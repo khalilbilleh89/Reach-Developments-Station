@@ -2,27 +2,29 @@
 
 import React from "react";
 import type { UnitFiltersState, UnitStatus, UnitType } from "@/lib/units-types";
+import { unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
 const STATUS_OPTIONS: { value: UnitStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
-  { value: "available", label: "Available" },
-  { value: "reserved", label: "Reserved" },
-  { value: "under_offer", label: "Under Offer" },
-  { value: "sold", label: "Sold" },
-  { value: "blocked", label: "Blocked" },
+  { value: "available", label: unitStatusLabel("available") },
+  { value: "reserved", label: unitStatusLabel("reserved") },
+  { value: "under_contract", label: unitStatusLabel("under_contract") },
+  { value: "registered", label: unitStatusLabel("registered") },
 ];
 
 const TYPE_OPTIONS: { value: UnitType | ""; label: string }[] = [
   { value: "", label: "All Types" },
-  { value: "apartment", label: "Apartment" },
-  { value: "penthouse", label: "Penthouse" },
-  { value: "townhouse", label: "Townhouse" },
-  { value: "villa", label: "Villa" },
-  { value: "studio", label: "Studio" },
-  { value: "retail", label: "Retail" },
-  { value: "office", label: "Office" },
-  { value: "other", label: "Other" },
+  { value: "studio", label: unitTypeLabel("studio") },
+  { value: "one_bedroom", label: unitTypeLabel("one_bedroom") },
+  { value: "two_bedroom", label: unitTypeLabel("two_bedroom") },
+  { value: "three_bedroom", label: unitTypeLabel("three_bedroom") },
+  { value: "four_bedroom", label: unitTypeLabel("four_bedroom") },
+  { value: "penthouse", label: unitTypeLabel("penthouse") },
+  { value: "villa", label: unitTypeLabel("villa") },
+  { value: "townhouse", label: unitTypeLabel("townhouse") },
+  { value: "retail", label: unitTypeLabel("retail") },
+  { value: "office", label: unitTypeLabel("office") },
 ];
 
 interface UnitFiltersProps {

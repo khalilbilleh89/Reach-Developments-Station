@@ -52,7 +52,7 @@ const mockUnit = {
   id: "unit-1",
   floor_id: "floor-1",
   unit_number: "A101",
-  unit_type: "apartment",
+  unit_type: "two_bedroom",
   status: "available",
   internal_area: 85.5,
   balcony_area: 10,

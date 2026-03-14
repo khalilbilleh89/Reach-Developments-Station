@@ -10,17 +10,19 @@
  *
  * Backend endpoints used:
  *   GET /projects                             → project list
- *   GET /units?floor_id=&skip=&limit=         → unit list
+ *   GET /phases?project_id=                   → phases for a project
+ *   GET /buildings?phase_id=                  → buildings for a phase
+ *   GET /floors?building_id=                  → floors for a building
+ *   GET /units?floor_id=                      → units for a floor
  *   GET /units/{unitId}                       → unit detail
  *   GET /pricing/unit/{unitId}                → calculated unit price
  *   GET /pricing/unit/{unitId}/attributes     → pricing attributes
  */
 
-import { apiFetch } from "./api-client";
+import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
   UnitDetail,
-  UnitFiltersState,
   UnitListItem,
   UnitPrice,
   UnitPricingAttributes,
@@ -34,9 +36,48 @@ interface ProjectListResponse {
   total: number;
 }
 
+interface PhaseItem {
+  id: string;
+}
+
+interface PhaseListResponse {
+  items: PhaseItem[];
+  total: number;
+}
+
+interface BuildingItem {
+  id: string;
+}
+
+interface BuildingListResponse {
+  items: BuildingItem[];
+  total: number;
+}
+
+interface FloorItem {
+  id: string;
+}
+
+interface FloorListResponse {
+  items: FloorItem[];
+  total: number;
+}
+
 interface UnitListResponse {
   items: UnitListItem[];
   total: number;
+}
+
+// ---------- Error discrimination ------------------------------------------
+
+/**
+ * Returns true if the error represents a "not found / not configured" state
+ * — i.e. an HTTP 404 from the backend.
+ * All other errors (5xx, network, auth) are considered unexpected and should
+ * be propagated to the caller.
+ */
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
 }
 
 // ---------- Query functions ----------------------------------------------
@@ -48,33 +89,49 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 /**
- * Fetch units for a given floor, or all units if no floor_id is provided.
- * The backend /units endpoint does not natively filter by project, so the
- * caller is expected to derive the relevant floor IDs and filter client-side,
- * or pass a floor_id if navigating from the hierarchy.
+ * Fetch all units belonging to a given project.
  *
- * When no floor_id filter is available, we load the full first page.
+ * The backend /units endpoint does not support direct project-level
+ * filtering. We walk the hierarchy:
+ *   Project → Phases → Buildings → Floors → Units
+ *
+ * All hierarchy traversals are parallelised where possible. An empty
+ * project (no phases) returns an empty array gracefully.
  */
 export async function getUnitsByProject(
-  _projectId: string,
-  filters?: Partial<UnitFiltersState>,
+  projectId: string,
 ): Promise<UnitListItem[]> {
-  // Build query params — backend currently filters by floor_id only.
-  // Status and type filtering is applied client-side from the returned list.
-  const params = new URLSearchParams({ limit: "500" });
-  const data = await apiFetch<UnitListResponse>(`/units?${params.toString()}`);
+  // 1. Phases for this project
+  const phasesData = await apiFetch<PhaseListResponse>(
+    `/phases?project_id=${projectId}&limit=500`,
+  );
+  if (phasesData.items.length === 0) return [];
 
-  let items = data.items;
+  // 2. Buildings for all phases — in parallel
+  const buildingResponses = await Promise.all(
+    phasesData.items.map((phase) =>
+      apiFetch<BuildingListResponse>(`/buildings?phase_id=${phase.id}&limit=500`),
+    ),
+  );
+  const buildings = buildingResponses.flatMap((r) => r.items);
+  if (buildings.length === 0) return [];
 
-  // Apply client-side filters for fields not natively supported by backend.
-  if (filters?.status) {
-    items = items.filter((u) => u.status === filters.status);
-  }
-  if (filters?.unit_type) {
-    items = items.filter((u) => u.unit_type === filters.unit_type);
-  }
+  // 3. Floors for all buildings — in parallel
+  const floorResponses = await Promise.all(
+    buildings.map((building) =>
+      apiFetch<FloorListResponse>(`/floors?building_id=${building.id}&limit=500`),
+    ),
+  );
+  const floors = floorResponses.flatMap((r) => r.items);
+  if (floors.length === 0) return [];
 
-  return items;
+  // 4. Units for all floors — in parallel
+  const unitResponses = await Promise.all(
+    floors.map((floor) =>
+      apiFetch<UnitListResponse>(`/units?floor_id=${floor.id}&limit=500`),
+    ),
+  );
+  return unitResponses.flatMap((r) => r.items);
 }
 
 /** Fetch a single unit by its ID. */
@@ -82,16 +139,28 @@ export async function getUnitById(unitId: string): Promise<UnitDetail> {
   return apiFetch<UnitDetail>(`/units/${unitId}`);
 }
 
-/** Fetch the calculated price for a unit. Returns null if not yet priced. */
+/**
+ * Fetch the calculated price for a unit.
+ *
+ * Returns null when the unit has not been priced yet (404 / not-found).
+ * Unexpected errors (5xx, network failures, auth errors) are propagated
+ * so that the calling component can show a proper error state.
+ */
 export async function getUnitPricing(unitId: string): Promise<UnitPrice | null> {
   try {
     return await apiFetch<UnitPrice>(`/pricing/unit/${unitId}`);
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
   }
 }
 
-/** Fetch the pricing attributes stored for a unit. Returns null if none set. */
+/**
+ * Fetch the pricing attributes stored for a unit.
+ *
+ * Returns null when no attributes have been configured yet (404 / not-found).
+ * Unexpected errors are propagated so the caller can show an error state.
+ */
 export async function getUnitPricingAttributes(
   unitId: string,
 ): Promise<UnitPricingAttributes | null> {
@@ -99,8 +168,9 @@ export async function getUnitPricingAttributes(
     return await apiFetch<UnitPricingAttributes>(
       `/pricing/unit/${unitId}/attributes`,
     );
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
   }
 }
 
@@ -108,8 +178,7 @@ export async function getUnitPricingAttributes(
  * Fetch the combined unit detail + pricing data for the detail page.
  *
  * Fetches unit, pricing, and attributes in parallel. Pricing/attribute
- * failures are caught and surfaced as null rather than breaking the page,
- * because units can exist before pricing is configured.
+ * "not found" states are surfaced as null; unexpected errors are propagated.
  */
 export async function getUnitPricingDetail(
   unitId: string,

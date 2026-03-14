@@ -45,6 +45,17 @@ jest.mock("@/lib/units-api", () => ({
   getUnitPricing: jest.fn(),
 }));
 
+// Import ApiError for constructing error fixtures
+jest.mock("@/lib/api-client", () => ({
+  apiFetch: jest.fn(),
+  ApiError: class ApiError extends Error {
+    constructor(message: string, public readonly status: number) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
+}));
+
 import { getProjects, getUnitsByProject, getUnitPricing } from "@/lib/units-api";
 import UnitsPricingPage from "@/app/(protected)/units-pricing/page";
 
@@ -62,7 +73,7 @@ const mockUnits = [
     id: "unit-1",
     floor_id: "floor-1",
     unit_number: "A101",
-    unit_type: "apartment",
+    unit_type: "one_bedroom",
     status: "available",
     internal_area: 85.5,
     balcony_area: 10,
@@ -75,8 +86,8 @@ const mockUnits = [
     id: "unit-2",
     floor_id: "floor-1",
     unit_number: "A102",
-    unit_type: "apartment",
-    status: "sold",
+    unit_type: "two_bedroom",
+    status: "under_contract",
     internal_area: 90.0,
     balcony_area: null,
     terrace_area: null,
@@ -154,6 +165,19 @@ describe("UnitsPricingPage", () => {
     );
   });
 
+  it("propagates unexpected pricing errors to the units error state", async () => {
+    mockGetUnitsByProject.mockResolvedValue(mockUnits);
+    // Simulate a 500 error from pricing — not a 404 "not found"
+    const { ApiError } = jest.requireMock("@/lib/api-client") as {
+      ApiError: new (message: string, status: number) => Error;
+    };
+    mockGetUnitPricing.mockRejectedValue(new ApiError("Internal Server Error", 500));
+    render(<UnitsPricingPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Internal Server Error")).toBeInTheDocument(),
+    );
+  });
+
   it("shows empty state when no project is available", async () => {
     mockGetProjects.mockResolvedValue([]);
     render(<UnitsPricingPage />);
@@ -168,5 +192,22 @@ describe("UnitsPricingPage", () => {
     await waitFor(() =>
       expect(screen.getByText("Server error")).toBeInTheDocument(),
     );
+  });
+
+  it("applies status filter to shown units", async () => {
+    render(<UnitsPricingPage />);
+    // Wait for both units to load
+    await waitFor(() =>
+      expect(screen.getByText("A101")).toBeInTheDocument(),
+    );
+    // Change status filter to "available" — only A101 matches
+    fireEvent.change(screen.getByLabelText(/status/i), {
+      target: { value: "available" },
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/1 unit shown/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByText("A101")).toBeInTheDocument();
+    expect(screen.queryByText("A102")).not.toBeInTheDocument();
   });
 });

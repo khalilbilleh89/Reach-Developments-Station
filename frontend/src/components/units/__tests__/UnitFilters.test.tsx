@@ -32,7 +32,7 @@ describe("UnitFilters", () => {
   });
 
   it("shows reset button when a filter is active", () => {
-    const filters: UnitFiltersState = { ...defaultFilters, status: "sold" };
+    const filters: UnitFiltersState = { ...defaultFilters, status: "under_contract" };
     render(<UnitFilters filters={filters} onChange={jest.fn()} />);
     expect(screen.getByRole("button", { name: /reset/i })).toBeInTheDocument();
   });
@@ -56,20 +56,20 @@ describe("UnitFilters", () => {
     render(<UnitFilters filters={defaultFilters} onChange={onChange} />);
 
     fireEvent.change(screen.getByLabelText(/unit type/i), {
-      target: { value: "apartment" },
+      target: { value: "one_bedroom" },
     });
 
     expect(onChange).toHaveBeenCalledWith({
       ...defaultFilters,
-      unit_type: "apartment",
+      unit_type: "one_bedroom",
     });
   });
 
   it("calls onChange with reset state when reset button is clicked", () => {
     const onChange = jest.fn();
     const filters: UnitFiltersState = {
-      status: "sold",
-      unit_type: "apartment",
+      status: "under_contract",
+      unit_type: "two_bedroom",
       min_price: "100000",
       max_price: "500000",
     };
@@ -83,6 +83,27 @@ describe("UnitFilters", () => {
       min_price: "",
       max_price: "",
     });
+  });
+
+  it("renders correct status options matching backend enum values", () => {
+    render(<UnitFilters filters={defaultFilters} onChange={jest.fn()} />);
+    const statusSelect = screen.getByLabelText(/status/i);
+    expect(statusSelect).toHaveTextContent("Under Contract");
+    expect(statusSelect).toHaveTextContent("Registered");
+    // Old non-backend values must not appear
+    expect(statusSelect).not.toHaveTextContent("Sold");
+    expect(statusSelect).not.toHaveTextContent("Blocked");
+    expect(statusSelect).not.toHaveTextContent("Under Offer");
+  });
+
+  it("renders correct unit type options matching backend enum values", () => {
+    render(<UnitFilters filters={defaultFilters} onChange={jest.fn()} />);
+    const typeSelect = screen.getByLabelText(/unit type/i);
+    expect(typeSelect).toHaveTextContent("1 Bedroom");
+    expect(typeSelect).toHaveTextContent("2 Bedroom");
+    // Old non-backend value must not appear
+    expect(typeSelect).not.toHaveTextContent("Apartment");
+    expect(typeSelect).not.toHaveTextContent("Other");
   });
 
   it("calls onChange with updated min_price", () => {
