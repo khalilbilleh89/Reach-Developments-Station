@@ -9,6 +9,24 @@ Responsibilities
 * SQL-level aggregations for actual collections and scheduled receivables
   scoped to a project and date range.
 
+Transaction design
+------------------
+* `stage_forecast()` — adds forecast to session and flushes to obtain its ID,
+  but does NOT commit.  The service controls the transaction boundary.
+* `stage_period_rows()` — bulk-adds period rows to the session, does NOT commit.
+* `commit()` — commits the current transaction.  Called once by the service
+  after both header and period rows are staged, making creation atomic.
+* `rollback()` — rolls back the current transaction on failure.
+
+Aggregation design
+------------------
+* `get_actual_collections_by_date()` and `get_scheduled_amounts_by_date()` each
+  execute a single GROUP-BY query over the full forecast window and return a
+  date → amount dict.  The service maps these into period buckets in memory,
+  replacing N×2 per-bucket scalar queries with 2 queries total.
+* `sum_scheduled_amounts_before()` / `sum_collected_amounts_before()` supply the
+  historical totals needed to seed the running overdue calculation.
+
 Design contract
 ---------------
 * No business forecasting rules here — all logic lives in service.py.
@@ -17,7 +35,7 @@ Design contract
 """
 
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -38,13 +56,30 @@ class CashflowRepository:
         self.db = db
 
     # ------------------------------------------------------------------
+    # Transaction control
+    # ------------------------------------------------------------------
+
+    def commit(self) -> None:
+        """Commit the current transaction."""
+        self.db.commit()
+
+    def rollback(self) -> None:
+        """Roll back the current transaction."""
+        self.db.rollback()
+
+    # ------------------------------------------------------------------
     # CashflowForecast
     # ------------------------------------------------------------------
 
-    def create_forecast(self, forecast: CashflowForecast) -> CashflowForecast:
+    def stage_forecast(self, forecast: CashflowForecast) -> CashflowForecast:
+        """Add forecast to session and flush to obtain a DB-assigned ID.
+
+        Does NOT commit — the service controls the transaction boundary so
+        that both the forecast header and its period rows are committed
+        atomically in a single transaction.
+        """
         self.db.add(forecast)
-        self.db.commit()
-        self.db.refresh(forecast)
+        self.db.flush()
         return forecast
 
     def save_forecast(self, forecast: CashflowForecast) -> CashflowForecast:
@@ -92,15 +127,13 @@ class CashflowRepository:
     # CashflowForecastPeriod
     # ------------------------------------------------------------------
 
-    def create_period_rows(
-        self, periods: List[CashflowForecastPeriod]
-    ) -> List[CashflowForecastPeriod]:
-        for period in periods:
-            self.db.add(period)
-        self.db.commit()
-        for period in periods:
-            self.db.refresh(period)
-        return periods
+    def stage_period_rows(self, periods: List[CashflowForecastPeriod]) -> None:
+        """Bulk-add all period rows to the session.
+
+        Does NOT commit — the service calls commit() once after both the
+        forecast header and period rows are staged.
+        """
+        self.db.add_all(periods)
 
     def list_periods_by_forecast(
         self, forecast_id: str
@@ -113,23 +146,24 @@ class CashflowRepository:
         )
 
     # ------------------------------------------------------------------
-    # Aggregations — actual collections by period
+    # Bulk aggregations — actual collections for full window
     # ------------------------------------------------------------------
 
-    def sum_actual_collections_by_period(
+    def get_actual_collections_by_date(
         self,
         project_id: str,
-        period_start: date,
-        period_end: date,
-    ) -> float:
-        """Return total recorded receipts for a project within [period_start, period_end).
+        start_date: date,
+        end_date: date,
+    ) -> Dict[date, float]:
+        """Return {receipt_date: total_received} for recorded receipts in [start_date, end_date).
 
-        Joins through the contract → unit → floor → building → phase → project
-        hierarchy and filters by receipt_date within the period window.
+        Single GROUP-BY query over the full window.  The caller maps results
+        into period buckets in Python, avoiding per-bucket scalar queries.
         """
-        result = (
+        rows = (
             self.db.query(
-                func.coalesce(func.sum(PaymentReceipt.amount_received), 0)
+                PaymentReceipt.receipt_date,
+                func.sum(PaymentReceipt.amount_received),
             )
             .join(SalesContract, PaymentReceipt.contract_id == SalesContract.id)
             .join(Unit, SalesContract.unit_id == Unit.id)
@@ -139,31 +173,33 @@ class CashflowRepository:
             .filter(
                 Phase.project_id == project_id,
                 PaymentReceipt.status == ReceiptStatus.RECORDED.value,
-                PaymentReceipt.receipt_date >= period_start,
-                PaymentReceipt.receipt_date < period_end,
+                PaymentReceipt.receipt_date >= start_date,
+                PaymentReceipt.receipt_date < end_date,
             )
-            .scalar()
+            .group_by(PaymentReceipt.receipt_date)
+            .all()
         )
-        return float(result)
+        return {row[0]: float(row[1]) for row in rows}
 
     # ------------------------------------------------------------------
-    # Aggregations — scheduled receivables by period
+    # Bulk aggregations — scheduled receivables for full window
     # ------------------------------------------------------------------
 
-    def sum_scheduled_receivables_by_period(
+    def get_scheduled_amounts_by_date(
         self,
         project_id: str,
-        period_start: date,
-        period_end: date,
-    ) -> float:
-        """Return total scheduled due amounts for a project within [period_start, period_end).
+        start_date: date,
+        end_date: date,
+    ) -> Dict[date, float]:
+        """Return {due_date: total_due} for scheduled installments in [start_date, end_date).
 
-        Joins through payment_schedule → contract → unit → … → project hierarchy
-        and filters by due_date within the period window.
+        Single GROUP-BY query over the full window.  The caller maps results
+        into period buckets in Python, avoiding per-bucket scalar queries.
         """
-        result = (
+        rows = (
             self.db.query(
-                func.coalesce(func.sum(PaymentSchedule.due_amount), 0)
+                PaymentSchedule.due_date,
+                func.sum(PaymentSchedule.due_amount),
             )
             .join(SalesContract, PaymentSchedule.contract_id == SalesContract.id)
             .join(Unit, SalesContract.unit_id == Unit.id)
@@ -172,25 +208,23 @@ class CashflowRepository:
             .join(Phase, Building.phase_id == Phase.id)
             .filter(
                 Phase.project_id == project_id,
-                PaymentSchedule.due_date >= period_start,
-                PaymentSchedule.due_date < period_end,
+                PaymentSchedule.due_date >= start_date,
+                PaymentSchedule.due_date < end_date,
             )
-            .scalar()
+            .group_by(PaymentSchedule.due_date)
+            .all()
         )
-        return float(result)
+        return {row[0]: float(row[1]) for row in rows}
 
-    def sum_overdue_receivables(
-        self,
-        project_id: str,
-        as_of_date: date,
+    # ------------------------------------------------------------------
+    # Historical totals — seed for running overdue calculation
+    # ------------------------------------------------------------------
+
+    def sum_scheduled_amounts_before(
+        self, project_id: str, as_of_date: date
     ) -> float:
-        """Return total scheduled due amounts that are past due (due_date < as_of_date)
-        and have not been fully collected.
-
-        For simplicity, this sums all scheduled amounts due before as_of_date
-        and subtracts recorded receipts up to as_of_date.
-        """
-        scheduled = (
+        """Return total scheduled due amounts with due_date < as_of_date."""
+        result = (
             self.db.query(
                 func.coalesce(func.sum(PaymentSchedule.due_amount), 0)
             )
@@ -205,7 +239,13 @@ class CashflowRepository:
             )
             .scalar()
         )
-        collected = (
+        return float(result)
+
+    def sum_collected_amounts_before(
+        self, project_id: str, as_of_date: date
+    ) -> float:
+        """Return total recorded receipts with receipt_date < as_of_date."""
+        result = (
             self.db.query(
                 func.coalesce(func.sum(PaymentReceipt.amount_received), 0)
             )
@@ -221,5 +261,5 @@ class CashflowRepository:
             )
             .scalar()
         )
-        overdue = float(scheduled) - float(collected)
-        return max(overdue, 0.0)
+        return float(result)
+

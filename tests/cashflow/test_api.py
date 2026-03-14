@@ -508,3 +508,126 @@ class TestForecastWithPaymentData:
         assert total_receivables > 0.0, (
             "Expected non-zero receivables_due reflecting payment plan installments"
         )
+
+    def test_scheduled_collections_preserves_actual_inflows(
+        self, client: TestClient
+    ) -> None:
+        """scheduled_collections basis must NOT zero out actual_inflows.
+
+        actual_inflows should always reflect real recorded receipts so the
+        API is truthful even when the expected basis is schedule-driven.
+        """
+        project_id, unit_id = _create_hierarchy(client, "CF051")
+        template_id = _create_payment_plan_template(client)
+        buyer_id = _create_buyer(client, "buyer051@test.com")
+        contract_id = _create_contract(client, unit_id, buyer_id, "CTR-051")
+        _apply_payment_plan(client, contract_id, template_id)
+
+        # Fetch the first schedule line so we can record a receipt against it
+        sched_resp = client.get(
+            f"/api/v1/payment-plans/contracts/{contract_id}/schedule"
+        )
+        assert sched_resp.status_code == 200, sched_resp.text
+        schedules = sched_resp.json()["items"]
+        assert len(schedules) > 0
+        first_line = schedules[0]
+
+        # Record a receipt for the first installment (due 2026-01-01)
+        receipt_resp = client.post(
+            "/api/v1/collections/receipts",
+            json={
+                "contract_id": contract_id,
+                "payment_schedule_id": first_line["id"],
+                "receipt_date": "2026-01-10",
+                "amount_received": 5000.0,
+                "payment_method": "bank_transfer",
+            },
+        )
+        assert receipt_resp.status_code == 201, receipt_resp.text
+
+        # Generate a scheduled_collections forecast for January
+        resp = client.post(
+            "/api/v1/cashflow/forecasts",
+            json={
+                "project_id": project_id,
+                "forecast_name": "Scheduled basis with actuals",
+                "start_date": "2026-01-01",
+                "end_date": "2026-02-01",
+                "period_type": "monthly",
+                "forecast_basis": "scheduled_collections",
+            },
+        )
+        assert resp.status_code == 201
+        forecast_id = resp.json()["id"]
+
+        periods_resp = client.get(f"/api/v1/cashflow/forecasts/{forecast_id}/periods")
+        assert periods_resp.status_code == 200
+        periods = periods_resp.json()
+        assert len(periods) == 1
+
+        # actual_inflows must reflect the 5_000 receipt, not be zeroed out
+        assert float(periods[0]["actual_inflows"]) == pytest.approx(5000.0), (
+            "actual_inflows should be truthful even in scheduled_collections mode"
+        )
+
+
+class TestForecastAtomicity:
+    def test_successful_forecast_persists_header_and_periods_together(
+        self, client: TestClient
+    ) -> None:
+        """Verify that a successful forecast creates both header and period rows."""
+        project_id, _ = _create_hierarchy(client, "CF060")
+
+        resp = client.post(
+            "/api/v1/cashflow/forecasts",
+            json={
+                "project_id": project_id,
+                "forecast_name": "Atomic test",
+                "start_date": "2026-01-01",
+                "end_date": "2026-04-01",
+                "period_type": "monthly",
+                "forecast_basis": "scheduled_collections",
+            },
+        )
+        assert resp.status_code == 201
+        forecast_id = resp.json()["id"]
+
+        # Header is retrievable
+        assert client.get(f"/api/v1/cashflow/forecasts/{forecast_id}").status_code == 200
+
+        # Period rows are also present
+        periods = client.get(
+            f"/api/v1/cashflow/forecasts/{forecast_id}/periods"
+        ).json()
+        assert len(periods) == 3
+
+
+class TestForecastPeriodSequenceUniqueness:
+    def test_periods_have_unique_sequential_order(self, client: TestClient) -> None:
+        """Each period within a forecast must have a unique sequence number."""
+        project_id, _ = _create_hierarchy(client, "CF070")
+
+        resp = client.post(
+            "/api/v1/cashflow/forecasts",
+            json={
+                "project_id": project_id,
+                "forecast_name": "Sequence test",
+                "start_date": "2026-01-01",
+                "end_date": "2026-07-01",
+                "period_type": "monthly",
+                "forecast_basis": "scheduled_collections",
+            },
+        )
+        assert resp.status_code == 201
+        forecast_id = resp.json()["id"]
+
+        periods = client.get(
+            f"/api/v1/cashflow/forecasts/{forecast_id}/periods"
+        ).json()
+        assert len(periods) == 6
+
+        sequences = [p["sequence"] for p in periods]
+        assert sequences == list(range(1, 7)), (
+            "Periods must have contiguous unique sequence numbers starting at 1"
+        )
+        assert len(set(sequences)) == len(sequences), "Sequence numbers must be unique"

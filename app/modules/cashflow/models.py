@@ -18,7 +18,7 @@ sales contracts. Forecast rows are derived, not source-of-truth transactions.
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -83,6 +83,14 @@ class CashflowForecastPeriod(Base, TimestampMixin):
     """
 
     __tablename__ = "cashflow_forecast_periods"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "cashflow_forecast_id",
+            "sequence",
+            name="uq_cashflow_forecast_periods_forecast_seq",
+        ),
+    )
 
     cashflow_forecast_id: Mapped[str] = mapped_column(
         String(36),

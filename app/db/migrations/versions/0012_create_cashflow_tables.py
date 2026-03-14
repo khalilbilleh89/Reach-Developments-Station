@@ -141,6 +141,11 @@ def upgrade() -> None:
         sa.Column("notes", sa.String(1000), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint(
+            "cashflow_forecast_id",
+            "sequence",
+            name="uq_cashflow_forecast_periods_forecast_seq",
+        ),
     )
     op.create_index(
         "ix_cashflow_forecast_periods_forecast_id",

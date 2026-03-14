@@ -13,24 +13,34 @@ Core rules
 
    scheduled_collections
        expected_inflows = scheduled due amounts in the period.
+       actual_inflows   = real recorded receipts (always truthful).
 
    actual_plus_scheduled
        For periods that end on or before today (realized):
-           actual_inflows = actual receipts in that period.
-           expected_inflows = scheduled due amounts in that period.
+           effective inflow for balance = actual receipts in that period.
        For future periods:
-           actual_inflows = 0.
-           expected_inflows = scheduled due amounts in that period.
+           effective inflow for balance = scheduled due amounts.
+       actual_inflows and expected_inflows are always populated truthfully.
 
    blended
        expected_inflows = scheduled_due * collection_factor.
-       actual_inflows from receipts (same as actual_plus_scheduled).
+       effective inflow = actual_inflows if actuals exist, else expected_inflows.
+       actual_inflows always populated from real receipts.
 
 5. Per-period calculation:
-       net_cashflow    = (actual_inflows or expected_inflows) - expected_outflows
+       net_cashflow    = effective_inflow - expected_outflows
        closing_balance = opening_balance + net_cashflow
 
-6. Saved forecasts are reproducible from their assumptions_json.
+6. Forecast creation is atomic: the header and all period rows are
+   committed in a single transaction.  If period generation fails, the
+   partial header is rolled back.
+
+7. Aggregation is efficient: two GROUP-BY queries fetch actual collections
+   and scheduled amounts for the full forecast window up front; per-bucket
+   values are computed in Python from the resulting dicts (no per-bucket
+   round-trips).
+
+8. Saved forecasts are reproducible from their assumptions_json.
 
 Explicitly Forbidden
 --------------------
@@ -43,7 +53,7 @@ Explicitly Forbidden
 
 import json
 from datetime import date, datetime, timezone
-from typing import List, Optional
+from typing import Dict, List
 
 from dateutil.relativedelta import relativedelta
 from fastapi import HTTPException, status
@@ -115,6 +125,13 @@ class CashflowService:
                 break
         return buckets
 
+    @staticmethod
+    def _sum_in_range(
+        by_date: Dict[date, float], range_start: date, range_end: date
+    ) -> float:
+        """Sum all values from a date-keyed dict where key falls in [range_start, range_end)."""
+        return sum(v for d, v in by_date.items() if range_start <= d < range_end)
+
     # ------------------------------------------------------------------
     # Create forecast
     # ------------------------------------------------------------------
@@ -125,11 +142,14 @@ class CashflowService:
         Steps:
         1. Validate project exists.
         2. Build period buckets from window and period_type.
-        3. For each bucket, query DB for actual collections + scheduled due amounts.
-        4. Compute expected_inflows per basis mode.
+        3. Pre-fetch actual collections and scheduled amounts for the full
+           window in two GROUP-BY queries (no per-bucket round-trips).
+        4. Compute expected_inflows per basis mode; always keep truthful
+           actual_inflows from real receipts.
         5. Apply optional outflow schedule.
         6. Accumulate opening/closing balances.
-        7. Persist forecast + period rows.
+        7. Stage header (flush for ID) and all period rows, then commit once
+           so that header + periods are atomic.  Roll back on any failure.
         """
         self._require_project(data.project_id)
 
@@ -147,7 +167,6 @@ class CashflowService:
                 detail="Forecast window produces no periods. Check start_date and end_date.",
             )
 
-        # Persist the forecast header first so we have a FK for period rows
         assumptions = {
             "forecast_basis": data.forecast_basis.value,
             "period_type": data.period_type.value,
@@ -171,88 +190,97 @@ class CashflowService:
             generated_by=data.generated_by,
             notes=data.notes,
         )
-        forecast = self.repo.create_forecast(forecast)
 
-        # Generate period rows
-        period_rows: List[CashflowForecastPeriod] = []
-        running_balance = data.opening_balance
+        try:
+            # Stage header — flush to obtain the ID needed as FK for period rows.
+            # Does NOT commit; the whole block is one transaction.
+            self.repo.stage_forecast(forecast)
 
-        for seq, (p_start, p_end) in enumerate(buckets, start=1):
-            # Actual inflows: recorded receipts in this period
-            actual_inflows = self.repo.sum_actual_collections_by_period(
-                data.project_id, p_start, p_end
+            # Pre-aggregate over the full forecast window — 2 queries total.
+            actual_by_date = self.repo.get_actual_collections_by_date(
+                data.project_id, data.start_date, data.end_date
+            )
+            scheduled_by_date = self.repo.get_scheduled_amounts_by_date(
+                data.project_id, data.start_date, data.end_date
             )
 
-            # Scheduled due amounts in this period
-            scheduled_due = self.repo.sum_scheduled_receivables_by_period(
-                data.project_id, p_start, p_end
+            # Seed the running overdue calculation with historical totals.
+            hist_scheduled = self.repo.sum_scheduled_amounts_before(
+                data.project_id, data.start_date
             )
-
-            # Expected inflows depend on forecast basis
-            if data.forecast_basis == CashflowForecastBasis.SCHEDULED_COLLECTIONS:
-                expected_inflows = scheduled_due
-                actual_inflows = 0.0
-
-            elif data.forecast_basis == CashflowForecastBasis.ACTUAL_PLUS_SCHEDULED:
-                # Use actual if period is in the past, scheduled for future
-                expected_inflows = scheduled_due
-
-            elif data.forecast_basis == CashflowForecastBasis.BLENDED:
-                factor = data.collection_factor or 1.0
-                expected_inflows = scheduled_due * factor
-                # actual_inflows already queried
-
-            else:
-                expected_inflows = scheduled_due
-
-            # Outflows: look up in schedule by period_start ISO string
-            expected_outflows = float(
-                outflow_schedule.get(p_start.isoformat(), 0.0)
+            hist_collected = self.repo.sum_collected_amounts_before(
+                data.project_id, data.start_date
             )
+            running_scheduled = hist_scheduled
+            running_collected = hist_collected
 
-            # Receivables due in this period = scheduled due amounts
-            receivables_due = scheduled_due
+            # Build period rows
+            period_rows: List[CashflowForecastPeriod] = []
+            running_balance = data.opening_balance
 
-            # Overdue receivables: accumulated at period_start
-            receivables_overdue = self.repo.sum_overdue_receivables(
-                data.project_id, p_start
-            )
+            for seq, (p_start, p_end) in enumerate(buckets, start=1):
+                # Per-period values from pre-aggregated dicts (no DB round-trip)
+                actual_inflows = self._sum_in_range(actual_by_date, p_start, p_end)
+                scheduled_due = self._sum_in_range(scheduled_by_date, p_start, p_end)
 
-            # Effective inflow used for the balance calculation:
-            #   scheduled_collections — use expected (no actuals)
-            #   actual_plus_scheduled — use actuals for realized periods,
-            #                           expected for future periods
-            #   blended               — use actuals where available, else expected
-            if data.forecast_basis == CashflowForecastBasis.SCHEDULED_COLLECTIONS:
-                effective_inflow = expected_inflows
-            elif data.forecast_basis == CashflowForecastBasis.ACTUAL_PLUS_SCHEDULED:
-                effective_inflow = actual_inflows if p_end <= today else expected_inflows
-            else:
-                # blended: prefer actuals when they exist, otherwise use scaled expected
-                effective_inflow = actual_inflows if actual_inflows > 0 else expected_inflows
-            net_cashflow = effective_inflow - expected_outflows
-            closing_balance = running_balance + net_cashflow
+                # expected_inflows depends on basis; actual_inflows is always truthful
+                if data.forecast_basis == CashflowForecastBasis.BLENDED:
+                    factor = data.collection_factor or 1.0
+                    expected_inflows = scheduled_due * factor
+                else:
+                    expected_inflows = scheduled_due
 
-            period_rows.append(
-                CashflowForecastPeriod(
-                    cashflow_forecast_id=forecast.id,
-                    sequence=seq,
-                    period_start=p_start,
-                    period_end=p_end,
-                    opening_balance=running_balance,
-                    expected_inflows=expected_inflows,
-                    actual_inflows=actual_inflows,
-                    expected_outflows=expected_outflows,
-                    net_cashflow=net_cashflow,
-                    closing_balance=closing_balance,
-                    receivables_due=receivables_due,
-                    receivables_overdue=receivables_overdue,
+                # Effective inflow drives the balance calculation:
+                #   scheduled_collections — forward-looking, use expected schedule
+                #   actual_plus_scheduled — actuals for realized periods, expected for future
+                #   blended               — prefer actuals when present, else scaled expected
+                if data.forecast_basis == CashflowForecastBasis.SCHEDULED_COLLECTIONS:
+                    effective_inflow = expected_inflows
+                elif data.forecast_basis == CashflowForecastBasis.ACTUAL_PLUS_SCHEDULED:
+                    effective_inflow = actual_inflows if p_end <= today else expected_inflows
+                else:
+                    effective_inflow = actual_inflows if actual_inflows > 0 else expected_inflows
+
+                expected_outflows = float(outflow_schedule.get(p_start.isoformat(), 0.0))
+
+                # Overdue at period_start = cumulative scheduled - cumulative collected
+                receivables_overdue = max(running_scheduled - running_collected, 0.0)
+
+                net_cashflow = effective_inflow - expected_outflows
+                closing_balance = running_balance + net_cashflow
+
+                period_rows.append(
+                    CashflowForecastPeriod(
+                        cashflow_forecast_id=forecast.id,
+                        sequence=seq,
+                        period_start=p_start,
+                        period_end=p_end,
+                        opening_balance=running_balance,
+                        expected_inflows=expected_inflows,
+                        actual_inflows=actual_inflows,
+                        expected_outflows=expected_outflows,
+                        net_cashflow=net_cashflow,
+                        closing_balance=closing_balance,
+                        receivables_due=scheduled_due,
+                        receivables_overdue=receivables_overdue,
+                    )
                 )
-            )
 
-            running_balance = closing_balance
+                # Advance running balance and overdue accumulators
+                running_balance = closing_balance
+                running_scheduled += scheduled_due
+                running_collected += actual_inflows
 
-        self.repo.create_period_rows(period_rows)
+            # Stage period rows (bulk add, no per-row commit)
+            self.repo.stage_period_rows(period_rows)
+
+            # Single atomic commit — header + all period rows together
+            self.repo.commit()
+            self.db.refresh(forecast)
+
+        except Exception:
+            self.repo.rollback()
+            raise
 
         return CashflowForecastResponse.model_validate(forecast)
 
