@@ -5,6 +5,7 @@ Authentication business logic: registration, login, token issuance, role lookup.
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import Role, User
@@ -32,7 +33,14 @@ class AuthService:
                 detail="Email already registered",
             )
         password_hash = hash_password(data.password)
-        user = self.repo.create_user(email=data.email, password_hash=password_hash)
+        try:
+            user = self.repo.create_user(email=data.email, password_hash=password_hash)
+        except IntegrityError:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered",
+            )
         token = create_access_token({"sub": user.id, "roles": []})
         return TokenResponse(access_token=token)
 

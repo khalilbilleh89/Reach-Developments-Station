@@ -11,7 +11,7 @@ Endpoints:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -50,5 +50,11 @@ def me(
     service: Annotated[AuthService, Depends(_get_service)],
 ) -> UserResponse:
     """Return the profile of the currently authenticated user."""
-    user_id: str = payload["sub"]
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is missing required claim: sub",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return service.get_current_user(user_id)

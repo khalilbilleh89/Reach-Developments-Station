@@ -6,7 +6,7 @@ Pydantic request / response models for authentication.
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -47,7 +47,7 @@ class UserResponse(BaseModel):
     email: str
     is_active: bool
     created_at: datetime
-    roles: list[RoleResponse] = []
+    roles: list[RoleResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

@@ -22,6 +22,7 @@ if database_url:
 
 # Import Base metadata so Alembic can detect model changes
 from app.db.base import Base  # noqa: E402
+import app.modules.auth.models  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

@@ -58,11 +58,13 @@ class AuthRepository:
     # ------------------------------------------------------------------
 
     def get_user_roles(self, user_id: str) -> list[Role]:
-        """Return the list of roles assigned to a user."""
-        user_roles = (
-            self.db.query(UserRole).filter(UserRole.user_id == user_id).all()
+        """Return the list of roles assigned to a user (single-query join)."""
+        return (
+            self.db.query(Role)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == user_id)
+            .all()
         )
-        return [ur.role for ur in user_roles]
 
     def assign_role(self, user_id: str, role_id: str) -> UserRole:
         """Assign a role to a user if not already assigned."""

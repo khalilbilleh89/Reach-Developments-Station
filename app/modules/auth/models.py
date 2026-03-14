@@ -4,7 +4,7 @@ auth.models
 ORM models for authentication: User, Role, UserRole.
 """
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -37,6 +37,9 @@ class UserRole(Base, TimestampMixin):
     """Many-to-many join between User and Role."""
 
     __tablename__ = "user_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_id_role_id"),
+    )
 
     user_id: Mapped[str] = mapped_column(
         String(36),
