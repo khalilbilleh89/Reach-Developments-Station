@@ -139,7 +139,7 @@ class CommissionPayoutLineResponse(BaseModel):
     slab_id: Optional[str]
     amount: float
     percentage: float
-    units_covered: float
+    value_covered: float
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -168,7 +168,27 @@ class CommissionPayoutResponse(BaseModel):
 
 class CommissionPayoutListResponse(BaseModel):
     total: int
-    items: List[CommissionPayoutResponse]
+    items: List["CommissionPayoutListItem"]
+
+
+class CommissionPayoutListItem(BaseModel):
+    """Lightweight payout representation for list endpoints (no per-line detail)."""
+
+    id: str
+    project_id: str
+    sale_contract_id: str
+    commission_plan_id: str
+    gross_sale_value: float
+    commission_pool_value: float
+    calculation_mode: CalculationMode
+    status: CommissionPayoutStatus
+    calculated_at: Optional[datetime]
+    approved_at: Optional[datetime]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ---------------------------------------------------------------------------

@@ -16,21 +16,29 @@ from fastapi.testclient import TestClient
 
 def _create_hierarchy(client: TestClient, proj_code: str) -> tuple[str, str]:
     """Create Project → Phase → Building → Floor → Unit; return (project_id, unit_id)."""
-    project_id = client.post(
-        "/api/v1/projects", json={"name": "Comm Project", "code": proj_code}
-    ).json()["id"]
-    phase_id = client.post(
+    resp = client.post("/api/v1/projects", json={"name": "Comm Project", "code": proj_code})
+    assert resp.status_code == 201, resp.text
+    project_id = resp.json()["id"]
+
+    resp = client.post(
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
-    ).json()["id"]
-    building_id = client.post(
+    )
+    assert resp.status_code == 201, resp.text
+    phase_id = resp.json()["id"]
+
+    resp = client.post(
         "/api/v1/buildings",
         json={"phase_id": phase_id, "name": "Block A", "code": f"BLK-{proj_code}"},
-    ).json()["id"]
-    floor_id = client.post(
-        "/api/v1/floors", json={"building_id": building_id, "level": 1}
-    ).json()["id"]
-    unit_id = client.post(
+    )
+    assert resp.status_code == 201, resp.text
+    building_id = resp.json()["id"]
+
+    resp = client.post("/api/v1/floors", json={"building_id": building_id, "level": 1})
+    assert resp.status_code == 201, resp.text
+    floor_id = resp.json()["id"]
+
+    resp = client.post(
         "/api/v1/units",
         json={
             "floor_id": floor_id,
@@ -38,7 +46,10 @@ def _create_hierarchy(client: TestClient, proj_code: str) -> tuple[str, str]:
             "unit_type": "studio",
             "internal_area": 100.0,
         },
-    ).json()["id"]
+    )
+    assert resp.status_code == 201, resp.text
+    unit_id = resp.json()["id"]
+
     return project_id, unit_id
 
 
@@ -404,7 +415,7 @@ def test_calculate_payout_two_slabs_marginal(client: TestClient):
     assert total_allocated == pytest.approx(25_000.0, abs=0.05)
 
     # slab 1 commission = 15,000
-    slab1_lines = [ln for ln in data["lines"] if ln["units_covered"] == pytest.approx(300_000.0, abs=1)]
+    slab1_lines = [ln for ln in data["lines"] if ln["value_covered"] == pytest.approx(300_000.0, abs=1)]
     assert len(slab1_lines) == 5
     slab1_total = sum(ln["amount"] for ln in slab1_lines)
     assert slab1_total == pytest.approx(15_000.0, abs=0.05)
@@ -606,6 +617,8 @@ def test_list_project_payouts(client: TestClient):
     data = resp.json()
     assert data["total"] == 1
     assert len(data["items"]) == 1
+    # List items must NOT include per-line detail (no N+1 queries)
+    assert "lines" not in data["items"][0]
 
 
 def test_list_project_payouts_invalid_project_returns_404(client: TestClient):
@@ -647,3 +660,104 @@ def test_project_summary_with_payouts(client: TestClient):
 def test_project_summary_invalid_project_returns_404(client: TestClient):
     resp = client.get("/api/v1/commission/projects/no-project/summary")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PR-015A integrity tests
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_payout_cross_project_plan_returns_422(client: TestClient):
+    """Payout calculation must fail when the plan belongs to a different project."""
+    # Project A has a unit and a contract
+    project_a_id, unit_a_id = _create_hierarchy(client, "CP-XP-A")
+    buyer_id = _create_buyer(client, "xpa@example.com")
+    contract_id = _create_contract(client, unit_a_id, buyer_id, "CNT-XP-A")
+
+    # Project B has its own commission plan
+    project_b_id, _ = _create_hierarchy(client, "CP-XP-B")
+    plan_b_id = _setup_single_slab_plan(client, project_b_id)
+
+    # Calculating a payout for a contract from Project A using Project B's plan
+    # must be rejected
+    resp = client.post(
+        "/api/v1/commission/payouts/calculate",
+        json={"sale_contract_id": contract_id, "commission_plan_id": plan_b_id},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "project" in resp.json()["detail"].lower()
+
+
+def test_add_slab_after_approved_payout_returns_409(client: TestClient):
+    """Slabs cannot be added to a plan that already has an approved payout."""
+    project_id, unit_id = _create_hierarchy(client, "CP-FREEZE")
+    buyer_id = _create_buyer(client, "freeze@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-FREEZE")
+    plan_id = _setup_single_slab_plan(client, project_id)
+
+    # Calculate and approve a payout
+    payout = client.post(
+        "/api/v1/commission/payouts/calculate",
+        json={"sale_contract_id": contract_id, "commission_plan_id": plan_id},
+    ).json()
+    resp = client.post(f"/api/v1/commission/payouts/{payout['id']}/approve")
+    assert resp.status_code == 200
+
+    # Attempting to add a new slab must now be rejected
+    resp = client.post(
+        f"/api/v1/commission/plans/{plan_id}/slabs",
+        json={
+            "range_from": 0,
+            "range_to": None,
+            "sequence": 99,
+            "sales_rep_pct": 60,
+            "team_lead_pct": 20,
+            "manager_pct": 10,
+            "broker_pct": 5,
+            "platform_pct": 5,
+        },
+    )
+    assert resp.status_code == 409, resp.text
+
+
+def test_calculate_payout_slab_not_starting_at_zero_returns_422(client: TestClient):
+    """Payout calculation must fail when the first slab does not start at 0."""
+    project_id, unit_id = _create_hierarchy(client, "CP-SZ")
+    buyer_id = _create_buyer(client, "sz@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-SZ")
+
+    plan_id = _create_plan(client, project_id)
+    # First slab starts at 100k, not 0
+    _add_slab(client, plan_id, range_from=100_000, range_to=None, sequence=1)
+
+    resp = client.post(
+        "/api/v1/commission/payouts/calculate",
+        json={"sale_contract_id": contract_id, "commission_plan_id": plan_id},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "range_from" in resp.json()["detail"] or "start at 0" in resp.json()["detail"]
+
+
+def test_detail_payout_includes_lines(client: TestClient):
+    """GET /payouts/{id} (detail endpoint) must include payout lines."""
+    project_id, unit_id = _create_hierarchy(client, "CP-DL")
+    buyer_id = _create_buyer(client, "dl@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-DL")
+    plan_id = _setup_single_slab_plan(client, project_id)
+
+    payout = client.post(
+        "/api/v1/commission/payouts/calculate",
+        json={"sale_contract_id": contract_id, "commission_plan_id": plan_id},
+    ).json()
+
+    resp = client.get(f"/api/v1/commission/payouts/{payout['id']}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "lines" in data
+    assert len(data["lines"]) == 5
+    # value_covered (renamed from units_covered) holds the monetary value
+    # covered in this slab bracket.  With a single open-ended slab [0, ∞),
+    # every line covers the full 500,000 contract value.
+    for ln in data["lines"]:
+        assert "value_covered" in ln
+        assert ln["value_covered"] == pytest.approx(500_000.0)

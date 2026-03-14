@@ -157,5 +157,5 @@ class CommissionPayoutLine(Base, TimestampMixin):
     )
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     percentage: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
-    units_covered: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    value_covered: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

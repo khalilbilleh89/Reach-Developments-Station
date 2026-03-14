@@ -51,6 +51,7 @@ from app.modules.commission.models import (
 from app.modules.commission.repository import CommissionRepository
 from app.modules.commission.schemas import (
     CommissionPayoutListResponse,
+    CommissionPayoutListItem,
     CommissionPayoutRequest,
     CommissionPayoutResponse,
     CommissionPlanCreate,
@@ -189,7 +190,19 @@ class CommissionService:
         # 5. Resolve project_id from the contract's unit hierarchy
         project_id = self._resolve_project_id(contract)
 
-        # 6. Build payout header
+        # 6. Guard: plan must belong to the same project as the sale contract
+        if plan.project_id != project_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"CommissionPlan '{plan.id}' belongs to project "
+                    f"'{plan.project_id}', not to the sale contract's project "
+                    f"'{project_id}'.  Plans and contracts must belong to the "
+                    "same project."
+                ),
+            )
+
+        # 7. Build payout header
         payout = CommissionPayout(
             project_id=project_id,
             sale_contract_id=contract.id,
@@ -229,7 +242,7 @@ class CommissionService:
         total = self._repo.count_payouts_by_project(project_id)
         return CommissionPayoutListResponse(
             total=total,
-            items=[self._build_payout_response(p) for p in items],
+            items=[CommissionPayoutListItem.model_validate(p) for p in items],
         )
 
     def approve_payout(self, payout_id: str) -> CommissionPayoutResponse:
@@ -320,7 +333,7 @@ class CommissionService:
                         slab_id=slab.id,
                         amount=amount,
                         percentage=pct,
-                        units_covered=round(value_in_slab, 2),
+                        value_covered=round(value_in_slab, 2),
                     )
                 )
 
@@ -360,7 +373,7 @@ class CommissionService:
                     slab_id=applicable.id,
                     amount=amount,
                     percentage=pct,
-                    units_covered=round(gross, 2),
+                    value_covered=round(gross, 2),
                 )
             )
 
@@ -373,7 +386,12 @@ class CommissionService:
     def _validate_new_slab(
         self, data: CommissionSlabCreate, existing: List[CommissionSlab]
     ) -> None:
-        """Validate that the new slab does not overlap or create gaps."""
+        """Validate that the new slab has no duplicate sequence and does not overlap
+        an existing slab.
+
+        Note: full slab-set contiguity (no gaps, starts at 0) is enforced at
+        calculation time via _validate_slab_set(), not here.
+        """
         # Duplicate sequence check
         for s in existing:
             if s.sequence == data.sequence:
@@ -407,6 +425,17 @@ class CommissionService:
 
     def _validate_slab_set(self, slabs: List[CommissionSlab]) -> None:
         """Validate the complete slab set for contiguity and correct percentages."""
+        # First slab must start at 0 to guarantee full coverage from the base
+        if float(slabs[0].range_from) > 1e-9:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"First slab (sequence={slabs[0].sequence}) must start at 0 "
+                    f"(got range_from={float(slabs[0].range_from):.2f}).  "
+                    "Slab coverage must begin at 0."
+                ),
+            )
+
         for slab in slabs:
             total = round(
                 float(slab.sales_rep_pct)
@@ -473,8 +502,21 @@ class CommissionService:
         return plan
 
     def _require_plan_not_approved(self, plan: CommissionPlan) -> None:
-        """Plans with approved payouts cannot have new slabs added."""
-        pass  # slabs can be added freely before payouts are calculated
+        """Reject slab modifications when the plan already has approved payouts.
+
+        Once a payout is approved against a plan's slab structure, the slabs
+        become part of an immutable audit trail.  Adding or changing slabs after
+        that point would make historical payouts non-reproducible.
+        """
+        if self._repo.has_approved_payouts_for_plan(plan.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"CommissionPlan '{plan.id}' cannot be modified because it has "
+                    "approved payouts.  Approved payouts depend on the plan's slab "
+                    "structure and must remain auditable."
+                ),
+            )
 
     def _require_payout(self, payout_id: str) -> CommissionPayout:
         payout = self._repo.get_payout_by_id(payout_id)

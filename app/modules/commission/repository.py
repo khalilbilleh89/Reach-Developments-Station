@@ -169,6 +169,18 @@ class CommissionRepository:
         )
         return float(result)
 
+    def has_approved_payouts_for_plan(self, plan_id: str) -> bool:
+        """Return True if the plan has at least one approved payout."""
+        return (
+            self.db.query(CommissionPayout)
+            .filter(
+                CommissionPayout.commission_plan_id == plan_id,
+                CommissionPayout.status == CommissionPayoutStatus.APPROVED.value,
+            )
+            .first()
+            is not None
+        )
+
     # ------------------------------------------------------------------
     # CommissionPayoutLine
     # ------------------------------------------------------------------
