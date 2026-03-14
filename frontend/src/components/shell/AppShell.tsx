@@ -15,8 +15,6 @@ interface AppShellProps {
   title?: string;
   /** Breadcrumb trail for the current page (reserved for future use). */
   breadcrumbs?: Breadcrumb[];
-  /** Optional top-right action slot (passed through to children). */
-  actions?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -81,14 +79,7 @@ export function AppShell({ title, breadcrumbs, children }: AppShellProps) {
       </aside>
 
       {/* Main content area */}
-      <div
-        className={[
-          styles.main,
-          sidebarOpen ? styles.mainWithSidebar : styles.mainCollapsed,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
+      <div className={styles.main}>
         <AppHeader pageTitle={title} onToggleSidebar={toggleSidebar} />
 
         <div className={styles.content}>{children}</div>

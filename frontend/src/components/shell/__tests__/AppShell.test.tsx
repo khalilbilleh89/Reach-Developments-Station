@@ -39,6 +39,16 @@ jest.mock("../AppShell.module.css", () => ({}));
 jest.mock("../AppHeader.module.css", () => ({}));
 jest.mock("../SidebarNav.module.css", () => ({}));
 
+// Mock auth lib to prevent localStorage/window.location side-effects
+jest.mock("@/lib/auth", () => ({
+  logout: jest.fn(),
+  getToken: jest.fn(),
+  setToken: jest.fn(),
+  clearToken: jest.fn(),
+  isAuthenticated: jest.fn(),
+  requireAuth: jest.fn(),
+}));
+
 describe("AppShell", () => {
   it("renders without crashing", () => {
     render(

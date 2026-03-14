@@ -17,7 +17,7 @@ frontend/
 ├── next.config.js
 ├── package.json
 ├── tsconfig.json
-├── jest.config.ts
+├── jest.config.js
 └── src/
     ├── app/
     │   ├── layout.tsx                   # Root HTML layout
@@ -46,6 +46,7 @@ frontend/
     │       ├── AppHeader.tsx            # Top bar
     │       ├── SidebarNav.tsx           # Left navigation
     │       ├── PageContainer.tsx        # Reusable page content wrapper
+    │       ├── PlaceholderState.tsx     # Shared placeholder for unbuilt modules
     │       └── __tests__/
     │           ├── AppShell.test.tsx
     │           └── SidebarNav.test.tsx

@@ -116,8 +116,10 @@
   font-size: 18px;
 }
 
-/* Logout */
-.logoutBtn {
+/* User menu button (extends .iconBtn) */
+.userMenu {
+  position: relative;
+}
   background: none;
   border: 1px solid var(--color-border);
   border-radius: 6px;

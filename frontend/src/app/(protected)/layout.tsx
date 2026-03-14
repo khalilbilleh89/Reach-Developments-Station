@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 
 /**
  * Protected layout — wraps all authenticated routes.
  *
- * Checks for a stored access token on mount. Unauthenticated users
- * are redirected to /login. Authenticated users get the full AppShell.
+ * Checks for a stored access token on mount. While the check is running
+ * (or when no token is present) the layout renders nothing to prevent
+ * protected UI from flashing before the redirect fires. Only once a valid
+ * token is confirmed does the AppShell render.
  *
- * This is the auth guard for the frontend. The source of truth for
- * authentication remains the backend token issued at /api/v1/auth/login.
+ * The source of truth for authentication remains the backend token issued
+ * at /api/v1/auth/login.
  */
 export default function ProtectedLayout({
   children,
@@ -19,15 +21,28 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("reach_access_token");
-      if (!token) {
-        router.push("/login");
-      }
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("reach_access_token")
+        : null;
+
+    if (!token) {
+      router.push("/login");
+      // Keep isChecking true so nothing renders during the redirect.
+    } else {
+      setIsAuthed(true);
+      setIsChecking(false);
     }
   }, [router]);
 
+  if (isChecking || !isAuthed) {
+    return null;
+  }
+
   return <AppShell>{children}</AppShell>;
 }
+
