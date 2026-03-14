@@ -1,0 +1,95 @@
+.shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--color-bg);
+}
+
+/* --- Sidebar ----------------------------------------------- */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-sidebar-bg);
+  transition: width 0.2s ease;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 200;
+}
+
+.sidebarOpen {
+  width: var(--sidebar-width);
+}
+
+.sidebarCollapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+.sidebarLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--header-height);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.logoFull {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: #ffffff;
+  letter-spacing: -0.5px;
+}
+
+.logoMark {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+/* --- Main area --------------------------------------------- */
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  transition: margin-left 0.2s ease;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Mobile overlay ---------------------------------------- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: var(--sidebar-width) !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  .mobileVisible {
+    transform: translateX(0);
+  }
+
+  .main {
+    margin-left: 0 !important;
+    width: 100%;
+  }
+}
