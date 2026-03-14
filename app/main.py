@@ -30,6 +30,7 @@ from app.modules.projects.api import router as projects_router
 from app.modules.pricing.api import router as pricing_router
 from app.modules.sales.api import router as sales_router
 from app.modules.registration.api import router as registration_router
+from app.modules.sales_exceptions.api import router as sales_exceptions_router
 from app.modules.units.api import router as units_router
 
 
@@ -64,6 +65,7 @@ app.include_router(payment_plans_router, prefix=_API_PREFIX)
 app.include_router(collections_router, prefix=_API_PREFIX)
 app.include_router(finance_router, prefix=_API_PREFIX)
 app.include_router(registration_router, prefix=_API_PREFIX)
+app.include_router(sales_exceptions_router, prefix=_API_PREFIX)
 
 
 @app.get("/", tags=["root"])
