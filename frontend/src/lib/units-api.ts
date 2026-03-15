@@ -9,25 +9,36 @@
  * from the backend pricing engine.
  *
  * Backend endpoints used:
- *   GET /projects                             → project list
- *   GET /phases?project_id=                   → phases for a project
- *   GET /buildings?phase_id=                  → buildings for a phase
- *   GET /buildings/{building_id}/floors    → floors for a building
- *   GET /units?floor_id=                      → units for a floor
- *   GET /units/{unitId}                       → unit detail
- *   GET /pricing/unit/{unitId}                → calculated unit price
- *   GET /pricing/unit/{unitId}/attributes     → pricing attributes
+ *   GET    /projects                             → project list
+ *   GET    /phases?project_id=                   → phases for a project
+ *   GET    /buildings?phase_id=                  → buildings for a phase
+ *   GET    /buildings/{building_id}/floors        → floors for a building
+ *   GET    /floors/{floor_id}/units              → units for a floor (floor-scoped)
+ *   POST   /floors/{floor_id}/units              → create unit in floor
+ *   GET    /units?floor_id=                      → units for a floor (flat with filter)
+ *   POST   /units                                → create unit (body includes floor_id)
+ *   GET    /units/{unitId}                       → unit detail
+ *   PATCH  /units/{unitId}                       → update unit
+ *   DELETE /units/{unitId}                       → delete unit
+ *   GET    /pricing/unit/{unitId}                → calculated unit price
+ *   GET    /pricing/unit/{unitId}/attributes     → pricing attributes
  */
 
 import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
+  UnitCreate,
+  UnitCreateForFloor,
   UnitDetail,
   UnitListItem,
+  UnitListResponse,
   UnitPrice,
   UnitPricingAttributes,
   UnitPricingDetail,
+  UnitUpdate,
 } from "./units-types";
+
+// Note: UnitListResponse is imported from "./units-types" above.
 
 // ---------- Raw backend response envelopes (internal) --------------------
 
@@ -60,11 +71,6 @@ interface FloorItem {
 
 interface FloorListResponse {
   items: FloorItem[];
-  total: number;
-}
-
-interface UnitListResponse {
-  items: UnitListItem[];
   total: number;
 }
 
@@ -191,4 +197,56 @@ export async function getUnitPricingDetail(
     getUnitPricingAttributes(unitId),
   ]);
   return { unit, pricing, attributes };
+}
+
+// ---------- Inventory CRUD functions -------------------------------------
+
+/**
+ * Fetch units for a specific floor (floor-scoped endpoint).
+ */
+export async function listUnitsByFloor(
+  floorId: string,
+  limit = 500,
+): Promise<UnitListResponse> {
+  return apiFetch<UnitListResponse>(
+    `/floors/${encodeURIComponent(floorId)}/units?limit=${limit}`,
+  );
+}
+
+/**
+ * Create a unit in a specific floor using the floor-scoped endpoint.
+ */
+export async function createUnit(
+  floorId: string,
+  data: UnitCreateForFloor,
+): Promise<UnitDetail> {
+  return apiFetch<UnitDetail>(
+    `/floors/${encodeURIComponent(floorId)}/units`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+/**
+ * Update an existing unit by ID.
+ */
+export async function updateUnit(
+  unitId: string,
+  data: UnitUpdate,
+): Promise<UnitDetail> {
+  return apiFetch<UnitDetail>(`/units/${encodeURIComponent(unitId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Delete a unit by ID. Returns undefined on success (204 No Content).
+ */
+export async function deleteUnit(unitId: string): Promise<void> {
+  await apiFetch<undefined>(`/units/${encodeURIComponent(unitId)}`, {
+    method: "DELETE",
+  });
 }

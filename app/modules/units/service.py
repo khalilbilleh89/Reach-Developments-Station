@@ -60,3 +60,12 @@ class UnitService:
             )
         updated = self.repo.update(unit, data)
         return UnitResponse.model_validate(updated)
+
+    def delete_unit(self, unit_id: str) -> None:
+        unit = self.repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        self.repo.delete(unit)

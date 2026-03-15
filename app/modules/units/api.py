@@ -2,25 +2,58 @@
 units.api
 
 CRUD API router for the Unit entity.
+
+Provides two route groups:
+  /api/v1/floors/{floor_id}/units  — floor-scoped unit listing and creation
+  /api/v1/units                    — flat list with optional ?floor_id= filter
+  /api/v1/units/{unit_id}          — individual unit operations (get, update, delete)
 """
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.units.schemas import UnitCreate, UnitList, UnitResponse, UnitUpdate
+from app.modules.units.schemas import UnitCreate, UnitCreateForFloor, UnitList, UnitResponse, UnitUpdate
 from app.modules.units.service import UnitService
 
-router = APIRouter(prefix="/units", tags=["units"])
+router = APIRouter(tags=["units"])
 
 
 def get_service(db: Session = Depends(get_db)) -> UnitService:
     return UnitService(db)
 
 
-@router.post("", response_model=UnitResponse, status_code=201)
+# ── Floor-scoped endpoints ────────────────────────────────────────────────────
+
+
+@router.get("/floors/{floor_id}/units", response_model=UnitList)
+def list_units_by_floor(
+    floor_id: str,
+    service: Annotated[UnitService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> UnitList:
+    """List all units for a specific floor."""
+    return service.list_units(floor_id=floor_id, skip=skip, limit=limit)
+
+
+@router.post("/floors/{floor_id}/units", response_model=UnitResponse, status_code=201)
+def create_unit_for_floor(
+    floor_id: str,
+    data: UnitCreateForFloor,
+    service: Annotated[UnitService, Depends(get_service)],
+) -> UnitResponse:
+    """Create a new unit within a specific floor."""
+    full_data = UnitCreate(**data.model_dump(), floor_id=floor_id)
+    return service.create_unit(full_data)
+
+
+# ── Flat unit endpoints ───────────────────────────────────────────────────────
+
+
+@router.post("/units", response_model=UnitResponse, status_code=201)
 def create_unit(
     data: UnitCreate,
     service: Annotated[UnitService, Depends(get_service)],
@@ -29,7 +62,7 @@ def create_unit(
     return service.create_unit(data)
 
 
-@router.get("", response_model=UnitList)
+@router.get("/units", response_model=UnitList)
 def list_units(
     service: Annotated[UnitService, Depends(get_service)],
     floor_id: Optional[str] = Query(default=None),
@@ -40,7 +73,7 @@ def list_units(
     return service.list_units(floor_id=floor_id, skip=skip, limit=limit)
 
 
-@router.get("/{unit_id}", response_model=UnitResponse)
+@router.get("/units/{unit_id}", response_model=UnitResponse)
 def get_unit(
     unit_id: str,
     service: Annotated[UnitService, Depends(get_service)],
@@ -49,7 +82,7 @@ def get_unit(
     return service.get_unit(unit_id)
 
 
-@router.patch("/{unit_id}", response_model=UnitResponse)
+@router.patch("/units/{unit_id}", response_model=UnitResponse)
 def update_unit(
     unit_id: str,
     data: UnitUpdate,
@@ -57,3 +90,13 @@ def update_unit(
 ) -> UnitResponse:
     """Update a unit."""
     return service.update_unit(unit_id, data)
+
+
+@router.delete("/units/{unit_id}", status_code=204)
+def delete_unit(
+    unit_id: str,
+    service: Annotated[UnitService, Depends(get_service)],
+) -> Response:
+    """Delete a unit by ID."""
+    service.delete_unit(unit_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

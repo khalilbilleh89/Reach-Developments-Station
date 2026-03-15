@@ -52,3 +52,7 @@ class UnitRepository:
         self.db.commit()
         self.db.refresh(unit)
         return unit
+
+    def delete(self, unit: Unit) -> None:
+        self.db.delete(unit)
+        self.db.commit()

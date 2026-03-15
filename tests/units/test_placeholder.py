@@ -1,7 +1,7 @@
 """
 Tests for the units module.
 
-Validates create / list / get / update behaviour and hierarchy enforcement.
+Validates create / list / get / update / delete behaviour and hierarchy enforcement.
 """
 
 import pytest
@@ -146,3 +146,63 @@ def test_update_unit(client: TestClient):
     data = response.json()
     assert data["status"] == "reserved"
     assert float(data["internal_area"]) == 60.0
+
+
+def test_delete_unit(client: TestClient):
+    """DELETE /api/v1/units/{id} should remove the unit."""
+    floor_id = _create_hierarchy(client, proj_code="PRJ-DEL")
+    create = client.post(
+        "/api/v1/units",
+        json={
+            "floor_id": floor_id,
+            "unit_number": "201",
+            "unit_type": "one_bedroom",
+            "internal_area": 70.0,
+        },
+    )
+    unit_id = create.json()["id"]
+    delete_response = client.delete(f"/api/v1/units/{unit_id}")
+    assert delete_response.status_code == 204
+    get_response = client.get(f"/api/v1/units/{unit_id}")
+    assert get_response.status_code == 404
+
+
+def test_delete_unit_not_found(client: TestClient):
+    """DELETE /api/v1/units/{id} with unknown id should return 404."""
+    response = client.delete("/api/v1/units/no-such-unit")
+    assert response.status_code == 404
+
+
+def test_create_unit_floor_scoped(client: TestClient):
+    """POST /api/v1/floors/{floor_id}/units should create a unit using floor from URL."""
+    floor_id = _create_hierarchy(client, proj_code="PRJ-FS")
+    response = client.post(
+        f"/api/v1/floors/{floor_id}/units",
+        json={
+            "unit_number": "301",
+            "unit_type": "two_bedroom",
+            "internal_area": 90.0,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["floor_id"] == floor_id
+    assert data["unit_number"] == "301"
+
+
+def test_list_units_floor_scoped(client: TestClient):
+    """GET /api/v1/floors/{floor_id}/units should list units for that floor."""
+    floor_id = _create_hierarchy(client, proj_code="PRJ-LSF")
+    client.post(
+        f"/api/v1/floors/{floor_id}/units",
+        json={
+            "unit_number": "401",
+            "unit_type": "studio",
+            "internal_area": 50.0,
+        },
+    )
+    response = client.get(f"/api/v1/floors/{floor_id}/units")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["unit_number"] == "401"
