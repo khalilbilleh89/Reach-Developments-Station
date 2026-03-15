@@ -108,7 +108,7 @@ export function ProjectsTable({ projects, onSelectProject, onCreateProject }: Pr
         {onCreateProject && (
           <button
             type="button"
-            className={styles.emptyCta}
+            className={`${styles.addButton} ${styles.emptyCta}`}
             onClick={onCreateProject}
           >
             + Create Project
