@@ -114,12 +114,31 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
   white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
 }
 
-.table th:hover {
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sortButton:hover {
   color: var(--color-text);
+}
+
+.sortButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .table td {

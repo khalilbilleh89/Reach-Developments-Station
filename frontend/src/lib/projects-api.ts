@@ -16,11 +16,12 @@ import type {
   Project,
   ProjectCreate,
   ProjectListResponse,
+  ProjectStatus,
   ProjectUpdate,
 } from "./projects-types";
 
 export async function listProjects(params?: {
-  status?: string;
+  status?: ProjectStatus;
   search?: string;
   skip?: number;
   limit?: number;

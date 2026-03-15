@@ -37,11 +37,12 @@ class ProjectService:
         self,
         skip: int = 0,
         limit: int = 100,
-        status: Optional[str] = None,
+        status: Optional[ProjectStatus] = None,
         search: Optional[str] = None,
     ) -> ProjectList:
-        projects = self.repo.list(skip=skip, limit=limit, status=status, search=search)
-        total = self.repo.count(status=status, search=search)
+        status_value = status.value if status else None
+        projects = self.repo.list(skip=skip, limit=limit, status=status_value, search=search)
+        total = self.repo.count(status=status_value, search=search)
         return ProjectList(
             items=[ProjectResponse.model_validate(p) for p in projects],
             total=total,
@@ -49,6 +50,20 @@ class ProjectService:
 
     def update_project(self, project_id: str, data: ProjectUpdate) -> ProjectResponse:
         project = self._require_project(project_id)
+        # Validate date range using merged values: payload overrides persisted
+        effective_start = (
+            data.start_date if "start_date" in data.model_fields_set else project.start_date
+        )
+        effective_end = (
+            data.target_end_date
+            if "target_end_date" in data.model_fields_set
+            else project.target_end_date
+        )
+        if effective_start and effective_end and effective_end < effective_start:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="target_end_date must be on or after start_date.",
+            )
         updated = self.repo.update(project, data)
         return ProjectResponse.model_validate(updated)
 

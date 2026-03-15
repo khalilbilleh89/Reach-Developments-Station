@@ -5,26 +5,36 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
 import { listProjects } from "@/lib/projects-api";
-import type { Project } from "@/lib/projects-types";
+import type { Project, ProjectStatus } from "@/lib/projects-types";
 import styles from "@/styles/projects.module.css";
 
 /**
  * Projects page -- live data from /api/v1/projects.
  *
  * Displays KPI cards and a sortable project table backed by real backend records.
+ * Search is debounced (350 ms) to avoid per-keystroke requests.
  */
 export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
 
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "">("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce raw search input by 350 ms to reduce request volume
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Fetch projects whenever status filter or debounced search changes
   useEffect(() => {
     setLoading(true);
     listProjects({
       status: statusFilter || undefined,
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       limit: 500,
     })
       .then((resp) => {
@@ -36,7 +46,7 @@ export default function Page() {
         setProjects([]);
       })
       .finally(() => setLoading(false));
-  }, [statusFilter, search]);
+  }, [statusFilter, debouncedSearch]);
 
   const activeCount = projects.filter((p) => p.status === "active").length;
   const pipelineCount = projects.filter((p) => p.status === "pipeline").length;
@@ -85,7 +95,7 @@ export default function Page() {
             id="status-filter"
             className={styles.filterSelect}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | "")}
           >
             <option value="">All statuses</option>
             <option value="pipeline">Pipeline</option>
@@ -120,7 +130,7 @@ export default function Page() {
       </div>
 
       {/* Error */}
-      {error && <div className={styles.errorBanner}>\u26a0\ufe0f {error}</div>}
+      {error {error && <div className={styles.errorBanner}>{error}</div>}{error && <div className={styles.errorBanner}>{error}</div>} <div className={styles.errorBanner} role="alert" aria-live="polite">{error}</div>}
 
       {/* Loading */}
       {loading && <div className={styles.loadingText}>Loading projects\u2026</div>}

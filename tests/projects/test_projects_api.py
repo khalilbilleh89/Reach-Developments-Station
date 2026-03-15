@@ -162,3 +162,39 @@ def test_archive_project_not_found(client: TestClient):
     response = client.post("/api/v1/projects/does-not-exist/archive")
     assert response.status_code == 404
 
+
+
+def test_update_project_partial_date_cross_field_validation(client: TestClient):
+    """PATCH with only target_end_date earlier than existing start_date should return 422."""
+    create = client.post(
+        "/api/v1/projects",
+        json={"name": "Date Test", "code": "DT-001", "start_date": "2027-01-01"},
+    )
+    project_id = create.json()["id"]
+    # Patch only target_end_date to a date before persisted start_date
+    response = client.patch(
+        f"/api/v1/projects/{project_id}",
+        json={"target_end_date": "2026-01-01"},
+    )
+    assert response.status_code == 422
+
+
+def test_update_project_partial_date_valid(client: TestClient):
+    """PATCH with only target_end_date after existing start_date should succeed."""
+    create = client.post(
+        "/api/v1/projects",
+        json={"name": "Date Test 2", "code": "DT-002", "start_date": "2027-01-01"},
+    )
+    project_id = create.json()["id"]
+    response = client.patch(
+        f"/api/v1/projects/{project_id}",
+        json={"target_end_date": "2029-06-01"},
+    )
+    assert response.status_code == 200
+    assert response.json()["target_end_date"] == "2029-06-01"
+
+
+def test_list_projects_invalid_status_returns_422(client: TestClient):
+    """GET /api/v1/projects?status=invalid should return 422 (enum validation)."""
+    response = client.get("/api/v1/projects?status=invalid_status")
+    assert response.status_code == 422
