@@ -52,3 +52,7 @@ class PhaseRepository:
         self.db.commit()
         self.db.refresh(phase)
         return phase
+
+    def delete(self, phase: Phase) -> None:
+        self.db.delete(phase)
+        self.db.commit()

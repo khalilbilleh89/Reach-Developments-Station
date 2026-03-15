@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.phases.repository import PhaseRepository
-from app.modules.phases.schemas import PhaseCreate, PhaseList, PhaseResponse, PhaseUpdate
+from app.modules.phases.schemas import PhaseCreate, PhaseCreateForProject, PhaseList, PhaseResponse, PhaseUpdate
 from app.modules.projects.repository import ProjectRepository
 
 
@@ -34,6 +34,23 @@ class PhaseService:
         phase = self.repo.create(data)
         return PhaseResponse.model_validate(phase)
 
+    def create_phase_for_project(self, project_id: str, data: PhaseCreateForProject) -> PhaseResponse:
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project '{project_id}' not found.",
+            )
+        existing = self.repo.get_by_project_and_sequence(project_id, data.sequence)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Phase with sequence {data.sequence} already exists in project '{project_id}'.",
+            )
+        full_data = PhaseCreate(project_id=project_id, **data.model_dump())
+        phase = self.repo.create(full_data)
+        return PhaseResponse.model_validate(phase)
+
     def get_phase(self, phase_id: str) -> PhaseResponse:
         phase = self.repo.get_by_id(phase_id)
         if not phase:
@@ -51,6 +68,15 @@ class PhaseService:
             total=total,
         )
 
+    def list_phases_by_project(self, project_id: str, skip: int = 0, limit: int = 100) -> PhaseList:
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project '{project_id}' not found.",
+            )
+        return self.list_phases(project_id=project_id, skip=skip, limit=limit)
+
     def update_phase(self, phase_id: str, data: PhaseUpdate) -> PhaseResponse:
         phase = self.repo.get_by_id(phase_id)
         if not phase:
@@ -67,3 +93,12 @@ class PhaseService:
                 )
         updated = self.repo.update(phase, data)
         return PhaseResponse.model_validate(updated)
+
+    def delete_phase(self, phase_id: str) -> None:
+        phase = self.repo.get_by_id(phase_id)
+        if not phase:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Phase '{phase_id}' not found.",
+            )
+        self.repo.delete(phase)

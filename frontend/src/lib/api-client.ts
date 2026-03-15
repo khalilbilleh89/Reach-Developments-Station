@@ -25,10 +25,11 @@ export class ApiError extends Error {
   }
 }
 
-function authHeaders(): HeadersInit {
+function authHeaders(extra?: HeadersInit): HeadersInit {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(extra as Record<string, string> | undefined),
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
@@ -36,10 +37,14 @@ function authHeaders(): HeadersInit {
   return headers;
 }
 
-export async function apiFetch<T>(path: string): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: Omit<RequestInit, "headers"> & { headers?: HeadersInit },
+): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "GET",
-    headers: authHeaders(),
+    ...init,
+    headers: authHeaders(init?.headers),
   });
 
   if (!response.ok) {
@@ -48,6 +53,11 @@ export async function apiFetch<T>(path: string): Promise<T> {
       (body as { detail?: string }).detail ?? `API error: ${response.status}`,
       response.status,
     );
+  }
+
+  // 204 No Content — return undefined cast to T (callers that expect void use this)
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;

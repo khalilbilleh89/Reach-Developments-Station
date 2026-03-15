@@ -1,20 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
-import { listProjects } from "@/lib/projects-api";
+import { ProjectDetailView } from "@/components/projects/ProjectDetailView";
+import { listProjects, getProject } from "@/lib/projects-api";
 import type { Project, ProjectStatus } from "@/lib/projects-types";
 import styles from "@/styles/projects.module.css";
 
 /**
- * Projects page -- live data from /api/v1/projects.
- *
- * Displays KPI cards and a sortable project table backed by real backend records.
- * Search is debounced (350 ms) to avoid per-keystroke requests.
+ * ProjectsList — filterable portfolio view shown when no project is selected.
  */
-export default function Page() {
+function ProjectsList() {
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +47,13 @@ export default function Page() {
       })
       .finally(() => setLoading(false));
   }, [statusFilter, debouncedSearch]);
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      router.push(`/projects?id=${projectId}`);
+    },
+    [router],
+  );
 
   const activeCount = projects.filter((p) => p.status === "active").length;
   const pipelineCount = projects.filter((p) => p.status === "pipeline").length;
@@ -95,7 +102,9 @@ export default function Page() {
             id="status-filter"
             className={styles.filterSelect}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | "")}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as ProjectStatus | "")
+            }
           >
             <option value="">All statuses</option>
             <option value="pipeline">Pipeline</option>
@@ -130,13 +139,92 @@ export default function Page() {
       </div>
 
       {/* Error */}
-      {error {error && <div className={styles.errorBanner}>{error}</div>}{error && <div className={styles.errorBanner}>{error}</div>} <div className={styles.errorBanner} role="alert" aria-live="polite">{error}</div>}
+      {error && (
+        <div className={styles.errorBanner} role="alert">
+          {error}
+        </div>
+      )}
 
       {/* Loading */}
-      {loading && <div className={styles.loadingText}>Loading projects\u2026</div>}
+      {loading && (
+        <div className={styles.loadingText}>Loading projects\u2026</div>
+      )}
 
       {/* Table */}
-      {!loading && !error && <ProjectsTable projects={projects} />}
+      {!loading && !error && (
+        <ProjectsTable projects={projects} onSelectProject={handleSelectProject} />
+      )}
     </PageContainer>
+  );
+}
+
+/**
+ * ProjectDetailPage — loads and displays a single project with its phases.
+ */
+function ProjectDetailPage({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getProject(projectId)
+      .then((p) => {
+        setProject(p);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error ? err.message : "Failed to load project.",
+        );
+      })
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  const handleBack = useCallback(() => {
+    router.push("/projects");
+  }, [router]);
+
+  return (
+    <PageContainer title="Project Detail" subtitle="View and manage project phases.">
+      {loading && (
+        <div className={styles.loadingText}>Loading project\u2026</div>
+      )}
+      {error && (
+        <div className={styles.errorBanner} role="alert">
+          {error}
+        </div>
+      )}
+      {!loading && !error && project && (
+        <ProjectDetailView project={project} onBack={handleBack} />
+      )}
+    </PageContainer>
+  );
+}
+
+/**
+ * Inner — reads query params and delegates to list or detail view.
+ *
+ * Must be a separate component so useSearchParams() is inside a Suspense boundary.
+ */
+function Inner() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("id");
+
+  if (projectId) {
+    return <ProjectDetailPage projectId={projectId} />;
+  }
+  return <ProjectsList />;
+}
+
+/**
+ * Projects page — wraps Inner in Suspense as required by useSearchParams.
+ */
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <Inner />
+    </Suspense>
   );
 }
