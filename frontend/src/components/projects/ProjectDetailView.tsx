@@ -4,15 +4,20 @@ import React, { useEffect, useState } from "react";
 import type { Phase } from "@/lib/phases-types";
 import type { Project } from "@/lib/projects-types";
 import type { Building } from "@/lib/buildings-types";
+import type { Floor } from "@/lib/floors-types";
 import { listPhases, createPhase, updatePhase, deletePhase } from "@/lib/phases-api";
 import { listBuildings, createBuilding, updateBuilding, deleteBuilding } from "@/lib/buildings-api";
+import { listFloors, createFloor, updateFloor, deleteFloor } from "@/lib/floors-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
+import { FloorsTable } from "@/components/floors/FloorsTable";
 import { CreatePhaseModal } from "@/app/(protected)/projects/[id]/create-phase-modal";
 import { CreateBuildingModal } from "@/components/buildings/create-building-modal";
+import { CreateFloorModal } from "@/components/floors/CreateFloorModal";
 import type { PhaseCreate, PhaseUpdate } from "@/lib/phases-types";
 import type { BuildingCreate, BuildingUpdate } from "@/lib/buildings-types";
+import type { FloorCreate, FloorUpdate } from "@/lib/floors-types";
 import styles from "@/styles/projects.module.css";
 
 interface ProjectDetailViewProps {
@@ -20,7 +25,7 @@ interface ProjectDetailViewProps {
   onBack: () => void;
 }
 
-type Tab = "overview" | "phases" | "buildings";
+type Tab = "overview" | "phases" | "buildings" | "floors";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
@@ -41,7 +46,7 @@ function statusLabel(status: string): string {
 }
 
 /**
- * ProjectDetailView — shows a project summary card, its phases, and its buildings.
+ * ProjectDetailView — shows a project summary card, its phases, buildings, and floors.
  *
  * Rendered by the projects page when a project is selected.
  */
@@ -67,6 +72,17 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [deleteConfirmBuilding, setDeleteConfirmBuilding] = useState<Building | null>(null);
   const [deleteBuildingError, setDeleteBuildingError] = useState<string | null>(null);
 
+  // Floors state
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
+  const [allBuildings, setAllBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [floorsLoading, setFloorsLoading] = useState(false);
+  const [floorsError, setFloorsError] = useState<string | null>(null);
+  const [floorModalOpen, setFloorModalOpen] = useState(false);
+  const [editFloor, setEditFloor] = useState<Floor | null>(null);
+  const [deleteConfirmFloor, setDeleteConfirmFloor] = useState<Floor | null>(null);
+  const [deleteFloorError, setDeleteFloorError] = useState<string | null>(null);
+
   const fetchPhases = () => {
     setPhasesLoading(true);
     setPhasesError(null);
@@ -89,9 +105,30 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       .finally(() => setBuildingsLoading(false));
   };
 
+  const fetchAllBuildingsForProject = () => {
+    Promise.all(phases.map((p) => listBuildings(p.id)))
+      .then((results) => {
+        setAllBuildings(results.flatMap((r) => r.items));
+      })
+      .catch(() => {
+        setAllBuildings([]);
+      });
+  };
+
+  const fetchFloors = (buildingId: string) => {
+    setFloorsLoading(true);
+    setFloorsError(null);
+    listFloors(buildingId)
+      .then((resp) => setFloors(resp.items))
+      .catch((err: unknown) => {
+        setFloorsError(err instanceof Error ? err.message : "Failed to load floors.");
+      })
+      .finally(() => setFloorsLoading(false));
+  };
+
   useEffect(() => {
     fetchPhases();
-    // Reset buildings state when project changes
+    // Reset all dependent state when project changes
     setSelectedPhaseId(null);
     setBuildings([]);
     setBuildingsError(null);
@@ -99,6 +136,15 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     setEditBuilding(null);
     setDeleteConfirmBuilding(null);
     setDeleteBuildingError(null);
+    setSelectedBuildingId(null);
+    setAllBuildings([]);
+    setFloors([]);
+    setFloorsLoading(false);
+    setFloorsError(null);
+    setFloorModalOpen(false);
+    setEditFloor(null);
+    setDeleteConfirmFloor(null);
+    setDeleteFloorError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
@@ -108,6 +154,20 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedPhaseId]);
+
+  useEffect(() => {
+    if (activeTab === "floors" && phases.length > 0) {
+      fetchAllBuildingsForProject();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, phases]);
+
+  useEffect(() => {
+    if (activeTab === "floors" && selectedBuildingId) {
+      fetchFloors(selectedBuildingId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedBuildingId]);
 
   const handleCreatePhase = async (data: PhaseCreate | PhaseUpdate) => {
     await createPhase(project.id, data as PhaseCreate);
@@ -157,6 +217,32 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       if (selectedPhaseId) fetchBuildings(selectedPhaseId);
     } catch (err: unknown) {
       setDeleteBuildingError(err instanceof Error ? err.message : "Failed to delete building.");
+    }
+  };
+
+  const handleCreateFloor = async (data: FloorCreate | FloorUpdate) => {
+    if (!selectedBuildingId) return;
+    await createFloor(selectedBuildingId, data as FloorCreate);
+    setFloorModalOpen(false);
+    fetchFloors(selectedBuildingId);
+  };
+
+  const handleUpdateFloor = async (data: FloorCreate | FloorUpdate) => {
+    if (!editFloor) return;
+    await updateFloor(editFloor.id, data as FloorUpdate);
+    setFloorModalOpen(false);
+    setEditFloor(null);
+    if (selectedBuildingId) fetchFloors(selectedBuildingId);
+  };
+
+  const handleDeleteFloor = async (floor: Floor) => {
+    setDeleteFloorError(null);
+    try {
+      await deleteFloor(floor.id);
+      setDeleteConfirmFloor(null);
+      if (selectedBuildingId) fetchFloors(selectedBuildingId);
+    } catch (err: unknown) {
+      setDeleteFloorError(err instanceof Error ? err.message : "Failed to delete floor.");
     }
   };
 
@@ -228,6 +314,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
           onClick={() => setActiveTab("buildings")}
         >
           Buildings
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === "floors" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("floors")}
+        >
+          Floors
         </button>
       </div>
 
@@ -348,6 +441,111 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
               )}
             </>
           )}
+
+          {!selectedPhaseId && phases.length === 0 && !phasesLoading && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>🏗️</div>
+              <div className={styles.emptyText}>No phases yet</div>
+              <div className={styles.emptySubtext}>
+                Create a phase first to start adding buildings.
+              </div>
+            </div>
+          )}
+
+          {!selectedPhaseId && phases.length > 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyText}>Select a phase to view buildings</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floors tab */}
+      {activeTab === "floors" && (
+        <div>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Floors</h2>
+            <button
+              type="button"
+              className={styles.addButton}
+              disabled={!selectedBuildingId}
+              aria-disabled={!selectedBuildingId}
+              aria-label={!selectedBuildingId ? "Select a building before adding a floor" : "Add floor"}
+              title={!selectedBuildingId ? "Select a building first" : undefined}
+              onClick={() => {
+                setEditFloor(null);
+                setFloorModalOpen(true);
+              }}
+            >
+              + Add Floor
+            </button>
+          </div>
+
+          {/* Building selector */}
+          <div className={styles.floorSelectorRow}>
+            <label htmlFor="floor-building-select" className={styles.formLabel}>
+              Building
+            </label>
+            <select
+              id="floor-building-select"
+              className={styles.formSelect}
+              value={selectedBuildingId ?? ""}
+              onChange={(e) => {
+                setSelectedBuildingId(e.target.value || null);
+                setFloors([]);
+                setFloorsError(null);
+              }}
+            >
+              <option value="">— Select a building —</option>
+              {allBuildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.name} ({building.code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {floorsError && (
+            <div className={styles.errorBanner} role="alert">
+              {floorsError}
+            </div>
+          )}
+          {deleteFloorError && (
+            <div className={styles.errorBanner} role="alert">
+              {deleteFloorError}
+            </div>
+          )}
+
+          {!selectedBuildingId && allBuildings.length === 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>🏢</div>
+              <div className={styles.emptyText}>No buildings found</div>
+              <div className={styles.emptySubtext}>
+                Add buildings to your phases before creating floors.
+              </div>
+            </div>
+          )}
+
+          {!selectedBuildingId && allBuildings.length > 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyText}>Select a building to view floors</div>
+            </div>
+          )}
+
+          {selectedBuildingId && (
+            floorsLoading ? (
+              <div className={styles.loadingText}>Loading floors\u2026</div>
+            ) : (
+              <FloorsTable
+                floors={floors}
+                onEdit={(floor) => {
+                  setEditFloor(floor);
+                  setFloorModalOpen(true);
+                }}
+                onDelete={(floor) => setDeleteConfirmFloor(floor)}
+              />
+            )
+          )}
         </div>
       )}
 
@@ -433,6 +631,51 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                 type="button"
                 className={`${styles.submitButton} ${styles.actionButtonDanger}`}
                 onClick={() => handleDeleteBuilding(deleteConfirmBuilding)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Floor modal */}
+      {floorModalOpen && (
+        <CreateFloorModal
+          floor={editFloor}
+          onSubmit={editFloor ? handleUpdateFloor : handleCreateFloor}
+          onClose={() => {
+            setFloorModalOpen(false);
+            setEditFloor(null);
+          }}
+        />
+      )}
+
+      {/* Delete confirmation modal for floors */}
+      {deleteConfirmFloor && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true">
+          <div className={styles.modal}>
+            <h2 className={styles.modalTitle}>Delete Floor</h2>
+            <p style={{ marginBottom: "var(--space-6)", color: "var(--color-text)" }}>
+              Are you sure you want to delete{" "}
+              <strong>{deleteConfirmFloor.name}</strong>? This action cannot be
+              undone.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={() => {
+                  setDeleteConfirmFloor(null);
+                  setDeleteFloorError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.submitButton} ${styles.actionButtonDanger}`}
+                onClick={() => handleDeleteFloor(deleteConfirmFloor)}
               >
                 Delete
               </button>

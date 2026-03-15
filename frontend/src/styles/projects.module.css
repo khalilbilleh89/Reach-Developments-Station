@@ -708,3 +708,17 @@
   max-width: 320px;
   margin-bottom: var(--space-4);
 }
+
+/* --- Floors --------------------------------------------------- */
+
+.floorsTable {
+  margin-top: var(--space-4);
+}
+
+.floorSelectorRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 320px;
+  margin-bottom: var(--space-4);
+}

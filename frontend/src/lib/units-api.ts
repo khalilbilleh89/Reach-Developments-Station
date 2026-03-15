@@ -12,7 +12,7 @@
  *   GET /projects                             → project list
  *   GET /phases?project_id=                   → phases for a project
  *   GET /buildings?phase_id=                  → buildings for a phase
- *   GET /floors?building_id=                  → floors for a building
+ *   GET /buildings/{building_id}/floors    → floors for a building
  *   GET /units?floor_id=                      → units for a floor
  *   GET /units/{unitId}                       → unit detail
  *   GET /pricing/unit/{unitId}                → calculated unit price
@@ -119,7 +119,9 @@ export async function getUnitsByProject(
   // 3. Floors for all buildings — in parallel
   const floorResponses = await Promise.all(
     buildings.map((building) =>
-      apiFetch<FloorListResponse>(`/floors?building_id=${building.id}&limit=500`),
+      apiFetch<FloorListResponse>(
+        `/buildings/${building.id}/floors?limit=500`,
+      ),
     ),
   );
   const floors = floorResponses.flatMap((r) => r.items);

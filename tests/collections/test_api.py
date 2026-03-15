@@ -29,7 +29,8 @@ def _create_hierarchy(client: TestClient, proj_code: str = "PRJ-COL-API") -> str
         json={"name": "Block A", "code": "BLK-A"},
     ).json()["id"]
     floor_id = client.post(
-        "/api/v1/floors", json={"building_id": building_id, "level": 1}
+        f"/api/v1/buildings/{building_id}/floors",
+        json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
     ).json()["id"]
     unit_id = client.post(
         "/api/v1/units",

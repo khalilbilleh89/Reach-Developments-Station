@@ -58,7 +58,7 @@ def _make_unit(
     db.add(building)
     db.flush()
 
-    floor = Floor(building_id=building.id, level=1)
+    floor = Floor(building_id=building.id, name="Floor 1", code="FL-01", sequence_number=1)
     db.add(floor)
     db.flush()
 
