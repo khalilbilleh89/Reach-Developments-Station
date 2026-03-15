@@ -150,7 +150,3 @@ def save_unit_pricing(
     Rejects the request if the resulting final_price would be negative.
     """
     return service.save_unit_pricing(unit_id, data)
-
-
-# Deferred import to avoid circular dependencies at module level
-from app.modules.pricing.schemas import UnitPricingCreate as UnitPricingPayload  # noqa: E402
