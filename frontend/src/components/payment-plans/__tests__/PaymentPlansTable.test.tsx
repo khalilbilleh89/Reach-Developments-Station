@@ -81,7 +81,7 @@ describe("PaymentPlansTable", () => {
   it("renders contract numbers as links to detail page", () => {
     render(<PaymentPlansTable items={mockItems} />);
     const link = screen.getByRole("link", { name: /view payment plan for contract CNT-001/i });
-    expect(link).toHaveAttribute("href", "/payment-plans/contract-1");
+    expect(link).toHaveAttribute("href", "/payment-plans?contractId=contract-1");
   });
 
   it("renders all items", () => {

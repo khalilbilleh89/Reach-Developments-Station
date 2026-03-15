@@ -10,6 +10,7 @@ const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
   usePathname: () => "/sales",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 jest.mock("next/link", () => {
@@ -176,7 +177,7 @@ describe("SalesPage", () => {
       screen.getByRole("button", { name: /open sales workflow/i }),
     );
     expect(mockPush).toHaveBeenCalledWith(
-      expect.stringMatching(/\/sales\/unit-1\?projectId=proj-1/),
+      expect.stringMatching(/\/sales\?unitId=unit-1&projectId=proj-1/),
     );
   });
 });

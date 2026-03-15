@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { UnitFilters } from "@/components/units/UnitFilters";
 import { UnitsTable } from "@/components/units/UnitsTable";
+import UnitPricingDetailView from "@/components/units/UnitPricingDetailView";
 import {
   getProjects,
   getUnitsByProject,
@@ -26,17 +27,11 @@ const DEFAULT_FILTERS: UnitFiltersState = {
 };
 
 /**
- * UnitsPricingPage — project-aware units inventory and pricing listing.
+ * UnitsPricingList — project-aware units inventory and pricing listing.
  *
- * 1. Loads the project list and allows the user to switch projects.
- * 2. Fetches all units for the selected project.
- * 3. Fetches pricing data for each unit in parallel (failures are tolerated).
- * 4. Renders a filterable/sortable table of units with inline pricing data.
- *
- * All pricing values are sourced from the backend pricing engine.
- * No financial calculations are performed on the frontend.
+ * Rendered by UnitsPricingPage when no ?unitId= query param is present.
  */
-export default function UnitsPricingPage() {
+function UnitsPricingList() {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -126,7 +121,7 @@ export default function UnitsPricingPage() {
 
   const handleViewUnit = useCallback(
     (unitId: string) => {
-      router.push(`/units-pricing/${unitId}`);
+      router.push(`/units-pricing?unitId=${unitId}`);
     },
     [router],
   );
@@ -218,4 +213,18 @@ export default function UnitsPricingPage() {
       )}
     </PageContainer>
   );
+}
+
+/**
+ * UnitsPricingPage — renders the unit detail view when ?unitId= is present,
+ * otherwise renders the filterable units list.
+ */
+export default function UnitsPricingPage() {
+  const searchParams = useSearchParams();
+  const unitId = searchParams.get("unitId");
+
+  if (unitId) {
+    return <UnitPricingDetailView />;
+  }
+  return <UnitsPricingList />;
 }

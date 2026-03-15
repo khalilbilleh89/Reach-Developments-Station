@@ -1,16 +1,15 @@
 /**
- * SalesWorkflowDetailPage tests
+ * SalesWorkflowDetailView tests
  */
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
-// Mock Next.js navigation — including useSearchParams for projectId
-let mockSearchParams = new URLSearchParams("projectId=proj-1");
+// Mock Next.js navigation — useSearchParams provides ?unitId=unit-1&projectId=proj-1
+let mockSearchParams = new URLSearchParams("unitId=unit-1&projectId=proj-1");
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
-  usePathname: () => "/sales/unit-1",
-  useParams: () => ({ unitId: "unit-1" }),
+  usePathname: () => "/sales",
   useSearchParams: () => mockSearchParams,
 }));
 
@@ -47,7 +46,7 @@ jest.mock("@/lib/sales-api", () => ({
 }));
 
 import { getUnitSaleWorkflow } from "@/lib/sales-api";
-import SalesWorkflowDetailPage from "@/app/(protected)/sales/[unitId]/page";
+import SalesWorkflowDetailView from "@/components/sales/SalesWorkflowDetailView";
 
 const mockGetUnitSaleWorkflow = getUnitSaleWorkflow as jest.Mock;
 
@@ -113,40 +112,40 @@ const baseWorkflowDetail = {
   hasPendingException: false,
 };
 
-describe("SalesWorkflowDetailPage", () => {
+describe("SalesWorkflowDetailView", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSearchParams = new URLSearchParams("projectId=proj-1");
+    mockSearchParams = new URLSearchParams("unitId=unit-1&projectId=proj-1");
   });
 
   it("renders loading state initially", () => {
     mockGetUnitSaleWorkflow.mockReturnValue(new Promise(() => {}));
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     expect(screen.getByText(/loading sales workflow/i)).toBeInTheDocument();
   });
 
   it("calls getUnitSaleWorkflow with projectId from search params", async () => {
-    mockSearchParams = new URLSearchParams("projectId=proj-abc");
+    mockSearchParams = new URLSearchParams("unitId=unit-1&projectId=proj-abc");
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(mockGetUnitSaleWorkflow).toHaveBeenCalledWith("proj-abc", "unit-1"),
     );
   });
 
   it("calls getUnitSaleWorkflow with empty string when projectId is absent", async () => {
-    mockSearchParams = new URLSearchParams("");
+    mockSearchParams = new URLSearchParams("unitId=unit-1");
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(mockGetUnitSaleWorkflow).toHaveBeenCalledWith("", "unit-1"),
     );
   });
 
   it("shows warning when projectId is missing", () => {
-    mockSearchParams = new URLSearchParams("");
+    mockSearchParams = new URLSearchParams("unitId=unit-1");
     mockGetUnitSaleWorkflow.mockReturnValue(new Promise(() => {}));
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     expect(
       screen.getByText(/no project context available/i),
     ).toBeInTheDocument();
@@ -154,7 +153,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("does not show warning when projectId is present", () => {
     mockGetUnitSaleWorkflow.mockReturnValue(new Promise(() => {}));
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     expect(
       screen.queryByText(/no project context available/i),
     ).not.toBeInTheDocument();
@@ -162,7 +161,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("renders unit number after load", async () => {
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getAllByText("A101").length).toBeGreaterThanOrEqual(1),
     );
@@ -170,7 +169,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("renders final price", async () => {
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getAllByText(/950,000/).length).toBeGreaterThanOrEqual(1),
     );
@@ -178,7 +177,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("renders back link", () => {
     mockGetUnitSaleWorkflow.mockReturnValue(new Promise(() => {}));
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     expect(
       screen.getByRole("link", { name: /back to sales/i }),
     ).toBeInTheDocument();
@@ -189,7 +188,7 @@ describe("SalesWorkflowDetailPage", () => {
       ...baseWorkflowDetail,
       approvedExceptions: [mockApprovedException],
     });
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Approved Exceptions")).toBeInTheDocument(),
     );
@@ -199,7 +198,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("renders empty exception panel when no exceptions", async () => {
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(
         screen.getByText("No approved exceptions for this unit."),
@@ -213,7 +212,7 @@ describe("SalesWorkflowDetailPage", () => {
       readiness: "needs_exception_approval",
       hasPendingException: true,
     });
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Needs Exception Approval")).toBeInTheDocument(),
     );
@@ -224,7 +223,7 @@ describe("SalesWorkflowDetailPage", () => {
 
   it("renders contract action — available", async () => {
     mockGetUnitSaleWorkflow.mockResolvedValue(baseWorkflowDetail);
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(
         screen.getByText("Contract creation available"),
@@ -243,7 +242,7 @@ describe("SalesWorkflowDetailPage", () => {
       },
       readiness: "under_contract",
     });
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Active contract exists")).toBeInTheDocument(),
     );
@@ -255,7 +254,7 @@ describe("SalesWorkflowDetailPage", () => {
       ...baseWorkflowDetail,
       paymentPlanPreview: mockPaymentPlan,
     });
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Payment Plan Preview")).toBeInTheDocument(),
     );
@@ -270,7 +269,7 @@ describe("SalesWorkflowDetailPage", () => {
       contractAction: { kind: "unavailable", contractId: null, contractNumber: null, contractStatus: null },
       readiness: "missing_pricing",
     });
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Not priced")).toBeInTheDocument(),
     );
@@ -280,7 +279,7 @@ describe("SalesWorkflowDetailPage", () => {
     mockGetUnitSaleWorkflow.mockRejectedValue(
       new Error("Failed to load sales workflow."),
     );
-    render(<SalesWorkflowDetailPage />);
+    render(<SalesWorkflowDetailView />);
     await waitFor(() =>
       expect(
         screen.getByText("Failed to load sales workflow."),

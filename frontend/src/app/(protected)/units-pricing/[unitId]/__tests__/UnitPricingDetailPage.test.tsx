@@ -1,15 +1,16 @@
 /**
- * UnitPricingDetailPage tests
+ * UnitPricingDetailView tests
  */
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
-// Mock Next.js navigation
+// Mock Next.js navigation — useSearchParams provides ?unitId=unit-1
+let mockSearchParams = new URLSearchParams("unitId=unit-1");
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
-  usePathname: () => "/units-pricing/unit-1",
-  useParams: () => ({ unitId: "unit-1" }),
+  usePathname: () => "/units-pricing",
+  useSearchParams: () => mockSearchParams,
 }));
 
 jest.mock("next/link", () => {
@@ -45,7 +46,7 @@ jest.mock("@/lib/units-api", () => ({
 }));
 
 import { getUnitPricingDetail } from "@/lib/units-api";
-import UnitPricingDetailPage from "@/app/(protected)/units-pricing/[unitId]/page";
+import UnitPricingDetailView from "@/components/units/UnitPricingDetailView";
 
 const mockGetUnitPricingDetail = getUnitPricingDetail as jest.Mock;
 
@@ -82,14 +83,15 @@ const mockAttributes = {
   custom_adjustment: 0,
 };
 
-describe("UnitPricingDetailPage", () => {
+describe("UnitPricingDetailView", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSearchParams = new URLSearchParams("unitId=unit-1");
   });
 
   it("renders loading state initially", () => {
     mockGetUnitPricingDetail.mockReturnValue(new Promise(() => {}));
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     expect(screen.getByText(/loading unit details/i)).toBeInTheDocument();
   });
 
@@ -99,7 +101,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Unit A101")).toBeInTheDocument(),
     );
@@ -111,7 +113,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getAllByText(/950,000/).length).toBeGreaterThanOrEqual(1),
     );
@@ -123,7 +125,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getAllByText("A101").length).toBeGreaterThanOrEqual(1),
     );
@@ -136,7 +138,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: null,
       attributes: null,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getByText(/not priced/i)).toBeInTheDocument(),
     );
@@ -144,7 +146,7 @@ describe("UnitPricingDetailPage", () => {
 
   it("renders error state when fetch fails", async () => {
     mockGetUnitPricingDetail.mockRejectedValue(new Error("Unit not found"));
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Unit not found")).toBeInTheDocument(),
     );
@@ -156,7 +158,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     expect(
       screen.getByRole("link", { name: /back to units/i }),
     ).toBeInTheDocument();
@@ -168,7 +170,7 @@ describe("UnitPricingDetailPage", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
     });
-    render(<UnitPricingDetailPage />);
+    render(<UnitPricingDetailView />);
     await waitFor(() =>
       expect(screen.getByText("Pricing Breakdown")).toBeInTheDocument(),
     );
