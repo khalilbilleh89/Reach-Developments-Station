@@ -12,7 +12,9 @@ interface ProjectOverviewProps {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
+  // Parse YYYY-MM-DD components directly to avoid UTC-to-local shift.
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",

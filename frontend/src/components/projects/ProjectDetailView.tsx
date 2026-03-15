@@ -139,11 +139,9 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       </div>
 
       {/* Tab navigation */}
-      <div className={styles.tabBar} role="tablist" aria-label="Project sections">
+      <div className={styles.tabBar}>
         <button
           type="button"
-          role="tab"
-          aria-selected={activeTab === "overview"}
           className={`${styles.tabButton} ${activeTab === "overview" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("overview")}
         >
@@ -151,8 +149,6 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={activeTab === "phases"}
           className={`${styles.tabButton} ${activeTab === "phases" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("phases")}
         >

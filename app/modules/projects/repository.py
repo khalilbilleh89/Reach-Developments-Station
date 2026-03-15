@@ -6,6 +6,7 @@ Data access layer for the Project entity.
 
 from typing import List, Optional
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.modules.phases.models import Phase
@@ -72,23 +73,30 @@ class ProjectRepository:
         return project
 
     def get_project_phase_summary(self, project_id: str) -> dict:
-        """Aggregate phase counts and timeline dates for a project."""
-        phases = (
-            self.db.query(Phase)
+        """Aggregate phase counts and timeline dates for a project using SQL."""
+        result = (
+            self.db.query(
+                func.count(Phase.id).label("total_phases"),
+                func.sum(
+                    case((Phase.status == PhaseStatus.ACTIVE.value, 1), else_=0)
+                ).label("active_phases"),
+                func.sum(
+                    case((Phase.status == PhaseStatus.PLANNED.value, 1), else_=0)
+                ).label("planned_phases"),
+                func.sum(
+                    case((Phase.status == PhaseStatus.COMPLETED.value, 1), else_=0)
+                ).label("completed_phases"),
+                func.min(Phase.start_date).label("earliest_start_date"),
+                func.max(Phase.end_date).label("latest_target_completion"),
+            )
             .filter(Phase.project_id == project_id)
-            .all()
+            .one()
         )
-        total = len(phases)
-        active = sum(1 for p in phases if p.status == PhaseStatus.ACTIVE.value)
-        planned = sum(1 for p in phases if p.status == PhaseStatus.PLANNED.value)
-        completed = sum(1 for p in phases if p.status == PhaseStatus.COMPLETED.value)
-        start_dates = [p.start_date for p in phases if p.start_date is not None]
-        end_dates = [p.end_date for p in phases if p.end_date is not None]
         return {
-            "total_phases": total,
-            "active_phases": active,
-            "planned_phases": planned,
-            "completed_phases": completed,
-            "earliest_start_date": min(start_dates) if start_dates else None,
-            "latest_target_completion": max(end_dates) if end_dates else None,
+            "total_phases": result.total_phases or 0,
+            "active_phases": result.active_phases or 0,
+            "planned_phases": result.planned_phases or 0,
+            "completed_phases": result.completed_phases or 0,
+            "earliest_start_date": result.earliest_start_date,
+            "latest_target_completion": result.latest_target_completion,
         }
