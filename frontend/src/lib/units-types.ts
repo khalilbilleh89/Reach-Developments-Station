@@ -137,7 +137,7 @@ export interface UnitPricingDetail {
   attributes: UnitPricingAttributes | null;
 }
 
-// ---------- Filter state -------------------------------------------------
+// ---------- Inventory create/update types --------------------------------
 
 /** Payload for creating a new unit (floor_id provided in body). */
 export interface UnitCreate {

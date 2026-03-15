@@ -38,8 +38,6 @@ import type {
   UnitUpdate,
 } from "./units-types";
 
-// Note: UnitListResponse is imported from "./units-types" above.
-
 // ---------- Raw backend response envelopes (internal) --------------------
 
 interface ProjectListResponse {
