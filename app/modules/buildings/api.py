@@ -3,7 +3,7 @@ buildings.api
 
 CRUD API router for the Building entity.
 
-Provides two route groups:
+Provides the following route groups:
   /api/v1/phases/{phase_id}/buildings  — phase-scoped building listing and creation
   /api/v1/buildings                    — flat list with optional ?phase_id= filter
   /api/v1/buildings/{building_id}      — individual building operations (get, update, delete)
