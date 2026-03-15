@@ -43,7 +43,9 @@ class UnitService:
             )
         return UnitResponse.model_validate(unit)
 
-    def list_units(self, floor_id: str | None = None, skip: int = 0, limit: int = 100) -> UnitList:
+    def list_units(
+        self, floor_id: str | None = None, skip: int = 0, limit: int = 100
+    ) -> UnitList:
         units = self.repo.list(floor_id=floor_id, skip=skip, limit=limit)
         total = self.repo.count(floor_id=floor_id)
         return UnitList(

@@ -26,14 +26,18 @@ class UnitRepository:
     def get_by_id(self, unit_id: str) -> Optional[Unit]:
         return self.db.query(Unit).filter(Unit.id == unit_id).first()
 
-    def get_by_floor_and_number(self, floor_id: str, unit_number: str) -> Optional[Unit]:
+    def get_by_floor_and_number(
+        self, floor_id: str, unit_number: str
+    ) -> Optional[Unit]:
         return (
             self.db.query(Unit)
             .filter(Unit.floor_id == floor_id, Unit.unit_number == unit_number)
             .first()
         )
 
-    def list(self, floor_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Unit]:
+    def list(
+        self, floor_id: Optional[str] = None, skip: int = 0, limit: int = 100
+    ) -> List[Unit]:
         query = self.db.query(Unit)
         if floor_id:
             query = query.filter(Unit.floor_id == floor_id)

@@ -15,7 +15,13 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.units.schemas import UnitCreate, UnitCreateForFloor, UnitList, UnitResponse, UnitUpdate
+from app.modules.units.schemas import (
+    UnitCreate,
+    UnitCreateForFloor,
+    UnitList,
+    UnitResponse,
+    UnitUpdate,
+)
 from app.modules.units.service import UnitService
 
 router = APIRouter(tags=["units"])
