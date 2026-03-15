@@ -91,6 +91,14 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
 
   useEffect(() => {
     fetchPhases();
+    // Reset buildings state when project changes
+    setSelectedPhaseId(null);
+    setBuildings([]);
+    setBuildingsError(null);
+    setBuildingModalOpen(false);
+    setEditBuilding(null);
+    setDeleteConfirmBuilding(null);
+    setDeleteBuildingError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 

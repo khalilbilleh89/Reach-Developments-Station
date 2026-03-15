@@ -28,8 +28,8 @@ def _create_hierarchy(client: TestClient, proj_code: str) -> tuple[str, str]:
     phase_id = resp.json()["id"]
 
     resp = client.post(
-        "/api/v1/buildings",
-        json={"phase_id": phase_id, "name": "Block A", "code": f"BLK-{proj_code}"},
+        f"/api/v1/phases/{phase_id}/buildings",
+        json={"name": "Block A", "code": f"BLK-{proj_code}"},
     )
     assert resp.status_code == 201, resp.text
     building_id = resp.json()["id"]

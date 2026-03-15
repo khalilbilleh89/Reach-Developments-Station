@@ -73,9 +73,11 @@ export function CreateBuildingModal({
       return;
     }
 
-    const floors =
-      floorsCount.trim() !== "" ? parseInt(floorsCount, 10) : null;
-    if (floorsCount.trim() !== "" && (isNaN(floors!) || floors! < 1)) {
+    const floorsNum = floorsCount.trim() !== "" ? Number(floorsCount) : null;
+    if (
+      floorsCount.trim() !== "" &&
+      (!Number.isInteger(floorsNum) || floorsNum === null || floorsNum < 1)
+    ) {
       setError("Floors count must be a positive integer.");
       return;
     }
@@ -83,13 +85,13 @@ export function CreateBuildingModal({
     const data: BuildingCreate | BuildingUpdate = isEdit
       ? ({
           name: name.trim(),
-          floors_count: floors,
+          floors_count: floorsNum,
           status,
         } as BuildingUpdate)
       : ({
           name: name.trim(),
           code: code.trim(),
-          floors_count: floors,
+          floors_count: floorsNum,
           status,
         } as BuildingCreate);
 

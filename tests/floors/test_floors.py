@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 def _create_hierarchy(client: TestClient, proj_code: str = "PRJ-FLR"):
     project_id = client.post("/api/v1/projects", json={"name": "Test Project", "code": proj_code}).json()["id"]
     phase_id = client.post("/api/v1/phases", json={"project_id": project_id, "name": "Phase 1", "sequence": 1}).json()["id"]
-    building_id = client.post("/api/v1/buildings", json={"phase_id": phase_id, "name": "Block A", "code": "BLK-A"}).json()["id"]
+    building_id = client.post(f"/api/v1/phases/{phase_id}/buildings", json={"name": "Block A", "code": "BLK-A"}).json()["id"]
     return building_id
 
 
