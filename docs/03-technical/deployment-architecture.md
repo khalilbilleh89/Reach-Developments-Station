@@ -11,9 +11,41 @@ Live on Render. This document records the deployment configuration, boot path, a
 | Property | Value |
 |---|---|
 | Platform | [Render](https://render.com) |
-| Service type | Web service |
+| Service type | Web service (single service) |
 | Runtime | Python |
 | Config file | `infrastructure/render/render.yaml` |
+
+---
+
+## Single-Service Architecture
+
+The production deployment runs **one Render web service** that serves both the FastAPI backend and the Next.js frontend UI:
+
+```
+Render Web Service
+ ├── FastAPI backend
+ │    ├── API routes           /api/v1/*
+ │    ├── Swagger docs          /docs, /openapi.json
+ │    └── Health endpoints      /health, /health/db
+ └── Next.js frontend (pre-rendered HTML + static assets)
+      ├── Root / redirect       /         → /dashboard
+      ├── Login page            /login
+      ├── Dashboard             /dashboard
+      ├── Static chunks         /_next/static/*
+      └── All other UI routes   /* (SPA fallback to nearest page)
+```
+
+### Route priority
+
+FastAPI evaluates routes in registration order. The catch-all frontend handler is registered **last**, so API routes always take precedence:
+
+| Route pattern | Handler |
+|---|---|
+| `/api/v1/*` | FastAPI API routers |
+| `/docs`, `/openapi.json` | Swagger UI |
+| `/health`, `/health/db` | Health check endpoints |
+| `/_next/static/*` | Mounted Next.js compiled JS/CSS chunks |
+| `/*` (catch-all) | Frontend HTML (page-specific or SPA fallback) |
 
 ---
 
@@ -32,10 +64,14 @@ This resolves to `app/main.py` → the `app` FastAPI instance. **Do not** use a 
 ### Build Command
 
 ```bash
-pip install -r requirements.txt && alembic upgrade head
+cd frontend && npm ci && npm run build && cd .. && pip install -r requirements.txt && alembic upgrade head
 ```
 
-Dependencies are installed first, then Alembic applies all pending migrations against the attached PostgreSQL database before the service starts.
+The build sequence:
+1. Install Node dependencies (`npm ci`).
+2. Build the Next.js app (`npm run build`) — pre-rendered HTML lands in `frontend/.next/server/app/` and compiled static assets in `frontend/.next/static/`.
+3. Install Python dependencies (`pip install -r requirements.txt`).
+4. Apply all pending Alembic database migrations (`alembic upgrade head`).
 
 ### Start Command
 
@@ -47,11 +83,34 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 ---
 
+## Frontend Build
+
+The frontend (Next.js 15) is built using the standard `next build` command. The relevant output:
+
+```
+frontend/.next/
+ ├── server/app/         # pre-rendered HTML files (one per static route)
+ │    ├── index.html     # root / redirect to /dashboard
+ │    ├── login.html
+ │    ├── dashboard.html
+ │    └── ...
+ └── static/             # compiled JS/CSS chunks (served at /_next/static/)
+      ├── chunks/
+      └── css/
+```
+
+FastAPI mounts `frontend/.next/static/` at the URL prefix `/_next/static/` (efficient `StaticFiles` handler) and uses a wildcard catch-all route for all other browser paths:
+
+1. Try exact HTML file: `/login` → `frontend/.next/server/app/login.html`
+2. Try subdirectory index: `/login/` → `frontend/.next/server/app/login/index.html`
+3. Serve parent page for dynamic routes: `/sales/123` → `frontend/.next/server/app/sales.html` (SPA loads and client-routes to the detail)
+4. Root `index.html` as the ultimate SPA fallback
+
+---
+
 ## Environment Variables
 
 ### Required (Production)
-
-These must be set in the Render service dashboard. The service will not function correctly in production without them.
 
 | Variable | Purpose | Example |
 |---|---|---|
@@ -61,8 +120,6 @@ These must be set in the Render service dashboard. The service will not function
 
 ### Optional / Recommended
 
-These have application-level defaults (defined in `app/core/config.py`) and will work without being explicitly set. Setting them is recommended in production for clarity and correctness.
-
 | Variable | Default | Purpose | Recommended Production Value |
 |---|---|---|---|
 | `APP_NAME` | `Reach Developments Station` | Application display name | *(leave as default)* |
@@ -70,10 +127,9 @@ These have application-level defaults (defined in `app/core/config.py`) and will
 | `APP_DEBUG` | `false` | Debug mode flag | `false` |
 | `LOG_LEVEL` | `INFO` | Logging verbosity | `INFO` |
 | `API_V1_PREFIX` | `/api/v1` | API route prefix | `/api/v1` |
+| `NEXT_PUBLIC_API_URL` | *(none)* | Frontend API base URL | `https://<service>.onrender.com/api/v1` |
 
 ### Informational Only
-
-These variables exist in config but are **not used** by the actual runtime binding. Render injects `$PORT` directly into the uvicorn start command. They do not need to be set in Render.
 
 | Variable | Note |
 |---|---|
@@ -87,11 +143,16 @@ See `.env.example` for the local development template.
 ## Deployment Flow
 
 1. Push to the main branch triggers Render's auto-deploy.
-2. Render executes the build command — step 1: `pip install -r requirements.txt`.
-3. Render executes the build command — step 2: `alembic upgrade head` (applies all pending database migrations).
-4. Render executes the start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-5. The lifespan handler logs: `Starting <APP_NAME> [env=<APP_ENV>]`.
+2. Render executes the build command:
+   - Step 1: `cd frontend && npm ci` — install Node dependencies.
+   - Step 2: `npm run build && cd ..` — compile frontend; pre-rendered HTML → `frontend/.next/server/app/`, static chunks → `frontend/.next/static/`.
+   - Step 3: `pip install -r requirements.txt` — install Python dependencies.
+   - Step 4: `alembic upgrade head` — apply all pending database migrations.
+3. Render executes the start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+4. The lifespan handler logs: `Starting <APP_NAME> [env=<APP_ENV>]`.
+5. FastAPI mounts `frontend/.next/static/` at `/_next/static/`.
 6. Health check at `GET /health` confirms liveness.
+7. `GET /` serves the frontend `index.html` (which redirects the browser to `/dashboard`).
 
 ---
 
@@ -125,18 +186,11 @@ This is already set in `infrastructure/render/render.yaml`. Do not change it.
 
 ---
 
-## Current Scope
-
-- **Backend only** — API-first service
-- **No frontend** — no UI service is deployed or expected in this phase
-- **No worker services** — no background job queues or Redis in this phase
-
----
-
 ## Health Endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /` | Lightweight root liveness check (returns app name and status; debug fields included when `APP_DEBUG=true`) |
-| `GET /health` | Application health check |
+| `GET /health` | Application health check (returns `{"status": "ok"}`) |
 | `GET /health/db` | Database connectivity check |
+
+> **Note:** `GET /` now serves the frontend HTML in production (when `frontend/.next/server/app/` exists). In development and test environments where the frontend is not built, it falls back to a lightweight JSON status payload for backward compatibility.

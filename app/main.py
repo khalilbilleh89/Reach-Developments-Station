@@ -8,11 +8,14 @@ Architecture: Modular Monolith
 See: docs/03-technical/backend-architecture.md
 """
 
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.core.bootstrap import seed_admin_user
 from app.core.config import settings
@@ -35,6 +38,14 @@ from app.modules.sales_exceptions.api import router as sales_exceptions_router
 from app.modules.units.api import router as units_router
 from app.modules.commission.api import router as commission_router
 from app.modules.cashflow.api import router as cashflow_router
+
+# Path to the pre-rendered HTML files produced by `next build`.
+# Next.js (App Router) writes one .html file per static route to this directory.
+# Relative to the working directory uvicorn is started from (repo root).
+_FRONTEND_HTML_DIR = Path("frontend/.next/server/app")
+
+# Path to the compiled JS/CSS chunks served at /_next/static/*.
+_FRONTEND_STATIC_DIR = Path("frontend/.next/static")
 
 
 @asynccontextmanager
@@ -80,18 +91,14 @@ app.include_router(sales_exceptions_router, prefix=_API_PREFIX)
 app.include_router(commission_router, prefix=_API_PREFIX)
 app.include_router(cashflow_router, prefix=_API_PREFIX)
 
-
-@app.get("/", tags=["root"])
-async def root() -> dict:
-    """Lightweight root endpoint for liveness visibility on Render."""
-    response: dict = {
-        "app": settings.APP_NAME,
-        "status": "running",
-    }
-    if settings.APP_DEBUG:
-        response["env"] = settings.APP_ENV
-        response["docs"] = "/docs"
-    return response
+# Mount Next.js compiled static chunks (/_next/static/*) when the build exists.
+# These are the JS/CSS assets referenced by the pre-rendered HTML pages.
+if _FRONTEND_STATIC_DIR.is_dir():
+    app.mount(
+        "/_next/static",
+        StaticFiles(directory=str(_FRONTEND_STATIC_DIR)),
+        name="nextjs-static",
+    )
 
 
 @app.get("/health", tags=["health"])
@@ -110,3 +117,72 @@ async def health_db() -> JSONResponse:
         {"status": "error", "database": "unreachable"},
         status_code=503,
     )
+
+
+def _safe_resolve(base: Path, rel: str) -> Path | None:
+    """Resolve a path relative to base and verify it stays within base.
+
+    Returns the resolved Path if safe, or None if the result would escape base
+    (path traversal guard).
+    """
+    try:
+        resolved = (base / rel).resolve()
+        base_resolved = base.resolve()
+        if str(resolved).startswith(str(base_resolved) + os.sep) or resolved == base_resolved:
+            return resolved
+    except (ValueError, OSError):
+        pass
+    return None
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend(full_path: str) -> Response:
+    """Serve the built Next.js frontend UI for all browser routes.
+
+    Route resolution order (all candidates are inside frontend/.next/server/app/):
+      1. Exact HTML file:   /login        → login.html
+      2. Index fallback:    /login/       → login/index.html  (rare)
+      3. Parent segment:    /sales/123    → sales.html  (dynamic route SPA fallback)
+      4. Root index.html:   catch-all SPA fallback
+
+    When the frontend build is absent (development, CI, test environments)
+    a lightweight JSON status payload is returned to preserve backward
+    compatibility with existing health monitors that poll GET /.
+
+    API routes (/api/v1/*, /docs, /health*) are registered before this
+    catch-all and are matched first by FastAPI's router.
+    """
+    if _FRONTEND_HTML_DIR.is_dir():
+        resolved_html_dir = _FRONTEND_HTML_DIR.resolve()
+
+        if full_path:
+            # 1. Exact HTML file: /login → login.html
+            exact = _safe_resolve(resolved_html_dir, full_path + ".html")
+            if exact and exact.is_file():
+                return FileResponse(str(exact))
+
+            # 2. Subdirectory index: /login/ → login/index.html
+            index = _safe_resolve(resolved_html_dir, full_path + "/index.html")
+            if index and index.is_file():
+                return FileResponse(str(index))
+
+            # 3. Parent segment fallback for dynamic routes:
+            #    /sales/123 → try sales.html (SPA loads and client-routes to /sales/123)
+            parent = Path(full_path).parent
+            if str(parent) not in {".", ""}:
+                parent_html = _safe_resolve(resolved_html_dir, str(parent) + ".html")
+                if parent_html and parent_html.is_file():
+                    return FileResponse(str(parent_html))
+
+        # 4. Root index.html — ultimate SPA fallback
+        root_index = resolved_html_dir / "index.html"
+        if root_index.is_file():
+            return FileResponse(str(root_index))
+
+    # Frontend build not present — return lightweight status payload.
+    # Preserves backward compatibility in development and test environments.
+    response_body: dict = {"app": settings.APP_NAME, "status": "running"}
+    if settings.APP_DEBUG:
+        response_body["env"] = settings.APP_ENV
+        response_body["docs"] = "/docs"
+    return JSONResponse(response_body)
