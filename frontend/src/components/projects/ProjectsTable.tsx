@@ -139,7 +139,6 @@ export function ProjectsTable({ projects, onSelectProject }: ProjectsTableProps)
               key={project.id}
               className={onSelectProject ? styles.clickableRow : undefined}
               onClick={onSelectProject ? () => onSelectProject(project.id) : undefined}
-              style={onSelectProject ? { cursor: "pointer" } : undefined}
             >
               <td>
                 <div className={styles.projectName}>{project.name}</div>
