@@ -6,8 +6,9 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
 import { ProjectDetailView } from "@/components/projects/ProjectDetailView";
-import { listProjects, getProject } from "@/lib/projects-api";
-import type { Project, ProjectStatus } from "@/lib/projects-types";
+import { listProjects, getProject, createProject } from "@/lib/projects-api";
+import type { Project, ProjectCreate, ProjectStatus } from "@/lib/projects-types";
+import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import styles from "@/styles/projects.module.css";
 
 /**
@@ -22,6 +23,7 @@ function ProjectsList() {
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "">("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Debounce raw search input by 350 ms to reduce request volume
   useEffect(() => {
@@ -29,8 +31,7 @@ function ProjectsList() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch projects whenever status filter or debounced search changes
-  useEffect(() => {
+  const fetchProjects = useCallback(() => {
     setLoading(true);
     listProjects({
       status: statusFilter || undefined,
@@ -48,6 +49,19 @@ function ProjectsList() {
       .finally(() => setLoading(false));
   }, [statusFilter, debouncedSearch]);
 
+  // Fetch projects whenever status filter or debounced search changes
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  const handleCreateProject = useCallback(async (data: ProjectCreate) => {
+    // Let the error propagate so CreateProjectModal can display it.
+    // setShowCreateModal and fetchProjects only run on success.
+    await createProject(data);
+    setShowCreateModal(false);
+    fetchProjects();
+  }, [fetchProjects]);
+
   const handleSelectProject = useCallback(
     (projectId: string) => {
       router.push(`/projects?id=${encodeURIComponent(projectId)}`);
@@ -63,6 +77,15 @@ function ProjectsList() {
     <PageContainer
       title="Projects"
       subtitle="Manage and monitor all development projects."
+      actions={
+        <button
+          type="button"
+          className={styles.addButton}
+          onClick={() => setShowCreateModal(true)}
+        >
+          + Create Project
+        </button>
+      }
     >
       {/* KPI summary */}
       <div className={styles.kpiGrid}>
@@ -152,7 +175,19 @@ function ProjectsList() {
 
       {/* Table */}
       {!loading && !error && (
-        <ProjectsTable projects={projects} onSelectProject={handleSelectProject} />
+        <ProjectsTable
+          projects={projects}
+          onSelectProject={handleSelectProject}
+          onCreateProject={() => setShowCreateModal(true)}
+        />
+      )}
+
+      {/* Create Project modal */}
+      {showCreateModal && (
+        <CreateProjectModal
+          onSubmit={handleCreateProject}
+          onClose={() => setShowCreateModal(false)}
+        />
       )}
     </PageContainer>
   );

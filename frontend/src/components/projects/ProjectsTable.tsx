@@ -10,6 +10,7 @@ type SortDir = "asc" | "desc";
 interface ProjectsTableProps {
   projects: Project[];
   onSelectProject?: (projectId: string) => void;
+  onCreateProject?: () => void;
 }
 
 function statusClass(status: string): string {
@@ -49,7 +50,7 @@ function formatDate(dateStr: string | null): string {
  * All data comes from the live /api/v1/projects backend endpoint.
  * Sortable headers use <button> inside <th> for full keyboard accessibility.
  */
-export function ProjectsTable({ projects, onSelectProject }: ProjectsTableProps) {
+export function ProjectsTable({ projects, onSelectProject, onCreateProject }: ProjectsTableProps) {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -104,6 +105,15 @@ export function ProjectsTable({ projects, onSelectProject }: ProjectsTableProps)
         <div className={styles.emptySubtext}>
           Create your first project to get started.
         </div>
+        {onCreateProject && (
+          <button
+            type="button"
+            className={styles.emptyCta}
+            onClick={onCreateProject}
+          >
+            + Create Project
+          </button>
+        )}
       </div>
     );
   }
