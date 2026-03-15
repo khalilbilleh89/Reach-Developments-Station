@@ -43,7 +43,9 @@ class UnitService:
             )
         return UnitResponse.model_validate(unit)
 
-    def list_units(self, floor_id: str | None = None, skip: int = 0, limit: int = 100) -> UnitList:
+    def list_units(
+        self, floor_id: str | None = None, skip: int = 0, limit: int = 100
+    ) -> UnitList:
         units = self.repo.list(floor_id=floor_id, skip=skip, limit=limit)
         total = self.repo.count(floor_id=floor_id)
         return UnitList(
@@ -60,3 +62,12 @@ class UnitService:
             )
         updated = self.repo.update(unit, data)
         return UnitResponse.model_validate(updated)
+
+    def delete_unit(self, unit_id: str) -> None:
+        unit = self.repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        self.repo.delete(unit)

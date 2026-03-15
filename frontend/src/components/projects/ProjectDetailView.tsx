@@ -5,16 +5,20 @@ import type { Phase } from "@/lib/phases-types";
 import type { Project } from "@/lib/projects-types";
 import type { Building } from "@/lib/buildings-types";
 import type { Floor } from "@/lib/floors-types";
+import type { UnitListItem, UnitCreateForFloor, UnitUpdate } from "@/lib/units-types";
 import { listPhases, createPhase, updatePhase, deletePhase } from "@/lib/phases-api";
 import { listBuildings, createBuilding, updateBuilding, deleteBuilding } from "@/lib/buildings-api";
 import { listFloors, createFloor, updateFloor, deleteFloor } from "@/lib/floors-api";
+import { listUnitsByFloor, createUnit, updateUnit, deleteUnit } from "@/lib/units-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
 import { FloorsTable } from "@/components/floors/FloorsTable";
+import { UnitsInventoryTable } from "@/components/units/UnitsInventoryTable";
 import { CreatePhaseModal } from "@/app/(protected)/projects/[id]/create-phase-modal";
 import { CreateBuildingModal } from "@/components/buildings/create-building-modal";
 import { CreateFloorModal } from "@/components/floors/CreateFloorModal";
+import { CreateUnitModal } from "@/components/units/CreateUnitModal";
 import type { PhaseCreate, PhaseUpdate } from "@/lib/phases-types";
 import type { BuildingCreate, BuildingUpdate } from "@/lib/buildings-types";
 import type { FloorCreate, FloorUpdate } from "@/lib/floors-types";
@@ -25,7 +29,7 @@ interface ProjectDetailViewProps {
   onBack: () => void;
 }
 
-type Tab = "overview" | "phases" | "buildings" | "floors";
+type Tab = "overview" | "phases" | "buildings" | "floors" | "units";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
@@ -46,7 +50,7 @@ function statusLabel(status: string): string {
 }
 
 /**
- * ProjectDetailView — shows a project summary card, its phases, buildings, and floors.
+ * ProjectDetailView — shows a project summary card, its phases, buildings, floors, and units.
  *
  * Rendered by the projects page when a project is selected.
  */
@@ -82,6 +86,19 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [editFloor, setEditFloor] = useState<Floor | null>(null);
   const [deleteConfirmFloor, setDeleteConfirmFloor] = useState<Floor | null>(null);
   const [deleteFloorError, setDeleteFloorError] = useState<string | null>(null);
+
+  // Units state
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
+  const [allFloors, setAllFloors] = useState<Floor[]>([]);
+  const [allFloorsLoading, setAllFloorsLoading] = useState(false);
+  const [allFloorsError, setAllFloorsError] = useState<string | null>(null);
+  const [units, setUnits] = useState<UnitListItem[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
+  const [unitModalOpen, setUnitModalOpen] = useState(false);
+  const [editUnit, setEditUnit] = useState<UnitListItem | null>(null);
+  const [deleteConfirmUnit, setDeleteConfirmUnit] = useState<UnitListItem | null>(null);
+  const [deleteUnitError, setDeleteUnitError] = useState<string | null>(null);
 
   const fetchPhases = () => {
     setPhasesLoading(true);
@@ -126,6 +143,31 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       .finally(() => setFloorsLoading(false));
   };
 
+  const fetchAllFloorsForProject = () => {
+    setAllFloorsLoading(true);
+    setAllFloorsError(null);
+    Promise.all(allBuildings.map((b) => listFloors(b.id)))
+      .then((results) => {
+        setAllFloors(results.flatMap((r) => r.items));
+      })
+      .catch(() => {
+        setAllFloorsError("Failed to load floors. Please try again.");
+        setAllFloors([]);
+      })
+      .finally(() => setAllFloorsLoading(false));
+  };
+
+  const fetchUnits = (floorId: string) => {
+    setUnitsLoading(true);
+    setUnitsError(null);
+    listUnitsByFloor(floorId)
+      .then((resp) => setUnits(resp.items))
+      .catch((err: unknown) => {
+        setUnitsError(err instanceof Error ? err.message : "Failed to load units.");
+      })
+      .finally(() => setUnitsLoading(false));
+  };
+
   useEffect(() => {
     fetchPhases();
     // Reset all dependent state when project changes
@@ -145,6 +187,17 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     setEditFloor(null);
     setDeleteConfirmFloor(null);
     setDeleteFloorError(null);
+    setSelectedFloorId(null);
+    setAllFloors([]);
+    setAllFloorsLoading(false);
+    setAllFloorsError(null);
+    setUnits([]);
+    setUnitsLoading(false);
+    setUnitsError(null);
+    setUnitModalOpen(false);
+    setEditUnit(null);
+    setDeleteConfirmUnit(null);
+    setDeleteUnitError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
@@ -156,7 +209,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   }, [activeTab, selectedPhaseId]);
 
   useEffect(() => {
-    if (activeTab === "floors" && phases.length > 0) {
+    if ((activeTab === "floors" || activeTab === "units") && phases.length > 0) {
       fetchAllBuildingsForProject();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,6 +221,20 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedBuildingId]);
+
+  useEffect(() => {
+    if (activeTab === "units" && allBuildings.length > 0) {
+      fetchAllFloorsForProject();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, allBuildings]);
+
+  useEffect(() => {
+    if (activeTab === "units" && selectedFloorId) {
+      fetchUnits(selectedFloorId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedFloorId]);
 
   const handleCreatePhase = async (data: PhaseCreate | PhaseUpdate) => {
     await createPhase(project.id, data as PhaseCreate);
@@ -246,6 +313,32 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     }
   };
 
+  const handleCreateUnit = async (data: UnitCreateForFloor | UnitUpdate) => {
+    if (!selectedFloorId) return;
+    await createUnit(selectedFloorId, data as UnitCreateForFloor);
+    setUnitModalOpen(false);
+    fetchUnits(selectedFloorId);
+  };
+
+  const handleUpdateUnit = async (data: UnitCreateForFloor | UnitUpdate) => {
+    if (!editUnit) return;
+    await updateUnit(editUnit.id, data as UnitUpdate);
+    setUnitModalOpen(false);
+    setEditUnit(null);
+    if (selectedFloorId) fetchUnits(selectedFloorId);
+  };
+
+  const handleDeleteUnit = async (unit: UnitListItem) => {
+    setDeleteUnitError(null);
+    try {
+      await deleteUnit(unit.id);
+      setDeleteConfirmUnit(null);
+      if (selectedFloorId) fetchUnits(selectedFloorId);
+    } catch (err: unknown) {
+      setDeleteUnitError(err instanceof Error ? err.message : "Failed to delete unit.");
+    }
+  };
+
   return (
     <div>
       {/* Back navigation */}
@@ -321,6 +414,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
           onClick={() => setActiveTab("floors")}
         >
           Floors
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === "units" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("units")}
+        >
+          Units
         </button>
       </div>
 
@@ -549,6 +649,105 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         </div>
       )}
 
+      {/* Units tab */}
+      {activeTab === "units" && (
+        <div>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Units</h2>
+            <button
+              type="button"
+              className={styles.addButton}
+              disabled={!selectedFloorId}
+              aria-disabled={!selectedFloorId}
+              aria-label={!selectedFloorId ? "Select a floor before adding a unit" : "Add unit"}
+              title={!selectedFloorId ? "Select a floor first" : undefined}
+              onClick={() => {
+                setEditUnit(null);
+                setUnitModalOpen(true);
+              }}
+            >
+              + Add Unit
+            </button>
+          </div>
+
+          {/* Floor selector */}
+          <div className={styles.floorSelectorRow}>
+            <label htmlFor="unit-floor-select" className={styles.formLabel}>
+              Floor
+            </label>
+            {allFloorsLoading ? (
+              <div className={styles.loadingText}>Loading floors…</div>
+            ) : (
+              <select
+                id="unit-floor-select"
+                className={styles.formSelect}
+                value={selectedFloorId ?? ""}
+                onChange={(e) => {
+                  setSelectedFloorId(e.target.value || null);
+                  setUnits([]);
+                  setUnitsError(null);
+                }}
+              >
+                <option value="">— Select a floor —</option>
+                {allFloors.map((floor) => (
+                  <option key={floor.id} value={floor.id}>
+                    {floor.name} ({floor.code})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {allFloorsError && (
+            <div className={styles.errorBanner} role="alert">
+              {allFloorsError}
+            </div>
+          )}
+
+          {unitsError && (
+            <div className={styles.errorBanner} role="alert">
+              {unitsError}
+            </div>
+          )}
+          {deleteUnitError && (
+            <div className={styles.errorBanner} role="alert">
+              {deleteUnitError}
+            </div>
+          )}
+
+          {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length === 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>🏠</div>
+              <div className={styles.emptyText}>No floors found</div>
+              <div className={styles.emptySubtext}>
+                Add floors to your buildings before creating units.
+              </div>
+            </div>
+          )}
+
+          {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length > 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyText}>Select a floor to view units</div>
+            </div>
+          )}
+
+          {selectedFloorId && (
+            unitsLoading ? (
+              <div className={styles.loadingText}>Loading units\u2026</div>
+            ) : (
+              <UnitsInventoryTable
+                units={units}
+                onEdit={(unit) => {
+                  setEditUnit(unit);
+                  setUnitModalOpen(true);
+                }}
+                onDelete={(unit) => setDeleteConfirmUnit(unit)}
+              />
+            )
+          )}
+        </div>
+      )}
+
       {/* Create/Edit Phase modal */}
       {modalOpen && (
         <CreatePhaseModal
@@ -676,6 +875,51 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
                 type="button"
                 className={`${styles.submitButton} ${styles.actionButtonDanger}`}
                 onClick={() => handleDeleteFloor(deleteConfirmFloor)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Unit modal */}
+      {unitModalOpen && (
+        <CreateUnitModal
+          unit={editUnit}
+          onSubmit={editUnit ? handleUpdateUnit : handleCreateUnit}
+          onClose={() => {
+            setUnitModalOpen(false);
+            setEditUnit(null);
+          }}
+        />
+      )}
+
+      {/* Delete confirmation modal for units */}
+      {deleteConfirmUnit && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true">
+          <div className={styles.modal}>
+            <h2 className={styles.modalTitle}>Delete Unit</h2>
+            <p style={{ marginBottom: "var(--space-6)", color: "var(--color-text)" }}>
+              Are you sure you want to delete unit{" "}
+              <strong>{deleteConfirmUnit.unit_number}</strong>? This action cannot be
+              undone.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={() => {
+                  setDeleteConfirmUnit(null);
+                  setDeleteUnitError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.submitButton} ${styles.actionButtonDanger}`}
+                onClick={() => handleDeleteUnit(deleteConfirmUnit)}
               >
                 Delete
               </button>

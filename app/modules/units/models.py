@@ -12,7 +12,7 @@ from sqlalchemy import ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.project import UnitStatus, UnitType
+from app.shared.enums.project import UnitStatus
 
 if TYPE_CHECKING:
     from app.modules.floors.models import Floor
@@ -27,7 +27,10 @@ class Unit(Base, TimestampMixin):
     )
 
     floor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("floors.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("floors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     unit_number: Mapped[str] = mapped_column(String(50), nullable=False)
     unit_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -39,8 +42,12 @@ class Unit(Base, TimestampMixin):
     internal_area: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     balcony_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     terrace_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    roof_garden_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    front_garden_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    roof_garden_area: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    front_garden_area: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
     gross_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     floor: Mapped["Floor"] = relationship("Floor", back_populates="units")

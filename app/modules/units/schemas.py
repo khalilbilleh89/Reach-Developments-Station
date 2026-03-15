@@ -12,8 +12,9 @@ from pydantic import BaseModel, Field
 from app.shared.enums.project import UnitStatus, UnitType
 
 
-class UnitCreate(BaseModel):
-    floor_id: str
+class UnitCreateForFloor(BaseModel):
+    """Payload for creating a unit when floor_id comes from the URL path."""
+
     unit_number: str = Field(..., min_length=1, max_length=50)
     unit_type: UnitType
     status: UnitStatus = UnitStatus.AVAILABLE
@@ -23,6 +24,12 @@ class UnitCreate(BaseModel):
     roof_garden_area: Optional[float] = Field(None, ge=0)
     front_garden_area: Optional[float] = Field(None, ge=0)
     gross_area: Optional[float] = Field(None, gt=0)
+
+
+class UnitCreate(UnitCreateForFloor):
+    """Payload for creating a unit when floor_id is provided in the body."""
+
+    floor_id: str
 
 
 class UnitUpdate(BaseModel):

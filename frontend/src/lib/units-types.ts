@@ -137,6 +137,53 @@ export interface UnitPricingDetail {
   attributes: UnitPricingAttributes | null;
 }
 
+// ---------- Inventory create/update types --------------------------------
+
+/** Payload for creating a new unit (floor_id provided in body). */
+export interface UnitCreate {
+  floor_id: string;
+  unit_number: string;
+  unit_type: UnitType;
+  internal_area: number;
+  status?: UnitStatus;
+  balcony_area?: number | null;
+  terrace_area?: number | null;
+  roof_garden_area?: number | null;
+  front_garden_area?: number | null;
+  gross_area?: number | null;
+}
+
+/** Payload for creating a new unit via floor-scoped route (floor_id from URL). */
+export interface UnitCreateForFloor {
+  unit_number: string;
+  unit_type: UnitType;
+  internal_area: number;
+  status?: UnitStatus;
+  balcony_area?: number | null;
+  terrace_area?: number | null;
+  roof_garden_area?: number | null;
+  front_garden_area?: number | null;
+  gross_area?: number | null;
+}
+
+/** Payload for partially updating a unit. */
+export interface UnitUpdate {
+  unit_type?: UnitType;
+  status?: UnitStatus;
+  internal_area?: number;
+  balcony_area?: number | null;
+  terrace_area?: number | null;
+  roof_garden_area?: number | null;
+  front_garden_area?: number | null;
+  gross_area?: number | null;
+}
+
+/** Response envelope for list endpoints. */
+export interface UnitListResponse {
+  items: UnitListItem[];
+  total: number;
+}
+
 // ---------- Filter state -------------------------------------------------
 
 /** UI filter state for the units listing page. */
