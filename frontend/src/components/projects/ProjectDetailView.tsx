@@ -5,6 +5,7 @@ import type { Phase } from "@/lib/phases-types";
 import type { Project } from "@/lib/projects-types";
 import { listPhases, createPhase, updatePhase, deletePhase } from "@/lib/phases-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
+import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { CreatePhaseModal } from "@/app/(protected)/projects/[id]/create-phase-modal";
 import type { PhaseCreate, PhaseUpdate } from "@/lib/phases-types";
 import styles from "@/styles/projects.module.css";
@@ -13,6 +14,8 @@ interface ProjectDetailViewProps {
   project: Project;
   onBack: () => void;
 }
+
+type Tab = "overview" | "phases";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
@@ -38,6 +41,7 @@ function statusLabel(status: string): string {
  * Rendered by the projects page when a project is selected.
  */
 export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [phases, setPhases] = useState<Phase[]>([]);
   const [phasesLoading, setPhasesLoading] = useState(true);
   const [phasesError, setPhasesError] = useState<string | null>(null);
@@ -134,43 +138,68 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         </div>
       </div>
 
-      {/* Phases section */}
-      <div className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>Phases</h2>
+      {/* Tab navigation */}
+      <div className={styles.tabBar}>
         <button
           type="button"
-          className={styles.addButton}
-          onClick={() => {
-            setEditPhase(null);
-            setModalOpen(true);
-          }}
+          className={`${styles.tabButton} ${activeTab === "overview" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("overview")}
         >
-          + Add Phase
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === "phases" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("phases")}
+        >
+          Phases
         </button>
       </div>
 
-      {phasesError && (
-        <div className={styles.errorBanner} role="alert">
-          {phasesError}
-        </div>
-      )}
-      {deleteError && (
-        <div className={styles.errorBanner} role="alert">
-          {deleteError}
-        </div>
-      )}
+      {/* Overview tab */}
+      {activeTab === "overview" && <ProjectOverview project={project} />}
 
-      {phasesLoading ? (
-        <div className={styles.loadingText}>Loading phases\u2026</div>
-      ) : (
-        <ProjectPhasesTable
-          phases={phases}
-          onEdit={(phase) => {
-            setEditPhase(phase);
-            setModalOpen(true);
-          }}
-          onDelete={(phase) => setDeleteConfirmPhase(phase)}
-        />
+      {/* Phases tab */}
+      {activeTab === "phases" && (
+        <div>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Phases</h2>
+            <button
+              type="button"
+              className={styles.addButton}
+              onClick={() => {
+                setEditPhase(null);
+                setModalOpen(true);
+              }}
+            >
+              + Add Phase
+            </button>
+          </div>
+
+          {phasesError && (
+            <div className={styles.errorBanner} role="alert">
+              {phasesError}
+            </div>
+          )}
+          {deleteError && (
+            <div className={styles.errorBanner} role="alert">
+              {deleteError}
+            </div>
+          )}
+
+          {phasesLoading ? (
+            <div className={styles.loadingText}>Loading phases\u2026</div>
+          ) : (
+            <ProjectPhasesTable
+              phases={phases}
+              onEdit={(phase) => {
+                setEditPhase(phase);
+                setModalOpen(true);
+              }}
+              onDelete={(phase) => setDeleteConfirmPhase(phase)}
+            />
+          )}
+        </div>
       )}
 
       {/* Create/Edit Phase modal */}

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectUpdate
+from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectSummary, ProjectUpdate
 from app.modules.projects.service import ProjectService
 from app.shared.enums.project import ProjectStatus
 
@@ -59,6 +59,15 @@ def update_project(
 ) -> ProjectResponse:
     """Update a project."""
     return service.update_project(project_id, data)
+
+
+@router.get("/{project_id}/summary", response_model=ProjectSummary)
+def get_project_summary(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> ProjectSummary:
+    """Return aggregated KPI summary (phase counts, timeline) for a project."""
+    return service.get_project_summary(project_id)
 
 
 @router.post("/{project_id}/archive", response_model=ProjectResponse)
