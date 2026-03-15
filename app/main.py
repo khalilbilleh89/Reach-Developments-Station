@@ -138,7 +138,13 @@ def _safe_resolve(base: Path, rel: str) -> Path | None:
 async def serve_frontend(full_path: str) -> Response:
     """Serve the built Next.js frontend UI for all browser routes.
 
-    Route resolution order (all candidates are inside frontend/.next/server/app/):
+    Paths that carry a file extension (e.g. /favicon.ico, /robots.txt,
+    /manifest.json) are treated as static asset requests:
+      - Serve the exact file from the frontend build output if it exists.
+      - Return 404 if the file is not found.
+    They are never sent through the HTML SPA fallback chain.
+
+    Extensionless paths (app routes) follow the HTML resolution chain:
       1. Exact HTML file:   /login        → login.html
       2. Index fallback:    /login/       → login/index.html  (rare)
       3. Parent segment:    /sales/123    → sales.html  (dynamic route SPA fallback)
@@ -153,6 +159,14 @@ async def serve_frontend(full_path: str) -> Response:
     """
     if _FRONTEND_HTML_DIR.is_dir():
         resolved_html_dir = _FRONTEND_HTML_DIR.resolve()
+
+        if full_path and "." in full_path.rsplit("/", 1)[-1]:
+            # Static asset request (has a file extension): serve the exact file
+            # or return 404.  Never fall through to the HTML/SPA chain.
+            asset = _safe_resolve(resolved_html_dir, full_path)
+            if asset and asset.is_file():
+                return FileResponse(str(asset))
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
 
         if full_path:
             # 1. Exact HTML file: /login → login.html
