@@ -35,7 +35,10 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
 
     if not inspector.has_table("floors"):
-        return
+        raise RuntimeError(
+            "Alembic revision 0016 expects an existing 'floors' table, "
+            "but none was found. The schema state is unsupported for this migration."
+        )
 
     existing_columns = [col["name"] for col in inspector.get_columns("floors")]
     existing_constraints = [
@@ -64,11 +67,31 @@ def upgrade() -> None:
     # that are genuinely missing all required fields.
     if "level" in existing_columns:
         op.execute(
-            "UPDATE floors SET name = 'Floor ' || CAST(level AS VARCHAR), "
-            "code = 'FL-' || CAST(level AS VARCHAR), "
-            "sequence_number = level, "
-            "level_number = level "
-            "WHERE code IS NULL AND sequence_number IS NULL"
+            sa.text(
+                "UPDATE floors SET "
+                "name = COALESCE(name, 'Floor ' || CAST(level AS VARCHAR)), "
+                "code = COALESCE(code, 'FL-' || CAST(level AS VARCHAR)), "
+                "sequence_number = COALESCE(sequence_number, level), "
+                "level_number = COALESCE(level_number, level) "
+                "WHERE level IS NOT NULL "
+                "AND (name IS NULL OR code IS NULL OR sequence_number IS NULL OR level_number IS NULL)"
+            )
+        )
+
+    # Before setting NOT NULL, verify there are no remaining NULLs in required
+    # columns. This can happen if `level` was already dropped (or absent) and a
+    # prior partial migration left some rows unfilled.
+    result = bind.execute(
+        sa.text(
+            "SELECT 1 FROM floors "
+            "WHERE name IS NULL OR code IS NULL OR sequence_number IS NULL "
+            "LIMIT 1"
+        )
+    )
+    if result.scalar() is not None:
+        raise RuntimeError(
+            "Cannot set NOT NULL on floors.name/code/sequence_number because "
+            "some existing rows still contain NULLs."
         )
 
     # Make the new required columns non-nullable now that all rows have values
