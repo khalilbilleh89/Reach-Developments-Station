@@ -9,6 +9,7 @@ type SortDir = "asc" | "desc";
 
 interface ProjectsTableProps {
   projects: Project[];
+  onSelectProject?: (projectId: string) => void;
 }
 
 function statusClass(status: string): string {
@@ -48,7 +49,7 @@ function formatDate(dateStr: string | null): string {
  * All data comes from the live /api/v1/projects backend endpoint.
  * Sortable headers use <button> inside <th> for full keyboard accessibility.
  */
-export function ProjectsTable({ projects }: ProjectsTableProps) {
+export function ProjectsTable({ projects, onSelectProject }: ProjectsTableProps) {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -134,7 +135,24 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         </thead>
         <tbody>
           {sorted.map((project) => (
-            <tr key={project.id}>
+            <tr
+              key={project.id}
+              className={onSelectProject ? styles.clickableRow : undefined}
+              onClick={onSelectProject ? () => onSelectProject(project.id) : undefined}
+              tabIndex={onSelectProject ? 0 : undefined}
+              role={onSelectProject ? "button" : undefined}
+              aria-label={onSelectProject ? `View ${project.name}` : undefined}
+              onKeyDown={
+                onSelectProject
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectProject(project.id);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <td>
                 <div className={styles.projectName}>{project.name}</div>
                 <div className={styles.projectCode}>{project.code}</div>
