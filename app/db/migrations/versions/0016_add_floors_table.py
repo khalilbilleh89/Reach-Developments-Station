@@ -31,42 +31,90 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add new columns (nullable first to avoid issues with existing rows)
-    op.add_column("floors", sa.Column("name", sa.String(255), nullable=True))
-    op.add_column("floors", sa.Column("code", sa.String(100), nullable=True))
-    op.add_column("floors", sa.Column("sequence_number", sa.Integer, nullable=True))
-    op.add_column("floors", sa.Column("level_number", sa.Integer, nullable=True))
-    op.add_column("floors", sa.Column("description", sa.Text, nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    if not inspector.has_table("floors"):
+        raise RuntimeError(
+            "Alembic revision 0016 expects an existing 'floors' table, "
+            "but none was found. The schema state is unsupported for this migration."
+        )
+
+    existing_columns = [col["name"] for col in inspector.get_columns("floors")]
+    existing_constraints = [
+        c["name"] for c in inspector.get_unique_constraints("floors")
+    ]
+
+    # Add new columns (nullable first to avoid issues with existing rows).
+    # Each addition is guarded so the migration is safe to run against databases
+    # where some or all columns were already created by a prior partial migration.
+    if "name" not in existing_columns:
+        op.add_column("floors", sa.Column("name", sa.String(255), nullable=True))
+    if "code" not in existing_columns:
+        op.add_column("floors", sa.Column("code", sa.String(100), nullable=True))
+    if "sequence_number" not in existing_columns:
+        op.add_column(
+            "floors", sa.Column("sequence_number", sa.Integer, nullable=True)
+        )
+    if "level_number" not in existing_columns:
+        op.add_column("floors", sa.Column("level_number", sa.Integer, nullable=True))
+    if "description" not in existing_columns:
+        op.add_column("floors", sa.Column("description", sa.Text, nullable=True))
 
     # Back-fill: copy legacy `level` value into the new columns for existing rows.
-    # All three new required columns are added as nullable in the same step, so any
-    # pre-migration row will have all of them as NULL. Using AND ensures we only
-    # overwrite rows that are genuinely missing all required fields, avoiding
-    # accidental overwrites of any partially-set rows.
-    op.execute(
-        "UPDATE floors SET name = 'Floor ' || CAST(level AS VARCHAR), "
-        "code = 'FL-' || CAST(level AS VARCHAR), "
-        "sequence_number = level, "
-        "level_number = level "
-        "WHERE code IS NULL AND sequence_number IS NULL"
+    # Only runs when the legacy `level` column is still present, indicating rows
+    # may not yet have been populated.  Using AND ensures we only overwrite rows
+    # that are genuinely missing all required fields.
+    if "level" in existing_columns:
+        op.execute(
+            sa.text(
+                "UPDATE floors SET "
+                "name = COALESCE(name, 'Floor ' || CAST(level AS VARCHAR)), "
+                "code = COALESCE(code, 'FL-' || CAST(level AS VARCHAR)), "
+                "sequence_number = COALESCE(sequence_number, level), "
+                "level_number = COALESCE(level_number, level) "
+                "WHERE level IS NOT NULL "
+                "AND (name IS NULL OR code IS NULL OR sequence_number IS NULL OR level_number IS NULL)"
+            )
+        )
+
+    # Before setting NOT NULL, verify there are no remaining NULLs in required
+    # columns. This can happen if `level` was already dropped (or absent) and a
+    # prior partial migration left some rows unfilled.
+    result = bind.execute(
+        sa.text(
+            "SELECT 1 FROM floors "
+            "WHERE name IS NULL OR code IS NULL OR sequence_number IS NULL "
+            "LIMIT 1"
+        )
     )
+    if result.scalar() is not None:
+        raise RuntimeError(
+            "Cannot set NOT NULL on floors.name/code/sequence_number because "
+            "some existing rows still contain NULLs."
+        )
 
     # Make the new required columns non-nullable now that all rows have values
     op.alter_column("floors", "name", nullable=False)
     op.alter_column("floors", "code", nullable=False)
     op.alter_column("floors", "sequence_number", nullable=False)
 
-    # Drop the old unique constraint and add new ones
-    op.drop_constraint("uq_floor_building_level", "floors", type_="unique")
-    op.create_unique_constraint(
-        "uq_floor_building_code", "floors", ["building_id", "code"]
-    )
-    op.create_unique_constraint(
-        "uq_floor_building_sequence", "floors", ["building_id", "sequence_number"]
-    )
+    # Drop the old unique constraint and add new ones, guarded to avoid errors
+    # when the constraint was already dropped or created in a prior run.
+    if "uq_floor_building_level" in existing_constraints:
+        op.drop_constraint("uq_floor_building_level", "floors", type_="unique")
+    if "uq_floor_building_code" not in existing_constraints:
+        op.create_unique_constraint(
+            "uq_floor_building_code", "floors", ["building_id", "code"]
+        )
+    if "uq_floor_building_sequence" not in existing_constraints:
+        op.create_unique_constraint(
+            "uq_floor_building_sequence", "floors", ["building_id", "sequence_number"]
+        )
 
-    # Drop the legacy `level` column
-    op.drop_column("floors", "level")
+    # Drop the legacy `level` column only if it still exists
+    if "level" in existing_columns:
+        op.drop_column("floors", "level")
 
 
 def downgrade() -> None:
