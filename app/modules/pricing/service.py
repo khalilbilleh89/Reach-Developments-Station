@@ -193,3 +193,85 @@ class PricingService:
             items=items,
         )
 
+
+
+class UnitPricingService:
+    """Service for managing formal per-unit pricing records.
+
+    Computes final_price = base_price + manual_adjustment server-side.
+    Validates that the resulting final_price is non-negative.
+    """
+
+    def __init__(self, db: Session) -> None:
+        from app.modules.pricing.repository import UnitPricingRepository
+        self._pricing_repo = UnitPricingRepository(db)
+        self._unit_repo = UnitRepository(db)
+
+    def get_unit_pricing(self, unit_id: str):
+        """Return the pricing record for a unit, or raise 404 if not found."""
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        unit = self._unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        record = self._pricing_repo.get_by_unit_id(unit_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No pricing record found for unit '{unit_id}'.",
+            )
+        return UnitPricingResponse.model_validate(record)
+
+    def save_unit_pricing(self, unit_id: str, data):
+        """Create or update the pricing record for a unit.
+
+        Calculates final_price = base_price + manual_adjustment.
+        Rejects the operation if the resulting final_price would be negative.
+        """
+        from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
+
+        unit = self._unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+
+        # Resolve field values — merge with existing record if present
+        existing = self._pricing_repo.get_by_unit_id(unit_id)
+        payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
+
+        base_price = payload.get("base_price", float(existing.base_price) if existing else 0.0)
+        manual_adjustment = payload.get(
+            "manual_adjustment",
+            float(existing.manual_adjustment) if existing else 0.0,
+        )
+        currency = payload.get("currency", existing.currency if existing else "AED")
+        pricing_status = payload.get(
+            "pricing_status", existing.pricing_status if existing else "draft"
+        )
+        notes = payload.get("notes", existing.notes if existing else None)
+
+        final_price = base_price + manual_adjustment
+        if final_price < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Resulting final_price ({final_price}) would be negative. "
+                    "Adjust base_price or manual_adjustment."
+                ),
+            )
+
+        record = self._pricing_repo.upsert_for_unit(
+            unit_id,
+            base_price=base_price,
+            manual_adjustment=manual_adjustment,
+            final_price=final_price,
+            currency=currency,
+            pricing_status=pricing_status,
+            notes=notes,
+        )
+        return UnitPricingResponse.model_validate(record)

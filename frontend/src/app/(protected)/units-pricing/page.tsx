@@ -6,16 +6,21 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { UnitFilters } from "@/components/units/UnitFilters";
 import { UnitsTable } from "@/components/units/UnitsTable";
 import UnitPricingDetailView from "@/components/units/UnitPricingDetailView";
+import { EditPricingModal } from "@/components/pricing/EditPricingModal";
 import {
   getProjects,
   getUnitsByProject,
   getUnitPricing,
+  getUnitPricingRecord,
+  saveUnitPricingRecord,
 } from "@/lib/units-api";
 import type {
   Project,
   UnitFiltersState,
   UnitListItem,
   UnitPrice,
+  UnitPricingRecord,
+  UnitPricingRecordSave,
 } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -41,10 +46,15 @@ function UnitsPricingList() {
 
   const [units, setUnits] = useState<UnitListItem[]>([]);
   const [pricing, setPricing] = useState<Record<string, UnitPrice>>({});
+  const [pricingRecords, setPricingRecords] = useState<Record<string, UnitPricingRecord>>({});
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<UnitFiltersState>(DEFAULT_FILTERS);
+
+  // Edit pricing modal state
+  const [editingUnit, setEditingUnit] = useState<UnitListItem | null>(null);
+  const [editingRecord, setEditingRecord] = useState<UnitPricingRecord | null>(null);
 
   // Load projects on mount
   useEffect(() => {
@@ -68,32 +78,48 @@ function UnitsPricingList() {
   useEffect(() => {
     if (!selectedProjectId) return;
 
-    // Increment the request sequence. Any earlier in-flight request that
-    // resolves after this point will be discarded.
     let isCurrent = true;
 
     setUnitsLoading(true);
     setUnitsError(null);
     setUnits([]);
     setPricing({});
+    setPricingRecords({});
 
     getUnitsByProject(selectedProjectId)
       .then(async (unitList) => {
         if (!isCurrent) return;
         setUnits(unitList);
-        // Fetch pricing for all units; tolerate individual "not priced" responses
-        const pricingEntries = await Promise.all(
-          unitList.map(async (u) => {
-            const p = await getUnitPricing(u.id);
-            return p ? ([u.id, p] as [string, UnitPrice]) : null;
-          }),
-        );
+
+        // Fetch both engine pricing and formal pricing records in parallel
+        const [pricingEntries, recordEntries] = await Promise.all([
+          Promise.all(
+            unitList.map(async (u) => {
+              const p = await getUnitPricing(u.id);
+              return p ? ([u.id, p] as [string, UnitPrice]) : null;
+            }),
+          ),
+          Promise.all(
+            unitList.map(async (u) => {
+              const r = await getUnitPricingRecord(u.id);
+              return r ? ([u.id, r] as [string, UnitPricingRecord]) : null;
+            }),
+          ),
+        ]);
+
         if (!isCurrent) return;
+
         const pricingMap: Record<string, UnitPrice> = {};
         for (const entry of pricingEntries) {
           if (entry) pricingMap[entry[0]] = entry[1];
         }
         setPricing(pricingMap);
+
+        const recordMap: Record<string, UnitPricingRecord> = {};
+        for (const entry of recordEntries) {
+          if (entry) recordMap[entry[0]] = entry[1];
+        }
+        setPricingRecords(recordMap);
       })
       .catch((err: unknown) => {
         if (!isCurrent) return;
@@ -126,19 +152,44 @@ function UnitsPricingList() {
     [router],
   );
 
+  const handleEditPricing = useCallback(
+    (unit: UnitListItem) => {
+      setEditingUnit(unit);
+      setEditingRecord(pricingRecords[unit.id] ?? null);
+    },
+    [pricingRecords],
+  );
+
+  const handleSavePricing = useCallback(
+    async (unitId: string, data: UnitPricingRecordSave) => {
+      const saved = await saveUnitPricingRecord(unitId, data);
+      setPricingRecords((prev) => ({ ...prev, [unitId]: saved }));
+    },
+    [],
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setEditingUnit(null);
+    setEditingRecord(null);
+  }, []);
+
   // Apply all client-side filters: status, unit_type, and price range
   const filteredUnits = units.filter((u) => {
     if (filters.status !== "" && u.status !== filters.status) return false;
     if (filters.unit_type !== "" && u.unit_type !== filters.unit_type) return false;
     if (filters.min_price !== "") {
       const min = parseFloat(filters.min_price);
+      const r = pricingRecords[u.id];
       const p = pricing[u.id];
-      if (!p || p.final_unit_price < min) return false;
+      const finalPrice = r ? r.final_price : p ? p.final_unit_price : null;
+      if (finalPrice === null || finalPrice < min) return false;
     }
     if (filters.max_price !== "") {
       const max = parseFloat(filters.max_price);
+      const r = pricingRecords[u.id];
       const p = pricing[u.id];
-      if (!p || p.final_unit_price > max) return false;
+      const finalPrice = r ? r.final_price : p ? p.final_unit_price : null;
+      if (finalPrice === null || finalPrice > max) return false;
     }
     return true;
   });
@@ -146,7 +197,7 @@ function UnitsPricingList() {
   return (
     <PageContainer
       title="Units & Pricing"
-      subtitle="Browse unit inventory and inspect pricing at unit level."
+      subtitle="Browse unit inventory and manage per-unit pricing records."
     >
       {/* Project selector */}
       <div className={styles.selectorRow}>
@@ -205,11 +256,24 @@ function UnitsPricingList() {
               <UnitsTable
                 units={filteredUnits}
                 pricing={pricing}
+                pricingRecords={pricingRecords}
                 onViewUnit={handleViewUnit}
+                onEditPricing={handleEditPricing}
               />
             </>
           )}
         </>
+      )}
+
+      {/* Edit Pricing Modal */}
+      {editingUnit && (
+        <EditPricingModal
+          unitId={editingUnit.id}
+          unitNumber={editingUnit.unit_number}
+          existing={editingRecord}
+          onSave={handleSavePricing}
+          onClose={handleCloseModal}
+        />
       )}
     </PageContainer>
   );

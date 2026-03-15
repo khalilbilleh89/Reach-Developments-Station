@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import type { UnitListItem, UnitPrice } from "@/lib/units-types";
-import { unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
+import type { UnitListItem, UnitPrice, UnitPricingRecord } from "@/lib/units-types";
+import { pricingStatusLabel, unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -11,9 +11,12 @@ type SortDir = "asc" | "desc";
 
 interface UnitsTableProps {
   units: UnitListItem[];
-  /** Pricing map keyed by unit ID. May be partial if pricing is not available for all units. */
+  /** Engine-calculated pricing map keyed by unit ID. May be partial. */
   pricing: Record<string, UnitPrice>;
+  /** Formal pricing record map keyed by unit ID. May be partial. */
+  pricingRecords: Record<string, UnitPricingRecord>;
   onViewUnit: (unitId: string) => void;
+  onEditPricing: (unit: UnitListItem) => void;
 }
 
 /** Map a backend UnitStatus value to the corresponding CSS module class. */
@@ -46,7 +49,7 @@ function statusClass(status: string): string {
  * rather than raw `unit.internal_area`, keeping the UI consistent with how
  * `final_unit_price` was derived on the backend.
  */
-export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
+export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditPricing }: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -136,27 +139,17 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
             <SortHeader field="unit_type">Type</SortHeader>
             <SortHeader field="internal_area">Area (sqm)</SortHeader>
             <SortHeader field="status">Status</SortHeader>
+            <th scope="col">Base Price</th>
+            <th scope="col">Adjustment</th>
             <SortHeader field="final_unit_price">Final Price</SortHeader>
-            <th scope="col">Price / sqm</th>
-            <th scope="col">Outdoor Area</th>
+            <th scope="col">Pricing Status</th>
             <th scope="col" aria-label="Actions" />
           </tr>
         </thead>
         <tbody className={styles.tableBody}>
           {sorted.map((unit) => {
             const p = pricing[unit.id];
-            const outdoorArea =
-              (unit.balcony_area ?? 0) +
-              (unit.terrace_area ?? 0) +
-              (unit.roof_garden_area ?? 0) +
-              (unit.front_garden_area ?? 0);
-            // Use backend-resolved unit_area (which accounts for gross_area) for
-            // price/sqm, falling back to internal_area when pricing is not available.
-            const effectiveArea = p ? p.unit_area : unit.internal_area;
-            const pricePerSqm =
-              p && effectiveArea > 0
-                ? p.final_unit_price / effectiveArea
-                : null;
+            const r = pricingRecords[unit.id];
 
             return (
               <tr key={unit.id}>
@@ -173,24 +166,45 @@ export function UnitsTable({ units, pricing, onViewUnit }: UnitsTableProps) {
                   </span>
                 </td>
                 <td>
-                  {p ? formatCurrency(p.final_unit_price) : <span aria-label="Not priced">—</span>}
+                  {r ? formatCurrency(r.base_price) : <span aria-label="Not set">—</span>}
                 </td>
                 <td>
-                  {pricePerSqm !== null
-                    ? `AED ${Math.round(pricePerSqm).toLocaleString()}`
-                    : <span aria-label="Not available">—</span>}
+                  {r
+                    ? r.manual_adjustment !== 0
+                      ? `${r.manual_adjustment > 0 ? "+" : ""}${formatCurrency(r.manual_adjustment)}`
+                      : "—"
+                    : <span aria-label="Not set">—</span>}
                 </td>
                 <td>
-                  {outdoorArea > 0
-                    ? `${outdoorArea.toFixed(1)} sqm`
-                    : <span aria-label="None">—</span>}
+                  {r
+                    ? formatCurrency(r.final_price)
+                    : p
+                      ? formatCurrency(p.final_unit_price)
+                      : <span aria-label="Not priced">—</span>}
                 </td>
                 <td>
+                  {r ? (
+                    <span className={styles.statusBadge}>
+                      {pricingStatusLabel(r.pricing_status)}
+                    </span>
+                  ) : (
+                    <span aria-label="Not set">—</span>
+                  )}
+                </td>
+                <td style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className={styles.actionBtn}
+                    onClick={() => onEditPricing(unit)}
+                    aria-label={`Edit pricing for unit ${unit.unit_number}`}
+                  >
+                    Edit Pricing
+                  </button>
                   <button
                     type="button"
                     className={styles.actionBtn}
                     onClick={() => onViewUnit(unit.id)}
-                    aria-label={`View pricing for unit ${unit.unit_number}`}
+                    aria-label={`View detail for unit ${unit.unit_number}`}
                   >
                     View
                   </button>

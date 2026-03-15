@@ -7,6 +7,7 @@ Provides two route groups:
   /api/v1/floors/{floor_id}/units  — floor-scoped unit listing and creation
   /api/v1/units                    — flat list with optional ?floor_id= filter
   /api/v1/units/{unit_id}          — individual unit operations (get, update, delete)
+  /api/v1/units/{unit_id}/pricing  — per-unit formal pricing record (get, put)
 """
 
 from typing import Annotated, Optional
@@ -15,6 +16,8 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
+from app.modules.pricing.service import UnitPricingService
 from app.modules.units.schemas import (
     UnitCreate,
     UnitCreateForFloor,
@@ -106,3 +109,48 @@ def delete_unit(
     """Delete a unit by ID."""
     service.delete_unit(unit_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Per-unit pricing record endpoints ─────────────────────────────────────────
+
+
+def get_pricing_service(db: Session = Depends(get_db)) -> UnitPricingService:
+    return UnitPricingService(db)
+
+
+@router.get(
+    "/units/{unit_id}/pricing",
+    response_model=UnitPricingResponse,
+    tags=["unit-pricing"],
+)
+def get_unit_pricing(
+    unit_id: str,
+    service: Annotated[UnitPricingService, Depends(get_pricing_service)],
+) -> UnitPricingResponse:
+    """Get the formal pricing record for a unit.
+
+    Returns 404 if the unit does not exist or has no pricing record yet.
+    """
+    return service.get_unit_pricing(unit_id)
+
+
+@router.put(
+    "/units/{unit_id}/pricing",
+    response_model=UnitPricingResponse,
+    tags=["unit-pricing"],
+)
+def save_unit_pricing(
+    unit_id: str,
+    data: UnitPricingCreate,
+    service: Annotated[UnitPricingService, Depends(get_pricing_service)],
+) -> UnitPricingResponse:
+    """Create or update the formal pricing record for a unit.
+
+    Computes final_price = base_price + manual_adjustment server-side.
+    Rejects the request if the resulting final_price would be negative.
+    """
+    return service.save_unit_pricing(unit_id, data)
+
+
+# Deferred import to avoid circular dependencies at module level
+from app.modules.pricing.schemas import UnitPricingCreate as UnitPricingPayload  # noqa: E402
