@@ -5,10 +5,11 @@ CRUD API router for the Building entity.
 
 Provides two route groups:
   /api/v1/phases/{phase_id}/buildings  — phase-scoped building listing and creation
+  /api/v1/buildings                    — flat list with optional ?phase_id= filter
   /api/v1/buildings/{building_id}      — individual building operations (get, update, delete)
 """
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -45,6 +46,19 @@ def create_building_for_phase(
 ) -> BuildingResponse:
     """Create a new building within a specific phase."""
     return service.create_building_for_phase(phase_id, data)
+
+
+# ── Flat building endpoints ──────────────────────────────────────────────────
+
+@router.get("/buildings", response_model=BuildingList)
+def list_buildings(
+    service: Annotated[BuildingService, Depends(get_service)],
+    phase_id: Optional[str] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> BuildingList:
+    """List buildings, optionally filtered by phase."""
+    return service.list_buildings(phase_id=phase_id, skip=skip, limit=limit)
 
 
 # ── Individual building endpoints ────────────────────────────────────────────
