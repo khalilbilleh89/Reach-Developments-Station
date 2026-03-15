@@ -91,6 +91,12 @@ export function CreateUnitModal({ unit, onSubmit, onClose }: CreateUnitModalProp
       return;
     }
 
+    const grossAreaVal = parseOptionalFloat(grossArea);
+    if (grossArea.trim() !== "" && (grossAreaVal === null || grossAreaVal <= 0)) {
+      setError("Gross area must be greater than 0.");
+      return;
+    }
+
     const data: UnitCreateForFloor | UnitUpdate = isEdit
       ? ({
           unit_type: unitType,
@@ -154,7 +160,7 @@ export function CreateUnitModal({ unit, onSubmit, onClose }: CreateUnitModalProp
                 placeholder="e.g. 101"
                 disabled={isEdit}
                 required={!isEdit}
-                autoFocus
+                autoFocus={!isEdit}
               />
             </div>
 
@@ -167,6 +173,7 @@ export function CreateUnitModal({ unit, onSubmit, onClose }: CreateUnitModalProp
                 className={styles.formSelect}
                 value={unitType}
                 onChange={(e) => setUnitType(e.target.value as UnitType)}
+                autoFocus={isEdit}
               >
                 {UNIT_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -205,7 +212,7 @@ export function CreateUnitModal({ unit, onSubmit, onClose }: CreateUnitModalProp
                 className={styles.formInput}
                 value={grossArea}
                 onChange={(e) => setGrossArea(e.target.value)}
-                min={0}
+                min={0.01}
                 step={0.01}
                 placeholder="Optional"
               />

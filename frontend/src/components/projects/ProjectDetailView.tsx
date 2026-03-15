@@ -90,6 +90,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   // Units state
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
   const [allFloors, setAllFloors] = useState<Floor[]>([]);
+  const [allFloorsLoading, setAllFloorsLoading] = useState(false);
+  const [allFloorsError, setAllFloorsError] = useState<string | null>(null);
   const [units, setUnits] = useState<UnitListItem[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
@@ -142,13 +144,17 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   };
 
   const fetchAllFloorsForProject = () => {
+    setAllFloorsLoading(true);
+    setAllFloorsError(null);
     Promise.all(allBuildings.map((b) => listFloors(b.id)))
       .then((results) => {
         setAllFloors(results.flatMap((r) => r.items));
       })
       .catch(() => {
+        setAllFloorsError("Failed to load floors. Please try again.");
         setAllFloors([]);
-      });
+      })
+      .finally(() => setAllFloorsLoading(false));
   };
 
   const fetchUnits = (floorId: string) => {
@@ -183,6 +189,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     setDeleteFloorError(null);
     setSelectedFloorId(null);
     setAllFloors([]);
+    setAllFloorsLoading(false);
+    setAllFloorsError(null);
     setUnits([]);
     setUnitsLoading(false);
     setUnitsError(null);
@@ -667,24 +675,34 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             <label htmlFor="unit-floor-select" className={styles.formLabel}>
               Floor
             </label>
-            <select
-              id="unit-floor-select"
-              className={styles.formSelect}
-              value={selectedFloorId ?? ""}
-              onChange={(e) => {
-                setSelectedFloorId(e.target.value || null);
-                setUnits([]);
-                setUnitsError(null);
-              }}
-            >
-              <option value="">— Select a floor —</option>
-              {allFloors.map((floor) => (
-                <option key={floor.id} value={floor.id}>
-                  {floor.name} ({floor.code})
-                </option>
-              ))}
-            </select>
+            {allFloorsLoading ? (
+              <div className={styles.loadingText}>Loading floors…</div>
+            ) : (
+              <select
+                id="unit-floor-select"
+                className={styles.formSelect}
+                value={selectedFloorId ?? ""}
+                onChange={(e) => {
+                  setSelectedFloorId(e.target.value || null);
+                  setUnits([]);
+                  setUnitsError(null);
+                }}
+              >
+                <option value="">— Select a floor —</option>
+                {allFloors.map((floor) => (
+                  <option key={floor.id} value={floor.id}>
+                    {floor.name} ({floor.code})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {allFloorsError && (
+            <div className={styles.errorBanner} role="alert">
+              {allFloorsError}
+            </div>
+          )}
 
           {unitsError && (
             <div className={styles.errorBanner} role="alert">
@@ -697,7 +715,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             </div>
           )}
 
-          {!selectedFloorId && allFloors.length === 0 && (
+          {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length === 0 && (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>🏠</div>
               <div className={styles.emptyText}>No floors found</div>
@@ -707,7 +725,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             </div>
           )}
 
-          {!selectedFloorId && allFloors.length > 0 && (
+          {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length > 0 && (
             <div className={styles.emptyState}>
               <div className={styles.emptyText}>Select a floor to view units</div>
             </div>

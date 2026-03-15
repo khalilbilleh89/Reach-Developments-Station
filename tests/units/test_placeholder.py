@@ -160,6 +160,7 @@ def test_delete_unit(client: TestClient):
             "internal_area": 70.0,
         },
     )
+    assert create.status_code == 201
     unit_id = create.json()["id"]
     delete_response = client.delete(f"/api/v1/units/{unit_id}")
     assert delete_response.status_code == 204
@@ -193,7 +194,7 @@ def test_create_unit_floor_scoped(client: TestClient):
 def test_list_units_floor_scoped(client: TestClient):
     """GET /api/v1/floors/{floor_id}/units should list units for that floor."""
     floor_id = _create_hierarchy(client, proj_code="PRJ-LSF")
-    client.post(
+    create = client.post(
         f"/api/v1/floors/{floor_id}/units",
         json={
             "unit_number": "401",
@@ -201,6 +202,7 @@ def test_list_units_floor_scoped(client: TestClient):
             "internal_area": 50.0,
         },
     )
+    assert create.status_code == 201
     response = client.get(f"/api/v1/floors/{floor_id}/units")
     assert response.status_code == 200
     data = response.json()
