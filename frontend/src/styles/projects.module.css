@@ -217,6 +217,20 @@
   font-size: var(--font-size-sm);
 }
 
+.emptyCta {
+  display: inline-block;
+  margin-top: var(--space-5);
+}
+
+.emptyCta:hover {
+  opacity: 0.9;
+}
+
+.emptyCta:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* --- Error / loading states ------------------------------- */
 
 .errorBanner {
