@@ -32,8 +32,10 @@ This resolves to `app/main.py` → the `app` FastAPI instance. **Do not** use a 
 ### Build Command
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt && alembic upgrade head
 ```
+
+Dependencies are installed first, then Alembic applies all pending migrations against the attached PostgreSQL database before the service starts.
 
 ### Start Command
 
@@ -85,10 +87,11 @@ See `.env.example` for the local development template.
 ## Deployment Flow
 
 1. Push to the main branch triggers Render's auto-deploy.
-2. Render executes the build command: `pip install -r requirements.txt`.
-3. Render executes the start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-4. The lifespan handler logs: `Starting <APP_NAME> [env=<APP_ENV>]`.
-5. Health check at `GET /health` confirms liveness.
+2. Render executes the build command — step 1: `pip install -r requirements.txt`.
+3. Render executes the build command — step 2: `alembic upgrade head` (applies all pending database migrations).
+4. Render executes the start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+5. The lifespan handler logs: `Starting <APP_NAME> [env=<APP_ENV>]`.
+6. Health check at `GET /health` confirms liveness.
 
 ---
 
