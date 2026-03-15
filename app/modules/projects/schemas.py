@@ -64,3 +64,15 @@ class ProjectResponse(BaseModel):
 class ProjectList(BaseModel):
     items: List[ProjectResponse]
     total: int
+
+
+class ProjectSummary(BaseModel):
+    """Aggregated KPI summary for a single project."""
+
+    project_id: str
+    total_phases: int
+    active_phases: int
+    planned_phases: int
+    completed_phases: int
+    earliest_start_date: Optional[date]
+    latest_target_completion: Optional[date]

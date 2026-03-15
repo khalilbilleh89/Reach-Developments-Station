@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.projects.models import Project
 from app.modules.projects.repository import ProjectRepository
-from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectUpdate
+from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectSummary, ProjectUpdate
 from app.shared.enums.project import ProjectStatus
 
 
@@ -78,6 +78,12 @@ class ProjectService:
         archive_data = ProjectUpdate(status=ProjectStatus.ON_HOLD)
         updated = self.repo.update(project, archive_data)
         return ProjectResponse.model_validate(updated)
+
+    def get_project_summary(self, project_id: str) -> ProjectSummary:
+        """Return aggregated KPI summary for a project's phases."""
+        self._require_project(project_id)
+        data = self.repo.get_project_phase_summary(project_id)
+        return ProjectSummary(project_id=project_id, **data)
 
     # ------------------------------------------------------------------
     # Internal helpers

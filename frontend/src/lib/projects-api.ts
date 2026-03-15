@@ -17,6 +17,7 @@ import type {
   ProjectCreate,
   ProjectListResponse,
   ProjectStatus,
+  ProjectSummary,
   ProjectUpdate,
 } from "./projects-types";
 
@@ -62,4 +63,8 @@ export async function archiveProject(id: string): Promise<Project> {
   return apiFetch<Project>(`/api/v1/projects/${id}/archive`, {
     method: "POST",
   });
+}
+
+export async function getProjectSummary(id: string): Promise<ProjectSummary> {
+  return apiFetch<ProjectSummary>(`/api/v1/projects/${id}/summary`);
 }

@@ -45,3 +45,13 @@ export interface ProjectUpdate {
   status?: ProjectStatus;
   description?: string | null;
 }
+
+export interface ProjectSummary {
+  project_id: string;
+  total_phases: number;
+  active_phases: number;
+  planned_phases: number;
+  completed_phases: number;
+  earliest_start_date: string | null;
+  latest_target_completion: string | null;
+}
