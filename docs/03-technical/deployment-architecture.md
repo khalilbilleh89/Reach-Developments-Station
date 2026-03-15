@@ -27,7 +27,7 @@ Render Web Service
  │    ├── API routes           /api/v1/*
  │    ├── Swagger docs          /docs, /openapi.json
  │    └── Health endpoints      /health, /health/db
- └── Next.js frontend (pre-rendered HTML + static assets)
+ └── Next.js frontend (static-export HTML + static assets)
       ├── Root / redirect       /         → /dashboard
       ├── Login page            /login
       ├── Dashboard             /dashboard
@@ -44,7 +44,7 @@ FastAPI evaluates routes in registration order. The catch-all frontend handler i
 | `/api/v1/*` | FastAPI API routers |
 | `/docs`, `/openapi.json` | Swagger UI |
 | `/health`, `/health/db` | Health check endpoints |
-| `/_next/static/*` | Mounted Next.js compiled JS/CSS chunks |
+| `/_next/static/*` | Mounted Next.js static export JS/CSS chunks |
 | `/*` (catch-all) | Frontend HTML (page-specific or SPA fallback) |
 
 ---
@@ -69,7 +69,7 @@ cd frontend && npm ci && npm run build && cd .. && pip install -r requirements.t
 
 The build sequence:
 1. Install Node dependencies (`npm ci`).
-2. Build the Next.js app (`npm run build`) — pre-rendered HTML lands in `frontend/.next/server/app/` and compiled static assets in `frontend/.next/static/`.
+2. Build the Next.js app (`npm run build`) — static export lands in `frontend/out/` (HTML files + `_next/static/` assets).
 3. Install Python dependencies (`pip install -r requirements.txt`).
 4. Apply all pending Alembic database migrations (`alembic upgrade head`).
 
@@ -85,25 +85,25 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 ## Frontend Build
 
-The frontend (Next.js 15) is built using the standard `next build` command. The relevant output:
+The frontend (Next.js 15) is built using `next build` with `output: "export"`, which generates a self-contained static site in:
 
 ```
-frontend/.next/
- ├── server/app/         # pre-rendered HTML files (one per static route)
- │    ├── index.html     # root / redirect to /dashboard
- │    ├── login.html
- │    ├── dashboard.html
- │    └── ...
- └── static/             # compiled JS/CSS chunks (served at /_next/static/)
-      ├── chunks/
-      └── css/
+frontend/out/
+ ├── index.html          # root page (client-side redirects to /dashboard)
+ ├── login.html
+ ├── dashboard.html
+ ├── ...
+ └── _next/
+      └── static/        # compiled JS/CSS chunks (served at /_next/static/)
+           ├── chunks/
+           └── css/
 ```
 
-FastAPI mounts `frontend/.next/static/` at the URL prefix `/_next/static/` (efficient `StaticFiles` handler) and uses a wildcard catch-all route for all other browser paths:
+FastAPI mounts `frontend/out/_next/static/` at the URL prefix `/_next/static/` (efficient `StaticFiles` handler) and uses a wildcard catch-all route for all other browser paths:
 
-1. Try exact HTML file: `/login` → `frontend/.next/server/app/login.html`
-2. Try subdirectory index: `/login/` → `frontend/.next/server/app/login/index.html`
-3. Serve parent page for dynamic routes: `/sales/123` → `frontend/.next/server/app/sales.html` (SPA loads and client-routes to the detail)
+1. Try exact HTML file: `/login` → `frontend/out/login.html`
+2. Try subdirectory index: `/login/` → `frontend/out/login/index.html`
+3. Serve parent page for dynamic routes: `/sales/123` → `frontend/out/sales.html` (SPA loads and client-routes to the detail)
 4. Root `index.html` as the ultimate SPA fallback
 
 ---
@@ -145,14 +145,14 @@ See `.env.example` for the local development template.
 1. Push to the main branch triggers Render's auto-deploy.
 2. Render executes the build command:
    - Step 1: `cd frontend && npm ci` — install Node dependencies.
-   - Step 2: `npm run build && cd ..` — compile frontend; pre-rendered HTML → `frontend/.next/server/app/`, static chunks → `frontend/.next/static/`.
+   - Step 2: `npm run build && cd ..` — compile frontend with static export; HTML files + static assets → `frontend/out/`.
    - Step 3: `pip install -r requirements.txt` — install Python dependencies.
    - Step 4: `alembic upgrade head` — apply all pending database migrations.
 3. Render executes the start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 4. The lifespan handler logs: `Starting <APP_NAME> [env=<APP_ENV>]`.
-5. FastAPI mounts `frontend/.next/static/` at `/_next/static/`.
+5. FastAPI mounts `frontend/out/_next/static/` at `/_next/static/`.
 6. Health check at `GET /health` confirms liveness.
-7. `GET /` serves the frontend `index.html` (which redirects the browser to `/dashboard`).
+7. `GET /` serves the frontend `index.html` (which client-side redirects the browser to `/dashboard`).
 
 ---
 
@@ -193,4 +193,4 @@ This is already set in `infrastructure/render/render.yaml`. Do not change it.
 | `GET /health` | Application health check (returns `{"status": "ok"}`) |
 | `GET /health/db` | Database connectivity check |
 
-> **Note:** `GET /` now serves the frontend HTML in production (when `frontend/.next/server/app/` exists). In development and test environments where the frontend is not built, it falls back to a lightweight JSON status payload for backward compatibility.
+> **Note:** `GET /` now serves the frontend HTML in production (when `frontend/out/` exists). In development and test environments where the frontend is not built, it falls back to a lightweight JSON status payload for backward compatibility.

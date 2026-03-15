@@ -38,13 +38,13 @@ from app.modules.units.api import router as units_router
 from app.modules.commission.api import router as commission_router
 from app.modules.cashflow.api import router as cashflow_router
 
-# Path to the pre-rendered HTML files produced by `next build`.
-# Next.js (App Router) writes one .html file per static route to this directory.
+# Path to the static export produced by `next build` with `output: "export"`.
+# Next.js writes self-contained HTML files and assets to this directory.
 # Relative to the working directory uvicorn is started from (repo root).
-_FRONTEND_HTML_DIR = Path("frontend/.next/server/app")
+_FRONTEND_HTML_DIR = Path("frontend/out")
 
 # Path to the compiled JS/CSS chunks served at /_next/static/*.
-_FRONTEND_STATIC_DIR = Path("frontend/.next/static")
+_FRONTEND_STATIC_DIR = Path("frontend/out/_next/static")
 
 
 @asynccontextmanager
