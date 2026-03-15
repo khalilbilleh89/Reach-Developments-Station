@@ -26,18 +26,32 @@ class FloorRepository:
     def get_by_id(self, floor_id: str) -> Optional[Floor]:
         return self.db.query(Floor).filter(Floor.id == floor_id).first()
 
-    def get_by_building_and_level(self, building_id: str, level: int) -> Optional[Floor]:
+    def get_by_building_and_code(self, building_id: str, code: str) -> Optional[Floor]:
         return (
             self.db.query(Floor)
-            .filter(Floor.building_id == building_id, Floor.level == level)
+            .filter(Floor.building_id == building_id, Floor.code == code)
             .first()
         )
 
-    def list(self, building_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Floor]:
+    def get_by_building_and_sequence(
+        self, building_id: str, sequence_number: int
+    ) -> Optional[Floor]:
+        return (
+            self.db.query(Floor)
+            .filter(
+                Floor.building_id == building_id,
+                Floor.sequence_number == sequence_number,
+            )
+            .first()
+        )
+
+    def list(
+        self, building_id: Optional[str] = None, skip: int = 0, limit: int = 100
+    ) -> List[Floor]:
         query = self.db.query(Floor)
         if building_id:
             query = query.filter(Floor.building_id == building_id)
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Floor.sequence_number).offset(skip).limit(limit).all()
 
     def count(self, building_id: Optional[str] = None) -> int:
         query = self.db.query(Floor)
@@ -52,3 +66,7 @@ class FloorRepository:
         self.db.commit()
         self.db.refresh(floor)
         return floor
+
+    def delete(self, floor: Floor) -> None:
+        self.db.delete(floor)
+        self.db.commit()

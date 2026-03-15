@@ -23,6 +23,7 @@ from app.shared.enums.sales import ContractStatus, ReservationStatus
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_unit(db: Session, project_code: str = "PRJ-SAL") -> str:
     """Create a full project hierarchy and return a unit ID."""
     from app.modules.projects.models import Project
@@ -43,11 +44,15 @@ def _make_unit(db: Session, project_code: str = "PRJ-SAL") -> str:
     db.add(building)
     db.flush()
 
-    floor = Floor(building_id=building.id, level=1)
+    floor = Floor(
+        building_id=building.id, name="Floor 1", code="FL-01", sequence_number=1
+    )
     db.add(floor)
     db.flush()
 
-    unit = Unit(floor_id=floor.id, unit_number="101", unit_type="studio", internal_area=100.0)
+    unit = Unit(
+        floor_id=floor.id, unit_number="101", unit_type="studio", internal_area=100.0
+    )
     db.add(unit)
     db.commit()
     db.refresh(unit)
@@ -101,6 +106,7 @@ _CONTRACT_BASE = {
 # Buyer tests
 # ---------------------------------------------------------------------------
 
+
 def test_create_buyer(db_session: Session):
     svc = SalesService(db_session)
     buyer = svc.create_buyer(
@@ -137,6 +143,7 @@ def test_list_buyers(db_session: Session):
 # ---------------------------------------------------------------------------
 # Reservation tests
 # ---------------------------------------------------------------------------
+
 
 def test_create_reservation(db_session: Session):
     unit_id = _make_unit(db_session, "PRJ-RES1")
@@ -213,7 +220,9 @@ def test_reserve_invalid_unit_raises_404(db_session: Session):
     svc = SalesService(db_session)
     with pytest.raises(HTTPException) as exc_info:
         svc.create_reservation(
-            ReservationCreate(unit_id="no-such-unit", buyer_id=buyer_id, **_RESERVATION_DATES)
+            ReservationCreate(
+                unit_id="no-such-unit", buyer_id=buyer_id, **_RESERVATION_DATES
+            )
         )
     assert exc_info.value.status_code == 404
 
@@ -224,7 +233,9 @@ def test_reserve_invalid_buyer_raises_404(db_session: Session):
     svc = SalesService(db_session)
     with pytest.raises(HTTPException) as exc_info:
         svc.create_reservation(
-            ReservationCreate(unit_id=unit_id, buyer_id="no-such-buyer", **_RESERVATION_DATES)
+            ReservationCreate(
+                unit_id=unit_id, buyer_id="no-such-buyer", **_RESERVATION_DATES
+            )
         )
     assert exc_info.value.status_code == 404
 
@@ -275,6 +286,7 @@ def test_list_reservations(db_session: Session):
 # Contract tests
 # ---------------------------------------------------------------------------
 
+
 def test_create_contract_directly(db_session: Session):
     unit_id = _make_unit(db_session, "PRJ-CONT1")
     buyer_id = _make_buyer(db_session, "cont1@example.com")
@@ -324,7 +336,10 @@ def test_duplicate_active_contract_blocked(db_session: Session):
         )
     assert exc_info.value.status_code == 409
     # Confirm error message reflects the actual rule
-    assert "draft" in exc_info.value.detail.lower() or "active" in exc_info.value.detail.lower()
+    assert (
+        "draft" in exc_info.value.detail.lower()
+        or "active" in exc_info.value.detail.lower()
+    )
 
 
 def test_duplicate_contract_number_blocked(db_session: Session):
@@ -348,7 +363,9 @@ def test_contract_invalid_unit_raises_404(db_session: Session):
     svc = SalesService(db_session)
     with pytest.raises(HTTPException) as exc_info:
         svc.create_contract(
-            SalesContractCreate(unit_id="no-such-unit", buyer_id=buyer_id, **_CONTRACT_BASE)
+            SalesContractCreate(
+                unit_id="no-such-unit", buyer_id=buyer_id, **_CONTRACT_BASE
+            )
         )
     assert exc_info.value.status_code == 404
 
@@ -358,7 +375,9 @@ def test_contract_invalid_buyer_raises_404(db_session: Session):
     svc = SalesService(db_session)
     with pytest.raises(HTTPException) as exc_info:
         svc.create_contract(
-            SalesContractCreate(unit_id=unit_id, buyer_id="no-such-buyer", **_CONTRACT_BASE)
+            SalesContractCreate(
+                unit_id=unit_id, buyer_id="no-such-buyer", **_CONTRACT_BASE
+            )
         )
     assert exc_info.value.status_code == 404
 

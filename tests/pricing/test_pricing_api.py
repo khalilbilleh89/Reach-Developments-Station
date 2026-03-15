@@ -13,7 +13,7 @@ def _create_hierarchy(client: TestClient, proj_code: str = "PRJ-PAPI") -> tuple[
     project_id = client.post("/api/v1/projects", json={"name": "Pricing Project", "code": proj_code}).json()["id"]
     phase_id = client.post("/api/v1/phases", json={"project_id": project_id, "name": "Phase 1", "sequence": 1}).json()["id"]
     building_id = client.post(f"/api/v1/phases/{phase_id}/buildings", json={"name": "Block A", "code": "BLK-A"}).json()["id"]
-    floor_id = client.post("/api/v1/floors", json={"building_id": building_id, "level": 1}).json()["id"]
+    floor_id = client.post(f"/api/v1/buildings/{building_id}/floors", json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1}).json()["id"]
     unit_id = client.post(
         "/api/v1/units",
         json={"floor_id": floor_id, "unit_number": "101", "unit_type": "studio", "internal_area": 100.0},
