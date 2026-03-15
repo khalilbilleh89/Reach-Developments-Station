@@ -9,6 +9,7 @@ import "@testing-library/jest-dom";
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => "/payment-plans",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 jest.mock("next/link", () => {

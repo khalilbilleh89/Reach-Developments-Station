@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { PaymentPlanFilters } from "@/components/payment-plans/PaymentPlanFilters";
 import { PaymentPlansTable } from "@/components/payment-plans/PaymentPlansTable";
+import PaymentPlanDetailView from "@/components/payment-plans/PaymentPlanDetailView";
 import {
   getProjects,
   getPaymentPlans,
@@ -24,15 +26,11 @@ const DEFAULT_FILTERS: PaymentPlanFiltersState = {
 };
 
 /**
- * PaymentPlansPage — landing page for payment plan review.
+ * PaymentPlansList — project-scoped queue of payment plans.
  *
- * Shows a project-scoped queue of payment plans with collection progress,
- * overdue signals, and links to contract-level schedule detail.
- *
- * All financial values are sourced from the backend. No calculations are
- * performed on the frontend.
+ * Rendered by PaymentPlansPage when no ?contractId= query param is present.
  */
-export default function PaymentPlansPage() {
+function PaymentPlansList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -170,4 +168,18 @@ export default function PaymentPlansPage() {
       )}
     </PageContainer>
   );
+}
+
+/**
+ * PaymentPlansPage — renders the contract detail view when ?contractId= is
+ * present, otherwise renders the filterable payment plans list.
+ */
+export default function PaymentPlansPage() {
+  const searchParams = useSearchParams();
+  const contractId = searchParams.get("contractId");
+
+  if (contractId) {
+    return <PaymentPlanDetailView />;
+  }
+  return <PaymentPlansList />;
 }

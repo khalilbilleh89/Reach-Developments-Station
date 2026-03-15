@@ -195,7 +195,7 @@ export function PaymentPlansTable({ items }: PaymentPlansTableProps) {
             <tr key={item.contractId}>
               <td>
                 <Link
-                  href={`/payment-plans/${item.contractId}`}
+                  href={`/payment-plans?contractId=${item.contractId}`}
                   className={styles.contractLink}
                   aria-label={`View payment plan for contract ${item.contractNumber}`}
                 >
@@ -254,7 +254,7 @@ export function PaymentPlansTable({ items }: PaymentPlansTableProps) {
               </td>
               <td>
                 <Link
-                  href={`/payment-plans/${item.contractId}`}
+                  href={`/payment-plans?contractId=${item.contractId}`}
                   className={styles.actionBtn}
                   aria-label={`Open payment plan detail for contract ${item.contractNumber}`}
                 >

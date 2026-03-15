@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { SalesFilters } from "@/components/sales/SalesFilters";
 import { SalesCandidatesTable } from "@/components/sales/SalesCandidatesTable";
+import SalesWorkflowDetailView from "@/components/sales/SalesWorkflowDetailView";
 import {
   getProjects,
   getSalesCandidates,
@@ -25,15 +26,11 @@ const DEFAULT_FILTERS: SalesFiltersState = {
 };
 
 /**
- * SalesPage — sales workflow landing page.
+ * SalesList — filterable queue of sales candidates for the selected project.
  *
- * Displays a filterable queue of sales candidates for the selected project.
- * Each candidate is enriched with pricing, exception, contract, and readiness
- * data sourced from the backend.
- *
- * Selecting a candidate navigates to the guided unit-level sales workflow.
+ * Rendered by SalesPage when no ?unitId= query param is present.
  */
-export default function SalesPage() {
+function SalesList() {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -106,7 +103,7 @@ export default function SalesPage() {
 
   const handleSelectUnit = useCallback(
     (unitId: string) => {
-      router.push(`/sales/${unitId}?projectId=${selectedProjectId}`);
+      router.push(`/sales?unitId=${unitId}&projectId=${selectedProjectId}`);
     },
     [router, selectedProjectId],
   );
@@ -181,4 +178,18 @@ export default function SalesPage() {
       )}
     </PageContainer>
   );
+}
+
+/**
+ * SalesPage — renders the unit detail workflow when ?unitId= is present,
+ * otherwise renders the filterable sales candidates list.
+ */
+export default function SalesPage() {
+  const searchParams = useSearchParams();
+  const unitId = searchParams.get("unitId");
+
+  if (unitId) {
+    return <SalesWorkflowDetailView />;
+  }
+  return <SalesList />;
 }
