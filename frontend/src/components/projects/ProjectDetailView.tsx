@@ -469,6 +469,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
               type="button"
               className={styles.addButton}
               disabled={!selectedBuildingId}
+              aria-disabled={!selectedBuildingId}
+              aria-label={!selectedBuildingId ? "Select a building before adding a floor" : "Add floor"}
               title={!selectedBuildingId ? "Select a building first" : undefined}
               onClick={() => {
                 setEditFloor(null);
