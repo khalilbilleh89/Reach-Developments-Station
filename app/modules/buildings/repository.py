@@ -52,3 +52,7 @@ class BuildingRepository:
         self.db.commit()
         self.db.refresh(building)
         return building
+
+    def delete(self, building: Building) -> None:
+        self.db.delete(building)
+        self.db.commit()

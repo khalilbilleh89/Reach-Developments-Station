@@ -23,8 +23,8 @@ def _create_hierarchy(client: TestClient, proj_code: str = "PRJ-REG") -> tuple[s
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
     ).json()["id"]
     building_id = client.post(
-        "/api/v1/buildings",
-        json={"phase_id": phase_id, "name": "Block A", "code": "BLK-A"},
+        f"/api/v1/phases/{phase_id}/buildings",
+        json={"name": "Block A", "code": "BLK-A"},
     ).json()["id"]
     floor_id = client.post(
         "/api/v1/floors", json={"building_id": building_id, "level": 1}

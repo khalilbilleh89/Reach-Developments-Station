@@ -680,3 +680,17 @@
   font-weight: var(--font-weight-medium);
   color: var(--color-text);
 }
+
+/* --- Buildings ------------------------------------------------ */
+
+.buildingsTable {
+  margin-top: var(--space-4);
+}
+
+.buildingForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 320px;
+  margin-bottom: var(--space-4);
+}
