@@ -34,7 +34,7 @@ export default function Page() {
       title="Projects"
       subtitle="Manage and monitor all development projects."
       actions={
-        <button className={styles.btnOutline} disabled aria-label="Create project (coming soon)">
+        <button type="button" className={styles.btnOutline} disabled aria-label="Create project (coming soon)">
           + Create Project
         </button>
       }
@@ -72,7 +72,7 @@ export default function Page() {
       {/* Project cards grid */}
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Development Portfolio</h2>
-        <span className={styles.sectionNote}>4 projects · Demo data</span>
+        <span className={styles.sectionNote}>{demoProjects.length} projects · Demo data</span>
       </div>
 
       <div className={styles.projectGrid}>
@@ -116,18 +116,18 @@ export default function Page() {
         <h2 className={styles.sectionTitle}>Portfolio Summary</h2>
       </div>
       <div className={styles.tableWrapper}>
-        <table className={styles.table}>
+        <table className={styles.table} aria-label="Portfolio summary">
           <thead>
             <tr>
-              <th>Project</th>
-              <th>Location</th>
-              <th>Phase</th>
-              <th>Total Units</th>
-              <th>Available</th>
-              <th>Reserved</th>
-              <th>Sold</th>
-              <th>Proj. Revenue</th>
-              <th>Completion</th>
+              <th scope="col">Project</th>
+              <th scope="col">Location</th>
+              <th scope="col">Phase</th>
+              <th scope="col">Total Units</th>
+              <th scope="col">Available</th>
+              <th scope="col">Reserved</th>
+              <th scope="col">Sold</th>
+              <th scope="col">Proj. Revenue</th>
+              <th scope="col">Completion</th>
             </tr>
           </thead>
           <tbody>

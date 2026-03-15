@@ -78,17 +78,17 @@ export default function Page() {
         </span>
       </div>
       <div className={styles.tableWrapper}>
-        <table className={styles.table}>
+        <table className={styles.table} aria-label="Registration case tracker">
           <thead>
             <tr>
-              <th>Case Ref</th>
-              <th>Unit</th>
-              <th>Project</th>
-              <th>Buyer</th>
-              <th>Status</th>
-              <th>Submitted</th>
-              <th>Last Updated</th>
-              <th>Missing Docs</th>
+              <th scope="col">Case Ref</th>
+              <th scope="col">Unit</th>
+              <th scope="col">Project</th>
+              <th scope="col">Buyer</th>
+              <th scope="col">Status</th>
+              <th scope="col">Submitted</th>
+              <th scope="col">Last Updated</th>
+              <th scope="col">Missing Docs</th>
             </tr>
           </thead>
           <tbody>

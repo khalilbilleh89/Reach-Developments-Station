@@ -63,14 +63,14 @@ export default function Page() {
         <span className={styles.sectionNote}>Oct 2025 – Mar 2026 · Demo data</span>
       </div>
       <div className={styles.tableWrapper}>
-        <table className={styles.table}>
+        <table className={styles.table} aria-label="Monthly cashflow trend">
           <thead>
             <tr>
-              <th>Period</th>
-              <th>Total Inflows</th>
-              <th>Total Outflows</th>
-              <th>Net Position</th>
-              <th>Status</th>
+              <th scope="col">Period</th>
+              <th scope="col">Total Inflows</th>
+              <th scope="col">Total Outflows</th>
+              <th scope="col">Net Position</th>
+              <th scope="col">Status</th>
             </tr>
           </thead>
           <tbody>

@@ -91,19 +91,19 @@ export default function Page() {
         </span>
       </div>
       <div className={styles.tableWrapper}>
-        <table className={styles.table}>
+        <table className={styles.table} aria-label="Commission payout queue">
           <thead>
             <tr>
-              <th>Ref</th>
-              <th>Agent</th>
-              <th>Agency</th>
-              <th>Unit</th>
-              <th>Project</th>
-              <th>Contract Value</th>
-              <th>Rate</th>
-              <th>Commission Due</th>
-              <th>Status</th>
-              <th>Due Date</th>
+              <th scope="col">Ref</th>
+              <th scope="col">Agent</th>
+              <th scope="col">Agency</th>
+              <th scope="col">Unit</th>
+              <th scope="col">Project</th>
+              <th scope="col">Contract Value</th>
+              <th scope="col">Rate</th>
+              <th scope="col">Commission Due</th>
+              <th scope="col">Status</th>
+              <th scope="col">Due Date</th>
             </tr>
           </thead>
           <tbody>
