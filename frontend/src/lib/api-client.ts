@@ -25,14 +25,14 @@ export class ApiError extends Error {
   }
 }
 
-function authHeaders(extra?: HeadersInit): HeadersInit {
+function authHeaders(extra?: HeadersInit): Headers {
   const token = getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(extra as Record<string, string> | undefined),
-  };
+  const headers = new Headers(extra);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.set("Authorization", `Bearer ${token}`);
   }
   return headers;
 }

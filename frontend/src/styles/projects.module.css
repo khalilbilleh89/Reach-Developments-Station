@@ -527,3 +527,8 @@
 .clickableRow:hover td {
   background: var(--color-bg);
 }
+
+.clickableRow:focus-visible td {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}

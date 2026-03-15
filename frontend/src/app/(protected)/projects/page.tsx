@@ -50,7 +50,7 @@ function ProjectsList() {
 
   const handleSelectProject = useCallback(
     (projectId: string) => {
-      router.push(`/projects?id=${projectId}`);
+      router.push(`/projects?id=${encodeURIComponent(projectId)}`);
     },
     [router],
   );

@@ -72,6 +72,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const handleUpdatePhase = async (data: PhaseCreate | PhaseUpdate) => {
     if (!editPhase) return;
     await updatePhase(editPhase.id, data as PhaseUpdate);
+    setModalOpen(false);
     setEditPhase(null);
     fetchPhases();
   };

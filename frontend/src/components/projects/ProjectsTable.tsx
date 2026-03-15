@@ -139,6 +139,19 @@ export function ProjectsTable({ projects, onSelectProject }: ProjectsTableProps)
               key={project.id}
               className={onSelectProject ? styles.clickableRow : undefined}
               onClick={onSelectProject ? () => onSelectProject(project.id) : undefined}
+              tabIndex={onSelectProject ? 0 : undefined}
+              role={onSelectProject ? "button" : undefined}
+              aria-label={onSelectProject ? `View ${project.name}` : undefined}
+              onKeyDown={
+                onSelectProject
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectProject(project.id);
+                      }
+                    }
+                  : undefined
+              }
             >
               <td>
                 <div className={styles.projectName}>{project.name}</div>
