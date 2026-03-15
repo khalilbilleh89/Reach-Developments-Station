@@ -6,6 +6,10 @@ CRUD API router for the Floor entity.
 Provides two route groups:
   /api/v1/buildings/{building_id}/floors  — building-scoped floor listing and creation
   /api/v1/floors/{floor_id}               — individual floor operations (get, update, delete)
+
+A backward-compatible alias is kept for callers that still use the legacy
+  GET /api/v1/floors?building_id=...
+query-param style.
 """
 
 from typing import Annotated
@@ -87,3 +91,25 @@ def delete_floor(
     """Delete a floor by ID."""
     service.delete_floor(floor_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Backward-compatible alias ─────────────────────────────────────────────────
+
+
+@router.get("/floors", response_model=FloorList, include_in_schema=False)
+def list_floors_legacy(
+    service: Annotated[FloorService, Depends(get_service)],
+    building_id: str = Query(...),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> FloorList:
+    """Backward-compatible alias for GET /buildings/{building_id}/floors.
+
+    Kept so that older callers using ``/floors?building_id=`` continue to work
+    while they migrate to the canonical building-scoped route.
+    """
+    return service.list_floors_by_building(
+        building_id=building_id,
+        skip=skip,
+        limit=limit,
+    )

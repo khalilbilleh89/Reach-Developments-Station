@@ -171,3 +171,14 @@ def test_floor_on_hold_status(client: TestClient):
     )
     assert create.status_code == 201
     assert create.json()["status"] == "on_hold"
+
+
+def test_list_floors_legacy_endpoint(client: TestClient):
+    """GET /api/v1/floors?building_id=... backward-compatible alias should still work."""
+    building_id = _create_hierarchy(client, proj_code="PRJ-FLR-LEG")
+    client.post(f"/api/v1/buildings/{building_id}/floors", json=_floor_payload())
+    response = client.get(f"/api/v1/floors?building_id={building_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1

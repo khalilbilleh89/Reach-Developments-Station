@@ -38,13 +38,16 @@ def upgrade() -> None:
     op.add_column("floors", sa.Column("level_number", sa.Integer, nullable=True))
     op.add_column("floors", sa.Column("description", sa.Text, nullable=True))
 
-    # Back-fill: copy legacy `level` value into the new columns for existing rows
+    # Back-fill: copy legacy `level` value into the new columns for existing rows.
+    # Use the broadest possible condition to ensure every row that is missing
+    # any of the required new columns gets filled, regardless of whether the
+    # old `name` column was already set.
     op.execute(
         "UPDATE floors SET name = 'Floor ' || CAST(level AS VARCHAR), "
         "code = 'FL-' || CAST(level AS VARCHAR), "
         "sequence_number = level, "
         "level_number = level "
-        "WHERE name IS NULL"
+        "WHERE code IS NULL OR sequence_number IS NULL"
     )
 
     # Make the new required columns non-nullable now that all rows have values

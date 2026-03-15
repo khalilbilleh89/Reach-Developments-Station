@@ -139,6 +139,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     setSelectedBuildingId(null);
     setAllBuildings([]);
     setFloors([]);
+    setFloorsLoading(false);
     setFloorsError(null);
     setFloorModalOpen(false);
     setEditFloor(null);
@@ -467,6 +468,8 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             <button
               type="button"
               className={styles.addButton}
+              disabled={!selectedBuildingId}
+              title={!selectedBuildingId ? "Select a building first" : undefined}
               onClick={() => {
                 setEditFloor(null);
                 setFloorModalOpen(true);
