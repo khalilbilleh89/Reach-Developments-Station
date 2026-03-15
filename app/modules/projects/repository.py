@@ -29,11 +29,37 @@ class ProjectRepository:
     def get_by_code(self, code: str) -> Optional[Project]:
         return self.db.query(Project).filter(Project.code == code).first()
 
-    def list(self, skip: int = 0, limit: int = 100) -> List[Project]:
-        return self.db.query(Project).offset(skip).limit(limit).all()
+    def list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> List[Project]:
+        query = self.db.query(Project)
+        if status:
+            query = query.filter(Project.status == status)
+        if search:
+            term = f"%{search}%"
+            query = query.filter(
+                Project.name.ilike(term) | Project.code.ilike(term)
+            )
+        return query.order_by(Project.created_at.desc()).offset(skip).limit(limit).all()
 
-    def count(self) -> int:
-        return self.db.query(Project).count()
+    def count(
+        self,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        query = self.db.query(Project)
+        if status:
+            query = query.filter(Project.status == status)
+        if search:
+            term = f"%{search}%"
+            query = query.filter(
+                Project.name.ilike(term) | Project.code.ilike(term)
+            )
+        return query.count()
 
     def update(self, project: Project, data: ProjectUpdate) -> Project:
         update_data = data.model_dump(exclude_unset=True)
