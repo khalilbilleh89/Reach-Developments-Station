@@ -17,7 +17,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 # A path that is guaranteed not to exist, used to simulate an absent frontend build.
-_NO_BUILD = Path("/tmp/nonexistent-frontend-build-path")
+# Uses a relative path anchored to this file so it is portable across platforms.
+_NO_BUILD = Path(__file__).parent / "_nonexistent_frontend_build_"
 
 
 def test_app_is_fastapi_instance():

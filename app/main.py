@@ -8,7 +8,6 @@ Architecture: Modular Monolith
 See: docs/03-technical/backend-architecture.md
 """
 
-import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -128,7 +127,7 @@ def _safe_resolve(base: Path, rel: str) -> Path | None:
     try:
         resolved = (base / rel).resolve()
         base_resolved = base.resolve()
-        if str(resolved).startswith(str(base_resolved) + os.sep) or resolved == base_resolved:
+        if resolved == base_resolved or resolved.is_relative_to(base_resolved):
             return resolved
     except (ValueError, OSError):
         pass
