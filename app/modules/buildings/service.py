@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.buildings.repository import BuildingRepository
-from app.modules.buildings.schemas import BuildingCreate, BuildingList, BuildingResponse, BuildingUpdate
+from app.modules.buildings.schemas import BuildingCreate, BuildingCreateForPhase, BuildingList, BuildingResponse, BuildingUpdate
 from app.modules.phases.repository import PhaseRepository
 
 
@@ -33,6 +33,32 @@ class BuildingService:
             )
         building = self.repo.create(data)
         return BuildingResponse.model_validate(building)
+
+    def create_building_for_phase(self, phase_id: str, data: BuildingCreateForPhase) -> BuildingResponse:
+        phase = self.phase_repo.get_by_id(phase_id)
+        if not phase:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Phase '{phase_id}' not found.",
+            )
+        existing = self.repo.get_by_phase_and_code(phase_id, data.code)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Building with code '{data.code}' already exists in phase '{phase_id}'.",
+            )
+        full_data = BuildingCreate(phase_id=phase_id, **data.model_dump())
+        building = self.repo.create(full_data)
+        return BuildingResponse.model_validate(building)
+
+    def list_buildings_by_phase(self, phase_id: str, skip: int = 0, limit: int = 100) -> BuildingList:
+        phase = self.phase_repo.get_by_id(phase_id)
+        if not phase:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Phase '{phase_id}' not found.",
+            )
+        return self.list_buildings(phase_id=phase_id, skip=skip, limit=limit)
 
     def get_building(self, building_id: str) -> BuildingResponse:
         building = self.repo.get_by_id(building_id)
@@ -60,3 +86,12 @@ class BuildingService:
             )
         updated = self.repo.update(building, data)
         return BuildingResponse.model_validate(updated)
+
+    def delete_building(self, building_id: str) -> None:
+        building = self.repo.get_by_id(building_id)
+        if not building:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Building '{building_id}' not found.",
+            )
+        self.repo.delete(building)

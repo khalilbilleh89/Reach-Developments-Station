@@ -20,6 +20,13 @@ class BuildingCreate(BaseModel):
     status: BuildingStatus = BuildingStatus.PLANNED
 
 
+class BuildingCreateForPhase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    code: str = Field(..., min_length=1, max_length=100)
+    floors_count: Optional[int] = Field(None, ge=1)
+    status: BuildingStatus = BuildingStatus.PLANNED
+
+
 class BuildingUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     floors_count: Optional[int] = Field(None, ge=1)
