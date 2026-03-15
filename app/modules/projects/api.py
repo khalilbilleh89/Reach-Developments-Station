@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectUpdate
 from app.modules.projects.service import ProjectService
+from app.shared.enums.project import ProjectStatus
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -34,9 +35,11 @@ def list_projects(
     service: Annotated[ProjectService, Depends(get_service)],
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
+    status: Optional[ProjectStatus] = Query(default=None, description="Filter by project status"),
+    search: Optional[str] = Query(default=None, description="Search by name or code"),
 ) -> ProjectList:
-    """List all projects."""
-    return service.list_projects(skip=skip, limit=limit)
+    """List all projects, with optional status filter and name/code search."""
+    return service.list_projects(skip=skip, limit=limit, status=status, search=search)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -56,3 +59,12 @@ def update_project(
 ) -> ProjectResponse:
     """Update a project."""
     return service.update_project(project_id, data)
+
+
+@router.post("/{project_id}/archive", response_model=ProjectResponse)
+def archive_project(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> ProjectResponse:
+    """Archive (set to on_hold) a project."""
+    return service.archive_project(project_id)

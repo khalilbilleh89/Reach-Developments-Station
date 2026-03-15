@@ -1,156 +1,142 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { demoProjects } from "@/lib/demo-data";
-import styles from "@/styles/demo-shell.module.css";
+import { ProjectsTable } from "@/components/projects/ProjectsTable";
+import { listProjects } from "@/lib/projects-api";
+import type { Project, ProjectStatus } from "@/lib/projects-types";
+import styles from "@/styles/projects.module.css";
 
 /**
- * Projects — executive demo placeholder.
+ * Projects page -- live data from /api/v1/projects.
  *
- * Displays static preview cards and KPIs using real-estate-shaped demo data.
- * Replace with live API data in PR-018 (Projects Module MVP).
+ * Displays KPI cards and a sortable project table backed by real backend records.
+ * Search is debounced (350 ms) to avoid per-keystroke requests.
  */
 export default function Page() {
-  const totalUnits = demoProjects.reduce((s, p) => s + p.totalUnits, 0);
-  const totalSold = demoProjects.reduce((s, p) => s + p.sold, 0);
-  const totalReserved = demoProjects.reduce((s, p) => s + p.reserved, 0);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  function phaseBadgeClass(phase: string) {
-    switch (phase) {
-      case "Construction":
-        return styles.badgeBlue;
-      case "Post-Handover":
-        return styles.badgeGreen;
-      case "Pre-Launch":
-        return styles.badgeGray;
-      case "Launch":
-        return styles.badgePurple;
-      default:
-        return styles.badgeGray;
-    }
-  }
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "">("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce raw search input by 350 ms to reduce request volume
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Fetch projects whenever status filter or debounced search changes
+  useEffect(() => {
+    setLoading(true);
+    listProjects({
+      status: statusFilter || undefined,
+      search: debouncedSearch || undefined,
+      limit: 500,
+    })
+      .then((resp) => {
+        setProjects(resp.items);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to load projects.");
+        setProjects([]);
+      })
+      .finally(() => setLoading(false));
+  }, [statusFilter, debouncedSearch]);
+
+  const activeCount = projects.filter((p) => p.status === "active").length;
+  const pipelineCount = projects.filter((p) => p.status === "pipeline").length;
+  const completedCount = projects.filter((p) => p.status === "completed").length;
 
   return (
     <PageContainer
       title="Projects"
       subtitle="Manage and monitor all development projects."
-      actions={
-        <button type="button" className={styles.btnOutline} disabled aria-label="Create project (coming soon)">
-          + Create Project
-        </button>
-      }
     >
-      <div className={styles.demoBanner}>⬡ Demo Preview — static data only</div>
-
       {/* KPI summary */}
       <div className={styles.kpiGrid}>
         <MetricCard
-          title="Active Projects"
-          value={demoProjects.length}
-          subtitle="Across Abu Dhabi &amp; Dubai"
+          title="Total Projects"
+          value={loading ? "\u2026" : projects.length}
+          subtitle="All statuses"
           icon="📁"
         />
         <MetricCard
-          title="Total Units"
-          value={totalUnits}
-          subtitle="All phases combined"
-          icon="🏢"
+          title="Active"
+          value={loading ? "\u2026" : activeCount}
+          subtitle="In progress"
+          icon="🏗️"
         />
         <MetricCard
-          title="Units Sold"
-          value={totalSold}
-          subtitle={`${Math.round((totalSold / totalUnits) * 100)}% sell-through`}
-          icon="✅"
-        />
-        <MetricCard
-          title="Units Reserved"
-          value={totalReserved}
-          subtitle="Pending contract execution"
+          title="Pipeline"
+          value={loading ? "\u2026" : pipelineCount}
+          subtitle="Upcoming"
           icon="📋"
         />
+        <MetricCard
+          title="Completed"
+          value={loading ? "\u2026" : completedCount}
+          subtitle="Delivered"
+          icon="✅"
+        />
       </div>
 
-      {/* Project cards grid */}
+      {/* Filter bar */}
+      <div className={styles.filterBar}>
+        <div className={styles.filterGroup}>
+          <label htmlFor="status-filter" className={styles.filterLabel}>
+            Status
+          </label>
+          <select
+            id="status-filter"
+            className={styles.filterSelect}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | "")}
+          >
+            <option value="">All statuses</option>
+            <option value="pipeline">Pipeline</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="on_hold">On Hold</option>
+          </select>
+        </div>
+        <div className={styles.filterGroup}>
+          <label htmlFor="search-filter" className={styles.filterLabel}>
+            Search
+          </label>
+          <input
+            id="search-filter"
+            type="text"
+            className={styles.filterInput}
+            placeholder="Name or code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Section header */}
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Development Portfolio</h2>
-        <span className={styles.sectionNote}>{demoProjects.length} projects · Demo data</span>
+        {!loading && (
+          <span className={styles.sectionNote}>
+            {projects.length} project{projects.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
-      <div className={styles.projectGrid}>
-        {demoProjects.map((project) => (
-          <div key={project.id} className={styles.projectCard}>
-            <div className={styles.projectCardHeader}>
-              <div>
-                <div className={styles.projectName}>{project.name}</div>
-                <div className={styles.projectLocation}>📍 {project.location}</div>
-              </div>
-              <span className={`${styles.badge} ${phaseBadgeClass(project.phase)}`}>
-                {project.phase}
-              </span>
-            </div>
+      {/* Error */}
+      {error {error && <div className={styles.errorBanner}>{error}</div>}{error && <div className={styles.errorBanner}>{error}</div>} <div className={styles.errorBanner} role="alert" aria-live="polite">{error}</div>}
 
-            <div className={styles.projectStats}>
-              <div className={styles.projectStat}>
-                <div className={styles.projectStatLabel}>Available</div>
-                <div className={styles.projectStatValue}>{project.available}</div>
-              </div>
-              <div className={styles.projectStat}>
-                <div className={styles.projectStatLabel}>Reserved</div>
-                <div className={styles.projectStatValue}>{project.reserved}</div>
-              </div>
-              <div className={styles.projectStat}>
-                <div className={styles.projectStatLabel}>Sold</div>
-                <div className={styles.projectStatValue}>{project.sold}</div>
-              </div>
-            </div>
+      {/* Loading */}
+      {loading && <div className={styles.loadingText}>Loading projects\u2026</div>}
 
-            <div className={styles.projectFooter}>
-              <span>Completion: {project.completionDate}</span>
-              <span className={styles.projectRevenue}>{project.projectedRevenue}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Compact table summary */}
-      <div className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>Portfolio Summary</h2>
-      </div>
-      <div className={styles.tableWrapper}>
-        <table className={styles.table} aria-label="Portfolio summary">
-          <thead>
-            <tr>
-              <th scope="col">Project</th>
-              <th scope="col">Location</th>
-              <th scope="col">Phase</th>
-              <th scope="col">Total Units</th>
-              <th scope="col">Available</th>
-              <th scope="col">Reserved</th>
-              <th scope="col">Sold</th>
-              <th scope="col">Proj. Revenue</th>
-              <th scope="col">Completion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {demoProjects.map((p) => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: "var(--font-weight-medium)" }}>{p.name}</td>
-                <td>{p.location}</td>
-                <td>
-                  <span className={`${styles.badge} ${phaseBadgeClass(p.phase)}`}>
-                    {p.phase}
-                  </span>
-                </td>
-                <td>{p.totalUnits}</td>
-                <td>{p.available}</td>
-                <td>{p.reserved}</td>
-                <td>{p.sold}</td>
-                <td>{p.projectedRevenue}</td>
-                <td>{p.completionDate}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Table */}
+      {!loading && !error && <ProjectsTable projects={projects} />}
     </PageContainer>
   );
 }
