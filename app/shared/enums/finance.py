@@ -68,12 +68,14 @@ class ReceiptStatus(str, Enum):
 
 
 class ReceivableStatus(str, Enum):
-    """Computed status of a receivable schedule line."""
+    """Lifecycle status of a receivable record."""
 
     PENDING = "pending"
+    DUE = "due"
+    OVERDUE = "overdue"
     PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
-    OVERDUE = "overdue"
+    CANCELLED = "cancelled"
 
 
 class PaymentMethod(str, Enum):

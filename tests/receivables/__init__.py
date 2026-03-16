@@ -1,0 +1,1 @@
+"""receivables tests"""
