@@ -84,13 +84,13 @@ export default function UnitPricingDetailView() {
           </p>
           <div className={styles.setupActions}>
             <Link
-              href={`/units-pricing?unitId=${unitId}`}
+              href={`/units-pricing?unitId=${unitId}&action=editAttributes`}
               className={styles.actionBtn}
             >
               Edit Attributes
             </Link>
             <Link
-              href={`/units-pricing?unitId=${unitId}`}
+              href={`/units-pricing?unitId=${unitId}&action=editPricing`}
               className={styles.actionBtn}
             >
               Edit Pricing
