@@ -273,7 +273,7 @@ describe("UnitsPricingPage", () => {
     mockListProjectReservations.mockResolvedValue({ total: 0, items: [] });
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
-    const available = screen.getAllByText("Available");
+    const available = screen.getAllByText("Available", { selector: "*:not(option)" });
     // At least one badge per unit with no reservation
     expect(available.length).toBeGreaterThanOrEqual(2);
   });
@@ -302,9 +302,13 @@ describe("UnitsPricingPage", () => {
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
     // unit-1 should show "Reserved" badge; unit-2 still "Available"
-    // Note: "Reserved" also appears as a filter option — use getAllByText
-    expect(screen.getAllByText("Reserved").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Available").length).toBeGreaterThanOrEqual(1);
+    // Note: "Reserved" also appears as a filter option — restrict to non-<option> elements
+    expect(
+      screen.getAllByText("Reserved", { selector: "*:not(option)" }).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText("Available", { selector: "*:not(option)" }).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("uses 3 bulk requests instead of per-unit requests", async () => {
