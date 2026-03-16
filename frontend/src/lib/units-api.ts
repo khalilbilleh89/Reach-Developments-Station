@@ -32,6 +32,7 @@ import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
   PricingDetailState,
+  PricingReadiness,
   Reservation,
   ReservationCreate,
   ReservationListResponse,
@@ -193,13 +194,19 @@ export async function getUnitPricingAttributes(
 /**
  * Fetch the combined unit detail + pricing data for the detail page.
  *
- * Fetches unit first (throws if not found), then fetches pricing and
- * attributes in parallel using Promise.allSettled so that a 422 from the
+ * Fetches unit first (throws if not found), then fetches pricing, attributes,
+ * and readiness in parallel using Promise.allSettled so that a 422 from the
  * pricing engine does not discard the unit data.
+ *
+ * The readiness endpoint is the authoritative source for determining whether
+ * engine inputs are configured — it returns explicit missing_required_fields
+ * so the UI can show actionable details instead of a generic message.
  *
  * pricingState semantics:
  *   READY              — pricing engine returned a valid calculation.
- *   MISSING_ATTRIBUTES — backend returned 422 (engine inputs not configured).
+ *   MISSING_ATTRIBUTES — backend confirmed engine inputs not configured
+ *                        (readiness.is_ready_for_pricing === false) OR
+ *                        the engine itself returned 422.
  *   MISSING_PRICING_RECORD — pricing not found (404).
  *
  * Unexpected failures (5xx, network, auth) are re-thrown so the UI renders
@@ -210,19 +217,47 @@ export async function getUnitPricingDetail(
 ): Promise<UnitPricingDetail> {
   const unit = await getUnitById(unitId);
 
-  const [pricingResult, attributesResult] = await Promise.allSettled([
-    apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
-    apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
-  ]);
+  const [pricingResult, attributesResult, readinessResult] =
+    await Promise.allSettled([
+      apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
+      apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
+      apiFetch<PricingReadiness>(`/pricing/unit/${unitId}/readiness`),
+    ]);
 
   let pricing: UnitPrice | null = null;
   let pricingState: PricingDetailState = "READY";
 
+  // Resolve readiness from the dedicated inspection endpoint first so we can
+  // use it to set pricingState even when the calculation call itself succeeds.
+  let readiness: PricingReadiness | null = null;
+  if (readinessResult.status === "fulfilled") {
+    readiness = readinessResult.value;
+    if (!readiness.is_ready_for_pricing) {
+      pricingState = "MISSING_ATTRIBUTES";
+    }
+  } else {
+    // Readiness endpoint failure is non-fatal: fall back to inferring state
+    // from the pricing calculation result below.
+    if (
+      !(readinessResult.reason instanceof ApiError) ||
+      readinessResult.reason.status >= 500
+    ) {
+      throw readinessResult.reason;
+    }
+  }
+
   if (pricingResult.status === "fulfilled") {
     pricing = pricingResult.value;
+    // Override MISSING_ATTRIBUTES state when the engine successfully calculated
+    // (this handles the case where readiness endpoint is temporarily unavailable).
+    if (pricingState === "MISSING_ATTRIBUTES" && readiness?.is_ready_for_pricing !== false) {
+      pricingState = "READY";
+    }
   } else {
     const err = pricingResult.reason;
     if (err instanceof ApiError && err.status === 422) {
+      // Engine rejected — always treat as MISSING_ATTRIBUTES regardless of
+      // readiness response (engine is the authoritative execution check).
       pricingState = "MISSING_ATTRIBUTES";
     } else if (isNotFoundError(err)) {
       pricingState = "MISSING_PRICING_RECORD";
@@ -242,7 +277,7 @@ export async function getUnitPricingDetail(
     }
   }
 
-  return { unit, pricing, attributes, pricingState };
+  return { unit, pricing, attributes, pricingState, readiness };
 }
 
 // ---------- Inventory CRUD functions -------------------------------------

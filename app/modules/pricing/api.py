@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.pricing.schemas import (
+    PricingReadinessResponse,
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
     UnitPricingAttributesResponse,
@@ -54,6 +55,26 @@ def get_unit_pricing_attributes(
 ) -> UnitPricingAttributesResponse:
     """Get the pricing attributes for a unit."""
     return service.get_pricing_attributes(unit_id)
+
+
+@router.get(
+    "/unit/{unit_id}/readiness",
+    response_model=PricingReadinessResponse,
+)
+def get_unit_pricing_readiness(
+    unit_id: str,
+    service: Annotated[PricingService, Depends(get_service)],
+) -> PricingReadinessResponse:
+    """Return explicit pricing readiness for a unit.
+
+    Reports whether all required numerical pricing engine inputs are present,
+    and lists any missing fields if they are not.  Use this endpoint on the
+    pricing inspection page instead of relying on the 422 response from the
+    price calculation endpoint — that approach does not distinguish between
+    partially configured units and completely unconfigured units, and it
+    cannot report which specific fields are still missing.
+    """
+    return service.get_pricing_readiness(unit_id)
 
 
 # ---------------------------------------------------------------------------

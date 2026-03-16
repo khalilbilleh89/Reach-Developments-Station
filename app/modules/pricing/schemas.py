@@ -66,6 +66,31 @@ class ProjectPriceSummaryResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Pricing readiness inspection schema
+# ---------------------------------------------------------------------------
+
+class PricingReadinessResponse(BaseModel):
+    """Explicit readiness state for the pricing engine inputs of a unit.
+
+    Returned by GET /pricing/unit/{unit_id}/readiness so the frontend can
+    distinguish between:
+      - a unit that is fully configured for pricing (is_ready_for_pricing=True)
+      - a unit that is missing specific numerical engine attributes (False)
+
+    missing_required_fields lists only the fields that are absent from the
+    stored UnitPricingAttributes record (e.g. base_price_per_sqm, floor_premium).
+    This is separate from the qualitative attributes managed by the
+    EditAttributesModal (view_type, corner_unit, etc.), which do not block
+    the pricing engine.
+    """
+
+    unit_id: str
+    is_ready_for_pricing: bool
+    missing_required_fields: list[str]
+    readiness_reason: Optional[str]
+
+
+# ---------------------------------------------------------------------------
 # UnitPricing (formal per-unit pricing record) schemas
 # ---------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
 from app.modules.pricing.repository import UnitPricingAttributesRepository
 from app.modules.pricing.schemas import (
+    PricingReadinessResponse,
     ProjectPriceSummaryItem,
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
@@ -105,6 +106,55 @@ class PricingService:
                 size_adjustment=float(attrs.size_adjustment),
                 custom_adjustment=float(attrs.custom_adjustment),
             )
+        )
+
+    def get_pricing_readiness(self, unit_id: str) -> "PricingReadinessResponse":
+        """Return explicit pricing readiness for a unit.
+
+        Inspects the stored UnitPricingAttributes record and returns which
+        required numerical engine fields (if any) are still missing.
+
+        This is the source of truth consumed by the pricing inspection page so
+        the UI shows specific missing fields rather than a generic message.
+        """
+        unit = self.unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        attrs = self.attrs_repo.get_by_unit(unit_id)
+        if not attrs:
+            return PricingReadinessResponse(
+                unit_id=unit_id,
+                is_ready_for_pricing=False,
+                missing_required_fields=list(self._REQUIRED_PRICING_FIELDS),
+                readiness_reason=(
+                    "No pricing attributes record exists for this unit. "
+                    "Set the numerical engine inputs (base price, premiums, adjustments) "
+                    "before calculating a price."
+                ),
+            )
+        missing = [
+            field
+            for field in self._REQUIRED_PRICING_FIELDS
+            if getattr(attrs, field) is None
+        ]
+        if missing:
+            return PricingReadinessResponse(
+                unit_id=unit_id,
+                is_ready_for_pricing=False,
+                missing_required_fields=missing,
+                readiness_reason=(
+                    f"The following required pricing engine fields are not set: "
+                    f"{', '.join(missing)}."
+                ),
+            )
+        return PricingReadinessResponse(
+            unit_id=unit_id,
+            is_ready_for_pricing=True,
+            missing_required_fields=[],
+            readiness_reason=None,
         )
 
     def calculate_unit_price(self, unit_id: str) -> UnitPriceResponse:

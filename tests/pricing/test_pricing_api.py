@@ -286,3 +286,91 @@ def test_get_project_pricing_multiple_units(client: TestClient):
     assert unit_id_2 in data
     assert data[unit_id_1]["base_price"] == pytest.approx(400_000.0)
     assert data[unit_id_2]["base_price"] == pytest.approx(300_000.0)
+
+
+# ---------------------------------------------------------------------------
+# Pricing readiness endpoint
+# ---------------------------------------------------------------------------
+
+def test_get_pricing_readiness_no_attributes(client: TestClient):
+    """GET /api/v1/pricing/unit/{id}/readiness returns not-ready when no attrs are set."""
+    _, unit_id = _create_hierarchy(client, "PRJ-RDY-NONE")
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["unit_id"] == unit_id
+    assert data["is_ready_for_pricing"] is False
+    assert isinstance(data["missing_required_fields"], list)
+    assert len(data["missing_required_fields"]) > 0
+    # All required fields should be listed as missing
+    expected_fields = {
+        "base_price_per_sqm", "floor_premium", "view_premium",
+        "corner_premium", "size_adjustment", "custom_adjustment",
+    }
+    assert set(data["missing_required_fields"]) == expected_fields
+    assert data["readiness_reason"] is not None
+
+
+def test_get_pricing_readiness_fully_configured(client: TestClient):
+    """GET /api/v1/pricing/unit/{id}/readiness returns ready when all attrs are set."""
+    _, unit_id = _create_hierarchy(client, "PRJ-RDY-FULL")
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["unit_id"] == unit_id
+    assert data["is_ready_for_pricing"] is True
+    assert data["missing_required_fields"] == []
+    assert data["readiness_reason"] is None
+
+
+def test_get_pricing_readiness_after_save_is_consistent(client: TestClient):
+    """Readiness state must match the pricing calculation outcome for the same unit."""
+    _, unit_id = _create_hierarchy(client, "PRJ-RDY-CONS")
+
+    # Before saving attributes: readiness says not ready, engine returns 422
+    readiness_before = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness").json()
+    engine_before = client.get(f"/api/v1/pricing/unit/{unit_id}")
+    assert readiness_before["is_ready_for_pricing"] is False
+    assert engine_before.status_code == 422
+
+    # After saving attributes: readiness says ready, engine succeeds
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    readiness_after = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness").json()
+    engine_after = client.get(f"/api/v1/pricing/unit/{unit_id}")
+    assert readiness_after["is_ready_for_pricing"] is True
+    assert engine_after.status_code == 200
+
+
+def test_get_pricing_readiness_invalid_unit(client: TestClient):
+    """GET readiness for a non-existent unit should return 404."""
+    resp = client.get("/api/v1/pricing/unit/no-such-unit/readiness")
+    assert resp.status_code == 404
+
+
+def test_get_pricing_readiness_response_structure(client: TestClient):
+    """Readiness response must contain all required fields."""
+    _, unit_id = _create_hierarchy(client, "PRJ-RDY-STRUCT")
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness")
+    assert resp.status_code == 200
+    data = resp.json()
+    required_keys = {"unit_id", "is_ready_for_pricing", "missing_required_fields", "readiness_reason"}
+    for key in required_keys:
+        assert key in data, f"Missing key in readiness response: {key}"
+
+
+def test_readiness_and_table_query_consistent(client: TestClient):
+    """Units listed by project and inspected via readiness must agree on attribute presence."""
+    project_id, unit_id = _create_hierarchy(client, "PRJ-RDY-TABLE")
+    # No attributes set — both endpoints reflect the same absent state
+    readiness = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness").json()
+    attrs_resp = client.get(f"/api/v1/pricing/unit/{unit_id}/attributes")
+    assert readiness["is_ready_for_pricing"] is False
+    assert attrs_resp.status_code == 404  # No attributes yet
+
+    # Set attributes — both endpoints now agree attributes are present
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    readiness_after = client.get(f"/api/v1/pricing/unit/{unit_id}/readiness").json()
+    attrs_after = client.get(f"/api/v1/pricing/unit/{unit_id}/attributes")
+    assert readiness_after["is_ready_for_pricing"] is True
+    assert attrs_after.status_code == 200
