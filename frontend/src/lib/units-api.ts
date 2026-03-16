@@ -31,6 +31,7 @@
 import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
+  PricingDetailState,
   Reservation,
   ReservationCreate,
   ReservationListResponse,
@@ -200,7 +201,9 @@ export async function getUnitPricingAttributes(
  *   READY              — pricing engine returned a valid calculation.
  *   MISSING_ATTRIBUTES — backend returned 422 (engine inputs not configured).
  *   MISSING_PRICING_RECORD — pricing not found (404).
- *   ERROR              — unexpected failure; re-thrown to the caller.
+ *
+ * Unexpected failures (5xx, network, auth) are re-thrown so the UI renders
+ * a true error banner instead of a misleading setup state.
  */
 export async function getUnitPricingDetail(
   unitId: string,
@@ -213,7 +216,7 @@ export async function getUnitPricingDetail(
   ]);
 
   let pricing: UnitPrice | null = null;
-  let pricingState: import("./units-types").PricingDetailState = "READY";
+  let pricingState: PricingDetailState = "READY";
 
   if (pricingResult.status === "fulfilled") {
     pricing = pricingResult.value;
@@ -231,8 +234,13 @@ export async function getUnitPricingDetail(
   let attributes: UnitPricingAttributes | null = null;
   if (attributesResult.status === "fulfilled") {
     attributes = attributesResult.value;
+  } else {
+    // Only 404 is treated as "not configured yet"; all other failures
+    // (5xx, network, auth) are re-thrown to surface a true error banner.
+    if (!isNotFoundError(attributesResult.reason)) {
+      throw attributesResult.reason;
+    }
   }
-  // 404 on attributes → leave as null (not yet configured)
 
   return { unit, pricing, attributes, pricingState };
 }

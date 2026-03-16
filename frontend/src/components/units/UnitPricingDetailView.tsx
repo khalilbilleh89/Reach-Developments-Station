@@ -29,7 +29,7 @@ import styles from "@/styles/units-pricing.module.css";
  *   READY              — full pricing detail is shown.
  *   MISSING_ATTRIBUTES — pricing engine inputs not configured; setup prompt.
  *   MISSING_PRICING_RECORD — no pricing record exists; setup prompt.
- *   ERROR              — unexpected backend/network failure; error banner.
+ *   Unexpected failures — thrown to the error state (error banner).
  */
 export default function UnitPricingDetailView() {
   const searchParams = useSearchParams();
@@ -84,13 +84,13 @@ export default function UnitPricingDetailView() {
           </p>
           <div className={styles.setupActions}>
             <Link
-              href={`/units-pricing?unitId=${unitId}&action=editAttributes`}
+              href={`/units-pricing?action=editAttributes&target=${unitId}`}
               className={styles.actionBtn}
             >
               Edit Attributes
             </Link>
             <Link
-              href={`/units-pricing?unitId=${unitId}&action=editPricing`}
+              href={`/units-pricing?action=editPricing&target=${unitId}`}
               className={styles.actionBtn}
             >
               Edit Pricing
@@ -108,7 +108,7 @@ export default function UnitPricingDetailView() {
           </p>
           <div className={styles.setupActions}>
             <Link
-              href={`/units-pricing?unitId=${unitId}`}
+              href={`/units-pricing?action=editPricing&target=${unitId}`}
               className={styles.actionBtn}
             >
               Create Pricing Record

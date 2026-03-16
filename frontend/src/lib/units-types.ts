@@ -194,13 +194,14 @@ export interface UnitPrice {
  * - MISSING_ATTRIBUTES: backend returned HTTP 422 — engine inputs are
  *   not configured yet.  Show a setup prompt, not an error banner.
  * - MISSING_PRICING_RECORD: no pricing record exists for the unit (404).
- * - ERROR: unexpected backend or network failure.
+ *
+ * Unexpected backend or network failures are thrown as errors, not captured
+ * here, so the calling component can show a true error banner.
  */
 export type PricingDetailState =
   | "READY"
   | "MISSING_ATTRIBUTES"
-  | "MISSING_PRICING_RECORD"
-  | "ERROR";
+  | "MISSING_PRICING_RECORD";
 
 /**
  * Combined unit pricing detail used by the detail page.
