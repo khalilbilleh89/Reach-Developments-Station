@@ -2,7 +2,7 @@
  * UnitsPricingPage tests
  */
 import React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // Mock Next.js navigation
@@ -30,9 +30,7 @@ jest.mock("next/link", () => {
   return MockLink;
 });
 
-// Mock CSS modules
-jest.mock("@/styles/units-pricing.module.css", () => ({}));
-jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
+// CSS modules are handled via Jest configuration (e.g., moduleNameMapper).
 
 // Mock format-utils
 jest.mock("@/lib/format-utils", () => ({
@@ -275,7 +273,7 @@ describe("UnitsPricingPage", () => {
     mockListProjectReservations.mockResolvedValue({ total: 0, items: [] });
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
-    const available = screen.getAllByText("Available");
+    const available = screen.getAllByText("Available", { selector: "*:not(option)" });
     // At least one badge per unit with no reservation
     expect(available.length).toBeGreaterThanOrEqual(2);
   });
@@ -304,8 +302,13 @@ describe("UnitsPricingPage", () => {
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
     // unit-1 should show "Reserved" badge; unit-2 still "Available"
-    expect(screen.getByText("Reserved")).toBeInTheDocument();
-    expect(screen.getByText("Available")).toBeInTheDocument();
+    // Note: "Reserved" also appears as a filter option — restrict to non-<option> elements
+    expect(
+      screen.getAllByText("Reserved", { selector: "*:not(option)" }).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText("Available", { selector: "*:not(option)" }).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("uses 3 bulk requests instead of per-unit requests", async () => {
@@ -362,8 +365,9 @@ describe("UnitsPricingPage", () => {
     });
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
-    // The active reservation should be selected — badge shows "Reserved"
-    expect(screen.getByText("Reserved")).toBeInTheDocument();
+    // The active reservation should be selected — badge shows "Reserved" on the A101 row
+    const a101Row = screen.getByRole("row", { name: /A101/i });
+    expect(within(a101Row).getByText("Reserved")).toBeInTheDocument();
   });
 
   it("selects more recent reservation when both have same status", async () => {
