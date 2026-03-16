@@ -31,6 +31,9 @@
 import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
+  Reservation,
+  ReservationCreate,
+  ReservationListResponse,
   UnitCreate,
   UnitCreateForFloor,
   UnitDetail,
@@ -331,5 +334,98 @@ export async function saveUnitQualitativeAttributes(
       method: "PUT",
       body: JSON.stringify(data),
     },
+  );
+}
+
+// ---------- Reservation API functions ------------------------------------
+
+/**
+ * Create a new unit reservation.
+ *
+ * Returns 201 on success.
+ * Throws ApiError with status 409 if the unit already has an active reservation.
+ * Throws ApiError with status 404 if the unit does not exist.
+ */
+export async function createReservation(
+  data: ReservationCreate,
+): Promise<Reservation> {
+  return apiFetch<Reservation>("/reservations", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Fetch a single reservation by its ID.
+ *
+ * Returns null when the reservation is not found (404).
+ */
+export async function getReservation(
+  reservationId: string,
+): Promise<Reservation | null> {
+  try {
+    return await apiFetch<Reservation>(
+      `/reservations/${encodeURIComponent(reservationId)}`,
+    );
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Fetch the active reservation for a unit, or null if none exists.
+ */
+export async function getActiveReservationByUnit(
+  unitId: string,
+): Promise<Reservation | null> {
+  try {
+    const data = await apiFetch<ReservationListResponse>(
+      `/projects/_all/reservations?unit_id=${encodeURIComponent(unitId)}`,
+    );
+    return data.items.find((r) => r.status === "active") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cancel an active reservation.
+ *
+ * Throws ApiError with status 409 if the reservation is not active.
+ * Throws ApiError with status 404 if the reservation does not exist.
+ */
+export async function cancelReservation(
+  reservationId: string,
+): Promise<Reservation> {
+  return apiFetch<Reservation>(
+    `/reservations/${encodeURIComponent(reservationId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Mark a reservation as converted (when a contract is created).
+ *
+ * Throws ApiError with status 409 if the reservation is not active.
+ * Throws ApiError with status 404 if the reservation does not exist.
+ */
+export async function convertReservation(
+  reservationId: string,
+): Promise<Reservation> {
+  return apiFetch<Reservation>(
+    `/reservations/${encodeURIComponent(reservationId)}/convert`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * List all reservations for a project.
+ */
+export async function listProjectReservations(
+  projectId: string,
+): Promise<ReservationListResponse> {
+  return apiFetch<ReservationListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reservations`,
   );
 }

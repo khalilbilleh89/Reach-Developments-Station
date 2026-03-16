@@ -15,9 +15,69 @@
 // ---------- Unit types ---------------------------------------------------
 
 /**
- * Possible commercial statuses for a unit.
- * Values mirror the backend UnitStatus enum in app/shared/enums/project.py.
+ * Possible lifecycle states for a unit reservation.
+ * Values mirror the backend ReservationStatus enum.
  */
+export type ReservationStatus = "active" | "expired" | "cancelled" | "converted";
+
+/** Human-readable label for a ReservationStatus value. */
+export function reservationStatusLabel(status: ReservationStatus | string): string {
+  const labels: Record<string, string> = {
+    active: "Reserved",
+    expired: "Expired",
+    cancelled: "Cancelled",
+    converted: "Converted",
+  };
+  return (
+    labels[status] ??
+    status
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
+/**
+ * A unit reservation record returned by the API.
+ * Reflects the backend ReservationResponse schema.
+ */
+export interface Reservation {
+  id: string;
+  unit_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  reservation_price: number;
+  reservation_fee: number | null;
+  currency: string;
+  status: ReservationStatus;
+  expires_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Payload for creating a new unit reservation.
+ * Sent to POST /api/v1/reservations.
+ */
+export interface ReservationCreate {
+  unit_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string | null;
+  reservation_price: number;
+  reservation_fee?: number | null;
+  currency?: string;
+  expires_at?: string | null;
+  notes?: string | null;
+}
+
+/** Paginated list response for reservations. */
+export interface ReservationListResponse {
+  total: number;
+  items: Reservation[];
+}
 export type UnitStatus =
   | "available"
   | "reserved"
