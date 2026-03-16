@@ -469,6 +469,25 @@
   line-height: var(--line-height-relaxed, 1.6);
 }
 
+.missingFieldsList {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto var(--space-4);
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: left;
+}
+
+.missingFieldsItem {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning, #d97706);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-warning-subtle, #fef3c7);
+  border-radius: var(--radius-sm, 4px);
+  text-transform: capitalize;
+}
+
 .setupActions {
   display: flex;
   gap: var(--space-3);

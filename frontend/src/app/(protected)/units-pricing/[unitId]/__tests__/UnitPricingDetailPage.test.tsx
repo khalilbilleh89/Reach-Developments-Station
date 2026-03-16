@@ -101,6 +101,7 @@ describe("UnitPricingDetailView", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
       pricingState: "READY",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -114,6 +115,7 @@ describe("UnitPricingDetailView", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
       pricingState: "READY",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -127,6 +129,7 @@ describe("UnitPricingDetailView", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
       pricingState: "READY",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -141,6 +144,7 @@ describe("UnitPricingDetailView", () => {
       pricing: null,
       attributes: null,
       pricingState: "MISSING_ATTRIBUTES",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -155,12 +159,36 @@ describe("UnitPricingDetailView", () => {
     expect(screen.getByRole("link", { name: /Edit Pricing/i })).toBeInTheDocument();
   });
 
+  it("shows specific missing fields when readiness provides them", async () => {
+    mockGetUnitPricingDetail.mockResolvedValue({
+      unit: mockUnit,
+      pricing: null,
+      attributes: null,
+      pricingState: "MISSING_ATTRIBUTES",
+      readiness: {
+        unit_id: "unit-1",
+        is_ready_for_pricing: false,
+        missing_required_fields: ["base_price_per_sqm", "floor_premium"],
+        readiness_reason: "The following required pricing engine fields are not set: base_price_per_sqm, floor_premium.",
+      },
+    });
+    render(<UnitPricingDetailView />);
+    await waitFor(() =>
+      expect(screen.getByText(/Pricing Not Available Yet/i)).toBeInTheDocument(),
+    );
+    expect(screen.getAllByText(/base price per sqm/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/floor premium/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("link", { name: /Edit Attributes/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Edit Pricing/i })).toBeInTheDocument();
+  });
+
   it("shows setup state when pricing record is missing", async () => {
     mockGetUnitPricingDetail.mockResolvedValue({
       unit: mockUnit,
       pricing: null,
       attributes: null,
       pricingState: "MISSING_PRICING_RECORD",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -187,6 +215,7 @@ describe("UnitPricingDetailView", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
       pricingState: "READY",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     expect(
@@ -200,6 +229,7 @@ describe("UnitPricingDetailView", () => {
       pricing: mockPricing,
       attributes: mockAttributes,
       pricingState: "READY",
+      readiness: null,
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>

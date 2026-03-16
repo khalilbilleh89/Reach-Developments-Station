@@ -204,6 +204,24 @@ export type PricingDetailState =
   | "MISSING_PRICING_RECORD";
 
 /**
+ * Explicit pricing readiness for a unit's numerical engine inputs.
+ * Returned by GET /api/v1/pricing/unit/{unitId}/readiness.
+ *
+ * Separates the readiness of the pricing ENGINE inputs (base_price_per_sqm,
+ * floor_premium, etc.) from the qualitative attributes managed by the
+ * EditAttributesModal (view_type, corner_unit, etc.).  Only the engine inputs
+ * block price calculation — qualitative attributes are informational.
+ */
+export interface PricingReadiness {
+  unit_id: string;
+  is_ready_for_pricing: boolean;
+  /** List of engine-input field names that are not yet set. Empty when ready. */
+  missing_required_fields: string[];
+  /** Human-readable explanation when not ready; null when ready. */
+  readiness_reason: string | null;
+}
+
+/**
  * Combined unit pricing detail used by the detail page.
  * Aggregates unit data, pricing attributes, and calculated price.
  */
@@ -212,6 +230,8 @@ export interface UnitPricingDetail {
   pricing: UnitPrice | null;
   attributes: UnitPricingAttributes | null;
   pricingState: PricingDetailState;
+  /** Explicit readiness from the backend inspection endpoint. */
+  readiness: PricingReadiness | null;
 }
 
 // ---------- Inventory create/update types --------------------------------

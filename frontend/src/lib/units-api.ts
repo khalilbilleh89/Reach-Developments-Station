@@ -32,6 +32,7 @@ import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
   PricingDetailState,
+  PricingReadiness,
   Reservation,
   ReservationCreate,
   ReservationListResponse,
@@ -193,36 +194,74 @@ export async function getUnitPricingAttributes(
 /**
  * Fetch the combined unit detail + pricing data for the detail page.
  *
- * Fetches unit first (throws if not found), then fetches pricing and
- * attributes in parallel using Promise.allSettled so that a 422 from the
+ * Fetches unit first (throws if not found), then fetches pricing, attributes,
+ * and readiness in parallel using Promise.allSettled so that a 422 from the
  * pricing engine does not discard the unit data.
  *
+ * The readiness endpoint is an advisory diagnostic source — it returns
+ * explicit missing_required_fields so the UI can show actionable details
+ * instead of a generic message.  A successful engine calculation always
+ * overrides readiness and sets pricingState = READY.
+ *
  * pricingState semantics:
- *   READY              — pricing engine returned a valid calculation.
- *   MISSING_ATTRIBUTES — backend returned 422 (engine inputs not configured).
+ *   READY              — pricing engine returned a valid calculation (authoritative).
+ *   MISSING_ATTRIBUTES — engine returned 422, or readiness confirmed inputs missing.
  *   MISSING_PRICING_RECORD — pricing not found (404).
  *
- * Unexpected failures (5xx, network, auth) are re-thrown so the UI renders
- * a true error banner instead of a misleading setup state.
+ * Readiness endpoint failure handling:
+ *   404  — treated as non-fatal (endpoint absent in some deploy states).
+ *   other 4xx / 5xx — re-thrown; auth/config failures must not be hidden.
+ *
+ * Unexpected failures (5xx, network, auth) on other calls are re-thrown so
+ * the UI renders a true error banner instead of a misleading setup state.
  */
 export async function getUnitPricingDetail(
   unitId: string,
 ): Promise<UnitPricingDetail> {
   const unit = await getUnitById(unitId);
 
-  const [pricingResult, attributesResult] = await Promise.allSettled([
-    apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
-    apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
-  ]);
+  const [pricingResult, attributesResult, readinessResult] =
+    await Promise.allSettled([
+      apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
+      apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
+      apiFetch<PricingReadiness>(`/pricing/unit/${unitId}/readiness`),
+    ]);
 
   let pricing: UnitPrice | null = null;
   let pricingState: PricingDetailState = "READY";
 
+  // Resolve readiness from the dedicated inspection endpoint first so we can
+  // use it to set pricingState even when the calculation call itself succeeds.
+  let readiness: PricingReadiness | null = null;
+  if (readinessResult.status === "fulfilled") {
+    readiness = readinessResult.value;
+    if (!readiness.is_ready_for_pricing) {
+      pricingState = "MISSING_ATTRIBUTES";
+    }
+  } else {
+    // Readiness endpoint failure is non-fatal ONLY for 404 (endpoint absent in
+    // some deploy states / backward-compatibility).  All other ApiErrors
+    // (401 Unauthorized, 403 Forbidden, 422, 429, etc.) are real problems that
+    // must surface rather than being silently swallowed as a fallback.
+    const err = readinessResult.reason;
+    if (!(err instanceof ApiError) || err.status !== 404) {
+      throw err;
+    }
+  }
+
   if (pricingResult.status === "fulfilled") {
     pricing = pricingResult.value;
+    // A successful engine calculation is the authoritative "ready" signal —
+    // it must always win over any advisory readiness state.  This avoids a
+    // split-brain UI where the engine returns a valid price but the UI still
+    // shows a "missing attributes" setup prompt due to a stale or racing
+    // readiness response.
+    pricingState = "READY";
   } else {
     const err = pricingResult.reason;
     if (err instanceof ApiError && err.status === 422) {
+      // Engine rejected — always treat as MISSING_ATTRIBUTES regardless of
+      // readiness response (engine is the authoritative execution check).
       pricingState = "MISSING_ATTRIBUTES";
     } else if (isNotFoundError(err)) {
       pricingState = "MISSING_PRICING_RECORD";
@@ -242,7 +281,7 @@ export async function getUnitPricingDetail(
     }
   }
 
-  return { unit, pricing, attributes, pricingState };
+  return { unit, pricing, attributes, pricingState, readiness };
 }
 
 // ---------- Inventory CRUD functions -------------------------------------

@@ -78,10 +78,33 @@ export default function UnitPricingDetailView() {
       {!loading && detail && detail.pricingState === "MISSING_ATTRIBUTES" && (
         <div className={styles.setupState}>
           <h2 className={styles.setupTitle}>Pricing Not Available Yet</h2>
-          <p className={styles.setupMessage}>
-            Required pricing attributes are missing for this unit. Configure
-            the pricing attributes before calculating a price.
-          </p>
+          {detail.readiness && detail.readiness.missing_required_fields.length > 0 ? (
+            <>
+              <p className={styles.setupMessage}>
+                The following required pricing engine inputs are not yet configured
+                for this unit:
+              </p>
+              <ul className={styles.missingFieldsList}>
+                {detail.readiness.missing_required_fields.map((field) => (
+                  <li key={field} className={styles.missingFieldsItem}>
+                    {field.replace(/_/g, " ")}
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.setupMessage}>
+                Use <strong>Edit Pricing</strong> to set the numerical pricing
+                engine inputs (base price per sqm, premiums, adjustments).
+                The <strong>Edit Attributes</strong> action manages qualitative
+                characteristics (view type, orientation, etc.) which do not
+                block price calculation.
+              </p>
+            </>
+          ) : (
+            <p className={styles.setupMessage}>
+              Required pricing attributes are missing for this unit. Configure
+              the pricing attributes before calculating a price.
+            </p>
+          )}
           <div className={styles.setupActions}>
             <Link
               href={`/units-pricing?action=editAttributes&target=${unitId}`}
