@@ -161,31 +161,6 @@ class PaymentPlanCreate(BaseModel):
     down_payment_percent: float = Field(default=0.0, ge=0.0, le=100.0)
 
 
-class InstallmentCreate(BaseModel):
-    """Payload for a single installment (used in custom plan construction)."""
-
-    installment_number: int = Field(..., ge=1)
-    due_date: date
-    amount: float = Field(..., gt=0)
-    currency: str = Field(default="AED", min_length=3, max_length=3)
-
-
-class InstallmentResponse(BaseModel):
-    """Response shape for a single installment line (PR029 simplified view)."""
-
-    id: str
-    payment_plan_id: str
-    installment_number: int
-    due_date: date
-    amount: float
-    currency: str
-    status: PaymentScheduleStatus
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class PaymentPlanResponse(BaseModel):
     """Response shape for a created payment plan (PR029 simplified view).
 

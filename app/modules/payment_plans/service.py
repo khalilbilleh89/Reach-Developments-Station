@@ -310,10 +310,19 @@ class PaymentPlanService:
           - Contract must exist and have a positive contract price
           - One payment plan (schedule) per contract — use regenerate to replace
           - Installment totals must equal contract price within rounding tolerance
+
+        Transactional guarantee:
+          Template creation and schedule row insertion are executed inside a
+          single DB transaction. If either step fails the entire operation is
+          rolled back, leaving no orphaned template or partial schedule behind.
+          IntegrityError (e.g. duplicate installment numbers from a concurrent
+          request) is converted to a 409 response.
         """
+        from sqlalchemy.exc import IntegrityError
+
         contract = self._require_contract(data.contract_id)
 
-        # Reuse the guard already enforced by generate_schedule_for_contract.
+        # Guard: one plan per contract.
         existing = self.schedule_repo.list_by_contract(contract.id)
         if existing:
             raise HTTPException(
@@ -325,7 +334,6 @@ class PaymentPlanService:
                 ),
             )
 
-        # Create a named, single-use template for this plan.
         template_data = PaymentPlanTemplateCreate(
             name=data.plan_name,
             plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
@@ -335,20 +343,46 @@ class PaymentPlanService:
             is_active=True,
         )
         self._require_supported_plan_type(template_data.plan_type)
-        template = self.template_repo.create(template_data)
 
-        rows = self._build_schedule_rows(contract, template, data.start_date)
-        persisted = self.schedule_repo.bulk_create(rows)
+        # --- single atomic transaction -----------------------------------
+        # Add template + schedule rows in memory and commit once so that a
+        # failure in schedule generation cannot leave an orphaned template.
+        try:
+            template = PaymentPlanTemplate(**template_data.model_dump())
+            self.db.add(template)
+            self.db.flush()  # obtain template.id without committing
 
+            rows = self._build_schedule_rows(contract, template, data.start_date)
+            schedule_objs = [PaymentSchedule(**row) for row in rows]
+            for obj in schedule_objs:
+                self.db.add(obj)
+
+            self.db.commit()
+            self.db.refresh(template)
+            for obj in schedule_objs:
+                self.db.refresh(obj)
+        except IntegrityError:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A payment plan for contract {contract.id!r} already exists "
+                    "or a concurrent request created one. Please refresh and try again."
+                ),
+            )
+        # -----------------------------------------------------------------
+
+        # Re-query ordered rows so _build_plan_response gets correct ordering.
+        persisted = self.schedule_repo.list_by_contract(contract.id)
         return self._build_plan_response(template.name, template.plan_type, persisted)
 
-    def get_plan(self, schedule_item_id: str) -> PaymentScheduleResponse:
+    def get_schedule_item(self, schedule_item_id: str) -> PaymentScheduleResponse:
         """Return a single payment schedule item by its ID."""
         row = self.schedule_repo.get_by_id(schedule_item_id)
         if not row:
             raise HTTPException(
                 status_code=404,
-                detail=f"Payment plan item {schedule_item_id!r} not found.",
+                detail=f"Payment schedule item {schedule_item_id!r} not found.",
             )
         return PaymentScheduleResponse.model_validate(row)
 
@@ -387,8 +421,11 @@ class PaymentPlanService:
 
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
         now = dt.now(timezone.utc)
-        created_at = rows[0].created_at if rows else now
-        updated_at = rows[-1].updated_at if rows else now
+        # Use min/max across all rows so the plan-level timestamps are correct
+        # regardless of the ordering of the rows list (which is by installment
+        # number, not by creation/update time).
+        created_at = min([r.created_at for r in rows], default=now)
+        updated_at = max([r.updated_at for r in rows], default=now)
         # Use the template id of the first row as the plan id (stable for the contract).
         plan_id = (
             rows[0].template_id

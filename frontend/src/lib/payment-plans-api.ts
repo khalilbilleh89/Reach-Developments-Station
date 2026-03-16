@@ -528,7 +528,7 @@ export async function createPaymentPlan(
         installment_number: item.installment_number,
         due_date: String(item.due_date),
         due_amount: item.due_amount,
-        status: item.status as InstallmentStatus,
+        status: mapScheduleStatusToUiStatus(item.status),
         notes: item.notes,
       }),
     ),

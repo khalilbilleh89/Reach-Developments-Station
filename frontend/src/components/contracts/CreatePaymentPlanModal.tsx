@@ -40,9 +40,14 @@ export function CreatePaymentPlanModal({
 }: CreatePaymentPlanModalProps) {
   const [planName, setPlanName] = useState("");
   const [numberOfInstallments, setNumberOfInstallments] = useState(12);
-  const [startDate, setStartDate] = useState(
-    () => new Date().toISOString().slice(0, 10),
-  );
+  const [startDate, setStartDate] = useState(() => {
+    // Use local date parts to avoid UTC off-by-one for users outside UTC.
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  });
   const [frequency, setFrequency] = useState<Frequency>("monthly");
   const [downPaymentPercent, setDownPaymentPercent] = useState(0);
 

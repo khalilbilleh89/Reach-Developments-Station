@@ -10,16 +10,10 @@ import {
   listInstallments,
   type PaymentPlanCreatePayload,
 } from "@/lib/payment-plans-api";
+import { ApiError } from "@/lib/api-client";
 import type { PaymentPlan, Installment } from "@/lib/payment-plans-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/payment-plans.module.css";
-
-interface ContractSummary {
-  id: string;
-  contractNumber: string;
-  contractPrice: number;
-  status: string;
-}
 
 /**
  * ContractDetailView — contract-level view showing payment plan section.
@@ -28,7 +22,6 @@ interface ContractSummary {
  * Next.js static export (output: "export").
  *
  * Shows:
- *   - Contract summary (number, price, status)
  *   - Payment Plan section
  *       • If no plan exists: "Create Payment Plan" button
  *       • If plan exists: plan summary + InstallmentsTable
@@ -52,13 +45,15 @@ export default function ContractDetailView() {
       setError("No contract ID provided.");
       return;
     }
+    // Reset stale state from a previous contract before fetching.
+    setPlan(null);
+    setInstallments([]);
     setLoading(true);
     setError(null);
     try {
       // Try to load the installment schedule for this contract.
       const schedule = await listInstallments(contractId);
       if (schedule.total > 0) {
-        // Map schedule items to Installment shape for the table.
         setInstallments(
           schedule.items.map((item) => ({
             id: item.id,
@@ -69,11 +64,14 @@ export default function ContractDetailView() {
             notes: item.notes,
           })),
         );
+      } else {
+        setInstallments([]);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // 404 means no plan exists yet — that is expected.
-      if (!msg.includes("404")) {
+      // 404 means no plan exists yet — that is expected; show the CTA.
+      if (err instanceof ApiError && err.status === 404) {
+        setInstallments([]);
+      } else {
         setError("Failed to load payment plan.");
       }
     } finally {

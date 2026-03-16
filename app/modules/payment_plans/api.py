@@ -188,10 +188,10 @@ def list_contract_installments(
 # NOTE: This parameterised route must be declared AFTER all routes with static
 # path segments (/templates, /generate, /contracts/…) so that FastAPI's route
 # matching prefers the more-specific paths.
-@router.get("/{plan_id}", response_model=PaymentScheduleResponse)
-def get_payment_plan_item(
-    plan_id: str,
+@router.get("/{schedule_item_id}", response_model=PaymentScheduleResponse)
+def get_payment_schedule_item(
+    schedule_item_id: str,
     service: Annotated[PaymentPlanService, Depends(get_service)],
 ) -> PaymentScheduleResponse:
-    """Get a specific payment schedule item by ID."""
-    return service.get_plan(plan_id)
+    """Get a specific payment schedule item by its ID."""
+    return service.get_schedule_item(schedule_item_id)
