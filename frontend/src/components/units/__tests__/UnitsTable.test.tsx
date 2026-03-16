@@ -8,9 +8,9 @@ import "@testing-library/jest-dom";
 jest.mock("@/styles/units-pricing.module.css", () => ({}));
 jest.mock("@/lib/format-utils", () => ({
   formatCurrency: (v: number) => `AED ${v.toLocaleString()}`,
-  formatAmount: (v: number, _currency: string) => `AED ${v.toLocaleString()}`,
-  formatAdjustment: (v: number, _currency: string) =>
-    `${v >= 0 ? "+" : "-"}AED ${Math.abs(v).toLocaleString()}`,
+  formatAmount: (v: number, currency: string) => `${currency} ${v.toLocaleString()}`,
+  formatAdjustment: (v: number, currency: string) =>
+    `${currency} ${v >= 0 ? "+" : "-"}${Math.abs(v).toLocaleString()}`,
 }));
 
 import { UnitsTable } from "@/components/units/UnitsTable";
