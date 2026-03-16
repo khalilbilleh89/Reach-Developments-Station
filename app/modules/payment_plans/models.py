@@ -13,11 +13,23 @@ PaymentSchedule — individual installment lines generated from a template for
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Boolean, Integer, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    ForeignKey,
+    Numeric,
+    String,
+    Boolean,
+    Integer,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.finance import InstallmentFrequency, PaymentPlanType, PaymentScheduleStatus
+from app.shared.enums.finance import (
+    InstallmentFrequency,
+    PaymentPlanType,
+    PaymentScheduleStatus,
+)
 
 
 class PaymentPlanTemplate(Base, TimestampMixin):
@@ -39,7 +51,9 @@ class PaymentPlanTemplate(Base, TimestampMixin):
         nullable=False,
         default=InstallmentFrequency.MONTHLY.value,
     )
-    handover_percent: Mapped[Optional[float]] = mapped_column(Numeric(5, 2), nullable=True)
+    handover_percent: Mapped[Optional[float]] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     schedules: Mapped[list["PaymentSchedule"]] = relationship(

@@ -39,12 +39,7 @@ class PaymentPlanTemplateRepository:
         )
 
     def list(self, skip: int = 0, limit: int = 100) -> List[PaymentPlanTemplate]:
-        return (
-            self.db.query(PaymentPlanTemplate)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+        return self.db.query(PaymentPlanTemplate).offset(skip).limit(limit).all()
 
     def count(self) -> int:
         return self.db.query(PaymentPlanTemplate).count()

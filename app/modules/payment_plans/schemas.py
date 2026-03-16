@@ -9,7 +9,11 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.shared.enums.finance import InstallmentFrequency, PaymentPlanType, PaymentScheduleStatus
+from app.shared.enums.finance import (
+    InstallmentFrequency,
+    PaymentPlanType,
+    PaymentScheduleStatus,
+)
 
 
 # ---------------------------------------------------------------------------

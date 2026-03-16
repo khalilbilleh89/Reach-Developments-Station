@@ -38,12 +38,16 @@ class ScheduleLine:
     notes: Optional[str] = None
 
 
-def calculate_down_payment_amount(contract_price: float, down_payment_percent: float) -> float:
+def calculate_down_payment_amount(
+    contract_price: float, down_payment_percent: float
+) -> float:
     """Down payment amount from contract price and percentage."""
     return round(contract_price * down_payment_percent / 100.0, 2)
 
 
-def calculate_handover_amount(contract_price: float, handover_percent: Optional[float]) -> float:
+def calculate_handover_amount(
+    contract_price: float, handover_percent: Optional[float]
+) -> float:
     """Handover amount from contract price and percentage (0.0 if absent)."""
     if handover_percent is None or handover_percent == 0.0:
         return 0.0
@@ -59,7 +63,9 @@ def calculate_remaining_balance(
     return round(contract_price - down_payment_amount - handover_amount, 2)
 
 
-def split_installments(remaining_balance: float, number_of_installments: int) -> List[float]:
+def split_installments(
+    remaining_balance: float, number_of_installments: int
+) -> List[float]:
     """
     Split remaining_balance evenly over number_of_installments.
 
@@ -125,10 +131,14 @@ def generate_schedule(
 
     down_amount = calculate_down_payment_amount(contract_price, down_payment_percent)
     handover_amount = calculate_handover_amount(contract_price, handover_percent)
-    remaining = calculate_remaining_balance(contract_price, down_amount, handover_amount)
+    remaining = calculate_remaining_balance(
+        contract_price, down_amount, handover_amount
+    )
 
     installment_amounts = split_installments(remaining, number_of_installments)
-    due_dates = generate_due_dates(start_date, number_of_installments, installment_frequency)
+    due_dates = generate_due_dates(
+        start_date, number_of_installments, installment_frequency
+    )
 
     # Down payment (installment 0) — due on start_date
     if down_amount > 0.0:
@@ -142,7 +152,9 @@ def generate_schedule(
         )
 
     # Regular installments
-    for idx, (amount, due_date) in enumerate(zip(installment_amounts, due_dates), start=1):
+    for idx, (amount, due_date) in enumerate(
+        zip(installment_amounts, due_dates), start=1
+    ):
         lines.append(
             ScheduleLine(
                 installment_number=idx,
@@ -155,6 +167,7 @@ def generate_schedule(
     if handover_amount > 0.0:
         last_due_date = due_dates[-1] if due_dates else start_date
         from app.shared.enums.finance import InstallmentFrequency
+
         if installment_frequency == InstallmentFrequency.QUARTERLY.value:
             handover_due = last_due_date + relativedelta(months=3)
         else:

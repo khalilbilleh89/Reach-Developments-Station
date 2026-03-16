@@ -61,7 +61,9 @@ class PaymentPlanService:
     # Template management
     # ------------------------------------------------------------------
 
-    def create_template(self, data: PaymentPlanTemplateCreate) -> PaymentPlanTemplateResponse:
+    def create_template(
+        self, data: PaymentPlanTemplateCreate
+    ) -> PaymentPlanTemplateResponse:
         self._require_supported_plan_type(data.plan_type)
         template = self.template_repo.create(data)
         return PaymentPlanTemplateResponse.model_validate(template)
@@ -99,7 +101,9 @@ class PaymentPlanService:
         effective_handover = (
             data.handover_percent
             if data.handover_percent is not None
-            else (float(template.handover_percent) if template.handover_percent else 0.0)
+            else (
+                float(template.handover_percent) if template.handover_percent else 0.0
+            )
         )
         if effective_down + effective_handover > 100.0:
             raise HTTPException(
@@ -144,7 +148,9 @@ class PaymentPlanService:
         persisted = self.schedule_repo.bulk_create(rows)
         return self._build_list_response(contract.id, persisted)
 
-    def get_schedule_for_contract(self, contract_id: str) -> PaymentScheduleListResponse:
+    def get_schedule_for_contract(
+        self, contract_id: str
+    ) -> PaymentScheduleListResponse:
         """Retrieve persisted schedule rows for a contract."""
         self._require_contract(contract_id)
         rows = self.schedule_repo.list_by_contract(contract_id)
@@ -223,7 +229,9 @@ class PaymentPlanService:
     def _require_template(self, template_id: str) -> PaymentPlanTemplate:
         template = self.template_repo.get_by_id(template_id)
         if not template:
-            raise HTTPException(status_code=404, detail=f"Template {template_id!r} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Template {template_id!r} not found."
+            )
         return template
 
     def _require_active_template(self, template_id: str) -> PaymentPlanTemplate:
@@ -237,12 +245,12 @@ class PaymentPlanService:
 
     def _require_contract(self, contract_id: str) -> SalesContract:
         contract = (
-            self.db.query(SalesContract)
-            .filter(SalesContract.id == contract_id)
-            .first()
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
         )
         if not contract:
-            raise HTTPException(status_code=404, detail=f"Contract {contract_id!r} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Contract {contract_id!r} not found."
+            )
         if not contract.contract_price or float(contract.contract_price) <= 0:
             raise HTTPException(
                 status_code=422,
@@ -263,9 +271,7 @@ class PaymentPlanService:
             )
 
     @staticmethod
-    def _validate_schedule_total(
-        lines: list, contract_price: float
-    ) -> None:
+    def _validate_schedule_total(lines: list, contract_price: float) -> None:
         total = sum(line.due_amount for line in lines)
         drift = abs(total - contract_price)
         if drift > _ROUNDING_TOLERANCE:
@@ -358,12 +364,15 @@ class PaymentPlanService:
         # Derive plan name from the template if available.
         plan_name = rows[0].template.name if rows[0].template else "Payment Plan"
         plan_type = (
-            rows[0].template.plan_type if rows[0].template
+            rows[0].template.plan_type
+            if rows[0].template
             else PaymentPlanType.STANDARD_INSTALLMENTS.value
         )
         return self._build_plan_response(plan_name, plan_type, rows)
 
-    def list_contract_installments(self, contract_id: str) -> PaymentScheduleListResponse:
+    def list_contract_installments(
+        self, contract_id: str
+    ) -> PaymentScheduleListResponse:
         """List all installments for a contract (alias for get_schedule_for_contract)."""
         return self.get_schedule_for_contract(contract_id)
 
@@ -381,7 +390,13 @@ class PaymentPlanService:
         created_at = rows[0].created_at if rows else now
         updated_at = rows[-1].updated_at if rows else now
         # Use the template id of the first row as the plan id (stable for the contract).
-        plan_id = rows[0].template_id if rows and rows[0].template_id else rows[0].id if rows else ""
+        plan_id = (
+            rows[0].template_id
+            if rows and rows[0].template_id
+            else rows[0].id
+            if rows
+            else ""
+        )
         contract_id = rows[0].contract_id if rows else ""
         return PaymentPlanResponse(
             id=plan_id,
