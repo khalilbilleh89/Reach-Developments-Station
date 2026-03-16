@@ -18,6 +18,11 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
 from app.modules.pricing.service import UnitPricingService
+from app.modules.pricing_attributes.schemas import (
+    UnitQualitativeAttributesCreate,
+    UnitQualitativeAttributesResponse,
+)
+from app.modules.pricing_attributes.service import UnitPricingAttributesService
 from app.modules.units.schemas import (
     UnitCreate,
     UnitCreateForFloor,
@@ -150,3 +155,49 @@ def save_unit_pricing(
     Rejects the request if the resulting final_price would be negative.
     """
     return service.save_unit_pricing(unit_id, data)
+
+
+# ── Per-unit qualitative pricing attributes endpoints ─────────────────────────
+
+
+def get_pricing_attributes_service(
+    db: Session = Depends(get_db),
+) -> UnitPricingAttributesService:
+    return UnitPricingAttributesService(db)
+
+
+@router.get(
+    "/units/{unit_id}/pricing-attributes",
+    response_model=UnitQualitativeAttributesResponse,
+    tags=["unit-pricing-attributes"],
+)
+def get_unit_pricing_attributes(
+    unit_id: str,
+    service: Annotated[UnitPricingAttributesService, Depends(get_pricing_attributes_service)],
+) -> UnitQualitativeAttributesResponse:
+    """Get the qualitative pricing attributes for a unit.
+
+    Returns 404 if the unit does not exist or has no attributes record yet.
+    """
+    return service.get_attributes(unit_id)
+
+
+@router.put(
+    "/units/{unit_id}/pricing-attributes",
+    response_model=UnitQualitativeAttributesResponse,
+    tags=["unit-pricing-attributes"],
+)
+def save_unit_pricing_attributes(
+    unit_id: str,
+    data: UnitQualitativeAttributesCreate,
+    response: Response,
+    service: Annotated[UnitPricingAttributesService, Depends(get_pricing_attributes_service)],
+) -> UnitQualitativeAttributesResponse:
+    """Create or update the qualitative pricing attributes for a unit.
+
+    Returns 201 when a new attributes record is created, 200 when updated.
+    """
+    result, created = service.save_attributes(unit_id, data)
+    if created:
+        response.status_code = status.HTTP_201_CREATED
+    return result

@@ -35,6 +35,8 @@ import type {
   UnitPrice,
   UnitPricingAttributes,
   UnitPricingDetail,
+  UnitQualitativeAttributes,
+  UnitQualitativeAttributesSave,
   UnitUpdate,
 } from "./units-types";
 
@@ -282,6 +284,45 @@ export async function saveUnitPricingRecord(
 ): Promise<import("./units-types").UnitPricingRecord> {
   return apiFetch<import("./units-types").UnitPricingRecord>(
     `/units/${encodeURIComponent(unitId)}/pricing`,
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+// ---------- Qualitative pricing attributes functions ---------------------
+
+/**
+ * Fetch the qualitative pricing attributes for a unit.
+ *
+ * Returns null when no attributes record exists yet (404).
+ * Unexpected errors are propagated.
+ */
+export async function getUnitQualitativeAttributes(
+  unitId: string,
+): Promise<UnitQualitativeAttributes | null> {
+  try {
+    return await apiFetch<UnitQualitativeAttributes>(
+      `/units/${encodeURIComponent(unitId)}/pricing-attributes`,
+    );
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Create or update the qualitative pricing attributes for a unit.
+ *
+ * Returns 201 on creation, 200 on update (status is preserved in the response).
+ */
+export async function saveUnitQualitativeAttributes(
+  unitId: string,
+  data: UnitQualitativeAttributesSave,
+): Promise<UnitQualitativeAttributes> {
+  return apiFetch<UnitQualitativeAttributes>(
+    `/units/${encodeURIComponent(unitId)}/pricing-attributes`,
     {
       method: "PUT",
       body: JSON.stringify(data),
