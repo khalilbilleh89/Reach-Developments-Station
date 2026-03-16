@@ -18,13 +18,15 @@ interface UnitsTableProps {
   units: UnitListItem[];
   /** Engine-calculated pricing map keyed by unit ID. May be partial. */
   pricing: Record<string, UnitPrice | undefined>;
-  /** Formal pricing record map keyed by unit ID. May be partial. */
-  pricingRecords: Partial<Record<string, UnitPricingRecord>>;
-  /** Qualitative pricing attributes map keyed by unit ID. May be partial. */
-  attributesRecords: Partial<Record<string, UnitQualitativeAttributes>>;
+  /** Formal pricing record map keyed by unit ID. May be partial. Defaults to empty map. */
+  pricingRecords?: Partial<Record<string, UnitPricingRecord>>;
+  /** Qualitative pricing attributes map keyed by unit ID. May be partial. Defaults to empty map. */
+  attributesRecords?: Partial<Record<string, UnitQualitativeAttributes>>;
   onViewUnit: (unitId: string) => void;
-  onEditPricing: (unit: UnitListItem) => void;
-  onEditAttributes: (unit: UnitListItem) => void;
+  /** Called when the user clicks "Edit Pricing" for a row. No-op when omitted. */
+  onEditPricing?: (unit: UnitListItem) => void;
+  /** Called when the user clicks "Edit Attributes" for a row. No-op when omitted. */
+  onEditAttributes?: (unit: UnitListItem) => void;
 }
 
 /** Map a backend UnitStatus value to the corresponding CSS module class. */
@@ -58,7 +60,15 @@ function statusClass(status: string): string {
  * All monetary values are formatted using the record's own `currency` field
  * so that non-AED records display correctly.
  */
-export function UnitsTable({ units, pricing, pricingRecords, attributesRecords, onViewUnit, onEditPricing, onEditAttributes }: UnitsTableProps) {
+export function UnitsTable({
+  units,
+  pricing,
+  pricingRecords = {},
+  attributesRecords = {},
+  onViewUnit,
+  onEditPricing,
+  onEditAttributes,
+}: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -224,22 +234,26 @@ export function UnitsTable({ units, pricing, pricingRecords, attributesRecords, 
                     : <span aria-label="Not set">—</span>}
                 </td>
                 <td style={{ display: "flex", gap: "0.5rem" }}>
-                  <button
-                    type="button"
-                    className={styles.actionBtn}
-                    onClick={() => onEditPricing(unit)}
-                    aria-label={`Edit pricing for unit ${unit.unit_number}`}
-                  >
-                    Edit Pricing
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.actionBtn}
-                    onClick={() => onEditAttributes(unit)}
-                    aria-label={`Edit attributes for unit ${unit.unit_number}`}
-                  >
-                    Edit Attributes
-                  </button>
+                  {onEditPricing && (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => onEditPricing(unit)}
+                      aria-label={`Edit pricing for unit ${unit.unit_number}`}
+                    >
+                      Edit Pricing
+                    </button>
+                  )}
+                  {onEditAttributes && (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => onEditAttributes(unit)}
+                      aria-label={`Edit attributes for unit ${unit.unit_number}`}
+                    >
+                      Edit Attributes
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={styles.actionBtn}

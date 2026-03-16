@@ -4,10 +4,11 @@ units.api
 CRUD API router for the Unit entity.
 
 Provides two route groups:
-  /api/v1/floors/{floor_id}/units  — floor-scoped unit listing and creation
-  /api/v1/units                    — flat list with optional ?floor_id= filter
-  /api/v1/units/{unit_id}          — individual unit operations (get, update, delete)
-  /api/v1/units/{unit_id}/pricing  — per-unit formal pricing record (get, put)
+  /api/v1/floors/{floor_id}/units           — floor-scoped unit listing and creation
+  /api/v1/units                             — flat list with optional ?floor_id= filter
+  /api/v1/units/{unit_id}                   — individual unit operations (get, update, delete)
+  /api/v1/units/{unit_id}/pricing           — per-unit formal pricing record (get, put)
+  /api/v1/units/{unit_id}/pricing-attributes — per-unit qualitative pricing attributes (get, put)
 """
 
 from typing import Annotated, Optional

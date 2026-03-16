@@ -73,8 +73,8 @@ export function EditAttributesModal({
   const [viewType, setViewType] = useState<ViewType | "">(
     existing?.view_type ?? "",
   );
-  const [cornerUnit, setCornerUnit] = useState<boolean>(
-    existing?.corner_unit ?? false,
+  const [cornerUnit, setCornerUnit] = useState<boolean | null>(
+    existing?.corner_unit ?? null,
   );
   const [floorCategory, setFloorCategory] = useState<FloorPremiumCategory | "">(
     existing?.floor_premium_category ?? "",
@@ -85,8 +85,8 @@ export function EditAttributesModal({
   const [outdoorPremium, setOutdoorPremium] = useState<OutdoorAreaPremium | "">(
     existing?.outdoor_area_premium ?? "",
   );
-  const [upgradeFlag, setUpgradeFlag] = useState<boolean>(
-    existing?.upgrade_flag ?? false,
+  const [upgradeFlag, setUpgradeFlag] = useState<boolean | null>(
+    existing?.upgrade_flag ?? null,
   );
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -95,11 +95,11 @@ export function EditAttributesModal({
   // Re-initialise state when the existing record changes
   useEffect(() => {
     setViewType(existing?.view_type ?? "");
-    setCornerUnit(existing?.corner_unit ?? false);
+    setCornerUnit(existing?.corner_unit ?? null);
     setFloorCategory(existing?.floor_premium_category ?? "");
     setOrientation(existing?.orientation ?? "");
     setOutdoorPremium(existing?.outdoor_area_premium ?? "");
-    setUpgradeFlag(existing?.upgrade_flag ?? false);
+    setUpgradeFlag(existing?.upgrade_flag ?? null);
     setNotes(existing?.notes ?? "");
     setError(null);
   }, [existing]);
@@ -238,36 +238,46 @@ export function EditAttributesModal({
             </div>
           </div>
 
-          {/* Corner Unit + Upgrade Flag toggles */}
+          {/* Corner Unit + Upgrade Flag tri-state selects */}
           <div className={styles.formRow}>
             <div className={styles.formField}>
-              <label className={styles.formLabel}>Corner Unit</label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={cornerUnit}
-                  onChange={(e) => setCornerUnit(e.target.checked)}
-                  disabled={submitting}
-                />
-                {cornerUnit ? "Yes — corner unit" : "No — standard position"}
+              <label htmlFor="ea-corner-unit" className={styles.formLabel}>
+                Corner Unit
               </label>
+              <select
+                id="ea-corner-unit"
+                className={styles.formSelect}
+                value={cornerUnit === null ? "" : cornerUnit ? "true" : "false"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCornerUnit(v === "" ? null : v === "true");
+                }}
+                disabled={submitting}
+              >
+                <option value="">— Not set —</option>
+                <option value="true">Yes — corner unit</option>
+                <option value="false">No — standard position</option>
+              </select>
             </div>
 
             <div className={styles.formField}>
-              <label className={styles.formLabel}>Upgrade Flag</label>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={upgradeFlag}
-                  onChange={(e) => setUpgradeFlag(e.target.checked)}
-                  disabled={submitting}
-                />
-                {upgradeFlag ? "Yes — upgraded finishes" : "No — standard finishes"}
+              <label htmlFor="ea-upgrade-flag" className={styles.formLabel}>
+                Upgrade Flag
               </label>
+              <select
+                id="ea-upgrade-flag"
+                className={styles.formSelect}
+                value={upgradeFlag === null ? "" : upgradeFlag ? "true" : "false"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setUpgradeFlag(v === "" ? null : v === "true");
+                }}
+                disabled={submitting}
+              >
+                <option value="">— Not set —</option>
+                <option value="true">Yes — upgraded finishes</option>
+                <option value="false">No — standard finishes</option>
+              </select>
             </div>
           </div>
 

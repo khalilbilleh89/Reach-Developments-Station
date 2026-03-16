@@ -29,9 +29,13 @@ class UnitQualitativeAttributesRepository:
     def upsert_for_unit(
         self, unit_id: str, data: UnitQualitativeAttributesCreate
     ) -> UnitQualitativeAttributes:
-        """Create or update qualitative attributes for a unit (one record per unit)."""
+        """Create or update qualitative attributes for a unit (one record per unit).
+
+        Uses exclude_unset=True so that omitted fields are left unchanged on update.
+        Clients must send explicit null to clear a field.
+        """
         existing = self.get_by_unit_id(unit_id)
-        payload = data.model_dump(exclude_unset=False)
+        payload = data.model_dump(exclude_unset=True)
         if existing:
             for field, value in payload.items():
                 setattr(existing, field, value)

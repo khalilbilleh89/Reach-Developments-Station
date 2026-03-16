@@ -22,6 +22,10 @@
  *   DELETE /units/{unitId}                       → delete unit
  *   GET    /pricing/unit/{unitId}                → calculated unit price
  *   GET    /pricing/unit/{unitId}/attributes     → pricing attributes
+ *   GET    /units/{unitId}/pricing               → formal per-unit pricing record
+ *   PUT    /units/{unitId}/pricing               → create or update pricing record
+ *   GET    /units/{unitId}/pricing-attributes    → qualitative pricing attributes
+ *   PUT    /units/{unitId}/pricing-attributes    → create or update qualitative attributes
  */
 
 import { apiFetch, ApiError } from "./api-client";
