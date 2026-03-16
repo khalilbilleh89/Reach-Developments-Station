@@ -97,3 +97,18 @@ class ReservationRepository:
         self.db.commit()
         self.db.refresh(reservation)
         return reservation
+
+    def update_status(self, reservation_id: str, new_status: str) -> Optional[UnitReservation]:
+        """Update the status field of a reservation by ID and return the updated record.
+
+        Returns None if the reservation does not exist.
+        """
+        reservation = self.get_by_id(reservation_id)
+        if reservation is None:
+            return None
+        reservation.status = new_status
+        return self.save(reservation)
+
+    def get_active_reservation_for_unit(self, unit_id: str) -> Optional[UnitReservation]:
+        """Alias for get_active_by_unit — return the ACTIVE reservation for a unit."""
+        return self.get_active_by_unit(unit_id)

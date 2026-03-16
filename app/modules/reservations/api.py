@@ -20,6 +20,7 @@ from app.modules.reservations.schemas import (
     ReservationCreate,
     ReservationListResponse,
     ReservationResponse,
+    ReservationStatusUpdate,
     ReservationUpdate,
 )
 from app.modules.reservations.service import ReservationService
@@ -143,7 +144,38 @@ def convert_reservation(
 ) -> ReservationResponse:
     """Mark a reservation as converted into a formal sales contract.
 
-    Returns 409 if the reservation is not in ACTIVE status.
+    Returns 422 if the reservation is not in ACTIVE status.
     Returns 404 if the reservation does not exist.
     """
     return svc.convert_to_contract(reservation_id)
+
+
+# ---------------------------------------------------------------------------
+# Generic status transition
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/reservations/{reservation_id}/status",
+    response_model=ReservationResponse,
+    summary="Transition a reservation to a new lifecycle status",
+)
+def update_reservation_status(
+    reservation_id: str,
+    data: ReservationStatusUpdate,
+    svc: ReservationService = Depends(_svc),
+) -> ReservationResponse:
+    """Transition a reservation through its lifecycle state machine.
+
+    Valid transitions:
+      draft     → active, cancelled
+      active    → expired, cancelled, converted
+      expired   → cancelled
+      cancelled → (terminal — no transitions allowed)
+      converted → (terminal — no transitions allowed)
+
+    Returns 422 if the transition is not permitted by the state machine.
+    Returns 409 if activating would create a duplicate active reservation.
+    Returns 404 if the reservation does not exist.
+    """
+    return svc.transition_reservation_status(reservation_id, data.status)

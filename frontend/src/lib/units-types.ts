@@ -18,11 +18,12 @@
  * Possible lifecycle states for a unit reservation.
  * Values mirror the backend ReservationStatus enum.
  */
-export type ReservationStatus = "active" | "expired" | "cancelled" | "converted";
+export type ReservationStatus = "draft" | "active" | "expired" | "cancelled" | "converted";
 
 /** Human-readable label for a ReservationStatus value. */
 export function reservationStatusLabel(status: ReservationStatus | string): string {
   const labels: Record<string, string> = {
+    draft: "Draft",
     active: "Reserved",
     expired: "Expired",
     cancelled: "Cancelled",
