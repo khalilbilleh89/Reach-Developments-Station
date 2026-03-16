@@ -31,6 +31,8 @@ jest.mock("next/link", () => {
 });
 
 // CSS modules are handled via Jest configuration (e.g., moduleNameMapper).
+jest.mock("@/styles/units-pricing.module.css", () => ({}));
+jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
 
 // Mock format-utils
 jest.mock("@/lib/format-utils", () => ({
@@ -48,6 +50,7 @@ jest.mock("@/lib/units-api", () => ({
   listProjectReservations: jest.fn(),
   saveUnitPricingRecord: jest.fn(),
   saveUnitQualitativeAttributes: jest.fn(),
+  saveUnitEngineInputs: jest.fn(),
 }));
 
 // Import ApiError for constructing error fixtures

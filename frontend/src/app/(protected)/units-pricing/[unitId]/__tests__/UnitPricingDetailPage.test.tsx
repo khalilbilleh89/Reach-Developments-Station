@@ -156,7 +156,7 @@ describe("UnitPricingDetailView", () => {
       screen.getByText(/Required pricing attributes are missing/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Edit Attributes/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Edit Pricing/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Edit Engine Inputs/i })).toBeInTheDocument();
   });
 
   it("shows specific missing fields when readiness provides them", async () => {
@@ -179,7 +179,7 @@ describe("UnitPricingDetailView", () => {
     expect(screen.getAllByText(/base price per sqm/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/floor premium/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: /Edit Attributes/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Edit Pricing/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Edit Engine Inputs/i })).toBeInTheDocument();
   });
 
   it("shows setup state when pricing record is missing", async () => {

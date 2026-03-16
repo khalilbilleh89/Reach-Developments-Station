@@ -16,6 +16,7 @@ import {
   saveUnitPricingRecord,
   getProjectPricingAttributes,
   saveUnitQualitativeAttributes,
+  saveUnitEngineInputs,
   listProjectReservations,
 } from "@/lib/units-api";
 import type {
@@ -23,10 +24,12 @@ import type {
   Reservation,
   UnitFiltersState,
   UnitListItem,
+  UnitPricingAttributes,
   UnitPricingRecord,
   UnitPricingRecordSave,
   UnitQualitativeAttributes,
   UnitQualitativeAttributesSave,
+  UnitEngineInputsSave,
 } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -64,6 +67,7 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
   const [units, setUnits] = useState<UnitListItem[]>([]);
   const [pricingRecords, setPricingRecords] = useState<Partial<Record<string, UnitPricingRecord>>>({});
   const [attributesRecords, setAttributesRecords] = useState<Partial<Record<string, UnitQualitativeAttributes>>>({});
+  const [engineInputsRecords, setEngineInputsRecords] = useState<Partial<Record<string, UnitPricingAttributes>>>({});
   const [reservations, setReservations] = useState<Partial<Record<string, Reservation>>>({});
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
@@ -73,6 +77,10 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
   // Edit pricing modal state
   const [editingUnit, setEditingUnit] = useState<UnitListItem | null>(null);
   const [editingRecord, setEditingRecord] = useState<UnitPricingRecord | null>(null);
+
+  // Edit engine inputs modal state
+  const [editingEngineUnit, setEditingEngineUnit] = useState<UnitListItem | null>(null);
+  const [editingEngineAttrs, setEditingEngineAttrs] = useState<UnitPricingAttributes | null>(null);
 
   // Edit attributes modal state
   const [editingAttrsUnit, setEditingAttrsUnit] = useState<UnitListItem | null>(null);
@@ -110,6 +118,7 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
     setUnits([]);
     setPricingRecords({});
     setAttributesRecords({});
+    setEngineInputsRecords({});
     setReservations({});
 
     getUnitsByProject(selectedProjectId)
@@ -197,8 +206,11 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
     } else if (initialAction === "editPricing") {
       setEditingUnit(targetUnit);
       setEditingRecord(pricingRecords[targetUnit.id] ?? null);
+    } else if (initialAction === "editEngineInputs") {
+      setEditingEngineUnit(targetUnit);
+      setEditingEngineAttrs(engineInputsRecords[targetUnit.id] ?? null);
     }
-  }, [initialAction, initialTargetId, units, unitsLoading, pricingRecords, attributesRecords]);
+  }, [initialAction, initialTargetId, units, unitsLoading, pricingRecords, attributesRecords, engineInputsRecords]);
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedProjectId(e.target.value);
@@ -256,6 +268,27 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
   const handleCloseAttrsModal = useCallback(() => {
     setEditingAttrsUnit(null);
     setEditingAttrsRecord(null);
+  }, []);
+
+  const handleEditEngineInputs = useCallback(
+    (unit: UnitListItem) => {
+      setEditingEngineUnit(unit);
+      setEditingEngineAttrs(engineInputsRecords[unit.id] ?? null);
+    },
+    [engineInputsRecords],
+  );
+
+  const handleSaveEngineInputs = useCallback(
+    async (unitId: string, data: UnitEngineInputsSave) => {
+      const saved = await saveUnitEngineInputs(unitId, data);
+      setEngineInputsRecords((prev) => ({ ...prev, [unitId]: saved }));
+    },
+    [],
+  );
+
+  const handleCloseEngineModal = useCallback(() => {
+    setEditingEngineUnit(null);
+    setEditingEngineAttrs(null);
   }, []);
 
   // Apply all client-side filters: status, unit_type, and price range
@@ -344,6 +377,7 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
                 onViewUnit={handleViewUnit}
                 onEditPricing={handleEditPricing}
                 onEditAttributes={handleEditAttributes}
+                onEditEngineInputs={handleEditEngineInputs}
               />
             </>
           )}
@@ -369,6 +403,17 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
           existing={editingAttrsRecord}
           onSave={handleSaveAttributes}
           onClose={handleCloseAttrsModal}
+        />
+      )}
+
+      {/* Edit Engine Inputs Modal */}
+      {editingEngineUnit && (
+        <EditEngineInputsModal
+          unitId={editingEngineUnit.id}
+          unitNumber={editingEngineUnit.unit_number}
+          existing={editingEngineAttrs}
+          onSave={handleSaveEngineInputs}
+          onClose={handleCloseEngineModal}
         />
       )}
     </PageContainer>

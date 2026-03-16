@@ -23,8 +23,10 @@ interface UnitsTableProps {
   /** Reservation map keyed by unit ID (most relevant reservation per unit). May be partial. */
   reservations?: Partial<Record<string, Reservation>>;
   onViewUnit: (unitId: string) => void;
-  /** Called when the user clicks "Edit Pricing" for a row. No-op when omitted. */
+  /** Called when the user clicks "Edit Pricing Record" for a row. No-op when omitted. */
   onEditPricing?: (unit: UnitListItem) => void;
+  /** Called when the user clicks "Edit Engine Inputs" for a row. No-op when omitted. */
+  onEditEngineInputs?: (unit: UnitListItem) => void;
   /** Called when the user clicks "Edit Attributes" for a row. No-op when omitted. */
   onEditAttributes?: (unit: UnitListItem) => void;
 }
@@ -78,6 +80,7 @@ export function UnitsTable({
   reservations = {},
   onViewUnit,
   onEditPricing,
+  onEditEngineInputs,
   onEditAttributes,
 }: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
@@ -284,14 +287,24 @@ export function UnitsTable({
                     : <span aria-label="Not set">—</span>}
                 </td>
                 <td style={{ display: "flex", gap: "0.5rem" }}>
+                  {onEditEngineInputs && (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => onEditEngineInputs(unit)}
+                      aria-label={`Edit engine inputs for unit ${unit.unit_number}`}
+                    >
+                      Edit Engine Inputs
+                    </button>
+                  )}
                   {onEditPricing && (
                     <button
                       type="button"
                       className={styles.actionBtn}
                       onClick={() => onEditPricing(unit)}
-                      aria-label={`Edit pricing for unit ${unit.unit_number}`}
+                      aria-label={`Edit pricing record for unit ${unit.unit_number}`}
                     >
-                      {r ? "Edit Pricing" : "Add Pricing"}
+                      {r ? "Edit Pricing Record" : "Add Pricing Record"}
                     </button>
                   )}
                   {onEditAttributes && (
