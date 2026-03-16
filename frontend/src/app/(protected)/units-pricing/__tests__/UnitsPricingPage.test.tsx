@@ -30,10 +30,7 @@ jest.mock("next/link", () => {
   return MockLink;
 });
 
-// Mock CSS modules
-jest.mock("@/styles/units-pricing.module.css", () => ({}));
-jest.mock("@/styles/projects.module.css", () => ({}));
-jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
+// CSS modules are handled via Jest configuration (e.g., moduleNameMapper).
 
 // Mock format-utils
 jest.mock("@/lib/format-utils", () => ({
