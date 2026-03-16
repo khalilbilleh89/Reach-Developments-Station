@@ -31,6 +31,7 @@ import app.modules.registration.models  # noqa: F401
 import app.modules.sales_exceptions.models  # noqa: F401
 import app.modules.commission.models  # noqa: F401
 import app.modules.cashflow.models  # noqa: F401
+import app.modules.reservations.models  # noqa: F401
 
 from app.main import app
 

@@ -6,10 +6,12 @@ import type { Project } from "@/lib/projects-types";
 import type { Building } from "@/lib/buildings-types";
 import type { Floor } from "@/lib/floors-types";
 import type { UnitListItem, UnitCreateForFloor, UnitUpdate } from "@/lib/units-types";
+import type { Reservation, ReservationCreate } from "@/lib/units-types";
 import { listPhases, createPhase, updatePhase, deletePhase } from "@/lib/phases-api";
 import { listBuildings, createBuilding, updateBuilding, deleteBuilding } from "@/lib/buildings-api";
 import { listFloors, createFloor, updateFloor, deleteFloor } from "@/lib/floors-api";
 import { listUnitsByFloor, createUnit, updateUnit, deleteUnit } from "@/lib/units-api";
+import { createReservation, listProjectReservations } from "@/lib/units-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
@@ -19,6 +21,7 @@ import { CreatePhaseModal } from "@/app/(protected)/projects/[id]/create-phase-m
 import { CreateBuildingModal } from "@/components/buildings/create-building-modal";
 import { CreateFloorModal } from "@/components/floors/CreateFloorModal";
 import { CreateUnitModal } from "@/components/units/CreateUnitModal";
+import { ReserveUnitModal } from "@/components/units/ReserveUnitModal";
 import type { PhaseCreate, PhaseUpdate } from "@/lib/phases-types";
 import type { BuildingCreate, BuildingUpdate } from "@/lib/buildings-types";
 import type { FloorCreate, FloorUpdate } from "@/lib/floors-types";
@@ -100,6 +103,11 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
   const [deleteConfirmUnit, setDeleteConfirmUnit] = useState<UnitListItem | null>(null);
   const [deleteUnitError, setDeleteUnitError] = useState<string | null>(null);
 
+  // Reservation state
+  const [reserveUnit, setReserveUnit] = useState<UnitListItem | null>(null);
+  const [activeReservations, setActiveReservations] = useState<Map<string, Reservation>>(new Map());
+  const [reservationError, setReservationError] = useState<string | null>(null);
+
   const fetchPhases = () => {
     setPhasesLoading(true);
     setPhasesError(null);
@@ -168,6 +176,25 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       .finally(() => setUnitsLoading(false));
   };
 
+  const fetchActiveReservations = (projectId: string) => {
+    listProjectReservations(projectId)
+      .then((resp) => {
+        const map = new Map<string, Reservation>();
+        for (const r of resp.items) {
+          if (r.status === "active") {
+            map.set(r.unit_id, r);
+          }
+        }
+        setActiveReservations(map);
+        setReservationError(null);
+      })
+      .catch((err: unknown) => {
+        setReservationError(
+          err instanceof Error ? err.message : "Failed to load reservation data."
+        );
+      });
+  };
+
   useEffect(() => {
     fetchPhases();
     // Reset all dependent state when project changes
@@ -198,6 +225,9 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     setEditUnit(null);
     setDeleteConfirmUnit(null);
     setDeleteUnitError(null);
+    setReserveUnit(null);
+    setActiveReservations(new Map());
+    setReservationError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
@@ -235,6 +265,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedFloorId]);
+
+  useEffect(() => {
+    if (activeTab === "units") {
+      fetchActiveReservations(project.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, project.id]);
 
   const handleCreatePhase = async (data: PhaseCreate | PhaseUpdate) => {
     await createPhase(project.id, data as PhaseCreate);
@@ -337,6 +374,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
     } catch (err: unknown) {
       setDeleteUnitError(err instanceof Error ? err.message : "Failed to delete unit.");
     }
+  };
+
+  const handleCreateReservation = async (data: ReservationCreate) => {
+    setReservationError(null);
+    await createReservation(data);
+    setReserveUnit(null);
+    fetchActiveReservations(project.id);
   };
 
   return (
@@ -714,6 +758,11 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
               {deleteUnitError}
             </div>
           )}
+          {reservationError && (
+            <div className={styles.errorBanner} role="alert">
+              {reservationError}
+            </div>
+          )}
 
           {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length === 0 && (
             <div className={styles.emptyState}>
@@ -737,11 +786,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             ) : (
               <UnitsInventoryTable
                 units={units}
+                activeReservations={activeReservations}
                 onEdit={(unit) => {
                   setEditUnit(unit);
                   setUnitModalOpen(true);
                 }}
                 onDelete={(unit) => setDeleteConfirmUnit(unit)}
+                onReserve={(unit) => setReserveUnit(unit)}
               />
             )
           )}
@@ -891,6 +942,18 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
           onClose={() => {
             setUnitModalOpen(false);
             setEditUnit(null);
+          }}
+        />
+      )}
+
+      {/* Reserve Unit modal */}
+      {reserveUnit && (
+        <ReserveUnitModal
+          unit={reserveUnit}
+          onSubmit={handleCreateReservation}
+          onClose={() => {
+            setReserveUnit(null);
+            setReservationError(null);
           }}
         />
       )}
