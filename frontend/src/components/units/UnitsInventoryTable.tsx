@@ -34,9 +34,8 @@ function reservationStatusClass(status: string): string {
     case "active":
       return styles.statusPipeline;
     case "expired":
-      return styles.statusDraft ?? styles.statusPipeline;
     case "cancelled":
-      return styles.statusDraft ?? styles.statusPipeline;
+      return styles.statusPipeline;
     case "converted":
       return styles.statusCompleted;
     default:

@@ -374,22 +374,6 @@ export async function getReservation(
 }
 
 /**
- * Fetch the active reservation for a unit, or null if none exists.
- */
-export async function getActiveReservationByUnit(
-  unitId: string,
-): Promise<Reservation | null> {
-  try {
-    const data = await apiFetch<ReservationListResponse>(
-      `/projects/_all/reservations?unit_id=${encodeURIComponent(unitId)}`,
-    );
-    return data.items.find((r) => r.status === "active") ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Cancel an active reservation.
  *
  * Throws ApiError with status 409 if the reservation is not active.

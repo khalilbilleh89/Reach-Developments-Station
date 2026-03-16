@@ -65,7 +65,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
     const feeVal = reservationFee.trim()
       ? parseFloat(reservationFee)
       : null;
-    if (reservationFee.trim() && (isNaN(feeVal!) || feeVal! < 0)) {
+    if (feeVal !== null && (isNaN(feeVal) || feeVal < 0)) {
       setError("Reservation fee must be a non-negative number.");
       return;
     }

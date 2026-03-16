@@ -207,7 +207,7 @@ class ReservationService:
             expires = res.expires_at
             if expires is None:
                 continue
-            # SQLite returns naive datetimes; treat them as UTC for comparison.
+            # Normalize naive datetimes (e.g. from SQLite) to UTC before comparing.
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=timezone.utc)
             if expires <= now:
