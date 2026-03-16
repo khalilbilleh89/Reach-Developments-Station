@@ -10,6 +10,7 @@ Responsibilities:
 
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.receivables.models import Receivable
@@ -73,13 +74,21 @@ class ReceivableRepository:
         )
 
     def bulk_create(self, receivables: List[Receivable]) -> List[Receivable]:
-        """Persist a list of new receivable records in a single transaction."""
-        for r in receivables:
-            self.db.add(r)
-        self.db.commit()
-        for r in receivables:
-            self.db.refresh(r)
-        return receivables
+        """Persist a list of new receivable records in a single transaction.
+
+        Rolls back and re-raises ``IntegrityError`` so the service layer can
+        translate it into a 409 response (e.g. concurrent duplicate generation).
+        """
+        try:
+            for r in receivables:
+                self.db.add(r)
+            self.db.commit()
+            for r in receivables:
+                self.db.refresh(r)
+            return receivables
+        except IntegrityError:
+            self.db.rollback()
+            raise
 
     def save(self, receivable: Receivable) -> Receivable:
         """Persist changes to an existing receivable record."""

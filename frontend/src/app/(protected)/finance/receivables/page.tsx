@@ -5,6 +5,7 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { listProjectReceivables } from "@/lib/receivables-api";
 import { receivableStatusLabel } from "@/lib/receivables-types";
 import type { Receivable, ReceivableListResponse } from "@/lib/receivables-types";
+import { receivableStatusBadgeClass } from "@/lib/receivables-ui";
 import { getProjects } from "@/lib/finance-dashboard-api";
 import type { Project } from "@/lib/finance-dashboard-api";
 import { formatCurrency } from "@/lib/format-utils";
@@ -94,24 +95,6 @@ export default function FinanceReceivablesPage() {
   const filtered = statusFilter
     ? receivables.filter((r) => r.status === statusFilter)
     : receivables;
-
-  function statusClass(status: string): string {
-    switch (status) {
-      case "paid":
-        return styles.statusPaid;
-      case "partially_paid":
-        return styles.statusPartiallyPaid;
-      case "overdue":
-        return styles.statusOverdue;
-      case "due":
-        return styles.statusDue;
-      case "cancelled":
-        return styles.statusCancelled;
-      case "pending":
-      default:
-        return styles.statusPending;
-    }
-  }
 
   return (
     <PageContainer
@@ -238,7 +221,7 @@ export default function FinanceReceivablesPage() {
                   <td>{row.currency}</td>
                   <td>
                     <span
-                      className={`${styles.statusBadge} ${statusClass(row.status)}`}
+                      className={`${styles.statusBadge} ${receivableStatusBadgeClass(row.status)}`}
                     >
                       {receivableStatusLabel(row.status)}
                     </span>

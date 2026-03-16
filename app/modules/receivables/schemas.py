@@ -9,12 +9,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-
-# ---------------------------------------------------------------------------
-# Status enum (string literals for schema validation)
-# ---------------------------------------------------------------------------
-
-ReceivableStatusLiteral = str  # validated in service layer against enum values
+from app.shared.enums.finance import ReceivableStatus
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +30,7 @@ class ReceivableResponse(BaseModel):
     amount_paid: float
     balance_due: float
     currency: str
-    status: str
+    status: ReceivableStatus
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime

@@ -101,11 +101,14 @@ export default function ContractDetailView() {
       const data = await listContractReceivables(contractId);
       setReceivables(data.items);
     } catch (err: unknown) {
-      if (err instanceof ApiError && err.status === 404) {
-        setReceivables([]);
-      } else {
-        setReceivablesError("Failed to load receivables.");
-      }
+      // 404 means the contract itself was not found — that is a real error,
+      // not an "empty receivables" state. A contract with no receivables yet
+      // returns 200 with total=0.
+      setReceivablesError(
+        err instanceof ApiError && err.message
+          ? err.message
+          : "Failed to load receivables.",
+      );
     } finally {
       setReceivablesLoading(false);
     }

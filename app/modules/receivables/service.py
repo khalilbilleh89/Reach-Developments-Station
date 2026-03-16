@@ -14,6 +14,7 @@ Business rules enforced here:
       paid          → balance_due == 0
       cancelled     → set explicitly (contract/plan cancellation)
   - balance_due = amount_due - amount_paid (maintained by service)
+  - Monetary comparisons use integer cents to avoid floating-point drift.
 
 No collections engine, no cash receipt ledger, no cashflow forecast updates.
 """
@@ -24,6 +25,7 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.receivables.models import Receivable
@@ -42,6 +44,26 @@ from app.shared.enums.finance import ReceivableStatus
 _VALID_STATUSES = frozenset(s.value for s in ReceivableStatus)
 
 
+# ---------------------------------------------------------------------------
+# Money helpers — cent-based arithmetic to avoid float drift
+# ---------------------------------------------------------------------------
+
+
+def _to_cents(amount: float) -> int:
+    """Convert a monetary float to integer cents.
+
+    The inner ``round(float(amount), 2)`` normalises the value to 2dp first
+    (using Python's banker's rounding), then multiplies by 100 and rounds
+    again to handle any residual floating-point representation error.
+    """
+    return round(round(float(amount), 2) * 100)
+
+
+def _from_cents(cents: int) -> float:
+    """Convert integer cents back to a 2dp float."""
+    return round(cents / 100, 2)
+
+
 class ReceivableService:
     def __init__(self, db: Session) -> None:
         self.repo = ReceivableRepository(db)
@@ -56,7 +78,9 @@ class ReceivableService:
 
         Raises 404 if the contract does not exist.
         Raises 404 if the contract has no payment installments.
-        Raises 409 if receivables already exist for this contract.
+        Raises 409 if receivables already exist for this contract (including
+        concurrency-safe detection via the DB unique constraint on
+        installment_id).
         """
         contract = self._require_contract(contract_id)
 
@@ -76,7 +100,8 @@ class ReceivableService:
                 ),
             )
 
-        # Guard: block duplicate generation
+        # Guard: block duplicate generation (pre-check; unique constraint is
+        # the authoritative guardrail for concurrent requests).
         existing = self.repo.list_by_contract(contract_id)
         if existing:
             raise HTTPException(
@@ -90,9 +115,9 @@ class ReceivableService:
         today = date.today()
         new_receivables: List[Receivable] = []
         for inst in installments:
-            amount_due = float(inst.due_amount)
-            balance_due = amount_due  # amount_paid starts at 0
-            status = self._derive_status(inst.due_date, 0.0, amount_due, today)
+            due_cents = _to_cents(float(inst.due_amount))
+            amount_due = _from_cents(due_cents)
+            status = self._derive_status(inst.due_date, 0, due_cents, today)
             r = Receivable(
                 contract_id=contract.id,
                 payment_plan_id=inst.template_id,
@@ -101,13 +126,24 @@ class ReceivableService:
                 due_date=inst.due_date,
                 amount_due=amount_due,
                 amount_paid=0.0,
-                balance_due=balance_due,
+                balance_due=amount_due,
                 currency="AED",
                 status=status,
             )
             new_receivables.append(r)
 
-        persisted = self.repo.bulk_create(new_receivables)
+        try:
+            persisted = self.repo.bulk_create(new_receivables)
+        except IntegrityError:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A receivable for one or more installments in contract "
+                    f"{contract_id!r} already exists. "
+                    "Concurrent generation detected — please refresh and retry."
+                ),
+            )
+
         items = [ReceivableResponse.model_validate(r) for r in persisted]
         return GenerateReceivablesResponse(
             contract_id=contract_id,
@@ -160,8 +196,8 @@ class ReceivableService:
         for r in candidates:
             new_status = self._derive_status(
                 r.due_date,
-                float(r.amount_paid),
-                float(r.amount_due),
+                _to_cents(float(r.amount_paid)),
+                _to_cents(float(r.amount_due)),
                 effective_today,
             )
             if new_status != r.status:
@@ -178,27 +214,33 @@ class ReceivableService:
     def apply_payment_update(
         self, receivable_id: str, payload: ReceivablePaymentUpdate
     ) -> ReceivableResponse:
-        """Record a manual payment amount and recalculate balance/status."""
+        """Record a manual payment amount and recalculate balance/status.
+
+        Monetary comparisons are performed in integer cents to prevent
+        floating-point drift in the overpayment check and balance calculation.
+        """
         r = self.repo.get_by_id(receivable_id)
         if not r:
             raise HTTPException(
                 status_code=404,
                 detail=f"Receivable {receivable_id!r} not found.",
             )
-        amount_due = float(r.amount_due)
-        new_paid = payload.amount_paid
-        if new_paid > amount_due:
+        due_cents = _to_cents(float(r.amount_due))
+        new_paid_cents = _to_cents(payload.amount_paid)
+        if new_paid_cents > due_cents:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"amount_paid ({new_paid}) exceeds amount_due ({amount_due}). "
+                    f"amount_paid ({_from_cents(new_paid_cents):.2f}) exceeds "
+                    f"amount_due ({_from_cents(due_cents):.2f}). "
                     "Overpayment is not supported."
                 ),
             )
-        r.amount_paid = new_paid
-        r.balance_due = round(amount_due - new_paid, 2)
+        balance_cents = due_cents - new_paid_cents
+        r.amount_paid = _from_cents(new_paid_cents)
+        r.balance_due = _from_cents(balance_cents)
         r.status = self._derive_status(
-            r.due_date, new_paid, amount_due, date.today()
+            r.due_date, new_paid_cents, due_cents, date.today()
         )
         if payload.notes is not None:
             r.notes = payload.notes
@@ -249,24 +291,26 @@ class ReceivableService:
     @staticmethod
     def _derive_status(
         due_date: date,
-        amount_paid: float,
-        amount_due: float,
+        paid_cents: int,
+        due_cents: int,
         today: date,
     ) -> str:
-        """Derive receivable status from payment state and due date.
+        """Derive receivable status from cent-based payment state and due date.
+
+        All monetary comparisons use integer cents to avoid float drift.
 
         Status logic:
-          paid          → balance_due == 0 (regardless of date)
-          partially_paid → amount_paid > 0 and balance_due > 0
+          paid          → balance == 0 (regardless of date)
+          partially_paid → paid > 0 and balance > 0
           overdue       → due date passed (today > due_date) and balance > 0
           due           → due date is today and unpaid
           pending       → due date in future and unpaid
         """
-        balance = round(amount_due - amount_paid, 2)
-        if balance <= 0:
+        balance_cents = due_cents - paid_cents
+        if balance_cents <= 0:
             return ReceivableStatus.PAID.value
-        if amount_paid > 0:
-            # Partially paid — still overdue if past due
+        if paid_cents > 0:
+            # Partially paid — still overdue if past due date
             if today > due_date:
                 return ReceivableStatus.OVERDUE.value
             return ReceivableStatus.PARTIALLY_PAID.value
@@ -280,9 +324,10 @@ class ReceivableService:
     @staticmethod
     def _build_list_response(rows: List[Receivable]) -> ReceivableListResponse:
         items = [ReceivableResponse.model_validate(r) for r in rows]
-        total_amount_due = round(sum(i.amount_due for i in items), 2)
-        total_amount_paid = round(sum(i.amount_paid for i in items), 2)
-        total_balance_due = round(sum(i.balance_due for i in items), 2)
+        # Sum in integer cents to avoid float accumulation drift
+        total_amount_due = _from_cents(sum(_to_cents(i.amount_due) for i in items))
+        total_amount_paid = _from_cents(sum(_to_cents(i.amount_paid) for i in items))
+        total_balance_due = _from_cents(sum(_to_cents(i.balance_due) for i in items))
         return ReceivableListResponse(
             items=items,
             total=len(items),

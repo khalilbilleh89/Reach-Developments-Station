@@ -69,6 +69,8 @@ def upgrade() -> None:
 
     # Indexes for common query patterns
     op.create_index("ix_receivables_contract_id", "receivables", ["contract_id"])
+    op.create_index("ix_receivables_payment_plan_id", "receivables", ["payment_plan_id"])
+    op.create_index("ix_receivables_installment_id", "receivables", ["installment_id"])
     op.create_index("ix_receivables_due_date", "receivables", ["due_date"])
     op.create_index("ix_receivables_status", "receivables", ["status"])
 
@@ -98,5 +100,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_receivables_status", table_name="receivables")
     op.drop_index("ix_receivables_due_date", table_name="receivables")
+    op.drop_index("ix_receivables_installment_id", table_name="receivables")
+    op.drop_index("ix_receivables_payment_plan_id", table_name="receivables")
     op.drop_index("ix_receivables_contract_id", table_name="receivables")
     op.drop_table("receivables")

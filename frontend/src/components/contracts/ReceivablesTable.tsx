@@ -3,30 +3,12 @@
 import React from "react";
 import type { Receivable } from "@/lib/receivables-types";
 import { receivableStatusLabel } from "@/lib/receivables-types";
+import { receivableStatusBadgeClass } from "@/lib/receivables-ui";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/payment-plans.module.css";
 
 interface ReceivablesTableProps {
   receivables: Receivable[];
-}
-
-/** Map a receivable status to its CSS badge class. */
-function statusClass(status: string): string {
-  switch (status) {
-    case "paid":
-      return styles.statusPaid;
-    case "partially_paid":
-      return styles.statusPartiallyPaid;
-    case "overdue":
-      return styles.statusOverdue;
-    case "due":
-      return styles.statusDue;
-    case "cancelled":
-      return styles.statusCancelled;
-    case "pending":
-    default:
-      return styles.statusPending;
-  }
 }
 
 /**
@@ -71,7 +53,7 @@ export function ReceivablesTable({ receivables }: ReceivablesTableProps) {
               <td>{formatCurrency(row.balance_due)}</td>
               <td>
                 <span
-                  className={`${styles.statusBadge} ${statusClass(row.status)}`}
+                  className={`${styles.statusBadge} ${receivableStatusBadgeClass(row.status)}`}
                 >
                   {receivableStatusLabel(row.status)}
                 </span>

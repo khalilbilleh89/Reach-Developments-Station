@@ -208,8 +208,8 @@ def test_status_overdue_for_past_due_date(db_session: Session):
 def test_derive_status_paid_when_balance_zero():
     status = ReceivableService._derive_status(
         due_date=date(2026, 1, 1),
-        amount_paid=100_000.0,
-        amount_due=100_000.0,
+        paid_cents=10_000_000,
+        due_cents=10_000_000,
         today=date(2026, 1, 15),
     )
     assert status == ReceivableStatus.PAID.value
@@ -218,8 +218,8 @@ def test_derive_status_paid_when_balance_zero():
 def test_derive_status_partially_paid():
     status = ReceivableService._derive_status(
         due_date=date(2099, 1, 1),
-        amount_paid=50_000.0,
-        amount_due=100_000.0,
+        paid_cents=5_000_000,
+        due_cents=10_000_000,
         today=date(2026, 1, 15),
     )
     assert status == ReceivableStatus.PARTIALLY_PAID.value
@@ -228,8 +228,8 @@ def test_derive_status_partially_paid():
 def test_derive_status_overdue_partially_paid():
     status = ReceivableService._derive_status(
         due_date=date(2020, 1, 1),
-        amount_paid=50_000.0,
-        amount_due=100_000.0,
+        paid_cents=5_000_000,
+        due_cents=10_000_000,
         today=date(2026, 1, 15),
     )
     assert status == ReceivableStatus.OVERDUE.value
@@ -239,8 +239,8 @@ def test_derive_status_due_today():
     today = date.today()
     status = ReceivableService._derive_status(
         due_date=today,
-        amount_paid=0.0,
-        amount_due=100_000.0,
+        paid_cents=0,
+        due_cents=10_000_000,
         today=today,
     )
     assert status == ReceivableStatus.DUE.value
