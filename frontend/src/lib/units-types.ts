@@ -202,3 +202,51 @@ export interface Project {
   code: string;
   status: string;
 }
+
+// ---------- Unit pricing record types ------------------------------------
+
+/**
+ * Formal pricing status for a unit pricing record.
+ * Values mirror the backend pricing_status constraint in the unit_pricing table.
+ */
+export type PricingStatus = "draft" | "reviewed" | "approved";
+
+/** Human-readable label for a PricingStatus value. */
+export function pricingStatusLabel(status: PricingStatus | string): string {
+  const labels: Record<string, string> = {
+    draft: "Draft",
+    reviewed: "Reviewed",
+    approved: "Approved",
+  };
+  return labels[status] ?? status;
+}
+
+/**
+ * Formal per-unit pricing record.
+ * Returned by GET /api/v1/units/{unitId}/pricing.
+ */
+export interface UnitPricingRecord {
+  id: string;
+  unit_id: string;
+  base_price: number;
+  manual_adjustment: number;
+  final_price: number;
+  currency: string;
+  pricing_status: PricingStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Payload for creating or updating a formal per-unit pricing record.
+ * Sent to PUT /api/v1/units/{unitId}/pricing.
+ * final_price is NOT sent — it is computed server-side.
+ */
+export interface UnitPricingRecordSave {
+  base_price: number;
+  manual_adjustment?: number;
+  currency?: string;
+  pricing_status?: PricingStatus;
+  notes?: string | null;
+}

@@ -248,3 +248,43 @@ export async function deleteUnit(unitId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+// ---------- Formal unit pricing record functions -------------------------
+
+/**
+ * Fetch the formal pricing record for a unit.
+ *
+ * Returns null when the unit has no pricing record yet (404).
+ * Unexpected errors are propagated.
+ */
+export async function getUnitPricingRecord(
+  unitId: string,
+): Promise<import("./units-types").UnitPricingRecord | null> {
+  try {
+    return await apiFetch<import("./units-types").UnitPricingRecord>(
+      `/units/${encodeURIComponent(unitId)}/pricing`,
+    );
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Create or update the formal pricing record for a unit.
+ *
+ * The backend computes final_price = base_price + manual_adjustment.
+ * final_price is NOT accepted from the client.
+ */
+export async function saveUnitPricingRecord(
+  unitId: string,
+  data: import("./units-types").UnitPricingRecordSave,
+): Promise<import("./units-types").UnitPricingRecord> {
+  return apiFetch<import("./units-types").UnitPricingRecord>(
+    `/units/${encodeURIComponent(unitId)}/pricing`,
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+    },
+  );
+}
