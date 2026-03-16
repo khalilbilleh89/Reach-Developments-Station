@@ -186,9 +186,12 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
           }
         }
         setActiveReservations(map);
+        setReservationError(null);
       })
-      .catch(() => {
-        // Non-critical — silently ignore reservation load failures
+      .catch((err: unknown) => {
+        setReservationError(
+          err instanceof Error ? err.message : "Failed to load reservation data."
+        );
       });
   };
 
@@ -755,6 +758,11 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
               {deleteUnitError}
             </div>
           )}
+          {reservationError && (
+            <div className={styles.errorBanner} role="alert">
+              {reservationError}
+            </div>
+          )}
 
           {!allFloorsLoading && !allFloorsError && !selectedFloorId && allFloors.length === 0 && (
             <div className={styles.emptyState}>
@@ -948,12 +956,6 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
             setReservationError(null);
           }}
         />
-      )}
-
-      {reservationError && (
-        <div className={styles.errorBanner} role="alert">
-          {reservationError}
-        </div>
       )}
 
       {/* Delete confirmation modal for units */}

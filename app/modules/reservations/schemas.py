@@ -40,11 +40,14 @@ class ReservationCreate(BaseModel):
 
 
 class ReservationUpdate(BaseModel):
-    """Payload for partially updating an active reservation."""
+    """Payload for partially updating an active reservation.
+
+    Status transitions are NOT permitted via PATCH; use the dedicated lifecycle
+    endpoints (cancel, expire, convert) instead.
+    """
 
     notes: Optional[str] = Field(default=None, max_length=2000)
     expires_at: Optional[datetime] = None
-    status: Optional[ReservationStatus] = None
 
 
 # ---------------------------------------------------------------------------

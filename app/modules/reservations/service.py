@@ -16,6 +16,7 @@ the service boundary into API handlers.
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.reservations.repository import ReservationRepository
@@ -56,7 +57,14 @@ class ReservationService:
                 detail=f"Unit '{data.unit_id}' already has an active reservation.",
             )
 
-        reservation = self._repo.create(data)
+        try:
+            reservation = self._repo.create(data)
+        except IntegrityError:
+            self._repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Unit '{data.unit_id}' already has an active reservation.",
+            )
         return ReservationResponse.model_validate(reservation)
 
     # ------------------------------------------------------------------
@@ -94,19 +102,35 @@ class ReservationService:
     def update_reservation(
         self, reservation_id: str, data: ReservationUpdate
     ) -> ReservationResponse:
-        """Partially update a reservation (notes, expires_at, status).
+        """Partially update an active reservation (notes, expires_at).
+
+        Only ACTIVE reservations may be updated. Status transitions must go
+        through the dedicated lifecycle endpoints (cancel, expire, convert).
+
+        Uses model_fields_set so that explicitly-provided nulls (e.g.
+        ``{"notes": null}``) clear the field, while omitted fields are left
+        unchanged.
 
         Raises:
             404 — if the reservation does not exist.
+            409 — if the reservation is not in ACTIVE status.
         """
         reservation = self._require_reservation(reservation_id)
 
-        if data.notes is not None:
+        if reservation.status != ReservationStatus.active.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot update reservation with status '{reservation.status}'. "
+                    "Only active reservations can be updated."
+                ),
+            )
+
+        provided = data.model_fields_set
+        if "notes" in provided:
             reservation.notes = data.notes
-        if data.expires_at is not None:
+        if "expires_at" in provided:
             reservation.expires_at = data.expires_at
-        if data.status is not None:
-            reservation.status = data.status.value
 
         updated = self._repo.save(reservation)
         return ReservationResponse.model_validate(updated)

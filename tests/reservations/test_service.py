@@ -15,7 +15,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.modules.reservations.schemas import ReservationCreate, ReservationStatus
+from app.modules.reservations.schemas import ReservationCreate, ReservationStatus, ReservationUpdate
 from app.modules.reservations.service import ReservationService
 
 
@@ -239,6 +239,76 @@ def test_convert_non_active_raises_409(db_session: Session):
         svc.convert_to_contract(res.id)
 
     assert exc_info.value.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Update reservation (PATCH)
+# ---------------------------------------------------------------------------
+
+
+def test_update_reservation_notes(db_session: Session):
+    """Updating notes on an active reservation replaces the field."""
+    unit_id = _make_unit(db_session, "PRJ-UPDN")
+    svc = ReservationService(db_session)
+
+    res = svc.create_reservation(_make_create(unit_id))
+
+    updated = svc.update_reservation(res.id, ReservationUpdate(notes="VIP buyer"))
+
+    assert updated.notes == "VIP buyer"
+    assert updated.status == ReservationStatus.active
+
+
+def test_update_reservation_expires_at(db_session: Session):
+    """Updating expires_at on an active reservation replaces the field."""
+    unit_id = _make_unit(db_session, "PRJ-UPDE")
+    svc = ReservationService(db_session)
+
+    res = svc.create_reservation(_make_create(unit_id, expires_at=_FUTURE_EXPIRY))
+    new_expiry = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    updated = svc.update_reservation(res.id, ReservationUpdate(expires_at=new_expiry))
+
+    assert updated.expires_at is not None
+    # Verify the expiry was actually updated to the new value
+    assert updated.expires_at.replace(tzinfo=timezone.utc).year == 2099
+
+
+def test_update_reservation_clears_notes(db_session: Session):
+    """Sending notes=None explicitly clears the field."""
+    unit_id = _make_unit(db_session, "PRJ-CLRN")
+    svc = ReservationService(db_session)
+
+    res = svc.create_reservation(_make_create(unit_id))
+    # First set notes
+    svc.update_reservation(res.id, ReservationUpdate(notes="initial note"))
+    # Then clear them with explicit null
+    updated = svc.update_reservation(res.id, ReservationUpdate(notes=None))
+
+    assert updated.notes is None
+
+
+def test_update_reservation_non_active_raises_409(db_session: Session):
+    """PATCH on a cancelled reservation must raise 409."""
+    unit_id = _make_unit(db_session, "PRJ-UPDNA")
+    svc = ReservationService(db_session)
+
+    res = svc.create_reservation(_make_create(unit_id))
+    svc.cancel_reservation(res.id)
+
+    with pytest.raises(HTTPException) as exc_info:
+        svc.update_reservation(res.id, ReservationUpdate(notes="should fail"))
+
+    assert exc_info.value.status_code == 409
+
+
+def test_update_reservation_not_found_raises_404(db_session: Session):
+    """PATCH on a non-existent reservation must raise 404."""
+    svc = ReservationService(db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        svc.update_reservation("no-such-id", ReservationUpdate(notes="x"))
+
+    assert exc_info.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------

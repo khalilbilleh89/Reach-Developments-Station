@@ -17,7 +17,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.modules.reservations.models import UnitReservation
-from app.modules.reservations.schemas import ReservationCreate
+from app.modules.reservations.schemas import ReservationCreate, ReservationStatus
 from app.modules.units.models import Unit
 
 
@@ -45,7 +45,7 @@ class ReservationRepository:
             self.db.query(UnitReservation)
             .filter(
                 UnitReservation.unit_id == unit_id,
-                UnitReservation.status == "active",
+                UnitReservation.status == ReservationStatus.active.value,
             )
             .first()
         )

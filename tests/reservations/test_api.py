@@ -126,6 +126,40 @@ def test_update_reservation_notes(client: TestClient):
     assert resp.json()["notes"] == "VIP buyer — priority hold"
 
 
+def test_update_reservation_clear_notes(client: TestClient):
+    """Sending notes=null explicitly clears the field."""
+    _, unit_id = _create_hierarchy(client, "PRJ-CLRN")
+
+    res_id = client.post(
+        "/api/v1/reservations", json={"unit_id": unit_id, **_PAYLOAD}
+    ).json()["id"]
+
+    # Set notes first
+    client.patch(f"/api/v1/reservations/{res_id}", json={"notes": "initial"})
+    # Then clear with explicit null
+    resp = client.patch(f"/api/v1/reservations/{res_id}", json={"notes": None})
+    assert resp.status_code == 200
+    assert resp.json()["notes"] is None
+
+
+def test_update_reservation_non_active_returns_409(client: TestClient):
+    """PATCH on a cancelled reservation must return 409."""
+    _, unit_id = _create_hierarchy(client, "PRJ-UPDNA")
+
+    res_id = client.post(
+        "/api/v1/reservations", json={"unit_id": unit_id, **_PAYLOAD}
+    ).json()["id"]
+
+    client.post(f"/api/v1/reservations/{res_id}/cancel")
+    resp = client.patch(f"/api/v1/reservations/{res_id}", json={"notes": "should fail"})
+    assert resp.status_code == 409
+
+
+def test_update_reservation_not_found_returns_404(client: TestClient):
+    resp = client.patch("/api/v1/reservations/no-such-id", json={"notes": "x"})
+    assert resp.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Cancel reservation
 # ---------------------------------------------------------------------------

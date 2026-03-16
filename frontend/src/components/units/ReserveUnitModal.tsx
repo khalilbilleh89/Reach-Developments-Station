@@ -78,7 +78,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
       reservation_price: priceVal,
       reservation_fee: feeVal,
       currency: currency.trim() || "AED",
-      expires_at: expiresAt || null,
+      expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
       notes: notes.trim() || null,
     };
 
