@@ -4,6 +4,7 @@ from enum import Enum
 
 
 class ReservationStatus(str, Enum):
+    DRAFT = "draft"
     ACTIVE = "active"
     EXPIRED = "expired"
     CONVERTED = "converted"

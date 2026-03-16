@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 class ReservationStatus(str, Enum):
     """Lifecycle states for a unit reservation."""
 
+    draft = "draft"
     active = "active"
     expired = "expired"
     cancelled = "cancelled"
@@ -48,6 +49,16 @@ class ReservationUpdate(BaseModel):
 
     notes: Optional[str] = Field(default=None, max_length=2000)
     expires_at: Optional[datetime] = None
+
+
+class ReservationStatusUpdate(BaseModel):
+    """Payload for transitioning a reservation to a new lifecycle status.
+
+    Only valid transitions (as defined by the state machine) are accepted.
+    Invalid transitions raise HTTP 422.
+    """
+
+    status: ReservationStatus
 
 
 # ---------------------------------------------------------------------------
