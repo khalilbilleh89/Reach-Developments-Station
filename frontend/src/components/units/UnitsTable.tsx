@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import type { UnitListItem, UnitPrice, UnitPricingRecord } from "@/lib/units-types";
 import { pricingStatusLabel, unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount, formatAdjustment, formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
 type SortField = "unit_number" | "floor_id" | "unit_type" | "status" | "internal_area" | "final_unit_price";
@@ -12,9 +12,9 @@ type SortDir = "asc" | "desc";
 interface UnitsTableProps {
   units: UnitListItem[];
   /** Engine-calculated pricing map keyed by unit ID. May be partial. */
-  pricing: Record<string, UnitPrice>;
+  pricing: Record<string, UnitPrice | undefined>;
   /** Formal pricing record map keyed by unit ID. May be partial. */
-  pricingRecords: Record<string, UnitPricingRecord>;
+  pricingRecords: Partial<Record<string, UnitPricingRecord>>;
   onViewUnit: (unitId: string) => void;
   onEditPricing: (unit: UnitListItem) => void;
 }
@@ -36,18 +36,19 @@ function statusClass(status: string): string {
 }
 
 /**
- * UnitsTable — sortable table of unit inventory.
+ * UnitsTable — sortable table of unit inventory with pricing data.
  *
- * Displays unit number, type, area, status, and pricing data.
+ * Displays unit number, type, area, inventory status, and per-unit pricing
+ * columns (Base Price, Adjustment, Final Price, Pricing Status).
  * Sorting is performed client-side on the provided units list.
  *
- * Explicitly does NOT compute pricing formulas — all pricing values
- * are sourced from the backend pricing engine via the pricing prop.
+ * Pricing values are sourced from two backends:
+ *   - `pricingRecords` — the formal per-unit pricing record (preferred)
+ *   - `pricing` — the sqm-based engine calculation (fallback for Final Price)
  *
- * Price / sqm uses `pricing.unit_area` (which reflects the backend pricing
- * engine's resolved area — gross_area when set, otherwise internal_area)
- * rather than raw `unit.internal_area`, keeping the UI consistent with how
- * `final_unit_price` was derived on the backend.
+ * Both maps may be partial (not every unit has a record/calculation yet).
+ * All monetary values are formatted using the record's own `currency` field
+ * so that non-AED records display correctly.
  */
 export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditPricing }: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
@@ -166,18 +167,18 @@ export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditP
                   </span>
                 </td>
                 <td>
-                  {r ? formatCurrency(r.base_price) : <span aria-label="Not set">—</span>}
+                  {r ? formatAmount(r.base_price, r.currency) : <span aria-label="Not set">—</span>}
                 </td>
                 <td>
                   {r
                     ? r.manual_adjustment !== 0
-                      ? `${r.manual_adjustment > 0 ? "+" : ""}${formatCurrency(r.manual_adjustment)}`
+                      ? formatAdjustment(r.manual_adjustment, r.currency)
                       : "—"
                     : <span aria-label="Not set">—</span>}
                 </td>
                 <td>
                   {r
-                    ? formatCurrency(r.final_price)
+                    ? formatAmount(r.final_price, r.currency)
                     : p
                       ? formatCurrency(p.final_unit_price)
                       : <span aria-label="Not priced">—</span>}

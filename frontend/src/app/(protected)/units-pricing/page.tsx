@@ -45,8 +45,8 @@ function UnitsPricingList() {
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
   const [units, setUnits] = useState<UnitListItem[]>([]);
-  const [pricing, setPricing] = useState<Record<string, UnitPrice>>({});
-  const [pricingRecords, setPricingRecords] = useState<Record<string, UnitPricingRecord>>({});
+  const [pricing, setPricing] = useState<Record<string, UnitPrice | undefined>>({});
+  const [pricingRecords, setPricingRecords] = useState<Partial<Record<string, UnitPricingRecord>>>({});
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
 

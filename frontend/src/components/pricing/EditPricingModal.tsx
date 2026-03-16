@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { PricingStatus, UnitPricingRecord, UnitPricingRecordSave } from "@/lib/units-types";
-import { pricingStatusLabel } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
 import styles from "@/styles/projects.module.css";
 
 interface EditPricingModalProps {
@@ -210,7 +209,7 @@ export function EditPricingModal({
               >
                 {previewFinalPrice < 0
                   ? "⚠ Negative — not allowed"
-                  : formatCurrency(previewFinalPrice)}
+                  : formatAmount(previewFinalPrice, currency)}
               </p>
               <small style={{ color: "#888", fontSize: "0.75rem" }}>
                 Preview only — final value is confirmed by the server.
