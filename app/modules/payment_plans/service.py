@@ -28,7 +28,9 @@ from app.modules.payment_plans.repository import (
     PaymentScheduleRepository,
 )
 from app.modules.payment_plans.schemas import (
+    PaymentPlanCreate,
     PaymentPlanGenerateRequest,
+    PaymentPlanResponse,
     PaymentPlanTemplateCreate,
     PaymentPlanTemplateList,
     PaymentPlanTemplateResponse,
@@ -285,4 +287,110 @@ class PaymentPlanService:
             items=items,
             total=len(items),
             total_due=round(sum(i.due_amount for i in items), 2),
+        )
+
+    # ------------------------------------------------------------------
+    # PR029 — simplified payment plan creation and retrieval
+    # ------------------------------------------------------------------
+
+    def create_payment_plan(self, data: PaymentPlanCreate) -> PaymentPlanResponse:
+        """Create a payment plan for a contract without pre-registering a template.
+
+        This convenience method creates a temporary named template scoped to the
+        request and immediately generates the installment schedule, returning a
+        plan-centric response that wraps the underlying schedule rows.
+
+        Business rules enforced:
+          - Contract must exist and have a positive contract price
+          - One payment plan (schedule) per contract — use regenerate to replace
+          - Installment totals must equal contract price within rounding tolerance
+        """
+        contract = self._require_contract(data.contract_id)
+
+        # Reuse the guard already enforced by generate_schedule_for_contract.
+        existing = self.schedule_repo.list_by_contract(contract.id)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Contract {contract.id!r} already has a payment plan "
+                    f"({len(existing)} installments). "
+                    "Use the regenerate endpoint to replace it."
+                ),
+            )
+
+        # Create a named, single-use template for this plan.
+        template_data = PaymentPlanTemplateCreate(
+            name=data.plan_name,
+            plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
+            down_payment_percent=data.down_payment_percent,
+            number_of_installments=data.number_of_installments,
+            installment_frequency=data.installment_frequency,
+            is_active=True,
+        )
+        self._require_supported_plan_type(template_data.plan_type)
+        template = self.template_repo.create(template_data)
+
+        rows = self._build_schedule_rows(contract, template, data.start_date)
+        persisted = self.schedule_repo.bulk_create(rows)
+
+        return self._build_plan_response(template.name, template.plan_type, persisted)
+
+    def get_plan(self, schedule_item_id: str) -> PaymentScheduleResponse:
+        """Return a single payment schedule item by its ID."""
+        row = self.schedule_repo.get_by_id(schedule_item_id)
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Payment plan item {schedule_item_id!r} not found.",
+            )
+        return PaymentScheduleResponse.model_validate(row)
+
+    def get_contract_payment_plan(self, contract_id: str) -> PaymentPlanResponse:
+        """Return the payment plan for a contract as a plan-centric response."""
+        self._require_contract(contract_id)
+        rows = self.schedule_repo.list_by_contract(contract_id)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No payment plan found for contract {contract_id!r}.",
+            )
+        # Derive plan name from the template if available.
+        plan_name = rows[0].template.name if rows[0].template else "Payment Plan"
+        plan_type = (
+            rows[0].template.plan_type if rows[0].template
+            else PaymentPlanType.STANDARD_INSTALLMENTS.value
+        )
+        return self._build_plan_response(plan_name, plan_type, rows)
+
+    def list_contract_installments(self, contract_id: str) -> PaymentScheduleListResponse:
+        """List all installments for a contract (alias for get_schedule_for_contract)."""
+        return self.get_schedule_for_contract(contract_id)
+
+    @staticmethod
+    def _build_plan_response(
+        plan_name: str,
+        plan_type: str,
+        rows: List[PaymentSchedule],
+    ) -> PaymentPlanResponse:
+        """Build a PaymentPlanResponse from a list of persisted schedule rows."""
+        from datetime import datetime as dt, timezone
+
+        items = [PaymentScheduleResponse.model_validate(r) for r in rows]
+        now = dt.now(timezone.utc)
+        created_at = rows[0].created_at if rows else now
+        updated_at = rows[-1].updated_at if rows else now
+        # Use the template id of the first row as the plan id (stable for the contract).
+        plan_id = rows[0].template_id if rows and rows[0].template_id else rows[0].id if rows else ""
+        contract_id = rows[0].contract_id if rows else ""
+        return PaymentPlanResponse(
+            id=plan_id,
+            contract_id=contract_id,
+            plan_name=plan_name,
+            plan_type=plan_type,
+            installments=items,
+            total_installments=len(items),
+            total_due=round(sum(i.due_amount for i in items), 2),
+            created_at=created_at,
+            updated_at=updated_at,
         )

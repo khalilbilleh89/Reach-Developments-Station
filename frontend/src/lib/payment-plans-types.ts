@@ -191,3 +191,34 @@ export interface PaymentPlanFiltersState {
   minOutstanding: string;
   maxOutstanding: string;
 }
+
+// ---------- PR029 — contract-level payment plan types --------------------
+
+/**
+ * A single payment installment as returned by the simplified payment plan
+ * creation endpoint (PR029 blueprint).
+ */
+export interface Installment {
+  id: string;
+  installment_number: number;
+  due_date: string;
+  due_amount: number;
+  status: InstallmentStatus;
+  notes?: string | null;
+}
+
+/**
+ * A payment plan linked to a contract, as returned by the PR029 simplified
+ * endpoint POST /payment-plans and GET /contracts/{id}/payment-plan.
+ */
+export interface PaymentPlan {
+  id: string;
+  contract_id: string;
+  plan_name: string;
+  plan_type: string;
+  installments: Installment[];
+  total_installments: number;
+  total_due: number;
+  created_at: string;
+  updated_at: string;
+}

@@ -14,10 +14,18 @@ Templates
   GET    /templates/{template_id}            — get a template
   PATCH  /templates/{template_id}            — update a template
 
-Schedule generation
+Payment plan creation (PR029 simplified interface)
+  POST   /                                   — create a payment plan for a contract
+  GET    /{plan_id}                          — get a specific schedule item by ID
+
+Schedule generation (advanced)
   POST   /generate                           — generate schedule for a contract
   GET    /contracts/{contract_id}/schedule   — retrieve schedule for a contract
   POST   /contracts/{contract_id}/regenerate — replace schedule for a contract
+
+Contract-scoped aliases (PR029 blueprint routes)
+  GET    /contracts/{contract_id}/payment-plan  — get the payment plan for a contract
+  GET    /contracts/{contract_id}/installments  — list installments for a contract
 """
 
 from typing import Annotated
@@ -27,12 +35,15 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.payment_plans.schemas import (
+    PaymentPlanCreate,
     PaymentPlanGenerateRequest,
+    PaymentPlanResponse,
     PaymentPlanTemplateCreate,
     PaymentPlanTemplateList,
     PaymentPlanTemplateResponse,
     PaymentPlanTemplateUpdate,
     PaymentScheduleListResponse,
+    PaymentScheduleResponse,
 )
 from app.modules.payment_plans.service import PaymentPlanService
 
@@ -41,6 +52,25 @@ router = APIRouter(prefix="/payment-plans", tags=["payment-plans"])
 
 def get_service(db: Session = Depends(get_db)) -> PaymentPlanService:
     return PaymentPlanService(db)
+
+
+# ---------------------------------------------------------------------------
+# PR029 — simplified payment plan endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("", response_model=PaymentPlanResponse, status_code=201)
+def create_payment_plan(
+    data: PaymentPlanCreate,
+    service: Annotated[PaymentPlanService, Depends(get_service)],
+) -> PaymentPlanResponse:
+    """Create a payment plan for a contract.
+
+    Generates the installment schedule immediately from the provided parameters.
+    A contract can only have one active payment plan; use the regenerate endpoint
+    to replace an existing schedule.
+    """
+    return service.create_payment_plan(data)
 
 
 # ---------------------------------------------------------------------------
@@ -124,3 +154,44 @@ def regenerate_schedule(
 ) -> PaymentScheduleListResponse:
     """Replace an existing payment schedule with a freshly generated one."""
     return service.regenerate_schedule_for_contract(contract_id, request)
+
+
+# ---------------------------------------------------------------------------
+# Contract-scoped alias endpoints (PR029 blueprint)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/contracts/{contract_id}/payment-plan",
+    response_model=PaymentPlanResponse,
+)
+def get_contract_payment_plan(
+    contract_id: str,
+    service: Annotated[PaymentPlanService, Depends(get_service)],
+) -> PaymentPlanResponse:
+    """Get the payment plan for a contract."""
+    return service.get_contract_payment_plan(contract_id)
+
+
+@router.get(
+    "/contracts/{contract_id}/installments",
+    response_model=PaymentScheduleListResponse,
+)
+def list_contract_installments(
+    contract_id: str,
+    service: Annotated[PaymentPlanService, Depends(get_service)],
+) -> PaymentScheduleListResponse:
+    """List all installments for a contract."""
+    return service.list_contract_installments(contract_id)
+
+
+# NOTE: This parameterised route must be declared AFTER all routes with static
+# path segments (/templates, /generate, /contracts/…) so that FastAPI's route
+# matching prefers the more-specific paths.
+@router.get("/{plan_id}", response_model=PaymentScheduleResponse)
+def get_payment_plan_item(
+    plan_id: str,
+    service: Annotated[PaymentPlanService, Depends(get_service)],
+) -> PaymentScheduleResponse:
+    """Get a specific payment schedule item by ID."""
+    return service.get_plan(plan_id)

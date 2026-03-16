@@ -14,6 +14,9 @@
  *   GET /projects/{id}/units                               → unit list
  *   GET /units/{unitId}                                    → unit detail
  *   GET /sales/contracts?unit_id={unitId}                  → contract list
+ *   POST /payment-plans                                    → create payment plan
+ *   GET /payment-plans/contracts/{contractId}/payment-plan → payment plan for contract
+ *   GET /payment-plans/contracts/{contractId}/installments → installment list
  *   GET /payment-plans/contracts/{contractId}/schedule     → payment schedule
  *   GET /collections/contracts/{contractId}/receivables    → receivables summary
  */
@@ -23,9 +26,11 @@ import { getProjects as getProjectsRaw, getUnitsByProject, getUnitById } from ".
 import type { Project } from "./units-types";
 import type {
   CollectionSummary,
+  Installment,
   InstallmentRow,
   InstallmentStatus,
   OverdueInstallment,
+  PaymentPlan,
   PaymentPlanDetail,
   PaymentPlanFiltersState,
   PaymentPlanListItem,
@@ -470,4 +475,80 @@ export function filterPaymentPlans(
     }
     return true;
   });
+}
+
+// ---------- PR029 — simplified payment plan creation and installment listing ----
+
+/** Raw backend response for the simplified payment plan creation endpoint. */
+interface PaymentPlanCreateResponse {
+  id: string;
+  contract_id: string;
+  plan_name: string;
+  plan_type: string;
+  installments: ScheduleItem[];
+  total_installments: number;
+  total_due: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Payload for the simplified POST /payment-plans endpoint. */
+export interface PaymentPlanCreatePayload {
+  contract_id: string;
+  plan_name: string;
+  number_of_installments: number;
+  start_date: string;
+  installment_frequency: "monthly" | "quarterly" | "custom";
+  down_payment_percent?: number;
+}
+
+/**
+ * Create a payment plan for a contract.
+ *
+ * Calls POST /payment-plans with the plan parameters and returns the
+ * created plan including all installments mapped to the frontend PaymentPlan
+ * type.
+ */
+export async function createPaymentPlan(
+  payload: PaymentPlanCreatePayload,
+): Promise<PaymentPlan> {
+  const raw = await apiFetch<PaymentPlanCreateResponse>("/payment-plans", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+  });
+  return {
+    id: raw.id,
+    contract_id: raw.contract_id,
+    plan_name: raw.plan_name,
+    plan_type: raw.plan_type,
+    installments: raw.installments.map(
+      (item): Installment => ({
+        id: item.id,
+        installment_number: item.installment_number,
+        due_date: String(item.due_date),
+        due_amount: item.due_amount,
+        status: item.status as InstallmentStatus,
+        notes: item.notes,
+      }),
+    ),
+    total_installments: raw.total_installments,
+    total_due: raw.total_due,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
+}
+
+/**
+ * List all installments for a contract.
+ *
+ * Calls GET /payment-plans/contracts/{contractId}/installments and returns
+ * the raw schedule response.
+ */
+export async function listInstallments(
+  contractId: string,
+): Promise<ScheduleListResponse> {
+  return apiFetch<ScheduleListResponse>(
+    `/payment-plans/contracts/${contractId}/installments`,
+  );
 }

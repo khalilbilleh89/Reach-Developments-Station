@@ -504,3 +504,149 @@ def test_regenerate_preserves_schedule_on_invalid_template(client: TestClient):
     after = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/schedule").json()
     assert after["total"] == original_total
     assert abs(after["total_due"] - 500_000.0) < 0.02
+
+
+# ---------------------------------------------------------------------------
+# PR029 — simplified payment plan creation endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_payment_plan_returns_201(client: TestClient):
+    """POST /payment-plans creates a plan and returns 201."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-A", 600_000.0, "CNT-PP029-A1", "pp029a@test.com"
+    )
+    resp = client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "Standard 12-Month",
+            "number_of_installments": 12,
+            "start_date": "2026-01-01",
+            "installment_frequency": "monthly",
+            "down_payment_percent": 0.0,
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["contract_id"] == contract_id
+    assert data["plan_name"] == "Standard 12-Month"
+    assert data["total_installments"] == 12
+    assert abs(data["total_due"] - 600_000.0) < 0.02
+
+
+def test_create_payment_plan_duplicate_returns_409(client: TestClient):
+    """Creating a second plan for the same contract returns 409."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-B", 500_000.0, "CNT-PP029-B1", "pp029b@test.com"
+    )
+    payload = {
+        "contract_id": contract_id,
+        "plan_name": "Plan A",
+        "number_of_installments": 6,
+        "start_date": "2026-01-01",
+        "installment_frequency": "monthly",
+    }
+    client.post("/api/v1/payment-plans", json=payload)
+    resp = client.post("/api/v1/payment-plans", json=payload)
+    assert resp.status_code == 409
+
+
+def test_create_payment_plan_contract_not_found(client: TestClient):
+    """Creating a plan for a non-existent contract returns 404."""
+    resp = client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": "no-such-contract",
+            "plan_name": "Ghost Plan",
+            "number_of_installments": 6,
+            "start_date": "2026-01-01",
+            "installment_frequency": "monthly",
+        },
+    )
+    assert resp.status_code == 404
+
+
+def test_get_payment_plan_item_by_id(client: TestClient):
+    """GET /payment-plans/{id} returns a single schedule item."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-C", 300_000.0, "CNT-PP029-C1", "pp029c@test.com"
+    )
+    created = client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "3-Month Plan",
+            "number_of_installments": 3,
+            "start_date": "2026-01-01",
+            "installment_frequency": "monthly",
+        },
+    ).json()
+    item_id = created["installments"][0]["id"]
+
+    resp = client.get(f"/api/v1/payment-plans/{item_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == item_id
+    assert data["contract_id"] == contract_id
+
+
+def test_get_payment_plan_item_not_found(client: TestClient):
+    """GET /payment-plans/{id} returns 404 for unknown IDs."""
+    resp = client.get("/api/v1/payment-plans/no-such-id")
+    assert resp.status_code == 404
+
+
+def test_get_contract_payment_plan_endpoint(client: TestClient):
+    """GET /payment-plans/contracts/{id}/payment-plan returns plan response."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-D", 480_000.0, "CNT-PP029-D1", "pp029d@test.com"
+    )
+    client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "48-Month Plan",
+            "number_of_installments": 48,
+            "start_date": "2026-01-01",
+            "installment_frequency": "monthly",
+        },
+    )
+    resp = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/payment-plan")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["contract_id"] == contract_id
+    assert data["total_installments"] == 48
+    assert abs(data["total_due"] - 480_000.0) < 0.02
+
+
+def test_get_contract_payment_plan_not_found(client: TestClient):
+    """GET /payment-plans/contracts/{id}/payment-plan returns 404 when no plan exists."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-E", 300_000.0, "CNT-PP029-E1", "pp029e@test.com"
+    )
+    resp = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/payment-plan")
+    assert resp.status_code == 404
+
+
+def test_list_contract_installments_endpoint(client: TestClient):
+    """GET /payment-plans/contracts/{id}/installments returns schedule list."""
+    contract_id = _create_contract(
+        client, "PRJ-PP029-F", 360_000.0, "CNT-PP029-F1", "pp029f@test.com"
+    )
+    client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "36-Month Plan",
+            "number_of_installments": 36,
+            "start_date": "2026-03-01",
+            "installment_frequency": "monthly",
+        },
+    )
+    resp = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/installments")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["contract_id"] == contract_id
+    assert data["total"] == 36
+    assert abs(data["total_due"] - 360_000.0) < 0.02

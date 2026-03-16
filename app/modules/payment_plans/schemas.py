@@ -134,3 +134,67 @@ class PaymentScheduleListResponse(BaseModel):
     items: List[PaymentScheduleResponse]
     total: int
     total_due: float
+
+
+# ---------------------------------------------------------------------------
+# PR029 — simplified payment plan schemas (direct creation without template
+# pre-registration, suitable for the contract-level payment plan workflow).
+# ---------------------------------------------------------------------------
+
+
+class PaymentPlanCreate(BaseModel):
+    """Payload for creating a payment plan directly for a contract.
+
+    Internally this creates a one-time plan template and generates the
+    installment schedule in a single step.
+    """
+
+    contract_id: str = Field(..., min_length=1)
+    plan_name: str = Field(..., min_length=1, max_length=255)
+    number_of_installments: int = Field(..., ge=1)
+    start_date: date
+    installment_frequency: InstallmentFrequency = InstallmentFrequency.MONTHLY
+    down_payment_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+
+
+class InstallmentCreate(BaseModel):
+    """Payload for a single installment (used in custom plan construction)."""
+
+    installment_number: int = Field(..., ge=1)
+    due_date: date
+    amount: float = Field(..., gt=0)
+    currency: str = Field(default="AED", min_length=3, max_length=3)
+
+
+class InstallmentResponse(BaseModel):
+    """Response shape for a single installment line (PR029 simplified view)."""
+
+    id: str
+    payment_plan_id: str
+    installment_number: int
+    due_date: date
+    amount: float
+    currency: str
+    status: PaymentScheduleStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentPlanResponse(BaseModel):
+    """Response shape for a created payment plan (PR029 simplified view).
+
+    Wraps the underlying schedule response into the plan-centric model expected
+    by the contract detail workflow.
+    """
+
+    id: str
+    contract_id: str
+    plan_name: str
+    plan_type: str
+    installments: List[PaymentScheduleResponse]
+    total_installments: int
+    total_due: float
+    created_at: datetime
+    updated_at: datetime

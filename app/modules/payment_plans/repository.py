@@ -86,6 +86,13 @@ class PaymentScheduleRepository:
             .all()
         )
 
+    def get_by_id(self, schedule_id: str) -> Optional[PaymentSchedule]:
+        return (
+            self.db.query(PaymentSchedule)
+            .filter(PaymentSchedule.id == schedule_id)
+            .first()
+        )
+
     def replace_for_contract(self, contract_id: str, rows: List[dict]) -> None:
         """Atomically delete existing schedule rows and insert new rows.
 
