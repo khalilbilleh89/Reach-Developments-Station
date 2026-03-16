@@ -198,19 +198,22 @@ export async function getUnitPricingAttributes(
  * and readiness in parallel using Promise.allSettled so that a 422 from the
  * pricing engine does not discard the unit data.
  *
- * The readiness endpoint is the authoritative source for determining whether
- * engine inputs are configured — it returns explicit missing_required_fields
- * so the UI can show actionable details instead of a generic message.
+ * The readiness endpoint is an advisory diagnostic source — it returns
+ * explicit missing_required_fields so the UI can show actionable details
+ * instead of a generic message.  A successful engine calculation always
+ * overrides readiness and sets pricingState = READY.
  *
  * pricingState semantics:
- *   READY              — pricing engine returned a valid calculation.
- *   MISSING_ATTRIBUTES — backend confirmed engine inputs not configured
- *                        (readiness.is_ready_for_pricing === false) OR
- *                        the engine itself returned 422.
+ *   READY              — pricing engine returned a valid calculation (authoritative).
+ *   MISSING_ATTRIBUTES — engine returned 422, or readiness confirmed inputs missing.
  *   MISSING_PRICING_RECORD — pricing not found (404).
  *
- * Unexpected failures (5xx, network, auth) are re-thrown so the UI renders
- * a true error banner instead of a misleading setup state.
+ * Readiness endpoint failure handling:
+ *   404  — treated as non-fatal (endpoint absent in some deploy states).
+ *   other 4xx / 5xx — re-thrown; auth/config failures must not be hidden.
+ *
+ * Unexpected failures (5xx, network, auth) on other calls are re-thrown so
+ * the UI renders a true error banner instead of a misleading setup state.
  */
 export async function getUnitPricingDetail(
   unitId: string,
@@ -236,23 +239,24 @@ export async function getUnitPricingDetail(
       pricingState = "MISSING_ATTRIBUTES";
     }
   } else {
-    // Readiness endpoint failure is non-fatal: fall back to inferring state
-    // from the pricing calculation result below.
-    if (
-      !(readinessResult.reason instanceof ApiError) ||
-      readinessResult.reason.status >= 500
-    ) {
-      throw readinessResult.reason;
+    // Readiness endpoint failure is non-fatal ONLY for 404 (endpoint absent in
+    // some deploy states / backward-compatibility).  All other ApiErrors
+    // (401 Unauthorized, 403 Forbidden, 422, 429, etc.) are real problems that
+    // must surface rather than being silently swallowed as a fallback.
+    const err = readinessResult.reason;
+    if (!(err instanceof ApiError) || err.status !== 404) {
+      throw err;
     }
   }
 
   if (pricingResult.status === "fulfilled") {
     pricing = pricingResult.value;
-    // Override MISSING_ATTRIBUTES state when the engine successfully calculated
-    // (this handles the case where readiness endpoint is temporarily unavailable).
-    if (pricingState === "MISSING_ATTRIBUTES" && readiness?.is_ready_for_pricing !== false) {
-      pricingState = "READY";
-    }
+    // A successful engine calculation is the authoritative "ready" signal —
+    // it must always win over any advisory readiness state.  This avoids a
+    // split-brain UI where the engine returns a valid price but the UI still
+    // shows a "missing attributes" setup prompt due to a stale or racing
+    // readiness response.
+    pricingState = "READY";
   } else {
     const err = pricingResult.reason;
     if (err instanceof ApiError && err.status === 422) {
