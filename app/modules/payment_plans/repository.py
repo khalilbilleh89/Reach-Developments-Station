@@ -39,12 +39,7 @@ class PaymentPlanTemplateRepository:
         )
 
     def list(self, skip: int = 0, limit: int = 100) -> List[PaymentPlanTemplate]:
-        return (
-            self.db.query(PaymentPlanTemplate)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+        return self.db.query(PaymentPlanTemplate).offset(skip).limit(limit).all()
 
     def count(self) -> int:
         return self.db.query(PaymentPlanTemplate).count()
@@ -84,6 +79,13 @@ class PaymentScheduleRepository:
             .filter(PaymentSchedule.contract_id == contract_id)
             .order_by(PaymentSchedule.installment_number)
             .all()
+        )
+
+    def get_by_id(self, schedule_id: str) -> Optional[PaymentSchedule]:
+        return (
+            self.db.query(PaymentSchedule)
+            .filter(PaymentSchedule.id == schedule_id)
+            .first()
         )
 
     def replace_for_contract(self, contract_id: str, rows: List[dict]) -> None:

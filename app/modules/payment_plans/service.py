@@ -28,7 +28,9 @@ from app.modules.payment_plans.repository import (
     PaymentScheduleRepository,
 )
 from app.modules.payment_plans.schemas import (
+    PaymentPlanCreate,
     PaymentPlanGenerateRequest,
+    PaymentPlanResponse,
     PaymentPlanTemplateCreate,
     PaymentPlanTemplateList,
     PaymentPlanTemplateResponse,
@@ -59,7 +61,9 @@ class PaymentPlanService:
     # Template management
     # ------------------------------------------------------------------
 
-    def create_template(self, data: PaymentPlanTemplateCreate) -> PaymentPlanTemplateResponse:
+    def create_template(
+        self, data: PaymentPlanTemplateCreate
+    ) -> PaymentPlanTemplateResponse:
         self._require_supported_plan_type(data.plan_type)
         template = self.template_repo.create(data)
         return PaymentPlanTemplateResponse.model_validate(template)
@@ -97,7 +101,9 @@ class PaymentPlanService:
         effective_handover = (
             data.handover_percent
             if data.handover_percent is not None
-            else (float(template.handover_percent) if template.handover_percent else 0.0)
+            else (
+                float(template.handover_percent) if template.handover_percent else 0.0
+            )
         )
         if effective_down + effective_handover > 100.0:
             raise HTTPException(
@@ -142,7 +148,9 @@ class PaymentPlanService:
         persisted = self.schedule_repo.bulk_create(rows)
         return self._build_list_response(contract.id, persisted)
 
-    def get_schedule_for_contract(self, contract_id: str) -> PaymentScheduleListResponse:
+    def get_schedule_for_contract(
+        self, contract_id: str
+    ) -> PaymentScheduleListResponse:
         """Retrieve persisted schedule rows for a contract."""
         self._require_contract(contract_id)
         rows = self.schedule_repo.list_by_contract(contract_id)
@@ -221,7 +229,9 @@ class PaymentPlanService:
     def _require_template(self, template_id: str) -> PaymentPlanTemplate:
         template = self.template_repo.get_by_id(template_id)
         if not template:
-            raise HTTPException(status_code=404, detail=f"Template {template_id!r} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Template {template_id!r} not found."
+            )
         return template
 
     def _require_active_template(self, template_id: str) -> PaymentPlanTemplate:
@@ -235,12 +245,12 @@ class PaymentPlanService:
 
     def _require_contract(self, contract_id: str) -> SalesContract:
         contract = (
-            self.db.query(SalesContract)
-            .filter(SalesContract.id == contract_id)
-            .first()
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
         )
         if not contract:
-            raise HTTPException(status_code=404, detail=f"Contract {contract_id!r} not found.")
+            raise HTTPException(
+                status_code=404, detail=f"Contract {contract_id!r} not found."
+            )
         if not contract.contract_price or float(contract.contract_price) <= 0:
             raise HTTPException(
                 status_code=422,
@@ -261,9 +271,7 @@ class PaymentPlanService:
             )
 
     @staticmethod
-    def _validate_schedule_total(
-        lines: list, contract_price: float
-    ) -> None:
+    def _validate_schedule_total(lines: list, contract_price: float) -> None:
         total = sum(line.due_amount for line in lines)
         drift = abs(total - contract_price)
         if drift > _ROUNDING_TOLERANCE:
@@ -285,4 +293,156 @@ class PaymentPlanService:
             items=items,
             total=len(items),
             total_due=round(sum(i.due_amount for i in items), 2),
+        )
+
+    # ------------------------------------------------------------------
+    # PR029 — simplified payment plan creation and retrieval
+    # ------------------------------------------------------------------
+
+    def create_payment_plan(self, data: PaymentPlanCreate) -> PaymentPlanResponse:
+        """Create a payment plan for a contract without pre-registering a template.
+
+        This convenience method creates a temporary named template scoped to the
+        request and immediately generates the installment schedule, returning a
+        plan-centric response that wraps the underlying schedule rows.
+
+        Business rules enforced:
+          - Contract must exist and have a positive contract price
+          - One payment plan (schedule) per contract — use regenerate to replace
+          - Installment totals must equal contract price within rounding tolerance
+
+        Transactional guarantee:
+          Template creation and schedule row insertion are executed inside a
+          single DB transaction. If either step fails the entire operation is
+          rolled back, leaving no orphaned template or partial schedule behind.
+          IntegrityError (e.g. duplicate installment numbers from a concurrent
+          request) is converted to a 409 response.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        contract = self._require_contract(data.contract_id)
+
+        # Guard: one plan per contract.
+        existing = self.schedule_repo.list_by_contract(contract.id)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Contract {contract.id!r} already has a payment plan "
+                    f"({len(existing)} installments). "
+                    "Use the regenerate endpoint to replace it."
+                ),
+            )
+
+        template_data = PaymentPlanTemplateCreate(
+            name=data.plan_name,
+            plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
+            down_payment_percent=data.down_payment_percent,
+            number_of_installments=data.number_of_installments,
+            installment_frequency=data.installment_frequency,
+            is_active=True,
+        )
+        self._require_supported_plan_type(template_data.plan_type)
+
+        # --- single atomic transaction -----------------------------------
+        # Add template + schedule rows in memory and commit once so that a
+        # failure in schedule generation cannot leave an orphaned template.
+        try:
+            template = PaymentPlanTemplate(**template_data.model_dump())
+            self.db.add(template)
+            self.db.flush()  # obtain template.id without committing
+
+            rows = self._build_schedule_rows(contract, template, data.start_date)
+            schedule_objs = [PaymentSchedule(**row) for row in rows]
+            for obj in schedule_objs:
+                self.db.add(obj)
+
+            self.db.commit()
+            self.db.refresh(template)
+            for obj in schedule_objs:
+                self.db.refresh(obj)
+        except IntegrityError:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A payment plan for contract {contract.id!r} already exists "
+                    "or a concurrent request created one. Please refresh and try again."
+                ),
+            )
+        # -----------------------------------------------------------------
+
+        # Re-query ordered rows so _build_plan_response gets correct ordering.
+        persisted = self.schedule_repo.list_by_contract(contract.id)
+        return self._build_plan_response(template.name, template.plan_type, persisted)
+
+    def get_schedule_item(self, schedule_item_id: str) -> PaymentScheduleResponse:
+        """Return a single payment schedule item by its ID."""
+        row = self.schedule_repo.get_by_id(schedule_item_id)
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Payment schedule item {schedule_item_id!r} not found.",
+            )
+        return PaymentScheduleResponse.model_validate(row)
+
+    def get_contract_payment_plan(self, contract_id: str) -> PaymentPlanResponse:
+        """Return the payment plan for a contract as a plan-centric response."""
+        self._require_contract(contract_id)
+        rows = self.schedule_repo.list_by_contract(contract_id)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No payment plan found for contract {contract_id!r}.",
+            )
+        # Derive plan name from the template if available.
+        plan_name = rows[0].template.name if rows[0].template else "Payment Plan"
+        plan_type = (
+            rows[0].template.plan_type
+            if rows[0].template
+            else PaymentPlanType.STANDARD_INSTALLMENTS.value
+        )
+        return self._build_plan_response(plan_name, plan_type, rows)
+
+    def list_contract_installments(
+        self, contract_id: str
+    ) -> PaymentScheduleListResponse:
+        """List all installments for a contract (alias for get_schedule_for_contract)."""
+        return self.get_schedule_for_contract(contract_id)
+
+    @staticmethod
+    def _build_plan_response(
+        plan_name: str,
+        plan_type: str,
+        rows: List[PaymentSchedule],
+    ) -> PaymentPlanResponse:
+        """Build a PaymentPlanResponse from a list of persisted schedule rows."""
+        from datetime import datetime as dt, timezone
+
+        items = [PaymentScheduleResponse.model_validate(r) for r in rows]
+        now = dt.now(timezone.utc)
+        # Use min/max across all rows so the plan-level timestamps are correct
+        # regardless of the ordering of the rows list (which is by installment
+        # number, not by creation/update time).
+        created_at = min([r.created_at for r in rows], default=now)
+        updated_at = max([r.updated_at for r in rows], default=now)
+        # Use the template id of the first row as the plan id (stable for the contract).
+        plan_id = (
+            rows[0].template_id
+            if rows and rows[0].template_id
+            else rows[0].id
+            if rows
+            else ""
+        )
+        contract_id = rows[0].contract_id if rows else ""
+        return PaymentPlanResponse(
+            id=plan_id,
+            contract_id=contract_id,
+            plan_name=plan_name,
+            plan_type=plan_type,
+            installments=items,
+            total_installments=len(items),
+            total_due=round(sum(i.due_amount for i in items), 2),
+            created_at=created_at,
+            updated_at=updated_at,
         )

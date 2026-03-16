@@ -9,7 +9,11 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.shared.enums.finance import InstallmentFrequency, PaymentPlanType, PaymentScheduleStatus
+from app.shared.enums.finance import (
+    InstallmentFrequency,
+    PaymentPlanType,
+    PaymentScheduleStatus,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -134,3 +138,42 @@ class PaymentScheduleListResponse(BaseModel):
     items: List[PaymentScheduleResponse]
     total: int
     total_due: float
+
+
+# ---------------------------------------------------------------------------
+# PR029 — simplified payment plan schemas (direct creation without template
+# pre-registration, suitable for the contract-level payment plan workflow).
+# ---------------------------------------------------------------------------
+
+
+class PaymentPlanCreate(BaseModel):
+    """Payload for creating a payment plan directly for a contract.
+
+    Internally this creates a one-time plan template and generates the
+    installment schedule in a single step.
+    """
+
+    contract_id: str = Field(..., min_length=1)
+    plan_name: str = Field(..., min_length=1, max_length=255)
+    number_of_installments: int = Field(..., ge=1)
+    start_date: date
+    installment_frequency: InstallmentFrequency = InstallmentFrequency.MONTHLY
+    down_payment_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+
+
+class PaymentPlanResponse(BaseModel):
+    """Response shape for a created payment plan (PR029 simplified view).
+
+    Wraps the underlying schedule response into the plan-centric model expected
+    by the contract detail workflow.
+    """
+
+    id: str
+    contract_id: str
+    plan_name: str
+    plan_type: str
+    installments: List[PaymentScheduleResponse]
+    total_installments: int
+    total_due: float
+    created_at: datetime
+    updated_at: datetime
