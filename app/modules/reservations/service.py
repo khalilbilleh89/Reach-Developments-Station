@@ -76,10 +76,15 @@ class ReservationService:
     def create_reservation(self, data: ReservationCreate) -> ReservationResponse:
         """Create a new active reservation for a unit.
 
+        The unit's availability status is updated to RESERVED atomically in the
+        same DB transaction as the reservation record.
+
         Raises:
             404  — if the unit does not exist.
             409  — if the unit already has an active reservation.
         """
+        from app.modules.reservations.models import UnitReservation as _UnitReservation
+
         self._require_unit(data.unit_id)
 
         existing = self._repo.get_active_by_unit(data.unit_id)
@@ -90,7 +95,15 @@ class ReservationService:
             )
 
         try:
-            reservation = self._repo.create(data)
+            reservation = _UnitReservation(**data.model_dump())
+            self._repo.db.add(reservation)
+            self._repo.db.flush()  # populate .id without committing
+
+            # Sync unit to RESERVED in the same transaction.
+            self._set_unit_status(data.unit_id, UnitStatus.RESERVED.value)
+
+            self._repo.db.commit()
+            self._repo.db.refresh(reservation)
         except IntegrityError:
             self._repo.db.rollback()
             raise HTTPException(
@@ -214,14 +227,17 @@ class ReservationService:
                 )
 
         reservation.status = target
-        saved = self._repo.save(reservation)
 
-        # Sync unit availability with the new reservation status.
+        # Update the unit status in the same transaction (atomic).
         unit_status = _UNIT_STATUS_MAP.get(target)
         if unit_status is not None:
-            self._update_unit_status(reservation.unit_id, unit_status)
+            self._set_unit_status(reservation.unit_id, unit_status)
 
-        return ReservationResponse.model_validate(saved)
+        # Single commit covers both reservation and unit status changes.
+        self._repo.db.commit()
+        self._repo.db.refresh(reservation)
+
+        return ReservationResponse.model_validate(reservation)
 
     def cancel_reservation(self, reservation_id: str) -> ReservationResponse:
         """Cancel an active or expired reservation.
@@ -293,8 +309,8 @@ class ReservationService:
                 expires = expires.replace(tzinfo=timezone.utc)
             if expires <= now:
                 res.status = ReservationStatus.expired.value
-                # Update unit availability for each expired reservation.
-                self._update_unit_status(res.unit_id, UnitStatus.AVAILABLE.value)
+                # Mark unit available — committed together at the end of the loop.
+                self._set_unit_status(res.unit_id, UnitStatus.AVAILABLE.value)
                 expired_count += 1
 
         if expired_count:
@@ -324,10 +340,11 @@ class ReservationService:
             )
         return reservation
 
-    def _update_unit_status(self, unit_id: str, new_unit_status: str) -> None:
-        """Update the unit's availability status to reflect the reservation state."""
-        from app.modules.units.schemas import UnitUpdate
+    def _set_unit_status(self, unit_id: str, new_unit_status: str) -> None:
+        """Set the unit's availability status on the ORM object without committing.
 
+        The caller is responsible for calling ``db.commit()`` to persist the change.
+        """
         unit = self._unit_repo.get_by_id(unit_id)
         if unit is not None:
-            self._unit_repo.update(unit, UnitUpdate(status=new_unit_status))
+            unit.status = new_unit_status

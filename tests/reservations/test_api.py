@@ -297,19 +297,14 @@ def test_status_transition_expired_to_cancelled(client: TestClient):
     assert resp.json()["status"] == "cancelled"
 
 
-def test_invalid_transition_draft_to_converted_returns_422(client: TestClient):
-    """DRAFT → CONVERTED is invalid; PATCH /status returns 422."""
-    import json as _json
-    from fastapi.testclient import TestClient as _TC
-
+def test_invalid_transition_cancelled_to_active_returns_422(client: TestClient):
+    """CANCELLED → ACTIVE is invalid (terminal state); PATCH /status returns 422."""
     _, unit_id = _create_hierarchy(client, "PRJ-INV-DCV")
 
     res_id = client.post(
         "/api/v1/reservations", json={"unit_id": unit_id, **_PAYLOAD}
     ).json()["id"]
 
-    # Force to draft via cancel then re-check — actually just test cancelled→active
-    # which is also invalid. Cancelled is easier to reach via the API.
     client.patch(f"/api/v1/reservations/{res_id}/status", json={"status": "cancelled"})
     resp = client.patch(
         f"/api/v1/reservations/{res_id}/status", json={"status": "active"}
