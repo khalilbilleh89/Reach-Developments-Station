@@ -139,3 +139,43 @@ class UnitPricingResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Assembled pricing detail schema (three-layer model)
+# ---------------------------------------------------------------------------
+
+class UnitPricingDetailResponse(BaseModel):
+    """Assembled pricing detail for a single unit — all pricing layers in one response.
+
+    Separates the three conceptually distinct pricing concepts so that the
+    frontend can render a coherent inspection view without stitching together
+    multiple unrelated responses:
+
+    Layer 2 — engine_inputs (UnitPricingAttributesResponse | None):
+        Numerical inputs consumed by the pricing calculation engine:
+        base_price_per_sqm, floor_premium, view_premium, corner_premium,
+        size_adjustment, and custom_adjustment.  Missing when the unit has
+        not yet been configured for pricing.  Managed via POST
+        /pricing/unit/{id}/attributes.
+
+    Layer 3a — pricing_readiness (PricingReadinessResponse):
+        Authoritative readiness summary that lists exactly which engine-input
+        fields are still missing.  Always present (even when engine_inputs is
+        None) so the frontend can display actionable missing-field details.
+
+    Layer 3b — pricing_record (UnitPricingResponse | None):
+        Formal commercial pricing record: approved price, currency, status,
+        and analyst notes.  Missing when no record has been created yet.
+        Managed via PUT /units/{id}/pricing.
+
+    Note: Layer 1 (qualitative attributes — view type, corner unit, etc.) is
+    managed by the separate pricing_attributes module and is returned by
+    GET /units/{id}/pricing-attributes.  It is not included here to keep
+    the module boundary clean.
+    """
+
+    unit_id: str
+    engine_inputs: Optional[UnitPricingAttributesResponse]
+    pricing_readiness: PricingReadinessResponse
+    pricing_record: Optional[UnitPricingResponse]

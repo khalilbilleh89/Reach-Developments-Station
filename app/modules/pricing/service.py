@@ -18,6 +18,7 @@ from app.modules.pricing.schemas import (
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
     UnitPricingAttributesResponse,
+    UnitPricingDetailResponse,
     UnitPriceResponse,
 )
 from app.modules.units.repository import UnitRepository
@@ -155,6 +156,46 @@ class PricingService:
             is_ready_for_pricing=True,
             missing_required_fields=[],
             readiness_reason=None,
+        )
+
+    def get_unit_pricing_detail(self, unit_id: str) -> "UnitPricingDetailResponse":
+        """Assemble the full pricing detail for a unit as one coherent payload.
+
+        Returns all three pricing layers:
+          - engine_inputs (Layer 2): stored numerical engine inputs.
+          - pricing_readiness (Layer 3a): current readiness state.
+          - pricing_record (Layer 3b): stored commercial pricing record.
+
+        Qualitative attributes (Layer 1) are managed by the pricing_attributes
+        module and are returned separately from its own endpoint.
+        """
+        from app.modules.pricing.repository import UnitPricingRepository
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        unit = self.unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+
+        attrs = self.attrs_repo.get_by_unit(unit_id)
+        readiness = self.get_pricing_readiness(unit_id)
+
+        pricing_repo = UnitPricingRepository(self._db)
+        pricing_record_orm = pricing_repo.get_by_unit_id(unit_id)
+
+        return UnitPricingDetailResponse(
+            unit_id=unit_id,
+            engine_inputs=(
+                UnitPricingAttributesResponse.model_validate(attrs) if attrs else None
+            ),
+            pricing_readiness=readiness,
+            pricing_record=(
+                UnitPricingResponse.model_validate(pricing_record_orm)
+                if pricing_record_orm
+                else None
+            ),
         )
 
     def calculate_unit_price(self, unit_id: str) -> UnitPriceResponse:

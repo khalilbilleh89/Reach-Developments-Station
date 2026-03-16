@@ -26,11 +26,22 @@ const STATUS_OPTIONS: { value: PricingStatus; label: string }[] = [
 const CURRENCY_OPTIONS = ["AED", "USD", "EUR", "GBP", "SAR"];
 
 /**
- * EditPricingModal — modal form for creating or editing a per-unit pricing record.
+ * EditPricingModal — modal form for creating or editing a per-unit commercial pricing record
+ * (Layer 3 of the three-layer pricing model).
+ *
+ * This modal manages the COMMERCIAL pricing record:
+ *   • Base Price         — approved commercial unit price (not the per-sqm engine input)
+ *   • Manual Adjustment  — discretionary commercial adjustment on top of the approved base
+ *   • Currency           — transaction currency
+ *   • Pricing Status     — workflow status: draft | reviewed | approved
+ *   • Notes              — analyst notes on this pricing decision
  *
  * The backend computes final_price = base_price + manual_adjustment.
  * The UI previews the computed value client-side, but the backend result is
  * the authoritative value returned after save.
+ *
+ * This record is distinct from the pricing ENGINE inputs (base_price_per_sqm,
+ * floor_premium, etc.) which are managed via Edit Engine Inputs.
  *
  * Opening the modal with existing=null initializes a draft state (no record yet).
  */
@@ -111,15 +122,19 @@ export function EditPricingModal({
     <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="ep-modal-title">
       <div className={styles.modal}>
         <h2 id="ep-modal-title" className={styles.modalTitle}>
-          {existing ? "Edit Pricing" : "Set Pricing"} — Unit {unitNumber}
+          {existing ? "Edit Pricing Record" : "Create Pricing Record"} — Unit {unitNumber}
         </h2>
+        <p style={{ margin: "0 0 1rem", color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>
+          This is the commercial pricing record (approved price, status, and notes).
+          To configure engine inputs (Base Price Per Sqm, premiums), use Edit Engine Inputs.
+        </p>
 
         <form onSubmit={handleSubmit} className={styles.modalForm} noValidate>
           {/* Base Price */}
           <div className={styles.formRow}>
             <div className={styles.formField}>
               <label htmlFor="ep-base-price" className={styles.formLabel}>
-                Base Price <span aria-hidden="true">*</span>
+                Approved Base Price <span aria-hidden="true">*</span>
               </label>
               <input
                 id="ep-base-price"
@@ -133,6 +148,9 @@ export function EditPricingModal({
                 required
                 disabled={submitting}
               />
+              <small style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                Approved commercial price. Distinct from the per-sqm engine input.
+              </small>
             </div>
 
             {/* Currency */}
@@ -160,7 +178,7 @@ export function EditPricingModal({
           <div className={styles.formRow}>
             <div className={styles.formField}>
               <label htmlFor="ep-adjustment" className={styles.formLabel}>
-                Manual Adjustment
+                Commercial Adjustment
               </label>
               <input
                 id="ep-adjustment"
@@ -172,6 +190,9 @@ export function EditPricingModal({
                 placeholder="e.g. -5000 or 10000"
                 disabled={submitting}
               />
+              <small style={{ color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                Discretionary commercial adjustment (positive or negative).
+              </small>
             </div>
 
             {/* Pricing Status */}
@@ -212,7 +233,7 @@ export function EditPricingModal({
                   : formatAmount(previewFinalPrice, currency)}
               </p>
               <small style={{ color: "#888", fontSize: "0.75rem" }}>
-                Preview only — final value is confirmed by the server.
+                Preview: Approved Base Price + Commercial Adjustment. Confirmed by server on save.
               </small>
             </div>
           </div>
@@ -255,7 +276,7 @@ export function EditPricingModal({
               className={styles.submitBtn}
               disabled={submitting}
             >
-              {submitting ? "Saving…" : existing ? "Update Pricing" : "Set Pricing"}
+              {submitting ? "Saving…" : existing ? "Update Pricing Record" : "Create Pricing Record"}
             </button>
           </div>
         </form>

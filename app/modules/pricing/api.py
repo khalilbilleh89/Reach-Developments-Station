@@ -16,6 +16,7 @@ from app.modules.pricing.schemas import (
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
     UnitPricingAttributesResponse,
+    UnitPricingDetailResponse,
     UnitPriceResponse,
 )
 from app.modules.pricing.service import PricingService
@@ -75,6 +76,27 @@ def get_unit_pricing_readiness(
     cannot report which specific fields are still missing.
     """
     return service.get_pricing_readiness(unit_id)
+
+
+@router.get(
+    "/unit/{unit_id}/detail",
+    response_model=UnitPricingDetailResponse,
+)
+def get_unit_pricing_detail(
+    unit_id: str,
+    service: Annotated[PricingService, Depends(get_service)],
+) -> UnitPricingDetailResponse:
+    """Return the assembled pricing detail for a unit.
+
+    Combines all pricing layers into one coherent response:
+      - engine_inputs: stored numerical pricing engine inputs.
+      - pricing_readiness: current readiness state (missing fields, etc.).
+      - pricing_record: stored commercial pricing record (approved price, status, etc.).
+
+    Qualitative attributes (view type, corner unit, etc.) are managed by the
+    pricing_attributes module and are returned by GET /units/{id}/pricing-attributes.
+    """
+    return service.get_unit_pricing_detail(unit_id)
 
 
 # ---------------------------------------------------------------------------

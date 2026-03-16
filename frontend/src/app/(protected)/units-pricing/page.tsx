@@ -7,6 +7,7 @@ import { UnitFilters } from "@/components/units/UnitFilters";
 import { UnitsTable } from "@/components/units/UnitsTable";
 import UnitPricingDetailView from "@/components/units/UnitPricingDetailView";
 import { EditPricingModal } from "@/components/pricing/EditPricingModal";
+import { EditEngineInputsModal } from "@/components/pricing/EditEngineInputsModal";
 import { EditAttributesModal } from "@/components/units/EditAttributesModal";
 import {
   getProjects,
