@@ -275,3 +275,10 @@ class UnitPricingService:
             notes=notes,
         )
         return UnitPricingResponse.model_validate(record)
+
+    def get_project_pricing(self, project_id: str) -> "dict[str, UnitPricingResponse]":
+        """Return all pricing records for units in a project, keyed by unit_id."""
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        records = self._pricing_repo.list_by_project(project_id)
+        return {r.unit_id: UnitPricingResponse.model_validate(r) for r in records}

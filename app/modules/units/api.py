@@ -202,3 +202,38 @@ def save_unit_pricing_attributes(
     if created:
         response.status_code = status.HTTP_201_CREATED
     return result
+
+
+# ── Project-scoped bulk pricing endpoints ─────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/unit-pricing",
+    response_model=dict[str, UnitPricingResponse],
+    tags=["unit-pricing"],
+)
+def get_project_unit_pricing(
+    project_id: str,
+    service: Annotated[UnitPricingService, Depends(get_pricing_service)],
+) -> dict[str, UnitPricingResponse]:
+    """Get all formal pricing records for units in a project, keyed by unit_id.
+
+    Returns an empty map when no units in the project have pricing records.
+    """
+    return service.get_project_pricing(project_id)
+
+
+@router.get(
+    "/projects/{project_id}/unit-pricing-attributes",
+    response_model=dict[str, UnitQualitativeAttributesResponse],
+    tags=["unit-pricing-attributes"],
+)
+def get_project_unit_pricing_attributes(
+    project_id: str,
+    service: Annotated[UnitPricingAttributesService, Depends(get_pricing_attributes_service)],
+) -> dict[str, UnitQualitativeAttributesResponse]:
+    """Get all qualitative pricing attributes for units in a project, keyed by unit_id.
+
+    Returns an empty map when no units in the project have attributes set.
+    """
+    return service.get_project_pricing_attributes(project_id)

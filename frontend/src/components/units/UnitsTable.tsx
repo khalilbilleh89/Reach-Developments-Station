@@ -2,13 +2,13 @@
 
 import React, { useState } from "react";
 import type {
+  Reservation,
   UnitListItem,
-  UnitPrice,
   UnitPricingRecord,
   UnitQualitativeAttributes,
 } from "@/lib/units-types";
-import { pricingStatusLabel, unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
-import { formatAmount, formatAdjustment, formatCurrency } from "@/lib/format-utils";
+import { pricingStatusLabel, reservationStatusLabel, unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
+import { formatAmount, formatAdjustment } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
 type SortField = "unit_number" | "floor_id" | "unit_type" | "status" | "internal_area" | "final_unit_price";
@@ -16,12 +16,12 @@ type SortDir = "asc" | "desc";
 
 interface UnitsTableProps {
   units: UnitListItem[];
-  /** Engine-calculated pricing map keyed by unit ID. May be partial. */
-  pricing: Record<string, UnitPrice | undefined>;
   /** Formal pricing record map keyed by unit ID. May be partial. Defaults to empty map. */
   pricingRecords?: Partial<Record<string, UnitPricingRecord>>;
   /** Qualitative pricing attributes map keyed by unit ID. May be partial. Defaults to empty map. */
   attributesRecords?: Partial<Record<string, UnitQualitativeAttributes>>;
+  /** Reservation map keyed by unit ID (most relevant reservation per unit). May be partial. */
+  reservations?: Partial<Record<string, Reservation>>;
   onViewUnit: (unitId: string) => void;
   /** Called when the user clicks "Edit Pricing" for a row. No-op when omitted. */
   onEditPricing?: (unit: UnitListItem) => void;
@@ -45,26 +45,37 @@ function statusClass(status: string): string {
   }
 }
 
+/** Map a reservation status to a CSS badge class. */
+function reservationBadgeClass(status: string): string {
+  switch (status) {
+    case "active":
+      return styles.statusReserved;
+    case "expired":
+      return styles.statusExpired;
+    case "converted":
+      return styles.statusRegistered;
+    case "cancelled":
+      return "";
+    default:
+      return "";
+  }
+}
+
 /**
  * UnitsTable — sortable table of unit inventory with pricing data.
  *
  * Displays unit number, type, area, inventory status, and per-unit pricing
- * columns (Base Price, Adjustment, Final Price, Pricing Status).
- * Sorting is performed client-side on the provided units list.
+ * columns (Base Price, Adjustment, Final Price, Pricing Status) plus
+ * qualitative attributes and reservation status.
  *
- * Pricing values are sourced from two backends:
- *   - `pricingRecords` — the formal per-unit pricing record (preferred)
- *   - `pricing` — the sqm-based engine calculation (fallback for Final Price)
- *
- * Both maps may be partial (not every unit has a record/calculation yet).
- * All monetary values are formatted using the record's own `currency` field
- * so that non-AED records display correctly.
+ * All maps may be partial (not every unit has a record yet). Rows display
+ * graceful fallback values for missing data rather than failing.
  */
 export function UnitsTable({
   units,
-  pricing,
   pricingRecords = {},
   attributesRecords = {},
+  reservations = {},
   onViewUnit,
   onEditPricing,
   onEditAttributes,
@@ -87,8 +98,8 @@ export function UnitsTable({
 
     switch (sortField) {
       case "final_unit_price":
-        aVal = pricing[a.id]?.final_unit_price ?? -1;
-        bVal = pricing[b.id]?.final_unit_price ?? -1;
+        aVal = pricingRecords[a.id]?.final_price ?? -1;
+        bVal = pricingRecords[b.id]?.final_price ?? -1;
         break;
       case "internal_area":
         aVal = a.internal_area;
@@ -158,6 +169,7 @@ export function UnitsTable({
             <SortHeader field="unit_type">Type</SortHeader>
             <SortHeader field="internal_area">Area (sqm)</SortHeader>
             <SortHeader field="status">Status</SortHeader>
+            <th scope="col">Reservation</th>
             <th scope="col">Base Price</th>
             <th scope="col">Adjustment</th>
             <SortHeader field="final_unit_price">Final Price</SortHeader>
@@ -172,14 +184,26 @@ export function UnitsTable({
         </thead>
         <tbody className={styles.tableBody}>
           {sorted.map((unit) => {
-            const p = pricing[unit.id];
             const r = pricingRecords[unit.id];
             const a = attributesRecords[unit.id];
+            const rsv = reservations[unit.id];
+
+            const hasMissingPricing = !r;
+            const hasMissingAttributes = !a;
 
             return (
               <tr key={unit.id}>
                 <td>
                   <span className={styles.unitNumber}>{unit.unit_number}</span>
+                  {hasMissingPricing && (
+                    <span
+                      className={styles.rowWarning}
+                      title="No pricing record"
+                      aria-label="No pricing record"
+                    >
+                      {" "}⚠
+                    </span>
+                  )}
                 </td>
                 <td>{unitTypeLabel(unit.unit_type)}</td>
                 <td>{unit.internal_area.toFixed(1)}</td>
@@ -191,7 +215,26 @@ export function UnitsTable({
                   </span>
                 </td>
                 <td>
-                  {r ? formatAmount(r.base_price, r.currency) : <span aria-label="Not set">—</span>}
+                  {rsv ? (
+                    <span
+                      className={`${styles.statusBadge} ${reservationBadgeClass(rsv.status)}`}
+                      aria-label={`Reservation: ${reservationStatusLabel(rsv.status)}`}
+                    >
+                      {reservationStatusLabel(rsv.status)}
+                    </span>
+                  ) : (
+                    <span
+                      className={`${styles.statusBadge} ${styles.statusAvailable}`}
+                      aria-label="Reservation: Available"
+                    >
+                      Available
+                    </span>
+                  )}
+                </td>
+                <td>
+                  {r ? formatAmount(r.base_price, r.currency) : (
+                    <span className={styles.notSet}>Not priced</span>
+                  )}
                 </td>
                 <td>
                   {r
@@ -203,9 +246,7 @@ export function UnitsTable({
                 <td>
                   {r
                     ? formatAmount(r.final_price, r.currency)
-                    : p
-                      ? formatCurrency(p.final_unit_price)
-                      : <span aria-label="Not priced">—</span>}
+                    : <span aria-label="Not priced">—</span>}
                 </td>
                 <td>
                   {r ? (
@@ -224,7 +265,16 @@ export function UnitsTable({
                       : "No"
                     : <span aria-label="Not set">—</span>}
                 </td>
-                <td>{a?.floor_premium_category ?? <span aria-label="Not set">—</span>}</td>
+                <td>
+                  {a?.floor_premium_category ?? (
+                    <span
+                      className={hasMissingAttributes ? styles.notSet : undefined}
+                      aria-label={hasMissingAttributes ? "Attributes not set" : "Not set"}
+                    >
+                      {hasMissingAttributes ? "Attributes not set" : "—"}
+                    </span>
+                  )}
+                </td>
                 <td>{a?.orientation ?? <span aria-label="Not set">—</span>}</td>
                 <td>
                   {a != null && a.upgrade_flag != null
@@ -241,7 +291,7 @@ export function UnitsTable({
                       onClick={() => onEditPricing(unit)}
                       aria-label={`Edit pricing for unit ${unit.unit_number}`}
                     >
-                      Edit Pricing
+                      {r ? "Edit Pricing" : "Add Pricing"}
                     </button>
                   )}
                   {onEditAttributes && (
@@ -251,7 +301,7 @@ export function UnitsTable({
                       onClick={() => onEditAttributes(unit)}
                       aria-label={`Edit attributes for unit ${unit.unit_number}`}
                     >
-                      Edit Attributes
+                      {a ? "Edit Attributes" : "Add Attributes"}
                     </button>
                   )}
                   <button
