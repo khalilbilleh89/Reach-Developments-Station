@@ -115,14 +115,34 @@ function UnitsPricingList() {
         setPricingRecords(recordMap);
         setAttributesRecords(attrsMap);
 
-        // Build a per-unit reservation map: prefer active reservations; fall back
-        // to the most recent reservation for display purposes.
+        // Build a per-unit reservation map with deterministic selection:
+        //   1. Prefer an active reservation over any non-active one.
+        //   2. Among reservations with the same activeness, keep the most recent
+        //      (compare updated_at, fall back to created_at).
+        //   3. When timestamps are absent on both sides, keep the existing entry
+        //      so the result stays stable regardless of API ordering.
+        const isActive = (r: Reservation) => r.status === "active";
+        const tsOf = (r: Reservation): number => {
+          const s = r.updated_at ?? r.created_at;
+          return s ? new Date(s).getTime() : -1;
+        };
+        const preferredReservation = (a: Reservation, b: Reservation): Reservation => {
+          const aActive = isActive(a);
+          const bActive = isActive(b);
+          // Different activeness — active wins.
+          if (aActive !== bActive) return aActive ? a : b;
+          // Same activeness — prefer the more recent one.
+          const tsDiff = tsOf(b) - tsOf(a);
+          if (tsDiff !== 0) return tsDiff > 0 ? b : a;
+          // Timestamps identical or both absent — keep existing (a).
+          return a;
+        };
         const reservationMap: Record<string, Reservation> = {};
         for (const reservation of reservationsData.items) {
           const existing = reservationMap[reservation.unit_id];
-          if (!existing || reservation.status === "active") {
-            reservationMap[reservation.unit_id] = reservation;
-          }
+          reservationMap[reservation.unit_id] = existing
+            ? preferredReservation(existing, reservation)
+            : reservation;
         }
         setReservations(reservationMap);
       })
