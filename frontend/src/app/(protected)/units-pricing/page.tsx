@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { UnitFilters } from "@/components/units/UnitFilters";
@@ -36,12 +36,23 @@ const DEFAULT_FILTERS: UnitFiltersState = {
   max_price: "",
 };
 
+interface UnitsPricingListProps {
+  /** When navigating from a setup-state CTA, auto-open this action for the target unit. */
+  initialAction: string;
+  /** Unit ID to auto-open a modal for. */
+  initialTargetId: string;
+}
+
 /**
  * UnitsPricingList — project-aware units inventory and pricing listing.
  *
  * Rendered by UnitsPricingPage when no ?unitId= query param is present.
+ *
+ * When `initialAction` + `initialTargetId` are present (e.g., from a setup-state
+ * CTA on the pricing detail view), the appropriate modal is automatically opened
+ * once the unit list and pricing data finish loading.
  */
-function UnitsPricingList() {
+function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListProps) {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -65,6 +76,9 @@ function UnitsPricingList() {
   // Edit attributes modal state
   const [editingAttrsUnit, setEditingAttrsUnit] = useState<UnitListItem | null>(null);
   const [editingAttrsRecord, setEditingAttrsRecord] = useState<UnitQualitativeAttributes | null>(null);
+
+  // Guard: only auto-open once per mount so the modal doesn't reopen after close
+  const hasAutoOpened = useRef(false);
 
   // Load projects on mount
   useEffect(() => {
@@ -160,6 +174,30 @@ function UnitsPricingList() {
       isCurrent = false;
     };
   }, [selectedProjectId]);
+
+  // Auto-open the appropriate modal once data is ready (from setup-state CTAs)
+  useEffect(() => {
+    if (
+      hasAutoOpened.current ||
+      !initialAction ||
+      !initialTargetId ||
+      unitsLoading ||
+      units.length === 0
+    ) return;
+
+    const targetUnit = units.find((u) => u.id === initialTargetId);
+    if (!targetUnit) return;
+
+    hasAutoOpened.current = true;
+
+    if (initialAction === "editAttributes") {
+      setEditingAttrsUnit(targetUnit);
+      setEditingAttrsRecord(attributesRecords[targetUnit.id] ?? null);
+    } else if (initialAction === "editPricing") {
+      setEditingUnit(targetUnit);
+      setEditingRecord(pricingRecords[targetUnit.id] ?? null);
+    }
+  }, [initialAction, initialTargetId, units, unitsLoading, pricingRecords, attributesRecords]);
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedProjectId(e.target.value);
@@ -339,13 +377,19 @@ function UnitsPricingList() {
 /**
  * UnitsPricingPage — renders the unit detail view when ?unitId= is present,
  * otherwise renders the filterable units list.
+ *
+ * Reads optional `action` and `target` query params forwarded from the
+ * pricing detail view's setup-state CTAs, and passes them to UnitsPricingList
+ * so the appropriate modal is auto-opened once data finishes loading.
  */
 export default function UnitsPricingPage() {
   const searchParams = useSearchParams();
   const unitId = searchParams.get("unitId");
+  const action = searchParams.get("action") ?? "";
+  const target = searchParams.get("target") ?? "";
 
   if (unitId) {
     return <UnitPricingDetailView />;
   }
-  return <UnitsPricingList />;
+  return <UnitsPricingList initialAction={action} initialTargetId={target} />;
 }

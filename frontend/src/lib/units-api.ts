@@ -31,6 +31,7 @@
 import { apiFetch, ApiError } from "./api-client";
 import type {
   Project,
+  PricingDetailState,
   Reservation,
   ReservationCreate,
   ReservationListResponse,
@@ -192,18 +193,56 @@ export async function getUnitPricingAttributes(
 /**
  * Fetch the combined unit detail + pricing data for the detail page.
  *
- * Fetches unit, pricing, and attributes in parallel. Pricing/attribute
- * "not found" states are surfaced as null; unexpected errors are propagated.
+ * Fetches unit first (throws if not found), then fetches pricing and
+ * attributes in parallel using Promise.allSettled so that a 422 from the
+ * pricing engine does not discard the unit data.
+ *
+ * pricingState semantics:
+ *   READY              — pricing engine returned a valid calculation.
+ *   MISSING_ATTRIBUTES — backend returned 422 (engine inputs not configured).
+ *   MISSING_PRICING_RECORD — pricing not found (404).
+ *
+ * Unexpected failures (5xx, network, auth) are re-thrown so the UI renders
+ * a true error banner instead of a misleading setup state.
  */
 export async function getUnitPricingDetail(
   unitId: string,
 ): Promise<UnitPricingDetail> {
-  const [unit, pricing, attributes] = await Promise.all([
-    getUnitById(unitId),
-    getUnitPricing(unitId),
-    getUnitPricingAttributes(unitId),
+  const unit = await getUnitById(unitId);
+
+  const [pricingResult, attributesResult] = await Promise.allSettled([
+    apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
+    apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
   ]);
-  return { unit, pricing, attributes };
+
+  let pricing: UnitPrice | null = null;
+  let pricingState: PricingDetailState = "READY";
+
+  if (pricingResult.status === "fulfilled") {
+    pricing = pricingResult.value;
+  } else {
+    const err = pricingResult.reason;
+    if (err instanceof ApiError && err.status === 422) {
+      pricingState = "MISSING_ATTRIBUTES";
+    } else if (isNotFoundError(err)) {
+      pricingState = "MISSING_PRICING_RECORD";
+    } else {
+      throw err;
+    }
+  }
+
+  let attributes: UnitPricingAttributes | null = null;
+  if (attributesResult.status === "fulfilled") {
+    attributes = attributesResult.value;
+  } else {
+    // Only 404 is treated as "not configured yet"; all other failures
+    // (5xx, network, auth) are re-thrown to surface a true error banner.
+    if (!isNotFoundError(attributesResult.reason)) {
+      throw attributesResult.reason;
+    }
+  }
+
+  return { unit, pricing, attributes, pricingState };
 }
 
 // ---------- Inventory CRUD functions -------------------------------------

@@ -188,6 +188,22 @@ export interface UnitPrice {
 }
 
 /**
+ * Readiness state for the unit pricing detail page.
+ *
+ * - READY: pricing engine returned a valid calculation result.
+ * - MISSING_ATTRIBUTES: backend returned HTTP 422 — engine inputs are
+ *   not configured yet.  Show a setup prompt, not an error banner.
+ * - MISSING_PRICING_RECORD: no pricing record exists for the unit (404).
+ *
+ * Unexpected backend or network failures are thrown as errors, not captured
+ * here, so the calling component can show a true error banner.
+ */
+export type PricingDetailState =
+  | "READY"
+  | "MISSING_ATTRIBUTES"
+  | "MISSING_PRICING_RECORD";
+
+/**
  * Combined unit pricing detail used by the detail page.
  * Aggregates unit data, pricing attributes, and calculated price.
  */
@@ -195,6 +211,7 @@ export interface UnitPricingDetail {
   unit: UnitDetail;
   pricing: UnitPrice | null;
   attributes: UnitPricingAttributes | null;
+  pricingState: PricingDetailState;
 }
 
 // ---------- Inventory create/update types --------------------------------

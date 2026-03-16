@@ -100,6 +100,7 @@ describe("UnitPricingDetailView", () => {
       unit: mockUnit,
       pricing: mockPricing,
       attributes: mockAttributes,
+      pricingState: "READY",
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -112,6 +113,7 @@ describe("UnitPricingDetailView", () => {
       unit: mockUnit,
       pricing: mockPricing,
       attributes: mockAttributes,
+      pricingState: "READY",
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -124,6 +126,7 @@ describe("UnitPricingDetailView", () => {
       unit: mockUnit,
       pricing: mockPricing,
       attributes: mockAttributes,
+      pricingState: "READY",
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
@@ -132,16 +135,42 @@ describe("UnitPricingDetailView", () => {
     expect(screen.getAllByText(/85\.5 sqm/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("handles missing pricing gracefully", async () => {
+  it("shows setup state when pricing attributes are missing (HTTP 422)", async () => {
     mockGetUnitPricingDetail.mockResolvedValue({
       unit: mockUnit,
       pricing: null,
       attributes: null,
+      pricingState: "MISSING_ATTRIBUTES",
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
-      expect(screen.getByText(/not priced/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Pricing Not Available Yet/i),
+      ).toBeInTheDocument(),
     );
+    expect(
+      screen.getByText(/Required pricing attributes are missing/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Edit Attributes/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Edit Pricing/i })).toBeInTheDocument();
+  });
+
+  it("shows setup state when pricing record is missing", async () => {
+    mockGetUnitPricingDetail.mockResolvedValue({
+      unit: mockUnit,
+      pricing: null,
+      attributes: null,
+      pricingState: "MISSING_PRICING_RECORD",
+    });
+    render(<UnitPricingDetailView />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Unit Pricing Not Configured/i),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("link", { name: /Create Pricing Record/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders error state when fetch fails", async () => {
@@ -157,6 +186,7 @@ describe("UnitPricingDetailView", () => {
       unit: mockUnit,
       pricing: mockPricing,
       attributes: mockAttributes,
+      pricingState: "READY",
     });
     render(<UnitPricingDetailView />);
     expect(
@@ -169,6 +199,7 @@ describe("UnitPricingDetailView", () => {
       unit: mockUnit,
       pricing: mockPricing,
       attributes: mockAttributes,
+      pricingState: "READY",
     });
     render(<UnitPricingDetailView />);
     await waitFor(() =>
