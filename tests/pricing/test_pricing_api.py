@@ -215,3 +215,74 @@ def test_price_calculation_is_deterministic(client: TestClient):
     resp1 = client.post(f"/api/v1/pricing/unit/{unit_id}/calculate")
     resp2 = client.post(f"/api/v1/pricing/unit/{unit_id}/calculate")
     assert resp1.json()["final_unit_price"] == resp2.json()["final_unit_price"]
+
+
+# ---------------------------------------------------------------------------
+# Bulk project pricing endpoints
+# ---------------------------------------------------------------------------
+
+def test_get_project_pricing(client: TestClient):
+    """GET /api/v1/projects/{id}/unit-pricing returns a map of unit_id → pricing record."""
+    project_id, unit_id = _create_hierarchy(client, "PRJ-BPRICING")
+    client.put(f"/api/v1/units/{unit_id}/pricing", json={"base_price": 500_000.0})
+
+    resp = client.get(f"/api/v1/projects/{project_id}/unit-pricing")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert unit_id in data
+    assert data[unit_id]["base_price"] == pytest.approx(500_000.0)
+    assert data[unit_id]["final_price"] == pytest.approx(500_000.0)
+    assert data[unit_id]["unit_id"] == unit_id
+
+
+def test_get_project_pricing_empty(client: TestClient):
+    """GET project unit-pricing returns empty map when no units have records."""
+    project_id, _ = _create_hierarchy(client, "PRJ-BPRICEMPTY")
+    resp = client.get(f"/api/v1/projects/{project_id}/unit-pricing")
+    assert resp.status_code == 200
+    assert resp.json() == {}
+
+
+def test_get_project_pricing_attributes(client: TestClient):
+    """GET /api/v1/projects/{id}/unit-pricing-attributes returns a map of unit_id → attributes."""
+    project_id, unit_id = _create_hierarchy(client, "PRJ-BATTRS")
+    client.put(f"/api/v1/units/{unit_id}/pricing-attributes", json={"view_type": "sea"})
+
+    resp = client.get(f"/api/v1/projects/{project_id}/unit-pricing-attributes")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert unit_id in data
+    assert data[unit_id]["view_type"] == "sea"
+    assert data[unit_id]["unit_id"] == unit_id
+
+
+def test_get_project_pricing_attributes_empty(client: TestClient):
+    """GET project unit-pricing-attributes returns empty map when no units have attributes."""
+    project_id, _ = _create_hierarchy(client, "PRJ-BATTRSMPTY")
+    resp = client.get(f"/api/v1/projects/{project_id}/unit-pricing-attributes")
+    assert resp.status_code == 200
+    assert resp.json() == {}
+
+
+def test_get_project_pricing_multiple_units(client: TestClient):
+    """GET project unit-pricing includes all units with pricing records."""
+    project_id, unit_id_1 = _create_hierarchy(client, "PRJ-BMULTI")
+    # Create a second unit in the same project via same hierarchy
+    phase_id = client.get(f"/api/v1/phases?project_id={project_id}&limit=1").json()["items"][0]["id"]
+    building_id = client.get(f"/api/v1/buildings?phase_id={phase_id}&limit=1").json()["items"][0]["id"]
+    floor_id = client.get(f"/api/v1/buildings/{building_id}/floors?limit=1").json()["items"][0]["id"]
+    unit_id_2 = client.post(
+        "/api/v1/units",
+        json={"floor_id": floor_id, "unit_number": "102", "unit_type": "studio", "internal_area": 80.0},
+    ).json()["id"]
+
+    client.put(f"/api/v1/units/{unit_id_1}/pricing", json={"base_price": 400_000.0})
+    client.put(f"/api/v1/units/{unit_id_2}/pricing", json={"base_price": 300_000.0})
+
+    resp = client.get(f"/api/v1/projects/{project_id}/unit-pricing")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert unit_id_1 in data
+    assert unit_id_2 in data
+    assert data[unit_id_1]["base_price"] == pytest.approx(400_000.0)
+    assert data[unit_id_2]["base_price"] == pytest.approx(300_000.0)

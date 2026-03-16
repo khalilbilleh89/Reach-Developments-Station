@@ -84,3 +84,21 @@ class UnitPricingRepository:
         if existing:
             return self.update_for_unit(existing, **kwargs)
         return self.create_for_unit(unit_id, **kwargs)
+
+    def list_by_project(self, project_id: str) -> list["UnitPricing"]:
+        """Return all pricing records for units belonging to the given project."""
+        from app.modules.pricing.models import UnitPricing
+        from app.modules.units.models import Unit
+        from app.modules.floors.models import Floor
+        from app.modules.buildings.models import Building
+        from app.modules.phases.models import Phase
+
+        return (
+            self.db.query(UnitPricing)
+            .join(Unit, UnitPricing.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Phase.project_id == project_id)
+            .all()
+        )

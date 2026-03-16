@@ -47,3 +47,20 @@ class UnitQualitativeAttributesRepository:
         self.db.commit()
         self.db.refresh(record)
         return record
+
+    def list_by_project(self, project_id: str) -> list[UnitQualitativeAttributes]:
+        """Return all qualitative attributes for units belonging to the given project."""
+        from app.modules.units.models import Unit
+        from app.modules.floors.models import Floor
+        from app.modules.buildings.models import Building
+        from app.modules.phases.models import Phase
+
+        return (
+            self.db.query(UnitQualitativeAttributes)
+            .join(Unit, UnitQualitativeAttributes.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Phase.project_id == project_id)
+            .all()
+        )

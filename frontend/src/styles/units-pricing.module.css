@@ -207,6 +207,11 @@
   color: #44337a;
 }
 
+.statusExpired {
+  background: #fed7d7;
+  color: #742a2a;
+}
+
 /* --- Pricing summary card --------------------------------- */
 
 .summaryCard {
@@ -460,4 +465,20 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin-bottom: var(--space-4);
+}
+
+/* --- Row-level indicators -------------------------------- */
+
+/* Subtle warning indicator for missing pricing inputs */
+.rowWarning {
+  color: var(--color-warning, #d97706);
+  font-size: var(--font-size-sm);
+  cursor: default;
+}
+
+/* Muted placeholder text for cells with missing data */
+.notSet {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: var(--font-size-sm);
 }

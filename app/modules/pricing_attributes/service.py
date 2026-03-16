@@ -62,3 +62,10 @@ class UnitPricingAttributesService:
         created = existing is None
         record = self._repo.upsert_for_unit(unit_id, data)
         return UnitQualitativeAttributesResponse.model_validate(record), created
+
+    def get_project_pricing_attributes(
+        self, project_id: str
+    ) -> "dict[str, UnitQualitativeAttributesResponse]":
+        """Return all qualitative attributes for units in a project, keyed by unit_id."""
+        records = self._repo.list_by_project(project_id)
+        return {r.unit_id: UnitQualitativeAttributesResponse.model_validate(r) for r in records}

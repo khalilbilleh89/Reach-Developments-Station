@@ -37,13 +37,19 @@ jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
 // Mock format-utils
 jest.mock("@/lib/format-utils", () => ({
   formatCurrency: (v: number) => `AED ${v.toLocaleString()}`,
+  formatAmount: (v: number, currency: string) => `${currency} ${v.toLocaleString()}`,
+  formatAdjustment: (v: number, currency: string) => `${v > 0 ? "+" : ""}${currency} ${v.toLocaleString()}`,
 }));
 
-// Mock units-api
+// Mock units-api — includes all functions used by the page
 jest.mock("@/lib/units-api", () => ({
   getProjects: jest.fn(),
   getUnitsByProject: jest.fn(),
-  getUnitPricing: jest.fn(),
+  getProjectPricing: jest.fn(),
+  getProjectPricingAttributes: jest.fn(),
+  listProjectReservations: jest.fn(),
+  saveUnitPricingRecord: jest.fn(),
+  saveUnitQualitativeAttributes: jest.fn(),
 }));
 
 // Import ApiError for constructing error fixtures
@@ -57,12 +63,20 @@ jest.mock("@/lib/api-client", () => ({
   },
 }));
 
-import { getProjects, getUnitsByProject, getUnitPricing } from "@/lib/units-api";
+import {
+  getProjects,
+  getUnitsByProject,
+  getProjectPricing,
+  getProjectPricingAttributes,
+  listProjectReservations,
+} from "@/lib/units-api";
 import UnitsPricingPage from "@/app/(protected)/units-pricing/page";
 
 const mockGetProjects = getProjects as jest.Mock;
 const mockGetUnitsByProject = getUnitsByProject as jest.Mock;
-const mockGetUnitPricing = getUnitPricing as jest.Mock;
+const mockGetProjectPricing = getProjectPricing as jest.Mock;
+const mockGetProjectPricingAttributes = getProjectPricingAttributes as jest.Mock;
+const mockListProjectReservations = listProjectReservations as jest.Mock;
 
 const mockProjects = [
   { id: "proj-1", name: "Marina Tower", code: "MT-01", status: "active" },
@@ -98,22 +112,45 @@ const mockUnits = [
   },
 ];
 
-const mockPricing = {
+const mockPricingRecord = {
+  id: "pr-1",
   unit_id: "unit-1",
-  unit_area: 85.5,
-  base_unit_price: 900_000,
-  premium_total: 50_000,
-  final_unit_price: 950_000,
+  base_price: 900_000,
+  manual_adjustment: 0,
+  final_price: 900_000,
+  currency: "AED",
+  pricing_status: "draft",
+  notes: null,
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-01T00:00:00Z",
 };
+
+const mockAttributes = {
+  id: "attr-1",
+  unit_id: "unit-1",
+  view_type: "sea",
+  corner_unit: false,
+  floor_premium_category: "standard",
+  orientation: "N",
+  outdoor_area_premium: "balcony",
+  upgrade_flag: false,
+  notes: null,
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-01T00:00:00Z",
+};
+
+const emptyReservations = { total: 0, items: [] };
 
 describe("UnitsPricingPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetProjects.mockResolvedValue(mockProjects);
     mockGetUnitsByProject.mockResolvedValue(mockUnits);
-    mockGetUnitPricing.mockImplementation((id: string) =>
-      id === "unit-1" ? Promise.resolve(mockPricing) : Promise.resolve(null),
-    );
+    // unit-1 has pricing; unit-2 does not
+    mockGetProjectPricing.mockResolvedValue({ "unit-1": mockPricingRecord });
+    // unit-1 has attributes; unit-2 does not
+    mockGetProjectPricingAttributes.mockResolvedValue({ "unit-1": mockAttributes });
+    mockListProjectReservations.mockResolvedValue(emptyReservations);
   });
 
   it("renders the page title", () => {
@@ -166,13 +203,13 @@ describe("UnitsPricingPage", () => {
     );
   });
 
-  it("propagates unexpected pricing errors to the units error state", async () => {
+  it("propagates unexpected bulk pricing errors to the units error state", async () => {
     mockGetUnitsByProject.mockResolvedValue(mockUnits);
-    // Simulate a 500 error from pricing — not a 404 "not found"
+    // Simulate a 500 error from the bulk pricing endpoint
     const { ApiError } = jest.requireMock("@/lib/api-client") as {
       ApiError: new (message: string, status: number) => Error;
     };
-    mockGetUnitPricing.mockRejectedValue(new ApiError("Internal Server Error", 500));
+    mockGetProjectPricing.mockRejectedValue(new ApiError("Internal Server Error", 500));
     render(<UnitsPricingPage />);
     await waitFor(() =>
       expect(screen.getByText("Internal Server Error")).toBeInTheDocument(),
@@ -210,5 +247,77 @@ describe("UnitsPricingPage", () => {
     );
     expect(screen.getByText("A101")).toBeInTheDocument();
     expect(screen.queryByText("A102")).not.toBeInTheDocument();
+  });
+
+  // ── Partial data tolerance tests ──────────────────────────────────────────
+
+  it("renders rows without pricing records gracefully (shows 'Not priced')", async () => {
+    // unit-2 has no pricing record
+    mockGetProjectPricing.mockResolvedValue({});
+    render(<UnitsPricingPage />);
+    await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
+    // Both "Not priced" labels should appear (one per unit without a record)
+    const notPriced = screen.getAllByText("Not priced");
+    expect(notPriced.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders rows without attributes gracefully (shows 'Attributes not set')", async () => {
+    // No attributes for any unit
+    mockGetProjectPricingAttributes.mockResolvedValue({});
+    render(<UnitsPricingPage />);
+    await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
+    // "Attributes not set" should appear for units missing attributes
+    const attrsNotSet = screen.getAllByText("Attributes not set");
+    expect(attrsNotSet.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows 'Available' reservation badge when unit has no reservation", async () => {
+    mockListProjectReservations.mockResolvedValue({ total: 0, items: [] });
+    render(<UnitsPricingPage />);
+    await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
+    const available = screen.getAllByText("Available");
+    // At least one badge per unit with no reservation
+    expect(available.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows 'Reserved' badge for unit with active reservation", async () => {
+    mockListProjectReservations.mockResolvedValue({
+      total: 1,
+      items: [
+        {
+          id: "rsv-1",
+          unit_id: "unit-1",
+          customer_name: "Alice",
+          customer_phone: "+971500000000",
+          customer_email: null,
+          reservation_price: 900_000,
+          reservation_fee: null,
+          currency: "AED",
+          status: "active",
+          expires_at: null,
+          notes: null,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+        },
+      ],
+    });
+    render(<UnitsPricingPage />);
+    await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
+    // unit-1 should show "Reserved" badge; unit-2 still "Available"
+    expect(screen.getByText("Reserved")).toBeInTheDocument();
+    expect(screen.getByText("Available")).toBeInTheDocument();
+  });
+
+  it("uses 3 bulk requests instead of per-unit requests", async () => {
+    render(<UnitsPricingPage />);
+    await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
+    // Bulk functions should each be called exactly once
+    expect(mockGetProjectPricing).toHaveBeenCalledTimes(1);
+    expect(mockGetProjectPricingAttributes).toHaveBeenCalledTimes(1);
+    expect(mockListProjectReservations).toHaveBeenCalledTimes(1);
+    // All called with the first project id
+    expect(mockGetProjectPricing).toHaveBeenCalledWith("proj-1");
+    expect(mockGetProjectPricingAttributes).toHaveBeenCalledWith("proj-1");
+    expect(mockListProjectReservations).toHaveBeenCalledWith("proj-1");
   });
 });

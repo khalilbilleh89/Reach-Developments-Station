@@ -413,3 +413,33 @@ export async function listProjectReservations(
     `/projects/${encodeURIComponent(projectId)}/reservations`,
   );
 }
+
+// ---------- Bulk project pricing helpers ---------------------------------
+
+/**
+ * Fetch all formal pricing records for a project in a single bulk request.
+ *
+ * Returns a map of unit_id → UnitPricingRecord for all units in the project
+ * that have a pricing record. Units without a record are absent from the map.
+ */
+export async function getProjectPricing(
+  projectId: string,
+): Promise<Record<string, import("./units-types").UnitPricingRecord>> {
+  return apiFetch<Record<string, import("./units-types").UnitPricingRecord>>(
+    `/projects/${encodeURIComponent(projectId)}/unit-pricing`,
+  );
+}
+
+/**
+ * Fetch all qualitative pricing attributes for a project in a single bulk request.
+ *
+ * Returns a map of unit_id → UnitQualitativeAttributes for all units that
+ * have attributes set. Units without attributes are absent from the map.
+ */
+export async function getProjectPricingAttributes(
+  projectId: string,
+): Promise<Record<string, UnitQualitativeAttributes>> {
+  return apiFetch<Record<string, UnitQualitativeAttributes>>(
+    `/projects/${encodeURIComponent(projectId)}/unit-pricing-attributes`,
+  );
+}

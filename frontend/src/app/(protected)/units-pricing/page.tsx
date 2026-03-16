@@ -11,17 +11,17 @@ import { EditAttributesModal } from "@/components/units/EditAttributesModal";
 import {
   getProjects,
   getUnitsByProject,
-  getUnitPricing,
-  getUnitPricingRecord,
+  getProjectPricing,
   saveUnitPricingRecord,
-  getUnitQualitativeAttributes,
+  getProjectPricingAttributes,
   saveUnitQualitativeAttributes,
+  listProjectReservations,
 } from "@/lib/units-api";
 import type {
   Project,
+  Reservation,
   UnitFiltersState,
   UnitListItem,
-  UnitPrice,
   UnitPricingRecord,
   UnitPricingRecordSave,
   UnitQualitativeAttributes,
@@ -50,9 +50,9 @@ function UnitsPricingList() {
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
   const [units, setUnits] = useState<UnitListItem[]>([]);
-  const [pricing, setPricing] = useState<Record<string, UnitPrice | undefined>>({});
   const [pricingRecords, setPricingRecords] = useState<Partial<Record<string, UnitPricingRecord>>>({});
   const [attributesRecords, setAttributesRecords] = useState<Partial<Record<string, UnitQualitativeAttributes>>>({});
+  const [reservations, setReservations] = useState<Partial<Record<string, Reservation>>>({});
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
 
@@ -93,56 +93,38 @@ function UnitsPricingList() {
     setUnitsLoading(true);
     setUnitsError(null);
     setUnits([]);
-    setPricing({});
     setPricingRecords({});
     setAttributesRecords({});
+    setReservations({});
 
     getUnitsByProject(selectedProjectId)
       .then(async (unitList) => {
         if (!isCurrent) return;
         setUnits(unitList);
 
-        // Fetch engine pricing, formal pricing records, and qualitative attributes in parallel
-        const [pricingEntries, recordEntries, attrsEntries] = await Promise.all([
-          Promise.all(
-            unitList.map(async (u) => {
-              const p = await getUnitPricing(u.id);
-              return p ? ([u.id, p] as [string, UnitPrice]) : null;
-            }),
-          ),
-          Promise.all(
-            unitList.map(async (u) => {
-              const r = await getUnitPricingRecord(u.id);
-              return r ? ([u.id, r] as [string, UnitPricingRecord]) : null;
-            }),
-          ),
-          Promise.all(
-            unitList.map(async (u) => {
-              const a = await getUnitQualitativeAttributes(u.id);
-              return a ? ([u.id, a] as [string, UnitQualitativeAttributes]) : null;
-            }),
-          ),
+        // Fetch pricing records, qualitative attributes, and reservations in parallel
+        // (3 requests total regardless of unit count)
+        const [recordMap, attrsMap, reservationsData] = await Promise.all([
+          getProjectPricing(selectedProjectId),
+          getProjectPricingAttributes(selectedProjectId),
+          listProjectReservations(selectedProjectId),
         ]);
 
         if (!isCurrent) return;
 
-        const pricingMap: Record<string, UnitPrice> = {};
-        for (const entry of pricingEntries) {
-          if (entry) pricingMap[entry[0]] = entry[1];
-        }
-        setPricing(pricingMap);
-
-        const recordMap: Record<string, UnitPricingRecord> = {};
-        for (const entry of recordEntries) {
-          if (entry) recordMap[entry[0]] = entry[1];
-        }
         setPricingRecords(recordMap);
-
-        const attrsMap: Record<string, UnitQualitativeAttributes> = {};
-        for (const entry of attrsEntries) {
-          if (entry) attrsMap[entry[0]] = entry[1];
-        }
         setAttributesRecords(attrsMap);
+
+        // Build a per-unit reservation map: prefer active reservations; fall back
+        // to the most recent reservation for display purposes.
+        const reservationMap: Record<string, Reservation> = {};
+        for (const reservation of reservationsData.items) {
+          const existing = reservationMap[reservation.unit_id];
+          if (!existing || reservation.status === "active") {
+            reservationMap[reservation.unit_id] = reservation;
+          }
+        }
+        setReservations(reservationMap);
       })
       .catch((err: unknown) => {
         if (!isCurrent) return;
@@ -224,15 +206,13 @@ function UnitsPricingList() {
     if (filters.min_price !== "") {
       const min = parseFloat(filters.min_price);
       const r = pricingRecords[u.id];
-      const p = pricing[u.id];
-      const finalPrice = r ? r.final_price : p ? p.final_unit_price : null;
+      const finalPrice = r ? r.final_price : null;
       if (finalPrice === null || finalPrice < min) return false;
     }
     if (filters.max_price !== "") {
       const max = parseFloat(filters.max_price);
       const r = pricingRecords[u.id];
-      const p = pricing[u.id];
-      const finalPrice = r ? r.final_price : p ? p.final_unit_price : null;
+      const finalPrice = r ? r.final_price : null;
       if (finalPrice === null || finalPrice > max) return false;
     }
     return true;
@@ -299,9 +279,9 @@ function UnitsPricingList() {
               </p>
               <UnitsTable
                 units={filteredUnits}
-                pricing={pricing}
                 pricingRecords={pricingRecords}
                 attributesRecords={attributesRecords}
+                reservations={reservations}
                 onViewUnit={handleViewUnit}
                 onEditPricing={handleEditPricing}
                 onEditAttributes={handleEditAttributes}
