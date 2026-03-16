@@ -2,7 +2,7 @@
  * UnitsPricingPage tests
  */
 import React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // Mock Next.js navigation
@@ -365,9 +365,9 @@ describe("UnitsPricingPage", () => {
     });
     render(<UnitsPricingPage />);
     await waitFor(() => expect(screen.getByText("A101")).toBeInTheDocument());
-    // The active reservation should be selected — badge shows "Reserved"
-    // Note: "Reserved" also appears as a filter option — use getAllByText
-    expect(screen.getAllByText("Reserved").length).toBeGreaterThanOrEqual(1);
+    // The active reservation should be selected — badge shows "Reserved" on the A101 row
+    const a101Row = screen.getByRole("row", { name: /A101/i });
+    expect(within(a101Row).getByText("Reserved")).toBeInTheDocument();
   });
 
   it("selects more recent reservation when both have same status", async () => {
