@@ -7,12 +7,15 @@ import { UnitFilters } from "@/components/units/UnitFilters";
 import { UnitsTable } from "@/components/units/UnitsTable";
 import UnitPricingDetailView from "@/components/units/UnitPricingDetailView";
 import { EditPricingModal } from "@/components/pricing/EditPricingModal";
+import { EditAttributesModal } from "@/components/units/EditAttributesModal";
 import {
   getProjects,
   getUnitsByProject,
   getUnitPricing,
   getUnitPricingRecord,
   saveUnitPricingRecord,
+  getUnitQualitativeAttributes,
+  saveUnitQualitativeAttributes,
 } from "@/lib/units-api";
 import type {
   Project,
@@ -21,6 +24,8 @@ import type {
   UnitPrice,
   UnitPricingRecord,
   UnitPricingRecordSave,
+  UnitQualitativeAttributes,
+  UnitQualitativeAttributesSave,
 } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -47,6 +52,7 @@ function UnitsPricingList() {
   const [units, setUnits] = useState<UnitListItem[]>([]);
   const [pricing, setPricing] = useState<Record<string, UnitPrice | undefined>>({});
   const [pricingRecords, setPricingRecords] = useState<Partial<Record<string, UnitPricingRecord>>>({});
+  const [attributesRecords, setAttributesRecords] = useState<Partial<Record<string, UnitQualitativeAttributes>>>({});
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
 
@@ -55,6 +61,10 @@ function UnitsPricingList() {
   // Edit pricing modal state
   const [editingUnit, setEditingUnit] = useState<UnitListItem | null>(null);
   const [editingRecord, setEditingRecord] = useState<UnitPricingRecord | null>(null);
+
+  // Edit attributes modal state
+  const [editingAttrsUnit, setEditingAttrsUnit] = useState<UnitListItem | null>(null);
+  const [editingAttrsRecord, setEditingAttrsRecord] = useState<UnitQualitativeAttributes | null>(null);
 
   // Load projects on mount
   useEffect(() => {
@@ -85,14 +95,15 @@ function UnitsPricingList() {
     setUnits([]);
     setPricing({});
     setPricingRecords({});
+    setAttributesRecords({});
 
     getUnitsByProject(selectedProjectId)
       .then(async (unitList) => {
         if (!isCurrent) return;
         setUnits(unitList);
 
-        // Fetch both engine pricing and formal pricing records in parallel
-        const [pricingEntries, recordEntries] = await Promise.all([
+        // Fetch engine pricing, formal pricing records, and qualitative attributes in parallel
+        const [pricingEntries, recordEntries, attrsEntries] = await Promise.all([
           Promise.all(
             unitList.map(async (u) => {
               const p = await getUnitPricing(u.id);
@@ -103,6 +114,12 @@ function UnitsPricingList() {
             unitList.map(async (u) => {
               const r = await getUnitPricingRecord(u.id);
               return r ? ([u.id, r] as [string, UnitPricingRecord]) : null;
+            }),
+          ),
+          Promise.all(
+            unitList.map(async (u) => {
+              const a = await getUnitQualitativeAttributes(u.id);
+              return a ? ([u.id, a] as [string, UnitQualitativeAttributes]) : null;
             }),
           ),
         ]);
@@ -120,6 +137,12 @@ function UnitsPricingList() {
           if (entry) recordMap[entry[0]] = entry[1];
         }
         setPricingRecords(recordMap);
+
+        const attrsMap: Record<string, UnitQualitativeAttributes> = {};
+        for (const entry of attrsEntries) {
+          if (entry) attrsMap[entry[0]] = entry[1];
+        }
+        setAttributesRecords(attrsMap);
       })
       .catch((err: unknown) => {
         if (!isCurrent) return;
@@ -171,6 +194,27 @@ function UnitsPricingList() {
   const handleCloseModal = useCallback(() => {
     setEditingUnit(null);
     setEditingRecord(null);
+  }, []);
+
+  const handleEditAttributes = useCallback(
+    (unit: UnitListItem) => {
+      setEditingAttrsUnit(unit);
+      setEditingAttrsRecord(attributesRecords[unit.id] ?? null);
+    },
+    [attributesRecords],
+  );
+
+  const handleSaveAttributes = useCallback(
+    async (unitId: string, data: UnitQualitativeAttributesSave) => {
+      const saved = await saveUnitQualitativeAttributes(unitId, data);
+      setAttributesRecords((prev) => ({ ...prev, [unitId]: saved }));
+    },
+    [],
+  );
+
+  const handleCloseAttrsModal = useCallback(() => {
+    setEditingAttrsUnit(null);
+    setEditingAttrsRecord(null);
   }, []);
 
   // Apply all client-side filters: status, unit_type, and price range
@@ -257,8 +301,10 @@ function UnitsPricingList() {
                 units={filteredUnits}
                 pricing={pricing}
                 pricingRecords={pricingRecords}
+                attributesRecords={attributesRecords}
                 onViewUnit={handleViewUnit}
                 onEditPricing={handleEditPricing}
+                onEditAttributes={handleEditAttributes}
               />
             </>
           )}
@@ -273,6 +319,17 @@ function UnitsPricingList() {
           existing={editingRecord}
           onSave={handleSavePricing}
           onClose={handleCloseModal}
+        />
+      )}
+
+      {/* Edit Attributes Modal */}
+      {editingAttrsUnit && (
+        <EditAttributesModal
+          unitId={editingAttrsUnit.id}
+          unitNumber={editingAttrsUnit.unit_number}
+          existing={editingAttrsRecord}
+          onSave={handleSaveAttributes}
+          onClose={handleCloseAttrsModal}
         />
       )}
     </PageContainer>

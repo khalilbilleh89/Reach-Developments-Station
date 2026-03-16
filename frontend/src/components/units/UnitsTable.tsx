@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import type { UnitListItem, UnitPrice, UnitPricingRecord } from "@/lib/units-types";
+import type {
+  UnitListItem,
+  UnitPrice,
+  UnitPricingRecord,
+  UnitQualitativeAttributes,
+} from "@/lib/units-types";
 import { pricingStatusLabel, unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
 import { formatAmount, formatAdjustment, formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
@@ -13,10 +18,15 @@ interface UnitsTableProps {
   units: UnitListItem[];
   /** Engine-calculated pricing map keyed by unit ID. May be partial. */
   pricing: Record<string, UnitPrice | undefined>;
-  /** Formal pricing record map keyed by unit ID. May be partial. */
-  pricingRecords: Partial<Record<string, UnitPricingRecord>>;
+  /** Formal pricing record map keyed by unit ID. May be partial. Defaults to empty map. */
+  pricingRecords?: Partial<Record<string, UnitPricingRecord>>;
+  /** Qualitative pricing attributes map keyed by unit ID. May be partial. Defaults to empty map. */
+  attributesRecords?: Partial<Record<string, UnitQualitativeAttributes>>;
   onViewUnit: (unitId: string) => void;
-  onEditPricing: (unit: UnitListItem) => void;
+  /** Called when the user clicks "Edit Pricing" for a row. No-op when omitted. */
+  onEditPricing?: (unit: UnitListItem) => void;
+  /** Called when the user clicks "Edit Attributes" for a row. No-op when omitted. */
+  onEditAttributes?: (unit: UnitListItem) => void;
 }
 
 /** Map a backend UnitStatus value to the corresponding CSS module class. */
@@ -50,7 +60,15 @@ function statusClass(status: string): string {
  * All monetary values are formatted using the record's own `currency` field
  * so that non-AED records display correctly.
  */
-export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditPricing }: UnitsTableProps) {
+export function UnitsTable({
+  units,
+  pricing,
+  pricingRecords = {},
+  attributesRecords = {},
+  onViewUnit,
+  onEditPricing,
+  onEditAttributes,
+}: UnitsTableProps) {
   const [sortField, setSortField] = useState<SortField>("unit_number");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -144,6 +162,11 @@ export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditP
             <th scope="col">Adjustment</th>
             <SortHeader field="final_unit_price">Final Price</SortHeader>
             <th scope="col">Pricing Status</th>
+            <th scope="col">View</th>
+            <th scope="col">Corner</th>
+            <th scope="col">Floor Cat</th>
+            <th scope="col">Orientation</th>
+            <th scope="col">Upgrade</th>
             <th scope="col" aria-label="Actions" />
           </tr>
         </thead>
@@ -151,6 +174,7 @@ export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditP
           {sorted.map((unit) => {
             const p = pricing[unit.id];
             const r = pricingRecords[unit.id];
+            const a = attributesRecords[unit.id];
 
             return (
               <tr key={unit.id}>
@@ -192,15 +216,44 @@ export function UnitsTable({ units, pricing, pricingRecords, onViewUnit, onEditP
                     <span aria-label="Not set">—</span>
                   )}
                 </td>
+                <td>{a?.view_type ?? <span aria-label="Not set">—</span>}</td>
+                <td>
+                  {a != null && a.corner_unit != null
+                    ? a.corner_unit
+                      ? "Yes"
+                      : "No"
+                    : <span aria-label="Not set">—</span>}
+                </td>
+                <td>{a?.floor_premium_category ?? <span aria-label="Not set">—</span>}</td>
+                <td>{a?.orientation ?? <span aria-label="Not set">—</span>}</td>
+                <td>
+                  {a != null && a.upgrade_flag != null
+                    ? a.upgrade_flag
+                      ? "Yes"
+                      : "No"
+                    : <span aria-label="Not set">—</span>}
+                </td>
                 <td style={{ display: "flex", gap: "0.5rem" }}>
-                  <button
-                    type="button"
-                    className={styles.actionBtn}
-                    onClick={() => onEditPricing(unit)}
-                    aria-label={`Edit pricing for unit ${unit.unit_number}`}
-                  >
-                    Edit Pricing
-                  </button>
+                  {onEditPricing && (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => onEditPricing(unit)}
+                      aria-label={`Edit pricing for unit ${unit.unit_number}`}
+                    >
+                      Edit Pricing
+                    </button>
+                  )}
+                  {onEditAttributes && (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={() => onEditAttributes(unit)}
+                      aria-label={`Edit attributes for unit ${unit.unit_number}`}
+                    >
+                      Edit Attributes
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={styles.actionBtn}

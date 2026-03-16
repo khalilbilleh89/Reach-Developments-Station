@@ -250,3 +250,61 @@ export interface UnitPricingRecordSave {
   pricing_status?: PricingStatus;
   notes?: string | null;
 }
+
+// ---------- Qualitative pricing attributes types -------------------------
+
+/**
+ * Qualitative view type classification.
+ */
+export type ViewType = "city" | "sea" | "park" | "interior";
+
+/**
+ * Floor premium category classification.
+ */
+export type FloorPremiumCategory = "standard" | "premium" | "penthouse";
+
+/**
+ * Cardinal orientation.
+ */
+export type Orientation = "N" | "S" | "E" | "W" | "NE" | "NW" | "SE" | "SW";
+
+/**
+ * Outdoor area premium treatment.
+ */
+export type OutdoorAreaPremium = "none" | "balcony" | "terrace" | "roof_garden";
+
+/**
+ * Qualitative pricing attributes for a unit.
+ * Returned by GET /api/v1/units/{unitId}/pricing-attributes.
+ *
+ * Captures qualitative characteristics that influence pricing decisions:
+ * view type, corner unit flag, floor category, orientation, outdoor premium,
+ * upgrade flag, and analyst notes.
+ */
+export interface UnitQualitativeAttributes {
+  id: string;
+  unit_id: string;
+  view_type: ViewType | null;
+  corner_unit: boolean | null;
+  floor_premium_category: FloorPremiumCategory | null;
+  orientation: Orientation | null;
+  outdoor_area_premium: OutdoorAreaPremium | null;
+  upgrade_flag: boolean | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Payload for creating or updating qualitative pricing attributes.
+ * Sent to PUT /api/v1/units/{unitId}/pricing-attributes.
+ */
+export interface UnitQualitativeAttributesSave {
+  view_type?: ViewType | null;
+  corner_unit?: boolean | null;
+  floor_premium_category?: FloorPremiumCategory | null;
+  orientation?: Orientation | null;
+  outdoor_area_premium?: OutdoorAreaPremium | null;
+  upgrade_flag?: boolean | null;
+  notes?: string | null;
+}
