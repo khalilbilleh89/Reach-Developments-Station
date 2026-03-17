@@ -202,6 +202,7 @@ export interface UnitPrice {
   base_unit_price: number;
   premium_total: number;
   final_unit_price: number;
+  currency: string;
 }
 
 /**

@@ -8,6 +8,7 @@ import "@testing-library/jest-dom";
 jest.mock("@/styles/sales-workflow.module.css", () => ({}));
 jest.mock("@/lib/format-utils", () => ({
   formatCurrency: (v: number) => `AED ${v.toLocaleString()}`,
+  formatAmount: (v: number, currency: string) => `${currency} ${v.toLocaleString()}`,
 }));
 
 import { SalesCandidatesTable } from "@/components/sales/SalesCandidatesTable";
@@ -35,6 +36,7 @@ const makeCandidate = (
     base_unit_price: 900_000,
     premium_total: 50_000,
     final_unit_price: 950_000,
+    currency: "AED",
   },
   hasApprovedException: false,
   contractStatus: null,

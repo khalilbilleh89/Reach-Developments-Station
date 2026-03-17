@@ -67,6 +67,18 @@ class ProjectService:
         updated = self.repo.update(project, data)
         return ProjectResponse.model_validate(updated)
 
+    def delete_project(self, project_id: str) -> None:
+        project = self._require_project(project_id)
+        if self.repo.has_phases(project_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Project '{project_id}' cannot be deleted because it has "
+                    "dependent phase records. Remove all dependent phases first."
+                ),
+            )
+        self.repo.delete(project)
+
     def archive_project(self, project_id: str) -> ProjectResponse:
         """Set a project's status to on_hold, effectively archiving it."""
         project = self._require_project(project_id)

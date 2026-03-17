@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import type { SalesCandidate } from "@/lib/sales-types";
 import { readinessLabel, contractStatusLabel } from "@/lib/sales-types";
 import { unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
 import styles from "@/styles/sales-workflow.module.css";
 
 type SortField =
@@ -190,7 +190,7 @@ export function SalesCandidatesTable({
                 </td>
                 <td>
                   {pricing ? (
-                    formatCurrency(pricing.final_unit_price)
+                    formatAmount(pricing.final_unit_price, pricing.currency)
                   ) : (
                     <span aria-label="Not priced">—</span>
                   )}

@@ -11,8 +11,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
-from app.modules.pricing.repository import UnitPricingAttributesRepository
+from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository
 from app.modules.pricing.schemas import (
+    DEFAULT_CURRENCY,
     PricingReadinessResponse,
     ProjectPriceSummaryItem,
     ProjectPriceSummaryResponse,
@@ -27,6 +28,7 @@ from app.modules.units.repository import UnitRepository
 class PricingService:
     def __init__(self, db: Session) -> None:
         self.attrs_repo = UnitPricingAttributesRepository(db)
+        self.pricing_repo = UnitPricingRepository(db)
         self.unit_repo = UnitRepository(db)
         self._db = db
 
@@ -229,12 +231,18 @@ class PricingService:
 
         unit_area = self._resolve_unit_area(unit)
         outputs = self._run_pricing_for_area(unit_area, attrs)
+
+        # Inherit currency from the formal pricing record; default to platform default.
+        pricing_record = self.pricing_repo.get_by_unit_id(unit_id)
+        currency = pricing_record.currency if pricing_record else DEFAULT_CURRENCY
+
         return UnitPriceResponse(
             unit_id=unit_id,
             unit_area=unit_area,
             base_unit_price=outputs.base_unit_price,
             premium_total=outputs.premium_total,
             final_unit_price=outputs.final_unit_price,
+            currency=currency,
         )
 
     def calculate_project_price_summary(self, project_id: str) -> ProjectPriceSummaryResponse:

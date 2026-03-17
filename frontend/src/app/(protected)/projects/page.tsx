@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
 import { ProjectDetailView } from "@/components/projects/ProjectDetailView";
-import { listProjects, getProject, createProject } from "@/lib/projects-api";
+import { listProjects, getProject, createProject, deleteProject } from "@/lib/projects-api";
 import type { Project, ProjectCreate, ProjectStatus } from "@/lib/projects-types";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import styles from "@/styles/projects.module.css";
@@ -60,6 +60,15 @@ function ProjectsList() {
     await createProject(data);
     setShowCreateModal(false);
     fetchProjects();
+  }, [fetchProjects]);
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    try {
+      await deleteProject(projectId);
+      fetchProjects();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete project.");
+    }
   }, [fetchProjects]);
 
   const handleSelectProject = useCallback(
@@ -179,6 +188,7 @@ function ProjectsList() {
           projects={projects}
           onSelectProject={handleSelectProject}
           onCreateProject={() => setShowCreateModal(true)}
+          onDeleteProject={handleDeleteProject}
         />
       )}
 

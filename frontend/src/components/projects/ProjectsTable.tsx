@@ -11,6 +11,7 @@ interface ProjectsTableProps {
   projects: Project[];
   onSelectProject?: (projectId: string) => void;
   onCreateProject?: () => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 function statusClass(status: string): string {
@@ -50,7 +51,7 @@ function formatDate(dateStr: string | null): string {
  * All data comes from the live /api/v1/projects backend endpoint.
  * Sortable headers use <button> inside <th> for full keyboard accessibility.
  */
-export function ProjectsTable({ projects, onSelectProject, onCreateProject }: ProjectsTableProps) {
+export function ProjectsTable({ projects, onSelectProject, onCreateProject, onDeleteProject }: ProjectsTableProps) {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -141,6 +142,7 @@ export function ProjectsTable({ projects, onSelectProject, onCreateProject }: Pr
             <th scope="col" aria-sort={ariaSortFor("target_end_date")}>
               <SortButton field="target_end_date">Target End</SortButton>
             </th>
+            {onDeleteProject && <th scope="col" aria-label="Actions" />}
           </tr>
         </thead>
         <tbody>
@@ -176,6 +178,27 @@ export function ProjectsTable({ projects, onSelectProject, onCreateProject }: Pr
               </td>
               <td>{formatDate(project.start_date)}</td>
               <td>{formatDate(project.target_end_date)}</td>
+              {onDeleteProject && (
+                <td>
+                  <button
+                    type="button"
+                    className={styles.deleteButton}
+                    aria-label={`Delete project ${project.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          `Delete project "${project.name}"?\n\nThis action cannot be undone. The project must have no phases.`,
+                        )
+                      ) {
+                        onDeleteProject(project.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
