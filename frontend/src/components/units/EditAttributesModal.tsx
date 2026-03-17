@@ -205,7 +205,7 @@ export function EditAttributesModal({
         <form onSubmit={handleSubmit} className={styles.modalForm} noValidate>
 
           {/* ── Section 1: Apartment Attributes ─────────────────────────── */}
-          <fieldset className={styles.formSection} style={{ border: "none", margin: 0, padding: 0 }}>
+          <fieldset className={styles.formSection}>
             <legend className={styles.formSectionLegend}>Apartment Attributes</legend>
 
             {/* Bedrooms + Bathrooms */}
@@ -320,7 +320,7 @@ export function EditAttributesModal({
           </fieldset>
 
           {/* ── Section 2: Pricing Qualitative Attributes ─────────────────── */}
-          <fieldset className={styles.formSection} style={{ border: "none", margin: 0, padding: 0, marginTop: "1.5rem" }}>
+          <fieldset className={`${styles.formSection} ${styles.formSectionSpaced}`}>
             <legend className={styles.formSectionLegend}>Pricing Qualitative Attributes</legend>
 
             {/* View Type + Floor Premium Category */}

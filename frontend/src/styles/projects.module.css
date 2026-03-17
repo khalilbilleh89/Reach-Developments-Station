@@ -754,6 +754,10 @@
   padding: 0;
 }
 
+.formSectionSpaced {
+  margin-top: 1.5rem;
+}
+
 .formSectionLegend {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
