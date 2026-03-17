@@ -61,6 +61,21 @@ def update_project(
     return service.update_project(project_id, data)
 
 
+@router.delete("/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> None:
+    """Delete a project.
+
+    Returns 204 on success.
+    Returns 404 if the project does not exist.
+    Returns 409 if the project has dependent records (phases, buildings, units, etc.)
+    and cannot be safely deleted.
+    """
+    service.delete_project(project_id)
+
+
 @router.get("/{project_id}/summary", response_model=ProjectSummary)
 def get_project_summary(
     project_id: str,

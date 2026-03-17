@@ -69,6 +69,12 @@ export async function archiveProject(id: string): Promise<Project> {
   });
 }
 
+export async function deleteProject(id: string): Promise<void> {
+  await apiFetch<void>(`/projects/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getProjectSummary(id: string): Promise<ProjectSummary> {
   return apiFetch<ProjectSummary>(`/projects/${id}/summary`);
 }

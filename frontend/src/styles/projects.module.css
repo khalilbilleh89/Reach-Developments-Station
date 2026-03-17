@@ -399,6 +399,29 @@
   outline-offset: 2px;
 }
 
+.deleteButton {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--card-radius);
+  border: 1px solid #dc2626;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deleteButton:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.deleteButton:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+}
+
 /* --- Modal overlay ----------------------------------------- */
 
 .modalOverlay {

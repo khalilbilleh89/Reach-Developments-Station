@@ -1,6 +1,6 @@
 import React from "react";
 import type { UnitPrice, UnitPricingAttributes } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
 interface UnitPricingBreakdownProps {
@@ -45,7 +45,7 @@ export function UnitPricingBreakdown({
       <div className={styles.breakdownRow}>
         <span className={styles.breakdownKey}>Base Unit Price</span>
         <span className={styles.breakdownValue}>
-          {formatCurrency(pricing.base_unit_price)}
+          {formatAmount(pricing.base_unit_price, pricing.currency)}
         </span>
       </div>
 
@@ -56,7 +56,7 @@ export function UnitPricingBreakdown({
             <div className={styles.breakdownRow}>
               <span className={styles.breakdownKey}>Floor Premium</span>
               <span className={styles.breakdownValue}>
-                {formatCurrency(attributes.floor_premium!)}
+                {formatAmount(attributes.floor_premium!, pricing.currency)}
               </span>
             </div>
           )}
@@ -65,7 +65,7 @@ export function UnitPricingBreakdown({
             <div className={styles.breakdownRow}>
               <span className={styles.breakdownKey}>View Premium</span>
               <span className={styles.breakdownValue}>
-                {formatCurrency(attributes.view_premium!)}
+                {formatAmount(attributes.view_premium!, pricing.currency)}
               </span>
             </div>
           )}
@@ -74,7 +74,7 @@ export function UnitPricingBreakdown({
             <div className={styles.breakdownRow}>
               <span className={styles.breakdownKey}>Corner Premium</span>
               <span className={styles.breakdownValue}>
-                {formatCurrency(attributes.corner_premium!)}
+                {formatAmount(attributes.corner_premium!, pricing.currency)}
               </span>
             </div>
           )}
@@ -83,7 +83,7 @@ export function UnitPricingBreakdown({
             <div className={styles.breakdownRow}>
               <span className={styles.breakdownKey}>Size Adjustment</span>
               <span className={styles.breakdownValue}>
-                {formatCurrency(attributes.size_adjustment!)}
+                {formatAmount(attributes.size_adjustment!, pricing.currency)}
               </span>
             </div>
           )}
@@ -92,7 +92,7 @@ export function UnitPricingBreakdown({
             <div className={styles.breakdownRow}>
               <span className={styles.breakdownKey}>Custom Adjustment</span>
               <span className={styles.breakdownValue}>
-                {formatCurrency(attributes.custom_adjustment!)}
+                {formatAmount(attributes.custom_adjustment!, pricing.currency)}
               </span>
             </div>
           )}
@@ -104,7 +104,7 @@ export function UnitPricingBreakdown({
         <div className={styles.breakdownRow}>
           <span className={styles.breakdownKey}>Total Premiums</span>
           <span className={styles.breakdownValue}>
-            {formatCurrency(pricing.premium_total)}
+            {formatAmount(pricing.premium_total, pricing.currency)}
           </span>
         </div>
       )}
@@ -113,7 +113,7 @@ export function UnitPricingBreakdown({
       <div className={`${styles.breakdownRow} ${styles.breakdownRowFinal}`}>
         <span className={styles.breakdownKey}>Final Selling Price</span>
         <span className={styles.breakdownValueFinal}>
-          {formatCurrency(pricing.final_unit_price)}
+          {formatAmount(pricing.final_unit_price, pricing.currency)}
         </span>
       </div>
     </div>

@@ -64,6 +64,10 @@ class ProjectRepository:
             )
         return query.count()
 
+    def delete(self, project: Project) -> None:
+        self.db.delete(project)
+        self.db.commit()
+
     def update(self, project: Project, data: ProjectUpdate) -> Project:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():

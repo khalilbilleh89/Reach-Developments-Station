@@ -3,7 +3,7 @@
 import React from "react";
 import type { UnitListItem, UnitPrice } from "@/lib/units-types";
 import { unitStatusLabel, unitTypeLabel } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
 import styles from "@/styles/sales-workflow.module.css";
 
 interface SalesUnitSummaryProps {
@@ -70,7 +70,7 @@ export function SalesUnitSummary({ unit, pricing }: SalesUnitSummaryProps) {
         <div className={styles.summaryItem}>
           <span className={styles.summaryItemLabel}>Final Price</span>
           <span className={`${styles.summaryItemValue} ${styles.summaryPrice}`}>
-            {pricing ? formatCurrency(pricing.final_unit_price) : "Not priced"}
+            {pricing ? formatAmount(pricing.final_unit_price, pricing.currency) : "Not priced"}
           </span>
         </div>
 
@@ -78,7 +78,7 @@ export function SalesUnitSummary({ unit, pricing }: SalesUnitSummaryProps) {
           <div className={styles.summaryItem}>
             <span className={styles.summaryItemLabel}>Price / sqm</span>
             <span className={styles.summaryItemValue}>
-              {formatCurrency(Math.round(pricePerSqm))}
+              {formatAmount(Math.round(pricePerSqm), pricing!.currency)}
             </span>
           </div>
         )}

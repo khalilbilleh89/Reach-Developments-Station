@@ -1,7 +1,7 @@
 import React from "react";
 import type { UnitListItem, UnitPrice } from "@/lib/units-types";
 import { unitStatusLabel } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
 interface UnitPricingSummaryCardProps {
@@ -59,7 +59,7 @@ export function UnitPricingSummaryCard({
       <div>
         <p className={styles.summaryCardTitle}>Pricing Summary</p>
         <p className={styles.summaryPriceMain}>
-          {pricing ? formatCurrency(pricing.final_unit_price) : "Not priced"}
+          {pricing ? formatAmount(pricing.final_unit_price, pricing.currency) : "Not priced"}
         </p>
       </div>
 
@@ -68,7 +68,7 @@ export function UnitPricingSummaryCard({
           <span className={styles.summaryMetaLabel}>Price / sqm</span>
           <span className={styles.summaryMetaValue}>
             {pricePerSqm !== null
-              ? `AED ${Math.round(pricePerSqm).toLocaleString()}`
+              ? formatAmount(Math.round(pricePerSqm), pricing!.currency)
               : "—"}
           </span>
         </div>

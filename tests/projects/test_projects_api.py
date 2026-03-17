@@ -198,3 +198,34 @@ def test_list_projects_invalid_status_returns_422(client: TestClient):
     """GET /api/v1/projects?status=invalid should return 422 (enum validation)."""
     response = client.get("/api/v1/projects?status=invalid_status")
     assert response.status_code == 422
+
+
+def test_delete_project_no_dependencies(client: TestClient):
+    """DELETE /api/v1/projects/{id} should remove the project and return 204."""
+    create = client.post("/api/v1/projects", json={"name": "Delete Me", "code": "DEL-001"})
+    project_id = create.json()["id"]
+    response = client.delete(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 204
+    # Confirm it is gone
+    get_response = client.get(f"/api/v1/projects/{project_id}")
+    assert get_response.status_code == 404
+
+
+def test_delete_project_not_found(client: TestClient):
+    """DELETE /api/v1/projects/{id} with unknown id should return 404."""
+    response = client.delete("/api/v1/projects/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_delete_project_with_phases_returns_409(client: TestClient):
+    """DELETE /api/v1/projects/{id} should return 409 when the project has phases."""
+    create = client.post("/api/v1/projects", json={"name": "Has Phases", "code": "HP-001"})
+    project_id = create.json()["id"]
+    # Add a phase so the project has dependent records
+    client.post(
+        f"/api/v1/projects/{project_id}/phases",
+        json={"name": "Phase 1", "code": "HP-001-P1", "sequence": 1},
+    )
+    response = client.delete(f"/api/v1/projects/{project_id}")
+    assert response.status_code == 409
+    assert "dependent records" in response.json()["detail"]

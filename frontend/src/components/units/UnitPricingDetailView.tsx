@@ -9,7 +9,7 @@ import { UnitPricingBreakdown } from "@/components/units/UnitPricingBreakdown";
 import { UnitAttributesPanel } from "@/components/units/UnitAttributesPanel";
 import { getUnitPricingDetail } from "@/lib/units-api";
 import type { UnitPricingDetail, UnitQualitativeAttributes, UnitPricingRecord, UnitPricingAttributes } from "@/lib/units-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatCurrency, formatAmount } from "@/lib/format-utils";
 import { pricingStatusLabel } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -366,15 +366,15 @@ function PricingRecordSection({
       <dl className={styles.pricingSectionGrid}>
         <AttributeRow
           label="Approved Base Price"
-          value={formatCurrency(record.base_price)}
+          value={formatAmount(record.base_price, record.currency)}
         />
         <AttributeRow
           label="Commercial Adjustment"
-          value={formatCurrency(record.manual_adjustment)}
+          value={formatAmount(record.manual_adjustment, record.currency)}
         />
         <AttributeRow
           label="Final Approved Price"
-          value={formatCurrency(record.final_price)}
+          value={formatAmount(record.final_price, record.currency)}
         />
         <AttributeRow label="Currency" value={record.currency} />
         <AttributeRow label="Pricing Status" value={pricingStatusLabel(record.pricing_status)} />

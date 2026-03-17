@@ -48,6 +48,7 @@ class UnitPriceResponse(BaseModel):
     base_unit_price: float
     premium_total: float
     final_unit_price: float
+    currency: str = Field(default="AED")
 
 
 class ProjectPriceSummaryItem(BaseModel):
