@@ -12,9 +12,18 @@ The reservation lifecycle state machine (PR-REDS-031) introduces a 'draft'
 status so that reservations can be created in a provisional state before being
 explicitly activated.  This migration widens the constraint to include 'draft'.
 
+PostgreSQL is the supported migrated-environment target.
 On PostgreSQL the old constraint is dropped and recreated.
-SQLite does not enforce CHECK constraints at runtime, but the migration runs
-cleanly on both engines so that existing test infrastructure is unaffected.
+
+SQLite note:
+  This migration is intentionally a no-op on SQLite.  Modern SQLite versions
+  do enforce CHECK constraints, but Alembic cannot modify a CHECK constraint
+  on SQLite without a full batch table recreation, which adds complexity beyond
+  the scope of this PR.  SQLite is used exclusively for local development and
+  automated testing (via Base.metadata.create_all), where Alembic migrations
+  are never run.  Any schema drift on SQLite for already-migrated environments
+  is an accepted limitation; it does not affect production (PostgreSQL) or the
+  test suite (in-memory SQLite with schema created from models, not migrations).
 """
 
 from typing import Sequence, Union
@@ -41,9 +50,11 @@ def upgrade() -> None:
         # PostgreSQL supports ALTER TABLE DROP CONSTRAINT / ADD CONSTRAINT.
         op.drop_constraint(_OLD_CONSTRAINT, _TABLE, type_="check")
         op.create_check_constraint(_OLD_CONSTRAINT, _TABLE, _NEW_CHECK)
-    # SQLite: CHECK constraints cannot be modified via ALTER TABLE.
-    # The constraint is not enforced at runtime by SQLite anyway, so no action
-    # is needed for the test environment.
+    # SQLite: intentionally a no-op.  Alembic cannot modify a CHECK constraint
+    # on SQLite without a batch table recreation.  SQLite is only used for the
+    # test suite (schema built from ORM models, not migrations), so this
+    # migration is safe to skip there.  PostgreSQL is the only supported
+    # target for already-migrated production environments.
 
 
 def downgrade() -> None:
