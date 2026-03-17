@@ -14,7 +14,7 @@ from app.core.dependencies import get_db
 from app.db.base import Base
 
 # Import all models so SQLAlchemy registers them with Base.metadata
-import app.modules.projects.models  # noqa: F401
+import app.modules.projects.models  # noqa: F401  (also registers ProjectAttributeDefinition/Option)
 import app.modules.phases.models  # noqa: F401
 import app.modules.buildings.models  # noqa: F401
 import app.modules.floors.models  # noqa: F401

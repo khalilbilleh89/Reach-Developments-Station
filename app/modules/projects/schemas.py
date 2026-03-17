@@ -1,15 +1,21 @@
 """
 projects.schemas
 
-Pydantic request/response schemas for the Project CRUD API.
+Pydantic request/response schemas for the Project CRUD API,
+and for project-level attribute definitions and options.
 """
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.shared.enums.project import ProjectStatus
+
+# ---------------------------------------------------------------------------
+# Supported attribute definition keys — extend here as new types are added.
+# ---------------------------------------------------------------------------
+SUPPORTED_DEFINITION_KEYS = Literal["view_type"]
 
 
 class ProjectCreate(BaseModel):
@@ -76,3 +82,66 @@ class ProjectSummary(BaseModel):
     completed_phases: int
     earliest_start_date: Optional[date]
     latest_target_completion: Optional[date]
+
+
+# ---------------------------------------------------------------------------
+# Project Attribute Options
+# ---------------------------------------------------------------------------
+
+class AttributeOptionCreate(BaseModel):
+    value: str = Field(..., min_length=1, max_length=255)
+    label: str = Field(..., min_length=1, max_length=255)
+    sort_order: int = Field(default=0, ge=0)
+
+
+class AttributeOptionUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=255)
+    sort_order: Optional[int] = Field(None, ge=0)
+    is_active: Optional[bool] = None
+
+
+class AttributeOptionResponse(BaseModel):
+    id: str
+    definition_id: str
+    value: str
+    label: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Project Attribute Definitions
+# ---------------------------------------------------------------------------
+
+class AttributeDefinitionCreate(BaseModel):
+    key: SUPPORTED_DEFINITION_KEYS
+    label: str = Field(..., min_length=1, max_length=255)
+    input_type: str = Field(default="select", max_length=50)
+
+
+class AttributeDefinitionUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
+
+
+class AttributeDefinitionResponse(BaseModel):
+    id: str
+    project_id: str
+    key: str
+    label: str
+    input_type: str
+    is_active: bool
+    options: List[AttributeOptionResponse]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AttributeDefinitionList(BaseModel):
+    items: List[AttributeDefinitionResponse]
+    total: int

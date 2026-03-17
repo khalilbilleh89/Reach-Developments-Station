@@ -1,17 +1,24 @@
 """
 projects.repository
 
-Data access layer for the Project entity.
+Data access layer for the Project entity and project attribute definitions/options.
 """
 
 from typing import List, Optional
 
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.modules.phases.models import Phase
-from app.modules.projects.models import Project
-from app.modules.projects.schemas import ProjectCreate, ProjectUpdate
+from app.modules.projects.models import Project, ProjectAttributeDefinition, ProjectAttributeOption
+from app.modules.projects.schemas import (
+    AttributeDefinitionCreate,
+    AttributeDefinitionUpdate,
+    AttributeOptionCreate,
+    AttributeOptionUpdate,
+    ProjectCreate,
+    ProjectUpdate,
+)
 from app.shared.enums.project import PhaseStatus
 
 
@@ -112,3 +119,118 @@ class ProjectRepository:
             "earliest_start_date": result.earliest_start_date,
             "latest_target_completion": result.latest_target_completion,
         }
+
+    # ------------------------------------------------------------------
+    # Attribute Definitions
+    # ------------------------------------------------------------------
+
+    def get_definition_by_id(self, definition_id: str) -> Optional[ProjectAttributeDefinition]:
+        return (
+            self.db.query(ProjectAttributeDefinition)
+            .filter(ProjectAttributeDefinition.id == definition_id)
+            .first()
+        )
+
+    def get_definition_by_project_and_key(
+        self, project_id: str, key: str
+    ) -> Optional[ProjectAttributeDefinition]:
+        return (
+            self.db.query(ProjectAttributeDefinition)
+            .filter(
+                ProjectAttributeDefinition.project_id == project_id,
+                ProjectAttributeDefinition.key == key,
+            )
+            .first()
+        )
+
+    def list_definitions(self, project_id: str) -> List[ProjectAttributeDefinition]:
+        return (
+            self.db.query(ProjectAttributeDefinition)
+            .filter(ProjectAttributeDefinition.project_id == project_id)
+            .options(selectinload(ProjectAttributeDefinition.options))
+            .order_by(ProjectAttributeDefinition.created_at.asc())
+            .all()
+        )
+
+    def create_definition(
+        self, project_id: str, data: AttributeDefinitionCreate
+    ) -> ProjectAttributeDefinition:
+        definition = ProjectAttributeDefinition(
+            project_id=project_id,
+            key=data.key,
+            label=data.label,
+            input_type=data.input_type,
+        )
+        self.db.add(definition)
+        self.db.commit()
+        self.db.refresh(definition)
+        return definition
+
+    def update_definition(
+        self, definition: ProjectAttributeDefinition, data: AttributeDefinitionUpdate
+    ) -> ProjectAttributeDefinition:
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(definition, field, value)
+        self.db.commit()
+        self.db.refresh(definition)
+        return definition
+
+    # ------------------------------------------------------------------
+    # Attribute Options
+    # ------------------------------------------------------------------
+
+    def get_option_by_id(self, option_id: str) -> Optional[ProjectAttributeOption]:
+        return (
+            self.db.query(ProjectAttributeOption)
+            .filter(ProjectAttributeOption.id == option_id)
+            .first()
+        )
+
+    def get_option_by_definition_and_value(
+        self, definition_id: str, value: str
+    ) -> Optional[ProjectAttributeOption]:
+        return (
+            self.db.query(ProjectAttributeOption)
+            .filter(
+                ProjectAttributeOption.definition_id == definition_id,
+                ProjectAttributeOption.value == value,
+            )
+            .first()
+        )
+
+    def get_option_by_definition_and_label(
+        self, definition_id: str, label: str
+    ) -> Optional[ProjectAttributeOption]:
+        return (
+            self.db.query(ProjectAttributeOption)
+            .filter(
+                ProjectAttributeOption.definition_id == definition_id,
+                ProjectAttributeOption.label == label,
+            )
+            .first()
+        )
+
+    def create_option(
+        self, definition_id: str, data: AttributeOptionCreate
+    ) -> ProjectAttributeOption:
+        option = ProjectAttributeOption(
+            definition_id=definition_id,
+            value=data.value,
+            label=data.label,
+            sort_order=data.sort_order,
+        )
+        self.db.add(option)
+        self.db.commit()
+        self.db.refresh(option)
+        return option
+
+    def update_option(
+        self, option: ProjectAttributeOption, data: AttributeOptionUpdate
+    ) -> ProjectAttributeOption:
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(option, field, value)
+        self.db.commit()
+        self.db.refresh(option)
+        return option

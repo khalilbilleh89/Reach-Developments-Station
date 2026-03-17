@@ -1,7 +1,7 @@
 """
 projects.api
 
-CRUD API router for the Project entity.
+CRUD API router for the Project entity and project attribute definitions/options.
 """
 
 from typing import Annotated, Optional
@@ -10,7 +10,20 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.projects.schemas import ProjectCreate, ProjectList, ProjectResponse, ProjectSummary, ProjectUpdate
+from app.modules.projects.schemas import (
+    AttributeDefinitionCreate,
+    AttributeDefinitionList,
+    AttributeDefinitionResponse,
+    AttributeDefinitionUpdate,
+    AttributeOptionCreate,
+    AttributeOptionResponse,
+    AttributeOptionUpdate,
+    ProjectCreate,
+    ProjectList,
+    ProjectResponse,
+    ProjectSummary,
+    ProjectUpdate,
+)
 from app.modules.projects.service import ProjectService
 from app.shared.enums.project import ProjectStatus
 
@@ -92,3 +105,83 @@ def archive_project(
 ) -> ProjectResponse:
     """Archive (set to on_hold) a project."""
     return service.archive_project(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Project Attribute Definitions
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{project_id}/attribute-definitions",
+    response_model=AttributeDefinitionList,
+)
+def list_attribute_definitions(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> AttributeDefinitionList:
+    """List all attribute definitions for a project (with nested options)."""
+    return service.list_attribute_definitions(project_id)
+
+
+@router.post(
+    "/{project_id}/attribute-definitions",
+    response_model=AttributeDefinitionResponse,
+    status_code=201,
+)
+def create_attribute_definition(
+    project_id: str,
+    data: AttributeDefinitionCreate,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> AttributeDefinitionResponse:
+    """Create a project attribute definition (e.g. view_type)."""
+    return service.create_attribute_definition(project_id, data)
+
+
+@router.patch(
+    "/{project_id}/attribute-definitions/{definition_id}",
+    response_model=AttributeDefinitionResponse,
+)
+def update_attribute_definition(
+    project_id: str,
+    definition_id: str,
+    data: AttributeDefinitionUpdate,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> AttributeDefinitionResponse:
+    """Update label or active status of an attribute definition."""
+    return service.update_attribute_definition(project_id, definition_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Project Attribute Options
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{project_id}/attribute-definitions/{definition_id}/options",
+    response_model=AttributeOptionResponse,
+    status_code=201,
+)
+def create_attribute_option(
+    project_id: str,
+    definition_id: str,
+    data: AttributeOptionCreate,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> AttributeOptionResponse:
+    """Add an option to a project attribute definition."""
+    return service.create_attribute_option(project_id, definition_id, data)
+
+
+@router.patch(
+    "/{project_id}/attribute-definitions/{definition_id}/options/{option_id}",
+    response_model=AttributeOptionResponse,
+)
+def update_attribute_option(
+    project_id: str,
+    definition_id: str,
+    option_id: str,
+    data: AttributeOptionUpdate,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> AttributeOptionResponse:
+    """Update label, sort_order, or active status of an option."""
+    return service.update_attribute_option(project_id, definition_id, option_id, data)
