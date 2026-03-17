@@ -19,6 +19,7 @@ import {
   saveUnitQualitativeAttributes,
   saveUnitEngineInputs,
   listProjectReservations,
+  updateUnit,
 } from "@/lib/units-api";
 import type {
   Project,
@@ -31,6 +32,7 @@ import type {
   UnitQualitativeAttributes,
   UnitQualitativeAttributesSave,
   UnitEngineInputsSave,
+  UnitUpdate,
 } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
@@ -266,6 +268,16 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
     [],
   );
 
+  const handleSaveUnitData = useCallback(
+    async (unitId: string, data: UnitUpdate) => {
+      const saved = await updateUnit(unitId, data);
+      setUnits((prev) =>
+        prev.map((u) => (u.id === unitId ? { ...u, ...saved } : u)),
+      );
+    },
+    [],
+  );
+
   const handleCloseAttrsModal = useCallback(() => {
     setEditingAttrsUnit(null);
     setEditingAttrsRecord(null);
@@ -414,7 +426,9 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
           unitId={editingAttrsUnit.id}
           unitNumber={editingAttrsUnit.unit_number}
           existing={editingAttrsRecord}
+          unitData={editingAttrsUnit}
           onSave={handleSaveAttributes}
+          onSaveUnit={handleSaveUnitData}
           onClose={handleCloseAttrsModal}
         />
       )}

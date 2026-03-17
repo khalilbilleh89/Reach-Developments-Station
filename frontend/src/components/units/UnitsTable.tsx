@@ -11,7 +11,7 @@ import { pricingStatusLabel, reservationStatusLabel, unitStatusLabel, unitTypeLa
 import { formatAmount, formatAdjustment } from "@/lib/format-utils";
 import styles from "@/styles/units-pricing.module.css";
 
-type SortField = "unit_number" | "floor_id" | "unit_type" | "status" | "internal_area" | "final_unit_price";
+type SortField = "unit_number" | "floor_id" | "unit_type" | "status" | "internal_area" | "final_unit_price" | "bedrooms" | "bathrooms" | "floor_level";
 type SortDir = "asc" | "desc";
 
 interface UnitsTableProps {
@@ -108,6 +108,14 @@ export function UnitsTable({
         aVal = a.internal_area;
         bVal = b.internal_area;
         break;
+      case "bedrooms":
+        aVal = a.bedrooms ?? -1;
+        bVal = b.bedrooms ?? -1;
+        break;
+      case "bathrooms":
+        aVal = a.bathrooms ?? -1;
+        bVal = b.bathrooms ?? -1;
+        break;
       default:
         aVal = (a[sortField as keyof UnitListItem] as string) ?? "";
         bVal = (b[sortField as keyof UnitListItem] as string) ?? "";
@@ -171,6 +179,9 @@ export function UnitsTable({
             <SortHeader field="unit_number">Unit</SortHeader>
             <SortHeader field="unit_type">Type</SortHeader>
             <SortHeader field="internal_area">Area (sqm)</SortHeader>
+            <SortHeader field="bedrooms">Beds</SortHeader>
+            <SortHeader field="bathrooms">Baths</SortHeader>
+            <SortHeader field="floor_level">Floor</SortHeader>
             <SortHeader field="status">Status</SortHeader>
             <th scope="col">Reservation</th>
             <th scope="col">Base Price</th>
@@ -210,6 +221,15 @@ export function UnitsTable({
                 </td>
                 <td>{unitTypeLabel(unit.unit_type)}</td>
                 <td>{unit.internal_area.toFixed(1)}</td>
+                <td>
+                  {unit.bedrooms != null ? unit.bedrooms : <span aria-label="Not set">—</span>}
+                </td>
+                <td>
+                  {unit.bathrooms != null ? unit.bathrooms : <span aria-label="Not set">—</span>}
+                </td>
+                <td>
+                  {unit.floor_level ?? <span aria-label="Not set">—</span>}
+                </td>
                 <td>
                   <span
                     className={`${styles.statusBadge} ${statusClass(unit.status)}`}

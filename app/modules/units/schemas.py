@@ -24,6 +24,12 @@ class UnitCreateForFloor(BaseModel):
     roof_garden_area: Optional[float] = Field(None, ge=0)
     front_garden_area: Optional[float] = Field(None, ge=0)
     gross_area: Optional[float] = Field(None, gt=0)
+    # Apartment-specific master attributes (Layer A)
+    bedrooms: Optional[int] = Field(None, ge=0)
+    bathrooms: Optional[int] = Field(None, ge=0)
+    floor_level: Optional[str] = Field(None, max_length=50)
+    livable_area: Optional[float] = Field(None, ge=0)
+    has_roof_garden: Optional[bool] = None
 
 
 class UnitCreate(UnitCreateForFloor):
@@ -41,6 +47,12 @@ class UnitUpdate(BaseModel):
     roof_garden_area: Optional[float] = Field(None, ge=0)
     front_garden_area: Optional[float] = Field(None, ge=0)
     gross_area: Optional[float] = Field(None, gt=0)
+    # Apartment-specific master attributes (Layer A)
+    bedrooms: Optional[int] = Field(None, ge=0)
+    bathrooms: Optional[int] = Field(None, ge=0)
+    floor_level: Optional[str] = Field(None, max_length=50)
+    livable_area: Optional[float] = Field(None, ge=0)
+    has_roof_garden: Optional[bool] = None
 
 
 class UnitResponse(BaseModel):
@@ -55,6 +67,12 @@ class UnitResponse(BaseModel):
     roof_garden_area: Optional[float]
     front_garden_area: Optional[float]
     gross_area: Optional[float]
+    # Apartment-specific master attributes (Layer A)
+    bedrooms: Optional[int]
+    bathrooms: Optional[int]
+    floor_level: Optional[str]
+    livable_area: Optional[float]
+    has_roof_garden: Optional[bool]
     created_at: datetime
     updated_at: datetime
 

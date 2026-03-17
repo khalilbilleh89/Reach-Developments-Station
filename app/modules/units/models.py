@@ -8,7 +8,7 @@ Project → Phase → Building → Floor → Unit
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -49,5 +49,12 @@ class Unit(Base, TimestampMixin):
         Numeric(10, 2), nullable=True
     )
     gross_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+
+    # Apartment-specific attributes (Layer A — Unit Master Attributes)
+    bedrooms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bathrooms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    floor_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    livable_area: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    has_roof_garden: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     floor: Mapped["Floor"] = relationship("Floor", back_populates="units")
