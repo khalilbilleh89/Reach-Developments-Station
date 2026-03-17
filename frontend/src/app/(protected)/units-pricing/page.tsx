@@ -15,6 +15,7 @@ import {
   getProjectPricing,
   saveUnitPricingRecord,
   getProjectPricingAttributes,
+  getUnitPricingAttributes,
   saveUnitQualitativeAttributes,
   saveUnitEngineInputs,
   listProjectReservations,
@@ -271,9 +272,21 @@ function UnitsPricingList({ initialAction, initialTargetId }: UnitsPricingListPr
   }, []);
 
   const handleEditEngineInputs = useCallback(
-    (unit: UnitListItem) => {
+    async (unit: UnitListItem) => {
       setEditingEngineUnit(unit);
+      // Open the modal immediately with local cache (may be null if never fetched)
+      // then replace with fresh server data so we never overwrite existing values.
       setEditingEngineAttrs(engineInputsRecords[unit.id] ?? null);
+      try {
+        const fresh = await getUnitPricingAttributes(unit.id);
+        setEditingEngineAttrs(fresh);
+        if (fresh) {
+          setEngineInputsRecords((prev) => ({ ...prev, [unit.id]: fresh }));
+        }
+      } catch (err) {
+        // Fall back to local cache already set above. Log so API/auth failures are visible.
+        console.error("Failed to fetch engine inputs for unit", unit.id, err);
+      }
     },
     [engineInputsRecords],
   );

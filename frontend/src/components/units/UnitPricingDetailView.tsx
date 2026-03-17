@@ -10,6 +10,7 @@ import { UnitAttributesPanel } from "@/components/units/UnitAttributesPanel";
 import { getUnitPricingDetail } from "@/lib/units-api";
 import type { UnitPricingDetail, UnitQualitativeAttributes, UnitPricingRecord, UnitPricingAttributes } from "@/lib/units-types";
 import { formatCurrency } from "@/lib/format-utils";
+import { pricingStatusLabel } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
 /**
@@ -254,14 +255,18 @@ function QualitativeAttributesSection({
         Descriptive / categorical inputs. These do not block price calculation.
       </p>
       <dl className={styles.pricingSectionGrid}>
-        <AttributeRow label="View Type" value={attrs.view_type} />
+        <AttributeRow label="View Type" value={attrs.view_type} capitalize />
         <AttributeRow
           label="Corner Unit"
           value={attrs.corner_unit != null ? (attrs.corner_unit ? "Yes" : "No") : null}
         />
-        <AttributeRow label="Floor Category" value={attrs.floor_premium_category} />
+        <AttributeRow label="Floor Category" value={attrs.floor_premium_category} capitalize />
         <AttributeRow label="Orientation" value={attrs.orientation} />
-        <AttributeRow label="Outdoor Premium Type" value={attrs.outdoor_area_premium} />
+        <AttributeRow
+          label="Outdoor Premium Type"
+          value={attrs.outdoor_area_premium?.replace(/_/g, " ") ?? null}
+          capitalize
+        />
         <AttributeRow
           label="Upgrade Flag"
           value={attrs.upgrade_flag != null ? (attrs.upgrade_flag ? "Yes" : "No") : null}
@@ -372,7 +377,7 @@ function PricingRecordSection({
           value={formatCurrency(record.final_price)}
         />
         <AttributeRow label="Currency" value={record.currency} />
-        <AttributeRow label="Pricing Status" value={record.pricing_status} />
+        <AttributeRow label="Pricing Status" value={pricingStatusLabel(record.pricing_status)} />
         {record.notes && <AttributeRow label="Notes" value={record.notes} />}
       </dl>
     </div>
@@ -383,11 +388,22 @@ function PricingRecordSection({
 // Shared helper
 // ---------------------------------------------------------------------------
 
-function AttributeRow({ label, value }: { label: string; value: string | null | undefined }) {
+function AttributeRow({
+  label,
+  value,
+  capitalize = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  capitalize?: boolean;
+}) {
   return (
     <>
       <dt className={styles.pricingSectionLabel}>{label}</dt>
-      <dd className={styles.pricingSectionValue} style={{ textTransform: "capitalize" }}>
+      <dd
+        className={styles.pricingSectionValue}
+        style={capitalize ? { textTransform: "capitalize" } : undefined}
+      >
         {value ?? <span className={styles.notSet}>—</span>}
       </dd>
     </>
