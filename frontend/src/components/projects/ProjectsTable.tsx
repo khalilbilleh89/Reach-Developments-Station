@@ -188,7 +188,7 @@ export function ProjectsTable({ projects, onSelectProject, onCreateProject, onDe
                       e.stopPropagation();
                       if (
                         window.confirm(
-                          `Delete project "${project.name}"?\n\nThis action cannot be undone. The project must have no phases, buildings, or units.`,
+                          `Delete project "${project.name}"?\n\nThis action cannot be undone. The project must have no phases.`,
                         )
                       ) {
                         onDeleteProject(project.id);

@@ -9,6 +9,10 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+# Authoritative default currency for the platform.  All pricing values inherit
+# this when no explicit currency is available from the pricing record.
+DEFAULT_CURRENCY = "AED"
+
 
 # ---------------------------------------------------------------------------
 # UnitPricingAttributes schemas
@@ -48,7 +52,7 @@ class UnitPriceResponse(BaseModel):
     base_unit_price: float
     premium_total: float
     final_unit_price: float
-    currency: str = Field(default="AED")
+    currency: str = Field(default=DEFAULT_CURRENCY)
 
 
 class ProjectPriceSummaryItem(BaseModel):

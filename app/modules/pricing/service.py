@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
 from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository
 from app.modules.pricing.schemas import (
+    DEFAULT_CURRENCY,
     PricingReadinessResponse,
     ProjectPriceSummaryItem,
     ProjectPriceSummaryResponse,
@@ -231,9 +232,9 @@ class PricingService:
         unit_area = self._resolve_unit_area(unit)
         outputs = self._run_pricing_for_area(unit_area, attrs)
 
-        # Inherit currency from the formal pricing record; default to AED.
+        # Inherit currency from the formal pricing record; default to platform default.
         pricing_record = self.pricing_repo.get_by_unit_id(unit_id)
-        currency = pricing_record.currency if pricing_record else "AED"
+        currency = pricing_record.currency if pricing_record else DEFAULT_CURRENCY
 
         return UnitPriceResponse(
             unit_id=unit_id,
