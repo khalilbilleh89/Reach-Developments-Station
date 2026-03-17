@@ -6,11 +6,14 @@ import type {
   Orientation,
   OutdoorAreaPremium,
   UnitDetail,
+  UnitDynamicAttributeValue,
+  UnitDynamicAttributesSaveRequest,
   UnitQualitativeAttributes,
   UnitQualitativeAttributesSave,
   UnitUpdate,
   ViewType,
 } from "@/lib/units-types";
+import type { ProjectAttributeDefinition } from "@/lib/projects-types";
 import styles from "@/styles/projects.module.css";
 
 interface EditAttributesModalProps {
@@ -22,14 +25,23 @@ interface EditAttributesModalProps {
   existing: UnitQualitativeAttributes | null;
   /** Current unit data used to pre-populate apartment attribute fields. */
   unitData?: UnitDetail | null;
+  /** Project-defined attribute definitions (with options) for this unit's project. */
+  projectDefinitions?: ProjectAttributeDefinition[];
+  /** Existing dynamic attribute values already saved for this unit. */
+  existingDynamicValues?: UnitDynamicAttributeValue[];
   /** Called with the save payload when the qualitative attributes form is submitted. */
   onSave: (unitId: string, data: UnitQualitativeAttributesSave) => Promise<void>;
   /** Called with the unit update payload to save apartment master attributes. */
   onSaveUnit?: (unitId: string, data: UnitUpdate) => Promise<void>;
+  /** Called with the dynamic attribute save payload (PR-033). */
+  onSaveDynamicAttributes?: (
+    unitId: string,
+    data: UnitDynamicAttributesSaveRequest,
+  ) => Promise<void>;
   onClose: () => void;
 }
 
-const VIEW_TYPE_OPTIONS: { value: ViewType; label: string }[] = [
+const STATIC_VIEW_TYPE_OPTIONS: { value: ViewType; label: string }[] = [
   { value: "city", label: "City" },
   { value: "sea", label: "Sea" },
   { value: "park", label: "Park" },
@@ -71,6 +83,13 @@ const OUTDOOR_PREMIUM_OPTIONS: { value: OutdoorAreaPremium; label: string }[] = 
  *      (view type, corner unit, floor premium category, orientation, outdoor premium,
  *      upgrade flag, notes). Saved via onSave to the qualitative attributes record.
  *
+ * When projectDefinitions are provided and the project defines a view_type attribute:
+ *   - The view_type dropdown shows project-configured options instead of the static list.
+ *   - The selected value is saved via onSaveDynamicAttributes to the normalised
+ *     unit_dynamic_attribute_values layer (PR-033).
+ *   - The static qualitative view_type field remains editable as a fallback when no
+ *     project-defined view_type definition is configured.
+ *
  * Attributes do not automatically adjust pricing — they provide structured
  * context for pricing decisions and future automation.
  */
@@ -79,10 +98,28 @@ export function EditAttributesModal({
   unitNumber,
   existing,
   unitData,
+  projectDefinitions,
+  existingDynamicValues,
   onSave,
   onSaveUnit,
+  onSaveDynamicAttributes,
   onClose,
 }: EditAttributesModalProps) {
+  // Resolve project-defined view_type definition (if any)
+  const projectViewTypeDef = projectDefinitions?.find(
+    (d) => d.key === "view_type" && d.is_active,
+  ) ?? null;
+
+  // Active options for the project-defined view_type
+  const projectViewTypeOptions = projectViewTypeDef
+    ? projectViewTypeDef.options.filter((o) => o.is_active)
+    : [];
+
+  // Current dynamic value for view_type (if already saved)
+  const existingViewTypeDynamic = existingDynamicValues?.find(
+    (v) => v.definition_key === "view_type",
+  ) ?? null;
+
   // ── Apartment Attributes (Layer A) ──────────────────────────────────────
   const [bedrooms, setBedrooms] = useState<string>(
     unitData?.bedrooms != null ? String(unitData.bedrooms) : "",
@@ -101,6 +138,11 @@ export function EditAttributesModal({
   );
   const [balconyArea, setBalconyArea] = useState<string>(
     unitData?.balcony_area != null ? String(unitData.balcony_area) : "",
+  );
+
+  // ── Project-defined view type (dynamic layer, PR-033) ─────────────────
+  const [dynamicViewOptionId, setDynamicViewOptionId] = useState<string>(
+    existingViewTypeDynamic?.option_id ?? "",
   );
 
   // ── Qualitative Pricing Attributes (Layer B) ─────────────────────────
@@ -148,6 +190,10 @@ export function EditAttributesModal({
     setError(null);
   }, [existing]);
 
+  useEffect(() => {
+    setDynamicViewOptionId(existingViewTypeDynamic?.option_id ?? "");
+  }, [existingViewTypeDynamic]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -165,6 +211,18 @@ export function EditAttributesModal({
           balcony_area: balconyArea !== "" ? parseFloat(balconyArea) : null,
         };
         await onSaveUnit(unitId, unitPayload);
+      }
+
+      // Save project-defined dynamic attribute value for view_type (PR-033)
+      if (projectViewTypeDef && dynamicViewOptionId && onSaveDynamicAttributes) {
+        await onSaveDynamicAttributes(unitId, {
+          attributes: [
+            {
+              definition_id: projectViewTypeDef.id,
+              option_id: dynamicViewOptionId,
+            },
+          ],
+        });
       }
 
       // Save qualitative pricing attributes
@@ -319,31 +377,64 @@ export function EditAttributesModal({
             </div>
           </fieldset>
 
-          {/* ── Section 2: Pricing Qualitative Attributes ─────────────────── */}
+          {/* ── Section 2: Project-Defined Attributes (PR-033) ─────────────── */}
+          {projectViewTypeDef && projectViewTypeOptions.length > 0 && (
+            <fieldset className={`${styles.formSection} ${styles.formSectionSpaced}`}>
+              <legend className={styles.formSectionLegend}>
+                Project-Defined Attributes
+              </legend>
+              <div className={styles.formRow}>
+                <div className={styles.formField}>
+                  <label htmlFor="ea-dynamic-view-type" className={styles.formLabel}>
+                    {projectViewTypeDef.label}
+                  </label>
+                  <select
+                    id="ea-dynamic-view-type"
+                    className={styles.formSelect}
+                    value={dynamicViewOptionId}
+                    onChange={(e) => setDynamicViewOptionId(e.target.value)}
+                    disabled={submitting}
+                  >
+                    <option value="">— Not set —</option>
+                    {projectViewTypeOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </fieldset>
+          )}
+
+          {/* ── Section 3: Pricing Qualitative Attributes ─────────────────── */}
           <fieldset className={`${styles.formSection} ${styles.formSectionSpaced}`}>
             <legend className={styles.formSectionLegend}>Pricing Qualitative Attributes</legend>
 
             {/* View Type + Floor Premium Category */}
             <div className={styles.formRow}>
-              <div className={styles.formField}>
-                <label htmlFor="ea-view-type" className={styles.formLabel}>
-                  View Type
-                </label>
-                <select
-                  id="ea-view-type"
-                  className={styles.formSelect}
-                  value={viewType}
-                  onChange={(e) => setViewType(e.target.value as ViewType | "")}
-                  disabled={submitting}
-                >
-                  <option value="">— Not set —</option>
-                  {VIEW_TYPE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Show static view_type only when no project-defined definition is available */}
+              {!projectViewTypeDef && (
+                <div className={styles.formField}>
+                  <label htmlFor="ea-view-type" className={styles.formLabel}>
+                    View Type
+                  </label>
+                  <select
+                    id="ea-view-type"
+                    className={styles.formSelect}
+                    value={viewType}
+                    onChange={(e) => setViewType(e.target.value as ViewType | "")}
+                    disabled={submitting}
+                  >
+                    <option value="">— Not set —</option>
+                    {STATIC_VIEW_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className={styles.formField}>
                 <label htmlFor="ea-floor-category" className={styles.formLabel}>
