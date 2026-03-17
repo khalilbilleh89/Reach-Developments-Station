@@ -14,6 +14,7 @@ import { listUnitsByFloor, createUnit, updateUnit, deleteUnit } from "@/lib/unit
 import { createReservation, listProjectReservations } from "@/lib/units-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
+import { ProjectAttributeConfig } from "@/components/projects/ProjectAttributeConfig";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
 import { FloorsTable } from "@/components/floors/FloorsTable";
 import { UnitsInventoryTable } from "@/components/units/UnitsInventoryTable";
@@ -32,7 +33,7 @@ interface ProjectDetailViewProps {
   onBack: () => void;
 }
 
-type Tab = "overview" | "phases" | "buildings" | "floors" | "units";
+type Tab = "overview" | "phases" | "buildings" | "floors" | "units" | "attributes";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "\u2014";
@@ -466,6 +467,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         >
           Units
         </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === "attributes" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("attributes")}
+        >
+          Attributes
+        </button>
       </div>
 
       {/* Overview tab */}
@@ -796,6 +804,13 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
               />
             )
           )}
+        </div>
+      )}
+
+      {/* Attributes tab */}
+      {activeTab === "attributes" && (
+        <div style={{ padding: "var(--space-4) 0" }}>
+          <ProjectAttributeConfig projectId={project.id} />
         </div>
       )}
 
