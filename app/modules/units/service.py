@@ -18,6 +18,26 @@ class UnitService:
         self.repo = UnitRepository(db)
         self.floor_repo = FloorRepository(db)
 
+    def _validate_apartment_attributes(self, data: UnitCreate | UnitUpdate) -> None:
+        """Validate cross-field apartment attribute rules.
+
+        Per-field non-negative constraints (bedrooms >= 0, bathrooms >= 0, etc.)
+        are already enforced by Pydantic schema-level Field(ge=0) definitions.
+        Only cross-field business rules belong here.
+        """
+        # If has_roof_garden is explicitly False, roof_garden_area must be null or 0
+        has_roof_garden = getattr(data, "has_roof_garden", None)
+        roof_garden_area = getattr(data, "roof_garden_area", None)
+        if (
+            has_roof_garden is False
+            and roof_garden_area is not None
+            and roof_garden_area > 0
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="roof_garden_area must be null or 0 when has_roof_garden is false.",
+            )
+
     def create_unit(self, data: UnitCreate) -> UnitResponse:
         floor = self.floor_repo.get_by_id(data.floor_id)
         if not floor:
@@ -31,6 +51,7 @@ class UnitService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Unit '{data.unit_number}' already exists on floor '{data.floor_id}'.",
             )
+        self._validate_apartment_attributes(data)
         unit = self.repo.create(data)
         return UnitResponse.model_validate(unit)
 
@@ -60,6 +81,7 @@ class UnitService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Unit '{unit_id}' not found.",
             )
+        self._validate_apartment_attributes(data)
         updated = self.repo.update(unit, data)
         return UnitResponse.model_validate(updated)
 

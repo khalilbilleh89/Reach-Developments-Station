@@ -154,6 +154,12 @@ export interface UnitListItem {
   roof_garden_area: number | null;
   front_garden_area: number | null;
   gross_area: number | null;
+  // Apartment-specific master attributes (Layer A)
+  bedrooms: number | null;
+  bathrooms: number | null;
+  floor_level: string | null;
+  livable_area: number | null;
+  has_roof_garden: boolean | null;
 }
 
 /** Full unit detail as returned by GET /api/v1/units/{unitId}. */
@@ -275,6 +281,12 @@ export interface UnitCreate {
   roof_garden_area?: number | null;
   front_garden_area?: number | null;
   gross_area?: number | null;
+  // Apartment-specific master attributes (Layer A)
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  floor_level?: string | null;
+  livable_area?: number | null;
+  has_roof_garden?: boolean | null;
 }
 
 /** Payload for creating a new unit via floor-scoped route (floor_id from URL). */
@@ -288,6 +300,12 @@ export interface UnitCreateForFloor {
   roof_garden_area?: number | null;
   front_garden_area?: number | null;
   gross_area?: number | null;
+  // Apartment-specific master attributes (Layer A)
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  floor_level?: string | null;
+  livable_area?: number | null;
+  has_roof_garden?: boolean | null;
 }
 
 /** Payload for partially updating a unit. */
@@ -300,6 +318,12 @@ export interface UnitUpdate {
   roof_garden_area?: number | null;
   front_garden_area?: number | null;
   gross_area?: number | null;
+  // Apartment-specific master attributes (Layer A)
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  floor_level?: string | null;
+  livable_area?: number | null;
+  has_roof_garden?: boolean | null;
 }
 
 /** Response envelope for list endpoints. */

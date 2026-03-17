@@ -16,7 +16,9 @@ interface Attribute {
  * of a unit to support real sales conversations.
  *
  * Shows unit number, type, floor reference, areas (internal + individual
- * outdoor components), and current commercial status.
+ * outdoor components), apartment-specific master attributes (bedrooms,
+ * bathrooms, floor level, livable area, roof garden), and current commercial
+ * status.
  *
  * All values are sourced from the unit API response; no calculations are
  * performed beyond safe null checks for optional outdoor area fields.
@@ -70,6 +72,35 @@ export function UnitAttributesPanel({ unit }: UnitAttributesPanelProps) {
     },
   ].filter((a): a is { label: string; value: string } => a.value !== null);
 
+  // Apartment-specific master attributes (Layer A)
+  const apartmentAttributes: Attribute[] = [
+    {
+      label: "Bedrooms",
+      value: unit.bedrooms != null ? String(unit.bedrooms) : null,
+    },
+    {
+      label: "Bathrooms",
+      value: unit.bathrooms != null ? String(unit.bathrooms) : null,
+    },
+    {
+      label: "Floor Level",
+      value: unit.floor_level ?? null,
+    },
+    {
+      label: "Livable Area",
+      value: unit.livable_area != null ? `${unit.livable_area.toFixed(1)} sqm` : null,
+    },
+    {
+      label: "Roof Garden",
+      value:
+        unit.has_roof_garden != null
+          ? unit.has_roof_garden
+            ? "Yes"
+            : "No"
+          : null,
+    },
+  ].filter((a): a is { label: string; value: string } => a.value !== null);
+
   return (
     <div className={styles.attributesCard} aria-label="Unit attributes">
       <h2 className={styles.attributesTitle}>Unit Attributes</h2>
@@ -86,6 +117,20 @@ export function UnitAttributesPanel({ unit }: UnitAttributesPanelProps) {
           </div>
         ))}
       </div>
+
+      {apartmentAttributes.length > 0 && (
+        <>
+          <h3 className={styles.attributesSubtitle}>Apartment Attributes</h3>
+          <div className={styles.attributesGrid}>
+            {apartmentAttributes.map((attr) => (
+              <div key={attr.label} className={styles.attributeItem}>
+                <span className={styles.attributeLabel}>{attr.label}</span>
+                <span className={styles.attributeValue}>{attr.value}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
