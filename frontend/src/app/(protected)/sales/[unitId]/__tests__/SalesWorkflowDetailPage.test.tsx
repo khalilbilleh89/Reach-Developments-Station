@@ -63,6 +63,11 @@ const mockUnit = {
   roof_garden_area: null,
   front_garden_area: null,
   gross_area: null,
+  bedrooms: null,
+  bathrooms: null,
+  floor_level: null,
+  livable_area: null,
+  has_roof_garden: null,
 };
 
 const mockPricing = {

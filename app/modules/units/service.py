@@ -19,39 +19,20 @@ class UnitService:
         self.floor_repo = FloorRepository(db)
 
     def _validate_apartment_attributes(self, data: UnitCreate | UnitUpdate) -> None:
-        """Validate apartment-specific unit attributes."""
-        if getattr(data, "bedrooms", None) is not None and data.bedrooms < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="bedrooms must be >= 0.",
-            )
-        if getattr(data, "bathrooms", None) is not None and data.bathrooms < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="bathrooms must be >= 0.",
-            )
-        if getattr(data, "livable_area", None) is not None and data.livable_area < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="livable_area must be >= 0.",
-            )
-        if getattr(data, "balcony_area", None) is not None and data.balcony_area < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="balcony_area must be >= 0.",
-            )
-        if (
-            getattr(data, "roof_garden_area", None) is not None
-            and data.roof_garden_area < 0
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="roof_garden_area must be >= 0.",
-            )
+        """Validate cross-field apartment attribute rules.
+
+        Per-field non-negative constraints (bedrooms >= 0, bathrooms >= 0, etc.)
+        are already enforced by Pydantic schema-level Field(ge=0) definitions.
+        Only cross-field business rules belong here.
+        """
         # If has_roof_garden is explicitly False, roof_garden_area must be null or 0
         has_roof_garden = getattr(data, "has_roof_garden", None)
         roof_garden_area = getattr(data, "roof_garden_area", None)
-        if has_roof_garden is False and roof_garden_area and roof_garden_area > 0:
+        if (
+            has_roof_garden is False
+            and roof_garden_area is not None
+            and roof_garden_area > 0
+        ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="roof_garden_area must be null or 0 when has_roof_garden is false.",
