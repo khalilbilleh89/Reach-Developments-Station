@@ -7,7 +7,7 @@ Data access layer for the Project entity and project attribute definitions/optio
 from typing import List, Optional
 
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.modules.phases.models import Phase
 from app.modules.projects.models import Project, ProjectAttributeDefinition, ProjectAttributeOption
@@ -147,6 +147,7 @@ class ProjectRepository:
         return (
             self.db.query(ProjectAttributeDefinition)
             .filter(ProjectAttributeDefinition.project_id == project_id)
+            .options(selectinload(ProjectAttributeDefinition.options))
             .order_by(ProjectAttributeDefinition.created_at.asc())
             .all()
         )

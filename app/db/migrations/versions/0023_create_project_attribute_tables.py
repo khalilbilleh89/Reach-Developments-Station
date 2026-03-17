@@ -9,12 +9,14 @@ Adds two new tables that form the project-level attribute definition engine:
   project_attribute_definitions
     Each row represents a named, typed attribute set owned by a project
     (e.g. view_type for Project: Marina Residences).
-    Unique constraint on (project_id, key) prevents duplicate active keys.
+    Unique constraint on (project_id, key) prevents duplicate keys per project
+    regardless of is_active state.
 
   project_attribute_options
     Each row is an allowed selectable value within a definition
     (e.g. Sea View, Marina View, Internal View).
     Unique constraint on (definition_id, value) prevents duplicate option values.
+    Unique constraint on (definition_id, label) prevents duplicate option labels.
 
 Both tables are additive and non-breaking.
 Referential integrity is enforced via CASCADE foreign keys.
@@ -41,7 +43,6 @@ def upgrade() -> None:
             sa.String(36),
             sa.ForeignKey("projects.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("key", sa.String(100), nullable=False),
         sa.Column("label", sa.String(255), nullable=False),
@@ -65,7 +66,6 @@ def upgrade() -> None:
             sa.String(36),
             sa.ForeignKey("project_attribute_definitions.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("value", sa.String(255), nullable=False),
         sa.Column("label", sa.String(255), nullable=False),
@@ -74,6 +74,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("definition_id", "value", name="uq_pao_definition_value"),
+        sa.UniqueConstraint("definition_id", "label", name="uq_pao_definition_label"),
     )
     op.create_index(
         "ix_project_attribute_options_definition_id",

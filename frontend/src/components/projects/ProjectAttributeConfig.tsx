@@ -9,7 +9,6 @@ import {
   createAttributeDefinition,
   createAttributeOption,
   listAttributeDefinitions,
-  updateAttributeDefinition,
   updateAttributeOption,
 } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
@@ -55,6 +54,9 @@ export function ProjectAttributeConfig({
   const [editLabel, setEditLabel] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Deactivate/reactivate error
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // -----------------------------------------------------------------------
   // Data loading
@@ -177,6 +179,7 @@ export function ProjectAttributeConfig({
 
   const handleDeactivate = async (option: ProjectAttributeOption) => {
     if (!definition) return;
+    setActionError(null);
     try {
       const updated = await updateAttributeOption(
         projectId,
@@ -193,8 +196,10 @@ export function ProjectAttributeConfig({
           ),
         };
       });
-    } catch {
-      // Surface error inline if needed — for now silently reload
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to deactivate option."
+      );
       loadDefinitions();
     }
   };
@@ -205,6 +210,7 @@ export function ProjectAttributeConfig({
 
   const handleReactivate = async (option: ProjectAttributeOption) => {
     if (!definition) return;
+    setActionError(null);
     try {
       const updated = await updateAttributeOption(
         projectId,
@@ -221,7 +227,10 @@ export function ProjectAttributeConfig({
           ),
         };
       });
-    } catch {
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to reactivate option."
+      );
       loadDefinitions();
     }
   };
@@ -255,6 +264,17 @@ export function ProjectAttributeConfig({
           Define the selectable attribute values available to units in this project.
         </span>
       </div>
+
+      {/* Action error banner (deactivate / reactivate failures) */}
+      {actionError && (
+        <div
+          className={styles.modalError}
+          role="alert"
+          style={{ marginBottom: "var(--space-4)" }}
+        >
+          {actionError}
+        </div>
+      )}
 
       {/* View Type card */}
       <div

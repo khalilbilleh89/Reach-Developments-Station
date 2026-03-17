@@ -55,7 +55,7 @@ class ProjectAttributeDefinition(Base, TimestampMixin):
     """A named, typed attribute set that belongs to a project.
 
     Each project can own multiple attribute definitions (e.g. view_type).
-    Only one active definition per key is allowed per project.
+    Only one definition per key is allowed per project (regardless of is_active).
     """
 
     __tablename__ = "project_attribute_definitions"
@@ -89,6 +89,7 @@ class ProjectAttributeOption(Base, TimestampMixin):
     __tablename__ = "project_attribute_options"
     __table_args__ = (
         UniqueConstraint("definition_id", "value", name="uq_pao_definition_value"),
+        UniqueConstraint("definition_id", "label", name="uq_pao_definition_label"),
     )
 
     definition_id: Mapped[str] = mapped_column(

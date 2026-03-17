@@ -4,7 +4,7 @@ projects.service
 Business logic for the Project entity and project attribute definitions/options.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -141,6 +141,8 @@ class ProjectService:
 
         Raises 409 if a definition with the same key already exists for this project.
         """
+        from sqlalchemy.exc import IntegrityError
+
         self._require_project(project_id)
         existing = self.repo.get_definition_by_project_and_key(project_id, data.key)
         if existing:
@@ -151,7 +153,17 @@ class ProjectService:
                     f"for project '{project_id}'."
                 ),
             )
-        definition = self.repo.create_definition(project_id, data)
+        try:
+            definition = self.repo.create_definition(project_id, data)
+        except IntegrityError:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Attribute definition with key '{data.key}' already exists "
+                    f"for project '{project_id}' (concurrent request)."
+                ),
+            )
         return AttributeDefinitionResponse.model_validate(definition)
 
     def update_attribute_definition(
@@ -174,6 +186,8 @@ class ProjectService:
 
         Raises 409 if an option with the same value or label already exists.
         """
+        from sqlalchemy.exc import IntegrityError
+
         self._require_project(project_id)
         definition = self._require_definition(project_id, definition_id)
 
@@ -188,7 +202,14 @@ class ProjectService:
                 detail=f"An option with label '{data.label}' already exists in this definition.",
             )
 
-        option = self.repo.create_option(definition.id, data)
+        try:
+            option = self.repo.create_option(definition.id, data)
+        except IntegrityError:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An option with the same value or label already exists in this definition (concurrent request).",
+            )
         return AttributeOptionResponse.model_validate(option)
 
     def update_attribute_option(

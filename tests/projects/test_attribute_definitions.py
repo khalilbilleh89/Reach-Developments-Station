@@ -11,7 +11,6 @@ Validates:
   - 404 on invalid project/definition/option IDs
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
