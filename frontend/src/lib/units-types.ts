@@ -177,6 +177,22 @@ export interface UnitPricingAttributes {
 }
 
 /**
+ * Payload for creating or replacing pricing engine inputs for a unit.
+ * Sent to POST /api/v1/pricing/unit/{unitId}/attributes.
+ *
+ * base_price_per_sqm is required (must be > 0).
+ * All premium and adjustment fields default to 0.
+ */
+export interface UnitEngineInputsSave {
+  base_price_per_sqm: number;
+  floor_premium: number;
+  view_premium: number;
+  corner_premium: number;
+  size_adjustment: number;
+  custom_adjustment: number;
+}
+
+/**
  * Calculated price result for a unit.
  * Returned by GET /api/v1/pricing/unit/{unitId}.
  */
@@ -225,6 +241,11 @@ export interface PricingReadiness {
 /**
  * Combined unit pricing detail used by the detail page.
  * Aggregates unit data, pricing attributes, and calculated price.
+ *
+ * The three-layer pricing model:
+ *   qualitativeAttributes — descriptive/categorical inputs (Layer 1).
+ *   attributes / readiness — pricing engine inputs and their readiness state (Layer 2).
+ *   pricingRecord          — formal commercial pricing record (Layer 3).
  */
 export interface UnitPricingDetail {
   unit: UnitDetail;
@@ -233,6 +254,10 @@ export interface UnitPricingDetail {
   pricingState: PricingDetailState;
   /** Explicit readiness from the backend inspection endpoint. */
   readiness: PricingReadiness | null;
+  /** Layer 1 — qualitative descriptive attributes (view type, corner unit, etc.). */
+  qualitativeAttributes: UnitQualitativeAttributes | null;
+  /** Layer 3 — formal commercial pricing record (approved price, status, notes). */
+  pricingRecord: UnitPricingRecord | null;
 }
 
 // ---------- Inventory create/update types --------------------------------

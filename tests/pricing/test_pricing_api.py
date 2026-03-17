@@ -374,3 +374,101 @@ def test_readiness_and_table_query_consistent(client: TestClient):
     attrs_after = client.get(f"/api/v1/pricing/unit/{unit_id}/attributes")
     assert readiness_after["is_ready_for_pricing"] is True
     assert attrs_after.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Assembled pricing detail endpoint — GET /api/v1/pricing/unit/{id}/detail
+# ---------------------------------------------------------------------------
+
+def test_pricing_detail_invalid_unit_returns_404(client: TestClient):
+    """GET detail for a non-existent unit should return 404."""
+    resp = client.get("/api/v1/pricing/unit/no-such-unit/detail")
+    assert resp.status_code == 404
+
+
+def test_pricing_detail_no_engine_inputs(client: TestClient):
+    """Detail endpoint with no attributes set should return null engine_inputs and is_ready_for_pricing=False."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-NOATTR")
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/detail")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["unit_id"] == unit_id
+    assert data["engine_inputs"] is None
+    assert data["pricing_readiness"]["is_ready_for_pricing"] is False
+    assert len(data["pricing_readiness"]["missing_required_fields"]) > 0
+    assert data["pricing_record"] is None
+
+
+def test_pricing_detail_with_engine_inputs(client: TestClient):
+    """Detail endpoint with attributes set should return engine_inputs and is_ready_for_pricing=True."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-ATTRS")
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/detail")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["engine_inputs"] is not None
+    assert data["engine_inputs"]["base_price_per_sqm"] == pytest.approx(5000.0)
+    assert data["pricing_readiness"]["is_ready_for_pricing"] is True
+    assert data["pricing_readiness"]["missing_required_fields"] == []
+
+
+def test_pricing_detail_with_pricing_record(client: TestClient):
+    """Detail endpoint with a formal pricing record should return that record in pricing_record."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-REC")
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    client.put(f"/api/v1/units/{unit_id}/pricing", json={
+        "base_price": 500_000.0,
+        "manual_adjustment": 10_000.0,
+        "currency": "AED",
+        "pricing_status": "reviewed",
+    })
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/detail")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["pricing_record"] is not None
+    assert data["pricing_record"]["base_price"] == pytest.approx(500_000.0)
+    assert data["pricing_record"]["final_price"] == pytest.approx(510_000.0)
+    assert data["pricing_record"]["pricing_status"] == "reviewed"
+
+
+def test_pricing_detail_response_structure(client: TestClient):
+    """Detail response must contain all required top-level keys."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-STRUCT")
+    resp = client.get(f"/api/v1/pricing/unit/{unit_id}/detail")
+    assert resp.status_code == 200
+    data = resp.json()
+    required_keys = {"unit_id", "engine_inputs", "pricing_readiness", "pricing_record"}
+    for key in required_keys:
+        assert key in data, f"Missing key in detail response: {key}"
+
+
+def test_pricing_detail_readiness_matches_engine_inputs(client: TestClient):
+    """Readiness missing_required_fields must exactly match the fields absent from engine_inputs."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-ALIGN")
+    # No attributes → readiness reports all required fields as missing
+    detail = client.get(f"/api/v1/pricing/unit/{unit_id}/detail").json()
+    assert detail["engine_inputs"] is None
+    missing = set(detail["pricing_readiness"]["missing_required_fields"])
+    expected_engine_fields = {
+        "base_price_per_sqm", "floor_premium", "view_premium",
+        "corner_premium", "size_adjustment", "custom_adjustment",
+    }
+    # At minimum, base_price_per_sqm must be listed as missing
+    assert "base_price_per_sqm" in missing
+    # All reported missing fields must be real engine input field names
+    assert missing.issubset(expected_engine_fields)
+
+
+def test_pricing_detail_engine_fields_match_readiness_fields(client: TestClient):
+    """When engine_inputs is populated, no field from engine_inputs should appear in missing_required_fields."""
+    _, unit_id = _create_hierarchy(client, "PRJ-DTL-NMATCH")
+    client.post(f"/api/v1/pricing/unit/{unit_id}/attributes", json=_VALID_ATTRS_PAYLOAD)
+    detail = client.get(f"/api/v1/pricing/unit/{unit_id}/detail").json()
+    assert detail["engine_inputs"] is not None
+    engine_field_names = {
+        "base_price_per_sqm", "floor_premium", "view_premium",
+        "corner_premium", "size_adjustment", "custom_adjustment",
+    }
+    missing = set(detail["pricing_readiness"]["missing_required_fields"])
+    # No engine field should be listed as missing
+    assert missing.isdisjoint(engine_field_names)

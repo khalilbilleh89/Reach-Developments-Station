@@ -220,11 +220,13 @@ export async function getUnitPricingDetail(
 ): Promise<UnitPricingDetail> {
   const unit = await getUnitById(unitId);
 
-  const [pricingResult, attributesResult, readinessResult] =
+  const [pricingResult, attributesResult, readinessResult, qualAttrsResult, pricingRecordResult] =
     await Promise.allSettled([
       apiFetch<UnitPrice>(`/pricing/unit/${unitId}`),
       apiFetch<UnitPricingAttributes>(`/pricing/unit/${unitId}/attributes`),
       apiFetch<PricingReadiness>(`/pricing/unit/${unitId}/readiness`),
+      apiFetch<UnitQualitativeAttributes>(`/units/${unitId}/pricing-attributes`),
+      apiFetch<import("./units-types").UnitPricingRecord>(`/units/${unitId}/pricing`),
     ]);
 
   let pricing: UnitPrice | null = null;
@@ -281,7 +283,27 @@ export async function getUnitPricingDetail(
     }
   }
 
-  return { unit, pricing, attributes, pricingState, readiness };
+  // Layer 1 — qualitative attributes (non-fatal 404 when not yet set)
+  let qualitativeAttributes: UnitQualitativeAttributes | null = null;
+  if (qualAttrsResult.status === "fulfilled") {
+    qualitativeAttributes = qualAttrsResult.value;
+  } else {
+    if (!isNotFoundError(qualAttrsResult.reason)) {
+      throw qualAttrsResult.reason;
+    }
+  }
+
+  // Layer 3 — commercial pricing record (non-fatal 404 when not yet set)
+  let pricingRecord: import("./units-types").UnitPricingRecord | null = null;
+  if (pricingRecordResult.status === "fulfilled") {
+    pricingRecord = pricingRecordResult.value;
+  } else {
+    if (!isNotFoundError(pricingRecordResult.reason)) {
+      throw pricingRecordResult.reason;
+    }
+  }
+
+  return { unit, pricing, attributes, pricingState, readiness, qualitativeAttributes, pricingRecord };
 }
 
 // ---------- Inventory CRUD functions -------------------------------------
@@ -410,6 +432,31 @@ export async function saveUnitQualitativeAttributes(
     `/units/${encodeURIComponent(unitId)}/pricing-attributes`,
     {
       method: "PUT",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+// ---------- Pricing engine input functions --------------------------------
+
+/**
+ * Create or replace the pricing engine inputs for a unit.
+ *
+ * Sent to POST /api/v1/pricing/unit/{unitId}/attributes.
+ * These are the numerical inputs consumed by the pricing engine:
+ *   base_price_per_sqm, floor_premium, view_premium, corner_premium,
+ *   size_adjustment, custom_adjustment.
+ *
+ * Setting these values determines pricing readiness for the unit.
+ */
+export async function saveUnitEngineInputs(
+  unitId: string,
+  data: import("./units-types").UnitEngineInputsSave,
+): Promise<UnitPricingAttributes> {
+  return apiFetch<UnitPricingAttributes>(
+    `/pricing/unit/${encodeURIComponent(unitId)}/attributes`,
+    {
+      method: "POST",
       body: JSON.stringify(data),
     },
   );
