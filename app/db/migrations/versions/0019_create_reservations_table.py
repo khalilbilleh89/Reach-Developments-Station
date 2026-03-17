@@ -61,7 +61,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_unit_reservations_status",
         "unit_reservations",
-        "status IN ('active', 'expired', 'cancelled', 'converted')",
+        "status IN ('draft', 'active', 'expired', 'cancelled', 'converted')",
     )
 
     # PostgreSQL-only: one active reservation per unit at the DB layer.
