@@ -6,7 +6,7 @@ CRUD API router for the Project entity.
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -65,15 +65,15 @@ def update_project(
 def delete_project(
     project_id: str,
     service: Annotated[ProjectService, Depends(get_service)],
-) -> None:
+) -> Response:
     """Delete a project.
 
     Returns 204 on success.
     Returns 404 if the project does not exist.
-    Returns 409 if the project has dependent records (phases, buildings, units, etc.)
-    and cannot be safely deleted.
+    Returns 409 if the project has dependent phase records.
     """
     service.delete_project(project_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{project_id}/summary", response_model=ProjectSummary)

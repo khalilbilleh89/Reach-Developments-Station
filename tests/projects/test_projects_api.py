@@ -221,11 +221,11 @@ def test_delete_project_with_phases_returns_409(client: TestClient):
     """DELETE /api/v1/projects/{id} should return 409 when the project has phases."""
     create = client.post("/api/v1/projects", json={"name": "Has Phases", "code": "HP-001"})
     project_id = create.json()["id"]
-    # Add a phase so the project has dependent records
+    # Add a phase so the project has dependent phase records
     client.post(
         f"/api/v1/projects/{project_id}/phases",
         json={"name": "Phase 1", "code": "HP-001-P1", "sequence": 1},
     )
     response = client.delete(f"/api/v1/projects/{project_id}")
     assert response.status_code == 409
-    assert "dependent records" in response.json()["detail"]
+    assert "dependent phase records" in response.json()["detail"]

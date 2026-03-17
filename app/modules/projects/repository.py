@@ -68,6 +68,14 @@ class ProjectRepository:
         self.db.delete(project)
         self.db.commit()
 
+    def has_phases(self, project_id: str) -> bool:
+        """Return True if at least one Phase record exists for the given project."""
+        return (
+            self.db.query(Phase.id)
+            .filter(Phase.project_id == project_id)
+            .first()
+        ) is not None
+
     def update(self, project: Project, data: ProjectUpdate) -> Project:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():

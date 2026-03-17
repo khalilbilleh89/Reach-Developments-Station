@@ -7,12 +7,13 @@
  * (e.g. /api/v1) — do NOT include /api/v1 here.
  *
  * Backend endpoints used:
- *   GET  /projects                   → list projects
- *   POST /projects                   → create project
- *   GET  /projects/{id}              → get project by id
- *   PATCH /projects/{id}             → update project
- *   POST /projects/{id}/archive      → archive project
- *   GET  /projects/{id}/summary      → get project KPI summary
+ *   GET    /projects                   → list projects
+ *   POST   /projects                   → create project
+ *   GET    /projects/{id}              → get project by id
+ *   PATCH  /projects/{id}              → update project
+ *   DELETE /projects/{id}              → delete project
+ *   POST   /projects/{id}/archive      → archive project
+ *   GET    /projects/{id}/summary      → get project KPI summary
  */
 
 import { apiFetch } from "./api-client";

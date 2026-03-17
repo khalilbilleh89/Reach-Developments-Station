@@ -30,6 +30,7 @@ const mockPricing: UnitPrice = {
   base_unit_price: 900_000,
   premium_total: 50_000,
   final_unit_price: 950_000,
+  currency: "AED",
 };
 
 describe("SalesReadinessCard", () => {

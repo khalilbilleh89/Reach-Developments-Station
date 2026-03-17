@@ -69,13 +69,12 @@ class ProjectService:
 
     def delete_project(self, project_id: str) -> None:
         project = self._require_project(project_id)
-        if project.phases:
+        if self.repo.has_phases(project_id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     f"Project '{project_id}' cannot be deleted because it has "
-                    "dependent records (phases, buildings, units, or sales). "
-                    "Remove all dependent records first."
+                    "dependent phase records. Remove all dependent phases first."
                 ),
             )
         self.repo.delete(project)
