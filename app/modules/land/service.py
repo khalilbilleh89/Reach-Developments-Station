@@ -8,6 +8,7 @@ Handles validation, derived area calculations, and valuation computations.
 from typing import List, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
@@ -56,7 +57,18 @@ class LandService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"A standalone parcel with code '{data.parcel_code}' already exists.",
                 )
-        parcel = self.parcel_repo.create(data)
+        try:
+            parcel = self.parcel_repo.create(data)
+        except IntegrityError:
+            self.parcel_repo.db.rollback()
+            if data.project_id is None:
+                detail = f"A standalone parcel with code '{data.parcel_code}' already exists."
+            else:
+                detail = f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'."
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=detail,
+            )
         return LandParcelResponse.model_validate(parcel)
 
     def get_parcel(self, parcel_id: str) -> LandParcelResponse:

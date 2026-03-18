@@ -4,8 +4,15 @@ Tests for the land underwriting module.
 Validates create / list / update behaviour for parcels, assumptions, and valuations.
 """
 
+from unittest.mock import patch
+
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+
+from app.modules.land.schemas import LandParcelCreate
+from app.modules.land.service import LandService
 
 
 def _create_project(client: TestClient, code: str = "PRJ-LAND") -> str:
@@ -401,5 +408,27 @@ def test_standalone_parcel_duplicate_code_rejected(client: TestClient):
         json={"parcel_name": "Second Standalone", "parcel_code": "PCL-DUP-STANDALONE"},
     )
     assert resp2.status_code == 409
+    assert "PCL-DUP-STANDALONE" in resp2.json()["detail"]
+
+
+def test_standalone_parcel_integrity_error_maps_to_409(db_session):
+    """IntegrityError from DB layer must be caught and surfaced as HTTP 409.
+
+    Simulates the race-safe path: even when the service-layer pre-check is
+    bypassed (e.g., concurrent requests), an IntegrityError raised during
+    DB commit is converted to a deterministic 409 response.
+    """
+    service = LandService(db_session)
+    data = LandParcelCreate(parcel_name="Race Parcel", parcel_code="PCL-RACE")
+
+    with patch.object(
+        service.parcel_repo,
+        "create",
+        side_effect=IntegrityError("duplicate", {}, Exception("unique constraint")),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            service.create_parcel(data)
+    assert exc_info.value.status_code == 409
+    assert "PCL-RACE" in exc_info.value.detail
 
 
