@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.modules.construction.models import (
     ConstructionEngineeringItem,
     ConstructionMilestone,
+    ConstructionProgressUpdate,
     ConstructionScope,
 )
 from app.modules.construction.schemas import (
@@ -20,6 +21,7 @@ from app.modules.construction.schemas import (
     ConstructionScopeUpdate,
     EngineeringItemCreate,
     EngineeringItemUpdate,
+    ProgressUpdateCreate,
 )
 
 
@@ -213,4 +215,58 @@ class ConstructionEngineeringItemRepository:
 
     def delete(self, item: ConstructionEngineeringItem) -> None:
         self.db.delete(item)
+        self.db.commit()
+
+
+class ConstructionProgressUpdateRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, milestone_id: str, data: ProgressUpdateCreate) -> ConstructionProgressUpdate:
+        from datetime import datetime, timezone
+
+        reported_at = data.reported_at or datetime.now(timezone.utc)
+        update = ConstructionProgressUpdate(
+            milestone_id=milestone_id,
+            progress_percent=data.progress_percent,
+            status_note=data.status_note,
+            reported_by=data.reported_by,
+            reported_at=reported_at,
+        )
+        self.db.add(update)
+        self.db.commit()
+        self.db.refresh(update)
+        return update
+
+    def get_by_id(self, update_id: str) -> Optional[ConstructionProgressUpdate]:
+        return (
+            self.db.query(ConstructionProgressUpdate)
+            .filter(ConstructionProgressUpdate.id == update_id)
+            .first()
+        )
+
+    def list(
+        self,
+        milestone_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[ConstructionProgressUpdate]:
+        return (
+            self.db.query(ConstructionProgressUpdate)
+            .filter(ConstructionProgressUpdate.milestone_id == milestone_id)
+            .order_by(ConstructionProgressUpdate.reported_at, ConstructionProgressUpdate.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self, milestone_id: str) -> int:
+        return (
+            self.db.query(ConstructionProgressUpdate)
+            .filter(ConstructionProgressUpdate.milestone_id == milestone_id)
+            .count()
+        )
+
+    def delete(self, update: ConstructionProgressUpdate) -> None:
+        self.db.delete(update)
         self.db.commit()

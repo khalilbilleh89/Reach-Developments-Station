@@ -6,6 +6,7 @@ ORM models for the Construction domain.
 ConstructionScope          — tracks the construction scope for a project, phase, or building.
 ConstructionMilestone      — individual delivery milestones within a scope (Contractor side).
 ConstructionEngineeringItem — engineering tasks / deliverables within a scope (Engineering side).
+ConstructionProgressUpdate  — periodic progress report entries linked to a milestone.
 
 Hierarchy positioning:
   Project (optional) → Phase (optional) → Building (optional)
@@ -14,13 +15,14 @@ Hierarchy positioning:
   ConstructionScope
     ├── ConstructionEngineeringItem  (Engineering workspace)
     └── ConstructionMilestone        (Contractor workspace)
+         └── ConstructionProgressUpdate  (Progress history)
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -112,6 +114,42 @@ class ConstructionMilestone(Base, TimestampMixin):
 
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="milestones"
+    )
+    progress_updates: Mapped[List["ConstructionProgressUpdate"]] = relationship(
+        "ConstructionProgressUpdate",
+        back_populates="milestone",
+        cascade="all, delete-orphan",
+        order_by="ConstructionProgressUpdate.reported_at",
+    )
+
+
+class ConstructionProgressUpdate(Base, TimestampMixin):
+    """Periodic progress report entry linked to a construction milestone.
+
+    Records the percent complete, a status note, and who reported it.
+    Multiple updates per milestone build up a progress history.
+    """
+
+    __tablename__ = "construction_progress_updates"
+
+    milestone_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_milestones.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    progress_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    status_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reported_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    milestone: Mapped["ConstructionMilestone"] = relationship(
+        "ConstructionMilestone", back_populates="progress_updates"
     )
 
 
