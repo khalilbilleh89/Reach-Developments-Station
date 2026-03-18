@@ -225,7 +225,13 @@ class ConstructionProgressUpdateRepository:
     def create(self, milestone_id: str, data: ProgressUpdateCreate) -> ConstructionProgressUpdate:
         from datetime import datetime, timezone
 
-        reported_at = data.reported_at or datetime.now(timezone.utc)
+        raw = data.reported_at
+        if raw is None:
+            reported_at = datetime.now(timezone.utc)
+        elif raw.tzinfo is None:
+            reported_at = raw.replace(tzinfo=timezone.utc)
+        else:
+            reported_at = raw.astimezone(timezone.utc)
         update = ConstructionProgressUpdate(
             milestone_id=milestone_id,
             progress_percent=data.progress_percent,

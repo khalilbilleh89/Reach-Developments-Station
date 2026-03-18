@@ -118,6 +118,17 @@ class ProgressUpdateCreate(BaseModel):
     reported_by: Optional[str] = Field(None, max_length=255)
     reported_at: Optional[datetime] = None
 
+    @field_validator("reported_at")
+    @classmethod
+    def normalize_reported_at_to_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        from datetime import timezone
+
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
+
 
 class ProgressUpdateResponse(BaseModel):
     id: str
@@ -130,6 +141,17 @@ class ProgressUpdateResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("reported_at")
+    @classmethod
+    def ensure_reported_at_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        from datetime import timezone
+
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
 
 
 class ProgressUpdateList(BaseModel):
