@@ -206,7 +206,7 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
             <option value="">All Categories</option>
             {COST_CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c.replace("_", " ")}
+                {c.replace(/_/g, " ")}
               </option>
             ))}
           </select>
@@ -265,7 +265,7 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
                   return (
                     <tr key={item.id} className={styles.tr}>
                       <td className={styles.td}>
-                        {item.cost_category.replace("_", " ")}
+                        {item.cost_category.replace(/_/g, " ")}
                       </td>
                       <td className={styles.td}>{item.cost_type}</td>
                       <td className={styles.td}>{item.description}</td>
@@ -329,7 +329,7 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
                   >
                     {COST_CATEGORIES.map((c) => (
                       <option key={c} value={c}>
-                        {c.replace("_", " ")}
+                        {c.replace(/_/g, " ")}
                       </option>
                     ))}
                   </select>

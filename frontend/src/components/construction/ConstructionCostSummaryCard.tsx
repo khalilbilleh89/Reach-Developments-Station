@@ -96,7 +96,7 @@ export function ConstructionCostSummaryCard({
                 {categories.map(([cat, data]) => (
                   <tr key={cat} className={styles.tr}>
                     <td className={styles.td}>
-                      {cat.replace("_", " ")}
+                      {cat.replace(/_/g, " ")}
                     </td>
                     <td className={styles.td}>{fmt(data.budget, currency)}</td>
                     <td className={styles.td}>{fmt(data.committed, currency)}</td>
