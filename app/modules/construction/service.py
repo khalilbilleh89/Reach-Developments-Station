@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.buildings.repository import BuildingRepository
+from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
@@ -217,7 +218,7 @@ class ConstructionService:
             item = self.engineering_repo.create(scope_id, data)
         except IntegrityError:
             self.engineering_repo.db.rollback()
-            raise ValueError("Construction engineering item integrity error")
+            raise ConstructionConflictError("Construction engineering item integrity error")
         return EngineeringItemResponse.model_validate(item)
 
     def list_engineering_items(
@@ -261,7 +262,7 @@ class ConstructionService:
             updated = self.engineering_repo.update(item, data)
         except IntegrityError:
             self.engineering_repo.db.rollback()
-            raise ValueError("Construction engineering item integrity error")
+            raise ConstructionConflictError("Construction engineering item integrity error")
         return EngineeringItemResponse.model_validate(updated)
 
     def delete_engineering_item(self, item_id: str) -> None:
