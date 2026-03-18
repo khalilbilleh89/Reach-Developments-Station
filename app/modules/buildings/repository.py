@@ -37,7 +37,7 @@ class BuildingRepository:
         query = self.db.query(Building)
         if phase_id:
             query = query.filter(Building.phase_id == phase_id)
-        return query.order_by(Building.name).offset(skip).limit(limit).all()
+        return query.order_by(Building.name, Building.phase_id, Building.id).offset(skip).limit(limit).all()
 
     def count(self, phase_id: Optional[str] = None) -> int:
         query = self.db.query(Building)

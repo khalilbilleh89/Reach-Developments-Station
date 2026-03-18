@@ -428,3 +428,56 @@ def test_same_attribute_key_allowed_across_projects(client: TestClient):
         json={"key": "view_type", "label": "View B"},
     )
     assert resp_b.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# Tie-breaker ordering (unfiltered endpoints)
+# ---------------------------------------------------------------------------
+
+
+def test_phases_same_sequence_across_projects_deterministic(client: TestClient):
+    """Unfiltered phase list is deterministic even when multiple phases share the same sequence.
+
+    Two phases from different projects both at sequence=1 must appear in a stable,
+    reproducible order (project_id, then id as tie-breakers).
+    """
+    project_a_id = _create_project(client, "PRJ-TIE-PH-A")
+    project_b_id = _create_project(client, "PRJ-TIE-PH-B")
+    phase_a_id = _create_phase(client, project_a_id, "Phase 1", sequence=1)
+    phase_b_id = _create_phase(client, project_b_id, "Phase 1", sequence=1)
+
+    resp = client.get("/api/v1/phases")
+    assert resp.status_code == 200
+    ids = [p["id"] for p in resp.json()["items"]]
+
+    # Both phases are present and their relative order is stable (a second call
+    # must return the same order).
+    assert phase_a_id in ids
+    assert phase_b_id in ids
+
+    resp2 = client.get("/api/v1/phases")
+    assert resp2.json()["items"] == resp.json()["items"]
+
+
+def test_buildings_same_name_across_phases_deterministic(client: TestClient):
+    """Unfiltered building list is deterministic even when multiple buildings share the same name.
+
+    Two buildings in different phases both named 'Block A' must appear in a stable,
+    reproducible order (phase_id, then id as tie-breakers).
+    """
+    project_id = _create_project(client, "PRJ-TIE-BLD")
+    phase_a_id = _create_phase(client, project_id, "Phase 1", sequence=1)
+    phase_b_id = _create_phase(client, project_id, "Phase 2", sequence=2)
+    building_a_id = _create_building(client, phase_a_id, "Block A", "BLK-A1")
+    building_b_id = _create_building(client, phase_b_id, "Block A", "BLK-A2")
+
+    resp = client.get("/api/v1/buildings")
+    assert resp.status_code == 200
+    ids = [b["id"] for b in resp.json()["items"]]
+
+    # Both buildings are present and their relative order is stable.
+    assert building_a_id in ids
+    assert building_b_id in ids
+
+    resp2 = client.get("/api/v1/buildings")
+    assert resp2.json()["items"] == resp.json()["items"]
