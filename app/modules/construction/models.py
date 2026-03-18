@@ -7,6 +7,7 @@ ConstructionScope          — tracks the construction scope for a project, phas
 ConstructionMilestone      — individual delivery milestones within a scope (Contractor side).
 ConstructionEngineeringItem — engineering tasks / deliverables within a scope (Engineering side).
 ConstructionProgressUpdate  — periodic progress report entries linked to a milestone.
+ConstructionCostItem        — cost line items tracked at the scope level (budget/committed/actual).
 
 Hierarchy positioning:
   Project (optional) → Phase (optional) → Building (optional)
@@ -14,6 +15,7 @@ Hierarchy positioning:
 
   ConstructionScope
     ├── ConstructionEngineeringItem  (Engineering workspace)
+    ├── ConstructionCostItem         (Cost tracking workspace)
     └── ConstructionMilestone        (Contractor workspace)
          └── ConstructionProgressUpdate  (Progress history)
 """
@@ -22,7 +24,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -82,6 +84,12 @@ class ConstructionScope(Base, TimestampMixin):
         back_populates="scope",
         cascade="all, delete-orphan",
         order_by="ConstructionEngineeringItem.created_at",
+    )
+    cost_items: Mapped[List["ConstructionCostItem"]] = relationship(
+        "ConstructionCostItem",
+        back_populates="scope",
+        cascade="all, delete-orphan",
+        order_by="ConstructionCostItem.created_at",
     )
 
 
@@ -187,4 +195,53 @@ class ConstructionEngineeringItem(Base, TimestampMixin):
 
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="engineering_items"
+    )
+
+
+class ConstructionCostItem(Base, TimestampMixin):
+    """Cost line item within a construction scope.
+
+    Captures budget, committed, and actual amounts for a cost line,
+    allowing scope-level financial execution tracking.
+    Variance is derived at the service/response layer, not stored.
+    """
+
+    __tablename__ = "construction_cost_items"
+    __table_args__ = (
+        Index("ix_construction_cost_items_scope_id", "scope_id"),
+        Index("ix_construction_cost_items_cost_category", "cost_category"),
+        Index(
+            "ix_construction_cost_items_scope_cost_date",
+            "scope_id",
+            "cost_date",
+        ),
+    )
+
+    scope_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_scopes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    cost_category: Mapped[str] = mapped_column(String(50), nullable=False)
+    cost_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    vendor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    budget_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    committed_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    actual_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    cost_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    scope: Mapped["ConstructionScope"] = relationship(
+        "ConstructionScope", back_populates="cost_items"
     )

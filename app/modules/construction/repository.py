@@ -276,3 +276,69 @@ class ConstructionProgressUpdateRepository:
     def delete(self, update: ConstructionProgressUpdate) -> None:
         self.db.delete(update)
         self.db.commit()
+
+
+class ConstructionCostItemRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, scope_id: str, data) -> "ConstructionCostItem":
+        from app.modules.construction.models import ConstructionCostItem
+
+        item = ConstructionCostItem(scope_id=scope_id, **data.model_dump())
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def get_by_id(self, cost_item_id: str) -> Optional["ConstructionCostItem"]:
+        from app.modules.construction.models import ConstructionCostItem
+
+        return (
+            self.db.query(ConstructionCostItem)
+            .filter(ConstructionCostItem.id == cost_item_id)
+            .first()
+        )
+
+    def list(
+        self,
+        scope_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        category: Optional[str] = None,
+    ) -> List["ConstructionCostItem"]:
+        from app.modules.construction.models import ConstructionCostItem
+
+        query = self.db.query(ConstructionCostItem).filter(
+            ConstructionCostItem.scope_id == scope_id
+        )
+        if category:
+            query = query.filter(ConstructionCostItem.cost_category == category)
+        return (
+            query.order_by(ConstructionCostItem.created_at, ConstructionCostItem.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self, scope_id: str, category: Optional[str] = None) -> int:
+        from app.modules.construction.models import ConstructionCostItem
+
+        query = self.db.query(ConstructionCostItem).filter(
+            ConstructionCostItem.scope_id == scope_id
+        )
+        if category:
+            query = query.filter(ConstructionCostItem.cost_category == category)
+        return query.count()
+
+    def update(self, item: "ConstructionCostItem", data) -> "ConstructionCostItem":
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(item, field, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete(self, item: "ConstructionCostItem") -> None:
+        self.db.delete(item)
+        self.db.commit()

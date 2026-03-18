@@ -14,12 +14,18 @@ from sqlalchemy.orm import Session
 from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
+    ConstructionCostItemRepository,
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
     ConstructionProgressUpdateRepository,
     ConstructionScopeRepository,
 )
 from app.modules.construction.schemas import (
+    ConstructionCostItemCreate,
+    ConstructionCostItemList,
+    ConstructionCostItemResponse,
+    ConstructionCostItemUpdate,
+    ConstructionCostSummary,
     ConstructionMilestoneCreate,
     ConstructionMilestoneList,
     ConstructionMilestoneResponse,
@@ -46,6 +52,7 @@ class ConstructionService:
         self.milestone_repo = ConstructionMilestoneRepository(db)
         self.engineering_repo = ConstructionEngineeringItemRepository(db)
         self.progress_repo = ConstructionProgressUpdateRepository(db)
+        self.cost_repo = ConstructionCostItemRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -329,6 +336,122 @@ class ConstructionService:
                 detail=f"Progress update '{update_id}' not found.",
             )
         self.progress_repo.delete(update)
+
+    # ── Cost item operations ─────────────────────────────────────────────────
+
+    def create_cost_item(
+        self, scope_id: str, data: ConstructionCostItemCreate
+    ) -> ConstructionCostItemResponse:
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        item = self.cost_repo.create(scope_id, data)
+        return ConstructionCostItemResponse.from_orm_with_variance(item)
+
+    def list_cost_items(
+        self,
+        scope_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        category: str | None = None,
+    ) -> ConstructionCostItemList:
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        items = self.cost_repo.list(scope_id=scope_id, skip=skip, limit=limit, category=category)
+        total = self.cost_repo.count(scope_id=scope_id, category=category)
+        return ConstructionCostItemList(
+            items=[ConstructionCostItemResponse.from_orm_with_variance(i) for i in items],
+            total=total,
+        )
+
+    def get_cost_item(self, cost_item_id: str) -> ConstructionCostItemResponse:
+        item = self.cost_repo.get_by_id(cost_item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction cost item '{cost_item_id}' not found.",
+            )
+        return ConstructionCostItemResponse.from_orm_with_variance(item)
+
+    def update_cost_item(
+        self, cost_item_id: str, data: ConstructionCostItemUpdate
+    ) -> ConstructionCostItemResponse:
+        item = self.cost_repo.get_by_id(cost_item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction cost item '{cost_item_id}' not found.",
+            )
+        updated = self.cost_repo.update(item, data)
+        return ConstructionCostItemResponse.from_orm_with_variance(updated)
+
+    def delete_cost_item(self, cost_item_id: str) -> None:
+        item = self.cost_repo.get_by_id(cost_item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction cost item '{cost_item_id}' not found.",
+            )
+        self.cost_repo.delete(item)
+
+    def get_scope_cost_summary(self, scope_id: str) -> ConstructionCostSummary:
+        from decimal import Decimal as D
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        items = self.cost_repo.list(scope_id=scope_id, skip=0, limit=10000)
+
+        total_budget = D("0.00")
+        total_committed = D("0.00")
+        total_actual = D("0.00")
+        by_category: dict = {}
+
+        for item in items:
+            b = item.budget_amount or D("0.00")
+            c = item.committed_amount or D("0.00")
+            a = item.actual_amount or D("0.00")
+            total_budget += b
+            total_committed += c
+            total_actual += a
+            cat = item.cost_category
+            if cat not in by_category:
+                by_category[cat] = {
+                    "budget": D("0.00"),
+                    "committed": D("0.00"),
+                    "actual": D("0.00"),
+                }
+            by_category[cat]["budget"] += b
+            by_category[cat]["committed"] += c
+            by_category[cat]["actual"] += a
+
+        # Convert Decimal values to float for JSON serialisability in the dict
+        for cat_data in by_category.values():
+            cat_data["variance_to_budget"] = float(cat_data["actual"] - cat_data["budget"])
+            cat_data["variance_to_commitment"] = float(cat_data["actual"] - cat_data["committed"])
+            cat_data["budget"] = float(cat_data["budget"])
+            cat_data["committed"] = float(cat_data["committed"])
+            cat_data["actual"] = float(cat_data["actual"])
+
+        return ConstructionCostSummary(
+            scope_id=scope_id,
+            total_budget=total_budget,
+            total_committed=total_committed,
+            total_actual=total_actual,
+            total_variance_to_budget=total_actual - total_budget,
+            total_variance_to_commitment=total_actual - total_committed,
+            by_category=by_category,
+        )
 
     # ── Private helpers ──────────────────────────────────────────────────────
 

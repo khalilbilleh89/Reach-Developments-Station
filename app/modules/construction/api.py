@@ -25,6 +25,13 @@ Endpoints:
   GET    /api/v1/construction/scopes/{scope_id}/engineering-items
   PATCH  /api/v1/construction/engineering-items/{item_id}
   DELETE /api/v1/construction/engineering-items/{item_id}
+
+  POST   /api/v1/construction/scopes/{scope_id}/cost-items
+  GET    /api/v1/construction/scopes/{scope_id}/cost-items
+  GET    /api/v1/construction/scopes/{scope_id}/cost-summary
+  GET    /api/v1/construction/cost-items/{cost_item_id}
+  PATCH  /api/v1/construction/cost-items/{cost_item_id}
+  DELETE /api/v1/construction/cost-items/{cost_item_id}
 """
 
 from typing import Annotated, Optional
@@ -35,6 +42,11 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.schemas import (
+    ConstructionCostItemCreate,
+    ConstructionCostItemList,
+    ConstructionCostItemResponse,
+    ConstructionCostItemUpdate,
+    ConstructionCostSummary,
     ConstructionMilestoneCreate,
     ConstructionMilestoneList,
     ConstructionMilestoneResponse,
@@ -280,4 +292,85 @@ def delete_engineering_item(
 ) -> Response:
     """Delete an engineering item."""
     service.delete_engineering_item(item_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Cost item endpoints ──────────────────────────────────────────────────────
+
+
+@router.post(
+    "/construction/scopes/{scope_id}/cost-items",
+    response_model=ConstructionCostItemResponse,
+    status_code=201,
+)
+def create_cost_item(
+    scope_id: str,
+    data: ConstructionCostItemCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionCostItemResponse:
+    """Create a new cost line item within a construction scope."""
+    return service.create_cost_item(scope_id, data)
+
+
+@router.get(
+    "/construction/scopes/{scope_id}/cost-items",
+    response_model=ConstructionCostItemList,
+)
+def list_cost_items(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    category: Optional[str] = Query(default=None),
+) -> ConstructionCostItemList:
+    """List cost items for a construction scope with optional category filter."""
+    return service.list_cost_items(
+        scope_id=scope_id, skip=skip, limit=limit, category=category
+    )
+
+
+@router.get(
+    "/construction/scopes/{scope_id}/cost-summary",
+    response_model=ConstructionCostSummary,
+)
+def get_scope_cost_summary(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionCostSummary:
+    """Get aggregated cost summary (budget/committed/actual/variance) for a scope."""
+    return service.get_scope_cost_summary(scope_id)
+
+
+@router.get(
+    "/construction/cost-items/{cost_item_id}",
+    response_model=ConstructionCostItemResponse,
+)
+def get_cost_item(
+    cost_item_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionCostItemResponse:
+    """Get a specific cost item by ID."""
+    return service.get_cost_item(cost_item_id)
+
+
+@router.patch(
+    "/construction/cost-items/{cost_item_id}",
+    response_model=ConstructionCostItemResponse,
+)
+def update_cost_item(
+    cost_item_id: str,
+    data: ConstructionCostItemUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionCostItemResponse:
+    """Update a cost item."""
+    return service.update_cost_item(cost_item_id, data)
+
+
+@router.delete("/construction/cost-items/{cost_item_id}", status_code=204)
+def delete_cost_item(
+    cost_item_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete a cost item."""
+    service.delete_cost_item(cost_item_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
