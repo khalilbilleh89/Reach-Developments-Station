@@ -4,10 +4,12 @@ Tests for unit status transition rules and pricing adapter.
 Validates:
   - Valid/invalid status transitions via the service layer
   - status_rules module directly (unit-level)
-  - UnitPricingAdapter reads active price and pricing status
+  - Unit pricing endpoint behavior (GET/PUT /units/{id}/pricing)
+  - UnitPricingAdapter directly (get_active_price, get_pricing_status)
 """
 
 import pytest
+from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from app.modules.units.status_rules import assert_valid_transition, is_valid_transition
@@ -183,27 +185,46 @@ def test_api_invalid_transition_error_message_describes_allowed(client: TestClie
     assert "reserved" in detail
 
 
+def test_api_terminal_state_error_message_has_no_further_transitions(
+    client: TestClient,
+):
+    """422 from a terminal state should say 'No further transitions allowed'."""
+    _, floor_id = _create_hierarchy(client, "PRJ-SR8")
+    unit_id = _create_unit(client, floor_id)
+
+    # Advance to terminal state
+    client.patch(f"/api/v1/units/{unit_id}", json={"status": "reserved"})
+    client.patch(f"/api/v1/units/{unit_id}", json={"status": "under_contract"})
+    client.patch(f"/api/v1/units/{unit_id}", json={"status": "registered"})
+
+    response = client.patch(f"/api/v1/units/{unit_id}", json={"status": "available"})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "No further transitions allowed" in detail
+    assert "none" not in detail
+
+
 # ---------------------------------------------------------------------------
-# UnitPricingAdapter — via service layer integration
+# Unit pricing endpoints — API integration tests
 # ---------------------------------------------------------------------------
 
 
-def test_pricing_adapter_returns_none_when_no_pricing_record(client: TestClient):
-    """Adapter returns None when the unit has no pricing record."""
+def test_unit_pricing_endpoint_returns_404_when_no_pricing_record(client: TestClient):
+    """GET /units/{id}/pricing returns 404 when no pricing record exists."""
     _, floor_id = _create_hierarchy(client, "PRJ-PA1")
     unit_id = _create_unit(client, floor_id)
 
-    # No pricing record exists — GET /pricing should 404
     response = client.get(f"/api/v1/units/{unit_id}/pricing")
     assert response.status_code == 404
 
 
-def test_pricing_adapter_returns_final_price_after_record_created(client: TestClient):
-    """Adapter returns the final_price after a pricing record is saved."""
+def test_unit_pricing_endpoint_returns_final_price_after_record_created(
+    client: TestClient,
+):
+    """PUT then GET /units/{id}/pricing returns the stored final_price."""
     _, floor_id = _create_hierarchy(client, "PRJ-PA2")
     unit_id = _create_unit(client, floor_id)
 
-    # Save a pricing record
     save_resp = client.put(
         f"/api/v1/units/{unit_id}/pricing",
         json={"base_price": 500000.0, "manual_adjustment": 10000.0},
@@ -211,14 +232,110 @@ def test_pricing_adapter_returns_final_price_after_record_created(client: TestCl
     assert save_resp.status_code == 200
     assert float(save_resp.json()["final_price"]) == 510000.0
 
-    # Retrieve via GET to confirm persistence
     get_resp = client.get(f"/api/v1/units/{unit_id}/pricing")
     assert get_resp.status_code == 200
     assert float(get_resp.json()["final_price"]) == 510000.0
     assert get_resp.json()["pricing_status"] == "draft"
 
 
-def test_pricing_adapter_returns_none_for_unknown_unit(client: TestClient):
-    """GET /pricing for unknown unit returns 404 (adapter returns None)."""
+def test_unit_pricing_endpoint_returns_404_for_unknown_unit(client: TestClient):
+    """GET /units/{id}/pricing for an unknown unit returns 404."""
     response = client.get("/api/v1/units/no-such-unit/pricing")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# UnitPricingAdapter — direct adapter tests
+# ---------------------------------------------------------------------------
+
+
+def _build_unit_via_api(client: TestClient, proj_code: str) -> str:
+    """Create a full hierarchy + unit via API and return the unit id."""
+    _, floor_id = _create_hierarchy(client, proj_code)
+    return _create_unit(client, floor_id)
+
+
+def test_adapter_get_active_price_returns_none_when_no_record(db_session):
+    """UnitPricingAdapter.get_active_price() returns None when no record exists."""
+    from app.modules.units.pricing_adapter import UnitPricingAdapter
+
+    adapter = UnitPricingAdapter(db_session)
+    assert adapter.get_active_price("nonexistent-unit") is None
+
+
+def test_adapter_get_pricing_status_returns_none_when_no_record(db_session):
+    """UnitPricingAdapter.get_pricing_status() returns None when no record exists."""
+    from app.modules.units.pricing_adapter import UnitPricingAdapter
+
+    adapter = UnitPricingAdapter(db_session)
+    assert adapter.get_pricing_status("nonexistent-unit") is None
+
+
+def test_adapter_get_active_price_returns_decimal_after_record_created(
+    client: TestClient, db_session
+):
+    """UnitPricingAdapter.get_active_price() returns a Decimal equal to final_price."""
+    from app.modules.units.pricing_adapter import UnitPricingAdapter
+
+    unit_id = _build_unit_via_api(client, "PRJ-ADP3")
+    client.put(
+        f"/api/v1/units/{unit_id}/pricing",
+        json={"base_price": 750000.0, "manual_adjustment": -25000.0},
+    )
+
+    adapter = UnitPricingAdapter(db_session)
+    price = adapter.get_active_price(unit_id)
+    assert price is not None
+    assert isinstance(price, Decimal)
+    assert price == Decimal("725000.00")
+
+
+def test_adapter_get_pricing_status_returns_draft_by_default(
+    client: TestClient, db_session
+):
+    """UnitPricingAdapter.get_pricing_status() returns 'draft' for a new record."""
+    from app.modules.units.pricing_adapter import UnitPricingAdapter
+
+    unit_id = _build_unit_via_api(client, "PRJ-ADP4")
+    client.put(
+        f"/api/v1/units/{unit_id}/pricing",
+        json={"base_price": 300000.0},
+    )
+
+    adapter = UnitPricingAdapter(db_session)
+    assert adapter.get_pricing_status(unit_id) == "draft"
+
+
+def test_adapter_single_db_query_for_both_fields(client: TestClient, db_session):
+    """Each public method calls _get_record exactly once (not twice).
+
+    Verifies that _get_record is the centralised repository call path so
+    a future caller retrieving both fields in sequence only pays for two
+    round-trips at most (one per method), never four.
+    """
+    from unittest.mock import patch
+
+    from app.modules.units.pricing_adapter import UnitPricingAdapter
+
+    unit_id = _build_unit_via_api(client, "PRJ-ADP5")
+    client.put(
+        f"/api/v1/units/{unit_id}/pricing",
+        json={"base_price": 1000000.0, "pricing_status": "approved"},
+    )
+
+    adapter = UnitPricingAdapter(db_session)
+
+    with patch.object(
+        adapter, "_get_record", wraps=adapter._get_record
+    ) as mock_get_record:
+        price = adapter.get_active_price(unit_id)
+        assert mock_get_record.call_count == 1
+
+    with patch.object(
+        adapter, "_get_record", wraps=adapter._get_record
+    ) as mock_get_record:
+        pricing_status = adapter.get_pricing_status(unit_id)
+        assert mock_get_record.call_count == 1
+
+    assert price == Decimal("1000000.00")
+    assert pricing_status == "approved"

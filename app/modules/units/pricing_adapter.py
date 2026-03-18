@@ -6,11 +6,14 @@ Returns None when no pricing record has been configured for the unit.
 """
 
 from decimal import Decimal
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy.orm import Session
 
 from app.modules.pricing.repository import UnitPricingRepository
+
+if TYPE_CHECKING:
+    from app.modules.pricing.models import UnitPricing
 
 
 class UnitPricingAdapter:
@@ -24,6 +27,14 @@ class UnitPricingAdapter:
     def __init__(self, db: Session) -> None:
         self._repo = UnitPricingRepository(db)
 
+    def _get_record(self, unit_id: str) -> Optional["UnitPricing"]:
+        """Fetch the pricing record for *unit_id*, or return None.
+
+        Centralises the repository call so callers that need both
+        ``final_price`` and ``pricing_status`` only issue one DB query.
+        """
+        return self._repo.get_by_unit_id(unit_id)
+
     def get_active_price(self, unit_id: str) -> Optional[Decimal]:
         """Return the ``final_price`` for *unit_id*, or None if no record exists.
 
@@ -31,7 +42,7 @@ class UnitPricingAdapter:
         ``base_price + manual_adjustment`` stored in the ``unit_pricing``
         table.  This adapter never calculates — it only retrieves.
         """
-        record = self._repo.get_by_unit_id(unit_id)
+        record = self._get_record(unit_id)
         if record is None:
             return None
         return Decimal(str(record.final_price))
@@ -41,7 +52,7 @@ class UnitPricingAdapter:
 
         Possible values: ``draft`` | ``reviewed`` | ``approved``.
         """
-        record = self._repo.get_by_unit_id(unit_id)
+        record = self._get_record(unit_id)
         if record is None:
             return None
         return record.pricing_status

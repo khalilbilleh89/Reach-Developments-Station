@@ -35,8 +35,11 @@ def assert_valid_transition(current: str, requested: str) -> None:
     Callers should convert this into an HTTP 422 at the service layer.
     """
     if not is_valid_transition(current, requested):
-        allowed = _ALLOWED_TRANSITIONS.get(current, "none")
+        next_state = _ALLOWED_TRANSITIONS.get(current)
+        if next_state is None:
+            reason = f"No further transitions allowed from '{current}'."
+        else:
+            reason = f"Allowed next state from '{current}': '{next_state}'."
         raise ValueError(
-            f"Invalid status transition: '{current}' → '{requested}'. "
-            f"Allowed next state from '{current}': '{allowed}'."
+            f"Invalid status transition: '{current}' → '{requested}'. {reason}"
         )
