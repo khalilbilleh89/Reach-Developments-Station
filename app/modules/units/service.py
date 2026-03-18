@@ -19,6 +19,7 @@ from app.modules.phases.models import Phase
 from app.modules.projects.repository import ProjectRepository
 from app.modules.units.models import UnitDynamicAttributeValue
 from app.modules.units.repository import UnitDynamicAttributeRepository, UnitRepository
+from app.modules.units.status_rules import assert_valid_transition
 from app.modules.units.schemas import (
     UnitCreate,
     UnitDynamicAttributesSaveRequest,
@@ -97,6 +98,14 @@ class UnitService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Unit '{unit_id}' not found.",
             )
+        if data.status is not None:
+            try:
+                assert_valid_transition(unit.status, data.status.value)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=str(exc),
+                ) from exc
         self._validate_apartment_attributes(data)
         updated = self.repo.update(unit, data)
         return UnitResponse.model_validate(updated)
@@ -128,6 +137,7 @@ class UnitDynamicAttributeService:
     def _get_unit_project_id(self, unit_id: str) -> Optional[str]:
         """Return the project_id for the given unit via a single joined query."""
         from app.modules.units.models import Unit as UnitModel
+
         row = (
             self.db.query(Phase.project_id)
             .join(Building, Building.phase_id == Phase.id)
@@ -152,7 +162,9 @@ class UnitDynamicAttributeService:
             option_label=value.option.label,
         )
 
-    def list_dynamic_attributes(self, unit_id: str) -> list[UnitDynamicAttributeValueResponse]:
+    def list_dynamic_attributes(
+        self, unit_id: str
+    ) -> list[UnitDynamicAttributeValueResponse]:
         unit = self.unit_repo.get_by_id(unit_id)
         if not unit:
             raise HTTPException(
