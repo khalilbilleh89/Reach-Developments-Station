@@ -24,10 +24,11 @@ Endpoints:
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.schemas import (
     ConstructionMilestoneCreate,
     ConstructionMilestoneList,
@@ -175,7 +176,10 @@ def create_engineering_item(
     service: Annotated[ConstructionService, Depends(get_service)],
 ) -> EngineeringItemResponse:
     """Create a new engineering item within a construction scope."""
-    return service.create_engineering_item(scope_id, data)
+    try:
+        return service.create_engineering_item(scope_id, data)
+    except ConstructionConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.get(
@@ -202,7 +206,10 @@ def update_engineering_item(
     service: Annotated[ConstructionService, Depends(get_service)],
 ) -> EngineeringItemResponse:
     """Update an engineering item."""
-    return service.update_engineering_item(item_id, data)
+    try:
+        return service.update_engineering_item(item_id, data)
+    except ConstructionConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.delete("/construction/engineering-items/{item_id}", status_code=204)
