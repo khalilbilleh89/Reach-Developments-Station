@@ -19,7 +19,11 @@ from app.modules.projects.schemas import (
     AttributeOptionCreate,
     AttributeOptionResponse,
     AttributeOptionUpdate,
+    HierarchyBuilding,
+    HierarchyFloor,
+    HierarchyPhase,
     ProjectCreate,
+    ProjectHierarchy,
     ProjectList,
     ProjectResponse,
     ProjectSummary,
@@ -109,6 +113,50 @@ class ProjectService:
         self._require_project(project_id)
         data = self.repo.get_project_phase_summary(project_id)
         return ProjectSummary(project_id=project_id, **data)
+
+    def get_project_hierarchy(self, project_id: str) -> ProjectHierarchy:
+        """Return the full Project → Phase → Building → Floor hierarchy with unit counts."""
+        self._require_project(project_id)
+        rows = self.repo.get_hierarchy(project_id)
+
+        # Assemble nested structure from flat query rows
+        phases_map: dict[str, HierarchyPhase] = {}
+        buildings_map: dict[str, HierarchyBuilding] = {}
+
+        for row in rows:
+            if row.phase_id not in phases_map:
+                phases_map[row.phase_id] = HierarchyPhase(
+                    phase_id=row.phase_id,
+                    name=row.phase_name,
+                    sequence=row.phase_sequence,
+                    buildings=[],
+                )
+            if row.building_id is None:
+                continue
+            if row.building_id not in buildings_map:
+                building = HierarchyBuilding(
+                    building_id=row.building_id,
+                    name=row.building_name,
+                    code=row.building_code,
+                    floors=[],
+                )
+                buildings_map[row.building_id] = building
+                phases_map[row.phase_id].buildings.append(building)
+            if row.floor_id is None:
+                continue
+            floor = HierarchyFloor(
+                floor_id=row.floor_id,
+                name=row.floor_name,
+                code=row.floor_code,
+                sequence_number=row.floor_sequence,
+                unit_count=row.unit_count,
+            )
+            buildings_map[row.building_id].floors.append(floor)
+
+        return ProjectHierarchy(
+            project_id=project_id,
+            phases=list(phases_map.values()),
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -37,7 +37,7 @@ class PhaseRepository:
         query = self.db.query(Phase)
         if project_id:
             query = query.filter(Phase.project_id == project_id)
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Phase.sequence).offset(skip).limit(limit).all()
 
     def count(self, project_id: Optional[str] = None) -> int:
         query = self.db.query(Phase)

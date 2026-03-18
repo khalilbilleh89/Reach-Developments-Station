@@ -19,6 +19,7 @@ from app.modules.projects.schemas import (
     AttributeOptionResponse,
     AttributeOptionUpdate,
     ProjectCreate,
+    ProjectHierarchy,
     ProjectList,
     ProjectResponse,
     ProjectSummary,
@@ -96,6 +97,15 @@ def get_project_summary(
 ) -> ProjectSummary:
     """Return aggregated KPI summary (phase counts, timeline) for a project."""
     return service.get_project_summary(project_id)
+
+
+@router.get("/{project_id}/hierarchy", response_model=ProjectHierarchy)
+def get_project_hierarchy(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> ProjectHierarchy:
+    """Return the full Project → Phase → Building → Floor hierarchy with unit counts."""
+    return service.get_project_hierarchy(project_id)
 
 
 @router.post("/{project_id}/archive", response_model=ProjectResponse)

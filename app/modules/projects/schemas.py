@@ -145,3 +145,34 @@ class AttributeDefinitionResponse(BaseModel):
 class AttributeDefinitionList(BaseModel):
     items: List[AttributeDefinitionResponse]
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Project Hierarchy
+# ---------------------------------------------------------------------------
+
+class HierarchyFloor(BaseModel):
+    floor_id: str
+    name: str
+    code: str
+    sequence_number: int
+    unit_count: int
+
+
+class HierarchyBuilding(BaseModel):
+    building_id: str
+    name: str
+    code: str
+    floors: List[HierarchyFloor]
+
+
+class HierarchyPhase(BaseModel):
+    phase_id: str
+    name: str
+    sequence: int
+    buildings: List[HierarchyBuilding]
+
+
+class ProjectHierarchy(BaseModel):
+    project_id: str
+    phases: List[HierarchyPhase]
