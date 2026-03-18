@@ -82,6 +82,12 @@ class ProjectSummary(BaseModel):
     completed_phases: int
     earliest_start_date: Optional[date]
     latest_target_completion: Optional[date]
+    # Unit inventory KPIs (aggregated through the full hierarchy)
+    total_units: int
+    available_units: int
+    reserved_units: int
+    under_contract_units: int
+    registered_units: int
 
 
 # ---------------------------------------------------------------------------

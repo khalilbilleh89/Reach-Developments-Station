@@ -83,11 +83,12 @@ def create_unit(
 def list_units(
     service: Annotated[UnitService, Depends(get_service)],
     floor_id: Optional[str] = Query(default=None),
+    project_id: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> UnitList:
-    """List units, optionally filtered by floor."""
-    return service.list_units(floor_id=floor_id, skip=skip, limit=limit)
+    """List units, optionally filtered by floor or project."""
+    return service.list_units(floor_id=floor_id, project_id=project_id, skip=skip, limit=limit)
 
 
 @router.get("/units/{unit_id}", response_model=UnitResponse)

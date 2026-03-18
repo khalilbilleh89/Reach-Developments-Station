@@ -9,6 +9,9 @@ from typing import List, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.modules.buildings.models import Building
+from app.modules.floors.models import Floor
+from app.modules.phases.models import Phase
 from app.modules.units.models import Unit, UnitDynamicAttributeValue
 from app.modules.units.schemas import UnitCreate, UnitUpdate
 
@@ -36,18 +39,40 @@ class UnitRepository:
             .first()
         )
 
-    def list(
-        self, floor_id: Optional[str] = None, skip: int = 0, limit: int = 100
-    ) -> List[Unit]:
-        query = self.db.query(Unit)
+    def _apply_filters(self, query, floor_id: Optional[str], project_id: Optional[str]):
+        """Apply floor_id and/or project_id filters to a Unit query.
+
+        project_id filter joins through the canonical hierarchy:
+        Unit → Floor → Building → Phase to scope by project.
+        """
         if floor_id:
             query = query.filter(Unit.floor_id == floor_id)
+        if project_id:
+            query = (
+                query
+                .join(Floor, Floor.id == Unit.floor_id)
+                .join(Building, Building.id == Floor.building_id)
+                .join(Phase, Phase.id == Building.phase_id)
+                .filter(Phase.project_id == project_id)
+            )
+        return query
+
+    def list(
+        self,
+        floor_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[Unit]:
+        query = self._apply_filters(self.db.query(Unit), floor_id, project_id)
         return query.offset(skip).limit(limit).all()
 
-    def count(self, floor_id: Optional[str] = None) -> int:
-        query = self.db.query(Unit)
-        if floor_id:
-            query = query.filter(Unit.floor_id == floor_id)
+    def count(
+        self,
+        floor_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> int:
+        query = self._apply_filters(self.db.query(Unit), floor_id, project_id)
         return query.count()
 
     def update(self, unit: Unit, data: UnitUpdate) -> Unit:

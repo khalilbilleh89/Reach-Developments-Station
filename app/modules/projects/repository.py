@@ -21,7 +21,7 @@ from app.modules.projects.schemas import (
     ProjectCreate,
     ProjectUpdate,
 )
-from app.shared.enums.project import PhaseStatus
+from app.shared.enums.project import PhaseStatus, UnitStatus
 
 
 class ProjectRepository:
@@ -94,8 +94,10 @@ class ProjectRepository:
         return project
 
     def get_project_phase_summary(self, project_id: str) -> dict:
-        """Aggregate phase counts and timeline dates for a project using SQL."""
-        result = (
+        """Aggregate phase counts, timeline dates, and unit inventory KPIs for a project."""
+        from app.modules.units.models import Unit
+
+        phase_result = (
             self.db.query(
                 func.count(Phase.id).label("total_phases"),
                 func.sum(
@@ -113,13 +115,42 @@ class ProjectRepository:
             .filter(Phase.project_id == project_id)
             .one()
         )
+
+        unit_result = (
+            self.db.query(
+                func.count(Unit.id).label("total_units"),
+                func.sum(
+                    case((Unit.status == UnitStatus.AVAILABLE.value, 1), else_=0)
+                ).label("available_units"),
+                func.sum(
+                    case((Unit.status == UnitStatus.RESERVED.value, 1), else_=0)
+                ).label("reserved_units"),
+                func.sum(
+                    case((Unit.status == UnitStatus.UNDER_CONTRACT.value, 1), else_=0)
+                ).label("under_contract_units"),
+                func.sum(
+                    case((Unit.status == UnitStatus.REGISTERED.value, 1), else_=0)
+                ).label("registered_units"),
+            )
+            .join(Floor, Floor.id == Unit.floor_id)
+            .join(Building, Building.id == Floor.building_id)
+            .join(Phase, Phase.id == Building.phase_id)
+            .filter(Phase.project_id == project_id)
+            .one()
+        )
+
         return {
-            "total_phases": result.total_phases or 0,
-            "active_phases": result.active_phases or 0,
-            "planned_phases": result.planned_phases or 0,
-            "completed_phases": result.completed_phases or 0,
-            "earliest_start_date": result.earliest_start_date,
-            "latest_target_completion": result.latest_target_completion,
+            "total_phases": phase_result.total_phases or 0,
+            "active_phases": phase_result.active_phases or 0,
+            "planned_phases": phase_result.planned_phases or 0,
+            "completed_phases": phase_result.completed_phases or 0,
+            "earliest_start_date": phase_result.earliest_start_date,
+            "latest_target_completion": phase_result.latest_target_completion,
+            "total_units": unit_result.total_units or 0,
+            "available_units": unit_result.available_units or 0,
+            "reserved_units": unit_result.reserved_units or 0,
+            "under_contract_units": unit_result.under_contract_units or 0,
+            "registered_units": unit_result.registered_units or 0,
         }
 
     def get_hierarchy(self, project_id: str) -> list:
