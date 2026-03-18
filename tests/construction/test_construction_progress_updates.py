@@ -11,6 +11,8 @@ Validates:
   • 404 for unknown milestone / update IDs
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 
 
@@ -282,11 +284,10 @@ def test_reported_at_omitted_defaults_to_utc(client: TestClient):
     milestone = _create_milestone(client, scope["id"])
 
     update = _create_progress_update(client, milestone["id"], progress_percent=10)
-    # A non-null, parseable ISO timestamp must be returned
     assert update["reported_at"] is not None
-    from datetime import datetime
     parsed = datetime.fromisoformat(update["reported_at"])
-    assert parsed is not None
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(0)
 
 
 def test_reported_at_naive_datetime_normalized_to_utc(client: TestClient):
@@ -302,9 +303,11 @@ def test_reported_at_naive_datetime_normalized_to_utc(client: TestClient):
         reported_at="2026-03-10T08:00:00",
     )
     assert update["progress_percent"] == 30
-    # Naive datetimes are treated as UTC, so time value must be preserved unchanged
-    assert "2026-03-10" in update["reported_at"]
-    assert "08:00:00" in update["reported_at"]
+    parsed = datetime.fromisoformat(update["reported_at"])
+    assert parsed.tzinfo is timezone.utc
+    assert parsed.hour == 8
+    assert parsed.minute == 0
+    assert parsed.second == 0
 
 
 def test_reported_at_aware_datetime_converted_to_utc(client: TestClient):
@@ -321,9 +324,10 @@ def test_reported_at_aware_datetime_converted_to_utc(client: TestClient):
         reported_at="2026-03-12T06:00:00+05:00",
     )
     assert update["progress_percent"] == 50
-    # The stored value should be UTC-equivalent: 01:00:00 UTC
-    assert "2026-03-12" in update["reported_at"]
-    assert "01:00:00" in update["reported_at"]
+    parsed = datetime.fromisoformat(update["reported_at"])
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(0)
+    assert parsed.hour == 1
 
 
 def test_reported_at_utc_datetime_stored_unchanged(client: TestClient):
@@ -338,8 +342,10 @@ def test_reported_at_utc_datetime_stored_unchanged(client: TestClient):
         progress_percent=60,
         reported_at="2026-03-15T09:00:00+00:00",
     )
-    assert "2026-03-15" in update["reported_at"]
-    assert "09:00:00" in update["reported_at"]
+    parsed = datetime.fromisoformat(update["reported_at"])
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(0)
+    assert parsed.hour == 9
 
 
 def test_ordering_consistent_with_mixed_timestamp_inputs(client: TestClient):
