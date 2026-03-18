@@ -6,7 +6,8 @@ Data access layer for the Unit entity.
 
 from typing import List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.units.models import Unit, UnitDynamicAttributeValue
 from app.modules.units.schemas import UnitCreate, UnitUpdate
@@ -72,6 +73,10 @@ class UnitDynamicAttributeRepository:
         return (
             self.db.query(UnitDynamicAttributeValue)
             .filter(UnitDynamicAttributeValue.unit_id == unit_id)
+            .options(
+                joinedload(UnitDynamicAttributeValue.definition),
+                joinedload(UnitDynamicAttributeValue.option),
+            )
             .all()
         )
 
@@ -90,7 +95,13 @@ class UnitDynamicAttributeRepository:
     def upsert(
         self, unit_id: str, definition_id: str, option_id: str
     ) -> UnitDynamicAttributeValue:
-        """Create or replace the selected option for a given unit + definition pair."""
+        """Create or replace the selected option for a given unit + definition pair.
+
+        Uses a read-then-write pattern with IntegrityError recovery to handle
+        concurrent requests that may race on the (unit_id, definition_id) unique
+        constraint. On constraint violation the transaction is rolled back and the
+        existing row is re-fetched and updated deterministically.
+        """
         existing = self.get_by_unit_and_definition(unit_id, definition_id)
         if existing:
             existing.option_id = option_id
@@ -103,6 +114,17 @@ class UnitDynamicAttributeRepository:
             option_id=option_id,
         )
         self.db.add(value)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            # A concurrent request inserted the row first — fetch and update it.
+            existing = self.get_by_unit_and_definition(unit_id, definition_id)
+            if existing:
+                existing.option_id = option_id
+                self.db.commit()
+                self.db.refresh(existing)
+                return existing
+            raise
         self.db.refresh(value)
         return value

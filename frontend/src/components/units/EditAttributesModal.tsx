@@ -395,7 +395,9 @@ export function EditAttributesModal({
                     onChange={(e) => setDynamicViewOptionId(e.target.value)}
                     disabled={submitting}
                   >
-                    <option value="">— Not set —</option>
+                    {!existingViewTypeDynamic && (
+                      <option value="">— Select —</option>
+                    )}
                     {projectViewTypeOptions.map((opt) => (
                       <option key={opt.id} value={opt.id}>
                         {opt.label}

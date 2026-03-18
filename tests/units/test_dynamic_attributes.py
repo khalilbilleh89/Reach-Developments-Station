@@ -238,29 +238,32 @@ def test_save_dynamic_attribute_cross_project_rejected(client: TestClient):
 
 
 def test_save_dynamic_attribute_wrong_option_definition_rejected(client: TestClient):
-    """PUT with option that belongs to a different definition returns 422."""
-    project_id, floor_id = _create_hierarchy(client, "PRJ-DYNWRONG")
+    """PUT with option that belongs to a different definition returns 422.
+
+    Creates two projects each with their own view_type definition.
+    An option from project B's definition must be rejected when saved
+    against project A's definition (option.definition_id != definition_id).
+    """
+    # Project A — owns the unit under test
+    project_a_id, floor_id = _create_hierarchy(client, "PRJ-DYNMM-A")
     unit_id = _create_unit(client, floor_id)
-    definition_id = _create_view_type_definition(client, project_id)
+    def_a_id = _create_view_type_definition(client, project_a_id)
+    _create_option(client, project_a_id, def_a_id, "sea", "Sea View")
 
-    # Create a second definition for the same project (not allowed by unique constraint
-    # on (project_id, key) for the same key, so use a different key via raw API call)
-    # Instead, create an option on the correct definition then pass a mismatched option_id
-    opt_id = _create_option(client, project_id, definition_id, "sea", "Sea View")
+    # Project B — owns a separate view_type definition with its own option
+    project_b = client.post(
+        "/api/v1/projects", json={"name": "Project B Mismatch", "code": "PRJ-DYNMM-B"}
+    ).json()
+    project_b_id = project_b["id"]
+    def_b_id = _create_view_type_definition(client, project_b_id)
+    opt_b_id = _create_option(client, project_b_id, def_b_id, "marina", "Marina View")
 
-    # Pass an option_id that is completely unknown (doesn't belong to any definition)
+    # Attempt: save using definition_A but option from definition_B → 422
     response = client.put(
         f"/api/v1/units/{unit_id}/dynamic-attributes",
-        json={"attributes": [{"definition_id": definition_id, "option_id": "wrong-opt-id"}]},
+        json={"attributes": [{"definition_id": def_a_id, "option_id": opt_b_id}]},
     )
-    assert response.status_code == 404  # option not found
-
-    # Also verify using a real option_id from correct definition with a made-up definition_id
-    response2 = client.put(
-        f"/api/v1/units/{unit_id}/dynamic-attributes",
-        json={"attributes": [{"definition_id": "fake-def-id", "option_id": opt_id}]},
-    )
-    assert response2.status_code == 404  # definition not found
+    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------

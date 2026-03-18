@@ -578,7 +578,7 @@ export async function getProjectPricingAttributes(
  *
  * Returns an empty array when no values are set yet (unit exists but has
  * no dynamic attribute records).
- * Returns null when the unit does not exist (404).
+ * Throws ApiError with status 404 when the unit does not exist.
  */
 export async function getUnitDynamicAttributes(
   unitId: string,

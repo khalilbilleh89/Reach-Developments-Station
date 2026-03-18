@@ -10,6 +10,7 @@ attribute selections on units.
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.modules.buildings.models import Building
 from app.modules.floors.models import Floor
@@ -124,7 +125,7 @@ class UnitDynamicAttributeService:
         self.dav_repo = UnitDynamicAttributeRepository(db)
         self.project_repo = ProjectRepository(db)
 
-    def _get_unit_project_id(self, unit_id: str) -> str:
+    def _get_unit_project_id(self, unit_id: str) -> Optional[str]:
         """Return the project_id for the given unit via a single joined query."""
         from app.modules.units.models import Unit as UnitModel
         row = (
