@@ -3,22 +3,28 @@ construction.models
 
 ORM models for the Construction domain.
 
-ConstructionScope  — tracks the construction scope for a project, phase, or building.
-ConstructionMilestone — individual delivery milestones within a scope.
+ConstructionScope          — tracks the construction scope for a project, phase, or building.
+ConstructionMilestone      — individual delivery milestones within a scope (Contractor side).
+ConstructionEngineeringItem — engineering tasks / deliverables within a scope (Engineering side).
 
 Hierarchy positioning:
   Project (optional) → Phase (optional) → Building (optional)
   At least one of project_id / phase_id / building_id must be set.
+
+  ConstructionScope
+    ├── ConstructionEngineeringItem  (Engineering workspace)
+    └── ConstructionMilestone        (Contractor workspace)
 """
 
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.construction import ConstructionStatus, MilestoneStatus
+from app.shared.enums.construction import ConstructionStatus, EngineeringStatus, MilestoneStatus
 
 if TYPE_CHECKING:
     pass  # future cross-module relationships
@@ -69,6 +75,12 @@ class ConstructionScope(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="ConstructionMilestone.sequence",
     )
+    engineering_items: Mapped[List["ConstructionEngineeringItem"]] = relationship(
+        "ConstructionEngineeringItem",
+        back_populates="scope",
+        cascade="all, delete-orphan",
+        order_by="ConstructionEngineeringItem.created_at",
+    )
 
 
 class ConstructionMilestone(Base, TimestampMixin):
@@ -100,4 +112,41 @@ class ConstructionMilestone(Base, TimestampMixin):
 
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="milestones"
+    )
+
+
+class ConstructionEngineeringItem(Base, TimestampMixin):
+    """Engineering task or deliverable within a construction scope.
+
+    Represents the Engineering workspace: technical coordination, consultant
+    deliverables, and consultant cost tracking.
+    """
+
+    __tablename__ = "construction_engineering_items"
+
+    scope_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_scopes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=EngineeringStatus.PENDING.value,
+    )
+    item_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    consultant_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    consultant_cost: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )
+    target_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    completion_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    scope: Mapped["ConstructionScope"] = relationship(
+        "ConstructionScope", back_populates="engineering_items"
     )

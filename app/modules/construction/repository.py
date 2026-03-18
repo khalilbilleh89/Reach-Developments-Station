@@ -8,12 +8,18 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.modules.construction.models import ConstructionMilestone, ConstructionScope
+from app.modules.construction.models import (
+    ConstructionEngineeringItem,
+    ConstructionMilestone,
+    ConstructionScope,
+)
 from app.modules.construction.schemas import (
     ConstructionMilestoneCreate,
     ConstructionMilestoneUpdate,
     ConstructionScopeCreate,
     ConstructionScopeUpdate,
+    EngineeringItemCreate,
+    EngineeringItemUpdate,
 )
 
 
@@ -152,4 +158,59 @@ class ConstructionMilestoneRepository:
 
     def delete(self, milestone: ConstructionMilestone) -> None:
         self.db.delete(milestone)
+        self.db.commit()
+
+
+class ConstructionEngineeringItemRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, scope_id: str, data: EngineeringItemCreate) -> ConstructionEngineeringItem:
+        item = ConstructionEngineeringItem(scope_id=scope_id, **data.model_dump())
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def get_by_id(self, item_id: str) -> Optional[ConstructionEngineeringItem]:
+        return (
+            self.db.query(ConstructionEngineeringItem)
+            .filter(ConstructionEngineeringItem.id == item_id)
+            .first()
+        )
+
+    def list(
+        self,
+        scope_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[ConstructionEngineeringItem]:
+        return (
+            self.db.query(ConstructionEngineeringItem)
+            .filter(ConstructionEngineeringItem.scope_id == scope_id)
+            .order_by(ConstructionEngineeringItem.created_at, ConstructionEngineeringItem.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self, scope_id: str) -> int:
+        return (
+            self.db.query(ConstructionEngineeringItem)
+            .filter(ConstructionEngineeringItem.scope_id == scope_id)
+            .count()
+        )
+
+    def update(
+        self, item: ConstructionEngineeringItem, data: EngineeringItemUpdate
+    ) -> ConstructionEngineeringItem:
+        update_data = data.model_dump(exclude_unset=True, exclude_none=True)
+        for field, value in update_data.items():
+            setattr(item, field, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete(self, item: ConstructionEngineeringItem) -> None:
+        self.db.delete(item)
         self.db.commit()
