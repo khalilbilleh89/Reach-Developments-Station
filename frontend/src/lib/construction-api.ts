@@ -18,10 +18,16 @@
  *   GET    /construction/milestones/{id}      → get milestone by id
  *   PATCH  /construction/milestones/{id}      → update milestone
  *   DELETE /construction/milestones/{id}      → delete milestone
+ *
+ *   POST   /construction/scopes/{id}/engineering-items  → create engineering item
+ *   GET    /construction/scopes/{id}/engineering-items  → list engineering items
+ *   PATCH  /construction/engineering-items/{id}         → update engineering item
+ *   DELETE /construction/engineering-items/{id}         → delete engineering item
  */
 
 import { apiFetch } from "./api-client";
 import type {
+  ConstructionEngineeringItem,
   ConstructionMilestone,
   ConstructionMilestoneCreate,
   ConstructionMilestoneListResponse,
@@ -30,6 +36,9 @@ import type {
   ConstructionScopeCreate,
   ConstructionScopeListResponse,
   ConstructionScopeUpdate,
+  EngineeringItemCreate,
+  EngineeringItemListResponse,
+  EngineeringItemUpdate,
 } from "./construction-types";
 
 // ── Scope API ────────────────────────────────────────────────────────────────
@@ -141,6 +150,56 @@ export async function updateMilestone(
 export async function deleteMilestone(id: string): Promise<void> {
   return apiFetch<void>(
     `/construction/milestones/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ── Engineering item API ─────────────────────────────────────────────────────
+
+export async function listEngineeringItems(
+  scopeId: string,
+  params?: { skip?: number; limit?: number },
+): Promise<EngineeringItemListResponse> {
+  const query = new URLSearchParams();
+  if (params?.skip !== undefined) query.set("skip", String(params.skip));
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  return apiFetch<EngineeringItemListResponse>(
+    `/construction/scopes/${encodeURIComponent(scopeId)}/engineering-items${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createEngineeringItem(
+  scopeId: string,
+  data: EngineeringItemCreate,
+): Promise<ConstructionEngineeringItem> {
+  return apiFetch<ConstructionEngineeringItem>(
+    `/construction/scopes/${encodeURIComponent(scopeId)}/engineering-items`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function updateEngineeringItem(
+  id: string,
+  data: EngineeringItemUpdate,
+): Promise<ConstructionEngineeringItem> {
+  return apiFetch<ConstructionEngineeringItem>(
+    `/construction/engineering-items/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function deleteEngineeringItem(id: string): Promise<void> {
+  return apiFetch<void>(
+    `/construction/engineering-items/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   );
 }

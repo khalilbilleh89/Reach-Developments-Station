@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.repository import (
+    ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
     ConstructionScopeRepository,
 )
@@ -25,6 +26,10 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    EngineeringItemCreate,
+    EngineeringItemList,
+    EngineeringItemResponse,
+    EngineeringItemUpdate,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -34,6 +39,7 @@ class ConstructionService:
     def __init__(self, db: Session) -> None:
         self.scope_repo = ConstructionScopeRepository(db)
         self.milestone_repo = ConstructionMilestoneRepository(db)
+        self.engineering_repo = ConstructionEngineeringItemRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -196,6 +202,69 @@ class ConstructionService:
             )
         self.milestone_repo.delete(milestone)
 
+    # ── Engineering item operations ──────────────────────────────────────────
+
+    def create_engineering_item(
+        self, scope_id: str, data: EngineeringItemCreate
+    ) -> EngineeringItemResponse:
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        item = self.engineering_repo.create(scope_id, data)
+        return EngineeringItemResponse.model_validate(item)
+
+    def list_engineering_items(
+        self,
+        scope_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> EngineeringItemList:
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        items = self.engineering_repo.list(scope_id=scope_id, skip=skip, limit=limit)
+        total = self.engineering_repo.count(scope_id=scope_id)
+        return EngineeringItemList(
+            items=[EngineeringItemResponse.model_validate(i) for i in items],
+            total=total,
+        )
+
+    def get_engineering_item(self, item_id: str) -> EngineeringItemResponse:
+        item = self.engineering_repo.get_by_id(item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Engineering item '{item_id}' not found.",
+            )
+        return EngineeringItemResponse.model_validate(item)
+
+    def update_engineering_item(
+        self, item_id: str, data: EngineeringItemUpdate
+    ) -> EngineeringItemResponse:
+        item = self.engineering_repo.get_by_id(item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Engineering item '{item_id}' not found.",
+            )
+        updated = self.engineering_repo.update(item, data)
+        return EngineeringItemResponse.model_validate(updated)
+
+    def delete_engineering_item(self, item_id: str) -> None:
+        item = self.engineering_repo.get_by_id(item_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Engineering item '{item_id}' not found.",
+            )
+        self.engineering_repo.delete(item)
+
     # ── Private helpers ──────────────────────────────────────────────────────
 
     def _validate_links(
@@ -226,3 +295,4 @@ class ConstructionService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Building '{building_id}' not found.",
                 )
+

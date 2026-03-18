@@ -15,3 +15,11 @@ class MilestoneStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     DELAYED = "delayed"
+
+
+class EngineeringStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    DELAYED = "delayed"
+    ON_HOLD = "on_hold"

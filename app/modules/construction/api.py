@@ -15,6 +15,11 @@ Endpoints:
   GET    /api/v1/construction/milestones/{milestone_id}
   PATCH  /api/v1/construction/milestones/{milestone_id}
   DELETE /api/v1/construction/milestones/{milestone_id}
+
+  POST   /api/v1/construction/scopes/{scope_id}/engineering-items
+  GET    /api/v1/construction/scopes/{scope_id}/engineering-items
+  PATCH  /api/v1/construction/engineering-items/{item_id}
+  DELETE /api/v1/construction/engineering-items/{item_id}
 """
 
 from typing import Annotated, Optional
@@ -32,6 +37,10 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    EngineeringItemCreate,
+    EngineeringItemList,
+    EngineeringItemResponse,
+    EngineeringItemUpdate,
 )
 from app.modules.construction.service import ConstructionService
 
@@ -149,4 +158,58 @@ def delete_milestone(
 ) -> Response:
     """Delete a construction milestone."""
     service.delete_milestone(milestone_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Engineering item endpoints ───────────────────────────────────────────────
+
+
+@router.post(
+    "/construction/scopes/{scope_id}/engineering-items",
+    response_model=EngineeringItemResponse,
+    status_code=201,
+)
+def create_engineering_item(
+    scope_id: str,
+    data: EngineeringItemCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> EngineeringItemResponse:
+    """Create a new engineering item within a construction scope."""
+    return service.create_engineering_item(scope_id, data)
+
+
+@router.get(
+    "/construction/scopes/{scope_id}/engineering-items",
+    response_model=EngineeringItemList,
+)
+def list_engineering_items(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> EngineeringItemList:
+    """List engineering items for a construction scope."""
+    return service.list_engineering_items(scope_id=scope_id, skip=skip, limit=limit)
+
+
+@router.patch(
+    "/construction/engineering-items/{item_id}",
+    response_model=EngineeringItemResponse,
+)
+def update_engineering_item(
+    item_id: str,
+    data: EngineeringItemUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> EngineeringItemResponse:
+    """Update an engineering item."""
+    return service.update_engineering_item(item_id, data)
+
+
+@router.delete("/construction/engineering-items/{item_id}", status_code=204)
+def delete_engineering_item(
+    item_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete an engineering item."""
+    service.delete_engineering_item(item_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

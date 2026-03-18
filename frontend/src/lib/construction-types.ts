@@ -1,12 +1,20 @@
 /**
  * construction-types.ts — TypeScript types for the Construction domain.
  *
- * Mirrors the backend ConstructionScopeResponse and ConstructionMilestoneResponse schemas.
+ * Mirrors the backend ConstructionScopeResponse, ConstructionMilestoneResponse,
+ * and EngineeringItemResponse schemas.
  */
 
 export type ConstructionStatus = "planned" | "in_progress" | "on_hold" | "completed";
 
 export type MilestoneStatus = "pending" | "in_progress" | "completed" | "delayed";
+
+export type EngineeringStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "delayed"
+  | "on_hold";
 
 export interface ConstructionScope {
   id: string;
@@ -81,6 +89,53 @@ export interface ConstructionMilestoneUpdate {
   description?: string | null;
   sequence?: number;
   status?: MilestoneStatus;
+  target_date?: string | null;
+  completion_date?: string | null;
+  notes?: string | null;
+}
+
+// ── Engineering items ────────────────────────────────────────────────────────
+
+export interface ConstructionEngineeringItem {
+  id: string;
+  scope_id: string;
+  title: string;
+  description: string | null;
+  status: EngineeringStatus;
+  item_type: string | null;
+  consultant_name: string | null;
+  consultant_cost: string | null;
+  target_date: string | null;
+  completion_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EngineeringItemListResponse {
+  items: ConstructionEngineeringItem[];
+  total: number;
+}
+
+export interface EngineeringItemCreate {
+  title: string;
+  description?: string | null;
+  status?: EngineeringStatus;
+  item_type?: string | null;
+  consultant_name?: string | null;
+  consultant_cost?: string | null;
+  target_date?: string | null;
+  completion_date?: string | null;
+  notes?: string | null;
+}
+
+export interface EngineeringItemUpdate {
+  title?: string;
+  description?: string | null;
+  status?: EngineeringStatus;
+  item_type?: string | null;
+  consultant_name?: string | null;
+  consultant_cost?: string | null;
   target_date?: string | null;
   completion_date?: string | null;
   notes?: string | null;
