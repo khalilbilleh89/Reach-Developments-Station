@@ -443,6 +443,8 @@ export interface UnitQualitativeAttributes {
   updated_at: string;
 }
 
+// ---------- Unit dynamic attribute value types (PR-033) ------------------
+
 /**
  * Payload for creating or updating qualitative pricing attributes.
  * Sent to PUT /api/v1/units/{unitId}/pricing-attributes.
@@ -455,4 +457,38 @@ export interface UnitQualitativeAttributesSave {
   outdoor_area_premium?: OutdoorAreaPremium | null;
   upgrade_flag?: boolean | null;
   notes?: string | null;
+}
+
+/**
+ * A selected project-defined attribute value for a unit.
+ * Returned by GET /api/v1/units/{unitId}/dynamic-attributes.
+ *
+ * Includes denormalised definition and option fields for direct rendering.
+ */
+export interface UnitDynamicAttributeValue {
+  id: string;
+  unit_id: string;
+  definition_id: string;
+  option_id: string;
+  definition_key: string;
+  definition_label: string;
+  option_value: string;
+  option_label: string;
+}
+
+/**
+ * One attribute selection item in the save payload.
+ * Sent as part of PUT /api/v1/units/{unitId}/dynamic-attributes.
+ */
+export interface UnitDynamicAttributesSaveItem {
+  definition_id: string;
+  option_id: string;
+}
+
+/**
+ * Payload for PUT /api/v1/units/{unitId}/dynamic-attributes.
+ * Upserts all provided selections for the unit.
+ */
+export interface UnitDynamicAttributesSaveRequest {
+  attributes: UnitDynamicAttributesSaveItem[];
 }

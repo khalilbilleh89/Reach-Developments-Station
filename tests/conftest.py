@@ -18,7 +18,7 @@ import app.modules.projects.models  # noqa: F401  (also registers ProjectAttribu
 import app.modules.phases.models  # noqa: F401
 import app.modules.buildings.models  # noqa: F401
 import app.modules.floors.models  # noqa: F401
-import app.modules.units.models  # noqa: F401
+import app.modules.units.models  # noqa: F401  (also registers UnitDynamicAttributeValue)
 import app.modules.land.models  # noqa: F401
 import app.modules.feasibility.models  # noqa: F401
 import app.modules.pricing.models  # noqa: F401

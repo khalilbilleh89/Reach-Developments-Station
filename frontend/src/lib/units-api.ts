@@ -39,6 +39,8 @@ import type {
   UnitCreate,
   UnitCreateForFloor,
   UnitDetail,
+  UnitDynamicAttributesSaveRequest,
+  UnitDynamicAttributeValue,
   UnitListItem,
   UnitListResponse,
   UnitPrice,
@@ -566,5 +568,44 @@ export async function getProjectPricingAttributes(
 ): Promise<Record<string, UnitQualitativeAttributes>> {
   return apiFetch<Record<string, UnitQualitativeAttributes>>(
     `/projects/${encodeURIComponent(projectId)}/unit-pricing-attributes`,
+  );
+}
+
+// ---------- Dynamic attribute value functions (PR-033) -------------------
+
+/**
+ * Fetch all project-defined dynamic attribute selections for a unit.
+ *
+ * Returns an empty array when no values are set yet (unit exists but has
+ * no dynamic attribute records).
+ * Throws ApiError with status 404 when the unit does not exist.
+ */
+export async function getUnitDynamicAttributes(
+  unitId: string,
+): Promise<UnitDynamicAttributeValue[]> {
+  return apiFetch<UnitDynamicAttributeValue[]>(
+    `/units/${encodeURIComponent(unitId)}/dynamic-attributes`,
+  );
+}
+
+/**
+ * Create or update project-defined dynamic attribute selections for a unit.
+ *
+ * Each item must reference a definition belonging to the unit's project and
+ * an option belonging to that definition. Saving a new option for an existing
+ * definition replaces the previous selection (upsert semantics).
+ *
+ * Returns the full list of saved selections with denormalised labels.
+ */
+export async function saveUnitDynamicAttributes(
+  unitId: string,
+  data: UnitDynamicAttributesSaveRequest,
+): Promise<UnitDynamicAttributeValue[]> {
+  return apiFetch<UnitDynamicAttributeValue[]>(
+    `/units/${encodeURIComponent(unitId)}/dynamic-attributes`,
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+    },
   );
 }

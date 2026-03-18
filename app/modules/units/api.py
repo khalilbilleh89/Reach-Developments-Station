@@ -27,11 +27,13 @@ from app.modules.pricing_attributes.service import UnitPricingAttributesService
 from app.modules.units.schemas import (
     UnitCreate,
     UnitCreateForFloor,
+    UnitDynamicAttributesSaveRequest,
+    UnitDynamicAttributeValueResponse,
     UnitList,
     UnitResponse,
     UnitUpdate,
 )
-from app.modules.units.service import UnitService
+from app.modules.units.service import UnitDynamicAttributeService, UnitService
 
 router = APIRouter(tags=["units"])
 
@@ -202,6 +204,55 @@ def save_unit_pricing_attributes(
     if created:
         response.status_code = status.HTTP_201_CREATED
     return result
+
+
+# ── Per-unit dynamic attribute value endpoints ────────────────────────────────
+
+
+def get_dynamic_attribute_service(
+    db: Session = Depends(get_db),
+) -> UnitDynamicAttributeService:
+    return UnitDynamicAttributeService(db)
+
+
+@router.get(
+    "/units/{unit_id}/dynamic-attributes",
+    response_model=list[UnitDynamicAttributeValueResponse],
+    tags=["unit-dynamic-attributes"],
+)
+def list_unit_dynamic_attributes(
+    unit_id: str,
+    service: Annotated[UnitDynamicAttributeService, Depends(get_dynamic_attribute_service)],
+) -> list[UnitDynamicAttributeValueResponse]:
+    """List all project-defined dynamic attribute selections for a unit.
+
+    Returns an empty list when the unit has no dynamic attribute values set yet.
+    Returns 404 if the unit does not exist.
+    """
+    return service.list_dynamic_attributes(unit_id)
+
+
+@router.put(
+    "/units/{unit_id}/dynamic-attributes",
+    response_model=list[UnitDynamicAttributeValueResponse],
+    tags=["unit-dynamic-attributes"],
+)
+def save_unit_dynamic_attributes(
+    unit_id: str,
+    data: UnitDynamicAttributesSaveRequest,
+    service: Annotated[UnitDynamicAttributeService, Depends(get_dynamic_attribute_service)],
+) -> list[UnitDynamicAttributeValueResponse]:
+    """Create or update project-defined dynamic attribute selections for a unit.
+
+    Each item in ``attributes`` must reference:
+      - a definition that belongs to the same project as the unit
+      - an option that belongs to that definition
+
+    Saving a new option for an existing definition replaces the previous selection.
+    Returns 404 on unknown unit, definition, or option.
+    Returns 422 when project-scope or definition-option integrity is violated.
+    """
+    return service.save_dynamic_attributes(unit_id, data)
 
 
 # ── Project-scoped bulk pricing endpoints ─────────────────────────────────────

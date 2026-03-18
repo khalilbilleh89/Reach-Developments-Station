@@ -3,14 +3,30 @@ units.service
 
 Business logic for the Unit entity.
 Enforces: unit must belong to a valid floor; unit number must be unique per floor.
+
+Also contains UnitDynamicAttributeService (PR-033) for managing project-defined
+attribute selections on units.
 """
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
 
+from app.modules.buildings.models import Building
+from app.modules.floors.models import Floor
 from app.modules.floors.repository import FloorRepository
-from app.modules.units.repository import UnitRepository
-from app.modules.units.schemas import UnitCreate, UnitList, UnitResponse, UnitUpdate
+from app.modules.phases.models import Phase
+from app.modules.projects.repository import ProjectRepository
+from app.modules.units.models import UnitDynamicAttributeValue
+from app.modules.units.repository import UnitDynamicAttributeRepository, UnitRepository
+from app.modules.units.schemas import (
+    UnitCreate,
+    UnitDynamicAttributesSaveRequest,
+    UnitDynamicAttributeValueResponse,
+    UnitList,
+    UnitResponse,
+    UnitUpdate,
+)
 
 
 class UnitService:
@@ -93,3 +109,107 @@ class UnitService:
                 detail=f"Unit '{unit_id}' not found.",
             )
         self.repo.delete(unit)
+
+
+class UnitDynamicAttributeService:
+    """Business logic for unit dynamic attribute values (PR-033).
+
+    Validates project-scope integrity: unit, definition, and option must all
+    belong to the same project. Option must belong to the referenced definition.
+    Does not calculate pricing — it only stores and validates selections.
+    """
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+        self.unit_repo = UnitRepository(db)
+        self.dav_repo = UnitDynamicAttributeRepository(db)
+        self.project_repo = ProjectRepository(db)
+
+    def _get_unit_project_id(self, unit_id: str) -> Optional[str]:
+        """Return the project_id for the given unit via a single joined query."""
+        from app.modules.units.models import Unit as UnitModel
+        row = (
+            self.db.query(Phase.project_id)
+            .join(Building, Building.phase_id == Phase.id)
+            .join(Floor, Floor.building_id == Building.id)
+            .join(UnitModel, UnitModel.floor_id == Floor.id)
+            .filter(UnitModel.id == unit_id)
+            .scalar()
+        )
+        return row
+
+    def _build_response(
+        self, value: UnitDynamicAttributeValue
+    ) -> UnitDynamicAttributeValueResponse:
+        return UnitDynamicAttributeValueResponse(
+            id=value.id,
+            unit_id=value.unit_id,
+            definition_id=value.definition_id,
+            option_id=value.option_id,
+            definition_key=value.definition.key,
+            definition_label=value.definition.label,
+            option_value=value.option.value,
+            option_label=value.option.label,
+        )
+
+    def list_dynamic_attributes(self, unit_id: str) -> list[UnitDynamicAttributeValueResponse]:
+        unit = self.unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        values = self.dav_repo.list_by_unit(unit_id)
+        return [self._build_response(v) for v in values]
+
+    def save_dynamic_attributes(
+        self, unit_id: str, data: UnitDynamicAttributesSaveRequest
+    ) -> list[UnitDynamicAttributeValueResponse]:
+        unit = self.unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+
+        project_id = self._get_unit_project_id(unit_id)
+        if not project_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Could not resolve project for unit.",
+            )
+
+        results = []
+        for item in data.attributes:
+            definition = self.project_repo.get_definition_by_id(item.definition_id)
+            if not definition:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Attribute definition '{item.definition_id}' not found.",
+                )
+            if definition.project_id != project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=(
+                        f"Attribute definition '{item.definition_id}' does not belong "
+                        f"to the same project as unit '{unit_id}'."
+                    ),
+                )
+            option = self.project_repo.get_option_by_id(item.option_id)
+            if not option:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Attribute option '{item.option_id}' not found.",
+                )
+            if option.definition_id != item.definition_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=(
+                        f"Attribute option '{item.option_id}' does not belong to "
+                        f"definition '{item.definition_id}'."
+                    ),
+                )
+            value = self.dav_repo.upsert(unit_id, item.definition_id, item.option_id)
+            results.append(self._build_response(value))
+
+        return results

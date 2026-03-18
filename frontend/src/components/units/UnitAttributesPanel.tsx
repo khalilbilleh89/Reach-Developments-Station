@@ -1,9 +1,11 @@
 import React from "react";
-import type { UnitDetail } from "@/lib/units-types";
+import type { UnitDetail, UnitDynamicAttributeValue } from "@/lib/units-types";
 import styles from "@/styles/units-pricing.module.css";
 
 interface UnitAttributesPanelProps {
   unit: UnitDetail;
+  /** Project-defined dynamic attribute selections for this unit (PR-033). */
+  dynamicAttributes?: UnitDynamicAttributeValue[];
 }
 
 interface Attribute {
@@ -23,7 +25,7 @@ interface Attribute {
  * All values are sourced from the unit API response; no calculations are
  * performed beyond safe null checks for optional outdoor area fields.
  */
-export function UnitAttributesPanel({ unit }: UnitAttributesPanelProps) {
+export function UnitAttributesPanel({ unit, dynamicAttributes }: UnitAttributesPanelProps) {
   const attributes: Attribute[] = [
     { label: "Unit Number", value: unit.unit_number },
     {
@@ -126,6 +128,20 @@ export function UnitAttributesPanel({ unit }: UnitAttributesPanelProps) {
               <div key={attr.label} className={styles.attributeItem}>
                 <span className={styles.attributeLabel}>{attr.label}</span>
                 <span className={styles.attributeValue}>{attr.value}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {dynamicAttributes && dynamicAttributes.length > 0 && (
+        <>
+          <h3 className={styles.attributesSubtitle}>Project-Defined Attributes</h3>
+          <div className={styles.attributesGrid}>
+            {dynamicAttributes.map((attr) => (
+              <div key={attr.definition_id} className={styles.attributeItem}>
+                <span className={styles.attributeLabel}>{attr.definition_label}</span>
+                <span className={styles.attributeValue}>{attr.option_label}</span>
               </div>
             ))}
           </div>
