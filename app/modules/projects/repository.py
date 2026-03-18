@@ -9,6 +9,8 @@ from typing import List, Optional
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session, selectinload
 
+from app.modules.buildings.models import Building
+from app.modules.floors.models import Floor
 from app.modules.phases.models import Phase
 from app.modules.projects.models import Project, ProjectAttributeDefinition, ProjectAttributeOption
 from app.modules.projects.schemas import (
@@ -119,6 +121,49 @@ class ProjectRepository:
             "earliest_start_date": result.earliest_start_date,
             "latest_target_completion": result.latest_target_completion,
         }
+
+    def get_hierarchy(self, project_id: str) -> list:
+        """Return the full Project → Phase → Building → Floor hierarchy with unit counts.
+
+        Executes a single SQL join query to avoid N+1 patterns, then assembles
+        the nested structure in Python.
+        """
+        from app.modules.units.models import Unit
+
+        rows = (
+            self.db.query(
+                Phase.id.label("phase_id"),
+                Phase.name.label("phase_name"),
+                Phase.sequence.label("phase_sequence"),
+                Building.id.label("building_id"),
+                Building.name.label("building_name"),
+                Building.code.label("building_code"),
+                Floor.id.label("floor_id"),
+                Floor.name.label("floor_name"),
+                Floor.code.label("floor_code"),
+                Floor.sequence_number.label("floor_sequence"),
+                func.count(Unit.id).label("unit_count"),
+            )
+            .outerjoin(Building, Building.phase_id == Phase.id)
+            .outerjoin(Floor, Floor.building_id == Building.id)
+            .outerjoin(Unit, Unit.floor_id == Floor.id)
+            .filter(Phase.project_id == project_id)
+            .group_by(
+                Phase.id,
+                Phase.name,
+                Phase.sequence,
+                Building.id,
+                Building.name,
+                Building.code,
+                Floor.id,
+                Floor.name,
+                Floor.code,
+                Floor.sequence_number,
+            )
+            .order_by(Phase.sequence, Building.name, Floor.sequence_number)
+            .all()
+        )
+        return rows
 
     # ------------------------------------------------------------------
     # Attribute Definitions
