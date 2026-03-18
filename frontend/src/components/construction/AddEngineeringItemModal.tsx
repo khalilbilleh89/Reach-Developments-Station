@@ -13,13 +13,11 @@ import type { EngineeringItemCreate, EngineeringStatus } from "@/lib/constructio
 import styles from "@/styles/construction.module.css";
 
 interface AddEngineeringItemModalProps {
-  scopeId: string;
   onSubmit: (data: EngineeringItemCreate) => Promise<void>;
   onClose: () => void;
 }
 
 export function AddEngineeringItemModal({
-  scopeId,
   onSubmit,
   onClose,
 }: AddEngineeringItemModalProps) {

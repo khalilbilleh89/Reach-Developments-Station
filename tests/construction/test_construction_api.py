@@ -515,7 +515,8 @@ def test_delete_scope_cascades_engineering_items(client: TestClient):
     project_id = _create_project(client, "ENG-012")
     scope = _create_scope(client, project_id)
     item = _create_engineering_item(client, scope["id"])
-    client.delete(f"/api/v1/construction/scopes/{scope['id']}")
+    delete_resp = client.delete(f"/api/v1/construction/scopes/{scope['id']}")
+    assert delete_resp.status_code == 204
     # Engineering item should be gone (cascade)
     resp = client.patch(
         f"/api/v1/construction/engineering-items/{item['id']}",

@@ -204,7 +204,7 @@ class ConstructionEngineeringItemRepository:
     def update(
         self, item: ConstructionEngineeringItem, data: EngineeringItemUpdate
     ) -> ConstructionEngineeringItem:
-        update_data = data.model_dump(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True, exclude_none=True)
         for field, value in update_data.items():
             setattr(item, field, value)
         self.db.commit()

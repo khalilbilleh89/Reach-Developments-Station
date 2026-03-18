@@ -253,7 +253,14 @@ class ConstructionService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Engineering item '{item_id}' not found.",
             )
-        updated = self.engineering_repo.update(item, data)
+        try:
+            updated = self.engineering_repo.update(item, data)
+        except IntegrityError:
+            self.engineering_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Update failed due to a data constraint violation.",
+            )
         return EngineeringItemResponse.model_validate(updated)
 
     def delete_engineering_item(self, item_id: str) -> None:

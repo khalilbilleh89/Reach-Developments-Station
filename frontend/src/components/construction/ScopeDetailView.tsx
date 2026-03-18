@@ -282,7 +282,6 @@ export function ScopeDetailView({ scope, onBack }: ScopeDetailViewProps) {
 
           {showAddEngItem && (
             <AddEngineeringItemModal
-              scopeId={scope.id}
               onSubmit={handleAddEngineeringItem}
               onClose={() => setShowAddEngItem(false)}
             />
