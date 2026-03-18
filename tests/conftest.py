@@ -33,6 +33,7 @@ import app.modules.commission.models  # noqa: F401
 import app.modules.cashflow.models  # noqa: F401
 import app.modules.reservations.models  # noqa: F401
 import app.modules.receivables.models  # noqa: F401
+import app.modules.construction.models  # noqa: F401
 
 from app.main import app
 

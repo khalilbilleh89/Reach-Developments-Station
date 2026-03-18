@@ -34,6 +34,13 @@ export const NAV_ITEMS: NavItem[] = [
     requiresAuth: true,
   },
   {
+    label: "Construction",
+    href: "/construction",
+    icon: "HardHat",
+    section: "main",
+    requiresAuth: true,
+  },
+  {
     label: "Units & Pricing",
     href: "/units-pricing",
     icon: "Tag",
