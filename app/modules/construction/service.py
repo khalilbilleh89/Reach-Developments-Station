@@ -213,7 +213,11 @@ class ConstructionService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Construction scope '{scope_id}' not found.",
             )
-        item = self.engineering_repo.create(scope_id, data)
+        try:
+            item = self.engineering_repo.create(scope_id, data)
+        except IntegrityError:
+            self.engineering_repo.db.rollback()
+            raise ValueError("Construction engineering item integrity error")
         return EngineeringItemResponse.model_validate(item)
 
     def list_engineering_items(
@@ -257,10 +261,7 @@ class ConstructionService:
             updated = self.engineering_repo.update(item, data)
         except IntegrityError:
             self.engineering_repo.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Update failed due to a data constraint violation.",
-            )
+            raise ValueError("Construction engineering item integrity error")
         return EngineeringItemResponse.model_validate(updated)
 
     def delete_engineering_item(self, item_id: str) -> None:
