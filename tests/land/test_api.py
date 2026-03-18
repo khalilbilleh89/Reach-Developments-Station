@@ -430,5 +430,3 @@ def test_standalone_parcel_integrity_error_maps_to_409(db_session):
             service.create_parcel(data)
     assert exc_info.value.status_code == 409
     assert "PCL-RACE" in exc_info.value.detail
-
-

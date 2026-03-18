@@ -38,7 +38,7 @@ def create_run(
     data: FeasibilityRunCreate,
     service: Annotated[FeasibilityService, Depends(get_service)],
 ) -> FeasibilityRunResponse:
-    """Create a new feasibility scenario run for a project."""
+    """Create a new feasibility scenario run. project_id is optional — runs may be created before any project exists."""
     return service.create_feasibility_run(data)
 
 
