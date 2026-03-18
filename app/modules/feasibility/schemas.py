@@ -17,7 +17,7 @@ from app.shared.enums.finance import FeasibilityScenarioType
 # ---------------------------------------------------------------------------
 
 class FeasibilityRunCreate(BaseModel):
-    project_id: str
+    project_id: Optional[str] = None
     scenario_name: str = Field(..., min_length=1, max_length=255)
     scenario_type: FeasibilityScenarioType = FeasibilityScenarioType.BASE
     notes: Optional[str] = None
@@ -31,7 +31,7 @@ class FeasibilityRunUpdate(BaseModel):
 
 class FeasibilityRunResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: Optional[str]
     scenario_name: str
     scenario_type: FeasibilityScenarioType
     notes: Optional[str]

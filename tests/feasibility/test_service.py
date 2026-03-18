@@ -197,3 +197,32 @@ def test_recalculate_replaces_result(db_session: Session):
 
     assert result1.id == result2.id
     assert result2.gdv == pytest.approx(6_000_000.0)
+
+
+# ---------------------------------------------------------------------------
+# Pre-project independence tests (PR-B1)
+# ---------------------------------------------------------------------------
+
+def test_create_feasibility_run_without_project(db_session: Session):
+    """FeasibilityRun can be created without a project (pre-project scenario)."""
+    service = FeasibilityService(db_session)
+    run = service.create_feasibility_run(
+        FeasibilityRunCreate(scenario_name="Pre-Project Scenario")
+    )
+    assert run.id is not None
+    assert run.project_id is None
+    assert run.scenario_name == "Pre-Project Scenario"
+
+
+def test_standalone_run_full_calculation(db_session: Session):
+    """Full feasibility workflow executes without a project being present."""
+    service = FeasibilityService(db_session)
+    run = service.create_feasibility_run(
+        FeasibilityRunCreate(scenario_name="Standalone Base", scenario_type=FeasibilityScenarioType.BASE)
+    )
+    assert run.project_id is None
+
+    service.update_assumptions(run.id, _VALID_ASSUMPTIONS)
+    result = service.run_feasibility_calculation(run.id)
+    assert result.gdv == pytest.approx(3_000_000.0)
+    assert result.developer_profit == pytest.approx(1_990_000.0)

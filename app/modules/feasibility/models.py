@@ -3,6 +3,10 @@ feasibility.models
 
 ORM models for the Feasibility Engine domain.
 Entities: FeasibilityRun → FeasibilityAssumptions + FeasibilityResult
+
+FeasibilityRun is a pre-project entity. project_id is optional: a run can
+represent a standalone pre-project scenario and be linked to a project later
+in the development lifecycle.
 """
 
 from typing import TYPE_CHECKING, Optional
@@ -18,12 +22,16 @@ if TYPE_CHECKING:
 
 
 class FeasibilityRun(Base, TimestampMixin):
-    """One feasibility scenario linked to a development project."""
+    """One feasibility scenario — independent of project hierarchy.
+
+    project_id is optional. A run may exist as a standalone pre-project
+    scenario and be linked to a project after the acquisition decision is made.
+    """
 
     __tablename__ = "feasibility_runs"
 
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     scenario_name: Mapped[str] = mapped_column(String(255), nullable=False)
     scenario_type: Mapped[str] = mapped_column(
@@ -31,7 +39,7 @@ class FeasibilityRun(Base, TimestampMixin):
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="feasibility_runs")
+    project: Mapped[Optional["Project"]] = relationship("Project", back_populates="feasibility_runs")
     assumptions: Mapped[Optional["FeasibilityAssumptions"]] = relationship(
         "FeasibilityAssumptions",
         back_populates="run",

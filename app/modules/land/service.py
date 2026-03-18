@@ -8,6 +8,7 @@ Handles validation, derived area calculations, and valuation computations.
 from typing import List, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
@@ -36,19 +37,38 @@ class LandService:
     # ------------------------------------------------------------------
 
     def create_parcel(self, data: LandParcelCreate) -> LandParcelResponse:
-        project = self.project_repo.get_by_id(data.project_id)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{data.project_id}' not found.",
-            )
-        existing = self.parcel_repo.get_by_project_and_code(data.project_id, data.parcel_code)
-        if existing:
+        if data.project_id is not None:
+            project = self.project_repo.get_by_id(data.project_id)
+            if not project:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Project '{data.project_id}' not found.",
+                )
+            existing = self.parcel_repo.get_by_project_and_code(data.project_id, data.parcel_code)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'.",
+                )
+        else:
+            existing = self.parcel_repo.get_standalone_by_code(data.parcel_code)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"A standalone parcel with code '{data.parcel_code}' already exists.",
+                )
+        try:
+            parcel = self.parcel_repo.create(data)
+        except IntegrityError:
+            self.parcel_repo.db.rollback()
+            if data.project_id is None:
+                detail = f"A standalone parcel with code '{data.parcel_code}' already exists."
+            else:
+                detail = f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'."
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'.",
+                detail=detail,
             )
-        parcel = self.parcel_repo.create(data)
         return LandParcelResponse.model_validate(parcel)
 
     def get_parcel(self, parcel_id: str) -> LandParcelResponse:

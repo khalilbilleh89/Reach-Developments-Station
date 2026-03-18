@@ -17,7 +17,7 @@ from app.shared.enums.project import LandParcelStatus, LandScenarioType
 # ---------------------------------------------------------------------------
 
 class LandParcelCreate(BaseModel):
-    project_id: str
+    project_id: Optional[str] = None
     parcel_name: str = Field(..., min_length=1, max_length=255)
     parcel_code: str = Field(..., min_length=1, max_length=100)
     country: Optional[str] = Field(None, max_length=100)
@@ -56,7 +56,7 @@ class LandParcelUpdate(BaseModel):
 
 class LandParcelResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: Optional[str]
     parcel_name: str
     parcel_code: str
     country: Optional[str]

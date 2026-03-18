@@ -40,12 +40,13 @@ class FeasibilityService:
     # ------------------------------------------------------------------
 
     def create_feasibility_run(self, data: FeasibilityRunCreate) -> FeasibilityRunResponse:
-        project = self.project_repo.get_by_id(data.project_id)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{data.project_id}' not found.",
-            )
+        if data.project_id is not None:
+            project = self.project_repo.get_by_id(data.project_id)
+            if not project:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Project '{data.project_id}' not found.",
+                )
         run = self.run_repo.create(data)
         return FeasibilityRunResponse.model_validate(run)
 

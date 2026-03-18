@@ -38,6 +38,14 @@ class LandParcelRepository:
             .first()
         )
 
+    def get_standalone_by_code(self, parcel_code: str) -> Optional[LandParcel]:
+        """Return a standalone (project_id IS NULL) parcel matching parcel_code."""
+        return (
+            self.db.query(LandParcel)
+            .filter(LandParcel.project_id.is_(None), LandParcel.parcel_code == parcel_code)
+            .first()
+        )
+
     def list(self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[LandParcel]:
         query = self.db.query(LandParcel)
         if project_id:
