@@ -60,8 +60,14 @@ export function AddMilestoneModal({
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.modalTitle}>Add Milestone</h2>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-milestone-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="add-milestone-title" className={styles.modalTitle}>Add Milestone</h2>
         <form className={styles.modalForm} onSubmit={handleSubmit}>
           <div className={styles.formRow}>
             <div className={styles.formField}>

@@ -80,6 +80,7 @@ export function SidebarNav({ collapsed = false }: SidebarNavProps) {
 const ICON_MAP: Record<string, string> = {
   LayoutDashboard: "⊞",
   FolderOpen: "📁",
+  HardHat: "🪖",
   Tag: "🏷",
   ShoppingCart: "🛒",
   CreditCard: "💳",

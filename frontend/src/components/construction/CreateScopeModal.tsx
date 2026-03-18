@@ -53,8 +53,14 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.modalTitle}>Create Construction Scope</h2>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-scope-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="create-scope-title" className={styles.modalTitle}>Create Construction Scope</h2>
         <form className={styles.modalForm} onSubmit={handleSubmit}>
           <div className={styles.formRow}>
             <div className={styles.formField}>

@@ -8,6 +8,7 @@ lifecycle rules within each scope.
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.buildings.repository import BuildingRepository
@@ -51,7 +52,14 @@ class ConstructionService:
                 detail="A construction scope already exists for the given project/phase/building combination.",
             )
 
-        scope = self.scope_repo.create(data)
+        try:
+            scope = self.scope_repo.create(data)
+        except IntegrityError:
+            self.scope_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A construction scope already exists for the given project/phase/building combination.",
+            )
         return ConstructionScopeResponse.model_validate(scope)
 
     def list_scopes(
@@ -122,7 +130,14 @@ class ConstructionService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"A milestone with sequence {data.sequence} already exists in scope '{data.scope_id}'.",
             )
-        milestone = self.milestone_repo.create(data)
+        try:
+            milestone = self.milestone_repo.create(data)
+        except IntegrityError:
+            self.milestone_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A milestone with sequence {data.sequence} already exists in scope '{data.scope_id}'.",
+            )
         return ConstructionMilestoneResponse.model_validate(milestone)
 
     def list_milestones(
@@ -162,7 +177,14 @@ class ConstructionService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"A milestone with sequence {data.sequence} already exists in scope '{milestone.scope_id}'.",
                 )
-        updated = self.milestone_repo.update(milestone, data)
+        try:
+            updated = self.milestone_repo.update(milestone, data)
+        except IntegrityError:
+            self.milestone_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A milestone with sequence {data.sequence} already exists in scope '{milestone.scope_id}'.",
+            )
         return ConstructionMilestoneResponse.model_validate(updated)
 
     def delete_milestone(self, milestone_id: str) -> None:

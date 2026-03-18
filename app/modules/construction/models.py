@@ -25,12 +25,14 @@ if TYPE_CHECKING:
 
 
 class ConstructionScope(Base, TimestampMixin):
-    """Construction scope record linked to a project, phase, and/or building."""
+    """Construction scope record linked to a project, phase, and/or building.
+
+    Uniqueness per link combination is enforced in PostgreSQL via partial unique
+    indexes in migration 0026 (one per NULL-pattern), because a composite
+    UNIQUE constraint does not prevent duplicates when any column is NULL.
+    """
 
     __tablename__ = "construction_scopes"
-    __table_args__ = (
-        UniqueConstraint("project_id", "phase_id", "building_id", name="uq_construction_scope"),
-    )
 
     project_id: Mapped[Optional[str]] = mapped_column(
         String(36),

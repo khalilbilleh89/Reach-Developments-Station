@@ -67,9 +67,16 @@ export function ConstructionScopesTable({
             <tr
               key={scope.id}
               className={styles.clickableRow}
-              onClick={() => onSelectScope(scope.id)}
+              role="button"
+              aria-label={`View construction scope ${scope.name}`}
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onSelectScope(scope.id)}
+              onClick={() => onSelectScope(scope.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectScope(scope.id);
+                }
+              }}
             >
               <td>
                 <div className={styles.projectName}>{scope.name}</div>
