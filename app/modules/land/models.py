@@ -3,6 +3,10 @@ land.models
 
 ORM models for the Land Underwriting domain.
 Entities: LandParcel → LandAssumptions + LandValuation
+
+Land parcels are independent pre-project entities. project_id is optional:
+a parcel can exist before any project is created and can be linked to a
+project later in the development lifecycle.
 """
 
 from typing import TYPE_CHECKING, List, Optional
@@ -18,15 +22,20 @@ if TYPE_CHECKING:
 
 
 class LandParcel(Base, TimestampMixin):
-    """Physical land parcel linked to a development project."""
+    """Physical land parcel — independent of project hierarchy.
+
+    project_id is optional. A parcel may exist as a standalone pre-project
+    record (parcel intake, zoning analysis, valuation) and be linked to a
+    project at a later stage in the acquisition lifecycle.
+    """
 
     __tablename__ = "land_parcels"
     __table_args__ = (
         UniqueConstraint("parcel_code", "project_id", name="uq_land_parcel_code_project"),
     )
 
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     parcel_name: Mapped[str] = mapped_column(String(255), nullable=False)
     parcel_code: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -51,7 +60,7 @@ class LandParcel(Base, TimestampMixin):
         String(50), nullable=False, default=LandParcelStatus.DRAFT.value
     )
 
-    project: Mapped["Project"] = relationship("Project", back_populates="parcels")
+    project: Mapped[Optional["Project"]] = relationship("Project", back_populates="parcels")
     assumptions: Mapped[List["LandAssumptions"]] = relationship(
         "LandAssumptions", back_populates="parcel", cascade="all, delete-orphan"
     )

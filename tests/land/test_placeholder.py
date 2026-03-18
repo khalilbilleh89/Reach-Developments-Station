@@ -260,3 +260,146 @@ def test_valuation_invalid_parcel(client: TestClient):
     )
     assert response.status_code == 404
 
+
+# ---------------------------------------------------------------------------
+# Pre-project independence tests (PR-B1)
+# ---------------------------------------------------------------------------
+
+def test_parcel_create_without_project(client: TestClient):
+    """POST /api/v1/land/parcels without project_id should succeed.
+
+    Land parcels must be creatable independently before any project exists.
+    This validates the Land Independence boundary required by PR-B1.
+    """
+    response = client.post(
+        "/api/v1/land/parcels",
+        json={
+            "parcel_name": "Standalone Parcel",
+            "parcel_code": "PCL-STANDALONE",
+            "city": "Dubai",
+            "land_area_sqm": 5000.0,
+            "permitted_far": 2.0,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["project_id"] is None
+    assert data["parcel_code"] == "PCL-STANDALONE"
+    assert data["status"] == "draft"
+    assert data["city"] == "Dubai"
+    assert "id" in data
+
+
+def test_parcel_assumptions_without_project(client: TestClient):
+    """Assumptions can be added to a standalone parcel (no project required)."""
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Pre-Project Parcel", "parcel_code": "PCL-PREPRJ"},
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    resp = client.post(
+        f"/api/v1/land/parcels/{parcel_id}/assumptions",
+        json={"target_use": "mixed_use", "expected_sellable_ratio": 0.7},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["parcel_id"] == parcel_id
+    assert resp.json()["target_use"] == "mixed_use"
+
+
+def test_parcel_valuation_without_project(client: TestClient):
+    """Valuations can be created for a standalone parcel (no project required)."""
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={
+            "parcel_name": "Valuation Parcel",
+            "parcel_code": "PCL-VAL",
+            "land_area_sqm": 10000.0,
+            "permitted_far": 2.5,
+        },
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    client.post(
+        f"/api/v1/land/parcels/{parcel_id}/assumptions",
+        json={"expected_sellable_ratio": 0.8},
+    )
+    resp = client.post(
+        f"/api/v1/land/parcels/{parcel_id}/valuations",
+        json={
+            "scenario_name": "Pre-Project Base",
+            "scenario_type": "base",
+            "assumed_sale_price_per_sqm": 4500.0,
+            "assumed_cost_per_sqm": 2500.0,
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["parcel_id"] == parcel_id
+    assert data["scenario_name"] == "Pre-Project Base"
+    # GDV = 20000 * 4500 = 90_000_000
+    assert data["expected_gdv"] is not None
+
+
+def test_parcel_project_id_not_required(client: TestClient):
+    """project_id must be absent from LandParcelCreate — not a required field."""
+    # Sending without project_id at all must return 201, not 422
+    response = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "No Project", "parcel_code": "PCL-NOPROJ"},
+    )
+    assert response.status_code == 201
+    assert response.json()["project_id"] is None
+
+
+def test_parcel_invalid_project_still_rejected(client: TestClient):
+    """If project_id is explicitly provided, it must still reference a valid project."""
+    response = client.post(
+        "/api/v1/land/parcels",
+        json={"project_id": "nonexistent-project", "parcel_name": "X", "parcel_code": "X-001"},
+    )
+    assert response.status_code == 404
+
+
+def test_standalone_and_project_parcels_coexist(client: TestClient):
+    """Standalone parcels and project-linked parcels can both exist at the same time."""
+    # Create a project-linked parcel
+    project_id = _create_project(client, code="PRJ-COEXIST")
+    _create_parcel(client, project_id, code="PCL-PROJ-001")
+
+    # Create a standalone parcel with no project
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Standalone", "parcel_code": "PCL-STANDALONE-002"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["project_id"] is None
+
+    # Listing all parcels should return both
+    all_resp = client.get("/api/v1/land/parcels")
+    assert all_resp.status_code == 200
+    assert all_resp.json()["total"] >= 2
+
+    # Filtering by project_id should only return the project parcel
+    proj_resp = client.get(f"/api/v1/land/parcels?project_id={project_id}")
+    assert proj_resp.status_code == 200
+    assert proj_resp.json()["total"] == 1
+
+
+def test_standalone_parcel_duplicate_code_rejected(client: TestClient):
+    """Duplicate parcel_code among standalone parcels (no project) should return 409."""
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "First Standalone", "parcel_code": "PCL-DUP-STANDALONE"},
+    )
+    assert resp.status_code == 201
+
+    resp2 = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Second Standalone", "parcel_code": "PCL-DUP-STANDALONE"},
+    )
+    assert resp2.status_code == 409
+
+

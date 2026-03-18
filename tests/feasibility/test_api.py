@@ -305,3 +305,96 @@ def test_list_all_runs_pagination(client: TestClient):
     data = resp.json()
     assert data["total"] == 5
     assert len(data["items"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Pre-project independence tests (PR-B1)
+# ---------------------------------------------------------------------------
+
+def test_create_run_without_project(client: TestClient):
+    """POST /api/v1/feasibility/runs without project_id should succeed.
+
+    Feasibility scenarios must be creatable independently before any project
+    exists. This validates the pre-project feasibility boundary required by PR-B1.
+    """
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Pre-Project Base Case", "scenario_type": "base"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["project_id"] is None
+    assert data["scenario_name"] == "Pre-Project Base Case"
+    assert data["scenario_type"] == "base"
+    assert "id" in data
+
+
+def test_create_run_project_id_not_required(client: TestClient):
+    """project_id must not be required — omitting it entirely must return 201."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "No Project Run"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["project_id"] is None
+
+
+def test_create_run_invalid_project_still_rejected(client: TestClient):
+    """If project_id is explicitly provided, it must still reference a valid project."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": "nonexistent-project", "scenario_name": "Test"},
+    )
+    assert resp.status_code == 404
+
+
+def test_full_workflow_without_project(client: TestClient):
+    """Full pre-project feasibility workflow: create run → assumptions → calculate → results."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Standalone Scenario", "scenario_type": "base"},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["id"]
+    assert resp.json()["project_id"] is None
+
+    # Set assumptions
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    assert resp.status_code == 201
+    assert resp.json()["run_id"] == run_id
+
+    # Calculate
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["gdv"] is not None
+    assert data["developer_profit"] is not None
+
+    # Get results
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}/results")
+    assert resp.status_code == 200
+    assert resp.json()["run_id"] == run_id
+
+
+def test_standalone_and_project_runs_coexist(client: TestClient):
+    """Standalone runs and project-linked runs can both exist at the same time."""
+    project_id = _create_project(client, code="PRJ-FCOEXIST")
+    client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Project Run"},
+    )
+    client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Standalone Run"},
+    )
+
+    # All runs visible without filter
+    all_resp = client.get("/api/v1/feasibility/runs")
+    assert all_resp.status_code == 200
+    assert all_resp.json()["total"] == 2
+
+    # Project-filtered list returns only project runs
+    proj_resp = client.get(f"/api/v1/feasibility/runs?project_id={project_id}")
+    assert proj_resp.status_code == 200
+    assert proj_resp.json()["total"] == 1
+    assert proj_resp.json()["items"][0]["project_id"] == project_id
