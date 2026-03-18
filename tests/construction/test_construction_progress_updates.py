@@ -270,3 +270,101 @@ def test_cascade_delete_scope_removes_progress_updates(client: TestClient):
 
     get_resp = client.get(f"/api/v1/construction/progress-updates/{update['id']}")
     assert get_resp.status_code == 404
+
+
+# ── Timestamp normalization ───────────────────────────────────────────────────
+
+
+def test_reported_at_omitted_defaults_to_utc(client: TestClient):
+    """Omitting reported_at results in a UTC timestamp in the stored record."""
+    project_id = _create_project(client, "PU-080")
+    scope = _create_scope(client, project_id)
+    milestone = _create_milestone(client, scope["id"])
+
+    update = _create_progress_update(client, milestone["id"], progress_percent=10)
+    # A non-null, parseable ISO timestamp must be returned
+    assert update["reported_at"] is not None
+    from datetime import datetime
+    parsed = datetime.fromisoformat(update["reported_at"])
+    assert parsed is not None
+
+
+def test_reported_at_naive_datetime_normalized_to_utc(client: TestClient):
+    """A naive reported_at (no timezone) is treated as UTC and stored without offset shift."""
+    project_id = _create_project(client, "PU-081")
+    scope = _create_scope(client, project_id)
+    milestone = _create_milestone(client, scope["id"])
+
+    update = _create_progress_update(
+        client,
+        milestone["id"],
+        progress_percent=30,
+        reported_at="2026-03-10T08:00:00",
+    )
+    assert update["progress_percent"] == 30
+    # Naive datetimes are treated as UTC, so time value must be preserved unchanged
+    assert "2026-03-10" in update["reported_at"]
+    assert "08:00:00" in update["reported_at"]
+
+
+def test_reported_at_aware_datetime_converted_to_utc(client: TestClient):
+    """A timezone-aware reported_at is converted to UTC before storage."""
+    project_id = _create_project(client, "PU-082")
+    scope = _create_scope(client, project_id)
+    milestone = _create_milestone(client, scope["id"])
+
+    # +05:00 offset means 2026-03-12T06:00:00+05:00 == 2026-03-12T01:00:00Z
+    update = _create_progress_update(
+        client,
+        milestone["id"],
+        progress_percent=50,
+        reported_at="2026-03-12T06:00:00+05:00",
+    )
+    assert update["progress_percent"] == 50
+    # The stored value should be UTC-equivalent: 01:00:00 UTC
+    assert "2026-03-12" in update["reported_at"]
+    assert "01:00:00" in update["reported_at"]
+
+
+def test_reported_at_utc_datetime_stored_unchanged(client: TestClient):
+    """A UTC-aware reported_at is stored as-is (no offset applied)."""
+    project_id = _create_project(client, "PU-083")
+    scope = _create_scope(client, project_id)
+    milestone = _create_milestone(client, scope["id"])
+
+    update = _create_progress_update(
+        client,
+        milestone["id"],
+        progress_percent=60,
+        reported_at="2026-03-15T09:00:00+00:00",
+    )
+    assert "2026-03-15" in update["reported_at"]
+    assert "09:00:00" in update["reported_at"]
+
+
+def test_ordering_consistent_with_mixed_timestamp_inputs(client: TestClient):
+    """Progress updates are returned in chronological (reported_at) order."""
+    project_id = _create_project(client, "PU-084")
+    scope = _create_scope(client, project_id)
+    milestone = _create_milestone(client, scope["id"])
+
+    # Insert out-of-order timestamps
+    _create_progress_update(
+        client, milestone["id"], progress_percent=50,
+        reported_at="2026-03-15T12:00:00+00:00",
+    )
+    _create_progress_update(
+        client, milestone["id"], progress_percent=10,
+        reported_at="2026-03-14T08:00:00+00:00",
+    )
+    _create_progress_update(
+        client, milestone["id"], progress_percent=90,
+        reported_at="2026-03-16T06:00:00+00:00",
+    )
+
+    resp = client.get(f"/api/v1/construction/milestones/{milestone['id']}/progress-updates")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 3
+    percents = [item["progress_percent"] for item in items]
+    assert percents == [10, 50, 90]
