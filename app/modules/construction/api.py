@@ -16,6 +16,11 @@ Endpoints:
   PATCH  /api/v1/construction/milestones/{milestone_id}
   DELETE /api/v1/construction/milestones/{milestone_id}
 
+  POST   /api/v1/construction/milestones/{milestone_id}/progress-updates
+  GET    /api/v1/construction/milestones/{milestone_id}/progress-updates
+  GET    /api/v1/construction/progress-updates/{update_id}
+  DELETE /api/v1/construction/progress-updates/{update_id}
+
   POST   /api/v1/construction/scopes/{scope_id}/engineering-items
   GET    /api/v1/construction/scopes/{scope_id}/engineering-items
   PATCH  /api/v1/construction/engineering-items/{item_id}
@@ -42,6 +47,9 @@ from app.modules.construction.schemas import (
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    ProgressUpdateCreate,
+    ProgressUpdateList,
+    ProgressUpdateResponse,
 )
 from app.modules.construction.service import ConstructionService
 
@@ -159,6 +167,59 @@ def delete_milestone(
 ) -> Response:
     """Delete a construction milestone."""
     service.delete_milestone(milestone_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Progress update endpoints ────────────────────────────────────────────────
+
+
+@router.post(
+    "/construction/milestones/{milestone_id}/progress-updates",
+    response_model=ProgressUpdateResponse,
+    status_code=201,
+)
+def create_progress_update(
+    milestone_id: str,
+    data: ProgressUpdateCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProgressUpdateResponse:
+    """Record a progress update for a construction milestone."""
+    return service.create_progress_update(milestone_id, data)
+
+
+@router.get(
+    "/construction/milestones/{milestone_id}/progress-updates",
+    response_model=ProgressUpdateList,
+)
+def list_progress_updates(
+    milestone_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> ProgressUpdateList:
+    """List all progress updates for a construction milestone."""
+    return service.list_progress_updates(milestone_id=milestone_id, skip=skip, limit=limit)
+
+
+@router.get(
+    "/construction/progress-updates/{update_id}",
+    response_model=ProgressUpdateResponse,
+)
+def get_progress_update(
+    update_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProgressUpdateResponse:
+    """Get a specific progress update by ID."""
+    return service.get_progress_update(update_id)
+
+
+@router.delete("/construction/progress-updates/{update_id}", status_code=204)
+def delete_progress_update(
+    update_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete a progress update."""
+    service.delete_progress_update(update_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

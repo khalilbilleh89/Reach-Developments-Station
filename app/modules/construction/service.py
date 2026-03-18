@@ -16,6 +16,7 @@ from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
+    ConstructionProgressUpdateRepository,
     ConstructionScopeRepository,
 )
 from app.modules.construction.schemas import (
@@ -31,6 +32,9 @@ from app.modules.construction.schemas import (
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    ProgressUpdateCreate,
+    ProgressUpdateList,
+    ProgressUpdateResponse,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -41,6 +45,7 @@ class ConstructionService:
         self.scope_repo = ConstructionScopeRepository(db)
         self.milestone_repo = ConstructionMilestoneRepository(db)
         self.engineering_repo = ConstructionEngineeringItemRepository(db)
+        self.progress_repo = ConstructionProgressUpdateRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -273,6 +278,57 @@ class ConstructionService:
                 detail=f"Engineering item '{item_id}' not found.",
             )
         self.engineering_repo.delete(item)
+
+    # ── Progress update operations ───────────────────────────────────────────
+
+    def create_progress_update(
+        self, milestone_id: str, data: ProgressUpdateCreate
+    ) -> ProgressUpdateResponse:
+        milestone = self.milestone_repo.get_by_id(milestone_id)
+        if not milestone:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction milestone '{milestone_id}' not found.",
+            )
+        update = self.progress_repo.create(milestone_id, data)
+        return ProgressUpdateResponse.model_validate(update)
+
+    def list_progress_updates(
+        self,
+        milestone_id: str,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> ProgressUpdateList:
+        milestone = self.milestone_repo.get_by_id(milestone_id)
+        if not milestone:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction milestone '{milestone_id}' not found.",
+            )
+        updates = self.progress_repo.list(milestone_id=milestone_id, skip=skip, limit=limit)
+        total = self.progress_repo.count(milestone_id=milestone_id)
+        return ProgressUpdateList(
+            items=[ProgressUpdateResponse.model_validate(u) for u in updates],
+            total=total,
+        )
+
+    def get_progress_update(self, update_id: str) -> ProgressUpdateResponse:
+        update = self.progress_repo.get_by_id(update_id)
+        if not update:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Progress update '{update_id}' not found.",
+            )
+        return ProgressUpdateResponse.model_validate(update)
+
+    def delete_progress_update(self, update_id: str) -> None:
+        update = self.progress_repo.get_by_id(update_id)
+        if not update:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Progress update '{update_id}' not found.",
+            )
+        self.progress_repo.delete(update)
 
     # ── Private helpers ──────────────────────────────────────────────────────
 

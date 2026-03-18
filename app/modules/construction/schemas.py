@@ -109,6 +109,34 @@ class ConstructionMilestoneList(BaseModel):
     total: int
 
 
+# ── ConstructionProgressUpdate ───────────────────────────────────────────────
+
+
+class ProgressUpdateCreate(BaseModel):
+    progress_percent: int = Field(..., ge=0, le=100)
+    status_note: Optional[str] = None
+    reported_by: Optional[str] = Field(None, max_length=255)
+    reported_at: Optional[datetime] = None
+
+
+class ProgressUpdateResponse(BaseModel):
+    id: str
+    milestone_id: str
+    progress_percent: int
+    status_note: Optional[str]
+    reported_by: Optional[str]
+    reported_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProgressUpdateList(BaseModel):
+    items: List[ProgressUpdateResponse]
+    total: int
+
+
 # ── ConstructionEngineeringItem ──────────────────────────────────────────────
 
 
