@@ -33,7 +33,7 @@ frontend/
     │   │   ├── payment-plans/page.tsx
     │   │   ├── collections/page.tsx
     │   │   ├── finance/page.tsx
-    │   │   ├── registration/page.tsx
+    │   │   ├── registry/page.tsx
     │   │   ├── commission/page.tsx
     │   │   ├── cashflow/page.tsx
     │   │   └── settings/page.tsx
@@ -175,7 +175,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 | Payment Plans | `/payment-plans` | main |
 | Collections | `/collections` | main |
 | Finance | `/finance` | main |
-| Registration | `/registration` | main |
+| Registry | `/registry` | main |
 | Commission | `/commission` | main |
 | Cashflow | `/cashflow` | main |
 | Settings | `/settings` | settings |

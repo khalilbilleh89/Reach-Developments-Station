@@ -58,7 +58,7 @@ This page **displays and organizes backend truth**. It does not recreate financi
 | Cashflow Health | `GET /cashflow/projects/{id}/cashflow-summary` |
 | Commission Exposure | `GET /commission/projects/{id}/summary` |
 | Sales Exception Impact | `GET /sales-exceptions/projects/{id}/summary` |
-| Registration Signal | `GET /registration/projects/{id}/summary` |
+| Registration Signal | `GET /registry/projects/{id}/summary` |
 | Project Selector | `GET /projects` |
 
 All backend data is fetched via `apiFetch` in `finance-dashboard-api.ts`. No financial calculations are performed in the frontend.

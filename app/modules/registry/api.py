@@ -172,3 +172,84 @@ def update_document(
 ) -> RegistrationDocumentResponse:
     """Mark a document as received or update its reference details."""
     return service.update_document(case_id, document_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatibility alias — temporary, PR-D1 normalization safety net.
+#
+# These routes mirror /api/v1/registry/* exactly under the legacy
+# /api/v1/registration/* prefix. They are excluded from the OpenAPI schema
+# (include_in_schema=False) and are kept only to prevent runtime regressions
+# during the transition period.
+#
+# Remove this section (and the legacy_router include in app/main.py) in a
+# follow-up PR once all callers have been migrated to /api/v1/registry/*.
+# ---------------------------------------------------------------------------
+
+legacy_router = APIRouter(
+    prefix="/registration",
+    tags=["registry"],
+    include_in_schema=False,
+)
+
+legacy_router.add_api_route(
+    "/cases",
+    create_case,
+    methods=["POST"],
+    response_model=RegistrationCaseResponse,
+    status_code=201,
+)
+legacy_router.add_api_route(
+    "/cases/by-sale/{sale_contract_id}",
+    get_case_by_sale,
+    methods=["GET"],
+    response_model=RegistrationCaseResponse,
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}",
+    get_case,
+    methods=["GET"],
+    response_model=RegistrationCaseResponse,
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}",
+    update_case,
+    methods=["PATCH"],
+    response_model=RegistrationCaseResponse,
+)
+legacy_router.add_api_route(
+    "/projects/{project_id}/cases",
+    list_project_cases,
+    methods=["GET"],
+    response_model=RegistrationCaseListResponse,
+)
+legacy_router.add_api_route(
+    "/projects/{project_id}/summary",
+    get_project_summary,
+    methods=["GET"],
+    response_model=RegistrationSummaryResponse,
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}/milestones",
+    list_milestones,
+    methods=["GET"],
+    response_model=list[RegistrationMilestoneResponse],
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}/milestones/{milestone_id}",
+    update_milestone,
+    methods=["PATCH"],
+    response_model=RegistrationMilestoneResponse,
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}/documents",
+    list_documents,
+    methods=["GET"],
+    response_model=list[RegistrationDocumentResponse],
+)
+legacy_router.add_api_route(
+    "/cases/{case_id}/documents/{document_id}",
+    update_document,
+    methods=["PATCH"],
+    response_model=RegistrationDocumentResponse,
+)

@@ -67,7 +67,7 @@ interface BackendSalesExceptionsSummary {
   total_incentive_value: number;
 }
 
-/** Raw backend: /registration/projects/{id}/summary */
+/** Raw backend: /registry/projects/{id}/summary */
 interface BackendRegistrationSummary {
   project_id: string;
   total_sold_units: number;
@@ -182,7 +182,7 @@ export async function getProjectSalesExceptionsSummary(
 /**
  * Fetch project registration summary.
  *
- * Backend endpoint: GET /registration/projects/{projectId}/summary
+ * Backend endpoint: GET /registry/projects/{projectId}/summary
  *
  * Backend → UI mapping:
  *   registration_completion_ratio → completion_ratio
@@ -191,7 +191,7 @@ export async function getProjectRegistrationSummary(
   projectId: string,
 ): Promise<RegistrationFinanceSignal> {
   const raw = await apiFetch<BackendRegistrationSummary>(
-    `/registration/projects/${projectId}/summary`,
+    `/registry/projects/${projectId}/summary`,
   );
   return {
     total_sold_units: raw.total_sold_units,

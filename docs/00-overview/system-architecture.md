@@ -156,3 +156,16 @@ The backend starts as a **modular monolith** built with:
 The modular monolith approach is intentional — see [`../04-decisions/adr-001-domain-architecture.md`](../04-decisions/adr-001-domain-architecture.md) for the rationale.
 
 The full recommended backend code structure is documented in [`../03-technical/backend-architecture.md`](../03-technical/backend-architecture.md).
+
+---
+
+## Naming Compatibility Note (PR-D1)
+
+The canonical domain name is **Registry** (normalized in PR-D1). Some frontend documentation files in `docs/02-frontend/` still reference the legacy `Registration` terminology and `/registration` API routes. These will be updated in follow-up documentation cleanup passes.
+
+During the transition, the backend serves both:
+
+- `/api/v1/registry/*` — canonical (schema-visible)
+- `/api/v1/registration/*` — temporary backward-compatible alias (hidden from OpenAPI schema)
+
+The compatibility alias will be removed once all callers have migrated to `/api/v1/registry/*`.
