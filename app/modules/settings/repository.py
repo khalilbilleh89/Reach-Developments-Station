@@ -97,7 +97,7 @@ class CommissionPolicyRepository:
     def create(self, data: CommissionPolicyCreate) -> CommissionPolicy:
         policy = CommissionPolicy(**data.model_dump())
         self.db.add(policy)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(policy)
         return policy
 
@@ -140,7 +140,7 @@ class CommissionPolicyRepository:
     ) -> CommissionPolicy:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(policy, field, value)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(policy)
         return policy
 
@@ -148,11 +148,12 @@ class CommissionPolicyRepository:
         """Unset is_default on all commission policies."""
         self.db.query(CommissionPolicy).filter(
             CommissionPolicy.is_default.is_(True)
-        ).update({"is_default": False})
+        ).update({"is_default": False}, synchronize_session=False)
+        self.db.commit()
 
     def delete(self, policy: CommissionPolicy) -> None:
         self.db.delete(policy)
-        self.db.flush()
+        self.db.commit()
 
 
 class ProjectTemplateRepository:
@@ -162,7 +163,7 @@ class ProjectTemplateRepository:
     def create(self, data: ProjectTemplateCreate) -> ProjectTemplate:
         template = ProjectTemplate(**data.model_dump())
         self.db.add(template)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(template)
         return template
 
@@ -198,10 +199,10 @@ class ProjectTemplateRepository:
     ) -> ProjectTemplate:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(template, field, value)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(template)
         return template
 
     def delete(self, template: ProjectTemplate) -> None:
         self.db.delete(template)
-        self.db.flush()
+        self.db.commit()

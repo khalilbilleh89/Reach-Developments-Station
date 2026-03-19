@@ -4,7 +4,7 @@ from enum import Enum
 
 
 class PricingPriceMode(str, Enum):
-    """Governs how an optional-feature price (parking, storage, balcony) is applied."""
+    """Governs how an optional-feature price (parking, storage) is applied."""
 
     FIXED = "fixed"          # flat amount added to unit price
     PERCENTAGE = "percentage"  # percentage of base unit price
@@ -16,10 +16,3 @@ class CommissionCalculationMode(str, Enum):
 
     MARGINAL = "marginal"       # applied slab-by-slab on value tiers
     CUMULATIVE = "cumulative"   # applied to full contract value once threshold met
-
-
-class ProjectTemplateStatus(str, Enum):
-    """Lifecycle status of a project template."""
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"

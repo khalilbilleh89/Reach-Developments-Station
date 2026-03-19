@@ -78,6 +78,17 @@ def upgrade() -> None:
         "settings_pricing_policies",
         ["is_default"],
     )
+    # PostgreSQL-only: enforce at most one default pricing policy at the DB level.
+    # Prevents concurrent transactions from both committing is_default=True.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "uq_settings_pricing_policies_single_default",
+            "settings_pricing_policies",
+            ["is_default"],
+            unique=True,
+            postgresql_where=sa.text("is_default IS TRUE"),
+        )
 
     # ------------------------------------------------------------------
     # settings_commission_policies
@@ -114,6 +125,15 @@ def upgrade() -> None:
         "settings_commission_policies",
         ["is_default"],
     )
+    # PostgreSQL-only: enforce at most one default commission policy at the DB level.
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "uq_settings_commission_policies_single_default",
+            "settings_commission_policies",
+            ["is_default"],
+            unique=True,
+            postgresql_where=sa.text("is_default IS TRUE"),
+        )
 
     # ------------------------------------------------------------------
     # settings_project_templates
@@ -164,6 +184,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+
     op.drop_index(
         "ix_settings_project_templates_default_commission_policy_id",
         table_name="settings_project_templates",
@@ -178,6 +200,11 @@ def downgrade() -> None:
     )
     op.drop_table("settings_project_templates")
 
+    if bind.dialect.name == "postgresql":
+        op.drop_index(
+            "uq_settings_commission_policies_single_default",
+            table_name="settings_commission_policies",
+        )
     op.drop_index(
         "ix_settings_commission_policies_is_default",
         table_name="settings_commission_policies",
@@ -188,6 +215,11 @@ def downgrade() -> None:
     )
     op.drop_table("settings_commission_policies")
 
+    if bind.dialect.name == "postgresql":
+        op.drop_index(
+            "uq_settings_pricing_policies_single_default",
+            table_name="settings_pricing_policies",
+        )
     op.drop_index(
         "ix_settings_pricing_policies_is_default",
         table_name="settings_pricing_policies",
