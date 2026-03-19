@@ -132,9 +132,12 @@ The following are **not** part of any current implementation phase:
 
 ## Follow-Up PRs
 
-| PR Reference | Scope |
-|---|---|
-| PR-REDS-ARCH-002 | Write initial overview docs content in full detail |
-| PR-REDS-TECH-001 | Create first backend skeleton |
-| PR-REDS-DATA-001 | Define initial database schema for core hierarchy |
-| PR-REDS-MVP-001 | Implement Project / Phase / Building / Floor / Unit backbone |
+| PR Reference | Scope | Status |
+|---|---|---|
+| PR-REDS-ARCH-002 | Write initial overview docs content in full detail | ✅ Complete |
+| PR-REDS-TECH-001 | Create first backend skeleton | ✅ Complete |
+| PR-REDS-DATA-001 | Define initial database schema for core hierarchy | ✅ Complete |
+| PR-REDS-MVP-001 | Implement Project / Phase / Building / Floor / Unit backbone | ✅ Complete |
+| PR-D1 | Domain layer — asset backbone, commercial modules (Pricing, Sales, Payment Plans, Collections, Finance) | ✅ Complete |
+| PR-D2 | Commercial layer contracts — enforced ownership boundaries and architecture tests | ✅ Complete |
+| PR-E1 | Documentation / runtime alignment — docs aligned with actual runtime architecture | 🔄 In Progress |

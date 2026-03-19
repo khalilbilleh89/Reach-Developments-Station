@@ -209,13 +209,29 @@ reach-developments-station/
 │   │   │   ├── cashflow_forecast.py
 │   │   │   └── project_financial_summary.py
 │   │   │
-│   │   ├── registration/
+│   │   ├── registry/
 │   │   │   ├── api.py
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
+│   │   │   ├── repository.py
 │   │   │   ├── service.py
-│   │   │   ├── workflow_rules.py
-│   │   │   └── document_checklist.py
+│   │   │   ├── workflow_rules.py        # planned
+│   │   │   └── document_checklist.py   # planned
+│   │   │
+│   │   ├── construction/
+│   │   │   ├── api.py
+│   │   │   ├── models.py
+│   │   │   ├── schemas.py
+│   │   │   ├── repository.py
+│   │   │   ├── service.py
+│   │   │   └── exceptions.py
+│   │   │
+│   │   ├── settings/
+│   │   │   ├── api.py
+│   │   │   ├── models.py
+│   │   │   ├── schemas.py
+│   │   │   ├── repository.py
+│   │   │   └── service.py
 │   │   │
 │   │   ├── analytics/
 │   │   │   ├── api.py
@@ -256,7 +272,9 @@ reach-developments-station/
 │   ├── payment_plans/
 │   ├── collections/
 │   ├── finance/
-│   └── registration/
+│   ├── registry/
+│   ├── construction/
+│   └── settings/
 │
 ├── scripts/
 │   ├── seed_demo_data.py
