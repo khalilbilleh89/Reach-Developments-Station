@@ -36,7 +36,7 @@ from app.modules.registry.schemas import (
 )
 from app.modules.registry.service import RegistryService
 
-router = APIRouter(prefix="/registry", tags=["registry"])
+router = APIRouter(prefix="/registry", tags=["Registry"])
 
 
 def get_service(db: Session = Depends(get_db)) -> RegistryService:
@@ -188,7 +188,7 @@ def update_document(
 
 legacy_router = APIRouter(
     prefix="/registration",
-    tags=["registry"],
+    tags=["Registry"],
     include_in_schema=False,
 )
 

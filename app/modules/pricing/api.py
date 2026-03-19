@@ -21,7 +21,7 @@ from app.modules.pricing.schemas import (
 )
 from app.modules.pricing.service import PricingService
 
-router = APIRouter(prefix="/pricing", tags=["pricing"])
+router = APIRouter(prefix="/pricing", tags=["Pricing"])
 
 
 def get_service(db: Session = Depends(get_db)) -> PricingService:
