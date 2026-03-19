@@ -12,7 +12,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   listCostItems,
   createCostItem,
-  updateCostItem,
   deleteCostItem,
   getScopeCostSummary,
 } from "@/lib/construction-api";
@@ -117,8 +116,11 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
 
   useEffect(() => {
     fetchItems();
+  }, [fetchItems]);
+
+  useEffect(() => {
     fetchSummary();
-  }, [fetchItems, fetchSummary]);
+  }, [fetchSummary]);
 
   const handleDeleteItem = useCallback(
     async (itemId: string) => {

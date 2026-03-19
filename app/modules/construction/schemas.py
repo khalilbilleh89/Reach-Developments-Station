@@ -6,7 +6,7 @@ Pydantic request/response contracts for the Construction domain.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -382,6 +382,14 @@ class ConstructionCostItemList(BaseModel):
     total: int
 
 
+class CategoryCostBreakdown(BaseModel):
+    budget: Decimal
+    committed: Decimal
+    actual: Decimal
+    variance_to_budget: Decimal
+    variance_to_commitment: Decimal
+
+
 class ConstructionCostSummary(BaseModel):
     scope_id: str
     total_budget: Decimal
@@ -389,4 +397,4 @@ class ConstructionCostSummary(BaseModel):
     total_actual: Decimal
     total_variance_to_budget: Decimal
     total_variance_to_commitment: Decimal
-    by_category: dict
+    by_category: Dict[str, CategoryCostBreakdown]

@@ -383,12 +383,32 @@ class ConstructionService:
     def update_cost_item(
         self, cost_item_id: str, data: ConstructionCostItemUpdate
     ) -> ConstructionCostItemResponse:
+        from decimal import Decimal as D
+
         item = self.cost_repo.get_by_id(cost_item_id)
         if not item:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Construction cost item '{cost_item_id}' not found.",
             )
+
+        # Compute merged amounts to enforce the "at least one non-zero" invariant
+        update_fields = data.model_dump(exclude_unset=True)
+        D_ZERO = D("0.00")
+
+        def _merged(field: str, existing) -> D:
+            val = update_fields[field] if field in update_fields else existing
+            return val if val is not None else D_ZERO
+
+        merged_budget = _merged("budget_amount", item.budget_amount)
+        merged_committed = _merged("committed_amount", item.committed_amount)
+        merged_actual = _merged("actual_amount", item.actual_amount)
+        if merged_budget == 0 and merged_committed == 0 and merged_actual == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="At least one of budget_amount, committed_amount, or actual_amount must be non-zero.",
+            )
+
         updated = self.cost_repo.update(item, data)
         return ConstructionCostItemResponse.from_orm_with_variance(updated)
 
@@ -410,38 +430,19 @@ class ConstructionService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Construction scope '{scope_id}' not found.",
             )
-        items = self.cost_repo.list(scope_id=scope_id, skip=0, limit=10000)
 
-        total_budget = D("0.00")
-        total_committed = D("0.00")
-        total_actual = D("0.00")
+        total_budget, total_committed, total_actual = self.cost_repo.get_scope_totals(scope_id)
+        category_rows = self.cost_repo.get_scope_totals_by_category(scope_id)
+
         by_category: dict = {}
-
-        for item in items:
-            b = item.budget_amount or D("0.00")
-            c = item.committed_amount or D("0.00")
-            a = item.actual_amount or D("0.00")
-            total_budget += b
-            total_committed += c
-            total_actual += a
-            cat = item.cost_category
-            if cat not in by_category:
-                by_category[cat] = {
-                    "budget": D("0.00"),
-                    "committed": D("0.00"),
-                    "actual": D("0.00"),
-                }
-            by_category[cat]["budget"] += b
-            by_category[cat]["committed"] += c
-            by_category[cat]["actual"] += a
-
-        # Convert Decimal values to float for JSON serialisability in the dict
-        for cat_data in by_category.values():
-            cat_data["variance_to_budget"] = float(cat_data["actual"] - cat_data["budget"])
-            cat_data["variance_to_commitment"] = float(cat_data["actual"] - cat_data["committed"])
-            cat_data["budget"] = float(cat_data["budget"])
-            cat_data["committed"] = float(cat_data["committed"])
-            cat_data["actual"] = float(cat_data["actual"])
+        for cat, (b, c, a) in category_rows.items():
+            by_category[cat] = {
+                "budget": b,
+                "committed": c,
+                "actual": a,
+                "variance_to_budget": a - b,
+                "variance_to_commitment": a - c,
+            }
 
         return ConstructionCostSummary(
             scope_id=scope_id,

@@ -207,11 +207,11 @@ export interface ConstructionCostItemUpdate {
 }
 
 export interface CategoryCostBreakdown {
-  budget: number;
-  committed: number;
-  actual: number;
-  variance_to_budget: number;
-  variance_to_commitment: number;
+  budget: string;
+  committed: string;
+  actual: string;
+  variance_to_budget: string;
+  variance_to_commitment: string;
 }
 
 export interface ConstructionCostSummary {

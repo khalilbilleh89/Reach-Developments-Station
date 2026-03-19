@@ -16,7 +16,6 @@ Validates the full vertical slice:
 
 from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -348,6 +347,57 @@ def test_update_cost_item_not_found(client: TestClient):
     assert resp.status_code == 404
 
 
+def test_update_cost_item_all_amounts_to_zero_rejected(client: TestClient):
+    """PATCH that would leave budget/committed/actual all zero must be rejected."""
+    project_id = _create_project(client, "COST-P16B")
+    scope = _create_scope(client, project_id)
+    created = _create_cost_item(
+        client, scope["id"], budget_amount=5000.00, committed_amount=0.00, actual_amount=0.00
+    )
+    # Set the only non-zero amount to zero
+    resp = client.patch(
+        f"/api/v1/construction/cost-items/{created['id']}",
+        json={"budget_amount": 0.00},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_cost_item_partial_zero_allowed(client: TestClient):
+    """PATCH that zeroes some amounts but leaves at least one non-zero is OK."""
+    project_id = _create_project(client, "COST-P16C")
+    scope = _create_scope(client, project_id)
+    created = _create_cost_item(
+        client,
+        scope["id"],
+        budget_amount=10000.00,
+        committed_amount=8000.00,
+        actual_amount=0.00,
+    )
+    # Zero out committed; budget remains non-zero — should succeed
+    resp = client.patch(
+        f"/api/v1/construction/cost-items/{created['id']}",
+        json={"committed_amount": 0.00},
+    )
+    assert resp.status_code == 200
+    assert Decimal(str(resp.json()["committed_amount"])) == Decimal("0.00")
+    assert Decimal(str(resp.json()["budget_amount"])) == Decimal("10000.00")
+
+
+def test_update_cost_item_no_amount_fields_allowed(client: TestClient):
+    """PATCH with no amount fields at all uses existing values — must succeed."""
+    project_id = _create_project(client, "COST-P16D")
+    scope = _create_scope(client, project_id)
+    created = _create_cost_item(client, scope["id"], budget_amount=7000.00)
+    # Update only description — no amount fields touched
+    resp = client.patch(
+        f"/api/v1/construction/cost-items/{created['id']}",
+        json={"description": "Updated description"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "Updated description"
+    assert Decimal(str(resp.json()["budget_amount"])) == Decimal("7000.00")
+
+
 # ── Delete cost item ──────────────────────────────────────────────────────────
 
 
@@ -477,15 +527,15 @@ def test_cost_summary_by_category(client: TestClient):
     assert "permits" in data["by_category"]
 
     eq = data["by_category"]["equipment"]
-    assert eq["budget"] == pytest.approx(20000.00)
-    assert eq["committed"] == pytest.approx(18000.00)
-    assert eq["actual"] == pytest.approx(19000.00)
-    assert eq["variance_to_budget"] == pytest.approx(-1000.00)
-    assert eq["variance_to_commitment"] == pytest.approx(1000.00)
+    assert Decimal(str(eq["budget"])) == Decimal("20000.00")
+    assert Decimal(str(eq["committed"])) == Decimal("18000.00")
+    assert Decimal(str(eq["actual"])) == Decimal("19000.00")
+    assert Decimal(str(eq["variance_to_budget"])) == Decimal("-1000.00")
+    assert Decimal(str(eq["variance_to_commitment"])) == Decimal("1000.00")
 
     pm = data["by_category"]["permits"]
-    assert pm["budget"] == pytest.approx(3000.00)
-    assert pm["variance_to_budget"] == pytest.approx(0.00)
+    assert Decimal(str(pm["budget"])) == Decimal("3000.00")
+    assert Decimal(str(pm["variance_to_budget"])) == Decimal("0.00")
 
 
 def test_cost_summary_unknown_scope_returns_404(client: TestClient):
