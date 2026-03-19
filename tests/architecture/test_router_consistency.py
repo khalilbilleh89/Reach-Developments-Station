@@ -36,31 +36,6 @@ CORE_DOMAIN_ROUTERS = {
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_all_routes():
-    """Return all routes registered on the application."""
-    return list(app.routes)
-
-
-def _get_registered_routers():
-    """Collect (prefix, tags) from all APIRouter-sourced routes."""
-    from fastapi.routing import APIRoute
-
-    seen = {}
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            # FastAPI flattens routers into individual routes on the app.
-            # Recover the router prefix from the route path and tags.
-            for tag in route.tags or []:
-                if tag not in seen:
-                    seen[tag] = route.path
-    return seen
-
-
-# ---------------------------------------------------------------------------
 # Test class: router prefix registration
 # ---------------------------------------------------------------------------
 
@@ -76,8 +51,9 @@ class TestRouterPrefixRegistration:
         assert api_routes, "No API routes found on the application"
 
         # Routes that are intentionally outside the /api/v1 namespace.
-        # Health and auth endpoints are registered directly on the app.
-        _EXEMPT_PREFIXES = ("/health", "/auth", "/docs", "/openapi", "/redoc")
+        # Only /health routes live outside the versioned prefix; all other
+        # documented routes (including /auth) are included under _API_PREFIX.
+        _EXEMPT_PREFIXES = ("/health",)
 
         for route in api_routes:
             if route.include_in_schema and not route.path.startswith(_EXEMPT_PREFIXES):
@@ -199,14 +175,11 @@ class TestOpenAPISchema:
         assert response.status_code == 200, "OpenAPI schema failed to generate"
         return response.json()
 
-    def test_openapi_schema_loads_successfully(self, client):
+    def test_openapi_schema_loads_successfully(self, openapi_schema):
         """GET /openapi.json must return 200 with a valid schema."""
-        response = client.get("/openapi.json")
-        assert response.status_code == 200
-        schema = response.json()
-        assert "openapi" in schema
-        assert "paths" in schema
-        assert "info" in schema
+        assert "openapi" in openapi_schema
+        assert "paths" in openapi_schema
+        assert "info" in openapi_schema
 
     def test_all_core_domain_tags_present_in_openapi(self, openapi_schema):
         """All 8 core domain tags must appear in the OpenAPI schema."""
