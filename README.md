@@ -2,21 +2,67 @@
 
 **Real Estate Development Operating System**
 
-Reach Developments Station is a purpose-built operating system for real estate developers. It spans the full development lifecycle — from land underwriting and concept planning through feasibility, pricing, sales, payment plans, collections, finance, registration, and reporting.
+Reach Developments Station is a purpose-built operating system for real estate developers. It spans the full development lifecycle — from land underwriting and concept planning through feasibility, pricing, sales, payment plans, collections, finance, registry, construction, and reporting.
 
 ---
 
-## Platform Purpose
+## System Overview
 
-This platform is **not** a generic CRM or spreadsheet replacement. It is a domain-specific operating system designed to manage the complexity of multi-project, multi-phase real estate development businesses.
+The platform manages the full commercial and operational lifecycle of a real estate development business:
 
-The system is built around a master asset hierarchy:
+- **Asset management** — projects, phases, buildings, floors, units
+- **Pre-development** — land underwriting, feasibility analysis
+- **Commercial** — pricing engine, sales contracts, payment plans, collections
+- **Finance** — project financial summaries, cashflow, commissions
+- **Post-sale** — registry (title transfer workflow), construction progress tracking
+- **Configuration** — system-level pricing and commission policies, project templates
+
+---
+
+## Architecture
+
+The platform runs as a **single-service architecture** on Render:
+
+```
+Render Web Service
+ ├── FastAPI backend       /api/v1/*
+ ├── Next.js frontend      /* (static export served by FastAPI)
+ └── PostgreSQL database
+```
+
+The asset hierarchy is the central organizing principle of the entire system:
 
 ```
 Project → Phase → Building → Floor → Unit
 ```
 
-All domain modules — pricing, sales, payment plans, collections, finance — attach to this backbone.
+All commercial domain modules — pricing, sales, payment plans, collections, finance, registry — attach to this backbone.
+
+---
+
+## Module Overview
+
+| Layer | Modules |
+|---|---|
+| Asset Registry | Projects, Phases, Buildings, Floors, Units |
+| Pre-Development | Land, Feasibility |
+| Commercial | Pricing, Sales & Contracts, Sales Exceptions, Payment Plans, Collections & Receivables |
+| Finance | Finance Summary, Cashflow, Commissions |
+| Post-Sale | Registry (title transfer), Construction (delivery tracking) |
+| Configuration | Settings (pricing policies, commission policies, project templates) |
+
+### API Routes (all under `/api/v1/`)
+
+| Domain | Route Prefix |
+|---|---|
+| Projects | `/api/v1/projects` |
+| Pricing | `/api/v1/pricing` |
+| Sales | `/api/v1/sales` |
+| Payment Plans | `/api/v1/payment-plans` |
+| Finance | `/api/v1/finance` |
+| Registry | `/api/v1/registry` |
+| Construction | `/api/v1/construction` |
+| Settings | `/api/v1/settings` |
 
 ---
 
@@ -39,6 +85,7 @@ reach-developments-station/
 │   ├── shared/                    # Cross-cutting utilities, schemas, enums
 │   ├── modules/                   # Domain modules
 │   └── db/                        # Database base, migrations, seed data
+├── frontend/                      # Next.js frontend (static export)
 ├── tests/                         # Test suite
 ├── scripts/                       # Developer utility scripts
 └── infrastructure/                # Deployment configuration
@@ -61,34 +108,62 @@ reach-developments-station/
 
 ---
 
-## System Backbone Summary
+## Local Development
 
-The platform is built around the asset hierarchy `Project → Phase → Building → Floor → Unit`. Domain modules are organized into layers:
+### Backend
 
-| Layer | Modules |
-|---|---|
-| Master Data | Projects, Phases, Buildings, Floors, Units, Land |
-| Pre-Development | Concept Planning, Feasibility, Cost Planning |
-| Delivery Governance | Design & Delivery Governance |
-| Commercial | Pricing, Price Escalation, Sales & Contracts, Sales Exceptions |
-| Finance | Payment Plans, Collections & Receivables, Revenue Recognition, Finance Summary |
-| Post-Sale | Registration & Conveyancing, Commissions |
-| Intelligence | Analytics, Market Intelligence, Document Intelligence |
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # configure DATABASE_URL and other variables
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev        # development server at http://localhost:3000
+```
+
+Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` to point at the backend:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
 
 ---
 
-## MVP Module Summary
+## Deployment
 
-The first implementation phase focuses on the essential backbone:
+The platform deploys as a **single Render web service**:
 
-- **Asset Hierarchy**: Projects, Phases, Buildings, Floors, Units
-- **Pre-Development**: Land, Feasibility
-- **Commercial**: Pricing, Sales
-- **Finance**: Payment Plans, Collections, Finance
+- **Build command:** `cd frontend && npm ci && npm run build && cd .. && pip install -r requirements.txt && alembic upgrade head`
+- **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Database:** PostgreSQL (attached Render managed database)
 
-See [`docs/02-product/module-scope-mvp.md`](docs/02-product/module-scope-mvp.md) for the full MVP scope definition.
+The Next.js frontend is compiled to a static export (`frontend/out/`) and served directly by FastAPI alongside the API.
 
-See [`docs/03-technical/backend-architecture.md`](docs/03-technical/backend-architecture.md) for the full target backend structure.
+See [`docs/03-technical/deployment-architecture.md`](docs/03-technical/deployment-architecture.md) for full deployment details.
+
+---
+
+## Testing
+
+```bash
+# Run the full test suite
+pytest
+
+# Run architecture boundary tests only
+pytest tests/architecture/test_commercial_layer_contracts.py -v
+
+# Lint
+ruff check .
+ruff format .
+```
 
 ---
 
@@ -96,32 +171,15 @@ See [`docs/03-technical/backend-architecture.md`](docs/03-technical/backend-arch
 
 | Property | Value |
 |---|---|
-| Backend API | ✅ Deployed and live on Render |
-| Deployment target | [Render](https://render.com) |
+| Backend API | ✅ Live on Render |
+| Frontend | ✅ Next.js static export served by FastAPI |
+| Deployment target | [Render](https://render.com) — single web service |
 | ASGI entrypoint | `app.main:app` |
 | Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
-| Scope | Backend / API-first — no frontend UI |
 | Liveness endpoint | `GET /health` |
-| Root endpoint | `GET /` returns service name, env, and status |
+| Root endpoint | `GET /` serves the Next.js frontend (or JSON status when frontend build is absent) |
 
-> **Note:** The root path `/` returns a simple JSON status response. All domain APIs are served under `/api/v1/`.
->
-> See [`infrastructure/render/render.yaml`](infrastructure/render/render.yaml) and [`docs/03-technical/deployment-architecture.md`](docs/03-technical/deployment-architecture.md) for full deployment details.
-
----
-
-## Setup Orientation
-
-This repository uses Python (FastAPI). A local development environment can be set up using a virtual environment:
-
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-Copy `.env.example` to `.env` and configure variables before starting the server.
+See [`infrastructure/render/render.yaml`](infrastructure/render/render.yaml) and [`docs/03-technical/deployment-architecture.md`](docs/03-technical/deployment-architecture.md) for full deployment details.
 
 ---
 
