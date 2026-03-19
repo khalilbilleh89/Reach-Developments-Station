@@ -18,7 +18,6 @@ All tests parse the FastAPI OpenAPI schema or scan frontend source files
 without starting an external server.
 """
 
-import os
 import re
 from pathlib import Path
 
@@ -65,71 +64,72 @@ FORBIDDEN_LEGACY_PATTERNS = [
 
 # (method, path_pattern) pairs that must exist in the backend OpenAPI schema.
 # Path patterns use {param} placeholders matching the OpenAPI convention.
+# Paths are built from _API_PREFIX so the test tracks the running app prefix.
 CRITICAL_FRONTEND_CONTRACT_PAIRS = [
     # Projects
-    ("GET", "/api/v1/projects"),
-    ("POST", "/api/v1/projects"),
-    ("GET", "/api/v1/projects/{project_id}"),
-    ("PATCH", "/api/v1/projects/{project_id}"),
-    ("DELETE", "/api/v1/projects/{project_id}"),
-    ("POST", "/api/v1/projects/{project_id}/archive"),
-    ("GET", "/api/v1/projects/{project_id}/summary"),
+    ("GET", f"{_API_PREFIX}/projects"),
+    ("POST", f"{_API_PREFIX}/projects"),
+    ("GET", f"{_API_PREFIX}/projects/{{project_id}}"),
+    ("PATCH", f"{_API_PREFIX}/projects/{{project_id}}"),
+    ("DELETE", f"{_API_PREFIX}/projects/{{project_id}}"),
+    ("POST", f"{_API_PREFIX}/projects/{{project_id}}/archive"),
+    ("GET", f"{_API_PREFIX}/projects/{{project_id}}/summary"),
     # Sales
-    ("GET", "/api/v1/sales/contracts"),
-    ("POST", "/api/v1/sales/contracts"),
-    ("GET", "/api/v1/sales/contracts/{contract_id}"),
-    ("PATCH", "/api/v1/sales/contracts/{contract_id}"),
-    ("POST", "/api/v1/sales/contracts/{contract_id}/cancel"),
-    ("GET", "/api/v1/sales-exceptions/projects/{project_id}"),
+    ("GET", f"{_API_PREFIX}/sales/contracts"),
+    ("POST", f"{_API_PREFIX}/sales/contracts"),
+    ("GET", f"{_API_PREFIX}/sales/contracts/{{contract_id}}"),
+    ("PATCH", f"{_API_PREFIX}/sales/contracts/{{contract_id}}"),
+    ("POST", f"{_API_PREFIX}/sales/contracts/{{contract_id}}/cancel"),
+    ("GET", f"{_API_PREFIX}/sales-exceptions/projects/{{project_id}}"),
     # Payment Plans
-    ("GET", "/api/v1/payment-plans/contracts/{contract_id}/schedule"),
-    ("GET", "/api/v1/payment-plans/contracts/{contract_id}/installments"),
-    ("GET", "/api/v1/payment-plans/contracts/{contract_id}/payment-plan"),
+    ("GET", f"{_API_PREFIX}/payment-plans/contracts/{{contract_id}}/schedule"),
+    ("GET", f"{_API_PREFIX}/payment-plans/contracts/{{contract_id}}/installments"),
+    ("GET", f"{_API_PREFIX}/payment-plans/contracts/{{contract_id}}/payment-plan"),
     # Finance
-    ("GET", "/api/v1/finance/projects/{project_id}/summary"),
+    ("GET", f"{_API_PREFIX}/finance/projects/{{project_id}}/summary"),
     # Registry (canonical routes — not /registration/*)
-    ("POST", "/api/v1/registry/cases"),
-    ("GET", "/api/v1/registry/cases/{case_id}"),
-    ("PATCH", "/api/v1/registry/cases/{case_id}"),
-    ("GET", "/api/v1/registry/projects/{project_id}/cases"),
-    ("GET", "/api/v1/registry/projects/{project_id}/summary"),
-    ("GET", "/api/v1/registry/cases/{case_id}/milestones"),
-    ("PATCH", "/api/v1/registry/cases/{case_id}/milestones/{milestone_id}"),
-    ("GET", "/api/v1/registry/cases/{case_id}/documents"),
-    ("PATCH", "/api/v1/registry/cases/{case_id}/documents/{document_id}"),
+    ("POST", f"{_API_PREFIX}/registry/cases"),
+    ("GET", f"{_API_PREFIX}/registry/cases/{{case_id}}"),
+    ("PATCH", f"{_API_PREFIX}/registry/cases/{{case_id}}"),
+    ("GET", f"{_API_PREFIX}/registry/projects/{{project_id}}/cases"),
+    ("GET", f"{_API_PREFIX}/registry/projects/{{project_id}}/summary"),
+    ("GET", f"{_API_PREFIX}/registry/cases/{{case_id}}/milestones"),
+    ("PATCH", f"{_API_PREFIX}/registry/cases/{{case_id}}/milestones/{{milestone_id}}"),
+    ("GET", f"{_API_PREFIX}/registry/cases/{{case_id}}/documents"),
+    ("PATCH", f"{_API_PREFIX}/registry/cases/{{case_id}}/documents/{{document_id}}"),
     # Construction
-    ("GET", "/api/v1/construction/scopes"),
-    ("POST", "/api/v1/construction/scopes"),
-    ("GET", "/api/v1/construction/scopes/{scope_id}"),
-    ("PATCH", "/api/v1/construction/scopes/{scope_id}"),
-    ("DELETE", "/api/v1/construction/scopes/{scope_id}"),
-    ("GET", "/api/v1/construction/milestones"),
-    ("POST", "/api/v1/construction/milestones"),
-    ("GET", "/api/v1/construction/milestones/{milestone_id}"),
-    ("PATCH", "/api/v1/construction/milestones/{milestone_id}"),
-    ("DELETE", "/api/v1/construction/milestones/{milestone_id}"),
-    ("POST", "/api/v1/construction/milestones/{milestone_id}/progress-updates"),
-    ("GET", "/api/v1/construction/milestones/{milestone_id}/progress-updates"),
-    ("GET", "/api/v1/construction/progress-updates/{update_id}"),
-    ("DELETE", "/api/v1/construction/progress-updates/{update_id}"),
-    ("GET", "/api/v1/construction/projects/{project_id}/dashboard"),
-    ("GET", "/api/v1/construction/scopes/{scope_id}/cost-summary"),
+    ("GET", f"{_API_PREFIX}/construction/scopes"),
+    ("POST", f"{_API_PREFIX}/construction/scopes"),
+    ("GET", f"{_API_PREFIX}/construction/scopes/{{scope_id}}"),
+    ("PATCH", f"{_API_PREFIX}/construction/scopes/{{scope_id}}"),
+    ("DELETE", f"{_API_PREFIX}/construction/scopes/{{scope_id}}"),
+    ("GET", f"{_API_PREFIX}/construction/milestones"),
+    ("POST", f"{_API_PREFIX}/construction/milestones"),
+    ("GET", f"{_API_PREFIX}/construction/milestones/{{milestone_id}}"),
+    ("PATCH", f"{_API_PREFIX}/construction/milestones/{{milestone_id}}"),
+    ("DELETE", f"{_API_PREFIX}/construction/milestones/{{milestone_id}}"),
+    ("POST", f"{_API_PREFIX}/construction/milestones/{{milestone_id}}/progress-updates"),
+    ("GET", f"{_API_PREFIX}/construction/milestones/{{milestone_id}}/progress-updates"),
+    ("GET", f"{_API_PREFIX}/construction/progress-updates/{{update_id}}"),
+    ("DELETE", f"{_API_PREFIX}/construction/progress-updates/{{update_id}}"),
+    ("GET", f"{_API_PREFIX}/construction/projects/{{project_id}}/dashboard"),
+    ("GET", f"{_API_PREFIX}/construction/scopes/{{scope_id}}/cost-summary"),
     # Settings
-    ("GET", "/api/v1/settings/pricing-policies"),
-    ("POST", "/api/v1/settings/pricing-policies"),
-    ("GET", "/api/v1/settings/pricing-policies/{policy_id}"),
-    ("PATCH", "/api/v1/settings/pricing-policies/{policy_id}"),
-    ("DELETE", "/api/v1/settings/pricing-policies/{policy_id}"),
-    ("GET", "/api/v1/settings/commission-policies"),
-    ("POST", "/api/v1/settings/commission-policies"),
-    ("GET", "/api/v1/settings/commission-policies/{policy_id}"),
-    ("PATCH", "/api/v1/settings/commission-policies/{policy_id}"),
-    ("DELETE", "/api/v1/settings/commission-policies/{policy_id}"),
-    ("GET", "/api/v1/settings/project-templates"),
-    ("POST", "/api/v1/settings/project-templates"),
-    ("GET", "/api/v1/settings/project-templates/{template_id}"),
-    ("PATCH", "/api/v1/settings/project-templates/{template_id}"),
-    ("DELETE", "/api/v1/settings/project-templates/{template_id}"),
+    ("GET", f"{_API_PREFIX}/settings/pricing-policies"),
+    ("POST", f"{_API_PREFIX}/settings/pricing-policies"),
+    ("GET", f"{_API_PREFIX}/settings/pricing-policies/{{policy_id}}"),
+    ("PATCH", f"{_API_PREFIX}/settings/pricing-policies/{{policy_id}}"),
+    ("DELETE", f"{_API_PREFIX}/settings/pricing-policies/{{policy_id}}"),
+    ("GET", f"{_API_PREFIX}/settings/commission-policies"),
+    ("POST", f"{_API_PREFIX}/settings/commission-policies"),
+    ("GET", f"{_API_PREFIX}/settings/commission-policies/{{policy_id}}"),
+    ("PATCH", f"{_API_PREFIX}/settings/commission-policies/{{policy_id}}"),
+    ("DELETE", f"{_API_PREFIX}/settings/commission-policies/{{policy_id}}"),
+    ("GET", f"{_API_PREFIX}/settings/project-templates"),
+    ("POST", f"{_API_PREFIX}/settings/project-templates"),
+    ("GET", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
+    ("PATCH", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
+    ("DELETE", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
 ]
 
 
@@ -278,10 +278,10 @@ class TestBackendContractCoverage:
         """Registry canonical /registry/* paths must be in the OpenAPI schema."""
         schema_paths = openapi_schema.get("paths", {})
         required_registry_paths = [
-            "/api/v1/registry/cases",
-            "/api/v1/registry/cases/{case_id}",
-            "/api/v1/registry/projects/{project_id}/cases",
-            "/api/v1/registry/projects/{project_id}/summary",
+            f"{_API_PREFIX}/registry/cases",
+            f"{_API_PREFIX}/registry/cases/{{case_id}}",
+            f"{_API_PREFIX}/registry/projects/{{project_id}}/cases",
+            f"{_API_PREFIX}/registry/projects/{{project_id}}/summary",
         ]
         missing = [p for p in required_registry_paths if p not in schema_paths]
         assert not missing, (
@@ -293,9 +293,9 @@ class TestBackendContractCoverage:
         """Settings domain routes must be in the OpenAPI schema."""
         schema_paths = openapi_schema.get("paths", {})
         required_settings_paths = [
-            "/api/v1/settings/pricing-policies",
-            "/api/v1/settings/commission-policies",
-            "/api/v1/settings/project-templates",
+            f"{_API_PREFIX}/settings/pricing-policies",
+            f"{_API_PREFIX}/settings/commission-policies",
+            f"{_API_PREFIX}/settings/project-templates",
         ]
         missing = [p for p in required_settings_paths if p not in schema_paths]
         assert not missing, (
@@ -307,8 +307,8 @@ class TestBackendContractCoverage:
         """Construction progress update routes must be in the OpenAPI schema."""
         schema_paths = openapi_schema.get("paths", {})
         required_progress_paths = [
-            "/api/v1/construction/milestones/{milestone_id}/progress-updates",
-            "/api/v1/construction/progress-updates/{update_id}",
+            f"{_API_PREFIX}/construction/milestones/{{milestone_id}}/progress-updates",
+            f"{_API_PREFIX}/construction/progress-updates/{{update_id}}",
         ]
         missing = [p for p in required_progress_paths if p not in schema_paths]
         assert not missing, (

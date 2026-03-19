@@ -1,32 +1,22 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import { listProjects } from "@/lib/projects-api";
 import {
   listProjectCases,
   getProjectSummary,
 } from "@/lib/registry-api";
-import { apiFetch } from "@/lib/api-client";
-import type { RegistrationCase, CaseStatus } from "@/lib/registry-types";
+import type { Project } from "@/lib/projects-types";
+import type {
+  RegistrationCase,
+  CaseStatus,
+  RegistrationSummaryResponse,
+} from "@/lib/registry-types";
 import styles from "@/styles/demo-shell.module.css";
 import selectorStyles from "@/styles/finance-dashboard.module.css";
 import constructionStyles from "@/styles/construction.module.css";
-
-// ---------------------------------------------------------------------------
-// Project list (minimal shape — we only need id/name)
-// ---------------------------------------------------------------------------
-
-interface ProjectListItem {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface ProjectListResponse {
-  items: ProjectListItem[];
-  total: number;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -44,7 +34,6 @@ function statusBadgeClass(status: CaseStatus): string {
     case "awaiting_documents":
       return styles.badgeRed;
     case "draft":
-      return styles.badgeGray;
     case "cancelled":
       return styles.badgeGray;
     default:
@@ -93,26 +82,24 @@ function countMissingDocs(c: RegistrationCase): number {
  * Select a project to view its registration cases and KPI summary.
  */
 export default function Page() {
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
   const [cases, setCases] = useState<RegistrationCase[]>([]);
-  const [summary, setSummary] = useState<{
-    total_sold_units: number;
-    registration_cases_open: number;
-    registration_cases_completed: number;
-    sold_not_registered: number;
-    registration_completion_ratio: number;
-  } | null>(null);
+  const [summary, setSummary] = useState<RegistrationSummaryResponse | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+
+  // Request counter: guards against stale async responses overwriting state
+  // when the user changes project before the previous fetch completes.
+  const requestIdRef = useRef(0);
 
   // Load project list on mount
   useEffect(() => {
     setProjectsLoading(true);
-    apiFetch<ProjectListResponse>("/projects?limit=200")
+    listProjects({ limit: 200 })
       .then((resp) => {
         setProjects(resp.items);
         if (resp.items.length > 0) {
@@ -130,25 +117,35 @@ export default function Page() {
   // Fetch cases and summary when project changes
   const fetchProjectData = useCallback((projectId: string) => {
     if (!projectId) return;
+
+    // Increment and capture this request's ID before starting async work.
+    const thisRequestId = ++requestIdRef.current;
+
     setDataLoading(true);
     setDataError(null);
     setCases([]);
     setSummary(null);
 
     Promise.all([
-      listProjectCases(projectId, { limit: 500 }),
+      listProjectCases(projectId, { limit: 100 }),
       getProjectSummary(projectId),
     ])
       .then(([casesResp, summaryResp]) => {
+        // Discard the result if a newer request has already been issued.
+        if (thisRequestId !== requestIdRef.current) return;
         setCases(casesResp.items);
         setSummary(summaryResp);
       })
       .catch((err: unknown) => {
+        if (thisRequestId !== requestIdRef.current) return;
         setDataError(
           err instanceof Error ? err.message : "Failed to load registry data.",
         );
       })
-      .finally(() => setDataLoading(false));
+      .finally(() => {
+        if (thisRequestId !== requestIdRef.current) return;
+        setDataLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -161,7 +158,10 @@ export default function Page() {
     (c) => c.status === "awaiting_documents",
   ).length;
   const inProgressCount = cases.filter(
-    (c) => c.status === "in_progress" || c.status === "under_review" || c.status === "submitted",
+    (c) =>
+      c.status === "in_progress" ||
+      c.status === "under_review" ||
+      c.status === "submitted",
   ).length;
   const completedCount = cases.filter((c) => c.status === "completed").length;
 

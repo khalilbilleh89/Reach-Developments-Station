@@ -59,8 +59,10 @@ export interface PricingPolicy {
   description: string | null;
   is_default: boolean;
   currency: string;
-  base_markup_percent: number;
-  balcony_price_factor: number;
+  /** Serialized as string in JSON to preserve Decimal precision. */
+  base_markup_percent: string;
+  /** Serialized as string in JSON to preserve Decimal precision. */
+  balcony_price_factor: string;
   parking_price_mode: PricingPriceMode;
   storage_price_mode: PricingPriceMode;
   is_active: boolean;
@@ -104,7 +106,8 @@ export interface CommissionPolicy {
   name: string;
   description: string | null;
   is_default: boolean;
-  pool_percent: number;
+  /** Serialized as string in JSON to preserve Decimal precision. */
+  pool_percent: string;
   calculation_mode: CommissionCalculationMode;
   is_active: boolean;
   created_at: string;
