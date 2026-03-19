@@ -1,15 +1,17 @@
 """
 Smoke test: Sales Lifecycle
 
-Verifies the full commercial lifecycle end-to-end:
-  Project → Unit → Pricing → Buyer → Reservation → Sales Contract → Payment Schedule
+Verifies sequential creation through the commercial lifecycle:
+  Project → Unit → Pricing attributes → Buyer → Reservation → Sales Contract → Payment Schedule
 
 Assertions:
-  - Contract references unit
+  - Contract references unit and buyer
   - Payment schedule references contract
-"""
 
-from datetime import date
+Note: reservation and contract are created independently (no reservation_id linkage).
+The test verifies that both resources are created successfully and reference the
+correct unit/buyer, not that the reservation is converted on contract creation.
+"""
 
 from fastapi.testclient import TestClient
 
@@ -136,7 +138,11 @@ def test_sales_lifecycle_payment_schedule_references_contract(client: TestClient
 
 
 def test_sales_lifecycle_full_flow(client: TestClient):
-    """Complete flow from unit creation through payment schedule generation."""
+    """Smoke: create unit → pricing attrs → buyer → reservation → contract → payment schedule.
+
+    Reservation and contract are created independently; this verifies each step
+    in the sequence succeeds and produces correctly-referenced records.
+    """
     unit_id = _build_unit(client, "SMKS-003")
     _add_pricing(client, unit_id)
     buyer_id = _create_buyer(client, "smoke.c@example.com")

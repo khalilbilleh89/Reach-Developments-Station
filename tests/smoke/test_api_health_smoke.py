@@ -46,7 +46,7 @@ def test_openapi_schema_valid(client: TestClient):
         "/api/v1/projects",
         "/api/v1/pricing/project/nonexistent-project",
         "/api/v1/sales/buyers",
-        "/api/v1/registry/cases",
+        "/api/v1/registry/projects/nonexistent-project/cases",
         "/api/v1/construction/scopes",
         "/api/v1/settings/pricing-policies",
     ],
