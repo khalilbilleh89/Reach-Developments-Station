@@ -17,8 +17,8 @@ Validates project-level construction dashboard aggregation:
 
 from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 
 # ── Helper factories ──────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ def _create_progress_update(
     return resp.json()
 
 
-def _get_dashboard(client: TestClient, project_id: str) -> dict:
+def _get_dashboard(client: TestClient, project_id: str) -> Response:
     resp = client.get(f"/api/v1/construction/projects/{project_id}/dashboard")
     return resp
 
@@ -276,28 +276,13 @@ def test_dashboard_cost_aggregation_single_scope(client: TestClient):
 def test_dashboard_multiple_scopes_totals(client: TestClient):
     project_id = _create_project(client, "DASH-P07")
 
-    # Scope 1: one project → one scope only (uniqueness constraint)
-    # We need two separate projects to test multiple scopes but the
-    # constraint is per project/phase/building combo.  Use separate
-    # project+phase combos or create phases.
-    # Actually the scope uniqueness is per (project_id, phase_id, building_id)
-    # combination. Two scopes on same project but different phases work fine.
-    # But for the simplest approach, create two different projects and then
-    # test each independently… or use two scopes with different phase_ids.
-    #
-    # Simpler: just use two projects with one scope each and verify isolation.
-    # But here we specifically want multiple scopes under the SAME project.
-    # The unique constraint is per (project_id, phase_id, building_id) trio.
-    # So two scopes linked to different phases of the same project are fine.
-    #
-    # However creating phases requires project. Let's create a project with phases.
     phase_resp = client.post(
         "/api/v1/phases", json={"project_id": project_id, "name": "Phase 1", "sequence": 1}
     )
     assert phase_resp.status_code == 201
     phase_id = phase_resp.json()["id"]
 
-    # Scope A: linked to project (project_id only, phase_id=None)
+    # Scope A: linked directly to project
     scope_a_resp = client.post(
         "/api/v1/construction/scopes",
         json={"project_id": project_id, "name": "Scope A"},
@@ -305,23 +290,28 @@ def test_dashboard_multiple_scopes_totals(client: TestClient):
     assert scope_a_resp.status_code == 201
     scope_a = scope_a_resp.json()
 
-    # Scope B: linked to phase (phase_id only, project_id=None)
+    # Scope B: linked to a phase under the project (no direct project_id)
     scope_b_resp = client.post(
         "/api/v1/construction/scopes",
         json={"phase_id": phase_id, "name": "Scope B"},
     )
     assert scope_b_resp.status_code == 201
+    scope_b = scope_b_resp.json()
 
     _create_cost_item(client, scope_a["id"], budget_amount=10000.0, actual_amount=5000.0)
+    _create_cost_item(client, scope_b["id"], budget_amount=3000.0, actual_amount=1000.0)
 
-    # Only scope_a is linked to project_id; scope_b is linked to phase only
+    # Both scopes belong to the project — Scope B via phase hierarchy
     resp = _get_dashboard(client, project_id)
     assert resp.status_code == 200
     data = resp.json()
 
-    # Only the project-linked scope should appear in the project dashboard
-    assert data["scopes_total"] == 1
-    assert Decimal(data["total_budget"]) == Decimal("10000.00")
+    assert data["scopes_total"] == 2
+    scope_ids_in_dashboard = {s["scope_id"] for s in data["scopes"]}
+    assert scope_a["id"] in scope_ids_in_dashboard
+    assert scope_b["id"] in scope_ids_in_dashboard
+    assert Decimal(data["total_budget"]) == Decimal("13000.00")
+    assert Decimal(data["total_actual"]) == Decimal("6000.00")
 
 
 def test_dashboard_scope_isolation_across_projects(client: TestClient):
@@ -445,3 +435,138 @@ def test_dashboard_scope_fully_completed_not_active(client: TestClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data["scopes_active"] == 0
+
+
+def test_dashboard_active_scope_with_budget_only(client: TestClient):
+    """A scope with only a budget cost item (no actual/committed) is still active."""
+    project_id = _create_project(client, "DASH-P13")
+    scope = _create_scope(client, project_id)
+
+    # Budget-only cost item
+    _create_cost_item(client, scope["id"], budget_amount=5000.0, committed_amount=0.0, actual_amount=0.0)
+
+    resp = _get_dashboard(client, project_id)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["scopes_active"] == 1
+
+
+# ── Hierarchy: phase-linked and building-linked scopes ───────────────────────
+
+
+def test_dashboard_includes_phase_linked_scope(client: TestClient):
+    """Scopes linked via phase (Phase.project_id) appear in the project dashboard."""
+    project_id = _create_project(client, "DASH-H01")
+
+    phase_resp = client.post(
+        "/api/v1/phases", json={"project_id": project_id, "name": "Phase H1", "sequence": 1}
+    )
+    assert phase_resp.status_code == 201
+    phase_id = phase_resp.json()["id"]
+
+    # Scope linked only to phase, not directly to project
+    scope_resp = client.post(
+        "/api/v1/construction/scopes",
+        json={"phase_id": phase_id, "name": "Phase Scope"},
+    )
+    assert scope_resp.status_code == 201
+    scope = scope_resp.json()
+
+    _create_cost_item(client, scope["id"], budget_amount=7500.0, actual_amount=2000.0)
+
+    resp = _get_dashboard(client, project_id)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["scopes_total"] == 1
+    assert data["scopes"][0]["scope_id"] == scope["id"]
+    assert Decimal(data["total_budget"]) == Decimal("7500.00")
+    assert Decimal(data["total_actual"]) == Decimal("2000.00")
+
+
+def test_dashboard_includes_building_linked_scope(client: TestClient):
+    """Scopes linked via building (Building → Phase → Project) appear in the project dashboard."""
+    project_id = _create_project(client, "DASH-H02")
+
+    phase_resp = client.post(
+        "/api/v1/phases", json={"project_id": project_id, "name": "Phase H2", "sequence": 1}
+    )
+    assert phase_resp.status_code == 201
+    phase_id = phase_resp.json()["id"]
+
+    building_resp = client.post(
+        f"/api/v1/phases/{phase_id}/buildings",
+        json={"name": "Building A", "code": "BLD-A"},
+    )
+    assert building_resp.status_code == 201
+    building_id = building_resp.json()["id"]
+
+    # Scope linked only to building, not directly to project or phase
+    scope_resp = client.post(
+        "/api/v1/construction/scopes",
+        json={"building_id": building_id, "name": "Building Scope"},
+    )
+    assert scope_resp.status_code == 201
+    scope = scope_resp.json()
+
+    _create_cost_item(client, scope["id"], budget_amount=4000.0, actual_amount=1500.0)
+
+    resp = _get_dashboard(client, project_id)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["scopes_total"] == 1
+    assert data["scopes"][0]["scope_id"] == scope["id"]
+    assert Decimal(data["total_budget"]) == Decimal("4000.00")
+    assert Decimal(data["total_actual"]) == Decimal("1500.00")
+
+
+def test_dashboard_hierarchy_isolation_across_projects(client: TestClient):
+    """Phase/building scopes from different projects remain isolated."""
+    project_a = _create_project(client, "DASH-H03")
+    project_b = _create_project(client, "DASH-H04")
+
+    phase_a_resp = client.post(
+        "/api/v1/phases", json={"project_id": project_a, "name": "Phase A", "sequence": 1}
+    )
+    assert phase_a_resp.status_code == 201
+    phase_a_id = phase_a_resp.json()["id"]
+
+    phase_b_resp = client.post(
+        "/api/v1/phases", json={"project_id": project_b, "name": "Phase B", "sequence": 1}
+    )
+    assert phase_b_resp.status_code == 201
+    phase_b_id = phase_b_resp.json()["id"]
+
+    scope_a_resp = client.post(
+        "/api/v1/construction/scopes",
+        json={"phase_id": phase_a_id, "name": "Scope via Phase A"},
+    )
+    assert scope_a_resp.status_code == 201
+    scope_a = scope_a_resp.json()
+
+    scope_b_resp = client.post(
+        "/api/v1/construction/scopes",
+        json={"phase_id": phase_b_id, "name": "Scope via Phase B"},
+    )
+    assert scope_b_resp.status_code == 201
+    scope_b = scope_b_resp.json()
+
+    _create_cost_item(client, scope_a["id"], budget_amount=1000.0, actual_amount=100.0)
+    _create_cost_item(client, scope_b["id"], budget_amount=9999.0, actual_amount=9999.0)
+
+    # Project A dashboard must only see scope_a
+    resp_a = _get_dashboard(client, project_a)
+    assert resp_a.status_code == 200
+    data_a = resp_a.json()
+    assert data_a["scopes_total"] == 1
+    assert data_a["scopes"][0]["scope_id"] == scope_a["id"]
+    assert Decimal(data_a["total_budget"]) == Decimal("1000.00")
+
+    # Project B dashboard must only see scope_b
+    resp_b = _get_dashboard(client, project_b)
+    assert resp_b.status_code == 200
+    data_b = resp_b.json()
+    assert data_b["scopes_total"] == 1
+    assert data_b["scopes"][0]["scope_id"] == scope_b["id"]
+    assert Decimal(data_b["total_budget"]) == Decimal("9999.00")

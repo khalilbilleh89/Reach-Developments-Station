@@ -501,8 +501,9 @@ class ConstructionService:
             is_active = (
                 eng_open > 0
                 or ms_total > ms_completed
-                or s_actual > Decimal("0.00")
+                or s_budget > Decimal("0.00")
                 or s_committed > Decimal("0.00")
+                or s_actual > Decimal("0.00")
             )
             if is_active:
                 scopes_active += 1

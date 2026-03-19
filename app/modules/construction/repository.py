@@ -8,9 +8,10 @@ from datetime import date
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, over, select
 from sqlalchemy.orm import Session
 
+from app.modules.buildings.models import Building
 from app.modules.construction.models import (
     ConstructionCostItem,
     ConstructionEngineeringItem,
@@ -18,6 +19,7 @@ from app.modules.construction.models import (
     ConstructionProgressUpdate,
     ConstructionScope,
 )
+from app.modules.phases.models import Phase
 from app.shared.enums.construction import EngineeringStatus, MilestoneStatus
 from app.modules.construction.schemas import (
     ConstructionMilestoneCreate,
@@ -403,10 +405,27 @@ class ConstructionDashboardRepository:
         self.db = db
 
     def list_scopes_for_project(self, project_id: str) -> List[ConstructionScope]:
-        """Return all construction scopes linked to a project."""
+        """Return all construction scopes that belong to a project.
+
+        Includes scopes linked at any level of the hierarchy:
+          - directly via ConstructionScope.project_id
+          - indirectly via ConstructionScope.phase_id → Phase.project_id
+          - indirectly via ConstructionScope.building_id → Building.phase_id → Phase.project_id
+        """
+        phase_ids = select(Phase.id).where(Phase.project_id == project_id)
+        building_ids = (
+            select(Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .where(Phase.project_id == project_id)
+        )
+
         return (
             self.db.query(ConstructionScope)
-            .filter(ConstructionScope.project_id == project_id)
+            .filter(
+                (ConstructionScope.project_id == project_id)
+                | ConstructionScope.phase_id.in_(phase_ids)
+                | ConstructionScope.building_id.in_(building_ids)
+            )
             .order_by(ConstructionScope.name, ConstructionScope.id)
             .all()
         )
@@ -507,36 +526,46 @@ class ConstructionDashboardRepository:
     ) -> Dict[str, Optional[int]]:
         """Return {scope_id: latest_progress_percent}.
 
-        Returns the ``progress_percent`` from the most recently reported
-        progress update across all milestones in each scope.  Returns
-        ``None`` for scopes that have no progress updates.
+        Uses a window function to determine the latest progress update per scope
+        at the DB level, ordered by ``reported_at desc, id desc`` for a
+        deterministic tie-breaker.  Returns ``None`` for scopes that have no
+        progress updates.
         """
         if not scope_ids:
             return {}
 
-        rows = (
+        row_num = over(
+            func.row_number(),
+            partition_by=ConstructionMilestone.scope_id,
+            order_by=[
+                ConstructionProgressUpdate.reported_at.desc(),
+                ConstructionProgressUpdate.id.desc(),
+            ],
+        ).label("rn")
+
+        inner = (
             self.db.query(
                 ConstructionMilestone.scope_id,
                 ConstructionProgressUpdate.progress_percent,
-                ConstructionProgressUpdate.reported_at,
+                row_num,
             )
             .join(
                 ConstructionProgressUpdate,
                 ConstructionProgressUpdate.milestone_id == ConstructionMilestone.id,
             )
             .filter(ConstructionMilestone.scope_id.in_(scope_ids))
-            .order_by(
-                ConstructionMilestone.scope_id,
-                ConstructionProgressUpdate.reported_at.desc(),
-            )
+            .subquery()
+        )
+
+        rows = (
+            self.db.query(inner.c.scope_id, inner.c.progress_percent)
+            .filter(inner.c.rn == 1)
             .all()
         )
+
         result: Dict[str, Optional[int]] = {sid: None for sid in scope_ids}
-        seen: set = set()
         for row in rows:
-            if row.scope_id not in seen:
-                result[row.scope_id] = int(row.progress_percent)
-                seen.add(row.scope_id)
+            result[row.scope_id] = int(row.progress_percent)
         return result
 
     def cost_summary_by_scope(
