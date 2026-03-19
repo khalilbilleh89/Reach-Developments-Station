@@ -4,18 +4,21 @@ construction.repository
 Data access layer for the Construction domain.
 """
 
+from datetime import date
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.modules.construction.models import (
+    ConstructionCostItem,
     ConstructionEngineeringItem,
     ConstructionMilestone,
     ConstructionProgressUpdate,
     ConstructionScope,
 )
+from app.shared.enums.construction import EngineeringStatus, MilestoneStatus
 from app.modules.construction.schemas import (
     ConstructionMilestoneCreate,
     ConstructionMilestoneUpdate,
@@ -391,3 +394,177 @@ class ConstructionCostItemRepository:
             )
             for row in rows
         }
+
+
+class ConstructionDashboardRepository:
+    """Read-only aggregation helpers for the construction dashboard."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list_scopes_for_project(self, project_id: str) -> List[ConstructionScope]:
+        """Return all construction scopes linked to a project."""
+        return (
+            self.db.query(ConstructionScope)
+            .filter(ConstructionScope.project_id == project_id)
+            .order_by(ConstructionScope.name, ConstructionScope.id)
+            .all()
+        )
+
+    def count_engineering_items_by_scope(
+        self, scope_ids: List[str]
+    ) -> Dict[str, Tuple[int, int, int]]:
+        """Return {scope_id: (total, open, completed)} via DB GROUP BY.
+
+        ``open`` is defined as status != 'completed'.
+        """
+        if not scope_ids:
+            return {}
+
+        completed_val = EngineeringStatus.COMPLETED.value
+        rows = (
+            self.db.query(
+                ConstructionEngineeringItem.scope_id,
+                func.count(ConstructionEngineeringItem.id).label("total"),
+                func.sum(
+                    case(
+                        (ConstructionEngineeringItem.status == completed_val, 1),
+                        else_=0,
+                    )
+                ).label("completed"),
+            )
+            .filter(ConstructionEngineeringItem.scope_id.in_(scope_ids))
+            .group_by(ConstructionEngineeringItem.scope_id)
+            .all()
+        )
+        result: Dict[str, Tuple[int, int, int]] = {sid: (0, 0, 0) for sid in scope_ids}
+        for row in rows:
+            total = int(row.total)
+            completed = int(row.completed or 0)
+            result[row.scope_id] = (total, total - completed, completed)
+        return result
+
+    def count_milestones_by_scope(
+        self, scope_ids: List[str]
+    ) -> Dict[str, Tuple[int, int]]:
+        """Return {scope_id: (total, completed)} via DB GROUP BY."""
+        if not scope_ids:
+            return {}
+
+        completed_val = MilestoneStatus.COMPLETED.value
+        rows = (
+            self.db.query(
+                ConstructionMilestone.scope_id,
+                func.count(ConstructionMilestone.id).label("total"),
+                func.sum(
+                    case(
+                        (ConstructionMilestone.status == completed_val, 1),
+                        else_=0,
+                    )
+                ).label("completed"),
+            )
+            .filter(ConstructionMilestone.scope_id.in_(scope_ids))
+            .group_by(ConstructionMilestone.scope_id)
+            .all()
+        )
+        result: Dict[str, Tuple[int, int]] = {sid: (0, 0) for sid in scope_ids}
+        for row in rows:
+            result[row.scope_id] = (int(row.total), int(row.completed or 0))
+        return result
+
+    def count_overdue_milestones_by_scope(
+        self, scope_ids: List[str], today: date
+    ) -> Dict[str, int]:
+        """Return {scope_id: overdue_count}.
+
+        A milestone is overdue when its target_date is before *today* and its
+        status is not ``completed``.
+        """
+        if not scope_ids:
+            return {}
+
+        completed_val = MilestoneStatus.COMPLETED.value
+        rows = (
+            self.db.query(
+                ConstructionMilestone.scope_id,
+                func.count(ConstructionMilestone.id).label("overdue"),
+            )
+            .filter(
+                ConstructionMilestone.scope_id.in_(scope_ids),
+                ConstructionMilestone.target_date < today,
+                ConstructionMilestone.status != completed_val,
+            )
+            .group_by(ConstructionMilestone.scope_id)
+            .all()
+        )
+        result: Dict[str, int] = {sid: 0 for sid in scope_ids}
+        for row in rows:
+            result[row.scope_id] = int(row.overdue)
+        return result
+
+    def latest_progress_by_scope(
+        self, scope_ids: List[str]
+    ) -> Dict[str, Optional[int]]:
+        """Return {scope_id: latest_progress_percent}.
+
+        Returns the ``progress_percent`` from the most recently reported
+        progress update across all milestones in each scope.  Returns
+        ``None`` for scopes that have no progress updates.
+        """
+        if not scope_ids:
+            return {}
+
+        rows = (
+            self.db.query(
+                ConstructionMilestone.scope_id,
+                ConstructionProgressUpdate.progress_percent,
+                ConstructionProgressUpdate.reported_at,
+            )
+            .join(
+                ConstructionProgressUpdate,
+                ConstructionProgressUpdate.milestone_id == ConstructionMilestone.id,
+            )
+            .filter(ConstructionMilestone.scope_id.in_(scope_ids))
+            .order_by(
+                ConstructionMilestone.scope_id,
+                ConstructionProgressUpdate.reported_at.desc(),
+            )
+            .all()
+        )
+        result: Dict[str, Optional[int]] = {sid: None for sid in scope_ids}
+        seen: set = set()
+        for row in rows:
+            if row.scope_id not in seen:
+                result[row.scope_id] = int(row.progress_percent)
+                seen.add(row.scope_id)
+        return result
+
+    def cost_summary_by_scope(
+        self, scope_ids: List[str]
+    ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
+        """Return {scope_id: (total_budget, total_committed, total_actual)} via DB SUM."""
+        if not scope_ids:
+            return {}
+
+        rows = (
+            self.db.query(
+                ConstructionCostItem.scope_id,
+                func.coalesce(func.sum(ConstructionCostItem.budget_amount), 0).label("budget"),
+                func.coalesce(func.sum(ConstructionCostItem.committed_amount), 0).label("committed"),
+                func.coalesce(func.sum(ConstructionCostItem.actual_amount), 0).label("actual"),
+            )
+            .filter(ConstructionCostItem.scope_id.in_(scope_ids))
+            .group_by(ConstructionCostItem.scope_id)
+            .all()
+        )
+        result: Dict[str, Tuple[Decimal, Decimal, Decimal]] = {
+            sid: (Decimal("0.00"), Decimal("0.00"), Decimal("0.00"))
+            for sid in scope_ids
+        }
+        for row in rows:
+            result[row.scope_id] = (
+                Decimal(str(row.budget)),
+                Decimal(str(row.committed)),
+                Decimal(str(row.actual)),
+            )
+        return result

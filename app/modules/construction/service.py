@@ -7,6 +7,8 @@ Validates project / phase / building linkage and enforces milestone
 lifecycle rules within each scope.
 """
 
+from decimal import Decimal
+
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,6 +17,7 @@ from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
     ConstructionCostItemRepository,
+    ConstructionDashboardRepository,
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
     ConstructionProgressUpdateRepository,
@@ -26,6 +29,8 @@ from app.modules.construction.schemas import (
     ConstructionCostItemResponse,
     ConstructionCostItemUpdate,
     ConstructionCostSummary,
+    ConstructionDashboardResponse,
+    ConstructionDashboardScopeSummary,
     ConstructionMilestoneCreate,
     ConstructionMilestoneList,
     ConstructionMilestoneResponse,
@@ -53,6 +58,7 @@ class ConstructionService:
         self.engineering_repo = ConstructionEngineeringItemRepository(db)
         self.progress_repo = ConstructionProgressUpdateRepository(db)
         self.cost_repo = ConstructionCostItemRepository(db)
+        self.dashboard_repo = ConstructionDashboardRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -422,8 +428,6 @@ class ConstructionService:
         self.cost_repo.delete(item)
 
     def get_scope_cost_summary(self, scope_id: str) -> ConstructionCostSummary:
-        from decimal import Decimal as D
-
         scope = self.scope_repo.get_by_id(scope_id)
         if not scope:
             raise HTTPException(
@@ -452,6 +456,95 @@ class ConstructionService:
             total_variance_to_budget=total_actual - total_budget,
             total_variance_to_commitment=total_actual - total_committed,
             by_category=by_category,
+        )
+
+    # ── Dashboard ────────────────────────────────────────────────────────────
+
+    def get_project_construction_dashboard(
+        self, project_id: str
+    ) -> ConstructionDashboardResponse:
+        from datetime import date
+
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project '{project_id}' not found.",
+            )
+
+        scopes = self.dashboard_repo.list_scopes_for_project(project_id)
+        scope_ids = [s.id for s in scopes]
+
+        today = date.today()
+        eng_counts = self.dashboard_repo.count_engineering_items_by_scope(scope_ids)
+        milestone_counts = self.dashboard_repo.count_milestones_by_scope(scope_ids)
+        overdue_counts = self.dashboard_repo.count_overdue_milestones_by_scope(scope_ids, today)
+        progress_map = self.dashboard_repo.latest_progress_by_scope(scope_ids)
+        cost_map = self.dashboard_repo.cost_summary_by_scope(scope_ids)
+
+        scope_summaries: list[ConstructionDashboardScopeSummary] = []
+        total_budget = Decimal("0.00")
+        total_committed = Decimal("0.00")
+        total_actual = Decimal("0.00")
+        scopes_active = 0
+
+        for scope in scopes:
+            sid = scope.id
+            eng_total, eng_open, eng_completed = eng_counts.get(sid, (0, 0, 0))
+            ms_total, ms_completed = milestone_counts.get(sid, (0, 0))
+            ms_overdue = overdue_counts.get(sid, 0)
+            latest_progress = progress_map.get(sid)
+            s_budget, s_committed, s_actual = cost_map.get(
+                sid, (Decimal("0.00"), Decimal("0.00"), Decimal("0.00"))
+            )
+
+            is_active = (
+                eng_open > 0
+                or ms_total > ms_completed
+                or s_actual > Decimal("0.00")
+                or s_committed > Decimal("0.00")
+            )
+            if is_active:
+                scopes_active += 1
+
+            total_budget += s_budget
+            total_committed += s_committed
+            total_actual += s_actual
+
+            scope_summaries.append(
+                ConstructionDashboardScopeSummary(
+                    scope_id=sid,
+                    scope_name=scope.name,
+                    engineering_items_total=eng_total,
+                    engineering_items_open=eng_open,
+                    engineering_items_completed=eng_completed,
+                    milestones_total=ms_total,
+                    milestones_completed=ms_completed,
+                    milestones_overdue=ms_overdue,
+                    latest_progress_percent=latest_progress,
+                    total_budget=s_budget,
+                    total_committed=s_committed,
+                    total_actual=s_actual,
+                    variance_to_budget=s_actual - s_budget,
+                    variance_to_commitment=s_actual - s_committed,
+                )
+            )
+
+        eng_open_total = sum(s.engineering_items_open for s in scope_summaries)
+        ms_overdue_total = sum(s.milestones_overdue for s in scope_summaries)
+
+        return ConstructionDashboardResponse(
+            project_id=project_id,
+            scopes_total=len(scopes),
+            scopes_active=scopes_active,
+            engineering_items_open_total=eng_open_total,
+            milestones_overdue_total=ms_overdue_total,
+            total_budget=total_budget,
+            total_committed=total_committed,
+            total_actual=total_actual,
+            variance_to_budget=total_actual - total_budget,
+            variance_to_commitment=total_actual - total_committed,
+            scopes=scope_summaries,
         )
 
     # ── Private helpers ──────────────────────────────────────────────────────
