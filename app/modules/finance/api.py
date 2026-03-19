@@ -20,7 +20,7 @@ from app.core.dependencies import get_db
 from app.modules.finance.schemas import ProjectFinanceSummaryResponse
 from app.modules.finance.service import FinanceSummaryService
 
-router = APIRouter(prefix="/finance", tags=["finance"])
+router = APIRouter(prefix="/finance", tags=["Finance"])
 
 
 def get_service(db: Session = Depends(get_db)) -> FinanceSummaryService:

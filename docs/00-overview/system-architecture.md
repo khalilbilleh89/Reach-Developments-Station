@@ -177,3 +177,53 @@ Render Web Service
 The modular monolith approach is intentional — see [`../04-decisions/adr-001-domain-architecture.md`](../04-decisions/adr-001-domain-architecture.md) for the rationale.
 
 The full recommended backend code structure is documented in [`../03-technical/backend-architecture.md`](../03-technical/backend-architecture.md).
+
+---
+
+## API Router Structure
+
+All domain API routes are served under the `/api/v1` prefix. Each domain module owns a dedicated router prefix and OpenAPI tag group.
+
+### Core Domain Routers
+
+| Router Prefix | OpenAPI Tag | Module |
+|---|---|---|
+| `/api/v1/projects` | `Projects` | `app/modules/projects` |
+| `/api/v1/pricing` | `Pricing` | `app/modules/pricing` |
+| `/api/v1/sales` | `Sales` | `app/modules/sales` |
+| `/api/v1/payment-plans` | `Payment Plans` | `app/modules/payment_plans` |
+| `/api/v1/finance` | `Finance` | `app/modules/finance` |
+| `/api/v1/registry` | `Registry` | `app/modules/registry` |
+| `/api/v1/construction` | `Construction` | `app/modules/construction` |
+| `/api/v1/settings` | `Settings` | `app/modules/settings` |
+
+### Asset Hierarchy Routers
+
+Asset hierarchy routers expose nested resource paths that mirror the `Project → Phase → Building → Floor → Unit` backbone:
+
+| Domain | Example Paths |
+|---|---|
+| phases | `/api/v1/projects/{id}/phases`, `/api/v1/phases/{id}` |
+| buildings | `/api/v1/phases/{id}/buildings`, `/api/v1/buildings/{id}` |
+| floors | `/api/v1/buildings/{id}/floors`, `/api/v1/floors/{id}` |
+| units | `/api/v1/floors/{id}/units`, `/api/v1/units/{id}` |
+
+### Supporting Routers
+
+| Router Prefix | Module |
+|---|---|
+| `/api/v1/auth` | `app/modules/auth` |
+| `/api/v1/land` | `app/modules/land` |
+| `/api/v1/feasibility` | `app/modules/feasibility` |
+| `/api/v1/collections` | `app/modules/collections` |
+| `/api/v1/reservations` | `app/modules/reservations` |
+| `/api/v1/receivables` | `app/modules/receivables` |
+| `/api/v1/commission` | `app/modules/commission` |
+| `/api/v1/cashflow` | `app/modules/cashflow` |
+| `/api/v1/sales-exceptions` | `app/modules/sales_exceptions` |
+
+### Backward-Compatibility Aliases
+
+| Legacy Prefix | Canonical Prefix | Notes |
+|---|---|---|
+| `/api/v1/registration` | `/api/v1/registry` | Hidden from OpenAPI (`include_in_schema=False`) |

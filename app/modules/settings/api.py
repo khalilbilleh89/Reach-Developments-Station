@@ -47,7 +47,7 @@ from app.modules.settings.schemas import (
 )
 from app.modules.settings.service import SettingsService
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(prefix="/settings", tags=["Settings"])
 
 DbDep = Annotated[Session, Depends(get_db)]
 

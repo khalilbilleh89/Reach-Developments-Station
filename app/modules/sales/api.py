@@ -26,7 +26,7 @@ from app.modules.sales.schemas import (
 )
 from app.modules.sales.service import SalesService
 
-router = APIRouter(prefix="/sales", tags=["sales"])
+router = APIRouter(prefix="/sales", tags=["Sales"])
 
 
 def get_service(db: Session = Depends(get_db)) -> SalesService:

@@ -47,7 +47,7 @@ from app.modules.payment_plans.schemas import (
 )
 from app.modules.payment_plans.service import PaymentPlanService
 
-router = APIRouter(prefix="/payment-plans", tags=["payment-plans"])
+router = APIRouter(prefix="/payment-plans", tags=["Payment Plans"])
 
 
 def get_service(db: Session = Depends(get_db)) -> PaymentPlanService:

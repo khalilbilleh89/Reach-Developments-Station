@@ -66,7 +66,7 @@ from app.modules.construction.schemas import (
 )
 from app.modules.construction.service import ConstructionService
 
-router = APIRouter(tags=["construction"])
+router = APIRouter(prefix="/construction", tags=["Construction"])
 
 
 def get_service(db: Session = Depends(get_db)) -> ConstructionService:
@@ -76,7 +76,7 @@ def get_service(db: Session = Depends(get_db)) -> ConstructionService:
 # ── Dashboard endpoint ───────────────────────────────────────────────────────
 
 @router.get(
-    "/construction/projects/{project_id}/dashboard",
+    "/projects/{project_id}/dashboard",
     response_model=ConstructionDashboardResponse,
 )
 def get_project_construction_dashboard(
@@ -89,7 +89,7 @@ def get_project_construction_dashboard(
 
 # ── Scope endpoints ──────────────────────────────────────────────────────────
 
-@router.post("/construction/scopes", response_model=ConstructionScopeResponse, status_code=201)
+@router.post("/scopes", response_model=ConstructionScopeResponse, status_code=201)
 def create_scope(
     data: ConstructionScopeCreate,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -98,7 +98,7 @@ def create_scope(
     return service.create_scope(data)
 
 
-@router.get("/construction/scopes", response_model=ConstructionScopeList)
+@router.get("/scopes", response_model=ConstructionScopeList)
 def list_scopes(
     service: Annotated[ConstructionService, Depends(get_service)],
     project_id: Optional[str] = Query(default=None),
@@ -117,7 +117,7 @@ def list_scopes(
     )
 
 
-@router.get("/construction/scopes/{scope_id}", response_model=ConstructionScopeResponse)
+@router.get("/scopes/{scope_id}", response_model=ConstructionScopeResponse)
 def get_scope(
     scope_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -126,7 +126,7 @@ def get_scope(
     return service.get_scope(scope_id)
 
 
-@router.patch("/construction/scopes/{scope_id}", response_model=ConstructionScopeResponse)
+@router.patch("/scopes/{scope_id}", response_model=ConstructionScopeResponse)
 def update_scope(
     scope_id: str,
     data: ConstructionScopeUpdate,
@@ -136,7 +136,7 @@ def update_scope(
     return service.update_scope(scope_id, data)
 
 
-@router.delete("/construction/scopes/{scope_id}", status_code=204)
+@router.delete("/scopes/{scope_id}", status_code=204)
 def delete_scope(
     scope_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -148,7 +148,7 @@ def delete_scope(
 
 # ── Milestone endpoints ──────────────────────────────────────────────────────
 
-@router.post("/construction/milestones", response_model=ConstructionMilestoneResponse, status_code=201)
+@router.post("/milestones", response_model=ConstructionMilestoneResponse, status_code=201)
 def create_milestone(
     data: ConstructionMilestoneCreate,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -157,7 +157,7 @@ def create_milestone(
     return service.create_milestone(data)
 
 
-@router.get("/construction/milestones", response_model=ConstructionMilestoneList)
+@router.get("/milestones", response_model=ConstructionMilestoneList)
 def list_milestones(
     service: Annotated[ConstructionService, Depends(get_service)],
     scope_id: Optional[str] = Query(default=None),
@@ -168,7 +168,7 @@ def list_milestones(
     return service.list_milestones(scope_id=scope_id, skip=skip, limit=limit)
 
 
-@router.get("/construction/milestones/{milestone_id}", response_model=ConstructionMilestoneResponse)
+@router.get("/milestones/{milestone_id}", response_model=ConstructionMilestoneResponse)
 def get_milestone(
     milestone_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -177,7 +177,7 @@ def get_milestone(
     return service.get_milestone(milestone_id)
 
 
-@router.patch("/construction/milestones/{milestone_id}", response_model=ConstructionMilestoneResponse)
+@router.patch("/milestones/{milestone_id}", response_model=ConstructionMilestoneResponse)
 def update_milestone(
     milestone_id: str,
     data: ConstructionMilestoneUpdate,
@@ -187,7 +187,7 @@ def update_milestone(
     return service.update_milestone(milestone_id, data)
 
 
-@router.delete("/construction/milestones/{milestone_id}", status_code=204)
+@router.delete("/milestones/{milestone_id}", status_code=204)
 def delete_milestone(
     milestone_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -201,7 +201,7 @@ def delete_milestone(
 
 
 @router.post(
-    "/construction/milestones/{milestone_id}/progress-updates",
+    "/milestones/{milestone_id}/progress-updates",
     response_model=ProgressUpdateResponse,
     status_code=201,
 )
@@ -215,7 +215,7 @@ def create_progress_update(
 
 
 @router.get(
-    "/construction/milestones/{milestone_id}/progress-updates",
+    "/milestones/{milestone_id}/progress-updates",
     response_model=ProgressUpdateList,
 )
 def list_progress_updates(
@@ -229,7 +229,7 @@ def list_progress_updates(
 
 
 @router.get(
-    "/construction/progress-updates/{update_id}",
+    "/progress-updates/{update_id}",
     response_model=ProgressUpdateResponse,
 )
 def get_progress_update(
@@ -240,7 +240,7 @@ def get_progress_update(
     return service.get_progress_update(update_id)
 
 
-@router.delete("/construction/progress-updates/{update_id}", status_code=204)
+@router.delete("/progress-updates/{update_id}", status_code=204)
 def delete_progress_update(
     update_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -254,7 +254,7 @@ def delete_progress_update(
 
 
 @router.post(
-    "/construction/scopes/{scope_id}/engineering-items",
+    "/scopes/{scope_id}/engineering-items",
     response_model=EngineeringItemResponse,
     status_code=201,
 )
@@ -271,7 +271,7 @@ def create_engineering_item(
 
 
 @router.get(
-    "/construction/scopes/{scope_id}/engineering-items",
+    "/scopes/{scope_id}/engineering-items",
     response_model=EngineeringItemList,
 )
 def list_engineering_items(
@@ -285,7 +285,7 @@ def list_engineering_items(
 
 
 @router.patch(
-    "/construction/engineering-items/{item_id}",
+    "/engineering-items/{item_id}",
     response_model=EngineeringItemResponse,
 )
 def update_engineering_item(
@@ -300,7 +300,7 @@ def update_engineering_item(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.delete("/construction/engineering-items/{item_id}", status_code=204)
+@router.delete("/engineering-items/{item_id}", status_code=204)
 def delete_engineering_item(
     item_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],
@@ -314,7 +314,7 @@ def delete_engineering_item(
 
 
 @router.post(
-    "/construction/scopes/{scope_id}/cost-items",
+    "/scopes/{scope_id}/cost-items",
     response_model=ConstructionCostItemResponse,
     status_code=201,
 )
@@ -328,7 +328,7 @@ def create_cost_item(
 
 
 @router.get(
-    "/construction/scopes/{scope_id}/cost-items",
+    "/scopes/{scope_id}/cost-items",
     response_model=ConstructionCostItemList,
 )
 def list_cost_items(
@@ -345,7 +345,7 @@ def list_cost_items(
 
 
 @router.get(
-    "/construction/scopes/{scope_id}/cost-summary",
+    "/scopes/{scope_id}/cost-summary",
     response_model=ConstructionCostSummary,
 )
 def get_scope_cost_summary(
@@ -357,7 +357,7 @@ def get_scope_cost_summary(
 
 
 @router.get(
-    "/construction/cost-items/{cost_item_id}",
+    "/cost-items/{cost_item_id}",
     response_model=ConstructionCostItemResponse,
 )
 def get_cost_item(
@@ -369,7 +369,7 @@ def get_cost_item(
 
 
 @router.patch(
-    "/construction/cost-items/{cost_item_id}",
+    "/cost-items/{cost_item_id}",
     response_model=ConstructionCostItemResponse,
 )
 def update_cost_item(
@@ -381,7 +381,7 @@ def update_cost_item(
     return service.update_cost_item(cost_item_id, data)
 
 
-@router.delete("/construction/cost-items/{cost_item_id}", status_code=204)
+@router.delete("/cost-items/{cost_item_id}", status_code=204)
 def delete_cost_item(
     cost_item_id: str,
     service: Annotated[ConstructionService, Depends(get_service)],

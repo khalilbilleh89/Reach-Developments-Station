@@ -28,7 +28,7 @@ from app.modules.projects.schemas import (
 from app.modules.projects.service import ProjectService
 from app.shared.enums.project import ProjectStatus
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
 def get_service(db: Session = Depends(get_db)) -> ProjectService:
