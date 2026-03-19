@@ -398,3 +398,37 @@ class ConstructionCostSummary(BaseModel):
     total_variance_to_budget: Decimal
     total_variance_to_commitment: Decimal
     by_category: Dict[str, CategoryCostBreakdown]
+
+
+# ── Construction Dashboard ───────────────────────────────────────────────────
+
+
+class ConstructionDashboardScopeSummary(BaseModel):
+    scope_id: str
+    scope_name: str
+    engineering_items_total: int
+    engineering_items_open: int
+    engineering_items_completed: int
+    milestones_total: int
+    milestones_completed: int
+    milestones_overdue: int
+    latest_progress_percent: Optional[int]
+    total_budget: Decimal
+    total_committed: Decimal
+    total_actual: Decimal
+    variance_to_budget: Decimal
+    variance_to_commitment: Decimal
+
+
+class ConstructionDashboardResponse(BaseModel):
+    project_id: str
+    scopes_total: int
+    scopes_active: int
+    engineering_items_open_total: int
+    milestones_overdue_total: int
+    total_budget: Decimal
+    total_committed: Decimal
+    total_actual: Decimal
+    variance_to_budget: Decimal
+    variance_to_commitment: Decimal
+    scopes: List[ConstructionDashboardScopeSummary]

@@ -7,6 +7,7 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { ConstructionScopesTable } from "@/components/construction/ConstructionScopesTable";
 import { ScopeDetailView } from "@/components/construction/ScopeDetailView";
 import { CreateScopeModal } from "@/components/construction/CreateScopeModal";
+import { ConstructionDashboard } from "@/components/construction/ConstructionDashboard";
 import { listScopes, getScope, createScope, deleteScope } from "@/lib/construction-api";
 import type {
   ConstructionScope,
@@ -14,6 +15,39 @@ import type {
   ConstructionStatus,
 } from "@/lib/construction-types";
 import styles from "@/styles/construction.module.css";
+
+/**
+ * ConstructionProjectDashboardPage — shows project-level dashboard.
+ */
+function ConstructionProjectDashboardPage({ projectId }: { projectId: string }) {
+  const router = useRouter();
+
+  const handleSelectScope = useCallback(
+    (scopeId: string) => {
+      router.push(`/construction?id=${encodeURIComponent(scopeId)}`);
+    },
+    [router],
+  );
+
+  const handleBack = useCallback(() => {
+    router.push("/construction");
+  }, [router]);
+
+  return (
+    <PageContainer
+      title="Construction Dashboard"
+      subtitle="Project-level construction execution summary."
+    >
+      <button type="button" className={styles.backButton} onClick={handleBack}>
+        ← All Scopes
+      </button>
+      <ConstructionDashboard
+        projectId={projectId}
+        onSelectScope={handleSelectScope}
+      />
+    </PageContainer>
+  );
+}
 
 /**
  * ConstructionList — filterable portfolio view shown when no scope is selected.
@@ -234,16 +268,20 @@ function ConstructionDetailPage({ scopeId }: { scopeId: string }) {
 }
 
 /**
- * Inner — reads query params and delegates to list or detail view.
+ * Inner — reads query params and delegates to list, detail, or dashboard view.
  *
  * Must be a separate component so useSearchParams() is inside a Suspense boundary.
  */
 function Inner() {
   const searchParams = useSearchParams();
   const scopeId = searchParams.get("id");
+  const projectId = searchParams.get("projectId");
 
   if (scopeId) {
     return <ConstructionDetailPage scopeId={scopeId} />;
+  }
+  if (projectId) {
+    return <ConstructionProjectDashboardPage projectId={projectId} />;
   }
   return <ConstructionList />;
 }

@@ -39,6 +39,7 @@ import type {
   ConstructionCostItemListResponse,
   ConstructionCostItemUpdate,
   ConstructionCostSummary,
+  ConstructionDashboardResponse,
   ConstructionEngineeringItem,
   ConstructionMilestone,
   ConstructionMilestoneCreate,
@@ -278,5 +279,15 @@ export async function getScopeCostSummary(
 ): Promise<ConstructionCostSummary> {
   return apiFetch<ConstructionCostSummary>(
     `/construction/scopes/${encodeURIComponent(scopeId)}/cost-summary`,
+  );
+}
+
+// ── Dashboard API ─────────────────────────────────────────────────────────────
+
+export async function getProjectConstructionDashboard(
+  projectId: string,
+): Promise<ConstructionDashboardResponse> {
+  return apiFetch<ConstructionDashboardResponse>(
+    `/construction/projects/${encodeURIComponent(projectId)}/dashboard`,
   );
 }

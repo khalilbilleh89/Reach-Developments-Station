@@ -47,6 +47,7 @@ from app.modules.construction.schemas import (
     ConstructionCostItemResponse,
     ConstructionCostItemUpdate,
     ConstructionCostSummary,
+    ConstructionDashboardResponse,
     ConstructionMilestoneCreate,
     ConstructionMilestoneList,
     ConstructionMilestoneResponse,
@@ -70,6 +71,20 @@ router = APIRouter(tags=["construction"])
 
 def get_service(db: Session = Depends(get_db)) -> ConstructionService:
     return ConstructionService(db)
+
+
+# ── Dashboard endpoint ───────────────────────────────────────────────────────
+
+@router.get(
+    "/construction/projects/{project_id}/dashboard",
+    response_model=ConstructionDashboardResponse,
+)
+def get_project_construction_dashboard(
+    project_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionDashboardResponse:
+    """Get aggregated construction dashboard for a project."""
+    return service.get_project_construction_dashboard(project_id)
 
 
 # ── Scope endpoints ──────────────────────────────────────────────────────────

@@ -223,3 +223,36 @@ export interface ConstructionCostSummary {
   total_variance_to_commitment: string;
   by_category: Record<string, CategoryCostBreakdown>;
 }
+
+// ── Construction Dashboard ────────────────────────────────────────────────────
+
+export interface ConstructionDashboardScopeSummary {
+  scope_id: string;
+  scope_name: string;
+  engineering_items_total: number;
+  engineering_items_open: number;
+  engineering_items_completed: number;
+  milestones_total: number;
+  milestones_completed: number;
+  milestones_overdue: number;
+  latest_progress_percent: number | null;
+  total_budget: string;
+  total_committed: string;
+  total_actual: string;
+  variance_to_budget: string;
+  variance_to_commitment: string;
+}
+
+export interface ConstructionDashboardResponse {
+  project_id: string;
+  scopes_total: number;
+  scopes_active: number;
+  engineering_items_open_total: number;
+  milestones_overdue_total: number;
+  total_budget: string;
+  total_committed: string;
+  total_actual: string;
+  variance_to_budget: string;
+  variance_to_commitment: string;
+  scopes: ConstructionDashboardScopeSummary[];
+}
