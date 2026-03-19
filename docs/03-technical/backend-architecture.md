@@ -213,20 +213,24 @@ reach-developments-station/
 │   │   │   ├── api.py
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
+│   │   │   ├── repository.py
 │   │   │   ├── service.py
-│   │   │   ├── workflow_rules.py
-│   │   │   └── document_checklist.py
+│   │   │   ├── workflow_rules.py        # planned
+│   │   │   └── document_checklist.py   # planned
 │   │   │
 │   │   ├── construction/
 │   │   │   ├── api.py
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
-│   │   │   └── service.py
+│   │   │   ├── repository.py
+│   │   │   ├── service.py
+│   │   │   └── exceptions.py
 │   │   │
 │   │   ├── settings/
 │   │   │   ├── api.py
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
+│   │   │   ├── repository.py
 │   │   │   └── service.py
 │   │   │
 │   │   ├── analytics/

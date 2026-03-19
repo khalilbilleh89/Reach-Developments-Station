@@ -110,7 +110,7 @@ Project
 │   │   │       ├── Revenue Recog.   (attaches at Sale / Milestone level)
 │   │   │       └── Registry         (attaches at Sale / Unit level)
 │   │   │
-│   │   └── Construction             (attaches at Building / Phase level)
+│   │   └── Construction             (attaches at Project / Phase / Building level; at least one required)
 │
 └── Analytics / Finance Summary  (attaches at Project / Portfolio level)
 └── Settings                     (system-level configuration; no project FK)

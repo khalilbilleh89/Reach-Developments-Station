@@ -160,7 +160,7 @@ pytest
 # Run architecture boundary tests only
 pytest tests/architecture/test_commercial_layer_contracts.py -v
 
-# Lint
+# Lint (install ruff if not already present: pip install ruff)
 ruff check .
 ruff format .
 ```
