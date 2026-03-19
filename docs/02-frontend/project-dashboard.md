@@ -71,7 +71,7 @@ Backend returns `ProjectFinanceSummaryResponse`. Fields are passed through direc
 | `collection_ratio` | Fraction collected (0–1) |
 | `average_unit_price` | Mean contract price per unit |
 
-### Registration progress — `GET /api/v1/registration/projects/{id}/summary`
+### Registration progress — `GET /api/v1/registry/projects/{id}/summary`
 
 Backend returns `RegistrationSummaryResponse`. `getRegistrationSummary()` normalizes field names.
 

@@ -68,7 +68,7 @@ The system is organized into the following domain modules:
 ### Post-Sale
 | Module | Purpose |
 |---|---|
-| Registration & Conveyancing | Title transfer workflow, document checklist |
+| Registry & Conveyancing | Title transfer workflow, document checklist |
 
 ### Intelligence (Future)
 | Module | Purpose |
@@ -98,7 +98,7 @@ Project
 │   │   │       ├── Payment Plans    (attaches at Sale level)
 │   │   │       ├── Collections      (attaches at Payment Plan level)
 │   │   │       ├── Revenue Recog.   (attaches at Sale / Milestone level)
-│   │   │       └── Registration     (attaches at Sale / Unit level)
+│   │   │       └── Registry         (attaches at Sale / Unit level)
 │
 └── Analytics / Finance Summary  (attaches at Project / Portfolio level)
 ```
@@ -126,7 +126,7 @@ Operational transaction records:
 - Payment receipts and matching
 - Tender submissions and award records
 - Stage gate approvals and permit records
-- Registration workflow events
+- Registry workflow events
 
 ### Layer 4 — Analytics & Reporting
 Aggregated views and financial summaries:
@@ -156,3 +156,16 @@ The backend starts as a **modular monolith** built with:
 The modular monolith approach is intentional — see [`../04-decisions/adr-001-domain-architecture.md`](../04-decisions/adr-001-domain-architecture.md) for the rationale.
 
 The full recommended backend code structure is documented in [`../03-technical/backend-architecture.md`](../03-technical/backend-architecture.md).
+
+---
+
+## Naming Compatibility Note (PR-D1)
+
+The canonical domain name is **Registry** (normalized in PR-D1). Some frontend documentation files in `docs/02-frontend/` still reference the legacy `Registration` terminology and `/registration` API routes. These will be updated in follow-up documentation cleanup passes.
+
+During the transition, the backend serves both:
+
+- `/api/v1/registry/*` — canonical (schema-visible)
+- `/api/v1/registration/*` — temporary backward-compatible alias (hidden from OpenAPI schema)
+
+The compatibility alias will be removed once all callers have migrated to `/api/v1/registry/*`.

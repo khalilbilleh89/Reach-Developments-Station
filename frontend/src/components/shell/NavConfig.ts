@@ -77,8 +77,8 @@ export const NAV_ITEMS: NavItem[] = [
     futureRoleTags: ["finance_manager", "admin"],
   },
   {
-    label: "Registration",
-    href: "/registration",
+    label: "Registry",
+    href: "/registry",
     icon: "FileText",
     section: "main",
     requiresAuth: true,

@@ -1,24 +1,24 @@
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { demoRegistrationCases, type RegistrationStatus } from "@/lib/demo-data";
+import { demoRegistryCases, type RegistryStatus } from "@/lib/demo-data";
 import styles from "@/styles/demo-shell.module.css";
 
 /**
- * Registration — executive demo placeholder.
+ * Registry — executive demo placeholder.
  *
  * Shows a conveyancing / title-transfer workflow tracker with per-unit
- * registration status. Replace with live data in a follow-up registration PR.
+ * registration status. Replace with live data in a follow-up registry PR.
  */
 export default function Page() {
-  const counts = demoRegistrationCases.reduce<Record<RegistrationStatus, number>>(
+  const counts = demoRegistryCases.reduce<Record<RegistryStatus, number>>(
     (acc, c) => {
       acc[c.status] = (acc[c.status] ?? 0) + 1;
       return acc;
     },
-    {} as Record<RegistrationStatus, number>,
+    {} as Record<RegistryStatus, number>,
   );
 
-  function statusBadgeClass(status: RegistrationStatus) {
+  function statusBadgeClass(status: RegistryStatus) {
     switch (status) {
       case "Registered":
         return styles.badgeGreen;
@@ -37,7 +37,7 @@ export default function Page() {
 
   return (
     <PageContainer
-      title="Registration"
+      title="Registry"
       subtitle="Conveyancing cases, milestones, and document tracking."
     >
       <div className={styles.demoBanner}>⬡ Demo Preview — static data only</div>
@@ -74,7 +74,7 @@ export default function Page() {
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Registration Case Tracker</h2>
         <span className={styles.sectionNote}>
-          {demoRegistrationCases.length} cases · Demo data
+          {demoRegistryCases.length} cases · Demo data
         </span>
       </div>
       <div className={styles.tableWrapper}>
@@ -92,7 +92,7 @@ export default function Page() {
             </tr>
           </thead>
           <tbody>
-            {demoRegistrationCases.map((c) => (
+            {demoRegistryCases.map((c) => (
               <tr key={c.caseRef}>
                 <td style={{ fontFamily: "monospace", fontSize: "var(--font-size-xs)" }}>
                   {c.caseRef}

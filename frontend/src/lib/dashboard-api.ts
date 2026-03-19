@@ -40,7 +40,7 @@ interface BackendFinancialSummary {
   average_unit_price: number;
 }
 
-/** Raw backend: /registration/projects/{id}/summary */
+/** Raw backend: /registry/projects/{id}/summary */
 interface BackendRegistrationSummary {
   project_id: string;
   total_sold_units: number;
@@ -166,7 +166,7 @@ export async function getRegistrationSummary(
   projectId: string,
 ): Promise<RegistrationSummary> {
   const raw = await apiFetch<BackendRegistrationSummary>(
-    `/registration/projects/${projectId}/summary`,
+    `/registry/projects/${projectId}/summary`,
   );
   return {
     total_cases: raw.registration_cases_open + raw.registration_cases_completed,

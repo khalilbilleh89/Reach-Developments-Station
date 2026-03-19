@@ -1,7 +1,7 @@
 """
-registration.models
+registry.models
 
-ORM models for the Registration/Conveyancing domain.
+ORM models for the Registry/Conveyancing domain.
 
 Tracks the post-sale legal transfer workflow for sold units.
 """
@@ -70,7 +70,7 @@ class RegistrationCase(Base, TimestampMixin):
 
 
 class RegistrationMilestone(Base, TimestampMixin):
-    """A single stage in the registration case workflow.
+    """A single stage in the registry case workflow.
 
     Ordered by sequence so the client can display progress steps in order.
     """
@@ -103,7 +103,7 @@ class RegistrationMilestone(Base, TimestampMixin):
 
 
 class RegistrationDocument(Base, TimestampMixin):
-    """A document required or received for a registration case."""
+    """A document required or received for a registry case."""
 
     __tablename__ = "registration_documents"
 
