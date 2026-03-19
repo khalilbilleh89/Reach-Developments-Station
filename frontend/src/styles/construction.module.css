@@ -769,3 +769,66 @@
   border-bottom: 1px solid var(--color-border);
   width: 100%;
 }
+
+/* ── Cost tracking ──────────────────────────────────────────────────────── */
+
+.varianceOver {
+  color: var(--color-danger, #dc2626);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.varianceUnder {
+  color: var(--color-success, #16a34a);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.costSummaryCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+  margin-bottom: var(--space-6);
+}
+
+.costSummaryTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-4);
+}
+
+.costSummarySubtitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.costSummaryKpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.costKpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 140px;
+}
+
+.costKpiLabel {
+  font-size: var(--font-size-xs, 0.75rem);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.costKpiValue {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}

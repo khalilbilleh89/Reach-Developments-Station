@@ -6,7 +6,7 @@ Pydantic request/response contracts for the Construction domain.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -221,3 +221,180 @@ class EngineeringItemResponse(BaseModel):
 class EngineeringItemList(BaseModel):
     items: List[EngineeringItemResponse]
     total: int
+
+
+# ── ConstructionCostItem ─────────────────────────────────────────────────────
+
+COST_CATEGORIES = {
+    "materials",
+    "labor",
+    "equipment",
+    "subcontractor",
+    "consultant",
+    "permits",
+    "utilities",
+    "site_overheads",
+    "other",
+}
+
+COST_TYPES = {"budget", "commitment", "actual"}
+
+
+class ConstructionCostItemCreate(BaseModel):
+    cost_category: str = Field(..., min_length=1, max_length=50)
+    cost_type: str = Field(..., min_length=1, max_length=50)
+    description: str = Field(..., min_length=1, max_length=500)
+    vendor_name: Optional[str] = Field(None, max_length=255)
+    budget_amount: Decimal = Field(default=Decimal("0.00"))
+    committed_amount: Decimal = Field(default=Decimal("0.00"))
+    actual_amount: Decimal = Field(default=Decimal("0.00"))
+    currency: str = Field(default="AED", max_length=10)
+    cost_date: Optional[date] = None
+    notes: Optional[str] = None
+
+    @field_validator("cost_category")
+    @classmethod
+    def validate_cost_category(cls, v: str) -> str:
+        if v not in COST_CATEGORIES:
+            raise ValueError(
+                f"cost_category must be one of: {', '.join(sorted(COST_CATEGORIES))}"
+            )
+        return v
+
+    @field_validator("cost_type")
+    @classmethod
+    def validate_cost_type(cls, v: str) -> str:
+        if v not in COST_TYPES:
+            raise ValueError(
+                f"cost_type must be one of: {', '.join(sorted(COST_TYPES))}"
+            )
+        return v
+
+    @field_validator("budget_amount", "committed_amount", "actual_amount")
+    @classmethod
+    def amounts_non_negative(cls, v: Decimal) -> Decimal:
+        if v < 0:
+            raise ValueError("Amount must be non-negative.")
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_nonzero_amount(self) -> "ConstructionCostItemCreate":
+        if (
+            self.budget_amount == 0
+            and self.committed_amount == 0
+            and self.actual_amount == 0
+        ):
+            raise ValueError(
+                "At least one of budget_amount, committed_amount, or actual_amount must be non-zero."
+            )
+        return self
+
+
+class ConstructionCostItemUpdate(BaseModel):
+    cost_category: Optional[str] = Field(None, min_length=1, max_length=50)
+    cost_type: Optional[str] = Field(None, min_length=1, max_length=50)
+    description: Optional[str] = Field(None, min_length=1, max_length=500)
+    vendor_name: Optional[str] = Field(None, max_length=255)
+    budget_amount: Optional[Decimal] = None
+    committed_amount: Optional[Decimal] = None
+    actual_amount: Optional[Decimal] = None
+    currency: Optional[str] = Field(None, max_length=10)
+    cost_date: Optional[date] = None
+    notes: Optional[str] = None
+
+    @field_validator("cost_category")
+    @classmethod
+    def validate_cost_category(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in COST_CATEGORIES:
+            raise ValueError(
+                f"cost_category must be one of: {', '.join(sorted(COST_CATEGORIES))}"
+            )
+        return v
+
+    @field_validator("cost_type")
+    @classmethod
+    def validate_cost_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in COST_TYPES:
+            raise ValueError(
+                f"cost_type must be one of: {', '.join(sorted(COST_TYPES))}"
+            )
+        return v
+
+    @field_validator("budget_amount", "committed_amount", "actual_amount")
+    @classmethod
+    def amounts_non_negative(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v < 0:
+            raise ValueError("Amount must be non-negative.")
+        return v
+
+
+class ConstructionCostItemResponse(BaseModel):
+    id: str
+    scope_id: str
+    cost_category: str
+    cost_type: str
+    description: str
+    vendor_name: Optional[str]
+    budget_amount: Decimal
+    committed_amount: Decimal
+    actual_amount: Decimal
+    variance_to_budget: Decimal
+    variance_to_commitment: Decimal
+    currency: str
+    cost_date: Optional[date]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_with_variance(
+        cls, item: object
+    ) -> "ConstructionCostItemResponse":
+        from decimal import Decimal as D
+
+        budget = getattr(item, "budget_amount", D("0.00")) or D("0.00")
+        committed = getattr(item, "committed_amount", D("0.00")) or D("0.00")
+        actual = getattr(item, "actual_amount", D("0.00")) or D("0.00")
+        return cls(
+            id=getattr(item, "id"),
+            scope_id=getattr(item, "scope_id"),
+            cost_category=getattr(item, "cost_category"),
+            cost_type=getattr(item, "cost_type"),
+            description=getattr(item, "description"),
+            vendor_name=getattr(item, "vendor_name", None),
+            budget_amount=budget,
+            committed_amount=committed,
+            actual_amount=actual,
+            variance_to_budget=actual - budget,
+            variance_to_commitment=actual - committed,
+            currency=getattr(item, "currency", "AED"),
+            cost_date=getattr(item, "cost_date", None),
+            notes=getattr(item, "notes", None),
+            created_at=getattr(item, "created_at"),
+            updated_at=getattr(item, "updated_at"),
+        )
+
+
+class ConstructionCostItemList(BaseModel):
+    items: List[ConstructionCostItemResponse]
+    total: int
+
+
+class CategoryCostBreakdown(BaseModel):
+    budget: Decimal
+    committed: Decimal
+    actual: Decimal
+    variance_to_budget: Decimal
+    variance_to_commitment: Decimal
+
+
+class ConstructionCostSummary(BaseModel):
+    scope_id: str
+    total_budget: Decimal
+    total_committed: Decimal
+    total_actual: Decimal
+    total_variance_to_budget: Decimal
+    total_variance_to_commitment: Decimal
+    by_category: Dict[str, CategoryCostBreakdown]

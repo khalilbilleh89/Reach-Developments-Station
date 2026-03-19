@@ -23,10 +23,22 @@
  *   GET    /construction/scopes/{id}/engineering-items  → list engineering items
  *   PATCH  /construction/engineering-items/{id}         → update engineering item
  *   DELETE /construction/engineering-items/{id}         → delete engineering item
+ *
+ *   POST   /construction/scopes/{id}/cost-items         → create cost item
+ *   GET    /construction/scopes/{id}/cost-items         → list cost items
+ *   GET    /construction/scopes/{id}/cost-summary       → get scope cost summary
+ *   GET    /construction/cost-items/{id}                → get cost item by id
+ *   PATCH  /construction/cost-items/{id}                → update cost item
+ *   DELETE /construction/cost-items/{id}                → delete cost item
  */
 
 import { apiFetch } from "./api-client";
 import type {
+  ConstructionCostItem,
+  ConstructionCostItemCreate,
+  ConstructionCostItemListResponse,
+  ConstructionCostItemUpdate,
+  ConstructionCostSummary,
   ConstructionEngineeringItem,
   ConstructionMilestone,
   ConstructionMilestoneCreate,
@@ -201,5 +213,70 @@ export async function deleteEngineeringItem(id: string): Promise<void> {
   return apiFetch<void>(
     `/construction/engineering-items/${encodeURIComponent(id)}`,
     { method: "DELETE" },
+  );
+}
+
+// ── Cost item API ────────────────────────────────────────────────────────────
+
+export async function listCostItems(
+  scopeId: string,
+  params?: { skip?: number; limit?: number; category?: string },
+): Promise<ConstructionCostItemListResponse> {
+  const query = new URLSearchParams();
+  if (params?.skip !== undefined) query.set("skip", String(params.skip));
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  if (params?.category) query.set("category", params.category);
+  const qs = query.toString();
+  return apiFetch<ConstructionCostItemListResponse>(
+    `/construction/scopes/${encodeURIComponent(scopeId)}/cost-items${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createCostItem(
+  scopeId: string,
+  data: ConstructionCostItemCreate,
+): Promise<ConstructionCostItem> {
+  return apiFetch<ConstructionCostItem>(
+    `/construction/scopes/${encodeURIComponent(scopeId)}/cost-items`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function getCostItem(id: string): Promise<ConstructionCostItem> {
+  return apiFetch<ConstructionCostItem>(
+    `/construction/cost-items/${encodeURIComponent(id)}`,
+  );
+}
+
+export async function updateCostItem(
+  id: string,
+  data: ConstructionCostItemUpdate,
+): Promise<ConstructionCostItem> {
+  return apiFetch<ConstructionCostItem>(
+    `/construction/cost-items/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function deleteCostItem(id: string): Promise<void> {
+  return apiFetch<void>(
+    `/construction/cost-items/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function getScopeCostSummary(
+  scopeId: string,
+): Promise<ConstructionCostSummary> {
+  return apiFetch<ConstructionCostSummary>(
+    `/construction/scopes/${encodeURIComponent(scopeId)}/cost-summary`,
   );
 }

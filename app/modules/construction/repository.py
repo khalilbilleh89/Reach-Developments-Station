@@ -4,8 +4,10 @@ construction.repository
 Data access layer for the Construction domain.
 """
 
-from typing import List, Optional
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.modules.construction.models import (
@@ -276,3 +278,116 @@ class ConstructionProgressUpdateRepository:
     def delete(self, update: ConstructionProgressUpdate) -> None:
         self.db.delete(update)
         self.db.commit()
+
+
+class ConstructionCostItemRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, scope_id: str, data) -> "ConstructionCostItem":
+        from app.modules.construction.models import ConstructionCostItem
+
+        item = ConstructionCostItem(scope_id=scope_id, **data.model_dump())
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def get_by_id(self, cost_item_id: str) -> Optional["ConstructionCostItem"]:
+        from app.modules.construction.models import ConstructionCostItem
+
+        return (
+            self.db.query(ConstructionCostItem)
+            .filter(ConstructionCostItem.id == cost_item_id)
+            .first()
+        )
+
+    def list(
+        self,
+        scope_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        category: Optional[str] = None,
+    ) -> List["ConstructionCostItem"]:
+        from app.modules.construction.models import ConstructionCostItem
+
+        query = self.db.query(ConstructionCostItem).filter(
+            ConstructionCostItem.scope_id == scope_id
+        )
+        if category:
+            query = query.filter(ConstructionCostItem.cost_category == category)
+        return (
+            query.order_by(ConstructionCostItem.created_at, ConstructionCostItem.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self, scope_id: str, category: Optional[str] = None) -> int:
+        from app.modules.construction.models import ConstructionCostItem
+
+        query = self.db.query(ConstructionCostItem).filter(
+            ConstructionCostItem.scope_id == scope_id
+        )
+        if category:
+            query = query.filter(ConstructionCostItem.cost_category == category)
+        return query.count()
+
+    def update(self, item: "ConstructionCostItem", data) -> "ConstructionCostItem":
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(item, field, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete(self, item: "ConstructionCostItem") -> None:
+        self.db.delete(item)
+        self.db.commit()
+
+    def get_scope_totals(
+        self, scope_id: str
+    ) -> Tuple[Decimal, Decimal, Decimal]:
+        """Return (total_budget, total_committed, total_actual) for a scope via DB SUM."""
+        from app.modules.construction.models import ConstructionCostItem
+
+        row = (
+            self.db.query(
+                func.coalesce(func.sum(ConstructionCostItem.budget_amount), 0).label("budget"),
+                func.coalesce(func.sum(ConstructionCostItem.committed_amount), 0).label("committed"),
+                func.coalesce(func.sum(ConstructionCostItem.actual_amount), 0).label("actual"),
+            )
+            .filter(ConstructionCostItem.scope_id == scope_id)
+            .one()
+        )
+        return (
+            Decimal(str(row.budget)),
+            Decimal(str(row.committed)),
+            Decimal(str(row.actual)),
+        )
+
+    def get_scope_totals_by_category(
+        self, scope_id: str
+    ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
+        """Return per-category (budget, committed, actual) sums via DB GROUP BY."""
+        from app.modules.construction.models import ConstructionCostItem
+
+        rows = (
+            self.db.query(
+                ConstructionCostItem.cost_category,
+                func.coalesce(func.sum(ConstructionCostItem.budget_amount), 0).label("budget"),
+                func.coalesce(func.sum(ConstructionCostItem.committed_amount), 0).label("committed"),
+                func.coalesce(func.sum(ConstructionCostItem.actual_amount), 0).label("actual"),
+            )
+            .filter(ConstructionCostItem.scope_id == scope_id)
+            .group_by(ConstructionCostItem.cost_category)
+            .all()
+        )
+        return {
+            row.cost_category: (
+                Decimal(str(row.budget)),
+                Decimal(str(row.committed)),
+                Decimal(str(row.actual)),
+            )
+            for row in rows
+        }

@@ -2,7 +2,7 @@
  * construction-types.ts — TypeScript types for the Construction domain.
  *
  * Mirrors the backend ConstructionScopeResponse, ConstructionMilestoneResponse,
- * and EngineeringItemResponse schemas.
+ * EngineeringItemResponse, and ConstructionCostItemResponse schemas.
  */
 
 export type ConstructionStatus = "planned" | "in_progress" | "on_hold" | "completed";
@@ -15,6 +15,19 @@ export type EngineeringStatus =
   | "completed"
   | "delayed"
   | "on_hold";
+
+export type CostCategory =
+  | "materials"
+  | "labor"
+  | "equipment"
+  | "subcontractor"
+  | "consultant"
+  | "permits"
+  | "utilities"
+  | "site_overheads"
+  | "other";
+
+export type CostType = "budget" | "commitment" | "actual";
 
 export interface ConstructionScope {
   id: string;
@@ -139,4 +152,74 @@ export interface EngineeringItemUpdate {
   target_date?: string | null;
   completion_date?: string | null;
   notes?: string | null;
+}
+
+// ── Cost items ───────────────────────────────────────────────────────────────
+
+export interface ConstructionCostItem {
+  id: string;
+  scope_id: string;
+  cost_category: CostCategory;
+  cost_type: CostType;
+  description: string;
+  vendor_name: string | null;
+  budget_amount: string;
+  committed_amount: string;
+  actual_amount: string;
+  variance_to_budget: string;
+  variance_to_commitment: string;
+  currency: string;
+  cost_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConstructionCostItemListResponse {
+  items: ConstructionCostItem[];
+  total: number;
+}
+
+export interface ConstructionCostItemCreate {
+  cost_category: CostCategory;
+  cost_type: CostType;
+  description: string;
+  vendor_name?: string | null;
+  budget_amount?: number;
+  committed_amount?: number;
+  actual_amount?: number;
+  currency?: string;
+  cost_date?: string | null;
+  notes?: string | null;
+}
+
+export interface ConstructionCostItemUpdate {
+  cost_category?: CostCategory;
+  cost_type?: CostType;
+  description?: string;
+  vendor_name?: string | null;
+  budget_amount?: number;
+  committed_amount?: number;
+  actual_amount?: number;
+  currency?: string;
+  cost_date?: string | null;
+  notes?: string | null;
+}
+
+export interface CategoryCostBreakdown {
+  budget: string;
+  committed: string;
+  actual: string;
+  variance_to_budget: string;
+  variance_to_commitment: string;
+}
+
+export interface ConstructionCostSummary {
+  scope_id: string;
+  total_budget: string;
+  total_committed: string;
+  total_actual: string;
+  total_variance_to_budget: string;
+  total_variance_to_commitment: string;
+  by_category: Record<string, CategoryCostBreakdown>;
 }

@@ -1,8 +1,9 @@
 /**
- * ScopeDetailView — shows a single construction scope with two workspaces:
+ * ScopeDetailView — shows a single construction scope with three workspaces:
  *
  *   Engineering  — technical tasks, deliverables, consultant cost tracking
  *   Contractor   — site execution milestones and progress tracking
+ *   Costs        — construction cost line items and scope-level cost summary
  */
 
 "use client";
@@ -31,9 +32,10 @@ import { MilestonesTable } from "./MilestonesTable";
 import { AddMilestoneModal } from "./AddMilestoneModal";
 import { EngineeringItemsTable } from "./EngineeringItemsTable";
 import { AddEngineeringItemModal } from "./AddEngineeringItemModal";
+import { ConstructionCostTable } from "./ConstructionCostTable";
 import styles from "@/styles/construction.module.css";
 
-type WorkspaceTab = "engineering" | "contractor";
+type WorkspaceTab = "engineering" | "contractor" | "costs";
 
 interface ScopeDetailViewProps {
   scope: ConstructionScope;
@@ -246,6 +248,13 @@ export function ScopeDetailView({ scope, onBack }: ScopeDetailViewProps) {
         >
           🏗️ Contractor Milestones
         </button>
+        <button
+          type="button"
+          className={`${styles.tabButton} ${activeTab === "costs" ? styles.tabButtonActive : ""}`}
+          onClick={() => setActiveTab("costs")}
+        >
+          💰 Costs
+        </button>
       </div>
 
       {/* ── Engineering workspace ────────────────────────────────────────── */}
@@ -330,6 +339,11 @@ export function ScopeDetailView({ scope, onBack }: ScopeDetailViewProps) {
             />
           )}
         </>
+      )}
+
+      {/* ── Costs workspace ──────────────────────────────────────────────── */}
+      {activeTab === "costs" && (
+        <ConstructionCostTable scopeId={scope.id} />
       )}
     </>
   );
