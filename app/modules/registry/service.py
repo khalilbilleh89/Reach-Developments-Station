@@ -12,6 +12,7 @@ Business rules enforced here:
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.modules.registry.models import (
     RegistrationCase,
@@ -312,7 +313,7 @@ class RegistryService:
             )
         return project
 
-    def _derive_project_id_from_unit(self, unit_id: str) -> "str | None":
+    def _derive_project_id_from_unit(self, unit_id: str) -> Optional[str]:
         """Resolve the project_id for a unit via the canonical hierarchy.
 
         Traverses Unit → Floor → Building → Phase → Project so that the
