@@ -1,7 +1,7 @@
 """
-Tests for the registration/conveyancing API endpoints.
+Tests for the registry/conveyancing API endpoints.
 
-Validates HTTP behaviour, request/response contracts, and registration
+Validates HTTP behaviour, request/response contracts, and registry
 workflow rules.
 """
 
@@ -74,7 +74,7 @@ def _create_case(
     buyer_name: str = "Test Buyer",
 ) -> str:
     resp = client.post(
-        "/api/v1/registration/cases",
+        "/api/v1/registry/cases",
         json={
             "project_id": project_id,
             "unit_id": unit_id,
@@ -97,7 +97,7 @@ def test_create_registration_case(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RC1-001")
 
     resp = client.post(
-        "/api/v1/registration/cases",
+        "/api/v1/registry/cases",
         json={
             "project_id": project_id,
             "unit_id": unit_id,
@@ -122,7 +122,7 @@ def test_create_case_defaults_milestones_and_documents(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     # Milestones should be initialised automatically
-    ms_resp = client.get(f"/api/v1/registration/cases/{case_id}/milestones")
+    ms_resp = client.get(f"/api/v1/registry/cases/{case_id}/milestones")
     assert ms_resp.status_code == 200
     milestones = ms_resp.json()
     assert len(milestones) > 0
@@ -132,7 +132,7 @@ def test_create_case_defaults_milestones_and_documents(client: TestClient):
     assert sequences == sorted(sequences)
 
     # Documents should be initialised automatically
-    doc_resp = client.get(f"/api/v1/registration/cases/{case_id}/documents")
+    doc_resp = client.get(f"/api/v1/registry/cases/{case_id}/documents")
     assert doc_resp.status_code == 200
     docs = doc_resp.json()
     assert len(docs) > 0
@@ -143,7 +143,7 @@ def test_create_case_defaults_milestones_and_documents(client: TestClient):
 def test_create_case_invalid_contract_returns_404(client: TestClient):
     project_id, unit_id = _create_hierarchy(client, "PRJ-RC3")
     resp = client.post(
-        "/api/v1/registration/cases",
+        "/api/v1/registry/cases",
         json={
             "project_id": project_id,
             "unit_id": unit_id,
@@ -164,7 +164,7 @@ def test_create_case_contract_unit_mismatch_returns_422(client: TestClient):
 
     # Try to open a case referencing unit_id_b
     resp = client.post(
-        "/api/v1/registration/cases",
+        "/api/v1/registry/cases",
         json={
             "project_id": project_id,
             "unit_id": unit_id_b,
@@ -182,7 +182,7 @@ def test_duplicate_active_case_per_unit_returns_409(client: TestClient):
     _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.post(
-        "/api/v1/registration/cases",
+        "/api/v1/registry/cases",
         json={
             "project_id": project_id,
             "unit_id": unit_id,
@@ -203,13 +203,13 @@ def test_get_case(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RG1-001")
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
-    resp = client.get(f"/api/v1/registration/cases/{case_id}")
+    resp = client.get(f"/api/v1/registry/cases/{case_id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == case_id
 
 
 def test_get_case_not_found(client: TestClient):
-    resp = client.get("/api/v1/registration/cases/no-such-case")
+    resp = client.get("/api/v1/registry/cases/no-such-case")
     assert resp.status_code == 404
 
 
@@ -219,13 +219,13 @@ def test_get_case_by_sale_contract(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RBYS-001")
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
-    resp = client.get(f"/api/v1/registration/cases/by-sale/{contract_id}")
+    resp = client.get(f"/api/v1/registry/cases/by-sale/{contract_id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == case_id
 
 
 def test_get_case_by_sale_contract_not_found(client: TestClient):
-    resp = client.get("/api/v1/registration/cases/by-sale/no-such-contract")
+    resp = client.get("/api/v1/registry/cases/by-sale/no-such-contract")
     assert resp.status_code == 404
 
 
@@ -239,7 +239,7 @@ def test_list_project_cases(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RLPC-001")
     _create_case(client, project_id, unit_id, contract_id)
 
-    resp = client.get(f"/api/v1/registration/projects/{project_id}/cases")
+    resp = client.get(f"/api/v1/registry/projects/{project_id}/cases")
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 1
@@ -247,18 +247,18 @@ def test_list_project_cases(client: TestClient):
 
 
 def test_list_project_cases_not_found(client: TestClient):
-    resp = client.get("/api/v1/registration/projects/no-such-project/cases")
+    resp = client.get("/api/v1/registry/projects/no-such-project/cases")
     assert resp.status_code == 404
 
 
 def test_get_project_summary(client: TestClient):
-    """A unit with an open registration case is in the pipeline — not 'sold_not_registered'."""
+    """A unit with an open registry case is in the pipeline — not 'sold_not_registered'."""
     project_id, unit_id = _create_hierarchy(client, "PRJ-RSUMM")
     buyer_id = _create_buyer(client, "rsumm@example.com")
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RSUMM-001")
     _create_case(client, project_id, unit_id, contract_id)
 
-    resp = client.get(f"/api/v1/registration/projects/{project_id}/summary")
+    resp = client.get(f"/api/v1/registry/projects/{project_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["project_id"] == project_id
@@ -271,13 +271,13 @@ def test_get_project_summary(client: TestClient):
 
 
 def test_summary_sold_no_case_counts_as_not_registered(client: TestClient):
-    """A sold unit with no registration case at all must appear in sold_not_registered."""
+    """A sold unit with no registry case at all must appear in sold_not_registered."""
     project_id, unit_id = _create_hierarchy(client, "PRJ-RSNO")
     buyer_id = _create_buyer(client, "rsno@example.com")
     _create_contract(client, unit_id, buyer_id, "CNT-RSNO-001")
     # No case opened
 
-    resp = client.get(f"/api/v1/registration/projects/{project_id}/summary")
+    resp = client.get(f"/api/v1/registry/projects/{project_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["total_sold_units"] == 1
@@ -294,18 +294,18 @@ def test_summary_completed_case_not_counted_as_not_registered(client: TestClient
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     # Complete all milestones, then complete the case
-    milestones = client.get(f"/api/v1/registration/cases/{case_id}/milestones").json()
+    milestones = client.get(f"/api/v1/registry/cases/{case_id}/milestones").json()
     for ms in milestones:
         client.patch(
-            f"/api/v1/registration/cases/{case_id}/milestones/{ms['id']}",
+            f"/api/v1/registry/cases/{case_id}/milestones/{ms['id']}",
             json={"status": "completed"},
         )
     client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "completed"},
     )
 
-    resp = client.get(f"/api/v1/registration/projects/{project_id}/summary")
+    resp = client.get(f"/api/v1/registry/projects/{project_id}/summary")
     assert resp.status_code == 200
     data = resp.json()
     assert data["registration_cases_completed"] == 1
@@ -314,7 +314,7 @@ def test_summary_completed_case_not_counted_as_not_registered(client: TestClient
 
 
 def test_get_project_summary_not_found(client: TestClient):
-    resp = client.get("/api/v1/registration/projects/no-such-project/summary")
+    resp = client.get("/api/v1/registry/projects/no-such-project/summary")
     assert resp.status_code == 404
 
 
@@ -329,7 +329,7 @@ def test_update_case_status(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "in_progress"},
     )
     assert resp.status_code == 200
@@ -343,7 +343,7 @@ def test_update_case_notes(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"notes": "Awaiting NOC from developer"},
     )
     assert resp.status_code == 200
@@ -358,7 +358,7 @@ def test_complete_case_requires_all_milestones_done(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "completed"},
     )
     assert resp.status_code == 409
@@ -372,15 +372,15 @@ def test_complete_case_after_all_milestones_done(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     # Mark all milestones as completed
-    milestones = client.get(f"/api/v1/registration/cases/{case_id}/milestones").json()
+    milestones = client.get(f"/api/v1/registry/cases/{case_id}/milestones").json()
     for ms in milestones:
         client.patch(
-            f"/api/v1/registration/cases/{case_id}/milestones/{ms['id']}",
+            f"/api/v1/registry/cases/{case_id}/milestones/{ms['id']}",
             json={"status": "completed"},
         )
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "completed"},
     )
     assert resp.status_code == 200
@@ -395,29 +395,29 @@ def test_completed_case_immutable_except_notes(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     # Complete all milestones first
-    milestones = client.get(f"/api/v1/registration/cases/{case_id}/milestones").json()
+    milestones = client.get(f"/api/v1/registry/cases/{case_id}/milestones").json()
     for ms in milestones:
         client.patch(
-            f"/api/v1/registration/cases/{case_id}/milestones/{ms['id']}",
+            f"/api/v1/registry/cases/{case_id}/milestones/{ms['id']}",
             json={"status": "completed"},
         )
 
     # Complete the case
     client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "completed"},
     )
 
     # Attempt to change status on a completed case
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"status": "in_progress"},
     )
     assert resp.status_code == 409
 
     # Notes update must still succeed
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}",
+        f"/api/v1/registry/cases/{case_id}",
         json={"notes": "Admin correction note"},
     )
     assert resp.status_code == 200
@@ -433,11 +433,11 @@ def test_update_milestone(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RMS-001")
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
-    milestones = client.get(f"/api/v1/registration/cases/{case_id}/milestones").json()
+    milestones = client.get(f"/api/v1/registry/cases/{case_id}/milestones").json()
     ms_id = milestones[0]["id"]
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}/milestones/{ms_id}",
+        f"/api/v1/registry/cases/{case_id}/milestones/{ms_id}",
         json={"status": "in_progress", "remarks": "Started"},
     )
     assert resp.status_code == 200
@@ -453,7 +453,7 @@ def test_update_milestone_not_found(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}/milestones/no-such-milestone",
+        f"/api/v1/registry/cases/{case_id}/milestones/no-such-milestone",
         json={"status": "completed"},
     )
     assert resp.status_code == 404
@@ -465,11 +465,11 @@ def test_update_document(client: TestClient):
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RDOC-001")
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
-    docs = client.get(f"/api/v1/registration/cases/{case_id}/documents").json()
+    docs = client.get(f"/api/v1/registry/cases/{case_id}/documents").json()
     doc_id = docs[0]["id"]
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}/documents/{doc_id}",
+        f"/api/v1/registry/cases/{case_id}/documents/{doc_id}",
         json={
             "is_received": True,
             "received_at": "2026-03-10",
@@ -490,7 +490,7 @@ def test_update_document_not_found(client: TestClient):
     case_id = _create_case(client, project_id, unit_id, contract_id)
 
     resp = client.patch(
-        f"/api/v1/registration/cases/{case_id}/documents/no-such-doc",
+        f"/api/v1/registry/cases/{case_id}/documents/no-such-doc",
         json={"is_received": True},
     )
     assert resp.status_code == 404

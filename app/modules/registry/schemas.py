@@ -1,7 +1,7 @@
 """
-registration.schemas
+registry.schemas
 
-Pydantic request/response schemas for the Registration/Conveyancing domain.
+Pydantic request/response schemas for the Registry/Conveyancing domain.
 """
 
 from datetime import date, datetime
@@ -117,7 +117,7 @@ class RegistrationDocumentUpdate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Project registration summary schema
+# Project registry summary schema
 # ---------------------------------------------------------------------------
 
 class RegistrationSummaryResponse(BaseModel):

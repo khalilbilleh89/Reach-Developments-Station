@@ -1,5 +1,5 @@
 """
-registration.repository
+registry.repository
 
 Data access layer for RegistrationCase, RegistrationMilestone, and
 RegistrationDocument entities.
@@ -11,14 +11,14 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.modules.registration.models import (
+from app.modules.registry.models import (
     RegistrationCase,
     RegistrationDocument,
     RegistrationMilestone,
 )
 from app.shared.enums.registration import CaseStatus, MilestoneStatus
 
-# Default milestone template applied to every new registration case.
+# Default milestone template applied to every new registry case.
 _DEFAULT_MILESTONES = [
     ("spa_signed", "SPA Signed / Contract Executed", 1),
     ("due_diligence", "Due Diligence & Title Search", 2),
@@ -28,7 +28,7 @@ _DEFAULT_MILESTONES = [
     ("title_issued", "Title Deed Issued", 6),
 ]
 
-# Default required documents for every new registration case.
+# Default required documents for every new registry case.
 _DEFAULT_DOCUMENTS = [
     "Sale & Purchase Agreement (SPA)",
     "Buyer Passport / ID",
@@ -127,7 +127,7 @@ class RegistrationMilestoneRepository:
         self.db = db
 
     def create_defaults(self, case_id: str) -> List[RegistrationMilestone]:
-        """Insert the standard milestone template for a new registration case."""
+        """Insert the standard milestone template for a new registry case."""
         milestones = [
             RegistrationMilestone(
                 registration_case_id=case_id,

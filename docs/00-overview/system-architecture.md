@@ -68,7 +68,7 @@ The system is organized into the following domain modules:
 ### Post-Sale
 | Module | Purpose |
 |---|---|
-| Registration & Conveyancing | Title transfer workflow, document checklist |
+| Registry & Conveyancing | Title transfer workflow, document checklist |
 
 ### Intelligence (Future)
 | Module | Purpose |
@@ -98,7 +98,7 @@ Project
 │   │   │       ├── Payment Plans    (attaches at Sale level)
 │   │   │       ├── Collections      (attaches at Payment Plan level)
 │   │   │       ├── Revenue Recog.   (attaches at Sale / Milestone level)
-│   │   │       └── Registration     (attaches at Sale / Unit level)
+│   │   │       └── Registry         (attaches at Sale / Unit level)
 │
 └── Analytics / Finance Summary  (attaches at Project / Portfolio level)
 ```
@@ -126,7 +126,7 @@ Operational transaction records:
 - Payment receipts and matching
 - Tender submissions and award records
 - Stage gate approvals and permit records
-- Registration workflow events
+- Registry workflow events
 
 ### Layer 4 — Analytics & Reporting
 Aggregated views and financial summaries:

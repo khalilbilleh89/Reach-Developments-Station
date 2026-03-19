@@ -1,11 +1,11 @@
 """
-registration.service
+registry.service
 
-Application-layer orchestration for the Registration/Conveyancing domain.
+Application-layer orchestration for the Registry/Conveyancing domain.
 
 Business rules enforced here:
-  - A registration case must be tied to a valid, existing sales contract.
-  - A unit may not have more than one active (non-cancelled) registration case.
+  - A registry case must be tied to a valid, existing sales contract.
+  - A unit may not have more than one active (non-cancelled) registry case.
   - Completed cases are immutable except for notes / admin corrections.
   - Case completion requires all mandatory milestones to be completed.
 """
@@ -13,17 +13,17 @@ Business rules enforced here:
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.modules.registration.models import (
+from app.modules.registry.models import (
     RegistrationCase,
     RegistrationDocument,
     RegistrationMilestone,
 )
-from app.modules.registration.repository import (
+from app.modules.registry.repository import (
     RegistrationCaseRepository,
     RegistrationDocumentRepository,
     RegistrationMilestoneRepository,
 )
-from app.modules.registration.schemas import (
+from app.modules.registry.schemas import (
     RegistrationCaseCreate,
     RegistrationCaseListResponse,
     RegistrationCaseResponse,
@@ -43,7 +43,7 @@ from app.modules.phases.models import Phase
 from app.shared.enums.registration import CaseStatus
 
 
-class RegistrationService:
+class RegistryService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self.case_repo = RegistrationCaseRepository(db)
@@ -55,11 +55,11 @@ class RegistrationService:
     # ------------------------------------------------------------------
 
     def create_case(self, data: RegistrationCaseCreate) -> RegistrationCaseResponse:
-        """Open a new registration case for a sold unit.
+        """Open a new registry case for a sold unit.
 
         Validates:
         - The referenced sales contract exists.
-        - The unit does not already have an active registration case.
+        - The unit does not already have an active registry case.
         """
         contract = self._require_contract(data.sale_contract_id)
 
@@ -69,7 +69,7 @@ class RegistrationService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Unit '{data.unit_id}' already has an active registration case "
+                    f"Unit '{data.unit_id}' already has an active registry case "
                     f"(id='{existing.id}')."
                 ),
             )
@@ -103,7 +103,7 @@ class RegistrationService:
         if not case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No registration case found for contract '{sale_contract_id}'.",
+                detail=f"No registry case found for contract '{sale_contract_id}'.",
             )
         return RegistrationCaseResponse.model_validate(case)
 
@@ -132,7 +132,7 @@ class RegistrationService:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Completed registration cases are immutable. "
+                        "Completed registry cases are immutable. "
                         f"Cannot update: {sorted(disallowed)}."
                     ),
                 )
@@ -146,7 +146,7 @@ class RegistrationService:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Cannot complete a registration case while milestones are "
+                        "Cannot complete a registry case while milestones are "
                         "still pending or in progress."
                     ),
                 )
@@ -213,7 +213,7 @@ class RegistrationService:
     # ------------------------------------------------------------------
 
     def get_project_summary(self, project_id: str) -> RegistrationSummaryResponse:
-        """Return registration summary metrics for a project."""
+        """Return registry summary metrics for a project."""
         self._require_project(project_id)
 
         total_cases = self.case_repo.count_by_project(project_id)
@@ -231,7 +231,7 @@ class RegistrationService:
             .count()
         )
 
-        # Units already in the registration pipeline (open or completed cases)
+        # Units already in the registry pipeline (open or completed cases)
         # should not be counted as "sold but not registered".
         # open_cases excludes cancelled cases (see repository).
         active_pipeline = open_cases + completed
@@ -256,7 +256,7 @@ class RegistrationService:
         if not case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Registration case '{case_id}' not found.",
+                detail=f"Registry case '{case_id}' not found.",
             )
         return case
 

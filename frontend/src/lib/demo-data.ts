@@ -3,7 +3,7 @@
  *
  * ⚠️  These values are presentation-only. No backend records are created or
  * modified by this file. All data is hardcoded here and consumed exclusively
- * by the demo placeholder pages (Projects, Registration, Commission,
+ * by the demo placeholder pages (Projects, Registry, Commission,
  * Cashflow, Settings).
  *
  * Replace with real API-driven data in follow-up module PRs (PR-018+).
@@ -75,27 +75,27 @@ export const demoProjects: DemoProject[] = [
   },
 ];
 
-// ─── Registration ─────────────────────────────────────────────────────────────
+// ─── Registry ─────────────────────────────────────────────────────────────────
 
-export type RegistrationStatus =
+export type RegistryStatus =
   | "Pending Submission"
   | "In Review"
   | "Approved"
   | "Missing Documents"
   | "Registered";
 
-export interface DemoRegistrationCase {
+export interface DemoRegistryCase {
   caseRef: string;
   unitRef: string;
   projectName: string;
   buyerName: string;
-  status: RegistrationStatus;
+  status: RegistryStatus;
   submittedDate: string;
   lastUpdated: string;
   missingDocs: number;
 }
 
-export const demoRegistrationCases: DemoRegistrationCase[] = [
+export const demoRegistryCases: DemoRegistryCase[] = [
   {
     caseRef: "REG-2024-001",
     unitRef: "ARR-B2-1204",
