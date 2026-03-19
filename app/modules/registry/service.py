@@ -60,6 +60,11 @@ class RegistryService:
         Validates:
         - The referenced sales contract exists.
         - The unit does not already have an active registry case.
+        - The supplied project_id matches the unit's actual project derived
+          from the canonical hierarchy (Unit → Floor → Building → Phase → Project).
+          This enforces the architecture rule that commercial records must trace
+          back through the unit hierarchy and cannot bypass it with an arbitrary
+          project reference.
         """
         contract = self._require_contract(data.sale_contract_id)
 
@@ -79,6 +84,29 @@ class RegistryService:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="The sale contract does not belong to the specified unit.",
+            )
+
+        # Guard: project_id must match the unit's actual project via the
+        # canonical hierarchy.  Prevents a client from recording a case
+        # against an arbitrary project that does not own the unit.
+        actual_project_id = self._derive_project_id_from_unit(data.unit_id)
+        if actual_project_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Cannot resolve project for unit '{data.unit_id}'. "
+                    "Ensure the unit exists and belongs to a complete hierarchy."
+                ),
+            )
+        if data.project_id != actual_project_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"project_id '{data.project_id}' does not match the unit's "
+                    f"actual project '{actual_project_id}' as derived from the "
+                    "unit hierarchy (Unit → Floor → Building → Phase → Project). "
+                    "Use the correct project_id."
+                ),
             )
 
         case = RegistrationCase(**data.model_dump())
@@ -283,3 +311,19 @@ class RegistryService:
                 detail=f"Project '{project_id}' not found.",
             )
         return project
+
+    def _derive_project_id_from_unit(self, unit_id: str) -> "str | None":
+        """Resolve the project_id for a unit via the canonical hierarchy.
+
+        Traverses Unit → Floor → Building → Phase → Project so that the
+        registry case always records the project that actually owns the unit,
+        rather than trusting a client-supplied value.
+        """
+        return (
+            self._db.query(Phase.project_id)
+            .join(Building, Phase.id == Building.phase_id)
+            .join(Floor, Building.id == Floor.building_id)
+            .join(Unit, Floor.id == Unit.floor_id)
+            .filter(Unit.id == unit_id)
+            .scalar()
+        )
