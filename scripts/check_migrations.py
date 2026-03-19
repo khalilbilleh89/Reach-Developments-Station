@@ -21,11 +21,11 @@ Pass ``--verbose`` / ``-v`` for more detail in the output.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import sys
 import tempfile
-from typing import Any
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so ORM models can be imported.
@@ -36,8 +36,51 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 # ---------------------------------------------------------------------------
-# ANSI colour helpers
+# Import all ORM model modules at module level so Base.metadata is fully
+# populated for every check that inspects it (FK topology, indexes, etc.).
 # ---------------------------------------------------------------------------
+from app.db.base import Base  # noqa: E402
+import app.modules.auth.models  # noqa: E402, F401
+import app.modules.buildings.models  # noqa: E402, F401
+import app.modules.cashflow.models  # noqa: E402, F401
+import app.modules.collections.models  # noqa: E402, F401
+import app.modules.commission.models  # noqa: E402, F401
+import app.modules.construction.models  # noqa: E402, F401
+import app.modules.feasibility.models  # noqa: E402, F401
+import app.modules.floors.models  # noqa: E402, F401
+import app.modules.land.models  # noqa: E402, F401
+import app.modules.payment_plans.models  # noqa: E402, F401
+import app.modules.phases.models  # noqa: E402, F401
+import app.modules.pricing.models  # noqa: E402, F401
+import app.modules.pricing_attributes.models  # noqa: E402, F401
+import app.modules.projects.models  # noqa: E402, F401
+import app.modules.receivables.models  # noqa: E402, F401
+import app.modules.registry.models  # noqa: E402, F401
+import app.modules.reservations.models  # noqa: E402, F401
+import app.modules.sales.models  # noqa: E402, F401
+import app.modules.sales_exceptions.models  # noqa: E402, F401
+import app.modules.settings.models  # noqa: E402, F401
+import app.modules.units.models  # noqa: E402, F401
+
+@contextlib.contextmanager
+def _isolated_database_url(db_url: str):
+    """
+    Context manager that temporarily overrides ``DATABASE_URL`` in the
+    process environment so that Alembic's ``env.py`` (which reads that
+    variable) uses the provided *db_url* instead of any real configured DB.
+    The original value is restored on exit.
+    """
+    original = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = db_url
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = original
+
+
 _USE_COLOUR = sys.stdout.isatty()
 
 
@@ -254,17 +297,19 @@ def check_migration_run() -> CheckResult:
             cfg = Config(_ALEMBIC_INI)
             cfg.set_main_option("sqlalchemy.url", db_url)
 
-            try:
-                alembic_command.upgrade(cfg, "head")
-            except NotImplementedError as exc:
-                result.warn(
-                    f"Upgrade blocked by SQLite limitation: {exc}. "
-                    "Run against PostgreSQL for a complete validation."
-                )
-                return result
-            except Exception as exc:
-                result.fail(f"alembic upgrade head failed: {type(exc).__name__}: {exc}")
-                return result
+            # Override DATABASE_URL so env.py cannot redirect to a real DB.
+            with _isolated_database_url(db_url):
+                try:
+                    alembic_command.upgrade(cfg, "head")
+                except NotImplementedError as exc:
+                    result.warn(
+                        f"Upgrade blocked by SQLite limitation: {exc}. "
+                        "Run against PostgreSQL for a complete validation."
+                    )
+                    return result
+                except Exception as exc:
+                    result.fail(f"alembic upgrade head failed: {type(exc).__name__}: {exc}")
+                    return result
 
             # Verify the recorded head matches the declared head
             from sqlalchemy import create_engine, text
@@ -301,28 +346,6 @@ def check_orm_tables() -> CheckResult:
     try:
         from sqlalchemy import create_engine, inspect
         from sqlalchemy.pool import StaticPool
-        from app.db.base import Base
-        import app.modules.auth.models  # noqa: F401
-        import app.modules.buildings.models  # noqa: F401
-        import app.modules.cashflow.models  # noqa: F401
-        import app.modules.collections.models  # noqa: F401
-        import app.modules.commission.models  # noqa: F401
-        import app.modules.construction.models  # noqa: F401
-        import app.modules.feasibility.models  # noqa: F401
-        import app.modules.floors.models  # noqa: F401
-        import app.modules.land.models  # noqa: F401
-        import app.modules.payment_plans.models  # noqa: F401
-        import app.modules.phases.models  # noqa: F401
-        import app.modules.pricing.models  # noqa: F401
-        import app.modules.pricing_attributes.models  # noqa: F401
-        import app.modules.projects.models  # noqa: F401
-        import app.modules.receivables.models  # noqa: F401
-        import app.modules.registry.models  # noqa: F401
-        import app.modules.reservations.models  # noqa: F401
-        import app.modules.sales.models  # noqa: F401
-        import app.modules.sales_exceptions.models  # noqa: F401
-        import app.modules.settings.models  # noqa: F401
-        import app.modules.units.models  # noqa: F401
 
         engine = create_engine(
             "sqlite://",
@@ -349,7 +372,8 @@ def check_orm_tables() -> CheckResult:
         # Cross-check with migrations
         migration_tables: set[str] = set()
         for filename in _migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             found = re.findall(r'op\.create_table\(\s*["\'](\w+)["\']', content)
             migration_tables.update(found)
 
@@ -376,9 +400,14 @@ def check_orm_tables() -> CheckResult:
 def check_foreign_keys() -> CheckResult:
     result = CheckResult("Foreign-key topology")
     try:
-        from app.db.base import Base
-
         tables = Base.metadata.tables
+        if not tables:
+            result.fail(
+                "Base.metadata.tables is empty — ORM models were not imported. "
+                "Cannot perform FK topology check."
+            )
+            return result
+
         errors: list[str] = []
 
         for table_name, table in tables.items():
@@ -427,9 +456,14 @@ def check_foreign_keys() -> CheckResult:
 def check_indexes() -> CheckResult:
     result = CheckResult("Critical indexes")
     try:
-        from app.db.base import Base
-
         tables = Base.metadata.tables
+        if not tables:
+            result.fail(
+                "Base.metadata.tables is empty — ORM models were not imported. "
+                "Cannot perform index check."
+            )
+            return result
+
         critical = [
             ("phases", "ix_phases_project_id"),
             ("buildings", "ix_buildings_phase_id"),

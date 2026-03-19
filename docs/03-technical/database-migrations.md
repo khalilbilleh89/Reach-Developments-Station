@@ -7,8 +7,13 @@ all database schema changes. Every structural change to the database — creatin
 adding columns, altering constraints — must go through a migration file. Direct DDL
 against the database is prohibited.
 
-The migration chain currently contains **29 revisions** (0001 – 0030, with 0015 reserved).
-All revisions form a single linear chain from base `0001` to head `0030`.
+The migration chain is a single linear sequence starting from the base revision.
+To see the current head and full history at any time, run:
+
+```bash
+alembic heads          # shows the current head revision
+alembic history --verbose  # shows the full revision chain
+```
 
 ---
 

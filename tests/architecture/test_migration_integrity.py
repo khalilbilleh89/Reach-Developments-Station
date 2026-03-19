@@ -228,13 +228,19 @@ class TestMigrationFileCompleteness:
         )
 
     def test_revision_ids_match_file_names(self):
-        """Each file's revision ID should match its numeric filename prefix."""
+        """
+        Each file's ``revision`` value must exactly match the four-digit
+        numeric prefix of the filename.
+
+        Example: ``0030_create_settings_tables.py`` must contain
+        ``revision = "0030"`` — not ``"30"`` or any other normalisation.
+        """
         mismatches = []
         for filename in _all_migration_files():
             m = re.match(r"^(\d+)_", filename)
             if not m:
                 continue
-            expected_rev = m.group(1).lstrip("0") or "0"
+            expected_rev = m.group(1)  # raw 4-digit prefix, e.g. "0030"
             with open(os.path.join(_VERSIONS_DIR, filename)) as f:
                 content = f.read()
             rev_match = re.search(
@@ -242,11 +248,11 @@ class TestMigrationFileCompleteness:
             )
             if not rev_match:
                 continue
-            actual_rev = rev_match.group(1).lstrip("0") or "0"
+            actual_rev = rev_match.group(1)
             if actual_rev != expected_rev:
                 mismatches.append(
                     f"{filename}: filename prefix {expected_rev!r} != "
-                    f"revision {actual_rev!r}"
+                    f"in-file revision {actual_rev!r}"
                 )
         assert not mismatches, (
             "Revision ID/filename mismatches detected:\n" + "\n".join(mismatches)
@@ -258,9 +264,18 @@ class TestMigrationFileCompleteness:
         ``op.drop_constraint`` outside of ``batch_alter_table``, which will
         fail on SQLite.
 
-        These migrations require PostgreSQL for the ``upgrade`` to succeed.
-        This test documents the known incompatibilities so they are visible.
+        An explicit allowlist covers the two existing known incompatible
+        migrations.  Any new migration that adds such an operation *outside*
+        the allowlist causes this test to **fail** (not xfail), ensuring
+        the issue is visible and cannot be silently introduced.
         """
+        # Known existing migrations that are SQLite-incompatible.  This set
+        # must NOT grow without a deliberate decision to fix the new migration.
+        _KNOWN_INCOMPATIBLE = {
+            "0006_create_payment_plan_tables.py",
+            "0016_add_floors_table.py",
+        }
+
         incompatible = []
         for filename in _all_migration_files():
             path = os.path.join(_VERSIONS_DIR, filename)
@@ -288,13 +303,21 @@ class TestMigrationFileCompleteness:
             if has_standalone_constraint and not uses_batch and not guards_by_dialect:
                 incompatible.append(filename)
 
-        if incompatible:
+        new_incompatible = [f for f in incompatible if f not in _KNOWN_INCOMPATIBLE]
+        assert not new_incompatible, (
+            "New migrations use ``op.create_unique_constraint`` or "
+            "``op.drop_constraint`` outside of ``batch_alter_table`` — this "
+            "will fail on SQLite.  Wrap them with ``batch_alter_table`` or "
+            "guard with ``if bind.dialect.name == 'postgresql':``:\n"
+            + "\n".join(f"  - {f}" for f in new_incompatible)
+        )
+
+        known_found = [f for f in incompatible if f in _KNOWN_INCOMPATIBLE]
+        if known_found:
             pytest.xfail(
-                "The following migrations use ``op.create_unique_constraint`` or "
-                "``op.drop_constraint`` outside of ``batch_alter_table``, which "
-                "is not supported by the SQLite dialect. These migrations require "
-                "PostgreSQL to run end-to-end:\n"
-                + "\n".join(f"  - {f}" for f in incompatible)
+                "Known SQLite-incompatible migrations (require PostgreSQL to "
+                "run end-to-end).  Fix tracked in migration-hardening backlog:\n"
+                + "\n".join(f"  - {f}" for f in known_found)
             )
 
 
@@ -313,10 +336,13 @@ class TestMigrationsApplyCleanly:
     so CI stays informative while the underlying issue is tracked.
     """
 
-    def test_migrations_apply_cleanly(self, tmp_path):
+    def test_migrations_apply_cleanly(self, tmp_path, monkeypatch):
         """alembic upgrade head must succeed on a fresh database."""
         db_file = str(tmp_path / "migration_test.db")
         db_url = f"sqlite:///{db_file}"
+
+        # Prevent env.py from overriding the URL with a real DATABASE_URL.
+        monkeypatch.setenv("DATABASE_URL", db_url)
 
         cfg = _alembic_cfg(db_url)
         try:
@@ -337,13 +363,17 @@ class TestMigrationsApplyCleanly:
                 f"{type(exc).__name__}: {exc}"
             )
 
-    def test_alembic_history_is_consistent(self, tmp_path):
+    def test_alembic_history_is_consistent(self, tmp_path, monkeypatch):
         """
         After applying all migrations the recorded current revision must match
         the declared head.
         """
         db_file = str(tmp_path / "history_test.db")
         db_url = f"sqlite:///{db_file}"
+
+        # Prevent env.py from overriding the URL with a real DATABASE_URL.
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
         cfg = _alembic_cfg(db_url)
 
         from alembic import command as alembic_command
@@ -715,13 +745,18 @@ class TestSchemaMatchesModels:
 
     def test_postgresql_only_operations_are_guarded(self):
         """
-        Migrations that use PostgreSQL-specific DDL must guard those operations
-        with a dialect check (``bind.dialect.name == 'postgresql'``) or use
+        Migrations that use PostgreSQL-specific DDL *other than*
+        ``postgresql_where`` in ``create_index`` must guard those operations
+        with a dialect check (``bind.dialect.name == 'postgresql'``) or
         ``batch_alter_table`` so they degrade gracefully on SQLite.
 
-        Partial indexes (``postgresql_where=``) are always safe because
-        SQLAlchemy silently drops the WHERE clause on SQLite.
-        Standalone ``create_unique_constraint`` is NOT safe (see migration 0006).
+        ``postgresql_where=`` in ``op.create_index`` is explicitly **allowed**
+        without a guard because SQLAlchemy silently drops the WHERE clause when
+        targeting SQLite — no runtime error occurs.
+
+        Any usage of ``postgresql_ops=`` or ``postgresql_using=`` without a
+        dialect guard is flagged, as those keywords can affect query behaviour
+        and should be explicitly scoped to PostgreSQL.
         """
         unguarded = []
         for filename in _all_migration_files():
@@ -729,18 +764,22 @@ class TestSchemaMatchesModels:
             with open(path) as f:
                 content = f.read()
 
-            # Heuristic: look for postgresql-specific parameters outside guards
+            # Only flag the non-safe PostgreSQL-specific kwargs.
+            # postgresql_where is intentionally excluded because SQLAlchemy
+            # transparently ignores it on SQLite.
             has_pg_specific = bool(
-                re.search(r"postgresql_where|postgresql_ops|postgresql_using", content)
+                re.search(r"postgresql_ops|postgresql_using", content)
             )
             has_dialect_guard = "dialect.name" in content
             uses_batch = "batch_alter_table" in content
 
             if has_pg_specific and not has_dialect_guard and not uses_batch:
-                # postgresql_where in create_index is silently ignored on SQLite,
-                # so it is not a real incompatibility — document it but don't fail.
-                pass  # acceptable — SQLAlchemy handles this transparently
+                unguarded.append(filename)
 
-        # This test always passes; it is here to provide a clear audit trail
-        # in test output showing which migrations were reviewed.
-        assert True, "All migrations reviewed for PostgreSQL-only operations."
+        assert not unguarded, (
+            "Migrations use PostgreSQL-specific DDL kwargs "
+            "(``postgresql_ops``/``postgresql_using``) without a dialect "
+            "guard.  Wrap with ``if bind.dialect.name == 'postgresql':`` or "
+            "``batch_alter_table``:\n"
+            + "\n".join(f"  - {f}" for f in unguarded)
+        )
