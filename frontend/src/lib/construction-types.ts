@@ -224,6 +224,34 @@ export interface ConstructionCostSummary {
   by_category: Record<string, CategoryCostBreakdown>;
 }
 
+// ── Progress Updates ─────────────────────────────────────────────────────────
+
+/** Mirrors ProgressUpdateCreate */
+export interface ProgressUpdateCreate {
+  progress_percent: number;
+  status_note?: string | null;
+  reported_by?: string | null;
+  reported_at?: string | null;
+}
+
+/** Mirrors ProgressUpdateResponse */
+export interface ProgressUpdate {
+  id: string;
+  milestone_id: string;
+  progress_percent: number;
+  status_note: string | null;
+  reported_by: string | null;
+  reported_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Mirrors ProgressUpdateList */
+export interface ProgressUpdateList {
+  items: ProgressUpdate[];
+  total: number;
+}
+
 // ── Construction Dashboard ────────────────────────────────────────────────────
 
 export interface ConstructionDashboardScopeSummary {

@@ -52,6 +52,9 @@ import type {
   EngineeringItemCreate,
   EngineeringItemListResponse,
   EngineeringItemUpdate,
+  ProgressUpdate,
+  ProgressUpdateCreate,
+  ProgressUpdateList,
 } from "./construction-types";
 
 // ── Scope API ────────────────────────────────────────────────────────────────
@@ -289,5 +292,47 @@ export async function getProjectConstructionDashboard(
 ): Promise<ConstructionDashboardResponse> {
   return apiFetch<ConstructionDashboardResponse>(
     `/construction/projects/${encodeURIComponent(projectId)}/dashboard`,
+  );
+}
+
+// ── Progress Update API ───────────────────────────────────────────────────────
+
+export async function createProgressUpdate(
+  milestoneId: string,
+  data: ProgressUpdateCreate,
+): Promise<ProgressUpdate> {
+  return apiFetch<ProgressUpdate>(
+    `/construction/milestones/${encodeURIComponent(milestoneId)}/progress-updates`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function listProgressUpdates(
+  milestoneId: string,
+  params?: { skip?: number; limit?: number },
+): Promise<ProgressUpdateList> {
+  const query = new URLSearchParams();
+  if (params?.skip !== undefined) query.set("skip", String(params.skip));
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  return apiFetch<ProgressUpdateList>(
+    `/construction/milestones/${encodeURIComponent(milestoneId)}/progress-updates${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function getProgressUpdate(updateId: string): Promise<ProgressUpdate> {
+  return apiFetch<ProgressUpdate>(
+    `/construction/progress-updates/${encodeURIComponent(updateId)}`,
+  );
+}
+
+export async function deleteProgressUpdate(updateId: string): Promise<void> {
+  return apiFetch<void>(
+    `/construction/progress-updates/${encodeURIComponent(updateId)}`,
+    { method: "DELETE" },
   );
 }

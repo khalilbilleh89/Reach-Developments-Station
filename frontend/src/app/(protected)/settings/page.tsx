@@ -5,7 +5,15 @@ import styles from "@/styles/demo-shell.module.css";
  * Settings — executive demo placeholder.
  *
  * Shows structured settings category cards for management preview.
- * Replace with live settings forms in a follow-up settings PR.
+ *
+ * INTENTIONAL DEMO DATA — this page displays non-wired placeholder content
+ * for organisation-level settings (company profile, branding, users, roles)
+ * which are not yet implemented as backend resources.
+ *
+ * Backend-implemented settings (pricing policies, commission policies, and
+ * project templates) are accessible via the settings-api.ts wrapper
+ * (frontend/src/lib/settings-api.ts → /api/v1/settings/*).
+ * They will be surfaced in a dedicated settings management UI in a follow-up PR.
  */
 export default function Page() {
   const settingsCategories = [
