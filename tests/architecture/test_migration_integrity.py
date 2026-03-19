@@ -134,7 +134,8 @@ class TestMigrationChainStructure:
         reachable = {rev.revision for rev in script.walk_revisions()}
         all_revs = set()
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             match = re.search(r'^revision\s*:\s*str\s*=\s*["\'](\w+)["\']', content, re.M)
             if match:
                 all_revs.add(match.group(1))
@@ -156,7 +157,11 @@ class TestMigrationChainStructure:
             if m:
                 file_numbers.append(int(m.group(1)))
         max_num = max(file_numbers)
-        assert head == str(max_num).zfill(4) or int(head) == max_num, (
+        try:
+            head_int = int(head)
+        except (ValueError, TypeError):
+            head_int = None
+        assert head == str(max_num).zfill(4) or head_int == max_num, (
             f"Head revision is {head!r} but highest-numbered migration file is "
             f"{max_num:04d}. Ensure the head revision matches the latest migration."
         )
@@ -174,7 +179,8 @@ class TestMigrationFileCompleteness:
         """Every migration file must define an ``upgrade()`` function."""
         missing = []
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             if not re.search(r"^def upgrade\s*\(", content, re.M):
                 missing.append(filename)
         assert not missing, (
@@ -186,7 +192,8 @@ class TestMigrationFileCompleteness:
         """Every migration file must define a ``downgrade()`` function."""
         missing = []
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             if not re.search(r"^def downgrade\s*\(", content, re.M):
                 missing.append(filename)
         assert not missing, (
@@ -198,7 +205,8 @@ class TestMigrationFileCompleteness:
         """Every migration file must declare a ``revision`` string."""
         missing = []
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             if not re.search(r'^revision\s*:\s*str\s*=', content, re.M):
                 missing.append(filename)
         assert not missing, (
@@ -210,7 +218,8 @@ class TestMigrationFileCompleteness:
         """Every migration file must declare a ``down_revision`` (may be None for base)."""
         missing = []
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             if not re.search(r'^down_revision\s*:', content, re.M):
                 missing.append(filename)
         assert not missing, (
@@ -226,7 +235,8 @@ class TestMigrationFileCompleteness:
             if not m:
                 continue
             expected_rev = m.group(1).lstrip("0") or "0"
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             rev_match = re.search(
                 r'^revision\s*:\s*str\s*=\s*["\'](\w+)["\']', content, re.M
             )
@@ -254,7 +264,8 @@ class TestMigrationFileCompleteness:
         incompatible = []
         for filename in _all_migration_files():
             path = os.path.join(_VERSIONS_DIR, filename)
-            content = open(path).read()
+            with open(path) as f:
+                content = f.read()
 
             # Extract the upgrade() function body (rough heuristic)
             upgrade_match = re.search(
@@ -399,7 +410,8 @@ class TestAllTablesCreated:
         """
         migration_tables: set[str] = set()
         for filename in _all_migration_files():
-            content = open(os.path.join(_VERSIONS_DIR, filename)).read()
+            with open(os.path.join(_VERSIONS_DIR, filename)) as f:
+                content = f.read()
             found = re.findall(r'op\.create_table\(\s*["\'](\w+)["\']', content)
             migration_tables.update(found)
 
@@ -714,7 +726,8 @@ class TestSchemaMatchesModels:
         unguarded = []
         for filename in _all_migration_files():
             path = os.path.join(_VERSIONS_DIR, filename)
-            content = open(path).read()
+            with open(path) as f:
+                content = f.read()
 
             # Heuristic: look for postgresql-specific parameters outside guards
             has_pg_specific = bool(

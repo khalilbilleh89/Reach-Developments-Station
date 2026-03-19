@@ -186,7 +186,8 @@ def check_file_completeness() -> CheckResult:
 
     for filename in files:
         path = os.path.join(_VERSIONS_DIR, filename)
-        content = open(path).read()
+        with open(path) as f:
+            content = f.read()
 
         if not re.search(r"^def upgrade\s*\(", content, re.M):
             missing_upgrade.append(filename)
