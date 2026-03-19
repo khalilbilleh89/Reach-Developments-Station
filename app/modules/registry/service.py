@@ -93,7 +93,7 @@ class RegistryService:
         actual_project_id = self._derive_project_id_from_unit(data.unit_id)
         if actual_project_id is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
                     f"Cannot resolve project for unit '{data.unit_id}'. "
                     "Ensure the unit exists and belongs to a complete hierarchy."
@@ -101,7 +101,7 @@ class RegistryService:
             )
         if data.project_id != actual_project_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
                     f"project_id '{data.project_id}' does not match the unit's "
                     f"actual project '{actual_project_id}' as derived from the "
@@ -110,7 +110,12 @@ class RegistryService:
                 ),
             )
 
-        case = RegistrationCase(**data.model_dump())
+        # Use the server-derived project_id as the authoritative value so that
+        # even a matching but client-supplied string cannot slip through if the
+        # validation logic were relaxed in the future.
+        payload = data.model_dump()
+        payload["project_id"] = actual_project_id
+        case = RegistrationCase(**payload)
         self.case_repo.create(case)
 
         # Initialise default milestones and document checklist atomically

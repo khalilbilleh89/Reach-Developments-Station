@@ -322,8 +322,22 @@ class TestSalesBoundary:
                 contract_price=750_000.0,
             )
         )
-        # No assertion on finance tables needed — finance models are intentionally
-        # empty (placeholder), confirming finance does not own commercial records.
+
+        # Concrete assertion: finance.models must not define any ORM-mapped
+        # class even after the sales service has written commercial records.
+        import app.modules.finance.models as _fin_models
+        from sqlalchemy.orm.decl_api import DeclarativeAttributeIntercept
+
+        finance_orm_classes = [
+            v
+            for v in vars(_fin_models).values()
+            if isinstance(v, DeclarativeAttributeIntercept)
+        ]
+        assert finance_orm_classes == [], (
+            "finance.models must not define ORM models — finance is a "
+            "read-only aggregation domain; "
+            f"found: {[c.__name__ for c in finance_orm_classes]}"
+        )
 
     def test_reservation_requires_unit_to_exist(self, db_session: Session):
         """SalesService raises 404 when unit does not exist."""
@@ -649,45 +663,70 @@ class TestRegistryBoundary:
 # ===========================================================================
 
 
+def _assert_no_forbidden_imports(module, forbidden_prefixes: list[str]) -> None:
+    """Parse *module*'s source with the AST and assert it contains no
+    ``Import`` or ``ImportFrom`` nodes whose dotted name starts with any of
+    the *forbidden_prefixes*.
+
+    Using the AST rather than substring-matching ``inspect.getsource()``
+    ensures that:
+    - Mentions of a forbidden name in docstrings or comments do not trigger
+      false positives.
+    - Dynamic ``importlib`` calls are out of scope (those are separate
+      integration concerns), but all static import statements are caught
+      correctly.
+    """
+    import ast
+    import inspect
+
+    src = inspect.getsource(module)
+    tree = ast.parse(src)
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            dotted = node.module or ""
+            if any(dotted == p or dotted.startswith(p + ".") for p in forbidden_prefixes):
+                violations.append(f"from {dotted} import ...")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                dotted = alias.name
+                if any(dotted == p or dotted.startswith(p + ".") for p in forbidden_prefixes):
+                    violations.append(f"import {dotted}")
+
+    assert not violations, (
+        f"Module '{module.__name__}' contains forbidden imports targeting "
+        f"{forbidden_prefixes}:\n  " + "\n  ".join(violations)
+    )
+
+
 class TestCrossDomainIsolation:
     """Spot-check that each domain service is isolated from sibling domains."""
 
     def test_pricing_service_has_no_finance_imports(self):
         """PricingService must not import from finance domain."""
         import app.modules.pricing.service as ps
-        import inspect
 
-        src = inspect.getsource(ps)
-        assert "from app.modules.finance" not in src, (
-            "pricing.service must not import from finance"
-        )
-        assert "import app.modules.finance" not in src
+        _assert_no_forbidden_imports(ps, ["app.modules.finance"])
 
     def test_pricing_service_has_no_registry_imports(self):
         """PricingService must not import from registry domain."""
         import app.modules.pricing.service as ps
-        import inspect
 
-        src = inspect.getsource(ps)
-        assert "from app.modules.registry" not in src
-        assert "import app.modules.registry" not in src
+        _assert_no_forbidden_imports(ps, ["app.modules.registry"])
 
     def test_finance_service_has_no_pricing_write_imports(self):
-        """FinanceSummaryService must not import pricing write paths."""
-        import app.modules.finance.service as fs
-        import inspect
+        """FinanceSummaryService must not import pricing write paths.
 
-        src = inspect.getsource(fs)
-        # Finance may legitimately join through units; it must NOT import
-        # pricing service (which owns pricing creation).
-        assert "from app.modules.pricing.service" not in src
-        assert "import app.modules.pricing.service" not in src
+        Finance may legitimately traverse unit joins, but it must never import
+        the pricing service (which owns pricing record creation).
+        """
+        import app.modules.finance.service as fs
+
+        _assert_no_forbidden_imports(fs, ["app.modules.pricing.service"])
 
     def test_registry_service_has_no_pricing_imports(self):
         """RegistryService must not import from pricing domain."""
         import app.modules.registry.service as rs
-        import inspect
 
-        src = inspect.getsource(rs)
-        assert "from app.modules.pricing" not in src
-        assert "import app.modules.pricing" not in src
+        _assert_no_forbidden_imports(rs, ["app.modules.pricing"])
