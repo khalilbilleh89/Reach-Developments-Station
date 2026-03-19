@@ -33,7 +33,7 @@ class PricingPolicyRepository:
     def create(self, data: PricingPolicyCreate) -> PricingPolicy:
         policy = PricingPolicy(**data.model_dump())
         self.db.add(policy)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(policy)
         return policy
 
@@ -74,7 +74,7 @@ class PricingPolicyRepository:
     def update(self, policy: PricingPolicy, data: PricingPolicyUpdate) -> PricingPolicy:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(policy, field, value)
-        self.db.flush()
+        self.db.commit()
         self.db.refresh(policy)
         return policy
 
@@ -82,11 +82,12 @@ class PricingPolicyRepository:
         """Unset is_default on all pricing policies."""
         self.db.query(PricingPolicy).filter(
             PricingPolicy.is_default.is_(True)
-        ).update({"is_default": False})
+        ).update({"is_default": False}, synchronize_session=False)
+        self.db.commit()
 
     def delete(self, policy: PricingPolicy) -> None:
         self.db.delete(policy)
-        self.db.flush()
+        self.db.commit()
 
 
 class CommissionPolicyRepository:
