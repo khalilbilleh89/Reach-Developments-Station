@@ -608,7 +608,17 @@ class TestNoDemoDataLayer:
 
     def test_no_frontend_files_import_demo_data(self):
         """No frontend source file may import from demo-data."""
-        _import_pattern = re.compile(r"""from\s+['"][^'"]*demo-data[^'"]*['"]""")
+        # Detects all standard JS/TS import forms:
+        #   ES named/default:  import x from "...demo-data..."
+        #   Side-effect:       import "...demo-data..."
+        #   Dynamic import:    import("...demo-data...")
+        #   CommonJS require:  require("...demo-data...")
+        _import_pattern = re.compile(
+            r"""(?:from\s+['"][^'"]*demo-data[^'"]*['"]|"""
+            r"""import\s+['"][^'"]*demo-data[^'"]*['"]|"""
+            r"""import\(\s*['"][^'"]*demo-data[^'"]*['"]\s*\)|"""
+            r"""require\(\s*['"][^'"]*demo-data[^'"]*['"]\s*\))"""
+        )
         frontend_src = FRONTEND_LIB_DIR.parent  # frontend/src
         violations = []
         for source_file in frontend_src.rglob("*.[tj]s[x]?"):
