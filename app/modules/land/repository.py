@@ -66,6 +66,10 @@ class LandParcelRepository:
         self.db.refresh(parcel)
         return parcel
 
+    def delete(self, parcel: LandParcel) -> None:
+        self.db.delete(parcel)
+        self.db.commit()
+
 
 class LandAssumptionsRepository:
     def __init__(self, db: Session) -> None:

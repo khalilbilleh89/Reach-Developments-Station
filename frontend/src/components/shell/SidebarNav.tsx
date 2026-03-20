@@ -79,6 +79,7 @@ export function SidebarNav({ collapsed = false }: SidebarNavProps) {
 /** Minimal inline icon map — replace with a proper icon library later. */
 const ICON_MAP: Record<string, string> = {
   LayoutDashboard: "⊞",
+  MapPin: "📍",
   FolderOpen: "📁",
   HardHat: "🪖",
   Tag: "🏷",

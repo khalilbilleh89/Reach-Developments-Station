@@ -430,3 +430,141 @@ def test_standalone_parcel_integrity_error_maps_to_409(db_session):
             service.create_parcel(data)
     assert exc_info.value.status_code == 409
     assert "PCL-RACE" in exc_info.value.detail
+
+
+# ---------------------------------------------------------------------------
+# DELETE endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_delete_parcel_returns_204(client: TestClient):
+    """DELETE /api/v1/land/parcels/{id} should return 204 with empty body."""
+    project_id = _create_project(client, code="PRJ-DEL-204")
+    parcel = _create_parcel(client, project_id, code="PCL-DEL-001")
+    parcel_id = parcel["id"]
+    response = client.delete(f"/api/v1/land/parcels/{parcel_id}")
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_delete_parcel_not_found(client: TestClient):
+    """DELETE /api/v1/land/parcels/{id} with unknown id should return 404."""
+    response = client.delete("/api/v1/land/parcels/no-such-parcel")
+    assert response.status_code == 404
+
+
+def test_deleted_parcel_not_in_list(client: TestClient):
+    """Deleted parcel must not appear in GET /api/v1/land/parcels."""
+    project_id = _create_project(client, code="PRJ-DEL-LIST")
+    parcel = _create_parcel(client, project_id, code="PCL-DEL-LIST")
+    parcel_id = parcel["id"]
+
+    client.delete(f"/api/v1/land/parcels/{parcel_id}")
+
+    # List must no longer include the deleted parcel
+    list_resp = client.get(f"/api/v1/land/parcels?project_id={project_id}")
+    assert list_resp.status_code == 200
+    ids = [p["id"] for p in list_resp.json()["items"]]
+    assert parcel_id not in ids
+
+
+def test_deleted_parcel_get_returns_404(client: TestClient):
+    """GET /api/v1/land/parcels/{id} must return 404 after deletion."""
+    project_id = _create_project(client, code="PRJ-DEL-GET")
+    parcel = _create_parcel(client, project_id, code="PCL-DEL-GET")
+    parcel_id = parcel["id"]
+
+    client.delete(f"/api/v1/land/parcels/{parcel_id}")
+
+    get_resp = client.get(f"/api/v1/land/parcels/{parcel_id}")
+    assert get_resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# assign-to-project endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_assign_parcel_to_project(client: TestClient):
+    """POST /land/parcels/{id}/assign-project/{project_id} links parcel to project."""
+    # Create a standalone parcel (no project)
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Assign Parcel", "parcel_code": "PCL-ASSIGN-001"},
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+    assert resp.json()["project_id"] is None
+
+    project_id = _create_project(client, code="PRJ-ASSIGN-001")
+    assign_resp = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_id}")
+    assert assign_resp.status_code == 200
+    assert assign_resp.json()["project_id"] == project_id
+
+
+def test_assign_parcel_404_unknown_parcel(client: TestClient):
+    """assign-project returns 404 when parcel does not exist."""
+    project_id = _create_project(client, code="PRJ-ASGN-404P")
+    response = client.post(f"/api/v1/land/parcels/no-such-parcel/assign-project/{project_id}")
+    assert response.status_code == 404
+
+
+def test_assign_parcel_404_unknown_project(client: TestClient):
+    """assign-project returns 404 when target project does not exist."""
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Orphan Parcel", "parcel_code": "PCL-ASGN-NOPROJ"},
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    response = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/no-such-project")
+    assert response.status_code == 404
+
+
+def test_assign_parcel_409_already_assigned_to_different_project(client: TestClient):
+    """assign-project returns 409 when parcel is already linked to a different project."""
+    project_a_id = _create_project(client, code="PRJ-ASGN-A")
+    project_b_id = _create_project(client, code="PRJ-ASGN-B")
+    parcel = _create_parcel(client, project_a_id, code="PCL-CONFLICT-001")
+    parcel_id = parcel["id"]
+
+    response = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_b_id}")
+    assert response.status_code == 409
+    assert project_a_id in response.json()["detail"]
+
+
+def test_assign_parcel_409_same_code_in_target_project(client: TestClient):
+    """assign-project returns 409 when target project already has a parcel with the same code."""
+    project_id = _create_project(client, code="PRJ-ASGN-CODE")
+    # A parcel already linked to the target project with code PCL-CODE-CONFLICT
+    _create_parcel(client, project_id, code="PCL-CODE-CONFLICT")
+
+    # A standalone parcel with the same code
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Standalone Conflict", "parcel_code": "PCL-CODE-CONFLICT"},
+    )
+    assert resp.status_code == 201
+    standalone_id = resp.json()["id"]
+
+    response = client.post(f"/api/v1/land/parcels/{standalone_id}/assign-project/{project_id}")
+    assert response.status_code == 409
+    assert "PCL-CODE-CONFLICT" in response.json()["detail"]
+
+
+def test_assign_parcel_idempotent(client: TestClient):
+    """assign-project called twice with same project returns success both times."""
+    project_id = _create_project(client, code="PRJ-ASGN-IDEM")
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Idempotent Parcel", "parcel_code": "PCL-IDEM-001"},
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    first = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_id}")
+    assert first.status_code == 200
+    assert first.json()["project_id"] == project_id
+
+    second = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_id}")
+    assert second.status_code == 200
+    assert second.json()["project_id"] == project_id
