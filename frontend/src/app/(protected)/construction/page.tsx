@@ -62,7 +62,7 @@ function ConstructionList() {
 
   const fetchScopes = useCallback(() => {
     setLoading(true);
-    listScopes({ limit: 500 })
+    listScopes({ limit: 100 })
       .then((resp) => {
         setScopes(resp.items);
         setError(null);

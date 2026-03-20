@@ -572,9 +572,12 @@ class TestIndexesExist:
         ("payment_schedules", "ix_payment_schedules_contract_id", "payment_schedules.contract_id index"),
         ("payment_schedules", "ix_payment_schedules_due_date", "payment_schedules due_date ordering index"),
         ("payment_receipts", "ix_payment_receipts_contract_id", "payment_receipts.contract_id index"),
-        # Registry
+        # Registry — PR-E7 performance indexes
         ("registration_cases", "ix_registration_cases_unit_id", "registration_cases.unit_id index"),
         ("registration_cases", "ix_registration_cases_sale_contract_id", "registration_cases.contract FK index"),
+        ("registration_cases", "ix_registration_cases_project_id", "registration_cases.project_id index"),
+        ("registration_cases", "ix_registration_cases_status", "registration_cases.status filter index"),
+        ("registration_cases", "ix_registration_cases_project_id_status", "registration_cases composite project_id+status index"),
         # Construction — dashboard aggregation
         ("construction_progress_updates", "ix_construction_progress_updates_milestone_id", "progress updates milestone FK index"),
         ("construction_scopes", "ix_construction_scopes_project_id", "construction_scopes.project_id FK index"),

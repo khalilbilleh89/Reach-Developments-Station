@@ -9,7 +9,7 @@ Tracks the post-sale legal transfer workflow for sold units.
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -24,6 +24,9 @@ class RegistrationCase(Base, TimestampMixin):
     """
 
     __tablename__ = "registration_cases"
+    __table_args__ = (
+        Index("ix_registration_cases_project_id_status", "project_id", "status"),
+    )
 
     project_id: Mapped[str] = mapped_column(
         String(36),
@@ -50,6 +53,7 @@ class RegistrationCase(Base, TimestampMixin):
         String(50),
         nullable=False,
         default=CaseStatus.DRAFT.value,
+        index=True,
     )
     opened_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     submitted_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
