@@ -18,7 +18,7 @@ is in a shippable state from a deployment operations perspective.
 """
 
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest

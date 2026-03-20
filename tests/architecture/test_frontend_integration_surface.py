@@ -5,7 +5,10 @@ PR-F1: Frontend Integration Surface Tests.
 
 Validates the frontend/backend integration contract to prevent drift:
 
-  1. Frontend API wrappers exist for all 8 core domains.
+  1. Frontend API wrappers exist for the 7 core domains that have dedicated
+     wrapper files (Projects, Sales, Payment Plans, Finance, Construction,
+     Registry, Settings). Pricing attributes are accessed via units endpoints
+     and do not have a standalone wrapper file.
   2. No calls to deprecated /registration/* routes in any wrapper.
   3. All critical API endpoints exist in the OpenAPI schema.
   4. Registry page uses the live API (not static demo data).
@@ -33,7 +36,9 @@ FRONTEND_LIB_DIR = _REPO_ROOT / "frontend" / "src" / "lib"
 FRONTEND_APP_DIR = _REPO_ROOT / "frontend" / "src" / "app"
 
 # ---------------------------------------------------------------------------
-# Canonical wrapper and type files for all 8 core domains
+# Canonical wrapper and type files for 7 core domains that have dedicated
+# frontend wrappers. Pricing attributes are accessed via units endpoints and
+# do not have a standalone wrapper file.
 # ---------------------------------------------------------------------------
 
 REQUIRED_DOMAIN_API_WRAPPERS = [
@@ -146,7 +151,7 @@ class TestRequiredFrontendFilesExist:
     """All domain API wrapper and type definition files must be present."""
 
     def test_all_domain_api_wrappers_exist(self):
-        """Every domain must have an API wrapper file in frontend/src/lib/."""
+        """The 7 core domains with dedicated wrappers must have an API file in frontend/src/lib/."""
         missing = [f for f in REQUIRED_DOMAIN_API_WRAPPERS if not (FRONTEND_LIB_DIR / f).exists()]
         assert not missing, (
             "Missing domain API wrapper files in frontend/src/lib/:\n"

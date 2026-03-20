@@ -17,23 +17,12 @@ These tests guard long-term architecture integrity by failing fast if a
 cross-domain import boundary is violated.
 """
 
-import importlib
-import inspect
 from pathlib import Path
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _read_module_source(module_path: str) -> str:
-    """Read source lines of a Python module given its dotted import path."""
-    try:
-        mod = importlib.import_module(module_path)
-        source_file = inspect.getfile(mod)
-        return Path(source_file).read_text(encoding="utf-8")
-    except (ImportError, TypeError, OSError):
-        return ""
 
 
 def _module_file_text(rel_path: str) -> str:
@@ -70,7 +59,7 @@ class TestPricingModuleIsolation:
             "pricing.service imports finance.service — "
             "pricing must not depend on finance aggregation logic."
         )
-        assert "import finance" not in source or "modules.finance" not in source, (
+        assert "import finance" not in source and "modules.finance" not in source, (
             "pricing.service must not import finance module logic."
         )
 

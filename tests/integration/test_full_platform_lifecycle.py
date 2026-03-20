@@ -543,14 +543,33 @@ def test_full_platform_lifecycle_end_to_end(client: TestClient):
 
 
 def test_lifecycle_finance_does_not_double_count(client: TestClient):
-    """Finance summary must not double-count contracts for the same unit."""
-    ids = _build_hierarchy(client, "LCY-FIN")
-    buyer_id = _create_buyer(client, "lcy.fin@example.com")
-    _create_contract(client, ids["unit_id"], buyer_id, "CNT-LCY-FIN", 500_000.0)
+    """Finance summary must not double-count when multiple units and contracts exist.
 
-    summary = _get_finance_summary(client, ids["project_id"])
-    assert float(summary["total_contract_value"]) == 500_000.0
-    assert summary["total_units"] >= 1
+    Creates two units in the same project, each with its own contract, and
+    asserts that total_contract_value equals the exact sum (not a duplicate
+    caused by a fan-out join on the Unit→Floor→Building→Phase hierarchy).
+    """
+    ids = _build_hierarchy(client, "LCY-FIN")
+    project_id = ids["project_id"]
+
+    # Unit 1 — first contract in the project
+    unit_1_id = ids["unit_id"]
+    buyer_1_id = _create_buyer(client, "lcy.fin+u1@example.com")
+    _create_contract(client, unit_1_id, buyer_1_id, "CNT-LCY-FIN-U1", 300_000.0)
+
+    # Unit 2 — second unit in the same project with its own contract
+    unit_2_id = _create_unit(client, ids["floor_id"], unit_number="102")
+    buyer_2_id = _create_buyer(client, "lcy.fin+u2@example.com")
+    _create_contract(client, unit_2_id, buyer_2_id, "CNT-LCY-FIN-U2", 450_000.0)
+
+    expected_total = 300_000.0 + 450_000.0
+
+    summary = _get_finance_summary(client, project_id)
+    assert float(summary["total_contract_value"]) == expected_total, (
+        f"Finance summary double-counted: expected {expected_total}, "
+        f"got {summary['total_contract_value']}"
+    )
+    assert summary["total_units"] == 2
 
 
 def test_lifecycle_registry_case_references_valid_project(client: TestClient):
