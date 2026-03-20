@@ -4,9 +4,12 @@ phases.service
 Business logic for the Phase entity.
 Enforces: phase must belong to a valid project; sequence must be unique per project.
 Lifecycle rules:
-  - A phase cannot become active if the previous phase (lower sequence) is not completed.
+  - Only one ACTIVE phase is permitted per project at any time.
+  - A phase cannot become active if the preceding phase (lower sequence) is not completed.
   - A completed phase cannot regress to an earlier status (planned/active) unless reopened.
   - Lifecycle advancement follows sequence order and cannot skip steps.
+  - advance_project_phase() completes the current phase and activates the next in a single
+    atomic transaction; the next phase must be PLANNED to be eligible for activation.
 """
 
 from fastapi import HTTPException, status
@@ -30,6 +33,23 @@ class PhaseService:
     def __init__(self, db: Session) -> None:
         self.repo = PhaseRepository(db)
         self.project_repo = ProjectRepository(db)
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _assert_no_other_active_phase(self, project_id: str, exclude_phase_id: str) -> None:
+        """Raise 409 if any other phase in the project is already active."""
+        others = self.repo.get_active_phases(project_id, exclude_id=exclude_phase_id)
+        if others:
+            names = ", ".join(f"'{p.name}' (seq {p.sequence})" for p in others)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Only one active phase is allowed per project. "
+                    f"Already active: {names}."
+                ),
+            )
+
+    # ── CRUD ─────────────────────────────────────────────────────────────────
 
     def create_phase(self, data: PhaseCreate) -> PhaseResponse:
         project = self.project_repo.get_by_id(data.project_id)
@@ -97,6 +117,10 @@ class PhaseService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Phase '{phase_id}' not found.",
             )
+
+        # Resolve the effective sequence after this update (used for ordering checks below).
+        effective_seq = data.sequence if data.sequence is not None else phase.sequence
+
         if data.sequence is not None and data.sequence != phase.sequence:
             existing = self.repo.get_by_project_and_sequence(phase.project_id, data.sequence)
             if existing:
@@ -104,33 +128,44 @@ class PhaseService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Phase with sequence {data.sequence} already exists in the project.",
                 )
-        # Lifecycle rule: cannot regress a completed phase to planned or active
-        if data.status is not None:
-            current_status = PhaseStatus(phase.status)
-            new_status = data.status
-            if current_status == PhaseStatus.COMPLETED and new_status != PhaseStatus.COMPLETED:
+
+        # Resolve the effective status after this update.
+        effective_status = data.status if data.status is not None else PhaseStatus(phase.status)
+
+        # Lifecycle rule: cannot regress a completed phase to planned or active via PATCH.
+        current_status = PhaseStatus(phase.status)
+        if current_status == PhaseStatus.COMPLETED and effective_status != PhaseStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Cannot revert a completed phase. "
+                    "Use the reopen endpoint to explicitly reopen a phase."
+                ),
+            )
+
+        # Lifecycle rule: if the phase will be ACTIVE after the update, enforce ordering and
+        # uniqueness. This covers both status changes (planned→active) AND sequence changes
+        # where the phase is already active.
+        if effective_status == PhaseStatus.ACTIVE:
+            # Single active phase enforcement
+            self._assert_no_other_active_phase(phase.project_id, exclude_phase_id=phase_id)
+
+            # Prior phase must be completed (checked against the new sequence position).
+            prior = self.repo.get_prior_phase(phase.project_id, effective_seq)
+            if prior and PhaseStatus(prior.status) != PhaseStatus.COMPLETED:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
-                        "Cannot revert a completed phase. "
-                        "Use the reopen endpoint to explicitly reopen a phase."
+                        f"Cannot have phase '{phase.name}' active at sequence {effective_seq}: "
+                        f"the preceding phase '{prior.name}' (sequence {prior.sequence}) "
+                        "must be completed first."
                     ),
                 )
-            # Lifecycle rule: cannot activate a phase if a prior phase is not completed
-            if new_status == PhaseStatus.ACTIVE and current_status == PhaseStatus.PLANNED:
-                target_seq = data.sequence if data.sequence is not None else phase.sequence
-                prior = self.repo.get_prior_phase(phase.project_id, target_seq)
-                if prior and PhaseStatus(prior.status) != PhaseStatus.COMPLETED:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=(
-                            f"Cannot activate phase '{phase.name}' (sequence {target_seq}): "
-                            f"the preceding phase '{prior.name}' (sequence {prior.sequence}) "
-                            "must be completed first."
-                        ),
-                    )
+
         updated = self.repo.update(phase, data)
         return PhaseResponse.model_validate(updated)
+
+    # ── Lifecycle operations ──────────────────────────────────────────────────
 
     def reopen_phase(self, phase_id: str) -> PhaseResponse:
         """Explicitly reopen a completed phase back to active status."""
@@ -145,12 +180,19 @@ class PhaseService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Only completed phases can be reopened.",
             )
+        # Single active phase enforcement
+        self._assert_no_other_active_phase(phase.project_id, exclude_phase_id=phase_id)
+
         reopen_data = PhaseUpdate(status=PhaseStatus.ACTIVE)
         updated = self.repo.update(phase, reopen_data)
         return PhaseResponse.model_validate(updated)
 
     def advance_project_phase(self, phase_id: str) -> PhaseResponse:
-        """Mark a phase as completed and activate the next phase in sequence."""
+        """Mark a phase as completed and activate the next phase in sequence.
+
+        Both operations (complete current + activate next) are performed in a
+        single atomic transaction to prevent partial state on failure.
+        """
         phase = self.repo.get_by_id(phase_id)
         if not phase:
             raise HTTPException(
@@ -165,18 +207,40 @@ class PhaseService:
                     f"Current status: {phase.status}."
                 ),
             )
-        # Mark current phase as completed
-        complete_data = PhaseUpdate(status=PhaseStatus.COMPLETED)
-        self.repo.update(phase, complete_data)
 
-        # Activate the next phase in sequence if one exists
         next_phase = self.repo.get_next_phase(phase.project_id, phase.sequence)
         if next_phase:
-            activate_data = PhaseUpdate(status=PhaseStatus.ACTIVE)
-            self.repo.update(next_phase, activate_data)
+            next_status = PhaseStatus(next_phase.status)
+            if next_status == PhaseStatus.ACTIVE:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Cannot advance phase '{phase.name}' (sequence {phase.sequence}): "
+                        f"the next phase '{next_phase.name}' (sequence {next_phase.sequence}) "
+                        "is already active."
+                    ),
+                )
+            if next_status == PhaseStatus.COMPLETED:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Cannot activate next phase '{next_phase.name}' "
+                        f"(sequence {next_phase.sequence}) because it is already completed. "
+                        "Completed phases must be explicitly reopened."
+                    ),
+                )
 
-        updated = self.repo.get_by_id(phase_id)
-        return PhaseResponse.model_validate(updated)
+        # Apply both changes in memory, then commit once (atomic).
+        self.repo.apply_update(phase, PhaseUpdate(status=PhaseStatus.COMPLETED))
+        if next_phase:
+            self.repo.apply_update(next_phase, PhaseUpdate(status=PhaseStatus.ACTIVE))
+
+        self.repo.db.commit()
+        self.repo.db.refresh(phase)
+        if next_phase:
+            self.repo.db.refresh(next_phase)
+
+        return PhaseResponse.model_validate(phase)
 
     def get_project_lifecycle(self, project_id: str) -> ProjectLifecycle:
         """Return the ordered lifecycle view for a project."""
@@ -188,10 +252,10 @@ class PhaseService:
             )
         phases = self.repo.list(project_id=project_id, skip=0, limit=1000)
 
-        current_phase = next(
-            (p for p in phases if PhaseStatus(p.status) == PhaseStatus.ACTIVE),
-            None,
-        )
+        active_phases = [p for p in phases if PhaseStatus(p.status) == PhaseStatus.ACTIVE]
+        # With single-active enforcement there should be at most one; pick the lowest
+        # sequence for a deterministic result in edge-case legacy data.
+        current_phase = active_phases[0] if active_phases else None
 
         lifecycle_items = [
             LifecyclePhaseItem(

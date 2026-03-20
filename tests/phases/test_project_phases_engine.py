@@ -264,3 +264,77 @@ def test_full_lifecycle_progression(client: TestClient):
     data = lifecycle.json()
     assert data["current_phase_type"] is None
     assert all(p["status"] == "completed" for p in data["phases"])
+
+
+# ── Single active phase enforcement ────────────────────────────────────────
+
+def test_cannot_create_second_active_phase_via_patch(client: TestClient):
+    """Cannot PATCH a second phase to active when one is already active."""
+    project_id = _create_project(client, "SA-001")
+    _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="completed")
+    _create_phase(client, project_id, "Design", 2, phase_type="design", status="active")
+    phase3 = _create_phase(client, project_id, "Approvals", 3, phase_type="approvals")
+
+    resp = client.patch(f"/api/v1/phases/{phase3['id']}", json={"status": "active"})
+    assert resp.status_code == 409
+
+
+def test_cannot_reopen_when_another_phase_is_active(client: TestClient):
+    """Cannot reopen a completed phase when another phase is already active."""
+    project_id = _create_project(client, "SA-002")
+    phase1 = _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="completed")
+    _create_phase(client, project_id, "Design", 2, phase_type="design", status="active")
+
+    resp = client.post(f"/api/v1/phases/{phase1['id']}/reopen")
+    assert resp.status_code == 409
+
+
+# ── Active phase ordering on sequence change ────────────────────────────────
+
+def test_sequence_change_on_active_phase_enforces_prior_completion(client: TestClient):
+    """Moving an active phase to a position where its new predecessor is not
+    completed must be rejected with 422."""
+    project_id = _create_project(client, "SC-001")
+    # seq 1 = planned (NOT completed), no seq 2, seq 5 = active
+    _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="planned")
+    phase5 = _create_phase(client, project_id, "Approvals", 5, phase_type="approvals", status="active")
+
+    # Move active phase to seq 2 — new predecessor (seq 1) is NOT completed; seq 2 is free
+    resp = client.patch(f"/api/v1/phases/{phase5['id']}", json={"sequence": 2})
+    assert resp.status_code == 422
+
+
+def test_sequence_change_allowed_when_new_prior_is_completed(client: TestClient):
+    """Moving an active phase to a position after a completed phase is allowed."""
+    project_id = _create_project(client, "SC-002")
+    _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="completed")
+    # seq 3 is active; move it to seq 2 (no seq 2 exists, prior is seq 1 = completed)
+    phase3 = _create_phase(client, project_id, "Design", 3, phase_type="design", status="active")
+
+    resp = client.patch(f"/api/v1/phases/{phase3['id']}", json={"sequence": 2})
+    assert resp.status_code == 200
+    assert resp.json()["sequence"] == 2
+
+
+# ── Advance with already-active or already-completed next phase ─────────────
+
+def test_advance_rejects_when_next_phase_already_active(client: TestClient):
+    """advance must return 409 when the next phase in sequence is already active."""
+    project_id = _create_project(client, "ANP-001")
+    phase1 = _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="active")
+    # Force next phase to active directly in DB via repo (bypasses service guards)
+    # by creating it with active status
+    _create_phase(client, project_id, "Design", 2, phase_type="design", status="active")
+
+    resp = client.post(f"/api/v1/phases/{phase1['id']}/advance")
+    assert resp.status_code == 409
+
+
+def test_advance_rejects_when_next_phase_already_completed(client: TestClient):
+    """advance must return 422 when the next phase in sequence is already completed."""
+    project_id = _create_project(client, "ANP-002")
+    phase1 = _create_phase(client, project_id, "Concept", 1, phase_type="concept", status="active")
+    _create_phase(client, project_id, "Design", 2, phase_type="design", status="completed")
+
+    resp = client.post(f"/api/v1/phases/{phase1['id']}/advance")
+    assert resp.status_code == 422

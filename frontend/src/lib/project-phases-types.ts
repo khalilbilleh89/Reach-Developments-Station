@@ -3,17 +3,13 @@
  *
  * Mirrors the backend PhaseResponse and ProjectLifecycle schemas.
  * Extends the base Phase type with lifecycle-specific fields (phase_type, is_current).
+ *
+ * PhaseType and PhaseStatus are re-exported from the canonical phases-types module to
+ * keep all enum definitions in one place and prevent drift.
  */
 
-export type PhaseStatus = "planned" | "active" | "completed";
-
-export type PhaseType =
-  | "concept"
-  | "design"
-  | "approvals"
-  | "construction"
-  | "sales"
-  | "handover";
+import type { PhaseStatus, PhaseType } from "./phases-types";
+export type { PhaseStatus, PhaseType } from "./phases-types";
 
 export interface ProjectPhase {
   id: string;

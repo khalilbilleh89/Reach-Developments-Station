@@ -34,7 +34,7 @@ class Phase(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
-    phase_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    phase_type: Mapped[Optional[PhaseType]] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
