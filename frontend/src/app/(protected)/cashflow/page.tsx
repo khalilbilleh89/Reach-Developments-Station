@@ -99,11 +99,16 @@ export default function Page() {
   }, [selectedProject, loadCashflowData]);
 
   function periodLabel(period: CashflowForecastPeriod): string {
-    const start = new Date(period.period_start);
-    return start.toLocaleDateString("en-GB", {
+    const [yearStr, monthStr, dayStr] = period.period_start.split("-");
+    const year = Number(yearStr);
+    const monthIndex = Number(monthStr) - 1; // 0-based month index
+    const day = Number(dayStr);
+    const startUtc = new Date(Date.UTC(year, monthIndex, day));
+    return new Intl.DateTimeFormat("en-GB", {
       month: "short",
       year: "numeric",
-    });
+      timeZone: "UTC",
+    }).format(startUtc);
   }
 
   function netBadgeClass(net: number): string {
@@ -273,7 +278,7 @@ export default function Page() {
                 <th scope="col">Expected Outflows</th>
                 <th scope="col">Net Cashflow</th>
                 <th scope="col">Closing Balance</th>
-                <th scope="col">Status</th>
+                <th scope="col">Net Position</th>
               </tr>
             </thead>
             <tbody>
