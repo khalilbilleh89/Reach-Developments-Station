@@ -103,16 +103,22 @@ def test_health_db_error_when_database_unreachable(client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-def test_bootstrap_skipped_in_test_environment(caplog):
-    """Bootstrap must be silently skipped when APP_ENV is 'test'."""
+def test_bootstrap_skipped_in_test_environment():
+    """Bootstrap must be skipped (with a DEBUG log) when APP_ENV is 'test'."""
     with _patch_settings(
         APP_ENV="test", ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD="pass"
     ):
         with patch("app.main.SessionLocal") as mock_session:
-            with TestClient(app):
-                pass
+            with patch("app.main.logger") as mock_logger:
+                with TestClient(app):
+                    pass
     # SessionLocal must never be opened — bootstrap was skipped
     mock_session.assert_not_called()
+    # The skip must be communicated via a DEBUG log
+    debug_msgs = [str(c.args[0]) for c in mock_logger.debug.call_args_list if c.args]
+    assert any("skipped" in msg.lower() or "test" in msg.lower() for msg in debug_msgs), (
+        f"Expected a debug log for test-environment skip; debug calls: {debug_msgs}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -120,36 +126,52 @@ def test_bootstrap_skipped_in_test_environment(caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_bootstrap_skipped_when_no_credentials_logs_clearly(caplog):
+def test_bootstrap_skipped_when_no_credentials_logs_clearly():
     """Bootstrap must log clearly when ADMIN_EMAIL / ADMIN_PASSWORD are absent."""
     with _patch_settings(APP_ENV="production", ADMIN_EMAIL=None, ADMIN_PASSWORD=None):
         with patch("app.main.SessionLocal") as mock_session:
-            with TestClient(app):
-                pass
+            with patch("app.main.logger") as mock_logger:
+                with TestClient(app):
+                    pass
     # SessionLocal must never be opened when credentials are absent
     mock_session.assert_not_called()
+    # The skip reason must be logged at INFO level
+    info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert any(
+        "not configured" in msg.lower() or "skipped" in msg.lower() for msg in info_msgs
+    ), f"Expected an INFO log for missing-credentials skip; info calls: {info_msgs}"
 
 
-def test_bootstrap_skipped_when_email_only(caplog):
-    """Bootstrap must be skipped when only ADMIN_EMAIL is set (password missing)."""
+def test_bootstrap_skipped_when_email_only():
+    """Bootstrap must be skipped (and logged) when only ADMIN_EMAIL is set (password missing)."""
     with _patch_settings(
         APP_ENV="production", ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD=None
     ):
         with patch("app.main.SessionLocal") as mock_session:
-            with TestClient(app):
-                pass
+            with patch("app.main.logger") as mock_logger:
+                with TestClient(app):
+                    pass
     mock_session.assert_not_called()
+    info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert any(
+        "not configured" in msg.lower() or "skipped" in msg.lower() for msg in info_msgs
+    ), f"Expected an INFO log for partial-credentials skip; info calls: {info_msgs}"
 
 
-def test_bootstrap_skipped_when_password_only(caplog):
-    """Bootstrap must be skipped when only ADMIN_PASSWORD is set (email missing)."""
+def test_bootstrap_skipped_when_password_only():
+    """Bootstrap must be skipped (and logged) when only ADMIN_PASSWORD is set (email missing)."""
     with _patch_settings(
         APP_ENV="production", ADMIN_EMAIL=None, ADMIN_PASSWORD="secret"
     ):
         with patch("app.main.SessionLocal") as mock_session:
-            with TestClient(app):
-                pass
+            with patch("app.main.logger") as mock_logger:
+                with TestClient(app):
+                    pass
     mock_session.assert_not_called()
+    info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
+    assert any(
+        "not configured" in msg.lower() or "skipped" in msg.lower() for msg in info_msgs
+    ), f"Expected an INFO log for partial-credentials skip; info calls: {info_msgs}"
 
 
 # ---------------------------------------------------------------------------
@@ -231,22 +253,24 @@ def test_seed_admin_role_not_duplicated_on_repeated_calls(db_session):
 
 
 def test_startup_logs_starting_message():
-    """Startup must emit a log message identifying the app and environment."""
-    with patch("app.main.logger") as mock_logger:
-        with TestClient(app):
-            pass
+    """Startup must emit a 'Starting ...' log message identifying the app and environment."""
+    with _patch_settings(APP_ENV="test"):
+        with patch("app.main.logger") as mock_logger:
+            with TestClient(app):
+                pass
 
     info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
-    assert any("Starting" in msg or "Startup" in msg for msg in info_msgs), (
-        f"Expected a startup log message; info calls: {info_msgs}"
+    assert any(msg.startswith("Starting") for msg in info_msgs), (
+        f"Expected a startup 'Starting ...' log message; info calls: {info_msgs}"
     )
 
 
 def test_startup_logs_completion_message():
     """Startup must emit a 'ready' or 'complete' log message after initialization."""
-    with patch("app.main.logger") as mock_logger:
-        with TestClient(app):
-            pass
+    with _patch_settings(APP_ENV="test"):
+        with patch("app.main.logger") as mock_logger:
+            with TestClient(app):
+                pass
 
     info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
     assert any(
@@ -260,10 +284,11 @@ def test_startup_logs_frontend_build_status():
     """Startup must log whether the frontend build directory was found or not."""
     _no_build = Path(__file__).parent / "_nonexistent_frontend_build_for_test_"
 
-    with patch("app.main.logger") as mock_logger:
-        with patch("app.main._FRONTEND_HTML_DIR", _no_build):
-            with TestClient(app):
-                pass
+    with _patch_settings(APP_ENV="test"):
+        with patch("app.main.logger") as mock_logger:
+            with patch("app.main._FRONTEND_HTML_DIR", _no_build):
+                with TestClient(app):
+                    pass
 
     info_msgs = [str(c.args[0]) for c in mock_logger.info.call_args_list if c.args]
     assert any("frontend" in msg.lower() for msg in info_msgs), (
@@ -279,18 +304,20 @@ def test_startup_logs_frontend_build_status():
 def test_startup_succeeds_without_frontend_build(tmp_path: Path):
     """The application must start successfully when the frontend build is absent."""
     no_build = tmp_path / "nonexistent_out"
-    with patch("app.main._FRONTEND_HTML_DIR", no_build):
-        with TestClient(app) as client:
-            resp = client.get("/health")
+    with _patch_settings(APP_ENV="test"):
+        with patch("app.main._FRONTEND_HTML_DIR", no_build):
+            with TestClient(app) as client:
+                resp = client.get("/health")
     assert resp.status_code == 200
 
 
 def test_root_returns_json_fallback_when_frontend_absent(tmp_path: Path):
     """GET / must return a JSON status payload when the frontend build is absent."""
     no_build = tmp_path / "nonexistent_out"
-    with patch("app.main._FRONTEND_HTML_DIR", no_build):
-        with TestClient(app) as client:
-            resp = client.get("/")
+    with _patch_settings(APP_ENV="test"):
+        with patch("app.main._FRONTEND_HTML_DIR", no_build):
+            with TestClient(app) as client:
+                resp = client.get("/")
     assert resp.status_code == 200
     data = resp.json()
     assert "app" in data

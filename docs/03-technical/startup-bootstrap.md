@@ -223,7 +223,7 @@ INFO  Startup complete: Reach Developments Station is ready.
 
 ### Running tests
 
-The test suite sets `APP_ENV=test` (via `conftest.py` test database setup), which skips the bootstrap path entirely. Tests that need bootstrap behavior call `seed_admin_user` directly with an injected in-memory session.
+When running the test suite, `APP_ENV` should be set to `test` (for example via your shell environment, CI configuration, or `pytest.ini`/`pyproject.toml` env settings), which causes the lifespan to skip bootstrap entirely. Tests that need bootstrap behavior call `seed_admin_user` directly with an injected in-memory session.
 
 ---
 
