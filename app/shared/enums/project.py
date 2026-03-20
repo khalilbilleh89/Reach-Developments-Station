@@ -16,6 +16,15 @@ class PhaseStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class PhaseType(str, Enum):
+    CONCEPT = "concept"
+    DESIGN = "design"
+    APPROVALS = "approvals"
+    CONSTRUCTION = "construction"
+    SALES = "sales"
+    HANDOVER = "handover"
+
+
 class BuildingStatus(str, Enum):
     PLANNED = "planned"
     UNDER_CONSTRUCTION = "under_construction"

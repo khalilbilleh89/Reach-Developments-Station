@@ -33,6 +33,34 @@ class PhaseRepository:
             .first()
         )
 
+    def get_prior_phase(self, project_id: str, sequence: int) -> Optional[Phase]:
+        """Return the phase with the highest sequence less than the given sequence."""
+        return (
+            self.db.query(Phase)
+            .filter(Phase.project_id == project_id, Phase.sequence < sequence)
+            .order_by(Phase.sequence.desc())
+            .first()
+        )
+
+    def get_next_phase(self, project_id: str, sequence: int) -> Optional[Phase]:
+        """Return the phase with the lowest sequence greater than the given sequence."""
+        return (
+            self.db.query(Phase)
+            .filter(Phase.project_id == project_id, Phase.sequence > sequence)
+            .order_by(Phase.sequence.asc())
+            .first()
+        )
+
+    def get_active_phases(self, project_id: str, exclude_id: Optional[str] = None) -> List[Phase]:
+        """Return all active phases for a project, optionally excluding a specific phase."""
+        query = self.db.query(Phase).filter(
+            Phase.project_id == project_id,
+            Phase.status == "active",
+        )
+        if exclude_id:
+            query = query.filter(Phase.id != exclude_id)
+        return query.all()
+
     def list(self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Phase]:
         query = self.db.query(Phase)
         if project_id:
@@ -45,10 +73,15 @@ class PhaseRepository:
             query = query.filter(Phase.project_id == project_id)
         return query.count()
 
-    def update(self, phase: Phase, data: PhaseUpdate) -> Phase:
+    def apply_update(self, phase: Phase, data: PhaseUpdate) -> Phase:
+        """Apply field changes to a phase object without committing."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(phase, field, value)
+        return phase
+
+    def update(self, phase: Phase, data: PhaseUpdate) -> Phase:
+        self.apply_update(phase, data)
         self.db.commit()
         self.db.refresh(phase)
         return phase

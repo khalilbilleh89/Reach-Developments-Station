@@ -4,8 +4,11 @@ phases.api
 CRUD API router for the Phase entity.
 
 Provides two route groups:
-  /api/v1/projects/{project_id}/phases  — project-scoped phase listing and creation
-  /api/v1/phases/{phase_id}             — individual phase operations (get, update, delete)
+  /api/v1/projects/{project_id}/phases    — project-scoped phase listing and creation
+  /api/v1/projects/{project_id}/lifecycle — project lifecycle view
+  /api/v1/phases/{phase_id}               — individual phase operations (get, update, delete)
+  /api/v1/phases/{phase_id}/advance       — lifecycle advancement
+  /api/v1/phases/{phase_id}/reopen        — reopen a completed phase
 """
 
 from typing import Annotated, Optional
@@ -14,7 +17,14 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.phases.schemas import PhaseCreate, PhaseCreateForProject, PhaseList, PhaseResponse, PhaseUpdate
+from app.modules.phases.schemas import (
+    PhaseCreate,
+    PhaseCreateForProject,
+    PhaseList,
+    PhaseResponse,
+    PhaseUpdate,
+    ProjectLifecycle,
+)
 from app.modules.phases.service import PhaseService
 
 router = APIRouter(tags=["phases"])
@@ -45,6 +55,15 @@ def create_phase_for_project(
 ) -> PhaseResponse:
     """Create a new phase within a specific project."""
     return service.create_phase_for_project(project_id, data)
+
+
+@router.get("/projects/{project_id}/lifecycle", response_model=ProjectLifecycle)
+def get_project_lifecycle(
+    project_id: str,
+    service: Annotated[PhaseService, Depends(get_service)],
+) -> ProjectLifecycle:
+    """Get the ordered lifecycle view for a project, showing phase progression."""
+    return service.get_project_lifecycle(project_id)
 
 
 # ── Generic phase endpoints ─────────────────────────────────────────────────
@@ -86,6 +105,24 @@ def update_phase(
 ) -> PhaseResponse:
     """Update a phase."""
     return service.update_phase(phase_id, data)
+
+
+@router.post("/phases/{phase_id}/advance", response_model=PhaseResponse)
+def advance_phase(
+    phase_id: str,
+    service: Annotated[PhaseService, Depends(get_service)],
+) -> PhaseResponse:
+    """Advance the lifecycle: mark the phase as completed and activate the next phase."""
+    return service.advance_project_phase(phase_id)
+
+
+@router.post("/phases/{phase_id}/reopen", response_model=PhaseResponse)
+def reopen_phase(
+    phase_id: str,
+    service: Annotated[PhaseService, Depends(get_service)],
+) -> PhaseResponse:
+    """Explicitly reopen a completed phase back to active status."""
+    return service.reopen_phase(phase_id)
 
 
 @router.delete("/phases/{phase_id}", status_code=204)

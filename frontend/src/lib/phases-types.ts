@@ -6,12 +6,21 @@
 
 export type PhaseStatus = "planned" | "active" | "completed";
 
+export type PhaseType =
+  | "concept"
+  | "design"
+  | "approvals"
+  | "construction"
+  | "sales"
+  | "handover";
+
 export interface Phase {
   id: string;
   project_id: string;
   name: string;
   code: string | null;
   sequence: number;
+  phase_type: PhaseType | null;
   status: PhaseStatus;
   start_date: string | null;
   end_date: string | null;
@@ -29,6 +38,7 @@ export interface PhaseCreate {
   name: string;
   code?: string | null;
   sequence: number;
+  phase_type?: PhaseType | null;
   status?: PhaseStatus;
   start_date?: string | null;
   end_date?: string | null;
@@ -39,6 +49,7 @@ export interface PhaseUpdate {
   name?: string;
   code?: string | null;
   sequence?: number;
+  phase_type?: PhaseType | null;
   status?: PhaseStatus;
   start_date?: string | null;
   end_date?: string | null;
