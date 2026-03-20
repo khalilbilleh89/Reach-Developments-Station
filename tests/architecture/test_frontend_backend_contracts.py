@@ -44,6 +44,7 @@ REQUIRED_API_WRAPPER_FILES = [
     "settings-api.ts",   # PR-E5: was missing, now created
     "commission-api.ts", # PR-1: commission UI wiring
     "cashflow-api.ts",   # PR-2: cashflow UI wiring
+    "feasibility-api.ts", # PR-6: feasibility domain
 ]
 
 # Canonical frontend type definition files that MUST exist.
@@ -57,6 +58,7 @@ REQUIRED_TYPE_FILES = [
     "settings-types.ts",  # PR-E5: was missing, now created
     "commission-types.ts",  # PR-1: commission UI wiring
     "cashflow-types.ts",  # PR-2: cashflow UI wiring
+    "feasibility-types.ts",  # PR-6: feasibility domain
 ]
 
 # Legacy paths that must NOT appear as primary calls in frontend wrappers.
@@ -139,6 +141,15 @@ CRITICAL_FRONTEND_CONTRACT_PAIRS = [
     ("GET", f"{_API_PREFIX}/cashflow/projects/{{project_id}}/cashflow-summary"),
     ("GET", f"{_API_PREFIX}/cashflow/forecasts/{{forecast_id}}"),
     ("GET", f"{_API_PREFIX}/cashflow/forecasts/{{forecast_id}}/periods"),
+    # Feasibility
+    ("POST", f"{_API_PREFIX}/feasibility/runs"),
+    ("GET", f"{_API_PREFIX}/feasibility/runs"),
+    ("GET", f"{_API_PREFIX}/feasibility/runs/{{run_id}}"),
+    ("PATCH", f"{_API_PREFIX}/feasibility/runs/{{run_id}}"),
+    ("POST", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/assumptions"),
+    ("GET", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/assumptions"),
+    ("POST", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/calculate"),
+    ("GET", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/results"),
 ]
 
 
@@ -629,4 +640,85 @@ class TestNoDemoDataLayer:
             "The following frontend files still import from demo-data:\n"
             + "\n".join(f"  {v}" for v in sorted(violations))
             + "\nRemove all imports from demo-data and replace with live API calls."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: feasibility page uses live data, not demo
+# ---------------------------------------------------------------------------
+
+
+class TestFeasibilityPageIsLive:
+    """Feasibility page must use live API data and must exist as a real page."""
+
+    def test_feasibility_page_exists(self):
+        """(protected)/feasibility/page.tsx must exist."""
+        content = _read_frontend_page("(protected)/feasibility/page.tsx")
+        assert content, (
+            "(protected)/feasibility/page.tsx not found. "
+            "Create the feasibility page to expose the feasibility domain."
+        )
+
+    def test_feasibility_page_does_not_import_demo_data(self):
+        """Feasibility page must not import from demo-data.ts."""
+        content = _read_frontend_page("(protected)/feasibility/page.tsx")
+        assert content, "(protected)/feasibility/page.tsx not found"
+        assert "demo-data" not in content, (
+            "Feasibility page imports from demo-data.ts. "
+            "The feasibility backend is fully implemented — use feasibility-api.ts instead."
+        )
+
+    def test_feasibility_page_does_not_show_demo_banner(self):
+        """Feasibility page must not render the demo preview banner."""
+        content = _read_frontend_page("(protected)/feasibility/page.tsx")
+        assert content, "(protected)/feasibility/page.tsx not found"
+        assert "Demo Preview" not in content, (
+            "Feasibility page shows the 'Demo Preview' banner. "
+            "Remove the banner and wire to the live feasibility API."
+        )
+
+    def test_feasibility_page_imports_feasibility_api(self):
+        """Feasibility page must import from feasibility-api.ts."""
+        content = _read_frontend_page("(protected)/feasibility/page.tsx")
+        assert content, "(protected)/feasibility/page.tsx not found"
+        assert "feasibility-api" in content, (
+            "Feasibility page does not import from feasibility-api.ts. "
+            "It should call the live /feasibility/* backend endpoints."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: feasibility API wrapper covers required endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestFeasibilityApiWrapperContract:
+    """feasibility-api.ts must expose wrappers for feasibility backend endpoints."""
+
+    def test_feasibility_wrapper_has_runs_list(self):
+        """feasibility-api.ts must wrap GET /feasibility/runs."""
+        content = _read_frontend_file("feasibility-api.ts")
+        assert "/feasibility/runs" in content, (
+            "feasibility-api.ts does not wrap /feasibility/runs endpoint"
+        )
+
+    def test_feasibility_wrapper_has_assumptions(self):
+        """feasibility-api.ts must wrap /feasibility/runs/{id}/assumptions."""
+        content = _read_frontend_file("feasibility-api.ts")
+        assert "/assumptions" in content, (
+            "feasibility-api.ts does not wrap the assumptions endpoint"
+        )
+
+    def test_feasibility_wrapper_has_calculate(self):
+        """feasibility-api.ts must wrap POST /feasibility/runs/{id}/calculate."""
+        content = _read_frontend_file("feasibility-api.ts")
+        assert "/calculate" in content, (
+            "feasibility-api.ts does not wrap the calculate endpoint"
+        )
+
+    def test_feasibility_wrapper_has_results(self):
+        """feasibility-api.ts must wrap GET /feasibility/runs/{id}/results."""
+        content = _read_frontend_file("feasibility-api.ts")
+        assert "/results" in content, (
+            "feasibility-api.ts does not wrap the results endpoint"
         )
