@@ -50,6 +50,7 @@ class RegistrationCase(Base, TimestampMixin):
         String(50),
         nullable=False,
         default=CaseStatus.DRAFT.value,
+        index=True,
     )
     opened_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     submitted_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)

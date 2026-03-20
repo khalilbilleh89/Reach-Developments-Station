@@ -9,7 +9,7 @@ This module is pure database access — no business logic lives here.
 
 from typing import List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.modules.registry.models import (
     RegistrationCase,
@@ -80,6 +80,10 @@ class RegistrationCaseRepository:
     ) -> List[RegistrationCase]:
         return (
             self.db.query(RegistrationCase)
+            .options(
+                selectinload(RegistrationCase.milestones),
+                selectinload(RegistrationCase.documents),
+            )
             .filter(RegistrationCase.project_id == project_id)
             .offset(skip)
             .limit(limit)
