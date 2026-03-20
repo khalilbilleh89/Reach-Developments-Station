@@ -121,6 +121,8 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+**Bootstrap / Admin seed:** On startup, if `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set in `.env`, the application automatically creates an initial administrator account (idempotent — safe to restart). Set `APP_ENV=test` to skip bootstrap during test runs. See [`docs/03-technical/startup-bootstrap.md`](docs/03-technical/startup-bootstrap.md) for full startup and bootstrap documentation.
+
 ### Frontend
 
 ```bash
@@ -190,5 +192,6 @@ All structural and architectural decisions are documented in `/docs`. Read the d
 - [`docs/00-overview/vision-and-scope.md`](docs/00-overview/vision-and-scope.md) — What this platform is and is not
 - [`docs/00-overview/system-architecture.md`](docs/00-overview/system-architecture.md) — Business and technical architecture
 - [`docs/03-technical/backend-architecture.md`](docs/03-technical/backend-architecture.md) — Code structure and module organization
+- [`docs/03-technical/startup-bootstrap.md`](docs/03-technical/startup-bootstrap.md) — Startup sequence, bootstrap, admin seed, health endpoints
 - [`docs/04-decisions/`](docs/04-decisions/) — Architecture Decision Records
 

@@ -55,15 +55,35 @@ _FRONTEND_STATIC_DIR = Path("frontend/out/_next/static")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown events."""
     logger.info("Starting %s [env=%s]", settings.APP_NAME, settings.APP_ENV)
+
+    # Log frontend build availability so operators can confirm static serving state.
+    if _FRONTEND_HTML_DIR.is_dir():
+        logger.info("Startup: frontend build found at '%s'.", _FRONTEND_HTML_DIR)
+    else:
+        logger.info(
+            "Startup: frontend build not found at '%s' — JSON status fallback active.",
+            _FRONTEND_HTML_DIR,
+        )
+
     _is_test_env = (settings.APP_ENV or "").lower() == "test"
     _has_credentials = bool(settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD)
-    if not _is_test_env and _has_credentials:
+
+    if _is_test_env:
+        logger.debug("Bootstrap: skipped (test environment).")
+    elif not _has_credentials:
+        logger.info(
+            "Bootstrap: ADMIN_EMAIL / ADMIN_PASSWORD not configured — admin seed skipped."
+        )
+    else:
         try:
             with SessionLocal() as db:
                 seed_admin_user(db)
         except Exception:
             logger.exception("Bootstrap: admin seed failed — application startup continues.")
+
+    logger.info("Startup complete: %s is ready.", settings.APP_NAME)
     yield
+    logger.info("Shutdown: %s stopping.", settings.APP_NAME)
 
 
 app = FastAPI(
