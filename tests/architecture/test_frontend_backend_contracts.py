@@ -584,3 +584,49 @@ class TestCashflowApiWrapperContract:
         assert "/cashflow/forecasts/" in content and "/periods" in content, (
             "cashflow-api.ts does not wrap the forecast periods endpoint"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests: PR-4 — demo data layer is fully removed
+# ---------------------------------------------------------------------------
+
+
+class TestNoDemoDataLayer:
+    """
+    PR-4: The demo-data module must not exist and no frontend source file
+    may import from it.  These rules prevent any future page from accidentally
+    displaying hardcoded financial values instead of live backend data.
+    """
+
+    def test_demo_data_file_does_not_exist(self):
+        """frontend/src/lib/demo-data.ts must have been deleted."""
+        demo_data_path = FRONTEND_LIB_DIR / "demo-data.ts"
+        assert not demo_data_path.exists(), (
+            "frontend/src/lib/demo-data.ts still exists. "
+            "Delete this file — all pages must use live backend APIs."
+        )
+
+    def test_no_frontend_files_import_demo_data(self):
+        """No frontend source file may import from demo-data."""
+        # Detects all standard JS/TS import forms:
+        #   ES named/default:  import x from "...demo-data..."
+        #   Side-effect:       import "...demo-data..."
+        #   Dynamic import:    import("...demo-data...")
+        #   CommonJS require:  require("...demo-data...")
+        _import_pattern = re.compile(
+            r"""(?:from\s+['"][^'"]*demo-data[^'"]*['"]|"""
+            r"""import\s+['"][^'"]*demo-data[^'"]*['"]|"""
+            r"""import\(\s*['"][^'"]*demo-data[^'"]*['"]\s*\)|"""
+            r"""require\(\s*['"][^'"]*demo-data[^'"]*['"]\s*\))"""
+        )
+        frontend_src = FRONTEND_LIB_DIR.parent  # frontend/src
+        violations = []
+        for source_file in frontend_src.rglob("*.[tj]s[x]?"):
+            content = source_file.read_text(encoding="utf-8")
+            if _import_pattern.search(content):
+                violations.append(str(source_file.relative_to(frontend_src.parent.parent)))
+        assert not violations, (
+            "The following frontend files still import from demo-data:\n"
+            + "\n".join(f"  {v}" for v in sorted(violations))
+            + "\nRemove all imports from demo-data and replace with live API calls."
+        )
