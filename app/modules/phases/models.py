@@ -13,7 +13,7 @@ from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.project import PhaseStatus
+from app.shared.enums.project import PhaseStatus, PhaseType
 
 if TYPE_CHECKING:
     from app.modules.buildings.models import Building
@@ -34,6 +34,7 @@ class Phase(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    phase_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

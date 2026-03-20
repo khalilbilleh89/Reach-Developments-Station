@@ -33,6 +33,24 @@ class PhaseRepository:
             .first()
         )
 
+    def get_prior_phase(self, project_id: str, sequence: int) -> Optional[Phase]:
+        """Return the phase with the highest sequence less than the given sequence."""
+        return (
+            self.db.query(Phase)
+            .filter(Phase.project_id == project_id, Phase.sequence < sequence)
+            .order_by(Phase.sequence.desc())
+            .first()
+        )
+
+    def get_next_phase(self, project_id: str, sequence: int) -> Optional[Phase]:
+        """Return the phase with the lowest sequence greater than the given sequence."""
+        return (
+            self.db.query(Phase)
+            .filter(Phase.project_id == project_id, Phase.sequence > sequence)
+            .order_by(Phase.sequence.asc())
+            .first()
+        )
+
     def list(self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Phase]:
         query = self.db.query(Phase)
         if project_id:

@@ -1,7 +1,8 @@
 /**
- * phases-types.ts — TypeScript types for the Phases domain.
+ * project-phases-types.ts — TypeScript types for the Project Lifecycle & Phase Management Engine.
  *
- * Mirrors the backend PhaseResponse schema.
+ * Mirrors the backend PhaseResponse and ProjectLifecycle schemas.
+ * Extends the base Phase type with lifecycle-specific fields (phase_type, is_current).
  */
 
 export type PhaseStatus = "planned" | "active" | "completed";
@@ -14,7 +15,7 @@ export type PhaseType =
   | "sales"
   | "handover";
 
-export interface Phase {
+export interface ProjectPhase {
   id: string;
   project_id: string;
   name: string;
@@ -29,12 +30,33 @@ export interface Phase {
   updated_at: string;
 }
 
-export interface PhaseListResponse {
-  items: Phase[];
+export interface ProjectPhaseListResponse {
+  items: ProjectPhase[];
   total: number;
 }
 
-export interface PhaseCreate {
+export interface LifecyclePhaseItem {
+  id: string;
+  project_id: string;
+  name: string;
+  code: string | null;
+  sequence: number;
+  phase_type: PhaseType | null;
+  status: PhaseStatus;
+  start_date: string | null;
+  end_date: string | null;
+  description: string | null;
+  is_current: boolean;
+}
+
+export interface ProjectLifecycle {
+  project_id: string;
+  phases: LifecyclePhaseItem[];
+  current_phase_type: PhaseType | null;
+  current_sequence: number | null;
+}
+
+export interface ProjectPhaseCreate {
   name: string;
   code?: string | null;
   sequence: number;
@@ -45,7 +67,7 @@ export interface PhaseCreate {
   description?: string | null;
 }
 
-export interface PhaseUpdate {
+export interface ProjectPhaseUpdate {
   name?: string;
   code?: string | null;
   sequence?: number;
