@@ -11,6 +11,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.feasibility.engines.feasibility_engine import FeasibilityInputs, run_feasibility
+from app.modules.feasibility.break_even_engine import (
+    calculate_break_even_price_per_sqm,
+    calculate_break_even_units_sqm,
+    calculate_equity_multiple,
+)
+from app.modules.feasibility.irr_engine import calculate_irr
+from app.modules.feasibility.scenario_runner import run_sensitivity_scenarios
 from app.modules.feasibility.repository import (
     FeasibilityAssumptionsRepository,
     FeasibilityResultRepository,
@@ -158,6 +165,21 @@ class FeasibilityService:
             development_period_months=int(assumptions.development_period_months),
         )
         outputs = run_feasibility(inputs)
+
+        irr = calculate_irr(
+            total_cost=outputs.total_cost,
+            gdv=outputs.gdv,
+            development_period_months=inputs.development_period_months,
+        )
+        equity_multiple = calculate_equity_multiple(outputs.gdv, outputs.total_cost)
+        break_even_price = calculate_break_even_price_per_sqm(
+            outputs.total_cost, inputs.sellable_area_sqm
+        )
+        break_even_units = calculate_break_even_units_sqm(
+            outputs.total_cost, inputs.avg_sale_price_per_sqm
+        )
+        scenario_outputs = run_sensitivity_scenarios(inputs)
+
         result = self.result_repo.create_or_replace(
             run_id=run_id,
             gdv=outputs.gdv,
@@ -169,6 +191,11 @@ class FeasibilityService:
             developer_profit=outputs.developer_profit,
             profit_margin=outputs.profit_margin,
             irr_estimate=outputs.irr_estimate,
+            irr=irr,
+            equity_multiple=equity_multiple,
+            break_even_price=break_even_price,
+            break_even_units=break_even_units,
+            scenario_outputs=scenario_outputs,
         )
         return FeasibilityResultResponse.model_validate(result)
 

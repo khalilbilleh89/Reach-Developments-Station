@@ -11,7 +11,7 @@ in the development lifecycle.
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -93,6 +93,11 @@ class FeasibilityResult(Base, TimestampMixin):
     developer_profit: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     profit_margin: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
     irr_estimate: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
+    irr: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
+    equity_multiple: Mapped[Optional[float]] = mapped_column(Numeric(10, 4), nullable=True)
+    break_even_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    break_even_units: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    scenario_outputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     run: Mapped["FeasibilityRun"] = relationship("FeasibilityRun", back_populates="result")
 

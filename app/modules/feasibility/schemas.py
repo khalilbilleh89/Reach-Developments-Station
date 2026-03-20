@@ -105,6 +105,11 @@ class FeasibilityResultResponse(BaseModel):
     developer_profit: Optional[float]
     profit_margin: Optional[float]
     irr_estimate: Optional[float]
+    irr: Optional[float]
+    equity_multiple: Optional[float]
+    break_even_price: Optional[float]
+    break_even_units: Optional[float]
+    scenario_outputs: Optional[dict]
     created_at: datetime
     updated_at: datetime
 
