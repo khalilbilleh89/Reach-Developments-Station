@@ -1,11 +1,16 @@
-// Project structure route — static export stub.
+// The Buildings → Floors → Units structure UI is currently rendered
+// inside the main Projects page through the ProjectDetailView tabbed
+// interface. Those tabs are controlled by React component state rather
+// than URL query parameters.
 //
-// The actual structure UI (Buildings → Floors → Units hierarchy) is rendered
-// by the projects page via query params
-// (/projects?id=<projectId>&tab=buildings or &tab=floors).
+// This route exists only to satisfy Next.js static export requirements
+// (`output: "export"`) for the dynamic segment `/projects/[id]/structure`.
 //
-// generateStaticParams satisfies the `output: "export"` requirement.
-// dynamicParams = false ensures unmatched IDs return 404 from the static build.
+// It also acts as a placeholder for potential future nested routing
+// where the structure view could be separated into its own page.
+//
+// generateStaticParams ensures the static build knows which routes exist.
+// dynamicParams = false ensures unknown IDs return a static 404.
 
 export function generateStaticParams() {
   return [{ id: "_" }];
