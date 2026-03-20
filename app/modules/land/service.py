@@ -98,6 +98,48 @@ class LandService:
         updated = self.parcel_repo.update(parcel, data)
         return LandParcelResponse.model_validate(updated)
 
+    def delete_parcel(self, parcel_id: str) -> None:
+        parcel = self.parcel_repo.get_by_id(parcel_id)
+        if not parcel:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Land parcel '{parcel_id}' not found.",
+            )
+        self.parcel_repo.delete(parcel)
+
+    def assign_to_project(self, parcel_id: str, project_id: str) -> LandParcelResponse:
+        parcel = self.parcel_repo.get_by_id(parcel_id)
+        if not parcel:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Land parcel '{parcel_id}' not found.",
+            )
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project '{project_id}' not found.",
+            )
+        # Check that parcel is not already assigned to a different project
+        if parcel.project_id is not None and parcel.project_id != project_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Land parcel '{parcel_id}' is already assigned to project '{parcel.project_id}'.",
+            )
+        # Already assigned to the target project — nothing to do
+        if parcel.project_id == project_id:
+            return LandParcelResponse.model_validate(parcel)
+        # Check for code conflict within target project
+        existing = self.parcel_repo.get_by_project_and_code(project_id, parcel.parcel_code)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+            )
+        data = LandParcelUpdate(project_id=project_id)
+        updated = self.parcel_repo.update(parcel, data)
+        return LandParcelResponse.model_validate(updated)
+
     # ------------------------------------------------------------------
     # Assumptions operations
     # ------------------------------------------------------------------

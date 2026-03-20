@@ -73,6 +73,25 @@ def update_parcel(
     return service.update_parcel(parcel_id, data)
 
 
+@router.delete("/parcels/{parcel_id}", status_code=204)
+def delete_parcel(
+    parcel_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> None:
+    """Delete a land parcel."""
+    service.delete_parcel(parcel_id)
+
+
+@router.post("/parcels/{parcel_id}/assign-project/{project_id}", response_model=LandParcelResponse)
+def assign_parcel_to_project(
+    parcel_id: str,
+    project_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandParcelResponse:
+    """Assign a land parcel to a project."""
+    return service.assign_to_project(parcel_id, project_id)
+
+
 # ---------------------------------------------------------------------------
 # Assumptions endpoints
 # ---------------------------------------------------------------------------

@@ -27,6 +27,13 @@ export const NAV_ITEMS: NavItem[] = [
     requiresAuth: true,
   },
   {
+    label: "Land",
+    href: "/land",
+    icon: "MapPin",
+    section: "main",
+    requiresAuth: true,
+  },
+  {
     label: "Projects",
     href: "/projects",
     icon: "FolderOpen",
