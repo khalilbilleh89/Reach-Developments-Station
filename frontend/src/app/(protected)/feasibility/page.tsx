@@ -138,6 +138,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <label
+              htmlFor="create-run-scenario-name"
               style={{
                 display: "block",
                 marginBottom: 6,
@@ -148,6 +149,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               Scenario Name *
             </label>
             <input
+              id="create-run-scenario-name"
               type="text"
               value={scenarioName}
               onChange={(e) => setScenarioName(e.target.value)}
@@ -165,6 +167,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
           </div>
           <div style={{ marginBottom: 16 }}>
             <label
+              htmlFor="create-run-scenario-type"
               style={{
                 display: "block",
                 marginBottom: 6,
@@ -175,6 +178,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               Scenario Type
             </label>
             <select
+              id="create-run-scenario-type"
               value={scenarioType}
               onChange={(e) =>
                 setScenarioType(e.target.value as FeasibilityScenarioType)
@@ -197,6 +201,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
           </div>
           <div style={{ marginBottom: 24 }}>
             <label
+              htmlFor="create-run-notes"
               style={{
                 display: "block",
                 marginBottom: 6,
@@ -207,6 +212,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               Notes
             </label>
             <textarea
+              id="create-run-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes about this scenario…"
@@ -224,6 +230,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
           </div>
           {error && (
             <p
+              role="alert"
               style={{
                 color: "#b91c1c",
                 fontSize: "0.875rem",
@@ -293,7 +300,7 @@ export default function FeasibilityPage() {
     listFeasibilityRuns({ limit: 100 })
       .then((resp) => {
         setRuns(resp.items);
-        setTotal(resp.total);
+        setTotal(resp.items.length);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -397,6 +404,7 @@ export default function FeasibilityPage() {
       {/* Error state */}
       {error && (
         <div
+          role="alert"
           style={{
             padding: "12px 16px",
             background: "#fef2f2",

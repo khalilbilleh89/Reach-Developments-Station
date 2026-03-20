@@ -1,5 +1,5 @@
-// Feasibility run detail route stub — navigation is handled by query param on the
-// parent feasibility page (/feasibility?runId=<runId>).
+// Feasibility run detail route stub used to satisfy Next.js routing and static export.
+// This route is currently a no-op; run details are not rendered via this page.
 //
 // generateStaticParams satisfies the `output: "export"` requirement.
 // dynamicParams = false ensures unmatched IDs return 404 from the static build.
