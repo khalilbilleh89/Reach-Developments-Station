@@ -103,6 +103,9 @@ function CreateParcelModal({ onClose, onCreated }: CreateParcelModalProps) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-parcel-dialog-title"
       style={{
         position: "fixed",
         inset: 0,
@@ -123,7 +126,10 @@ function CreateParcelModal({ onClose, onCreated }: CreateParcelModalProps) {
           boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
         }}
       >
-        <h2 style={{ margin: "0 0 24px", fontSize: "1.125rem", fontWeight: 600 }}>
+        <h2
+          id="create-parcel-dialog-title"
+          style={{ margin: "0 0 24px", fontSize: "1.125rem", fontWeight: 600 }}
+        >
           New Land Parcel
         </h2>
         <form onSubmit={handleSubmit}>
@@ -217,7 +223,7 @@ function CreateParcelModal({ onClose, onCreated }: CreateParcelModalProps) {
                 value={landAreaSqm}
                 onChange={(e) => setLandAreaSqm(e.target.value)}
                 placeholder="e.g. 10000"
-                min={0}
+                min={0.01}
                 step={0.01}
                 style={{
                   width: "100%",

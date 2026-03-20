@@ -26,6 +26,7 @@ import type {
   LandParcelCreate,
   LandParcelList,
   LandParcelUpdate,
+  LandScenarioType,
   LandValuation,
 } from "./land-types";
 
@@ -129,7 +130,7 @@ export async function createLandValuation(
   parcelId: string,
   data: {
     scenario_name: string;
-    scenario_type?: string;
+    scenario_type?: LandScenarioType;
     assumed_sale_price_per_sqm?: number | null;
     assumed_cost_per_sqm?: number | null;
     valuation_notes?: string | null;

@@ -8,6 +8,7 @@ Endpoints for LandParcel, LandAssumptions, and LandValuation.
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -73,13 +74,14 @@ def update_parcel(
     return service.update_parcel(parcel_id, data)
 
 
-@router.delete("/parcels/{parcel_id}", status_code=204)
+@router.delete("/parcels/{parcel_id}", status_code=204, response_class=Response)
 def delete_parcel(
     parcel_id: str,
     service: Annotated[LandService, Depends(get_service)],
-) -> None:
+) -> Response:
     """Delete a land parcel."""
     service.delete_parcel(parcel_id)
+    return Response(status_code=204)
 
 
 @router.post("/parcels/{parcel_id}/assign-project/{project_id}", response_model=LandParcelResponse)

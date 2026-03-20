@@ -126,7 +126,7 @@ class LandService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Land parcel '{parcel_id}' is already assigned to project '{parcel.project_id}'.",
             )
-        # Already assigned to the target project — nothing to do
+        # Already assigned to the target project — idempotent success
         if parcel.project_id == project_id:
             return LandParcelResponse.model_validate(parcel)
         # Check for code conflict within target project
@@ -136,9 +136,18 @@ class LandService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
             )
-        data = LandParcelUpdate(project_id=project_id)
-        updated = self.parcel_repo.update(parcel, data)
-        return LandParcelResponse.model_validate(updated)
+        # Perform assignment — guard against concurrency-driven IntegrityError
+        try:
+            parcel.project_id = project_id
+            self.parcel_repo.db.commit()
+            self.parcel_repo.db.refresh(parcel)
+        except IntegrityError:
+            self.parcel_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+            )
+        return LandParcelResponse.model_validate(parcel)
 
     # ------------------------------------------------------------------
     # Assumptions operations
