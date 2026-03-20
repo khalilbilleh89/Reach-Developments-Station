@@ -117,6 +117,11 @@ class FeasibilityResultRepository:
         developer_profit: float,
         profit_margin: float,
         irr_estimate: float,
+        irr: float,
+        equity_multiple: float,
+        break_even_price: float,
+        break_even_units: float,
+        scenario_outputs: dict,
     ) -> FeasibilityResult:
         """Create or replace the result for a run (one result per run)."""
         existing = self.get_by_run(run_id)
@@ -130,6 +135,11 @@ class FeasibilityResultRepository:
             existing.developer_profit = developer_profit
             existing.profit_margin = profit_margin
             existing.irr_estimate = irr_estimate
+            existing.irr = irr
+            existing.equity_multiple = equity_multiple
+            existing.break_even_price = break_even_price
+            existing.break_even_units = break_even_units
+            existing.scenario_outputs = scenario_outputs
             self.db.commit()
             self.db.refresh(existing)
             return existing
@@ -144,6 +154,11 @@ class FeasibilityResultRepository:
             developer_profit=developer_profit,
             profit_margin=profit_margin,
             irr_estimate=irr_estimate,
+            irr=irr,
+            equity_multiple=equity_multiple,
+            break_even_price=break_even_price,
+            break_even_units=break_even_units,
+            scenario_outputs=scenario_outputs,
         )
         self.db.add(result)
         self.db.commit()
