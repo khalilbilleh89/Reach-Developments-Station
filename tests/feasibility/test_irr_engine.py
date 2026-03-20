@@ -63,15 +63,14 @@ def test_calculate_irr_unprofitable_project_is_negative():
 
 
 def test_calculate_irr_breakeven_project_near_zero():
-    # GDV == total cost ⟹ zero profit ⟹ IRR ≈ 0 (small positive due to
-    # timing: costs spent early, revenue received at end).
+    # GDV == total cost ⟹ zero profit, so the IRR should be close to 0.
+    # Depending on exact cashflow timing, the computed IRR may be slightly
+    # positive or slightly negative, but it should remain near zero.
     irr = calculate_irr(
         total_cost=3_000_000.0,
         gdv=3_000_000.0,
         development_period_months=24,
     )
-    # Near-zero but slightly negative because costs are spread monthly
-    # while revenue is at end — a slight time-value discount applies.
     assert abs(irr) < 0.05
 
 
@@ -115,3 +114,14 @@ def test_calculate_irr_returns_float():
 def test_calculate_irr_zero_gdv_is_negative():
     irr = calculate_irr(1_000_000.0, 0.0, 24)
     assert irr < 0.0
+
+
+def test_calculate_irr_zero_gdv_returns_minus_one():
+    # No revenue → full annualised loss; sentinel is -1.0 (-100 %).
+    assert calculate_irr(1_000_000.0, 0.0, 24) == -1.0
+
+
+def test_calculate_irr_convergence_returns_float_not_raises():
+    # Solver must not raise even for degenerate inputs; returns float sentinel.
+    result = calculate_irr(1.0, 1.0, 1)
+    assert isinstance(result, float)

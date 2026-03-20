@@ -142,10 +142,10 @@ def test_investor_gdv_factor():
 
 
 # ---------------------------------------------------------------------------
-# Scenario ordering: upside > base > investor profit ranking check
+# Scenario ordering: upside > base > downside profit ranking
 # ---------------------------------------------------------------------------
 
-def test_upside_profit_gt_investor_profit_gt_downside_profit():
+def test_upside_profit_gt_base_profit_gt_downside_profit():
     result = run_sensitivity_scenarios(_BASE_INPUTS)
     assert (
         result["upside"]["developer_profit"]
