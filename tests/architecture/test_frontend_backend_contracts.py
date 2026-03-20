@@ -150,6 +150,8 @@ CRITICAL_FRONTEND_CONTRACT_PAIRS = [
     ("GET", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/assumptions"),
     ("POST", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/calculate"),
     ("GET", f"{_API_PREFIX}/feasibility/runs/{{run_id}}/results"),
+    # Unit inventory hardening (PR-11)
+    ("GET", f"{_API_PREFIX}/units/{{unit_id}}/readiness"),
 ]
 
 

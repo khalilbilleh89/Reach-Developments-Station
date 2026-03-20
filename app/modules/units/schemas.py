@@ -89,6 +89,21 @@ class UnitList(BaseModel):
     total: int
 
 
+class UnitReadinessResponse(BaseModel):
+    """Commercial readiness state for a unit.
+
+    Reports whether the unit is ready for downstream pricing and sales
+    workflows.  Reasons lists are non-empty when the corresponding flag is
+    False so the caller can surface actionable detail to the user.
+    """
+
+    unit_id: str
+    is_ready_for_pricing: bool
+    is_ready_for_sales: bool
+    pricing_blocking_reasons: List[str]
+    sales_blocking_reasons: List[str]
+
+
 # ---------------------------------------------------------------------------
 # Unit dynamic attribute value schemas (PR-033)
 # ---------------------------------------------------------------------------

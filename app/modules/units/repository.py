@@ -39,14 +39,23 @@ class UnitRepository:
             .first()
         )
 
-    def _apply_filters(self, query, floor_id: Optional[str], project_id: Optional[str]):
-        """Apply floor_id and/or project_id filters to a Unit query.
+    def _apply_filters(self, query, floor_id: Optional[str], project_id: Optional[str],
+                       building_id: Optional[str] = None, status: Optional[str] = None):
+        """Apply floor_id, building_id, project_id, and status filters to a Unit query.
 
-        project_id filter joins through the canonical hierarchy:
-        Unit → Floor → Building → Phase to scope by project.
+        project_id and building_id filters join through the canonical hierarchy:
+        Unit → Floor → Building → Phase to scope by project/building.
         """
         if floor_id:
             query = query.filter(Unit.floor_id == floor_id)
+        if status:
+            query = query.filter(Unit.status == status)
+        if building_id and not project_id:
+            query = (
+                query
+                .join(Floor, Floor.id == Unit.floor_id)
+                .filter(Floor.building_id == building_id)
+            )
         if project_id:
             query = (
                 query
@@ -55,24 +64,32 @@ class UnitRepository:
                 .join(Phase, Phase.id == Building.phase_id)
                 .filter(Phase.project_id == project_id)
             )
+            if building_id:
+                query = query.filter(Building.id == building_id)
         return query
 
     def list(
         self,
         floor_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        building_id: Optional[str] = None,
+        status: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> List[Unit]:
-        query = self._apply_filters(self.db.query(Unit), floor_id, project_id)
+        query = self._apply_filters(self.db.query(Unit), floor_id, project_id,
+                                    building_id=building_id, status=status)
         return query.offset(skip).limit(limit).all()
 
     def count(
         self,
         floor_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        building_id: Optional[str] = None,
+        status: Optional[str] = None,
     ) -> int:
-        query = self._apply_filters(self.db.query(Unit), floor_id, project_id)
+        query = self._apply_filters(self.db.query(Unit), floor_id, project_id,
+                                    building_id=building_id, status=status)
         return query.count()
 
     def update(self, unit: Unit, data: UnitUpdate) -> Unit:

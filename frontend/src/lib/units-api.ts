@@ -41,6 +41,7 @@ import type {
   UnitDetail,
   UnitDynamicAttributesSaveRequest,
   UnitDynamicAttributeValue,
+  UnitInventoryReadiness,
   UnitListItem,
   UnitListResponse,
   UnitPrice,
@@ -156,6 +157,21 @@ export async function getUnitsByProject(
 /** Fetch a single unit by its ID. */
 export async function getUnitById(unitId: string): Promise<UnitDetail> {
   return apiFetch<UnitDetail>(`/units/${unitId}`);
+}
+
+/**
+ * Fetch the commercial readiness state for a unit.
+ *
+ * Returns the readiness report from the backend, including whether the
+ * unit is ready for pricing and sales, and any blocking reasons.
+ * Throws ApiError with status 404 if the unit does not exist.
+ */
+export async function getUnitInventoryReadiness(
+  unitId: string,
+): Promise<UnitInventoryReadiness> {
+  return apiFetch<UnitInventoryReadiness>(
+    `/units/${encodeURIComponent(unitId)}/readiness`,
+  );
 }
 
 /**
