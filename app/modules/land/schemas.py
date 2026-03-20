@@ -4,8 +4,8 @@ land.schemas
 Pydantic request/response schemas for the Land Underwriting CRUD API.
 """
 
-from datetime import datetime
-from typing import List, Optional
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -151,8 +151,27 @@ class LandValuationResponse(BaseModel):
     expected_cost: Optional[float]
     residual_land_value: Optional[float]
     land_value_per_sqm: Optional[float]
+    max_land_bid: Optional[float]
+    residual_margin: Optional[float]
+    valuation_date: Optional[date]
+    valuation_inputs: Optional[Dict[str, Any]]
     valuation_notes: Optional[str]
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# LandValuationEngine schemas — engine-driven residual valuation
+# ---------------------------------------------------------------------------
+
+class LandValuationEngineRequest(BaseModel):
+    scenario_name: str = Field(..., min_length=1, max_length=255)
+    scenario_type: LandScenarioType = LandScenarioType.BASE
+    gdv: float = Field(..., gt=0)
+    construction_cost: float = Field(..., gt=0)
+    soft_cost_percentage: float = Field(..., ge=0, le=1)
+    developer_margin_target: float = Field(..., ge=0, le=1)
+    sellable_area_sqm: float = Field(..., gt=0)
+    valuation_notes: Optional[str] = None

@@ -14,7 +14,9 @@ from app.modules.land.schemas import (
     LandParcelCreate,
     LandParcelUpdate,
     LandValuationCreate,
+    LandValuationEngineRequest,
 )
+from app.modules.land.engines.valuation_engine import ValuationOutputs
 
 
 class LandParcelRepository:
@@ -127,3 +129,36 @@ class LandValuationRepository:
             .filter(LandValuation.parcel_id == parcel_id)
             .all()
         )
+
+    def create_from_engine(
+        self,
+        parcel_id: str,
+        data: LandValuationEngineRequest,
+        outputs: ValuationOutputs,
+    ) -> LandValuation:
+        from datetime import date
+
+        valuation = LandValuation(
+            parcel_id=parcel_id,
+            scenario_name=data.scenario_name,
+            scenario_type=data.scenario_type.value,
+            expected_gdv=data.gdv,
+            expected_cost=outputs.total_cost,
+            residual_land_value=outputs.land_value,
+            land_value_per_sqm=outputs.land_value_per_sqm,
+            max_land_bid=outputs.max_land_bid,
+            residual_margin=outputs.residual_margin,
+            valuation_date=date.today(),
+            valuation_inputs={
+                "gdv": data.gdv,
+                "construction_cost": data.construction_cost,
+                "soft_cost_percentage": data.soft_cost_percentage,
+                "developer_margin_target": data.developer_margin_target,
+                "sellable_area_sqm": data.sellable_area_sqm,
+            },
+            valuation_notes=data.valuation_notes,
+        )
+        self.db.add(valuation)
+        self.db.commit()
+        self.db.refresh(valuation)
+        return valuation

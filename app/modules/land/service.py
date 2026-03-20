@@ -20,6 +20,7 @@ from app.modules.land.schemas import (
     LandParcelResponse,
     LandParcelUpdate,
     LandValuationCreate,
+    LandValuationEngineRequest,
     LandValuationResponse,
 )
 from app.modules.projects.repository import ProjectRepository
@@ -234,3 +235,25 @@ class LandService:
             )
         valuations = self.valuation_repo.list_by_parcel(parcel_id)
         return [LandValuationResponse.model_validate(v) for v in valuations]
+
+    def calculate_land_valuation(self, parcel_id: str, data: LandValuationEngineRequest) -> LandValuationResponse:
+        from app.modules.land.engines.valuation_engine import ValuationInputs, run_land_valuation
+
+        parcel = self.parcel_repo.get_by_id(parcel_id)
+        if not parcel:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Land parcel '{parcel_id}' not found.",
+            )
+
+        inputs = ValuationInputs(
+            gdv=data.gdv,
+            construction_cost=data.construction_cost,
+            soft_cost_percentage=data.soft_cost_percentage,
+            developer_margin_target=data.developer_margin_target,
+            sellable_area_sqm=data.sellable_area_sqm,
+        )
+        outputs = run_land_valuation(inputs)
+
+        valuation = self.valuation_repo.create_from_engine(parcel_id, data, outputs)
+        return LandValuationResponse.model_validate(valuation)

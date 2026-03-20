@@ -20,6 +20,7 @@ from app.modules.land.schemas import (
     LandParcelResponse,
     LandParcelUpdate,
     LandValuationCreate,
+    LandValuationEngineRequest,
     LandValuationResponse,
 )
 from app.modules.land.service import LandService
@@ -138,3 +139,17 @@ def list_valuations(
 ) -> List[LandValuationResponse]:
     """List all valuation scenarios for a land parcel."""
     return service.list_valuations(parcel_id)
+
+
+@router.post("/parcels/{parcel_id}/valuation", response_model=LandValuationResponse, status_code=201)
+def run_valuation_engine(
+    parcel_id: str,
+    data: LandValuationEngineRequest,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandValuationResponse:
+    """Run the land valuation engine for a parcel and persist the result.
+
+    Computes residual land value using:
+      land_value = GDV − (construction_cost + soft_costs) − target_profit
+    """
+    return service.calculate_land_valuation(parcel_id, data)
