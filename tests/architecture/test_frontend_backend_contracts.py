@@ -43,6 +43,7 @@ REQUIRED_API_WRAPPER_FILES = [
     "registry-api.ts",   # PR-E5: was missing, now created
     "settings-api.ts",   # PR-E5: was missing, now created
     "commission-api.ts", # PR-1: commission UI wiring
+    "cashflow-api.ts",   # PR-2: cashflow UI wiring
 ]
 
 # Canonical frontend type definition files that MUST exist.
@@ -55,6 +56,7 @@ REQUIRED_TYPE_FILES = [
     "registry-types.ts",  # PR-E5: was missing, now created
     "settings-types.ts",  # PR-E5: was missing, now created
     "commission-types.ts",  # PR-1: commission UI wiring
+    "cashflow-types.ts",  # PR-2: cashflow UI wiring
 ]
 
 # Legacy paths that must NOT appear as primary calls in frontend wrappers.
@@ -132,6 +134,11 @@ CRITICAL_FRONTEND_CONTRACT_PAIRS = [
     ("GET", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
     ("PATCH", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
     ("DELETE", f"{_API_PREFIX}/settings/project-templates/{{template_id}}"),
+    # Cashflow
+    ("GET", f"{_API_PREFIX}/cashflow/projects/{{project_id}}/forecasts"),
+    ("GET", f"{_API_PREFIX}/cashflow/projects/{{project_id}}/cashflow-summary"),
+    ("GET", f"{_API_PREFIX}/cashflow/forecasts/{{forecast_id}}"),
+    ("GET", f"{_API_PREFIX}/cashflow/forecasts/{{forecast_id}}/periods"),
 ]
 
 
@@ -510,4 +517,70 @@ class TestCommissionApiWrapperContract:
         content = _read_frontend_file("commission-api.ts")
         assert "/commission/projects/" in content and "/summary" in content, (
             "commission-api.ts does not wrap the commission project summary endpoint"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: cashflow page uses live data, not demo
+# ---------------------------------------------------------------------------
+
+
+class TestCashflowPageIsLive:
+    """Cashflow page must use live API data, not the static demo dataset."""
+
+    def test_cashflow_page_does_not_import_demo_data(self):
+        """Cashflow page must not import demoCashflowPeriods from demo-data.ts."""
+        content = _read_frontend_page("(protected)/cashflow/page.tsx")
+        assert content, "(protected)/cashflow/page.tsx not found"
+        assert "demoCashflowPeriods" not in content, (
+            "Cashflow page still imports demoCashflowPeriods from demo-data.ts. "
+            "The cashflow backend is fully implemented — use cashflow-api.ts instead."
+        )
+
+    def test_cashflow_page_does_not_show_demo_banner(self):
+        """Cashflow page must not render the demo preview banner."""
+        content = _read_frontend_page("(protected)/cashflow/page.tsx")
+        assert content, "(protected)/cashflow/page.tsx not found"
+        assert "Demo Preview" not in content, (
+            "Cashflow page still shows the 'Demo Preview' banner. "
+            "Remove the banner and wire to the live cashflow API."
+        )
+
+    def test_cashflow_page_imports_cashflow_api(self):
+        """Cashflow page must import from cashflow-api.ts."""
+        content = _read_frontend_page("(protected)/cashflow/page.tsx")
+        assert content, "(protected)/cashflow/page.tsx not found"
+        assert "cashflow-api" in content, (
+            "Cashflow page does not import from cashflow-api.ts. "
+            "It should call the live /cashflow/* backend endpoints."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: cashflow API wrapper covers required endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestCashflowApiWrapperContract:
+    """cashflow-api.ts must expose wrappers for cashflow backend endpoints."""
+
+    def test_cashflow_wrapper_has_project_summary(self):
+        """cashflow-api.ts must wrap GET /cashflow/projects/{id}/cashflow-summary."""
+        content = _read_frontend_file("cashflow-api.ts")
+        assert "/cashflow/projects/" in content, (
+            "cashflow-api.ts does not wrap /cashflow/projects/* endpoints"
+        )
+
+    def test_cashflow_wrapper_has_project_forecasts(self):
+        """cashflow-api.ts must wrap GET /cashflow/projects/{id}/forecasts."""
+        content = _read_frontend_file("cashflow-api.ts")
+        assert "/cashflow/projects/" in content and "/forecasts" in content, (
+            "cashflow-api.ts does not wrap the project forecasts endpoint"
+        )
+
+    def test_cashflow_wrapper_has_forecast_periods(self):
+        """cashflow-api.ts must wrap GET /cashflow/forecasts/{id}/periods."""
+        content = _read_frontend_file("cashflow-api.ts")
+        assert "/cashflow/forecasts/" in content and "/periods" in content, (
+            "cashflow-api.ts does not wrap the forecast periods endpoint"
         )
