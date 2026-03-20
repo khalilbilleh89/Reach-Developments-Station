@@ -11,7 +11,7 @@ project later in the development lifecycle.
 
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -112,6 +112,10 @@ class LandValuation(Base, TimestampMixin):
 
     residual_land_value: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     land_value_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    max_land_bid: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    residual_margin: Mapped[Optional[float]] = mapped_column(Numeric(8, 6), nullable=True)
+    valuation_date: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    valuation_inputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     valuation_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
