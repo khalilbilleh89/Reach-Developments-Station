@@ -103,7 +103,6 @@ def _make_registry_case(
     db: Session,
     project_id: str,
     unit_id: str,
-    buyer_id: str,
     contract_id: str,
     case_number: int = 1,
 ) -> str:
@@ -200,7 +199,7 @@ class TestRegistryEagerLoading:
             contract_id = _make_contract(
                 db_session, unit_id, buyer_id, f"CNT-QE-{i:03d}"
             )
-            _make_registry_case(db_session, project_id, unit_id, buyer_id, contract_id, i)
+            _make_registry_case(db_session, project_id, unit_id, contract_id, i)
 
         db_session.commit()
         db_session.expire_all()  # Force fresh load
@@ -242,9 +241,9 @@ class TestPaginationEnforcement:
         resp = client.get("/api/v1/registry/projects/nonexistent/cases?limit=10&skip=0")
         # 404 is expected since the project does not exist, but the route must
         # exist and accept the pagination parameters (not 422 from unknown params).
-        assert resp.status_code in (404, 200), (
-            f"Expected 404 (project not found) or 200, got {resp.status_code}. "
-            "Ensure the endpoint accepts limit/skip query params."
+        assert resp.status_code == 404, (
+            f"Expected 404 (project not found), got {resp.status_code}. "
+            "Ensure the endpoint exists and accepts limit/skip query params."
         )
 
     def test_construction_list_endpoint_enforces_pagination(self, client):
@@ -309,4 +308,15 @@ class TestIndexCoverage:
         index_names = {idx.name for idx in table.indexes}
         assert "ix_registration_cases_project_id" in index_names, (
             "registration_cases.project_id is missing its index."
+        )
+
+    def test_registration_cases_composite_index_exists(self):
+        """registration_cases must have a composite (project_id, status) index."""
+        from app.modules.registry.models import RegistrationCase
+
+        table = RegistrationCase.__table__
+        index_names = {idx.name for idx in table.indexes}
+        assert "ix_registration_cases_project_id_status" in index_names, (
+            "registration_cases is missing the composite (project_id, status) index.  "
+            "Declare it in __table_args__ and ensure migration 0031 is applied."
         )

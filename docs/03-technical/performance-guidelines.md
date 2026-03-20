@@ -187,8 +187,8 @@ total = sum(item.budget_amount for item in items)
 | `registration_cases` | `(project_id, status)` | `ix_registration_cases_project_id_status` | composite; covers `count_completed_by_project` and `count_open_by_project` |
 | `registration_cases` | `unit_id` | `ix_registration_cases_unit_id` | `get_active_by_unit` lookup |
 | `registration_cases` | `sale_contract_id` | `ix_registration_cases_sale_contract_id` | contract-lookup |
-| `registration_milestones` | `registration_case_id` | `ix_registration_milestones_registration_case_id` | milestones-by-case |
-| `registration_documents` | `registration_case_id` | `ix_registration_documents_registration_case_id` | documents-by-case |
+| `registration_milestones` | `registration_case_id` | `ix_registration_milestones_case_id` | milestones-by-case |
+| `registration_documents` | `registration_case_id` | `ix_registration_documents_case_id` | documents-by-case |
 | `construction_scopes` | `project_id` | `ix_construction_scopes_project_id` | project-scoped scope list |
 | `construction_milestones` | `scope_id` | `ix_construction_milestones_scope_id` | milestones-by-scope |
 | `construction_progress_updates` | `milestone_id` | `ix_construction_progress_updates_milestone_id` | progress-by-milestone |
