@@ -39,8 +39,14 @@ class UnitRepository:
             .first()
         )
 
-    def _apply_filters(self, query, floor_id: Optional[str], project_id: Optional[str],
-                       building_id: Optional[str] = None, status: Optional[str] = None):
+    def _apply_filters(
+        self,
+        query,
+        floor_id: Optional[str],
+        project_id: Optional[str],
+        building_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ):
         """Apply floor_id, building_id, project_id, and status filters to a Unit query.
 
         project_id and building_id filters join through the canonical hierarchy:
@@ -77,8 +83,10 @@ class UnitRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[Unit]:
-        query = self._apply_filters(self.db.query(Unit), floor_id, project_id,
-                                    building_id=building_id, status=status)
+        query = self._apply_filters(
+            self.db.query(Unit), floor_id, project_id,
+            building_id=building_id, status=status,
+        )
         return query.offset(skip).limit(limit).all()
 
     def count(
@@ -88,8 +96,10 @@ class UnitRepository:
         building_id: Optional[str] = None,
         status: Optional[str] = None,
     ) -> int:
-        query = self._apply_filters(self.db.query(Unit), floor_id, project_id,
-                                    building_id=building_id, status=status)
+        query = self._apply_filters(
+            self.db.query(Unit), floor_id, project_id,
+            building_id=building_id, status=status,
+        )
         return query.count()
 
     def update(self, unit: Unit, data: UnitUpdate) -> Unit:
