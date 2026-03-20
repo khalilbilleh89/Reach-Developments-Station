@@ -44,6 +44,19 @@ def _bisect_irr(
     Searches for a monthly rate in *[lo, hi]* where NPV changes sign.
     Returns the root (monthly rate) when found, or ``None`` when there is
     no sign change in the search range (no real root exists).
+
+    Parameters
+    ----------
+    cashflows:
+        Periodic cashflow array (month 0 first).
+    lo:
+        Lower bound for the monthly rate search range.
+    hi:
+        Upper bound for the monthly rate search range.
+    max_iterations:
+        Maximum bisection iterations.
+    tolerance:
+        Convergence tolerance on the NPV magnitude and interval width.
     """
     f_lo = _npv(lo, cashflows)
     f_hi = _npv(hi, cashflows)

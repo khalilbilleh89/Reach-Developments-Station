@@ -111,11 +111,6 @@ def test_calculate_irr_returns_float():
     assert isinstance(result, float)
 
 
-def test_calculate_irr_zero_gdv_is_negative():
-    irr = calculate_irr(1_000_000.0, 0.0, 24)
-    assert irr < 0.0
-
-
 def test_calculate_irr_zero_gdv_returns_minus_one():
     # No revenue → full annualised loss; sentinel is -1.0 (-100 %).
     assert calculate_irr(1_000_000.0, 0.0, 24) == -1.0
