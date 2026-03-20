@@ -1,22 +1,79 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
+import {
+  listPricingPolicies,
+  listCommissionPolicies,
+  listProjectTemplates,
+} from "@/lib/settings-api";
+import type {
+  PricingPolicy,
+  CommissionPolicy,
+  ProjectTemplate,
+} from "@/lib/settings-types";
 import styles from "@/styles/demo-shell.module.css";
 
 /**
- * Settings — executive demo placeholder.
+ * Settings — governance configuration page.
  *
- * Shows structured settings category cards for management preview.
+ * Live sections (from backend API):
+ *   • Pricing Policies  → /api/v1/settings/pricing-policies
+ *   • Commission Policies → /api/v1/settings/commission-policies
+ *   • Project Templates  → /api/v1/settings/project-templates
  *
- * INTENTIONAL DEMO DATA — this page displays non-wired placeholder content
- * for organisation-level settings (company profile, branding, users, roles)
- * which are not yet implemented as backend resources.
- *
- * Backend-implemented settings (pricing policies, commission policies, and
- * project templates) are accessible via the settings-api.ts wrapper
- * (frontend/src/lib/settings-api.ts → /api/v1/settings/*).
- * They will be surfaced in a dedicated settings management UI in a follow-up PR.
+ * INTENTIONAL DEMO — the organisation-level cards below (Company Profile,
+ * Branding, Users & Roles, Permissions, Currency & Defaults, Notifications)
+ * are placeholder content for settings domains not yet backed by a backend
+ * resource. They will be replaced in a follow-up PR when those resources are
+ * implemented.
  */
+
+/** Maximum number of records fetched per governance resource on load. */
+const SETTINGS_PAGE_SIZE = 100;
+
 export default function Page() {
-  const settingsCategories = [
+  const [pricingPolicies, setPricingPolicies] = useState<PricingPolicy[]>([]);
+  const [commissionPolicies, setCommissionPolicies] = useState<CommissionPolicy[]>([]);
+  const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      listPricingPolicies({ limit: SETTINGS_PAGE_SIZE }),
+      listCommissionPolicies({ limit: SETTINGS_PAGE_SIZE }),
+      listProjectTemplates({ limit: SETTINGS_PAGE_SIZE }),
+    ])
+      .then(([pricing, commission, templates]) => {
+        if (cancelled) return;
+        setPricingPolicies(pricing.items);
+        setCommissionPolicies(commission.items);
+        setProjectTemplates(templates.items);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(
+          err instanceof Error ? err.message : "Failed to load settings",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ─── Organisation-level demo cards ────────────────────────────────────────
+  // INTENTIONAL DEMO DATA — these categories are not yet backed by backend
+  // resources. They remain as structured placeholders for visibility.
+  const orgCategories = [
     {
       icon: "🏢",
       title: "Company Profile",
@@ -88,12 +145,189 @@ export default function Page() {
   return (
     <PageContainer
       title="Settings"
-      subtitle="Application configuration and user preferences."
+      subtitle="Governance configuration and application preferences."
     >
-      <div className={styles.demoBanner}>⬡ Demo Preview — static data only</div>
+      {/* Global error banner */}
+      {error && (
+        <p role="alert" className={styles.errorBanner}>
+          {error}
+        </p>
+      )}
 
+      {/* ── Pricing Policies ─────────────────────────────────────────────── */}
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>Pricing Policies</h2>
+        <span role="status" className={styles.sectionNote}>
+          {loading ? "Loading…" : `${pricingPolicies.length} record${pricingPolicies.length !== 1 ? "s" : ""}`}
+        </span>
+      </div>
+
+      {!loading && !error && pricingPolicies.length === 0 && (
+        <p className={styles.sectionNote}>No pricing policies configured.</p>
+      )}
+
+      {pricingPolicies.length > 0 && (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table} aria-label="Pricing policies">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Currency</th>
+                <th scope="col">Base Markup %</th>
+                <th scope="col">Balcony Factor</th>
+                <th scope="col">Parking Mode</th>
+                <th scope="col">Storage Mode</th>
+                <th scope="col">Default</th>
+                <th scope="col">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pricingPolicies.map((policy) => (
+                <tr key={policy.id}>
+                  <td style={{ fontWeight: "var(--font-weight-medium)" }}>
+                    {policy.name}
+                  </td>
+                  <td>{policy.currency}</td>
+                  <td>{policy.base_markup_percent}%</td>
+                  <td>{policy.balcony_price_factor}</td>
+                  <td>{policy.parking_price_mode}</td>
+                  <td>{policy.storage_price_mode}</td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${policy.is_default ? styles.badgeBlue : styles.badgeGray}`}
+                    >
+                      {policy.is_default ? "Yes" : "No"}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${policy.is_active ? styles.badgeGreen : styles.badgeGray}`}
+                    >
+                      {policy.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Commission Policies ──────────────────────────────────────────── */}
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>Commission Policies</h2>
+        <span role="status" className={styles.sectionNote}>
+          {loading ? "Loading…" : `${commissionPolicies.length} record${commissionPolicies.length !== 1 ? "s" : ""}`}
+        </span>
+      </div>
+
+      {!loading && !error && commissionPolicies.length === 0 && (
+        <p className={styles.sectionNote}>No commission policies configured.</p>
+      )}
+
+      {commissionPolicies.length > 0 && (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table} aria-label="Commission policies">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Pool %</th>
+                <th scope="col">Calculation Mode</th>
+                <th scope="col">Default</th>
+                <th scope="col">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {commissionPolicies.map((policy) => (
+                <tr key={policy.id}>
+                  <td style={{ fontWeight: "var(--font-weight-medium)" }}>
+                    {policy.name}
+                  </td>
+                  <td>{policy.pool_percent}%</td>
+                  <td>{policy.calculation_mode}</td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${policy.is_default ? styles.badgeBlue : styles.badgeGray}`}
+                    >
+                      {policy.is_default ? "Yes" : "No"}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${policy.is_active ? styles.badgeGreen : styles.badgeGray}`}
+                    >
+                      {policy.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Project Templates ────────────────────────────────────────────── */}
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>Project Templates</h2>
+        <span role="status" className={styles.sectionNote}>
+          {loading ? "Loading…" : `${projectTemplates.length} record${projectTemplates.length !== 1 ? "s" : ""}`}
+        </span>
+      </div>
+
+      {!loading && !error && projectTemplates.length === 0 && (
+        <p className={styles.sectionNote}>No project templates configured.</p>
+      )}
+
+      {projectTemplates.length > 0 && (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table} aria-label="Project templates">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Default Currency</th>
+                <th scope="col">Pricing Policy</th>
+                <th scope="col">Commission Policy</th>
+                <th scope="col">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projectTemplates.map((template) => (
+                <tr key={template.id}>
+                  <td style={{ fontWeight: "var(--font-weight-medium)" }}>
+                    {template.name}
+                  </td>
+                  <td>{template.default_currency}</td>
+                  <td className={styles.monospaceCell}>
+                    {template.default_pricing_policy_id ?? "—"}
+                  </td>
+                  <td className={styles.monospaceCell}>
+                    {template.default_commission_policy_id ?? "—"}
+                  </td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${template.is_active ? styles.badgeGreen : styles.badgeGray}`}
+                    >
+                      {template.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Organisation settings (INTENTIONAL DEMO) ─────────────────────── */}
+      {/* INTENTIONAL DEMO — the cards below (Company Profile, Branding, etc.)
+          represent organisation-level settings that are not yet backed by a
+          backend resource. They will be replaced when those domains are
+          implemented in a follow-up PR. */}
+      <div className={styles.sectionHeader} style={{ marginTop: "var(--space-8)" }}>
+        <h2 className={styles.sectionTitle}>Organisation Settings</h2>
+        <span className={styles.sectionNote}>Preview only — not yet persisted</span>
+      </div>
       <div className={styles.settingsGrid}>
-        {settingsCategories.map((cat) => (
+        {orgCategories.map((cat) => (
           <div key={cat.title} className={styles.settingsCard}>
             <div className={styles.settingsCardHeader}>
               <span className={styles.settingsCardIcon} aria-hidden="true">

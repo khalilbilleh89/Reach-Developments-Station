@@ -429,3 +429,18 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* --- Error banner ----------------------------------------- */
+
+.errorBanner {
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+  margin-bottom: var(--space-6);
+}
+
+/* --- Monospace table cell ---------------------------------- */
+
+.monospaceCell {
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+}
