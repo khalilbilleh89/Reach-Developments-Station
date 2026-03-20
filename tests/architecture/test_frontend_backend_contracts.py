@@ -42,6 +42,7 @@ REQUIRED_API_WRAPPER_FILES = [
     "construction-api.ts",
     "registry-api.ts",   # PR-E5: was missing, now created
     "settings-api.ts",   # PR-E5: was missing, now created
+    "commission-api.ts", # PR-1: commission UI wiring
 ]
 
 # Canonical frontend type definition files that MUST exist.
@@ -53,6 +54,7 @@ REQUIRED_TYPE_FILES = [
     "construction-types.ts",
     "registry-types.ts",  # PR-E5: was missing, now created
     "settings-types.ts",  # PR-E5: was missing, now created
+    "commission-types.ts",  # PR-1: commission UI wiring
 ]
 
 # Legacy paths that must NOT appear as primary calls in frontend wrappers.
@@ -449,4 +451,63 @@ class TestSettingsPageDocumentation:
         assert "INTENTIONAL DEMO" in content or "intentional" in content.lower(), (
             "Settings page does not document that it is intentionally showing demo data. "
             "Add a comment explaining which sections are demo vs. live."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: commission page uses live data, not demo
+# ---------------------------------------------------------------------------
+
+
+class TestCommissionPageIsLive:
+    """Commission page must use live API data, not the static demo dataset."""
+
+    def test_commission_page_does_not_import_demo_data(self):
+        """Commission page must not import demoCommissionRows from demo-data.ts."""
+        content = _read_frontend_page("(protected)/commission/page.tsx")
+        assert content, "(protected)/commission/page.tsx not found"
+        assert "demoCommissionRows" not in content, (
+            "Commission page still imports demoCommissionRows from demo-data.ts. "
+            "The commission backend is fully implemented — use commission-api.ts instead."
+        )
+
+    def test_commission_page_does_not_show_demo_banner(self):
+        """Commission page must not render the demo preview banner."""
+        content = _read_frontend_page("(protected)/commission/page.tsx")
+        assert content, "(protected)/commission/page.tsx not found"
+        assert "Demo Preview" not in content, (
+            "Commission page still shows the 'Demo Preview' banner. "
+            "Remove the banner and wire to the live commission API."
+        )
+
+    def test_commission_page_imports_commission_api(self):
+        """Commission page must import from commission-api.ts."""
+        content = _read_frontend_page("(protected)/commission/page.tsx")
+        assert content, "(protected)/commission/page.tsx not found"
+        assert "commission-api" in content, (
+            "Commission page does not import from commission-api.ts. "
+            "It should call the live /commission/* backend endpoints."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: commission API wrapper covers required endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestCommissionApiWrapperContract:
+    """commission-api.ts must expose wrappers for commission backend endpoints."""
+
+    def test_commission_wrapper_has_project_payouts(self):
+        """commission-api.ts must wrap GET /commission/projects/{id}/payouts."""
+        content = _read_frontend_file("commission-api.ts")
+        assert "/commission/projects/" in content, (
+            "commission-api.ts does not wrap /commission/projects/* endpoints"
+        )
+
+    def test_commission_wrapper_has_project_summary(self):
+        """commission-api.ts must wrap GET /commission/projects/{id}/summary."""
+        content = _read_frontend_file("commission-api.ts")
+        assert "summary" in content, (
+            "commission-api.ts does not wrap the commission project summary endpoint"
         )

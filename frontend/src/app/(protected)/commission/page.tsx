@@ -1,139 +1,288 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { demoCommissionRows, type CommissionStatus } from "@/lib/demo-data";
+import { listProjects } from "@/lib/projects-api";
+import type { Project } from "@/lib/projects-types";
+import {
+  listProjectCommissionPayouts,
+  getProjectCommissionSummary,
+} from "@/lib/commission-api";
+import type {
+  CommissionPayoutListItem,
+  CommissionPayoutStatus,
+  CommissionSummary,
+} from "@/lib/commission-types";
+import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/demo-shell.module.css";
 
 /**
- * Commission — executive demo placeholder.
+ * Commission — live data dashboard.
  *
- * Shows commission payout queue, slab tier preview, and per-agent summary
- * using static demo data. Replace with live data in a follow-up commission PR.
+ * Fetches commission payouts and summary from the backend commission API.
+ * No demo data is used.
  */
 export default function Page() {
-  function statusBadgeClass(status: CommissionStatus) {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+
+  const [summary, setSummary] = useState<CommissionSummary | null>(null);
+  const [payouts, setPayouts] = useState<CommissionPayoutListItem[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+
+  // Load project list on mount
+  useEffect(() => {
+    setProjectsLoading(true);
+    setProjectsError(null);
+    listProjects({ limit: 100 })
+      .then((res) => {
+        setProjects(res.items);
+        if (res.items.length > 0) {
+          setSelectedProject(res.items[0]);
+        }
+      })
+      .catch((err: unknown) => {
+        setProjectsError(
+          err instanceof Error ? err.message : "Failed to load projects",
+        );
+      })
+      .finally(() => setProjectsLoading(false));
+  }, []);
+
+  // Fetch commission data when project changes
+  const loadCommissionData = useCallback((projectId: string) => {
+    setDataLoading(true);
+    setDataError(null);
+    setSummary(null);
+    setPayouts([]);
+    Promise.all([
+      getProjectCommissionSummary(projectId),
+      listProjectCommissionPayouts(projectId, { limit: 200 }),
+    ])
+      .then(([summaryData, payoutData]) => {
+        setSummary(summaryData);
+        setPayouts(payoutData.items);
+      })
+      .catch((err: unknown) => {
+        setDataError(
+          err instanceof Error ? err.message : "Failed to load commission data",
+        );
+      })
+      .finally(() => setDataLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadCommissionData(selectedProject.id);
+    }
+  }, [selectedProject, loadCommissionData]);
+
+  function statusBadgeClass(status: CommissionPayoutStatus): string {
     switch (status) {
-      case "Paid":
-        return styles.badgeGreen;
-      case "Approved":
+      case "approved":
         return styles.badgeBlue;
-      case "Pending":
+      case "calculated":
+        return styles.badgeGreen;
+      case "draft":
         return styles.badgeYellow;
-      case "Under Review":
-        return styles.badgePurple;
+      case "cancelled":
+        return styles.badgeRed;
       default:
         return styles.badgeGray;
     }
   }
+
+  function statusLabel(status: CommissionPayoutStatus): string {
+    switch (status) {
+      case "approved":
+        return "Approved";
+      case "calculated":
+        return "Calculated";
+      case "draft":
+        return "Draft";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return status;
+    }
+  }
+
+  const pendingPool =
+    summary !== null
+      ? summary.draft_payouts + summary.calculated_payouts
+      : null;
 
   return (
     <PageContainer
       title="Commission"
       subtitle="Commission plans, slabs, and payout tracking."
     >
-      <div className={styles.demoBanner}>⬡ Demo Preview — static data only</div>
+      {/* Project selector */}
+      {projectsLoading && (
+        <p className={styles.sectionNote}>Loading projects…</p>
+      )}
+      {projectsError && (
+        <p className={styles.sectionNote} style={{ color: "var(--color-danger)" }}>
+          {projectsError}
+        </p>
+      )}
+      {!projectsLoading && projects.length > 0 && (
+        <div className={styles.sectionHeader}>
+          <label htmlFor="project-select" className={styles.sectionTitle}>
+            Project
+          </label>
+          <select
+            id="project-select"
+            value={selectedProject?.id ?? ""}
+            onChange={(e) => {
+              const project = projects.find((p) => p.id === e.target.value);
+              setSelectedProject(project ?? null);
+            }}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* KPI summary */}
       <div className={styles.kpiGrid}>
         <MetricCard
-          title="Total Due"
-          value="AED 876,250"
-          subtitle="6 active commission records"
+          title="Total Commission Pool"
+          value={
+            summary !== null
+              ? formatCurrency(summary.total_commission_pool)
+              : "—"
+          }
+          subtitle={
+            summary !== null
+              ? `${summary.total_payouts} payout record${summary.total_payouts !== 1 ? "s" : ""}`
+              : "Select a project"
+          }
           icon="💰"
         />
         <MetricCard
-          title="Paid"
-          value="AED 245,000"
-          subtitle="2 payouts processed"
+          title="Approved"
+          value={summary !== null ? String(summary.approved_payouts) : "—"}
+          subtitle="Approved payouts"
           icon="✅"
         />
         <MetricCard
-          title="Pending Approval"
-          value="AED 432,500"
-          subtitle="3 records awaiting sign-off"
+          title="Pending"
+          value={pendingPool !== null ? String(pendingPool) : "—"}
+          subtitle="Draft + calculated payouts"
           icon="⏳"
         />
         <MetricCard
-          title="Under Review"
-          value="AED 93,750"
-          subtitle="1 record in dispute review"
-          icon="🔍"
+          title="Total Gross Value"
+          value={
+            summary !== null
+              ? formatCurrency(summary.total_gross_value)
+              : "—"
+          }
+          subtitle="Sum of all contract values"
+          icon="📊"
         />
-      </div>
-
-      {/* Commission slab tiers */}
-      <div className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>Commission Slab Preview</h2>
-        <span className={styles.sectionNote}>Configurable tiers — demo data</span>
-      </div>
-      <div className={styles.slabGrid}>
-        <div className={styles.slabCard}>
-          <div className={styles.slabTier}>Standard</div>
-          <div className={styles.slabRate}>2.0%</div>
-          <div className={styles.slabDesc}>Post-launch / secondary market sales</div>
-        </div>
-        <div className={styles.slabCard}>
-          <div className={styles.slabTier}>Premium</div>
-          <div className={styles.slabRate}>2.5%</div>
-          <div className={styles.slabDesc}>Primary launch &amp; preferred agency deals</div>
-        </div>
-        <div className={styles.slabCard}>
-          <div className={styles.slabTier}>Incentive</div>
-          <div className={styles.slabRate}>3.0%</div>
-          <div className={styles.slabDesc}>Target achievement &amp; campaign top-up</div>
-        </div>
       </div>
 
       {/* Payout table */}
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Commission Payout Queue</h2>
         <span className={styles.sectionNote}>
-          {demoCommissionRows.length} records · Demo data
+          {dataLoading
+            ? "Loading…"
+            : summary !== null
+              ? `${summary.total_payouts} record${summary.total_payouts !== 1 ? "s" : ""}`
+              : ""}
         </span>
       </div>
-      <div className={styles.tableWrapper}>
-        <table className={styles.table} aria-label="Commission payout queue">
-          <thead>
-            <tr>
-              <th scope="col">Ref</th>
-              <th scope="col">Agent</th>
-              <th scope="col">Agency</th>
-              <th scope="col">Unit</th>
-              <th scope="col">Project</th>
-              <th scope="col">Contract Value</th>
-              <th scope="col">Rate</th>
-              <th scope="col">Commission Due</th>
-              <th scope="col">Status</th>
-              <th scope="col">Due Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {demoCommissionRows.map((row) => (
-              <tr key={row.ref}>
-                <td style={{ fontFamily: "monospace", fontSize: "var(--font-size-xs)" }}>
-                  {row.ref}
-                </td>
-                <td style={{ fontWeight: "var(--font-weight-medium)" }}>{row.agentName}</td>
-                <td>{row.agencyName}</td>
-                <td style={{ fontFamily: "monospace", fontSize: "var(--font-size-xs)" }}>
-                  {row.unitRef}
-                </td>
-                <td>{row.projectName}</td>
-                <td>{row.contractValue}</td>
-                <td>{row.commissionRate}</td>
-                <td style={{ fontWeight: "var(--font-weight-semibold)" }}>
-                  {row.commissionDue}
-                </td>
-                <td>
-                  <span className={`${styles.badge} ${statusBadgeClass(row.status)}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td>{row.dueDate}</td>
+
+      {dataError && (
+        <p className={styles.sectionNote} style={{ color: "var(--color-danger)" }}>
+          {dataError}
+        </p>
+      )}
+
+      {!dataLoading && !dataError && payouts.length === 0 && selectedProject && (
+        <p className={styles.sectionNote}>
+          No commission payouts found for {selectedProject.name}.
+        </p>
+      )}
+
+      {payouts.length > 0 && (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table} aria-label="Commission payout queue">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Contract ID</th>
+                <th scope="col">Plan ID</th>
+                <th scope="col">Gross Sale Value</th>
+                <th scope="col">Commission Pool</th>
+                <th scope="col">Mode</th>
+                <th scope="col">Status</th>
+                <th scope="col">Calculated At</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {payouts.map((payout) => (
+                <tr key={payout.id}>
+                  <td
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "var(--font-size-xs)",
+                    }}
+                  >
+                    {payout.id}
+                  </td>
+                  <td
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "var(--font-size-xs)",
+                    }}
+                  >
+                    {payout.sale_contract_id}
+                  </td>
+                  <td
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "var(--font-size-xs)",
+                    }}
+                  >
+                    {payout.commission_plan_id}
+                  </td>
+                  <td>{formatCurrency(payout.gross_sale_value)}</td>
+                  <td style={{ fontWeight: "var(--font-weight-semibold)" }}>
+                    {formatCurrency(payout.commission_pool_value)}
+                  </td>
+                  <td>{payout.calculation_mode}</td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${statusBadgeClass(payout.status)}`}
+                    >
+                      {statusLabel(payout.status)}
+                    </span>
+                  </td>
+                  <td>
+                    {payout.calculated_at
+                      ? new Date(payout.calculated_at).toLocaleDateString(
+                          "en-GB",
+                        )
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </PageContainer>
   );
 }
