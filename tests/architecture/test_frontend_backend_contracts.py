@@ -508,6 +508,6 @@ class TestCommissionApiWrapperContract:
     def test_commission_wrapper_has_project_summary(self):
         """commission-api.ts must wrap GET /commission/projects/{id}/summary."""
         content = _read_frontend_file("commission-api.ts")
-        assert "summary" in content, (
+        assert "/commission/projects/" in content and "/summary" in content, (
             "commission-api.ts does not wrap the commission project summary endpoint"
         )

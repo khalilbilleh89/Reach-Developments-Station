@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { listProjects } from "@/lib/projects-api";
@@ -34,6 +34,10 @@ export default function Page() {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
+  // Request counter: guards against stale async responses overwriting state
+  // when the user switches projects before the previous fetch completes.
+  const requestIdRef = useRef(0);
+
   // Load project list on mount
   useEffect(() => {
     setProjectsLoading(true);
@@ -55,6 +59,9 @@ export default function Page() {
 
   // Fetch commission data when project changes
   const loadCommissionData = useCallback((projectId: string) => {
+    // Increment and capture this request's ID before starting async work.
+    const thisRequestId = ++requestIdRef.current;
+
     setDataLoading(true);
     setDataError(null);
     setSummary(null);
@@ -64,15 +71,21 @@ export default function Page() {
       listProjectCommissionPayouts(projectId, { limit: 200 }),
     ])
       .then(([summaryData, payoutData]) => {
+        // Discard the result if a newer request has already been issued.
+        if (thisRequestId !== requestIdRef.current) return;
         setSummary(summaryData);
         setPayouts(payoutData.items);
       })
       .catch((err: unknown) => {
+        if (thisRequestId !== requestIdRef.current) return;
         setDataError(
           err instanceof Error ? err.message : "Failed to load commission data",
         );
       })
-      .finally(() => setDataLoading(false));
+      .finally(() => {
+        if (thisRequestId !== requestIdRef.current) return;
+        setDataLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -111,10 +124,18 @@ export default function Page() {
     }
   }
 
-  const pendingPool =
+  // Count of pending payouts (draft + calculated), not a monetary amount.
+  const pendingCount =
     summary !== null
       ? summary.draft_payouts + summary.calculated_payouts
       : null;
+
+  function recordCountLabel(total: number, visible: number): string {
+    if (visible < total) {
+      return `Showing ${visible} of ${total} record${total !== 1 ? "s" : ""}`;
+    }
+    return `${total} record${total !== 1 ? "s" : ""}`;
+  }
 
   return (
     <PageContainer
@@ -129,6 +150,9 @@ export default function Page() {
         <p className={styles.sectionNote} style={{ color: "var(--color-danger)" }}>
           {projectsError}
         </p>
+      )}
+      {!projectsLoading && !projectsError && projects.length === 0 && (
+        <p className={styles.sectionNote}>No projects found.</p>
       )}
       {!projectsLoading && projects.length > 0 && (
         <div className={styles.sectionHeader}>
@@ -176,7 +200,7 @@ export default function Page() {
         />
         <MetricCard
           title="Pending"
-          value={pendingPool !== null ? String(pendingPool) : "—"}
+          value={pendingCount !== null ? String(pendingCount) : "—"}
           subtitle="Draft + calculated payouts"
           icon="⏳"
         />
@@ -199,7 +223,7 @@ export default function Page() {
           {dataLoading
             ? "Loading…"
             : summary !== null
-              ? `${summary.total_payouts} record${summary.total_payouts !== 1 ? "s" : ""}`
+              ? recordCountLabel(summary.total_payouts, payouts.length)
               : ""}
         </span>
       </div>
