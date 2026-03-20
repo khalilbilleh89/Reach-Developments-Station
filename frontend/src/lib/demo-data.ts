@@ -169,56 +169,5 @@ export const demoRegistryCases: DemoRegistryCase[] = [
 ];
 
 // ─── Cashflow ─────────────────────────────────────────────────────────────────
-
-export interface DemoCashflowPeriod {
-  period: string;
-  inflows: string;
-  outflows: string;
-  netPosition: string;
-  trend: "positive" | "negative" | "neutral";
-}
-
-export const demoCashflowPeriods: DemoCashflowPeriod[] = [
-  {
-    period: "Oct 2025",
-    inflows: "AED 28.4 M",
-    outflows: "AED 19.2 M",
-    netPosition: "+ AED 9.2 M",
-    trend: "positive",
-  },
-  {
-    period: "Nov 2025",
-    inflows: "AED 34.1 M",
-    outflows: "AED 22.6 M",
-    netPosition: "+ AED 11.5 M",
-    trend: "positive",
-  },
-  {
-    period: "Dec 2025",
-    inflows: "AED 21.8 M",
-    outflows: "AED 31.4 M",
-    netPosition: "– AED 9.6 M",
-    trend: "negative",
-  },
-  {
-    period: "Jan 2026",
-    inflows: "AED 41.6 M",
-    outflows: "AED 18.9 M",
-    netPosition: "+ AED 22.7 M",
-    trend: "positive",
-  },
-  {
-    period: "Feb 2026",
-    inflows: "AED 38.2 M",
-    outflows: "AED 24.5 M",
-    netPosition: "+ AED 13.7 M",
-    trend: "positive",
-  },
-  {
-    period: "Mar 2026 (Proj.)",
-    inflows: "AED 45.0 M",
-    outflows: "AED 27.3 M",
-    netPosition: "+ AED 17.7 M",
-    trend: "positive",
-  },
-];
+// Removed in PR-2: cashflow page now fetches live data from cashflow-api.ts.
+// Full demo layer removal is scheduled for PR-4.
