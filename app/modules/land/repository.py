@@ -142,6 +142,8 @@ class LandValuationRepository:
             parcel_id=parcel_id,
             scenario_name=data.scenario_name,
             scenario_type=data.scenario_type.value,
+            expected_gdv=data.gdv,
+            expected_cost=outputs.total_cost,
             residual_land_value=outputs.land_value,
             land_value_per_sqm=outputs.land_value_per_sqm,
             max_land_bid=outputs.max_land_bid,

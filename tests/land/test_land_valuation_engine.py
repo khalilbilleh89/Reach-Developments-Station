@@ -5,6 +5,8 @@ Validates the residual land value calculation, edge cases, and
 sensitivity to margin targets.
 """
 
+import dataclasses
+
 import pytest
 
 from app.modules.land.engines.valuation_engine import (
@@ -177,7 +179,7 @@ def test_run_land_valuation_outputs_are_frozen():
     )
     out = run_land_valuation(inputs)
 
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         out.land_value = 999  # type: ignore[misc]
 
 

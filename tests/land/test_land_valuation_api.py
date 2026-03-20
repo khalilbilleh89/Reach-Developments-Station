@@ -10,12 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def _create_project(client: TestClient, code: str = "PRJ-ENG-001") -> str:
-    resp = client.post("/api/v1/projects", json={"name": "Engine Test Project", "code": code})
-    assert resp.status_code == 201
-    return resp.json()["id"]
-
-
 def _create_parcel(client: TestClient, code: str = "PCL-ENG-001", project_id: str | None = None) -> str:
     payload: dict = {
         "parcel_name": "Engine Test Parcel",
@@ -68,6 +62,8 @@ def test_run_valuation_engine_correct_residual(client: TestClient):
 
     assert body["parcel_id"] == parcel_id
     assert body["scenario_name"] == "Base Case"
+    assert body["expected_gdv"] == pytest.approx(20_000_000.0, rel=1e-3)
+    assert body["expected_cost"] == pytest.approx(11_000_000.0, rel=1e-3)
     assert body["residual_land_value"] == pytest.approx(5_000_000.0, rel=1e-3)
     assert body["land_value_per_sqm"] == pytest.approx(500.0, rel=1e-3)
     assert body["max_land_bid"] == pytest.approx(5_000_000.0, rel=1e-3)
