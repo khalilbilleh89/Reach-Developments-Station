@@ -28,6 +28,10 @@ import styles from "@/styles/demo-shell.module.css";
  * resource. They will be replaced in a follow-up PR when those resources are
  * implemented.
  */
+
+/** Maximum number of records fetched per governance resource on load. */
+const SETTINGS_PAGE_SIZE = 100;
+
 export default function Page() {
   const [pricingPolicies, setPricingPolicies] = useState<PricingPolicy[]>([]);
   const [commissionPolicies, setCommissionPolicies] = useState<CommissionPolicy[]>([]);
@@ -36,24 +40,34 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     setLoading(true);
     setError(null);
     Promise.all([
-      listPricingPolicies({ limit: 100 }),
-      listCommissionPolicies({ limit: 100 }),
-      listProjectTemplates({ limit: 100 }),
+      listPricingPolicies({ limit: SETTINGS_PAGE_SIZE }),
+      listCommissionPolicies({ limit: SETTINGS_PAGE_SIZE }),
+      listProjectTemplates({ limit: SETTINGS_PAGE_SIZE }),
     ])
       .then(([pricing, commission, templates]) => {
+        if (cancelled) return;
         setPricingPolicies(pricing.items);
         setCommissionPolicies(commission.items);
         setProjectTemplates(templates.items);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(
           err instanceof Error ? err.message : "Failed to load settings",
         );
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ─── Organisation-level demo cards ────────────────────────────────────────
@@ -133,13 +147,9 @@ export default function Page() {
       title="Settings"
       subtitle="Governance configuration and application preferences."
     >
-      {/* Global error / loading status */}
+      {/* Global error banner */}
       {error && (
-        <p
-          role="status"
-          className={styles.sectionNote}
-          style={{ color: "var(--color-danger)", marginBottom: "var(--space-6)" }}
-        >
+        <p role="alert" className={styles.errorBanner}>
           {error}
         </p>
       )}
@@ -287,20 +297,10 @@ export default function Page() {
                     {template.name}
                   </td>
                   <td>{template.default_currency}</td>
-                  <td
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: "var(--font-size-xs)",
-                    }}
-                  >
+                  <td className={styles.monospaceCell}>
                     {template.default_pricing_policy_id ?? "—"}
                   </td>
-                  <td
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: "var(--font-size-xs)",
-                    }}
-                  >
+                  <td className={styles.monospaceCell}>
                     {template.default_commission_policy_id ?? "—"}
                   </td>
                   <td>
