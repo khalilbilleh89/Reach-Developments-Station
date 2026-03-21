@@ -573,6 +573,34 @@ class CollectionsAgingService:
             aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
         )
 
+    def get_project_receivables_map(self) -> dict[str, float]:
+        """Return a mapping of project_id → total outstanding receivables.
+
+        Executes a single GROUP BY query across all projects.  Only PENDING
+        and OVERDUE installments are included; PAID and CANCELLED are excluded.
+
+        Used by TreasuryMonitoringService to compute per-project exposure
+        without issuing N+1 queries.
+        """
+        rows = (
+            self.db.query(
+                Phase.project_id,
+                func.sum(ContractPaymentSchedule.amount),
+            )
+            .select_from(ContractPaymentSchedule)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES))
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {str(pid): float(total) for pid, total in rows}
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

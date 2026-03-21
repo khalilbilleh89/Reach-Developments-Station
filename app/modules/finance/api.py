@@ -9,6 +9,7 @@ Full path:     /api/v1/finance/...
 Endpoints
 ---------
   GET /finance/portfolio/summary                       — portfolio financial summary
+  GET /finance/treasury/monitoring                     — portfolio treasury monitoring
   GET /finance/projects/{project_id}/summary           — project financial summary
   GET /finance/contracts/{contract_id}/revenue         — contract revenue recognition
   GET /finance/projects/{project_id}/revenue-summary   — project revenue recognition summary
@@ -46,6 +47,7 @@ from app.modules.finance.schemas import (
     ReceiptMatchResult,
     ResolveAlertRequest,
     RevenueRecognitionResponse,
+    TreasuryMonitoringResponse,
 )
 from app.modules.finance.service import (
     CollectionsAgingService,
@@ -56,6 +58,7 @@ from app.modules.finance.service import (
 )
 from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
+from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
 
 router = APIRouter(prefix="/finance", tags=["Finance"])
@@ -91,6 +94,12 @@ def get_portfolio_summary_service(
     return PortfolioSummaryService(db)
 
 
+def get_treasury_monitoring_service(
+    db: Session = Depends(get_db),
+) -> TreasuryMonitoringService:
+    return TreasuryMonitoringService(db)
+
+
 @router.get(
     "/portfolio/summary",
     response_model=PortfolioFinancialSummaryResponse,
@@ -105,6 +114,25 @@ def get_portfolio_financial_summary(
     financial metrics from the existing financial engines.
     """
     return service.get_portfolio_summary()
+
+
+@router.get(
+    "/treasury/monitoring",
+    response_model=TreasuryMonitoringResponse,
+)
+def get_treasury_monitoring(
+    service: Annotated[
+        TreasuryMonitoringService, Depends(get_treasury_monitoring_service)
+    ],
+) -> TreasuryMonitoringResponse:
+    """Return the portfolio treasury monitoring snapshot.
+
+    Provides liquidity and exposure indicators derived from the existing
+    financial engines (revenue recognition, receivables aging, and cashflow
+    forecasting).  Project exposures are ranked by receivable exposure
+    descending so the highest-risk projects appear first.
+    """
+    return service.get_treasury_monitoring()
 
 
 @router.get(

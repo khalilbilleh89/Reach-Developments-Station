@@ -180,3 +180,24 @@ export interface PortfolioFinancialSummary {
   projectCount: number;
   projectSummaries: ProjectFinancialSummary[];
 }
+
+// ---------- Treasury monitoring types --------------------------------
+
+/** Receivable exposure metrics for a single project within the treasury view. */
+export interface ProjectExposure {
+  projectId: string;
+  receivableExposure: number;
+  exposurePercentage: number;
+  forecastInflow: number;
+}
+
+/** Portfolio-level treasury monitoring snapshot. */
+export interface TreasuryMonitoring {
+  cashPosition: number;
+  receivablesExposure: number;
+  overdueReceivables: number;
+  liquidityRatio: number;
+  forecastNextMonth: number;
+  projectCount: number;
+  projectExposures: ProjectExposure[];
+}
