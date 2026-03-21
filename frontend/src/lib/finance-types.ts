@@ -88,3 +88,49 @@ export interface PortfolioAging {
   projectCount: number;
   agingBuckets: AgingBucketSummary[];
 }
+
+// ---------- Collections alert types ------------------------------------
+
+/** Severity tier of a collections alert. */
+export type AlertSeverity = "warning" | "critical" | "high_risk";
+
+/** Response model for a single collections alert. */
+export interface CollectionsAlert {
+  alertId: string;
+  contractId: string;
+  installmentId: string;
+  alertType: string;
+  severity: AlertSeverity;
+  daysOverdue: number;
+  outstandingBalance: number;
+  createdAt: string;
+  resolvedAt: string | null;
+  notes: string | null;
+}
+
+/** Paginated list of active collections alerts. */
+export interface CollectionsAlertList {
+  items: CollectionsAlert[];
+  total: number;
+}
+
+// ---------- Receipt matching types ------------------------------------
+
+/** Strategy used when matching a payment to installments. */
+export type MatchStrategy = "exact" | "partial" | "multi_installment" | "unmatched";
+
+/** Allocation of a payment amount to a single installment. */
+export interface MatchedInstallmentAllocation {
+  installmentId: string;
+  allocatedAmount: number;
+}
+
+/** Result of matching a payment to outstanding installment obligations. */
+export interface ReceiptMatchResult {
+  contractId: string;
+  paymentAmount: number;
+  strategy: MatchStrategy;
+  matchedInstallmentIds: string[];
+  allocations: MatchedInstallmentAllocation[];
+  unallocatedAmount: number;
+}

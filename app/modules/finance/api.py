@@ -15,6 +15,10 @@ Endpoints
   GET /finance/contracts/{contract_id}/aging           — contract receivable aging
   GET /finance/projects/{project_id}/aging             — project receivable aging
   GET /finance/receivables/aging-overview              — portfolio receivable aging
+  GET /finance/collections/alerts                      — active collections alerts
+  POST /finance/collections/alerts/generate            — generate alerts from overdue installments
+  POST /finance/collections/alerts/{id}/resolve        — resolve a collections alert
+  POST /finance/payments/match-receipt                 — match a payment to installment obligations
 """
 
 from typing import Annotated
@@ -24,19 +28,27 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.finance.schemas import (
+    CollectionsAlertListResponse,
+    CollectionsAlertResponse,
     ContractAgingResponse,
+    MatchReceiptRequest,
     PortfolioAgingResponse,
     PortfolioRevenueOverviewResponse,
     ProjectAgingResponse,
     ProjectFinanceSummaryResponse,
     ProjectRevenueSummaryResponse,
+    ReceiptMatchResult,
+    ResolveAlertRequest,
     RevenueRecognitionResponse,
 )
 from app.modules.finance.service import (
     CollectionsAgingService,
+    CollectionsAlertService,
     FinanceSummaryService,
+    ReceiptMatchingService,
     RevenueRecognitionService,
 )
+from app.shared.enums.finance import AlertSeverity
 
 router = APIRouter(prefix="/finance", tags=["Finance"])
 
@@ -51,6 +63,14 @@ def get_revenue_service(db: Session = Depends(get_db)) -> RevenueRecognitionServ
 
 def get_aging_service(db: Session = Depends(get_db)) -> CollectionsAgingService:
     return CollectionsAgingService(db)
+
+
+def get_alert_service(db: Session = Depends(get_db)) -> CollectionsAlertService:
+    return CollectionsAlertService(db)
+
+
+def get_matching_service(db: Session = Depends(get_db)) -> ReceiptMatchingService:
+    return ReceiptMatchingService(db)
 
 
 @router.get(
@@ -141,3 +161,73 @@ def get_receivables_aging_overview(
 ) -> PortfolioAgingResponse:
     """Return portfolio-wide receivable aging distribution across all projects."""
     return service.get_portfolio_aging()
+
+
+# ---------------------------------------------------------------------------
+# Collections alerts endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/collections/alerts",
+    response_model=CollectionsAlertListResponse,
+)
+def get_collections_alerts(
+    severity: AlertSeverity | None = None,
+    service: Annotated[CollectionsAlertService, Depends(get_alert_service)] = ...,
+) -> CollectionsAlertListResponse:
+    """Return all active (unresolved) collections alerts.
+
+    Optional query parameter:
+      - ``severity``: filter by severity (warning | critical | high_risk).
+    """
+    return service.get_overdue_alerts(severity=severity.value if severity else None)
+
+
+@router.post(
+    "/collections/alerts/generate",
+    response_model=CollectionsAlertListResponse,
+    status_code=201,
+)
+def generate_collections_alerts(
+    service: Annotated[CollectionsAlertService, Depends(get_alert_service)],
+) -> CollectionsAlertListResponse:
+    """Scan all outstanding installments and generate collections alerts.
+
+    Existing active alerts are not duplicated.
+    Returns the full active alert list after generation.
+    """
+    return service.generate_alerts()
+
+
+@router.post(
+    "/collections/alerts/{alert_id}/resolve",
+    response_model=CollectionsAlertResponse,
+)
+def resolve_collections_alert(
+    alert_id: str,
+    data: ResolveAlertRequest,
+    service: Annotated[CollectionsAlertService, Depends(get_alert_service)],
+) -> CollectionsAlertResponse:
+    """Resolve a single collections alert by ID."""
+    return service.resolve_alert(alert_id, notes=data.notes)
+
+
+# ---------------------------------------------------------------------------
+# Receipt matching endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/payments/match-receipt",
+    response_model=ReceiptMatchResult,
+)
+def match_payment_receipt(
+    request: MatchReceiptRequest,
+    service: Annotated[ReceiptMatchingService, Depends(get_matching_service)],
+) -> ReceiptMatchResult:
+    """Match an incoming payment amount to outstanding installment obligations.
+
+    Returns the matching strategy and per-installment allocation breakdown.
+    """
+    return service.match_payment(request)

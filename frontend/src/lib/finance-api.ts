@@ -16,10 +16,14 @@
 import { apiFetch } from "./api-client";
 import type {
   AgingBucketSummary,
+  CollectionsAlert,
+  CollectionsAlertList,
   ContractAging,
+  MatchedInstallmentAllocation,
   PortfolioAging,
   ProjectAging,
   ProjectRevenueSummary,
+  ReceiptMatchResult,
   ReceivableAgingBucket,
   RevenueOverview,
   RevenueRecognition,
@@ -206,5 +210,147 @@ export async function getPortfolioAging(): Promise<PortfolioAging> {
     installmentCount: raw.installment_count,
     projectCount: raw.project_count,
     agingBuckets: raw.aging_buckets.map(mapAgingBucket),
+  };
+}
+
+// ---------- Raw backend shapes for collections alerts ----------------
+
+interface BackendCollectionsAlert {
+  alert_id: string;
+  contract_id: string;
+  installment_id: string;
+  alert_type: string;
+  severity: string;
+  days_overdue: number;
+  outstanding_balance: number;
+  created_at: string;
+  resolved_at: string | null;
+  notes: string | null;
+}
+
+interface BackendCollectionsAlertList {
+  items: BackendCollectionsAlert[];
+  total: number;
+}
+
+interface BackendMatchedAllocation {
+  installment_id: string;
+  allocated_amount: number;
+}
+
+interface BackendReceiptMatchResult {
+  contract_id: string;
+  payment_amount: number;
+  strategy: string;
+  matched_installment_ids: string[];
+  allocations: BackendMatchedAllocation[];
+  unallocated_amount: number;
+}
+
+// ---------- Mapping helpers (collections) -----------------------------
+
+function mapCollectionsAlert(raw: BackendCollectionsAlert): CollectionsAlert {
+  return {
+    alertId: raw.alert_id,
+    contractId: raw.contract_id,
+    installmentId: raw.installment_id,
+    alertType: raw.alert_type,
+    severity: raw.severity as CollectionsAlert["severity"],
+    daysOverdue: raw.days_overdue,
+    outstandingBalance: raw.outstanding_balance,
+    createdAt: raw.created_at,
+    resolvedAt: raw.resolved_at,
+    notes: raw.notes,
+  };
+}
+
+// ---------- Exported collections query functions ---------------------
+
+/**
+ * Fetch all active (unresolved) collections alerts.
+ *
+ * Backend endpoint: GET /finance/collections/alerts
+ */
+export async function getCollectionsAlerts(
+  severity?: string,
+): Promise<CollectionsAlertList> {
+  const params = severity ? `?severity=${encodeURIComponent(severity)}` : "";
+  const raw = await apiFetch<BackendCollectionsAlertList>(
+    `/finance/collections/alerts${params}`,
+  );
+  return {
+    items: raw.items.map(mapCollectionsAlert),
+    total: raw.total,
+  };
+}
+
+/**
+ * Generate collections alerts from overdue installments.
+ *
+ * Backend endpoint: POST /finance/collections/alerts/generate
+ */
+export async function generateCollectionsAlerts(): Promise<CollectionsAlertList> {
+  const raw = await apiFetch<BackendCollectionsAlertList>(
+    "/finance/collections/alerts/generate",
+    { method: "POST" },
+  );
+  return {
+    items: raw.items.map(mapCollectionsAlert),
+    total: raw.total,
+  };
+}
+
+/**
+ * Resolve a collections alert by ID.
+ *
+ * Backend endpoint: POST /finance/collections/alerts/{id}/resolve
+ */
+export async function resolveCollectionsAlert(
+  alertId: string,
+  notes?: string,
+): Promise<CollectionsAlert> {
+  const raw = await apiFetch<BackendCollectionsAlert>(
+    `/finance/collections/alerts/${alertId}/resolve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notes ?? null }),
+    },
+  );
+  return mapCollectionsAlert(raw);
+}
+
+/**
+ * Match an incoming payment amount to outstanding installment obligations.
+ *
+ * Backend endpoint: POST /finance/payments/match-receipt
+ */
+export async function matchPaymentReceipt(
+  contractId: string,
+  paymentAmount: number,
+): Promise<ReceiptMatchResult> {
+  const raw = await apiFetch<BackendReceiptMatchResult>(
+    "/finance/payments/match-receipt",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contract_id: contractId,
+        payment_amount: paymentAmount,
+      }),
+    },
+  );
+  return {
+    contractId: raw.contract_id,
+    paymentAmount: raw.payment_amount,
+    strategy: raw.strategy as ReceiptMatchResult["strategy"],
+    matchedInstallmentIds: raw.matched_installment_ids,
+    allocations: raw.allocations.map(
+      (a): MatchedInstallmentAllocation => ({
+        installmentId: a.installment_id,
+        allocatedAmount: a.allocated_amount,
+      }),
+    ),
+    unallocatedAmount: raw.unallocated_amount,
   };
 }
