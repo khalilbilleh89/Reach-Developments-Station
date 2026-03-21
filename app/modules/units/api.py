@@ -35,6 +35,7 @@ from app.modules.units.schemas import (
     UnitUpdate,
 )
 from app.modules.units.service import UnitDynamicAttributeService, UnitService
+from app.shared.enums.project import UnitStatus
 
 router = APIRouter(tags=["units"])
 
@@ -86,7 +87,7 @@ def list_units(
     floor_id: Optional[str] = Query(default=None),
     project_id: Optional[str] = Query(default=None),
     building_id: Optional[str] = Query(default=None),
-    unit_status: Optional[str] = Query(default=None, alias="status"),
+    unit_status: Optional[UnitStatus] = Query(default=None, alias="status"),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> UnitList:
@@ -95,7 +96,7 @@ def list_units(
         floor_id=floor_id,
         project_id=project_id,
         building_id=building_id,
-        status=unit_status,
+        unit_status=unit_status.value if unit_status is not None else None,
         skip=skip,
         limit=limit,
     )

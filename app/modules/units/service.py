@@ -17,7 +17,7 @@ from app.modules.floors.models import Floor
 from app.modules.floors.repository import FloorRepository
 from app.modules.phases.models import Phase
 from app.modules.projects.repository import ProjectRepository
-from app.modules.units.models import UnitDynamicAttributeValue
+from app.modules.units.models import Unit as UnitModel, UnitDynamicAttributeValue
 from app.modules.units.pricing_adapter import UnitPricingAdapter
 from app.modules.units.repository import UnitDynamicAttributeRepository, UnitRepository
 from app.modules.units.status_rules import assert_valid_transition
@@ -48,8 +48,9 @@ class UnitService:
         """Verify that *floor_id* exists and belongs to a complete hierarchy.
 
         Traverses Floor → Building → Phase to confirm all three levels are
-        present.  Raises HTTP 404 on the first missing link so the caller
-        receives a specific error message.
+        present.  Raises HTTP 404 when the floor does not exist.  Raises
+        HTTP 422 when the floor is attached to a missing building, or the
+        building is attached to a missing phase (broken reference chain).
 
         Returns the validated Floor ORM object.
         """
@@ -98,19 +99,36 @@ class UnitService:
                 detail="roof_garden_area must be null or 0 when has_roof_garden is false.",
             )
 
-    def validate_unit_dimensions(self, data: UnitCreate | UnitUpdate) -> None:
+    def validate_unit_dimensions(
+        self,
+        data: UnitCreate | UnitUpdate,
+        existing_unit: Optional[UnitModel] = None,
+    ) -> None:
         """Validate dimensional consistency of area fields.
 
-        Rules enforced:
-          - gross_area, if provided, must be >= internal_area.
-          - livable_area, if provided, must be <= internal_area.
+        Validates against the *effective* post-update values: values present in
+        the request payload override the current unit, and missing fields fall
+        back to the existing persisted unit (when ``existing_unit`` is provided).
+        For pure creates, only the provided fields are considered.
 
-        These checks only apply when both sides of the comparison are present
-        in the request payload (sparse updates are allowed).
+        Rules enforced:
+          - gross_area must be >= internal_area.
+          - livable_area must be <= internal_area.
         """
-        internal_area = getattr(data, "internal_area", None)
-        gross_area = getattr(data, "gross_area", None)
-        livable_area = getattr(data, "livable_area", None)
+        payload_internal_area = getattr(data, "internal_area", None)
+        payload_gross_area = getattr(data, "gross_area", None)
+        payload_livable_area = getattr(data, "livable_area", None)
+
+        def _effective(field: str, payload_value):
+            if payload_value is not None:
+                return payload_value
+            if existing_unit is not None:
+                return getattr(existing_unit, field, None)
+            return None
+
+        internal_area = _effective("internal_area", payload_internal_area)
+        gross_area = _effective("gross_area", payload_gross_area)
+        livable_area = _effective("livable_area", payload_livable_area)
 
         if internal_area is not None and gross_area is not None:
             if gross_area < internal_area:
@@ -244,7 +262,7 @@ class UnitService:
         floor_id: str | None = None,
         project_id: str | None = None,
         building_id: str | None = None,
-        status: str | None = None,
+        unit_status: str | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> UnitList:
@@ -252,7 +270,7 @@ class UnitService:
             floor_id=floor_id,
             project_id=project_id,
             building_id=building_id,
-            status=status,
+            status=unit_status,
             skip=skip,
             limit=limit,
         )
@@ -260,7 +278,7 @@ class UnitService:
             floor_id=floor_id,
             project_id=project_id,
             building_id=building_id,
-            status=status,
+            status=unit_status,
         )
         return UnitList(
             items=[UnitResponse.model_validate(u) for u in units],
@@ -283,7 +301,7 @@ class UnitService:
                     detail=str(exc),
                 ) from exc
         self._validate_apartment_attributes(data)
-        self.validate_unit_dimensions(data)
+        self.validate_unit_dimensions(data, existing_unit=unit)
         updated = self.repo.update(unit, data)
         return UnitResponse.model_validate(updated)
 

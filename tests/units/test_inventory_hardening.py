@@ -242,10 +242,11 @@ def test_unit_readiness_available_with_approved_pricing_ready_for_sales(client: 
     unit_id = _create_unit(client, floor_id)
 
     # Create and approve a formal pricing record
-    client.put(
+    pricing_resp = client.put(
         f"/api/v1/units/{unit_id}/pricing",
         json={"base_price": 500000.0, "pricing_status": "approved"},
     )
+    assert pricing_resp.status_code == 200, pricing_resp.text
 
     response = client.get(f"/api/v1/units/{unit_id}/readiness")
     assert response.status_code == 200
@@ -261,10 +262,11 @@ def test_unit_readiness_draft_pricing_not_ready_for_sales(client: TestClient):
     _, _, floor_id = _create_hierarchy(client, "PRJ-IH-R4")
     unit_id = _create_unit(client, floor_id)
 
-    client.put(
+    pricing_resp = client.put(
         f"/api/v1/units/{unit_id}/pricing",
         json={"base_price": 400000.0, "pricing_status": "draft"},
     )
+    assert pricing_resp.status_code == 200, pricing_resp.text
 
     response = client.get(f"/api/v1/units/{unit_id}/readiness")
     assert response.status_code == 200
@@ -379,3 +381,98 @@ def test_list_units_filtered_by_building_id(client: TestClient):
     ids = [item["id"] for item in data["items"]]
     assert unit_id_b1 in ids
     assert unit_id_b2 not in ids
+
+
+# ---------------------------------------------------------------------------
+# Typed status filter — invalid enum value rejection
+# ---------------------------------------------------------------------------
+
+
+def test_list_units_invalid_status_filter_returns_422(client: TestClient):
+    """GET /units?status=not_a_status should be rejected with 422 (typed enum filter)."""
+    response = client.get("/api/v1/units?status=not_a_real_status")
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Sparse-update dimension validation
+# ---------------------------------------------------------------------------
+
+
+def test_sparse_patch_gross_area_below_existing_internal_area_rejected(client: TestClient):
+    """PATCH sending only gross_area below the existing internal_area is rejected.
+
+    Without effective-state validation, a sparse PATCH with only gross_area
+    could set gross_area < internal_area because internal_area is missing from
+    the payload. With effective-state validation, the backend falls back to the
+    persisted internal_area and correctly rejects the request.
+    """
+    _, _, floor_id = _create_hierarchy(client, "PRJ-IH-SP1")
+    unit_id = _create_unit(client, floor_id, "SP01", internal_area=80.0)
+
+    # Send only gross_area — the backend must compare it against existing internal_area=80
+    response = client.patch(
+        f"/api/v1/units/{unit_id}",
+        json={"gross_area": 50.0},  # 50 < 80 → invalid effective state
+    )
+    assert response.status_code == 422
+    assert "gross_area" in response.json()["detail"]
+
+
+def test_sparse_patch_gross_area_valid_against_existing_internal_area_accepted(client: TestClient):
+    """PATCH sending only gross_area >= existing internal_area is accepted."""
+    _, _, floor_id = _create_hierarchy(client, "PRJ-IH-SP2")
+    unit_id = _create_unit(client, floor_id, "SP02", internal_area=80.0)
+
+    response = client.patch(
+        f"/api/v1/units/{unit_id}",
+        json={"gross_area": 95.0},  # 95 >= 80 → valid
+    )
+    assert response.status_code == 200
+    assert float(response.json()["gross_area"]) == 95.0
+
+
+def test_sparse_patch_livable_area_above_existing_internal_area_rejected(client: TestClient):
+    """PATCH sending only livable_area > existing internal_area is rejected."""
+    _, _, floor_id = _create_hierarchy(client, "PRJ-IH-SP3")
+    unit_id = _create_unit(client, floor_id, "SP03", internal_area=60.0)
+
+    response = client.patch(
+        f"/api/v1/units/{unit_id}",
+        json={"livable_area": 80.0},  # 80 > 60 → invalid effective state
+    )
+    assert response.status_code == 422
+    assert "livable_area" in response.json()["detail"]
+
+
+def test_sparse_patch_livable_area_valid_against_existing_internal_area_accepted(client: TestClient):
+    """PATCH sending only livable_area <= existing internal_area is accepted."""
+    _, _, floor_id = _create_hierarchy(client, "PRJ-IH-SP4")
+    unit_id = _create_unit(client, floor_id, "SP04", internal_area=60.0)
+
+    response = client.patch(
+        f"/api/v1/units/{unit_id}",
+        json={"livable_area": 55.0},  # 55 <= 60 → valid
+    )
+    assert response.status_code == 200
+    assert float(response.json()["livable_area"]) == 55.0
+
+
+def test_sparse_patch_internal_area_above_existing_gross_area_rejected(client: TestClient):
+    """PATCH raising internal_area above the existing gross_area is rejected.
+
+    The unit already has gross_area set. Raising internal_area above it
+    should be caught by effective-state validation even though gross_area
+    is not in the PATCH payload (effective gross_area falls back to the
+    persisted value of 80, while the patched internal_area = 90 > 80).
+    """
+    _, _, floor_id = _create_hierarchy(client, "PRJ-IH-SP5")
+    # Create unit: internal_area=60, gross_area=80
+    unit_id = _create_unit(client, floor_id, "SP05", internal_area=60.0, gross_area=80.0)
+
+    # Raise internal_area above existing gross_area=80 → gross_area(80) < internal_area(90)
+    response = client.patch(
+        f"/api/v1/units/{unit_id}",
+        json={"internal_area": 90.0},  # 80 < 90 → gross_area < internal_area → invalid
+    )
+    assert response.status_code == 422
