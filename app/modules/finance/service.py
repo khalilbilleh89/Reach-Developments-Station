@@ -17,19 +17,34 @@ Business rules enforced here:
     both buckets consistently.
 """
 
-from typing import List
+from typing import List, cast
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import case, distinct, func
 from sqlalchemy.orm import Session
 
+from app.modules.collections.aging_engine import (
+    ALL_BUCKETS,
+    BUCKET_1_30,
+    BUCKET_31_60,
+    BUCKET_61_90,
+    BUCKET_90_PLUS,
+    BUCKET_CURRENT,
+    AgingBucket,
+    calculate_receivable_age,
+    classify_receivable_bucket,
+)
 from app.modules.finance.repository import FinanceSummaryRepository
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
     calculate_contract_revenue_recognition,
 )
 from app.modules.finance.schemas import (
+    AgingBucketSummary,
+    ContractAgingResponse,
+    PortfolioAgingResponse,
     PortfolioRevenueOverviewResponse,
+    ProjectAgingResponse,
     ProjectFinanceSummaryResponse,
     ProjectRevenueSummaryResponse,
     RevenueRecognitionResponse,
@@ -41,6 +56,13 @@ from app.modules.floors.models import Floor
 from app.modules.buildings.models import Building
 from app.modules.phases.models import Phase
 from app.shared.enums.sales import ContractPaymentStatus
+
+# Statuses that represent collectible outstanding receivables.
+# CANCELLED installments are not receivable obligations and must be excluded.
+_RECEIVABLE_STATUSES = [
+    ContractPaymentStatus.PENDING.value,
+    ContractPaymentStatus.OVERDUE.value,
+]
 
 
 class FinanceSummaryService:
@@ -131,9 +153,7 @@ class RevenueRecognitionService:
         Raises HTTP 404 if the contract does not exist.
         """
         contract = (
-            self.db.query(SalesContract)
-            .filter(SalesContract.id == contract_id)
-            .first()
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
         )
         if not contract:
             raise HTTPException(
@@ -187,15 +207,9 @@ class RevenueRecognitionService:
             )
             contract_details.append(calculate_contract_revenue_recognition(data))
 
-        total_contract_value = round(
-            sum(r.contract_total for r in contract_details), 2
-        )
-        total_recognized = round(
-            sum(r.recognized_revenue for r in contract_details), 2
-        )
-        total_deferred = round(
-            sum(r.deferred_revenue for r in contract_details), 2
-        )
+        total_contract_value = round(sum(r.contract_total for r in contract_details), 2)
+        total_recognized = round(sum(r.recognized_revenue for r in contract_details), 2)
+        total_deferred = round(sum(r.deferred_revenue for r in contract_details), 2)
 
         if total_contract_value > 0:
             overall_pct = round(
@@ -334,5 +348,261 @@ class RevenueRecognitionService:
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
             .filter(Phase.project_id == project_id)
+            .all()
+        )
+
+
+# ---------------------------------------------------------------------------
+# Collections Aging Service
+# ---------------------------------------------------------------------------
+
+
+def _build_bucket_summaries(
+    bucket_amounts: dict[AgingBucket, float],
+    bucket_counts: dict[AgingBucket, int],
+) -> List[AgingBucketSummary]:
+    """Return a list of AgingBucketSummary in canonical bucket order."""
+    return [
+        AgingBucketSummary(
+            bucket=b,
+            amount=round(bucket_amounts.get(b, 0.0), 2),
+            installment_count=bucket_counts.get(b, 0),
+        )
+        for b in ALL_BUCKETS
+    ]
+
+
+class CollectionsAgingService:
+    """Computes receivable aging buckets from payment schedule data.
+
+    Aging model:
+      Outstanding installments are those with status in PENDING or OVERDUE.
+      PAID and CANCELLED installments are excluded from aging calculations.
+      Each installment is classified into one of five buckets based on how
+      many days past its due_date it falls on the reference date (today).
+
+      Buckets:
+        current  — due_date >= reference_date (not yet overdue)
+        1-30     — 1 to 30 days overdue
+        31-60    — 31 to 60 days overdue
+        61-90    — 61 to 90 days overdue
+        90+      — more than 90 days overdue
+
+    All computations are read-only; no records are created or mutated.
+    """
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_contract_aging(self, contract_id: str) -> ContractAgingResponse:
+        """Return receivable aging breakdown for a single contract.
+
+        Raises HTTP 404 if the contract does not exist.
+        """
+        contract = (
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
+        )
+        if not contract:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Contract {contract_id!r} not found.",
+            )
+
+        from datetime import date
+
+        today = date.today()
+        installments = (
+            self.db.query(ContractPaymentSchedule)
+            .filter(
+                ContractPaymentSchedule.contract_id == contract_id,
+                ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES),
+            )
+            .all()
+        )
+
+        paid_amount = self._sum_paid_for_contract(contract_id)
+        contract_total = float(contract.contract_price)
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+
+        for inst in installments:
+            days_overdue = calculate_receivable_age(inst.due_date, today)
+            bucket = classify_receivable_bucket(days_overdue)
+            amount = float(inst.amount)
+            bucket_amounts[bucket] = bucket_amounts[bucket] + amount
+            bucket_counts[bucket] = bucket_counts[bucket] + 1
+
+        outstanding = round(sum(bucket_amounts.values()), 2)
+
+        return ContractAgingResponse(
+            contract_id=contract_id,
+            contract_total=round(contract_total, 2),
+            paid_amount=round(paid_amount, 2),
+            outstanding_amount=outstanding,
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    def get_project_aging(self, project_id: str) -> ProjectAgingResponse:
+        """Return aggregated receivable aging for all outstanding installments
+        in a project.
+
+        Raises HTTP 404 if the project does not exist.
+        Uses a single SQL join to avoid N+1 queries.
+        """
+        project = self.db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project {project_id!r} not found.",
+            )
+
+        from datetime import date
+
+        today = date.today()
+        rows = self._get_outstanding_installments_for_project(project_id)
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+
+        for inst in rows:
+            days_overdue = calculate_receivable_age(inst.due_date, today)
+            bucket = classify_receivable_bucket(days_overdue)
+            amount = float(inst.amount)
+            bucket_amounts[bucket] = bucket_amounts[bucket] + amount
+            bucket_counts[bucket] = bucket_counts[bucket] + 1
+
+        total_outstanding = round(sum(bucket_amounts.values()), 2)
+        total_count = sum(bucket_counts.values())
+
+        return ProjectAgingResponse(
+            project_id=project_id,
+            total_outstanding=total_outstanding,
+            installment_count=total_count,
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    def get_portfolio_aging(self) -> PortfolioAgingResponse:
+        """Return portfolio-wide receivable aging distribution.
+
+        Aggregates outstanding installments using SQL-level CASE + GROUP BY,
+        so the database returns at most 5 aggregated rows instead of loading
+        the full schedule dataset into Python.
+
+        A separate scalar query counts the number of distinct projects that
+        carry outstanding receivables.
+
+        Only PENDING and OVERDUE installments are counted; PAID and CANCELLED
+        are excluded.
+        """
+        from datetime import date, timedelta
+
+        today = date.today()
+        d30 = today - timedelta(days=30)
+        d60 = today - timedelta(days=60)
+        d90 = today - timedelta(days=90)
+
+        # Build a portable CASE expression using Python-computed date cutoffs.
+        # Bucket constants are used directly to keep SQL output aligned with the
+        # canonical labels defined in aging_engine.py.
+        # Date comparisons work identically in SQLite (tests) and PostgreSQL (prod).
+        bucket_expr = case(
+            (ContractPaymentSchedule.due_date >= today, BUCKET_CURRENT),
+            (ContractPaymentSchedule.due_date >= d30, BUCKET_1_30),
+            (ContractPaymentSchedule.due_date >= d60, BUCKET_31_60),
+            (ContractPaymentSchedule.due_date >= d90, BUCKET_61_90),
+            else_=BUCKET_90_PLUS,
+        )
+
+        base_query = (
+            self.db.query(ContractPaymentSchedule)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES))
+        )
+
+        # Aggregate by bucket in SQL — returns at most 5 rows.
+        bucket_rows = (
+            base_query.with_entities(
+                bucket_expr.label("bucket"),
+                func.sum(ContractPaymentSchedule.amount).label("amount"),
+                func.count(ContractPaymentSchedule.id).label("cnt"),
+            )
+            .group_by(bucket_expr)
+            .all()
+        )
+
+        # Count distinct projects with outstanding receivables.
+        project_count: int = (
+            base_query.with_entities(func.count(distinct(Phase.project_id))).scalar()
+            or 0
+        )
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+
+        for bucket_label, amount, cnt in bucket_rows:
+            # Defensive guard: bucket_label is produced by the CASE expression
+            # using canonical BUCKET_* constants, so it will always be a valid
+            # AgingBucket. This check guards against unexpected DB states.
+            if bucket_label not in ALL_BUCKETS:
+                continue
+            b = cast(AgingBucket, bucket_label)
+            bucket_amounts[b] = round(float(amount), 2)
+            bucket_counts[b] = int(cnt)
+
+        total_outstanding = round(sum(bucket_amounts.values()), 2)
+        total_count = sum(bucket_counts.values())
+
+        return PortfolioAgingResponse(
+            total_outstanding=total_outstanding,
+            installment_count=total_count,
+            project_count=project_count,
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _sum_paid_for_contract(self, contract_id: str) -> float:
+        result = (
+            self.db.query(func.coalesce(func.sum(ContractPaymentSchedule.amount), 0))
+            .filter(
+                ContractPaymentSchedule.contract_id == contract_id,
+                ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
+            )
+            .scalar()
+        )
+        return float(result)
+
+    def _get_outstanding_installments_for_project(self, project_id: str) -> list:
+        """Return all outstanding ContractPaymentSchedule rows for a project.
+
+        Only PENDING and OVERDUE installments are returned; PAID and CANCELLED
+        are excluded.
+        """
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(
+                Phase.project_id == project_id,
+                ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES),
+            )
             .all()
         )
