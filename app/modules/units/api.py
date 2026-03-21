@@ -7,7 +7,8 @@ Provides two route groups:
   /api/v1/floors/{floor_id}/units           — floor-scoped unit listing and creation
   /api/v1/units                             — flat list with optional ?floor_id= filter
   /api/v1/units/{unit_id}                   — individual unit operations (get, update, delete)
-  /api/v1/units/{unit_id}/pricing           — per-unit formal pricing record (get, put)
+  /api/v1/units/{unit_id}/pricing           — per-unit formal pricing record (get, put, post)
+  /api/v1/units/{unit_id}/pricing/history   — per-unit pricing history
   /api/v1/units/{unit_id}/pricing-attributes — per-unit qualitative pricing attributes (get, put)
 """
 
@@ -17,7 +18,11 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
+from app.modules.pricing.schemas import (
+    PricingHistoryResponse,
+    UnitPricingCreate,
+    UnitPricingResponse,
+)
 from app.modules.pricing.service import UnitPricingService
 from app.modules.pricing_attributes.schemas import (
     UnitQualitativeAttributesCreate,
@@ -183,8 +188,46 @@ def save_unit_pricing(
 
     Computes final_price = base_price + manual_adjustment server-side.
     Rejects the request if the resulting final_price would be negative.
+    Rejects the request if the existing pricing record is approved (immutable).
     """
     return service.save_unit_pricing(unit_id, data)
+
+
+@router.post(
+    "/units/{unit_id}/pricing",
+    response_model=UnitPricingResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["unit-pricing"],
+)
+def create_unit_pricing(
+    unit_id: str,
+    data: UnitPricingCreate,
+    service: Annotated[UnitPricingService, Depends(get_pricing_service)],
+) -> UnitPricingResponse:
+    """Create a new pricing record under the hardened lifecycle.
+
+    Enforces that the unit is ready for pricing (unit status must be 'available').
+    Archives any existing active pricing record before creating the new one.
+    The new record always starts as 'draft' regardless of the requested status.
+    """
+    return service.create_pricing(unit_id, data)
+
+
+@router.get(
+    "/units/{unit_id}/pricing/history",
+    response_model=PricingHistoryResponse,
+    tags=["unit-pricing"],
+)
+def get_unit_pricing_history(
+    unit_id: str,
+    service: Annotated[UnitPricingService, Depends(get_pricing_service)],
+) -> PricingHistoryResponse:
+    """Return the full pricing history for a unit.
+
+    Includes the current active record and all archived (superseded) records,
+    ordered newest first.
+    """
+    return service.get_pricing_history(unit_id)
 
 
 # ── Per-unit qualitative pricing attributes endpoints ─────────────────────────

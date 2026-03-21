@@ -4,12 +4,14 @@ pricing.repository
 Data access layer for UnitPricingAttributes entities.
 """
 
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.modules.pricing.models import UnitPricingAttributes
 from app.modules.pricing.schemas import UnitPricingAttributesCreate
+from app.modules.pricing.status_rules import ARCHIVED_STATUS
 
 
 class UnitPricingAttributesRepository:
@@ -56,11 +58,31 @@ class UnitPricingRepository:
         self.db = db
 
     def get_by_unit_id(self, unit_id: str) -> Optional["UnitPricing"]:
+        """Return the active (non-archived) pricing record for *unit_id*, or None."""
+        from app.modules.pricing.models import UnitPricing
+        return (
+            self.db.query(UnitPricing)
+            .filter(
+                UnitPricing.unit_id == unit_id,
+                UnitPricing.pricing_status != ARCHIVED_STATUS,
+            )
+            .order_by(UnitPricing.created_at.desc())
+            .first()
+        )
+
+    def get_by_id(self, pricing_id: str) -> Optional["UnitPricing"]:
+        """Return a pricing record by its primary key, or None."""
+        from app.modules.pricing.models import UnitPricing
+        return self.db.query(UnitPricing).filter(UnitPricing.id == pricing_id).first()
+
+    def get_all_by_unit_id(self, unit_id: str) -> List["UnitPricing"]:
+        """Return all pricing records for *unit_id*, including archived, newest first."""
         from app.modules.pricing.models import UnitPricing
         return (
             self.db.query(UnitPricing)
             .filter(UnitPricing.unit_id == unit_id)
-            .first()
+            .order_by(UnitPricing.created_at.desc())
+            .all()
         )
 
     def create_for_unit(self, unit_id: str, **kwargs) -> "UnitPricing":
@@ -79,14 +101,28 @@ class UnitPricingRepository:
         return record
 
     def upsert_for_unit(self, unit_id: str, **kwargs) -> "UnitPricing":
-        """Create or update the pricing record for a unit (one record per unit)."""
+        """Create or update the active pricing record for a unit.
+
+        Updates the existing active (non-archived) record in place when one
+        exists, preserving pricing history for archived records.
+        """
         existing = self.get_by_unit_id(unit_id)
         if existing:
             return self.update_for_unit(existing, **kwargs)
         return self.create_for_unit(unit_id, **kwargs)
 
+    def archive_existing_pricing(self, unit_id: str) -> Optional["UnitPricing"]:
+        """Set the active pricing record for *unit_id* to 'archived'.
+
+        Returns the archived record, or None when no active record exists.
+        """
+        record = self.get_by_unit_id(unit_id)
+        if record is None:
+            return None
+        return self.update_for_unit(record, pricing_status=ARCHIVED_STATUS)
+
     def list_by_project(self, project_id: str) -> list["UnitPricing"]:
-        """Return all pricing records for units belonging to the given project."""
+        """Return all active (non-archived) pricing records for units in the given project."""
         from app.modules.pricing.models import UnitPricing
         from app.modules.units.models import Unit
         from app.modules.floors.models import Floor
@@ -99,6 +135,9 @@ class UnitPricingRepository:
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
-            .filter(Phase.project_id == project_id)
+            .filter(
+                Phase.project_id == project_id,
+                UnitPricing.pricing_status != ARCHIVED_STATUS,
+            )
             .all()
         )
