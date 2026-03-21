@@ -20,6 +20,7 @@ import pytest
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
+from app.modules.finance.date_utils import next_month_key
 from app.modules.finance.portfolio_summary_service import (
     PortfolioSummaryService,
     _next_month_key,
@@ -149,26 +150,25 @@ class TestNextMonthKey:
         assert 1 <= int(month) <= 12
 
     def test_december_wraps_to_january(self, monkeypatch):
-        from app.modules.finance import portfolio_summary_service as psm
+        import app.modules.finance.date_utils as du
 
         monkeypatch.setattr(
-            psm,
+            du,
             "date",
             type("MockDate", (), {"today": staticmethod(lambda: date(2026, 12, 15))}),
         )  # type: ignore[arg-type]
-        # Call directly with the patched module date
-        key = psm._next_month_key()
+        key = next_month_key()
         assert key == "2027-01"
 
     def test_non_december_increments(self, monkeypatch):
-        from app.modules.finance import portfolio_summary_service as psm
+        import app.modules.finance.date_utils as du
 
         monkeypatch.setattr(
-            psm,
+            du,
             "date",
             type("MockDate", (), {"today": staticmethod(lambda: date(2026, 5, 10))}),
         )  # type: ignore[arg-type]
-        key = psm._next_month_key()
+        key = next_month_key()
         assert key == "2026-06"
 
 

@@ -23,7 +23,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.modules.finance.cashflow_service import CashflowForecastService
-from app.modules.finance.portfolio_summary_service import _next_month_key
+from app.modules.finance.date_utils import next_month_key
 from app.modules.finance.schemas import (
     ProjectExposureEntry,
     TreasuryMonitoringResponse,
@@ -89,7 +89,7 @@ class TreasuryMonitoringService:
 
         # --- Cashflow forecast — next calendar month ---
         cashflow = self._forecast_svc.get_portfolio_forecast()
-        next_month = _next_month_key()
+        next_month = next_month_key()
         forecast_next_month = 0.0
         for entry in cashflow.monthly_entries:
             if entry.month == next_month:

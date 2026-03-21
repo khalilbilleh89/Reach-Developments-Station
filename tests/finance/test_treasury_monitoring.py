@@ -441,3 +441,124 @@ class TestTreasuryMonitoringAPI:
             "project_exposures",
         }
         assert required_keys.issubset(data.keys())
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — next-month forecast extraction
+# ---------------------------------------------------------------------------
+
+
+def _next_month_date() -> date:
+    """Return a date in the next calendar month."""
+    today = date.today()
+    if today.month == 12:
+        return date(today.year + 1, 1, 15)
+    return date(today.year, today.month + 1, 15)
+
+
+def _two_months_date() -> date:
+    """Return a date two calendar months from today."""
+    today = date.today()
+    month = today.month + 2
+    year = today.year
+    if month > 12:
+        month -= 12
+        year += 1
+    return date(year, month, 15)
+
+
+class TestTreasuryForecastNextMonth:
+    """Explicit tests for next-calendar-month forecast extraction."""
+
+    def test_installment_due_next_month_captured_in_portfolio_forecast(
+        self, db_session: Session
+    ):
+        """forecast_next_month must equal the amount of installments due next month."""
+        pid = _make_project(db_session, "TM-FCT-01")
+        uid = _make_unit(db_session, pid, "TM-FCT01-U01")
+        cid = _make_contract(
+            db_session, uid, 500_000.0, "TM-FCT-C001", "fct01@test.com"
+        )
+        next_month = _next_month_date()
+        _make_installment(db_session, cid, 250_000.0, 1, next_month, "pending")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        assert result.forecast_next_month == pytest.approx(250_000.0)
+
+    def test_installments_not_in_next_month_excluded_from_forecast(
+        self, db_session: Session
+    ):
+        """Installments due two months from now must not appear in forecast_next_month."""
+        pid = _make_project(db_session, "TM-FCT-02")
+        uid = _make_unit(db_session, pid, "TM-FCT02-U01")
+        cid = _make_contract(
+            db_session, uid, 400_000.0, "TM-FCT-C002", "fct02@test.com"
+        )
+        two_months = _two_months_date()
+        _make_installment(db_session, cid, 400_000.0, 1, two_months, "pending")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        assert result.forecast_next_month == pytest.approx(0.0)
+
+    def test_mixed_months_only_next_month_counted(self, db_session: Session):
+        """Only the installment due next month appears in forecast_next_month."""
+        pid = _make_project(db_session, "TM-FCT-03")
+        uid = _make_unit(db_session, pid, "TM-FCT03-U01")
+        cid = _make_contract(
+            db_session, uid, 600_000.0, "TM-FCT-C003", "fct03@test.com"
+        )
+        next_month = _next_month_date()
+        two_months = _two_months_date()
+        _make_installment(db_session, cid, 300_000.0, 1, next_month, "pending")
+        _make_installment(db_session, cid, 300_000.0, 2, two_months, "pending")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        assert result.forecast_next_month == pytest.approx(300_000.0)
+
+    def test_project_forecast_inflow_equals_next_month_installments(
+        self, db_session: Session
+    ):
+        """Per-project forecast_inflow must reflect only next-month installments."""
+        pid = _make_project(db_session, "TM-FCT-04")
+        uid = _make_unit(db_session, pid, "TM-FCT04-U01")
+        cid = _make_contract(
+            db_session, uid, 800_000.0, "TM-FCT-C004", "fct04@test.com"
+        )
+        next_month = _next_month_date()
+        two_months = _two_months_date()
+        _make_installment(db_session, cid, 200_000.0, 1, next_month, "pending")
+        _make_installment(db_session, cid, 600_000.0, 2, two_months, "pending")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        assert len(result.project_exposures) >= 1
+        entry = next(e for e in result.project_exposures if e.project_id == pid)
+        # Only the 200k next-month installment should appear in forecast_inflow
+        assert entry.forecast_inflow == pytest.approx(200_000.0)
+
+    def test_no_next_month_installments_project_forecast_inflow_zero(
+        self, db_session: Session
+    ):
+        """A project with installments only in future months beyond next should show
+        forecast_inflow == 0."""
+        pid = _make_project(db_session, "TM-FCT-05")
+        uid = _make_unit(db_session, pid, "TM-FCT05-U01")
+        cid = _make_contract(
+            db_session, uid, 300_000.0, "TM-FCT-C005", "fct05@test.com"
+        )
+        two_months = _two_months_date()
+        _make_installment(db_session, cid, 300_000.0, 1, two_months, "pending")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        assert len(result.project_exposures) >= 1
+        entry = next(e for e in result.project_exposures if e.project_id == pid)
+        assert entry.forecast_inflow == pytest.approx(0.0)

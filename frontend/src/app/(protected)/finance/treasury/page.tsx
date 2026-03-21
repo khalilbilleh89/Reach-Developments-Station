@@ -98,13 +98,16 @@ export default function FinanceTreasuryPage() {
               <h3 className={styles.sectionHeading ?? undefined}>
                 Project Exposure Ranking
               </h3>
-              <table className={styles.dataTable ?? undefined}>
+              <table
+                className={styles.dataTable ?? undefined}
+                aria-label="Project exposure ranking table"
+              >
                 <thead>
                   <tr>
-                    <th>Project</th>
-                    <th>Receivable Exposure</th>
-                    <th>Exposure %</th>
-                    <th>Forecast Inflow (Next Month)</th>
+                    <th scope="col">Project</th>
+                    <th scope="col">Receivable Exposure</th>
+                    <th scope="col">Exposure %</th>
+                    <th scope="col">Forecast Inflow (Next Month)</th>
                   </tr>
                 </thead>
                 <tbody>

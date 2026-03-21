@@ -18,7 +18,6 @@ performs portfolio-level aggregation on top of their outputs.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import List
 
 from sqlalchemy import func
@@ -26,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.finance.constants import RECEIVABLE_STATUSES
+from app.modules.finance.date_utils import next_month_key
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
     calculate_contract_revenue_recognition,
@@ -47,11 +47,13 @@ from app.shared.enums.sales import ContractPaymentStatus
 
 
 def _next_month_key() -> str:
-    """Return the YYYY-MM key for the calendar month after today."""
-    today = date.today()
-    if today.month == 12:
-        return f"{today.year + 1:04d}-01"
-    return f"{today.year:04d}-{today.month + 1:02d}"
+    """Return the YYYY-MM key for the calendar month after today.
+
+    Delegates to the shared ``next_month_key`` helper in
+    ``app.modules.finance.date_utils``.  Kept here for backward
+    compatibility with existing tests that monkeypatch this name.
+    """
+    return next_month_key()
 
 
 class PortfolioSummaryService:
