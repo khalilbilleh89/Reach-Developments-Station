@@ -26,6 +26,8 @@ Endpoints
   POST /finance/analytics/rebuild                      — rebuild analytics fact tables
   GET /finance/analytics/portfolio                     — portfolio analytics dashboard
   GET /finance/projects/{project_id}/dashboard         — project financial dashboard
+  GET /finance/alerts/portfolio                        — portfolio risk alerts
+  GET /finance/projects/{project_id}/alerts            — project risk alerts
 """
 
 from typing import Annotated
@@ -45,11 +47,13 @@ from app.modules.finance.schemas import (
     PortfolioCashflowForecastResponse,
     PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
+    PortfolioRiskResponse,
     ProjectAgingResponse,
     ProjectCashflowForecastResponse,
     ProjectFinanceSummaryResponse,
     ProjectFinancialDashboardResponse,
     ProjectRevenueSummaryResponse,
+    ProjectRiskAlert,
     ReceiptMatchResult,
     ResolveAlertRequest,
     RevenueRecognitionResponse,
@@ -68,6 +72,7 @@ from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.auth.security import get_current_user_payload, require_roles
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
 from app.modules.finance.project_financial_dashboard_service import ProjectFinancialDashboardService
+from app.modules.finance.risk_alert_engine import FinancialRiskAlertEngine
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
 
@@ -447,3 +452,54 @@ def get_project_financial_dashboard(
     Auth required.
     """
     return service.get_project_financial_dashboard(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Financial risk alert endpoints
+# ---------------------------------------------------------------------------
+
+
+def get_risk_alert_engine(
+    db: Session = Depends(get_db),
+) -> FinancialRiskAlertEngine:
+    return FinancialRiskAlertEngine(db)
+
+
+@router.get(
+    "/alerts/portfolio",
+    response_model=PortfolioRiskResponse,
+)
+def get_portfolio_risk_alerts(
+    service: Annotated[FinancialRiskAlertEngine, Depends(get_risk_alert_engine)],
+    _: Annotated[dict, Depends(get_current_user_payload)],
+) -> PortfolioRiskResponse:
+    """Return financial risk alerts for the entire portfolio.
+
+    Scans all projects and produces structured risk alerts for conditions such
+    as:
+
+      - High overdue exposure (overdue_percentage > 20 %)
+      - Collection efficiency collapse (collection_efficiency < 60 %)
+      - Receivables surge (growth > 30 % from prior snapshot)
+      - Liquidity stress (forecast < 25 % of receivables exposure)
+
+    Auth required.
+    """
+    return service.scan_portfolio_risks()
+
+
+@router.get(
+    "/projects/{project_id}/alerts",
+    response_model=list[ProjectRiskAlert],
+)
+def get_project_risk_alerts(
+    project_id: str,
+    service: Annotated[FinancialRiskAlertEngine, Depends(get_risk_alert_engine)],
+    _: Annotated[dict, Depends(get_current_user_payload)],
+) -> list[ProjectRiskAlert]:
+    """Return financial risk alerts for a single project.
+
+    Returns 404 if the project does not exist.
+    Auth required.
+    """
+    return service.scan_project_risks(project_id)

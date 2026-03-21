@@ -373,6 +373,32 @@ class ProjectFinancialDashboardResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Financial risk alert schemas
+# ---------------------------------------------------------------------------
+
+
+class ProjectRiskAlert(BaseModel):
+    """A single financial risk alert for a project.
+
+    Produced by FinancialRiskAlertEngine when a monitored metric breaches its
+    configured threshold.
+    """
+
+    project_id: str
+    alert_type: str = Field(..., description="Machine-readable alert category key.")
+    severity: str = Field(..., description="Alert severity: HIGH, MEDIUM, or LOW.")
+    message: str = Field(..., description="Human-readable description of the risk condition.")
+    metric_value: float = Field(..., description="Observed metric value that triggered the alert.")
+    threshold: float = Field(..., description="Threshold the metric crossed to trigger the alert.")
+
+
+class PortfolioRiskResponse(BaseModel):
+    """Aggregated financial risk alerts across the entire project portfolio."""
+
+    alerts: List[ProjectRiskAlert] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Analytics fact layer schemas
 # ---------------------------------------------------------------------------
 

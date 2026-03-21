@@ -296,3 +296,23 @@ export interface ProjectFinancialDashboard {
   collectionsTrend: ProjectFinancialTrendEntry[];
   receivablesTrend: ProjectFinancialTrendEntry[];
 }
+
+// ---------- Financial risk alert types -----------------------------------
+
+/** Severity level of a financial risk alert produced by the alert engine. */
+export type RiskAlertSeverity = "HIGH" | "MEDIUM" | "LOW";
+
+/** A single structured financial risk alert for a project. */
+export interface ProjectRiskAlert {
+  projectId: string;
+  alertType: string;
+  severity: RiskAlertSeverity;
+  message: string;
+  metricValue: number;
+  threshold: number;
+}
+
+/** Aggregated financial risk alerts across the entire portfolio. */
+export interface PortfolioRiskResponse {
+  alerts: ProjectRiskAlert[];
+}
