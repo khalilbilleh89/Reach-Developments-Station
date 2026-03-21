@@ -232,3 +232,39 @@ export interface ReceivablesTrend {
   bucket61To90: number;
   bucket90Plus: number;
 }
+
+// ---------- Portfolio analytics dashboard types -----------------------
+
+/** Aggregated recognized revenue for a single calendar month. */
+export interface RevenueTrendEntry {
+  month: string;
+  totalRecognizedRevenue: number;
+}
+
+/** Aggregated collections amount for a single calendar month. */
+export interface CollectionsTrendEntry {
+  month: string;
+  totalAmount: number;
+}
+
+/** Total receivables across all projects for a single snapshot date. */
+export interface ReceivablesTrendEntry {
+  snapshotDate: string;
+  totalReceivables: number;
+}
+
+/** Top-level portfolio financial KPIs from the analytics fact tables. */
+export interface PortfolioKPI {
+  totalRevenue: number;
+  totalCollections: number;
+  totalReceivables: number;
+  collectionEfficiency: number;
+}
+
+/** Portfolio analytics dashboard response. */
+export interface PortfolioAnalytics {
+  revenueTrend: RevenueTrendEntry[];
+  collectionsTrend: CollectionsTrendEntry[];
+  receivablesTrend: ReceivablesTrendEntry[];
+  kpis: PortfolioKPI;
+}

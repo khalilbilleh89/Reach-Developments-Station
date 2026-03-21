@@ -23,7 +23,8 @@ Endpoints
   POST /finance/payments/match-receipt                 — match a payment to installment obligations
   GET /finance/cashflow/forecast                       — portfolio cashflow forecast
   GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast
-  POST /finance/analytics/rebuild                     — rebuild analytics fact tables
+  POST /finance/analytics/rebuild                      — rebuild analytics fact tables
+  GET /finance/analytics/portfolio                     — portfolio analytics dashboard
 """
 
 from typing import Annotated
@@ -39,6 +40,7 @@ from app.modules.finance.schemas import (
     ContractAgingResponse,
     MatchReceiptRequest,
     PortfolioAgingResponse,
+    PortfolioAnalyticsResponse,
     PortfolioCashflowForecastResponse,
     PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
@@ -59,6 +61,7 @@ from app.modules.finance.service import (
     RevenueRecognitionService,
 )
 from app.modules.finance.analytics_service import AnalyticsService
+from app.modules.finance.analytics_dashboard_service import AnalyticsDashboardService
 from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.auth.security import require_roles
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
@@ -366,3 +369,37 @@ def rebuild_analytics_facts(
     layer and returns a summary of rows inserted into each fact table.
     """
     return service.rebuild_financial_analytics()
+
+
+# ---------------------------------------------------------------------------
+# Analytics dashboard endpoint
+# ---------------------------------------------------------------------------
+
+
+def get_analytics_dashboard_service(
+    db: Session = Depends(get_db),
+) -> AnalyticsDashboardService:
+    return AnalyticsDashboardService(db)
+
+
+@router.get(
+    "/analytics/portfolio",
+    response_model=PortfolioAnalyticsResponse,
+)
+def get_portfolio_analytics(
+    service: Annotated[AnalyticsDashboardService, Depends(get_analytics_dashboard_service)],
+) -> PortfolioAnalyticsResponse:
+    """Return the portfolio analytics dashboard.
+
+    Provides revenue trends, collections trends, receivable exposure trends,
+    and portfolio-level KPIs derived from the analytics fact tables.
+
+    Data is sourced exclusively from:
+      - fact_revenue              — monthly recognized revenue.
+      - fact_collections          — payments received by month.
+      - fact_receivables_snapshot — receivable aging snapshots.
+
+    Run POST /finance/analytics/rebuild (admin-only) to refresh the fact tables
+    before reading this endpoint.
+    """
+    return service.get_portfolio_analytics()

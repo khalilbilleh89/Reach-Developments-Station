@@ -287,6 +287,54 @@ class TreasuryMonitoringResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Analytics dashboard schemas
+# ---------------------------------------------------------------------------
+
+
+class RevenueTrendEntry(BaseModel):
+    """Aggregated recognized revenue for a single calendar month."""
+
+    month: str
+    total_recognized_revenue: float = Field(..., ge=0)
+
+
+class CollectionsTrendEntry(BaseModel):
+    """Aggregated collections amount for a single calendar month."""
+
+    month: str
+    total_amount: float = Field(..., ge=0)
+
+
+class ReceivablesTrendEntry(BaseModel):
+    """Total receivables across all projects for a single snapshot date."""
+
+    snapshot_date: str
+    total_receivables: float = Field(..., ge=0)
+
+
+class PortfolioKPI(BaseModel):
+    """Top-level portfolio financial KPIs derived from the analytics fact tables."""
+
+    total_revenue: float = Field(..., ge=0)
+    total_collections: float = Field(..., ge=0)
+    total_receivables: float = Field(..., ge=0)
+    collection_efficiency: float = Field(..., ge=0)
+
+
+class PortfolioAnalyticsResponse(BaseModel):
+    """Portfolio analytics dashboard response.
+
+    Contains revenue trends, collections trends, receivable exposure trends,
+    and top-level portfolio KPIs — all derived from the analytics fact tables.
+    """
+
+    revenue_trend: List[RevenueTrendEntry] = Field(default_factory=list)
+    collections_trend: List[CollectionsTrendEntry] = Field(default_factory=list)
+    receivables_trend: List[ReceivablesTrendEntry] = Field(default_factory=list)
+    kpis: PortfolioKPI
+
+
+# ---------------------------------------------------------------------------
 # Analytics fact layer schemas
 # ---------------------------------------------------------------------------
 

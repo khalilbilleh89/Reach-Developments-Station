@@ -18,12 +18,15 @@ import type {
   AgingBucketSummary,
   CollectionsAlert,
   CollectionsAlertList,
+  CollectionsTrendEntry,
   ContractAging,
   MatchedInstallmentAllocation,
   MonthlyForecastEntry,
   PortfolioAging,
+  PortfolioAnalytics,
   PortfolioCashflowForecast,
   PortfolioFinancialSummary,
+  PortfolioKPI,
   ProjectAging,
   ProjectCashflowForecast,
   ProjectExposure,
@@ -31,8 +34,10 @@ import type {
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
+  ReceivablesTrendEntry,
   RevenueOverview,
   RevenueRecognition,
+  RevenueTrendEntry,
   TreasuryMonitoring,
 } from "./finance-types";
 
@@ -543,5 +548,91 @@ export async function getTreasuryMonitoring(): Promise<TreasuryMonitoring> {
     forecastNextMonth: raw.forecast_next_month,
     projectCount: raw.project_count,
     projectExposures: raw.project_exposures.map(mapProjectExposure),
+  };
+}
+
+// ---------- Portfolio analytics raw shapes ---------------------------
+
+interface BackendRevenueTrendEntry {
+  month: string;
+  total_recognized_revenue: number;
+}
+
+interface BackendCollectionsTrendEntry {
+  month: string;
+  total_amount: number;
+}
+
+interface BackendReceivablesTrendEntry {
+  snapshot_date: string;
+  total_receivables: number;
+}
+
+interface BackendPortfolioKPI {
+  total_revenue: number;
+  total_collections: number;
+  total_receivables: number;
+  collection_efficiency: number;
+}
+
+interface BackendPortfolioAnalytics {
+  revenue_trend: BackendRevenueTrendEntry[];
+  collections_trend: BackendCollectionsTrendEntry[];
+  receivables_trend: BackendReceivablesTrendEntry[];
+  kpis: BackendPortfolioKPI;
+}
+
+// ---------- Mapping helpers ------------------------------------------
+
+function mapRevenueTrendEntry(raw: BackendRevenueTrendEntry): RevenueTrendEntry {
+  return {
+    month: raw.month,
+    totalRecognizedRevenue: raw.total_recognized_revenue,
+  };
+}
+
+function mapCollectionsTrendEntry(
+  raw: BackendCollectionsTrendEntry,
+): CollectionsTrendEntry {
+  return {
+    month: raw.month,
+    totalAmount: raw.total_amount,
+  };
+}
+
+function mapReceivablesTrendEntry(
+  raw: BackendReceivablesTrendEntry,
+): ReceivablesTrendEntry {
+  return {
+    snapshotDate: raw.snapshot_date,
+    totalReceivables: raw.total_receivables,
+  };
+}
+
+function mapPortfolioKPI(raw: BackendPortfolioKPI): PortfolioKPI {
+  return {
+    totalRevenue: raw.total_revenue,
+    totalCollections: raw.total_collections,
+    totalReceivables: raw.total_receivables,
+    collectionEfficiency: raw.collection_efficiency,
+  };
+}
+
+// ---------- Exported portfolio analytics function --------------------
+
+/**
+ * Fetch the portfolio analytics dashboard data.
+ *
+ * Backend endpoint: GET /finance/analytics/portfolio
+ */
+export async function getPortfolioAnalytics(): Promise<PortfolioAnalytics> {
+  const raw = await apiFetch<BackendPortfolioAnalytics>(
+    "/finance/analytics/portfolio",
+  );
+  return {
+    revenueTrend: raw.revenue_trend.map(mapRevenueTrendEntry),
+    collectionsTrend: raw.collections_trend.map(mapCollectionsTrendEntry),
+    receivablesTrend: raw.receivables_trend.map(mapReceivablesTrendEntry),
+    kpis: mapPortfolioKPI(raw.kpis),
   };
 }
