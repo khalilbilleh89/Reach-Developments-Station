@@ -227,8 +227,8 @@ export interface ReceivablesTrend {
   projectId: string;
   snapshotDate: string;
   totalReceivables: number;
-  bucket_0_30: number;
-  bucket_31_60: number;
-  bucket_61_90: number;
-  bucket_90_plus: number;
+  bucket0To30: number;
+  bucket31To60: number;
+  bucket61To90: number;
+  bucket90Plus: number;
 }

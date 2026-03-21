@@ -60,6 +60,7 @@ from app.modules.finance.service import (
 )
 from app.modules.finance.analytics_service import AnalyticsService
 from app.modules.finance.cashflow_service import CashflowForecastService
+from app.modules.auth.security import require_roles
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
@@ -352,6 +353,7 @@ def get_analytics_service(db: Session = Depends(get_db)) -> AnalyticsService:
 )
 def rebuild_analytics_facts(
     service: Annotated[AnalyticsService, Depends(get_analytics_service)],
+    _: Annotated[dict, Depends(require_roles("admin"))],
 ) -> AnalyticsRebuildResponse:
     """Rebuild all analytics fact tables from the current operational data.
 
@@ -360,8 +362,7 @@ def rebuild_analytics_facts(
       - fact_collections    — payment collections by project / month.
       - fact_receivables_snapshot — receivable aging snapshot per project.
 
-    This endpoint is intended for admin use.  It performs a full rebuild of
-    the analytics layer and returns a summary of rows inserted into each
-    fact table.
+    Admin-only endpoint.  Performs an atomic rebuild of the analytics
+    layer and returns a summary of rows inserted into each fact table.
     """
     return service.rebuild_financial_analytics()

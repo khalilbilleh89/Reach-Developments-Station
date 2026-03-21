@@ -14,8 +14,7 @@ Tables:
   fact_receivables_snapshot — Point-in-time receivable aging snapshots.
 """
 
-from datetime import date, datetime
-from typing import Optional
+from datetime import date
 
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column

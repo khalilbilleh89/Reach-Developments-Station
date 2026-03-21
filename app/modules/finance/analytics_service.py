@@ -4,9 +4,9 @@ finance.analytics_service
 Builds and stores analytics fact records from operational financial engines.
 
 Responsibilities:
-  - Read recognized revenue records from RevenueRecognitionService.
-  - Read paid installments and group by project / month for collections.
-  - Read receivable aging buckets from CollectionsAgingService.
+  - Read paid installments grouped by project/unit/month for revenue facts.
+  - Read paid installments grouped by project/month for collections facts.
+  - Read outstanding installment aging from operational data for snapshot facts.
   - Materialize results into fact_revenue, fact_collections, and
     fact_receivables_snapshot tables.
 
@@ -14,8 +14,15 @@ All source data comes from the existing operational financial engines.
 This service does NOT change operational tables.
 
 The rebuild process:
-  1. Truncates existing fact rows for each table (full rebuild).
-  2. Re-inserts all fact rows from the current state of operational data.
+  1. fact_revenue and fact_collections are fully rebuilt — all existing rows
+     are deleted and re-inserted from the current state of operational data.
+  2. fact_receivables_snapshot is rebuilt only for the current snapshot date
+     (today) — rows for today are deleted and re-inserted; historical snapshot
+     rows from prior dates remain unchanged.
+
+Rebuild is atomic: all three builders execute inside a single transaction.
+A failure in any builder triggers a full rollback so dashboards never see a
+partially rebuilt fact layer.
 
 This can be triggered via the POST /finance/analytics/rebuild endpoint,
 an admin action, or a scheduled task.
@@ -24,9 +31,9 @@ an admin action, or a scheduled task.
 from __future__ import annotations
 
 from datetime import date
-from typing import List
 
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.modules.buildings.models import Building
@@ -60,6 +67,10 @@ class AnalyticsService:
 
     All writes go to the three analytics fact tables only.  Operational
     tables are never modified.
+
+    Rebuild atomicity: rebuild_financial_analytics() executes all three
+    builders inside a single transaction.  Builders do not commit; the
+    caller is responsible for the transaction boundary.
     """
 
     def __init__(self, db: Session) -> None:
@@ -70,18 +81,26 @@ class AnalyticsService:
     # ------------------------------------------------------------------
 
     def rebuild_financial_analytics(self) -> AnalyticsRebuildResponse:
-        """Rebuild all three analytics fact tables.
+        """Rebuild all three analytics fact tables atomically.
 
-        Executes the three build functions in order:
+        Executes the three builders inside a single transaction:
           1. build_revenue_fact()
           2. build_collections_fact()
           3. build_receivable_snapshot()
 
+        Commits on success; rolls back on any failure so dashboards never
+        see a partially rebuilt fact layer.
+
         Returns a summary of how many rows were inserted into each table.
         """
-        revenue_count = self.build_revenue_fact()
-        collections_count = self.build_collections_fact()
-        snapshot_count = self.build_receivable_snapshot()
+        try:
+            revenue_count = self.build_revenue_fact()
+            collections_count = self.build_collections_fact()
+            snapshot_count = self.build_receivable_snapshot()
+            self.db.commit()
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
 
         return AnalyticsRebuildResponse(
             revenue_facts_created=revenue_count,
@@ -90,193 +109,187 @@ class AnalyticsService:
         )
 
     def build_revenue_fact(self) -> int:
-        """Rebuild fact_revenue from the revenue recognition engine.
+        """Rebuild fact_revenue from paid installment data.
+
+        Uses a single DB-side GROUP BY across the contract → project / unit
+        join chain to aggregate recognized revenue per (project, unit, month)
+        without loading individual installment objects into Python.
 
         Steps:
           1. Delete all existing fact_revenue rows.
-          2. Load all contracts with their project / unit associations.
-          3. For each contract with paid installments, group paid amounts
-             by calendar month of payment (paid_at).
+          2. Aggregate paid installments by (project_id, unit_id, month) in SQL.
+          3. Fetch the total contract value per (project_id, unit_id) for context.
           4. Insert one FactRevenue row per (project, unit, month).
 
-        Returns the number of rows inserted.
+        The month is derived from the paid_at timestamp of each installment.
+
+        Returns the number of rows inserted.  Does not commit; the caller
+        (rebuild_financial_analytics) owns the transaction boundary.
         """
-        # Clear existing facts.
         self.db.query(FactRevenue).delete()
         self.db.flush()
 
-        # Load all contracts with project / unit chain.
-        rows = (
-            self.db.query(SalesContract, Phase.project_id)
+        year_expr = func.extract("year", ContractPaymentSchedule.paid_at)
+        month_expr = func.extract("month", ContractPaymentSchedule.paid_at)
+
+        agg_rows = (
+            self.db.query(
+                Phase.project_id,
+                SalesContract.unit_id,
+                year_expr.label("paid_year"),
+                month_expr.label("paid_month"),
+                func.sum(ContractPaymentSchedule.amount).label("recognized"),
+            )
+            .select_from(ContractPaymentSchedule)
+            .join(SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id)
             .join(Unit, SalesContract.unit_id == Unit.id)
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
-            .all()
-        )
-
-        if not rows:
-            self.db.commit()
-            return 0
-
-        # Build a mapping: contract_id → (project_id, unit_id, contract_price)
-        contract_meta: dict[str, tuple[str, str, float]] = {
-            contract.id: (str(project_id), str(contract.unit_id), float(contract.contract_price))
-            for contract, project_id in rows
-        }
-
-        # Load all paid installments with their paid_at timestamp.
-        paid_installments = (
-            self.db.query(ContractPaymentSchedule)
             .filter(
-                ContractPaymentSchedule.contract_id.in_(list(contract_meta.keys())),
                 ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
                 ContractPaymentSchedule.paid_at.isnot(None),
             )
+            .group_by(Phase.project_id, SalesContract.unit_id, year_expr, month_expr)
             .all()
         )
 
-        # Group by (project_id, unit_id, month) → total paid amount.
-        # month is derived from paid_at.
-        group: dict[tuple[str, str, str], float] = {}
-        contract_value_by_unit: dict[tuple[str, str], float] = {}
+        if not agg_rows:
+            return 0
 
-        for inst in paid_installments:
-            meta = contract_meta.get(inst.contract_id)
-            if meta is None:
-                continue
-            project_id, unit_id, contract_price = meta
+        # Fetch total contract value per (project_id, unit_id) for context.
+        contract_value_rows = (
+            self.db.query(
+                Phase.project_id,
+                SalesContract.unit_id,
+                func.sum(SalesContract.contract_price).label("contract_value"),
+            )
+            .select_from(SalesContract)
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .group_by(Phase.project_id, SalesContract.unit_id)
+            .all()
+        )
+        contract_value_map: dict[tuple[str, str], float] = {
+            (str(pid), str(uid)): float(cv)
+            for pid, uid, cv in contract_value_rows
+        }
 
-            # Store contract value per (project_id, unit_id) for context.
-            contract_value_by_unit.setdefault((project_id, unit_id), contract_price)
-
-            paid_at_date = inst.paid_at.date() if hasattr(inst.paid_at, "date") else inst.paid_at
-            month_key = f"{paid_at_date.year:04d}-{paid_at_date.month:02d}"
-
-            key = (project_id, unit_id, month_key)
-            group[key] = group.get(key, 0.0) + float(inst.amount)
-
-        # Insert FactRevenue rows.
         inserted = 0
-        for (project_id, unit_id, month), recognized in group.items():
-            contract_value = contract_value_by_unit.get((project_id, unit_id), 0.0)
+        for project_id, unit_id, paid_year, paid_month, recognized in agg_rows:
+            month_key = f"{int(paid_year):04d}-{int(paid_month):02d}"
+            contract_value = contract_value_map.get((str(project_id), str(unit_id)), 0.0)
             fact = FactRevenue(
-                project_id=project_id,
-                unit_id=unit_id,
-                month=month,
-                recognized_revenue=round(recognized, 2),
+                project_id=str(project_id),
+                unit_id=str(unit_id),
+                month=month_key,
+                recognized_revenue=round(float(recognized), 2),
                 contract_value=round(contract_value, 2),
             )
             self.db.add(fact)
             inserted += 1
 
-        self.db.commit()
+        self.db.flush()
         return inserted
 
     def build_collections_fact(self) -> int:
-        """Rebuild fact_collections from paid installment payment data.
+        """Rebuild fact_collections from paid installment data.
 
-        Steps:
-          1. Delete all existing fact_collections rows.
-          2. Load all paid installments grouped by project and month.
-          3. Insert one FactCollections row per (project, month, payment_method).
+        Uses a single DB-side GROUP BY to aggregate collected payments per
+        (project_id, month, payment_method) without loading individual
+        installment objects into Python.
+
+        payment_date is set to the first day of the month — a deterministic,
+        month-aligned marker that is stable across repeated rebuilds.
 
         payment_method defaults to 'bank_transfer' as the source schema
         does not carry a structured payment-method field.
 
-        Returns the number of rows inserted.
+        Steps:
+          1. Delete all existing fact_collections rows.
+          2. Aggregate paid installments by (project_id, year, month) in SQL.
+          3. Insert one FactCollections row per (project, month, payment_method).
+
+        Returns the number of rows inserted.  Does not commit; the caller
+        (rebuild_financial_analytics) owns the transaction boundary.
         """
-        # Clear existing facts.
         self.db.query(FactCollections).delete()
         self.db.flush()
 
-        # Load all contracts with their project chain.
-        rows = (
-            self.db.query(SalesContract, Phase.project_id)
+        year_expr = func.extract("year", ContractPaymentSchedule.paid_at)
+        month_expr = func.extract("month", ContractPaymentSchedule.paid_at)
+
+        agg_rows = (
+            self.db.query(
+                Phase.project_id,
+                year_expr.label("paid_year"),
+                month_expr.label("paid_month"),
+                func.sum(ContractPaymentSchedule.amount).label("total_amount"),
+            )
+            .select_from(ContractPaymentSchedule)
+            .join(SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id)
             .join(Unit, SalesContract.unit_id == Unit.id)
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
-            .all()
-        )
-
-        if not rows:
-            self.db.commit()
-            return 0
-
-        contract_to_project: dict[str, str] = {
-            contract.id: str(project_id) for contract, project_id in rows
-        }
-
-        # Load all paid installments.
-        paid_installments = (
-            self.db.query(ContractPaymentSchedule)
             .filter(
-                ContractPaymentSchedule.contract_id.in_(list(contract_to_project.keys())),
                 ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
                 ContractPaymentSchedule.paid_at.isnot(None),
             )
+            .group_by(Phase.project_id, year_expr, month_expr)
             .all()
         )
 
-        # Group by (project_id, month, payment_method) → (total amount, payment_date).
-        group: dict[tuple[str, str, str], tuple[float, date]] = {}
-
-        for inst in paid_installments:
-            project_id = contract_to_project.get(inst.contract_id)
-            if project_id is None:
-                continue
-
-            paid_at_date = inst.paid_at.date() if hasattr(inst.paid_at, "date") else inst.paid_at
-            month_key = f"{paid_at_date.year:04d}-{paid_at_date.month:02d}"
-            payment_method = "bank_transfer"
-
-            key = (project_id, month_key, payment_method)
-            existing_amount, _ = group.get(key, (0.0, paid_at_date))
-            group[key] = (existing_amount + float(inst.amount), paid_at_date)
-
-        # Insert FactCollections rows.
         inserted = 0
-        for (project_id, month, payment_method), (amount, payment_date) in group.items():
+        for project_id, paid_year, paid_month, total_amount in agg_rows:
+            year_int = int(paid_year)
+            month_int = int(paid_month)
+            month_key = f"{year_int:04d}-{month_int:02d}"
+            # Use the first day of the month as a deterministic, month-aligned
+            # payment_date marker.  This value is stable across repeated rebuilds.
+            payment_date = date(year_int, month_int, 1)
             fact = FactCollections(
-                project_id=project_id,
+                project_id=str(project_id),
                 payment_date=payment_date,
-                month=month,
-                amount=round(amount, 2),
-                payment_method=payment_method,
+                month=month_key,
+                amount=round(float(total_amount), 2),
+                payment_method="bank_transfer",
             )
             self.db.add(fact)
             inserted += 1
 
-        self.db.commit()
+        self.db.flush()
         return inserted
 
     def build_receivable_snapshot(self) -> int:
-        """Rebuild fact_receivables_snapshot from the current aging state.
+        """Rebuild today's receivable aging snapshot per project.
+
+        Rebuilds only rows for today's snapshot_date; historical snapshots
+        from prior dates remain unchanged.
 
         Steps:
-          1. Delete all existing fact_receivables_snapshot rows for today.
+          1. Delete existing fact_receivables_snapshot rows for today.
           2. Load all outstanding installments per project.
           3. Classify each installment into aging buckets.
           4. Insert one FactReceivablesSnapshot row per project.
 
         The snapshot_date is set to today.
 
-        Returns the number of rows inserted.
+        Returns the number of rows inserted.  Does not commit; the caller
+        (rebuild_financial_analytics) owns the transaction boundary.
         """
         today = date.today()
 
-        # Clear existing facts for today's snapshot (allow historical snapshots
-        # on different dates to coexist).
+        # Clear only today's snapshot rows; historical rows remain.
         self.db.query(FactReceivablesSnapshot).filter(
             FactReceivablesSnapshot.snapshot_date == today
         ).delete()
         self.db.flush()
 
-        # Load all projects.
         projects = self.db.query(Project).all()
         if not projects:
-            self.db.commit()
             return 0
 
         # Load all outstanding installments with their project chain.
@@ -336,5 +349,5 @@ class AnalyticsService:
             self.db.add(snapshot)
             inserted += 1
 
-        self.db.commit()
+        self.db.flush()
         return inserted

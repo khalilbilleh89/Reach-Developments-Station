@@ -5,18 +5,22 @@ Validates:
   - Revenue fact generation (monthly grouping, project association)
   - Collections fact generation (payments aggregated by month)
   - Receivable snapshot generation (bucket totals correct)
-  - Analytics rebuild endpoint (returns success, facts created)
+  - Analytics rebuild endpoint (admin-only, returns success, facts created)
 
 Edge cases:
   - Empty portfolio (no contracts, no installments)
   - Projects with no paid installments
   - Multiple projects / units in the same month
+  - Non-admin caller rejected with 403
+  - Deterministic payment_date in collections facts
 """
 
 import pytest
 from datetime import date, datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.finance.analytics_service import AnalyticsService
 from app.modules.finance.models import (
     FactCollections,
@@ -131,6 +135,33 @@ def _make_installment(
     db_session.commit()
     db_session.refresh(line)
     return line.id
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def admin_client(db_session):
+    """TestClient that injects the test DB session and an admin auth payload."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    def override_admin_payload():
+        return {"sub": "test-admin-user", "roles": ["admin"]}
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_payload] = override_admin_payload
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +398,35 @@ class TestBuildCollectionsFact:
 
         assert db_session.query(FactCollections).count() == 1
 
+    def test_payment_date_is_deterministic_first_of_month(self, db_session: Session):
+        """payment_date is always the first day of the month, regardless of
+        when within the month the installments were paid."""
+        pid = _make_project(db_session, "AF-COL-06")
+        uid = _make_unit(db_session, pid, "AF-C06-U01")
+        cid = _make_contract(db_session, uid, 120_000.0, "AF-COL-C006", "col06@test.com")
+
+        # Two installments paid on different dates within the same month.
+        _make_installment(
+            db_session, cid, 40_000.0, 1, date(2026, 7, 5), "paid",
+            datetime(2026, 7, 5, tzinfo=timezone.utc),
+        )
+        _make_installment(
+            db_session, cid, 40_000.0, 2, date(2026, 7, 20), "paid",
+            datetime(2026, 7, 20, tzinfo=timezone.utc),
+        )
+
+        svc = AnalyticsService(db_session)
+        svc.build_collections_fact()
+
+        fact = db_session.query(FactCollections).first()
+        assert fact is not None
+        # payment_date must always be the first day of the calendar month.
+        assert fact.payment_date == date(2026, 7, 1)
+        # Rebuild produces the same deterministic date.
+        svc.build_collections_fact()
+        fact2 = db_session.query(FactCollections).first()
+        assert fact2.payment_date == date(2026, 7, 1)
+
 
 # ---------------------------------------------------------------------------
 # Test 3 — Receivable snapshot generation
@@ -532,27 +592,55 @@ class TestBuildReceivableSnapshot:
 class TestAnalyticsRebuildEndpoint:
     """Tests for POST /finance/analytics/rebuild."""
 
-    def test_rebuild_endpoint_returns_200(self, client):
+    def test_rebuild_endpoint_rejects_request_without_token(self, client):
+        """Callers with no Authorization header must be rejected with 401 or 403.
+
+        The `client` fixture injects only the DB override and sends no Bearer
+        token, so this test exercises the unauthenticated path.
+        """
         response = client.post("/api/v1/finance/analytics/rebuild")
+        assert response.status_code in (401, 403)
+
+    def test_rebuild_endpoint_rejects_non_admin(self, db_session):
+        """Callers with a non-admin role must receive 403."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        def override_get_db():
+            yield db_session
+
+        def override_sales_payload():
+            return {"sub": "test-sales-user", "roles": ["sales_agent"]}
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user_payload] = override_sales_payload
+        with TestClient(app) as c:
+            response = c.post("/api/v1/finance/analytics/rebuild")
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 403
+
+    def test_rebuild_endpoint_returns_200(self, admin_client):
+        response = admin_client.post("/api/v1/finance/analytics/rebuild")
         assert response.status_code == 200
 
-    def test_rebuild_endpoint_returns_analytics_rebuild_response(self, client):
-        response = client.post("/api/v1/finance/analytics/rebuild")
+    def test_rebuild_endpoint_returns_analytics_rebuild_response(self, admin_client):
+        response = admin_client.post("/api/v1/finance/analytics/rebuild")
         data = response.json()
 
         assert "revenue_facts_created" in data
         assert "collections_facts_created" in data
         assert "receivable_snapshots_created" in data
 
-    def test_rebuild_endpoint_empty_portfolio_returns_zeros(self, client):
-        response = client.post("/api/v1/finance/analytics/rebuild")
+    def test_rebuild_endpoint_empty_portfolio_returns_zeros(self, admin_client):
+        response = admin_client.post("/api/v1/finance/analytics/rebuild")
         data = response.json()
 
         assert data["revenue_facts_created"] == 0
         assert data["collections_facts_created"] == 0
         assert data["receivable_snapshots_created"] == 0
 
-    def test_rebuild_endpoint_with_data_creates_facts(self, client, db_session: Session):
+    def test_rebuild_endpoint_with_data_creates_facts(self, admin_client, db_session: Session):
         """End-to-end: rebuild endpoint creates correct fact rows."""
         today = date.today()
         pid = _make_project(db_session, "AF-API-01")
@@ -562,7 +650,7 @@ class TestAnalyticsRebuildEndpoint:
         _make_installment(db_session, cid, 60_000.0, 1, date(2026, 3, 1), "paid", paid_at)
         _make_installment(db_session, cid, 60_000.0, 2, today + timedelta(days=30), "pending")
 
-        response = client.post("/api/v1/finance/analytics/rebuild")
+        response = admin_client.post("/api/v1/finance/analytics/rebuild")
         assert response.status_code == 200
 
         data = response.json()
