@@ -20,8 +20,11 @@ import type {
   CollectionsAlertList,
   ContractAging,
   MatchedInstallmentAllocation,
+  MonthlyForecastEntry,
   PortfolioAging,
+  PortfolioCashflowForecast,
   ProjectAging,
+  ProjectCashflowForecast,
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
@@ -353,4 +356,80 @@ export async function matchPaymentReceipt(
     ),
     unallocatedAmount: raw.unallocated_amount,
   };
+}
+
+// ---------- Raw backend cashflow forecast shapes (internal) ----------
+
+interface BackendMonthlyForecastEntry {
+  month: string;
+  expected_collections: number;
+  installment_count: number;
+}
+
+interface BackendProjectCashflowForecast {
+  project_id: string;
+  total_expected: number;
+  monthly_entries: BackendMonthlyForecastEntry[];
+}
+
+interface BackendPortfolioCashflowForecast {
+  total_expected: number;
+  project_count: number;
+  monthly_entries: BackendMonthlyForecastEntry[];
+  project_forecasts: BackendProjectCashflowForecast[];
+}
+
+// ---------- Mapping helpers (internal) --------------------------------
+
+function mapMonthlyForecastEntry(
+  raw: BackendMonthlyForecastEntry,
+): MonthlyForecastEntry {
+  return {
+    month: raw.month,
+    expectedCollections: raw.expected_collections,
+    installmentCount: raw.installment_count,
+  };
+}
+
+function mapProjectCashflowForecast(
+  raw: BackendProjectCashflowForecast,
+): ProjectCashflowForecast {
+  return {
+    projectId: raw.project_id,
+    totalExpected: raw.total_expected,
+    monthlyEntries: raw.monthly_entries.map(mapMonthlyForecastEntry),
+  };
+}
+
+// ---------- Exported cashflow forecast query functions ---------------
+
+/**
+ * Fetch the portfolio-wide cashflow forecast.
+ *
+ * Backend endpoint: GET /finance/cashflow/forecast
+ */
+export async function getPortfolioCashflowForecast(): Promise<PortfolioCashflowForecast> {
+  const raw = await apiFetch<BackendPortfolioCashflowForecast>(
+    "/finance/cashflow/forecast",
+  );
+  return {
+    totalExpected: raw.total_expected,
+    projectCount: raw.project_count,
+    monthlyEntries: raw.monthly_entries.map(mapMonthlyForecastEntry),
+    projectForecasts: raw.project_forecasts.map(mapProjectCashflowForecast),
+  };
+}
+
+/**
+ * Fetch the cashflow forecast for a single project.
+ *
+ * Backend endpoint: GET /finance/cashflow/forecast/project/{projectId}
+ */
+export async function getProjectCashflowForecast(
+  projectId: string,
+): Promise<ProjectCashflowForecast> {
+  const raw = await apiFetch<BackendProjectCashflowForecast>(
+    `/finance/cashflow/forecast/project/${encodeURIComponent(projectId)}`,
+  );
+  return mapProjectCashflowForecast(raw);
 }
