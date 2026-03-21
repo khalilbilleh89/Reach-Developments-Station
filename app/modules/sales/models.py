@@ -8,7 +8,7 @@ ContractPaymentSchedule.
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -125,6 +125,13 @@ class ContractPaymentSchedule(Base, TimestampMixin):
     """
 
     __tablename__ = "contract_payment_schedule"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_id",
+            "installment_number",
+            name="uq_cps_contract_installment",
+        ),
+    )
 
     contract_id: Mapped[str] = mapped_column(
         String(36),

@@ -5,6 +5,7 @@ Revises: 0037
 Create Date: 2026-03-21
 
 PR-16 — Contract Payment Schedule Engine
+PR-16A — Contract Payment Schedule Integrity Hardening
 
 Creates the ``contract_payment_schedule`` table — structured installment
 obligations generated when a sales contract is activated.
@@ -23,10 +24,14 @@ Columns:
   created_at           — UTC creation timestamp.
   updated_at           — UTC last-update timestamp.
 
-Indexes:
-  ix_cps_contract_id   — fast lookups by contract.
-  ix_cps_due_date      — supports overdue-sweep queries.
-  ix_cps_status        — supports status-filtered queries.
+Indexes (auto-named by SQLAlchemy/Alembic):
+  index on contract_id    — fast lookups by contract.
+  index on due_date       — supports overdue-sweep queries.
+  index on status         — supports status-filtered queries.
+
+Constraints:
+  uq_cps_contract_installment — unique (contract_id, installment_number)
+    prevents duplicate schedule generation at the database level.
 """
 
 from typing import Sequence, Union
@@ -81,6 +86,11 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             nullable=False,
             server_default=sa.func.now(),
+        ),
+        sa.UniqueConstraint(
+            "contract_id",
+            "installment_number",
+            name="uq_cps_contract_installment",
         ),
     )
 

@@ -147,29 +147,34 @@ def test_schedule_installment_numbers_are_sequential(db_session: Session):
 
 
 def test_schedule_total_matches_contract_price(db_session: Session):
-    """Sum of all installment amounts must equal the contract price."""
+    """Sum of all installment amounts must equal the contract price exactly."""
     contract_id = _create_active_contract(db_session, "PRJ-TOT", "tot@cps.com")
     svc = ContractPaymentService(db_session)
     items = svc.list_schedule(contract_id).items
 
-    total = sum(i.amount for i in items)
-    assert abs(total - _CONTRACT_PRICE) < 0.02  # allow minor rounding
+    total = round(sum(i.amount for i in items), 2)
+    assert total == round(_CONTRACT_PRICE, 2)
 
 
 def test_schedule_percentages(db_session: Session):
-    """Default milestones are 10%, 20%, 40%, 30% of the contract price."""
+    """Default milestones are 10%, 20%, 40%, 30% of the contract price.
+    The final installment is the remainder so the total is exact.
+    """
     contract_id = _create_active_contract(db_session, "PRJ-PCT", "pct@cps.com")
     svc = ContractPaymentService(db_session)
     items = svc.list_schedule(contract_id).items
 
-    expected = [
-        round(_CONTRACT_PRICE * 0.10, 2),
-        round(_CONTRACT_PRICE * 0.20, 2),
-        round(_CONTRACT_PRICE * 0.40, 2),
-        round(_CONTRACT_PRICE * 0.30, 2),
+    price = round(_CONTRACT_PRICE, 2)
+    expected_first_three = [
+        round(price * 0.10, 2),
+        round(price * 0.20, 2),
+        round(price * 0.40, 2),
     ]
-    for item, exp in zip(items, expected):
-        assert abs(item.amount - exp) < 0.02
+    for item, exp in zip(items[:3], expected_first_three):
+        assert item.amount == exp
+    # Final installment is the remainder
+    expected_last = round(price - sum(expected_first_three), 2)
+    assert items[3].amount == expected_last
 
 
 def test_schedule_due_dates_are_ordered(db_session: Session):
@@ -248,8 +253,8 @@ def test_generate_payment_schedule_creates_schedule(db_session: Session):
     svc = ContractPaymentService(db_session)
     result = svc.generate_payment_schedule(contract.id)
     assert result.total == 4
-    total = sum(i.amount for i in result.items)
-    assert abs(total - 200_000.0) < 0.02
+    total = round(sum(i.amount for i in result.items), 2)
+    assert total == round(200_000.0, 2)
 
 
 def test_generate_payment_schedule_conflicts_when_exists(db_session: Session):
@@ -465,20 +470,21 @@ def test_mark_overdue_noop_for_future_dates(db_session: Session):
 
 
 def test_activating_contract_twice_does_not_duplicate_schedule(db_session: Session):
-    """Double-activating a contract (shouldn't be possible via API, but test the
-    guard in _generate_default_payment_schedule) must not duplicate installments."""
+    """The DB-level unique constraint must prevent duplicate installment rows.
+
+    The state machine prevents double-activation via the API, but this test
+    verifies that explicitly calling generate_payment_schedule when a schedule
+    already exists returns 409 and does not create extra rows.
+    """
     contract_id = _create_active_contract(db_session, "PRJ-DBL", "dbl@cps.com")
     svc = ContractPaymentService(db_session)
 
-    # Attempt direct double-generation (simulates race-condition guard)
-    from app.modules.sales.service import SalesService as SS
-    from app.modules.sales.repository import SalesContractRepository
+    # Attempt to generate a second time via the service — must get 409
+    with pytest.raises(HTTPException) as exc_info:
+        svc.generate_payment_schedule(contract_id)
+    assert exc_info.value.status_code == 409
 
-    repo = SalesContractRepository(db_session)
-    contract = repo.get_by_id(contract_id)
-    ss = SS(db_session)
-    ss._generate_default_payment_schedule(contract)  # type: ignore[attr-defined]
-
+    # The schedule must still have exactly 4 rows
     result = svc.list_schedule(contract_id)
     assert result.total == 4
 
@@ -681,10 +687,113 @@ def test_api_generate_payment_schedule(client):
     assert resp.status_code == 201
     data = resp.json()
     assert data["total"] == 4
-    total = sum(i["amount"] for i in data["items"])
-    assert abs(total - 250_000.0) < 0.02
+    total = round(sum(i["amount"] for i in data["items"]), 2)
+    assert total == round(250_000.0, 2)
 
 
 def test_api_payment_schedule_not_found(client):
     resp = client.get("/api/v1/sales/contracts/no-such-id/payment-schedule")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PR-16A hardening: exact rounding, paid_at normalization, DB constraint
+# ---------------------------------------------------------------------------
+
+
+def test_schedule_total_exact_for_irregular_price(db_session: Session):
+    """Schedule total must equal contract_price exactly for non-round prices."""
+    unit_id = _make_unit(db_session, "PRJ-IRR")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "irr@cps.com")
+    sales_svc = SalesService(db_session)
+    irregular_price = 333_333.33
+    contract = sales_svc.create_contract(
+        SalesContractCreate(
+            unit_id=unit_id,
+            buyer_id=buyer_id,
+            contract_number="CNT-IRR",
+            contract_date=_CONTRACT_DATE,
+            contract_price=irregular_price,
+        )
+    )
+    svc = ContractPaymentService(db_session)
+    result = svc.generate_payment_schedule(contract.id)
+    total = round(sum(i.amount for i in result.items), 2)
+    assert total == round(irregular_price, 2)
+
+
+def test_final_installment_is_remainder(db_session: Session):
+    """The last installment must be the remainder so the sum is exact."""
+    unit_id = _make_unit(db_session, "PRJ-REM")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "rem@cps.com")
+    sales_svc = SalesService(db_session)
+    price = 300_001.01  # irregular price that can expose rounding drift
+    contract = sales_svc.create_contract(
+        SalesContractCreate(
+            unit_id=unit_id,
+            buyer_id=buyer_id,
+            contract_number="CNT-REM",
+            contract_date=_CONTRACT_DATE,
+            contract_price=price,
+        )
+    )
+    svc = ContractPaymentService(db_session)
+    result = svc.generate_payment_schedule(contract.id)
+    items = result.items
+
+    first_three_sum = round(sum(i.amount for i in items[:3]), 2)
+    expected_last = round(price - first_three_sum, 2)
+    assert items[3].amount == expected_last
+    assert round(sum(i.amount for i in items), 2) == round(price, 2)
+
+
+def test_paid_at_naive_datetime_normalized_to_utc(db_session: Session):
+    """A naive paid_at must be coerced to UTC (not rejected)."""
+    naive_ts = datetime(2026, 3, 14, 10, 0, 0)  # no tzinfo
+    req = ContractPaymentRecordRequest(installment_number=1, paid_at=naive_ts)
+    assert req.paid_at is not None
+    assert req.paid_at.tzinfo is not None
+    assert req.paid_at.utcoffset().total_seconds() == 0
+
+
+def test_paid_at_aware_datetime_normalized_to_utc(db_session: Session):
+    """An aware paid_at in a non-UTC timezone must be converted to UTC."""
+    # Create a timezone +5:30 (India)
+    ist = timezone(timedelta(hours=5, minutes=30))
+    ist_ts = datetime(2026, 3, 14, 15, 30, 0, tzinfo=ist)
+    req = ContractPaymentRecordRequest(installment_number=1, paid_at=ist_ts)
+    assert req.paid_at is not None
+    assert req.paid_at.utcoffset().total_seconds() == 0
+    # 15:30 IST = 10:00 UTC
+    assert req.paid_at.hour == 10
+    assert req.paid_at.minute == 0
+
+
+def test_paid_at_none_passes_through(db_session: Session):
+    """None paid_at must remain None."""
+    req = ContractPaymentRecordRequest(installment_number=1, paid_at=None)
+    assert req.paid_at is None
+
+
+def test_db_unique_constraint_prevents_duplicate_installments(db_session: Session):
+    """The DB-level unique constraint must reject duplicate (contract_id, installment_number)."""
+    from sqlalchemy.exc import IntegrityError
+    from app.modules.sales.models import ContractPaymentSchedule
+
+    contract_id = _create_active_contract(db_session, "PRJ-UNQ", "unq@cps.com")
+
+    # Attempt to insert a duplicate installment row directly — must fail
+    duplicate = ContractPaymentSchedule(
+        contract_id=contract_id,
+        installment_number=1,  # already exists
+        due_date=_CONTRACT_DATE,
+        amount=1.00,
+        currency="AED",
+        status="pending",
+    )
+    db_session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+    db_session.rollback()
