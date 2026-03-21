@@ -75,12 +75,19 @@ def test_create_pricing_available_unit_succeeds(client: TestClient):
 
 
 def test_create_pricing_always_starts_as_draft(client: TestClient):
-    """POST pricing always creates the record as 'draft' regardless of input status."""
+    """POST pricing rejects restricted statuses; non-terminal statuses (submitted, reviewed) are accepted."""
     _, unit_id = _create_hierarchy(client, "PRJ-DRAFTONLY")
+    # Attempting to pass 'approved' status on create is rejected by the schema
+    # (only draft/submitted/reviewed are accepted by the create endpoint).
     payload = {**_VALID_PRICING_PAYLOAD, "pricing_status": "approved"}
     resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=payload)
-    assert resp.status_code == 201
-    assert resp.json()["pricing_status"] == "draft"
+    assert resp.status_code == 422
+
+    # Passing a valid non-terminal status is accepted.
+    payload_submitted = {**_VALID_PRICING_PAYLOAD, "pricing_status": "submitted"}
+    resp2 = client.post(f"/api/v1/units/{unit_id}/pricing", json=payload_submitted)
+    assert resp2.status_code == 201
+    assert resp2.json()["pricing_status"] == "submitted"
 
 
 def test_create_pricing_invalid_unit_returns_404(client: TestClient):
@@ -300,3 +307,77 @@ def test_pricing_response_has_new_fields(client: TestClient):
     assert "approval_date" in record
     assert record["approved_by"] is None
     assert record["approval_date"] is None
+
+
+# ---------------------------------------------------------------------------
+# Approval bypass regression tests (PR-12A)
+# ---------------------------------------------------------------------------
+
+def test_legacy_put_cannot_set_approved_status(client: TestClient):
+    """PUT /units/{id}/pricing must reject 'approved' as pricing_status (bypass prevention)."""
+    _, unit_id = _create_hierarchy(client, "PRJ-BYPASS1")
+    payload = {**_VALID_PRICING_PAYLOAD, "pricing_status": "approved"}
+    resp = client.put(f"/api/v1/units/{unit_id}/pricing", json=payload)
+    assert resp.status_code == 422
+
+
+def test_legacy_put_cannot_set_archived_status(client: TestClient):
+    """PUT /units/{id}/pricing must reject 'archived' as pricing_status."""
+    _, unit_id = _create_hierarchy(client, "PRJ-BYPASS2")
+    payload = {**_VALID_PRICING_PAYLOAD, "pricing_status": "archived"}
+    resp = client.put(f"/api/v1/units/{unit_id}/pricing", json=payload)
+    assert resp.status_code == 422
+
+
+def test_put_pricing_by_id_cannot_set_status(client: TestClient):
+    """PUT /pricing/{id} must not accept pricing_status changes (status field ignored)."""
+    _, unit_id = _create_hierarchy(client, "PRJ-BYPASS3")
+    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
+    pricing_id = record["id"]
+
+    # The schema no longer accepts pricing_status — Pydantic validation rejects it.
+    # Even if somehow passed, the service does not apply it.
+    # We verify the record remains draft after an update.
+    update_resp = client.put(f"/api/v1/pricing/{pricing_id}", json={"base_price": 550_000.0})
+    assert update_resp.status_code == 200
+    assert update_resp.json()["pricing_status"] == "draft"
+    assert update_resp.json()["base_price"] == pytest.approx(550_000.0)
+
+
+def test_approval_metadata_absent_without_approval_endpoint(client: TestClient):
+    """approved_by and approval_date must remain null on records not yet approved."""
+    _, unit_id = _create_hierarchy(client, "PRJ-METAMETA")
+    record = client.put(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
+    assert record["approved_by"] is None
+    assert record["approval_date"] is None
+
+    # Update via PUT also must not set approval metadata.
+    record2 = client.put(
+        f"/api/v1/units/{unit_id}/pricing",
+        json={**_VALID_PRICING_PAYLOAD, "base_price": 510_000.0},
+    ).json()
+    assert record2["approved_by"] is None
+    assert record2["approval_date"] is None
+
+
+def test_legacy_put_unit_readiness_on_new_record(client: TestClient):
+    """PUT /units/{id}/pricing must enforce unit readiness when creating a new record."""
+    _, unit_id = _create_hierarchy(client, "PRJ-LEGREADY")
+    # Block readiness by setting unit to a non-available status.
+    client.patch(f"/api/v1/units/{unit_id}", json={"status": "reserved"})
+    resp = client.put(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 422
+    assert "not ready for pricing" in resp.json()["detail"].lower()
+
+
+def test_legacy_put_updates_existing_approved_is_blocked(client: TestClient):
+    """PUT /units/{id}/pricing on an approved record must be rejected (immutability)."""
+    _, unit_id = _create_hierarchy(client, "PRJ-LEGAPPR")
+    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
+    client.post(f"/api/v1/pricing/{record['id']}/approve", json={"approved_by": "mgr"})
+
+    resp = client.put(
+        f"/api/v1/units/{unit_id}/pricing",
+        json={**_VALID_PRICING_PAYLOAD, "base_price": 999_000.0},
+    )
+    assert resp.status_code == 422

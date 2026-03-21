@@ -144,11 +144,15 @@ def test_negative_final_price_rejected(client: TestClient):
 
 
 def test_approved_status_persisted(client: TestClient):
-    """Pricing status 'approved' must be stored and retrieved correctly."""
+    """Pricing status 'approved' must be stored and retrieved correctly via the approval endpoint."""
     _, unit_id = _create_hierarchy(client, "PRJ-APPRD")
-    payload = {**_VALID_PRICING_PAYLOAD, "pricing_status": "approved"}
-    resp = client.put(f"/api/v1/units/{unit_id}/pricing", json=payload)
-    assert resp.status_code == 200
+    # Create a draft record first, then approve via the dedicated endpoint.
+    record = client.put(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
+    approve_resp = client.post(
+        f"/api/v1/pricing/{record['id']}/approve",
+        json={"approved_by": "manager@example.com"},
+    )
+    assert approve_resp.status_code == 200
     get_resp = client.get(f"/api/v1/units/{unit_id}/pricing")
     assert get_resp.json()["pricing_status"] == "approved"
 

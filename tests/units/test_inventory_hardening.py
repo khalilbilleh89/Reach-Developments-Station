@@ -241,12 +241,18 @@ def test_unit_readiness_available_with_approved_pricing_ready_for_sales(client: 
     _, _, floor_id = _create_hierarchy(client, "PRJ-IH-R3")
     unit_id = _create_unit(client, floor_id)
 
-    # Create and approve a formal pricing record
+    # Create a pricing record then approve it via the governed endpoint.
     pricing_resp = client.put(
         f"/api/v1/units/{unit_id}/pricing",
-        json={"base_price": 500000.0, "pricing_status": "approved"},
+        json={"base_price": 500000.0},
     )
     assert pricing_resp.status_code == 200, pricing_resp.text
+    pricing_id = pricing_resp.json()["id"]
+    approve_resp = client.post(
+        f"/api/v1/pricing/{pricing_id}/approve",
+        json={"approved_by": "manager@example.com"},
+    )
+    assert approve_resp.status_code == 200, approve_resp.text
 
     response = client.get(f"/api/v1/units/{unit_id}/readiness")
     assert response.status_code == 200

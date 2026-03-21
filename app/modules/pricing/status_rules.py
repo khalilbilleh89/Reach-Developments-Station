@@ -17,6 +17,13 @@ draft      → submitted  (analyst submits for review)
 submitted  → approved   (approver signs off)
 approved   → archived   (superseded when new pricing is created)
 
+Supersede/archive path
+-----------------------
+When a new pricing record is created for a unit, any existing active record
+(regardless of its current status — draft, submitted, reviewed, or approved)
+is archived automatically.  This models the real-estate workflow where a
+pricing revision always supersedes the previous version.
+
 No backward transitions are permitted.
 
 The ``reviewed`` status is treated as equivalent to ``submitted`` for
@@ -28,12 +35,14 @@ from fastapi import HTTPException, status
 # Ordered sequence of canonical lifecycle states.
 PRICING_STATUSES = ("draft", "submitted", "reviewed", "approved", "archived")
 
-# Map of allowed forward transitions.
+# Map of allowed forward transitions via dedicated lifecycle endpoints.
 # ``reviewed`` is included alongside ``submitted`` for backward compatibility.
+# Any non-archived status may also transition to ``archived`` via the supersede
+# path (create_pricing archives the previous active record unconditionally).
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
-    "draft":     frozenset({"submitted", "reviewed"}),
-    "submitted": frozenset({"approved"}),
-    "reviewed":  frozenset({"approved"}),
+    "draft":     frozenset({"submitted", "reviewed", "archived"}),
+    "submitted": frozenset({"approved", "archived"}),
+    "reviewed":  frozenset({"approved", "archived"}),
     "approved":  frozenset({"archived"}),
     "archived":  frozenset(),
 }
@@ -46,6 +55,11 @@ ARCHIVED_STATUS = "archived"
 
 # Status required for a unit to be eligible for sales.
 SALES_ELIGIBLE_STATUS = "approved"
+
+# Statuses that clients are NOT allowed to set through general update paths.
+# Approval must go through the dedicated approval endpoint.
+# Archival is handled automatically by the supersede (create) workflow.
+RESTRICTED_STATUSES: frozenset[str] = frozenset({"approved", "archived"})
 
 
 def can_transition(from_status: str, to_status: str) -> bool:
@@ -74,3 +88,14 @@ def assert_valid_transition(from_status: str, to_status: str) -> None:
 def is_immutable(pricing_status: str) -> bool:
     """Return True when the pricing record with *pricing_status* cannot be edited."""
     return pricing_status in IMMUTABLE_STATUSES
+
+
+def is_restricted_status(pricing_status: str) -> bool:
+    """Return True when *pricing_status* cannot be set via general update paths.
+
+    Restricted statuses require dedicated lifecycle endpoints:
+    - ``approved``: requires POST /pricing/{id}/approve (stamps metadata)
+    - ``archived``: set automatically by the supersede (create) workflow
+    """
+    return pricing_status in RESTRICTED_STATUSES
+

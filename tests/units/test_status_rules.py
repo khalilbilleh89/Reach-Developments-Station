@@ -318,9 +318,14 @@ def test_adapter_single_db_query_for_both_fields(client: TestClient, db_session)
     from app.modules.units.pricing_adapter import UnitPricingAdapter
 
     unit_id = _build_unit_via_api(client, "PRJ-ADP5")
-    client.put(
+    pricing_resp = client.put(
         f"/api/v1/units/{unit_id}/pricing",
-        json={"base_price": 1000000.0, "pricing_status": "approved"},
+        json={"base_price": 1000000.0},
+    )
+    pricing_id = pricing_resp.json()["id"]
+    client.post(
+        f"/api/v1/pricing/{pricing_id}/approve",
+        json={"approved_by": "test.manager"},
     )
 
     adapter = UnitPricingAdapter(db_session)

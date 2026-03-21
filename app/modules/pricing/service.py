@@ -24,7 +24,7 @@ from app.modules.pricing.schemas import (
     UnitPricingDetailResponse,
     UnitPriceResponse,
 )
-from app.modules.pricing.status_rules import is_immutable
+from app.modules.pricing.status_rules import is_immutable, is_restricted_status
 from app.modules.units.repository import UnitRepository
 
 
@@ -399,7 +399,9 @@ class UnitPricingService:
 
         Enforces that the unit is ready for pricing (status 'available').
         Archives any existing active pricing record before creating a new one.
-        The new record always starts as 'draft'.
+        Restricted statuses (approved, archived) are rejected — the record starts
+        as 'draft' by default, but may be created as 'submitted' or 'reviewed'
+        if those values are explicitly supplied.
         """
         from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
 
@@ -411,6 +413,9 @@ class UnitPricingService:
         manual_adjustment = payload.get("manual_adjustment", 0.0)
         currency = payload.get("currency", "AED")
         notes = payload.get("notes", None)
+        # Schema accepts draft/submitted/reviewed; blocks approved/archived.
+        # Default to draft here as an additional safety net.
+        pricing_status = payload.get("pricing_status", "draft")
 
         final_price = base_price + manual_adjustment
         if final_price < 0:
@@ -431,7 +436,7 @@ class UnitPricingService:
             manual_adjustment=manual_adjustment,
             final_price=final_price,
             currency=currency,
-            pricing_status="draft",
+            pricing_status=pricing_status,
             notes=notes,
         )
         return UnitPricingResponse.model_validate(record)
@@ -475,6 +480,9 @@ class UnitPricingService:
         Calculates final_price = base_price + manual_adjustment.
         Rejects the operation if the resulting final_price would be negative.
         Rejects the operation if the existing active record is approved (immutable).
+        Enforces unit readiness when creating a new pricing record.
+        Client-supplied ``pricing_status`` values of 'approved' or 'archived' are
+        stripped — approval requires the dedicated endpoint, archival is automatic.
         """
         from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
 
@@ -488,13 +496,17 @@ class UnitPricingService:
         # Resolve field values — merge with existing record if present
         existing = self._pricing_repo.get_by_unit_id(unit_id)
 
+        # Readiness gate: unit must be ready for pricing when creating a new record.
+        if existing is None:
+            self.assert_unit_ready_for_pricing(unit_id)
+
         # Immutability gate: approved records cannot be edited.
         if existing and is_immutable(existing.pricing_status):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Pricing record is '{existing.pricing_status}' and cannot be edited. "
-                    "Approve a new pricing record to supersede it."
+                    "Create a new pricing record to supersede it."
                 ),
             )
 
@@ -506,8 +518,21 @@ class UnitPricingService:
             float(existing.manual_adjustment) if existing else 0.0,
         )
         currency = payload.get("currency", existing.currency if existing else "AED")
-        pricing_status = payload.get(
-            "pricing_status", existing.pricing_status if existing else "draft"
+
+        # Strip restricted status values — approval must go through the
+        # dedicated approval endpoint, archival is handled by supersede.
+        requested_status = payload.get("pricing_status")
+        if requested_status and is_restricted_status(requested_status):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Cannot set pricing_status to '{requested_status}' via this endpoint. "
+                    "Use POST /pricing/{id}/approve to approve, or POST /units/{id}/pricing "
+                    "to supersede (which archives the current record automatically)."
+                ),
+            )
+        pricing_status = requested_status if requested_status else (
+            existing.pricing_status if existing else "draft"
         )
         notes = payload.get("notes", existing.notes if existing else None)
 
@@ -544,6 +569,10 @@ class UnitPricingService:
 
         Rejected when the record is in an immutable state (approved or archived).
         Recomputes final_price = base_price + manual_adjustment.
+
+        ``pricing_status`` cannot be changed here — status progression occurs
+        only through dedicated lifecycle endpoints (POST /pricing/{id}/approve
+        for approval, POST /units/{id}/pricing to supersede).
         """
         from app.modules.pricing.schemas import UnitPricingResponse
 
@@ -582,7 +611,8 @@ class UnitPricingService:
             "manual_adjustment": manual_adjustment,
             "final_price": final_price,
         }
-        for field in ("currency", "pricing_status", "notes"):
+        # Only price/currency/notes are writable; pricing_status is excluded.
+        for field in ("currency", "notes"):
             if field in payload:
                 update_kwargs[field] = payload[field]
 

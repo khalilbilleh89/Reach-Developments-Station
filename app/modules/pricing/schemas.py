@@ -105,7 +105,13 @@ class PricingReadinessResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class UnitPricingCreate(BaseModel):
-    """Payload for creating or updating a formal per-unit pricing record."""
+    """Payload for creating or updating a formal per-unit pricing record.
+
+    ``pricing_status`` is intentionally limited to non-terminal values here.
+    Approval must go through POST /pricing/{id}/approve (which stamps
+    ``approved_by`` and ``approval_date``).  Archival is handled automatically
+    by the supersede workflow.
+    """
 
     base_price: float = Field(..., ge=0, description="Base price of the unit. Must be non-negative.")
     manual_adjustment: float = Field(
@@ -115,22 +121,26 @@ class UnitPricingCreate(BaseModel):
     currency: str = Field(default="AED", min_length=1, max_length=10)
     pricing_status: str = Field(
         default="draft",
-        pattern=_PRICING_STATUS_PATTERN,
-        description="Pricing lifecycle status: draft | submitted | reviewed | approved | archived.",
+        pattern=r"^(draft|submitted|reviewed)$",
+        description="Pricing lifecycle status for create/update: draft | submitted | reviewed.",
     )
     notes: Optional[str] = Field(default=None, description="Optional free-text notes.")
 
 
 class UnitPricingUpdate(BaseModel):
-    """Payload for partially updating a formal per-unit pricing record."""
+    """Payload for partially updating a formal per-unit pricing record.
+
+    ``pricing_status`` is intentionally excluded.  Status progression must
+    occur through dedicated lifecycle endpoints only:
+    - POST /pricing/{id}/approve  — transitions to ``approved``
+    - POST /units/{id}/pricing    — archives existing and creates new ``draft``
+
+    Only price/currency/notes fields are writable here.
+    """
 
     base_price: Optional[float] = Field(default=None, ge=0)
     manual_adjustment: Optional[float] = Field(default=None)
     currency: Optional[str] = Field(default=None, min_length=1, max_length=10)
-    pricing_status: Optional[str] = Field(
-        default=None,
-        pattern=_PRICING_STATUS_PATTERN,
-    )
     notes: Optional[str] = Field(default=None)
 
 
