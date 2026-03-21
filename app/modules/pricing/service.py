@@ -650,11 +650,15 @@ class UnitPricingService:
         """Update a specific pricing record by its ID.
 
         Rejected when the record is in an immutable state (approved or archived).
-        Recomputes final_price = base_price + manual_adjustment.
+        Recomputes final_price = base_price + existing manual_adjustment.
 
         ``pricing_status`` cannot be changed here — status progression occurs
         only through dedicated lifecycle endpoints (POST /pricing/{id}/approve
         for approval, POST /units/{id}/pricing to supersede).
+
+        ``manual_adjustment`` cannot be changed here — pricing overrides must
+        use POST /pricing/{id}/override, which enforces role-based authority
+        thresholds and records a full audit trail.
         """
         from app.modules.pricing.schemas import UnitPricingResponse
 
@@ -676,7 +680,9 @@ class UnitPricingService:
         payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
 
         base_price = payload.get("base_price", float(record.base_price))
-        manual_adjustment = payload.get("manual_adjustment", float(record.manual_adjustment))
+        # manual_adjustment is governed — always preserve the existing value here.
+        # Use POST /pricing/{id}/override to change the adjustment.
+        manual_adjustment = float(record.manual_adjustment)
         final_price = base_price + manual_adjustment
 
         if final_price < 0:
@@ -684,16 +690,16 @@ class UnitPricingService:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Resulting final_price ({final_price}) would be negative. "
-                    "Adjust base_price or manual_adjustment."
+                    "Adjust base_price or use POST /pricing/{id}/override."
                 ),
             )
 
         update_kwargs: dict = {
             "base_price": base_price,
-            "manual_adjustment": manual_adjustment,
             "final_price": final_price,
         }
-        # Only price/currency/notes are writable; pricing_status is excluded.
+        # Only base_price/currency/notes are writable; pricing_status and
+        # manual_adjustment are excluded.
         for field in ("currency", "notes"):
             if field in payload:
                 update_kwargs[field] = payload[field]
@@ -702,7 +708,7 @@ class UnitPricingService:
         return UnitPricingResponse.model_validate(record)
 
     def apply_pricing_override(
-        self, pricing_id: str, data: "PricingOverrideRequest"
+        self, pricing_id: str, data: PricingOverrideRequest
     ) -> "UnitPricingResponse":
         """Apply a governed price override to a pricing record.
 

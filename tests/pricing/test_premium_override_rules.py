@@ -538,21 +538,18 @@ class TestApplyPricingOverride:
         assert exc_info.value.status_code == 422
         assert "negative" in exc_info.value.detail.lower()
 
-    def test_unknown_role_raises(self, db_session: Session):
-        unit_id = _make_unit(db_session, "PRJ-OV9")
-        pricing = self._make_pricing(db_session, unit_id)
-        svc = UnitPricingService(db_session)
+    def test_unknown_role_rejected_by_schema(self, db_session: Session):
+        """Invalid role values are now rejected at schema construction by Pydantic Literal validation."""
+        from pydantic import ValidationError as PydanticValidationError
 
-        req = PricingOverrideRequest(
-            override_amount=1_000.0,
-            override_reason="Test",
-            requested_by="alice",
-            role="wizard",
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            svc.apply_pricing_override(pricing.id, req)
-        assert exc_info.value.status_code == 422
-        assert "Unknown role" in exc_info.value.detail
+        with pytest.raises(PydanticValidationError) as exc_info:
+            PricingOverrideRequest(
+                override_amount=1_000.0,
+                override_reason="Test",
+                requested_by="alice",
+                role="wizard",  # not a valid Literal value
+            )
+        assert "role" in str(exc_info.value)
 
 
 # ===========================================================================
@@ -723,3 +720,113 @@ class TestPremiumBreakdownEndpoint:
         assert breakdown["engine_final_unit_price"] == pytest.approx(
             engine_price["final_unit_price"]
         )
+
+
+# ===========================================================================
+# PR-14A: Override governance — PUT /pricing/{id} cannot bypass override rules
+# ===========================================================================
+
+
+class TestOverrideGovernancePutEndpoint:
+    """Verify that PUT /pricing/{id} cannot be used to change manual_adjustment.
+
+    All adjustment changes must flow through POST /pricing/{id}/override,
+    which enforces role authority thresholds and records audit metadata.
+    """
+
+    def _setup(self, client: TestClient, proj_code: str) -> tuple[str, str]:
+        """Create hierarchy + pricing record. Returns (unit_id, pricing_id)."""
+        _, unit_id = _create_hierarchy(client, proj_code)
+        pricing_id = client.post(
+            f"/api/v1/units/{unit_id}/pricing",
+            json={"base_price": 500_000.0},
+        ).json()["id"]
+        return unit_id, pricing_id
+
+    def test_put_cannot_change_manual_adjustment(self, client: TestClient):
+        """PUT /pricing/{id} with manual_adjustment must be rejected (422 — unknown field)."""
+        _, pricing_id = self._setup(client, "PRJ-GOVPUT1")
+        resp = client.put(
+            f"/api/v1/pricing/{pricing_id}",
+            json={"manual_adjustment": 10_000.0},
+        )
+        # Pydantic rejects unknown fields (or ignores them — either way
+        # the adjustment must NOT be applied to the record).
+        data = client.get(f"/api/v1/pricing/{pricing_id}/premium-breakdown").json()
+        # manual_adjustment must remain 0.0 (default from creation)
+        assert data["manual_adjustment"] == pytest.approx(0.0)
+
+    def test_put_base_price_update_preserves_existing_adjustment(self, client: TestClient):
+        """PUT /pricing/{id} updating base_price must keep existing manual_adjustment intact."""
+        _, pricing_id = self._setup(client, "PRJ-GOVPUT2")
+
+        # First apply an override via the correct endpoint.
+        client.post(
+            f"/api/v1/pricing/{pricing_id}/override",
+            json={
+                "override_amount": 5_000.0,
+                "override_reason": "Client negotiation",
+                "requested_by": "alice",
+                "role": "sales_manager",
+            },
+        )
+
+        # Now update base_price via PUT — manual_adjustment must be preserved.
+        resp = client.put(
+            f"/api/v1/pricing/{pricing_id}",
+            json={"base_price": 550_000.0},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["base_price"] == pytest.approx(550_000.0)
+        # manual_adjustment from the override is preserved.
+        assert data["manual_adjustment"] == pytest.approx(5_000.0)
+        assert data["final_price"] == pytest.approx(555_000.0)
+
+    def test_override_endpoint_remains_functional(self, client: TestClient):
+        """POST /pricing/{id}/override must still work correctly after governance hardening."""
+        _, pricing_id = self._setup(client, "PRJ-GOVPUT3")
+        resp = client.post(
+            f"/api/v1/pricing/{pricing_id}/override",
+            json={
+                "override_amount": 10_000.0,
+                "override_reason": "Special client discount",
+                "requested_by": "director1",
+                "role": "development_director",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["manual_adjustment"] == pytest.approx(10_000.0)
+        assert data["final_price"] == pytest.approx(510_000.0)
+        assert data["override_reason"] == "Special client discount"
+        assert data["override_requested_by"] == "director1"
+
+    def test_invalid_role_rejected_by_schema(self, client: TestClient):
+        """POST /pricing/{id}/override with an invalid role is rejected at schema level."""
+        _, pricing_id = self._setup(client, "PRJ-GOVPUT4")
+        resp = client.post(
+            f"/api/v1/pricing/{pricing_id}/override",
+            json={
+                "override_amount": 1_000.0,
+                "override_reason": "Test",
+                "requested_by": "alice",
+                "role": "wizard",  # not a valid Literal value
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_governance_rule_sales_manager_cannot_exceed_threshold(self, client: TestClient):
+        """Governance rules still enforced after hardening."""
+        _, pricing_id = self._setup(client, "PRJ-GOVPUT5")
+        resp = client.post(
+            f"/api/v1/pricing/{pricing_id}/override",
+            json={
+                "override_amount": 20_000.0,  # 4% > sales_manager limit (2%)
+                "override_reason": "Test",
+                "requested_by": "alice",
+                "role": "sales_manager",
+            },
+        )
+        assert resp.status_code == 422
+        assert "Development Director" in resp.json()["detail"]

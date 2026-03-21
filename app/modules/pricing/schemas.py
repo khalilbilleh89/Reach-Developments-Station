@@ -5,7 +5,7 @@ Pydantic request/response schemas for the Pricing Engine API.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -135,11 +135,14 @@ class UnitPricingUpdate(BaseModel):
     - POST /pricing/{id}/approve  — transitions to ``approved``
     - POST /units/{id}/pricing    — archives existing and creates new ``draft``
 
-    Only price/currency/notes fields are writable here.
+    ``manual_adjustment`` is intentionally excluded.  All pricing overrides
+    must use POST /pricing/{id}/override, which enforces role-based authority
+    thresholds and records a full audit trail.
+
+    Only base_price/currency/notes fields are writable here.
     """
 
     base_price: Optional[float] = Field(default=None, ge=0)
-    manual_adjustment: Optional[float] = Field(default=None)
     currency: Optional[str] = Field(default=None, min_length=1, max_length=10)
     notes: Optional[str] = Field(default=None)
 
@@ -287,10 +290,8 @@ class PricingOverrideRequest(BaseModel):
         max_length=255,
         description="Identifier of the user requesting the override.",
     )
-    role: str = Field(
+    role: Literal["sales_manager", "development_director", "ceo"] = Field(
         ...,
-        min_length=1,
-        max_length=100,
         description=(
             "Role of the requester used for authority threshold validation. "
             "Accepted values: sales_manager, development_director, ceo."

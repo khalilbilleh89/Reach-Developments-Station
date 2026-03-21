@@ -163,9 +163,13 @@ def update_pricing_record(
     data: UnitPricingUpdate,
     service: Annotated[UnitPricingService, Depends(get_unit_pricing_service)],
 ) -> UnitPricingResponse:
-    """Update a specific pricing record by ID.
+    """Update structural fields of a pricing record (base_price, currency, notes).
 
     Rejected when the record is in an immutable state (approved or archived).
+
+    Pricing overrides (changes to ``manual_adjustment``) are intentionally NOT
+    accepted here.  Use POST /pricing/{id}/override instead, which enforces
+    role-based authority thresholds and records a full audit trail.
     """
     return service.update_pricing_by_id(pricing_id, data)
 

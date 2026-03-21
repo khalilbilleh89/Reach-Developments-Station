@@ -6,7 +6,6 @@ Returns a deterministic, settings-driven breakdown of each premium component.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)

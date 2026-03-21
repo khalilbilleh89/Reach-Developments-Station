@@ -132,22 +132,6 @@ export interface PremiumBreakdownResponse {
 }
 
 /**
- * Request payload for applying a governed price override.
- * Sent to POST /api/v1/pricing/{pricingId}/override.
- *
- * The ``override_amount`` replaces the current ``manual_adjustment``.
- * The override percentage (abs(override_amount) / base_price × 100) must be
- * within the authority threshold for the caller's ``role``.
- */
-export interface PricingOverrideRequest {
-  override_amount: number;
-  override_reason: string;
-  requested_by: string;
-  /** Role key: 'sales_manager' | 'development_director' | 'ceo' */
-  role: string;
-}
-
-/**
  * Override authority roles supported by the backend override rule engine.
  * Thresholds: sales_manager ≤ 2%, development_director ≤ 5%, ceo = unlimited.
  */
@@ -159,3 +143,18 @@ export const OVERRIDE_ROLE_LABELS: Record<OverrideRole, string> = {
   development_director: "Development Director",
   ceo: "CEO",
 };
+
+/**
+ * Request payload for applying a governed price override.
+ * Sent to POST /api/v1/pricing/{pricingId}/override.
+ *
+ * The ``override_amount`` replaces the current ``manual_adjustment``.
+ * The override percentage (abs(override_amount) / base_price × 100) must be
+ * within the authority threshold for the caller's ``role``.
+ */
+export interface PricingOverrideRequest {
+  override_amount: number;
+  override_reason: string;
+  requested_by: string;
+  role: OverrideRole;
+}
