@@ -25,6 +25,7 @@ Endpoints
   GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast
   POST /finance/analytics/rebuild                      — rebuild analytics fact tables
   GET /finance/analytics/portfolio                     — portfolio analytics dashboard
+  GET /finance/projects/{project_id}/dashboard         — project financial dashboard
 """
 
 from typing import Annotated
@@ -47,6 +48,7 @@ from app.modules.finance.schemas import (
     ProjectAgingResponse,
     ProjectCashflowForecastResponse,
     ProjectFinanceSummaryResponse,
+    ProjectFinancialDashboardResponse,
     ProjectRevenueSummaryResponse,
     ReceiptMatchResult,
     ResolveAlertRequest,
@@ -65,6 +67,7 @@ from app.modules.finance.analytics_dashboard_service import AnalyticsDashboardSe
 from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.auth.security import get_current_user_payload, require_roles
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
+from app.modules.finance.project_financial_dashboard_service import ProjectFinancialDashboardService
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
 
@@ -404,3 +407,43 @@ def get_portfolio_analytics(
     before reading this endpoint.
     """
     return service.get_portfolio_analytics()
+
+
+# ---------------------------------------------------------------------------
+# Project financial dashboard endpoint
+# ---------------------------------------------------------------------------
+
+
+def get_project_financial_dashboard_service(
+    db: Session = Depends(get_db),
+) -> ProjectFinancialDashboardService:
+    return ProjectFinancialDashboardService(db)
+
+
+@router.get(
+    "/projects/{project_id}/dashboard",
+    response_model=ProjectFinancialDashboardResponse,
+)
+def get_project_financial_dashboard(
+    project_id: str,
+    service: Annotated[
+        ProjectFinancialDashboardService,
+        Depends(get_project_financial_dashboard_service),
+    ],
+    _: Annotated[dict, Depends(get_current_user_payload)],
+) -> ProjectFinancialDashboardResponse:
+    """Return the full financial dashboard for a single project.
+
+    Composes project-level KPIs and trend series from the existing financial
+    engines and analytics fact tables:
+
+      - Recognized revenue and deferred revenue — revenue recognition engine
+      - Receivables exposure and overdue breakdown — collections aging engine
+      - Next-month cashflow forecast — cashflow forecast engine
+      - Collection efficiency, revenue trend, collections trend,
+        receivables trend — analytics fact tables
+
+    Returns 404 if the project does not exist.
+    Auth required.
+    """
+    return service.get_project_financial_dashboard(project_id)

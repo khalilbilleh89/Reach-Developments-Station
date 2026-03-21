@@ -335,6 +335,44 @@ class PortfolioAnalyticsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Project financial dashboard schemas
+# ---------------------------------------------------------------------------
+
+
+class ProjectFinancialKPIResponse(BaseModel):
+    """Top-level financial KPIs for a single project."""
+
+    recognized_revenue: float = Field(..., ge=0)
+    deferred_revenue: float = Field(..., ge=0)
+    receivables_exposure: float = Field(..., ge=0)
+    overdue_receivables: float = Field(..., ge=0)
+    overdue_percentage: float = Field(..., ge=0, le=100)
+    forecast_next_month: float = Field(..., ge=0)
+    collection_efficiency: float = Field(..., ge=0)
+
+
+class ProjectFinancialTrendEntry(BaseModel):
+    """A single period-value pair for a project financial trend."""
+
+    period: str = Field(..., description="Calendar month (YYYY-MM) or snapshot date (YYYY-MM-DD)")
+    value: float = Field(..., ge=0)
+
+
+class ProjectFinancialDashboardResponse(BaseModel):
+    """Full project-level financial dashboard payload.
+
+    Composes KPIs and trend series for a single project from the existing
+    finance services and analytics fact tables.
+    """
+
+    project_id: str
+    kpis: ProjectFinancialKPIResponse
+    revenue_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
+    collections_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
+    receivables_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Analytics fact layer schemas
 # ---------------------------------------------------------------------------
 
