@@ -337,7 +337,9 @@ class SalesService:
     def _set_unit_status(self, unit_id: str, new_unit_status: str) -> None:
         """Set the unit's availability status on the ORM object without committing.
 
-        The caller is responsible for calling ``db.commit()`` (via save()) to persist the change.
+        The caller is responsible for calling the repository's save() method
+        (which calls db.commit()) to persist the change atomically with the
+        associated contract/reservation update.
         """
         unit = self.unit_repo.get_by_id(unit_id)
         if unit is not None:
