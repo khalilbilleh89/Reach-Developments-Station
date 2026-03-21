@@ -158,3 +158,47 @@ export interface PricingOverrideRequest {
   requested_by: string;
   role: OverrideRole;
 }
+
+/**
+ * Reason codes for a pricing audit trail entry.
+ * Mirrors the change_type constants in app/modules/pricing/models.py.
+ */
+export type PricingChangeType =
+  | "INITIAL"
+  | "MANUAL_UPDATE"
+  | "PREMIUM_RECALC"
+  | "OVERRIDE"
+  | "APPROVAL"
+  | "ARCHIVE";
+
+/**
+ * Single entry in a pricing record's immutable audit trail.
+ * Returned inside PricingAuditTrailResponse.
+ */
+export interface PricingAuditEntry {
+  id: string;
+  pricing_id: string;
+  unit_id: string;
+  change_type: PricingChangeType;
+  base_price: number;
+  manual_adjustment: number;
+  final_price: number;
+  pricing_status: PricingStatus;
+  currency: string;
+  override_reason: string | null;
+  override_requested_by: string | null;
+  override_approved_by: string | null;
+  actor: string | null;
+  created_at: string;
+}
+
+/**
+ * Full audit trail for a single pricing record.
+ * Returned by GET /api/v1/pricing/{pricingId}/audit-trail.
+ */
+export interface PricingAuditTrailResponse {
+  pricing_id: string;
+  unit_id: string;
+  total: number;
+  entries: PricingAuditEntry[];
+}

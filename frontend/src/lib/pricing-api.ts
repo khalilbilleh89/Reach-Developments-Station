@@ -20,6 +20,7 @@ import { apiFetch } from "./api-client";
 import type {
   PremiumBreakdownResponse,
   PricingApprovalRequest,
+  PricingAuditTrailResponse,
   PricingHistoryResponse,
   PricingOverrideRequest,
   UnitPricing,
@@ -151,4 +152,21 @@ export async function requestPricingOverride(
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+/**
+ * Return the full audit trail for a pricing record, oldest first.
+ *
+ * Each entry captures a snapshot of the pricing record's state at the moment
+ * a governed change event occurred.  Change types: INITIAL, MANUAL_UPDATE,
+ * PREMIUM_RECALC, OVERRIDE, APPROVAL, ARCHIVE.
+ *
+ * @throws ApiError 404 when the pricing record does not exist.
+ */
+export async function getPricingAuditTrail(
+  pricingId: string,
+): Promise<PricingAuditTrailResponse> {
+  return apiFetch<PricingAuditTrailResponse>(
+    `/pricing/${pricingId}/audit-trail`,
+  );
 }
