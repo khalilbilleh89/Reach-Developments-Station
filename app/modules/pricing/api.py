@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.pricing.schemas import (
     PremiumBreakdownResponse,
     PricingApprovalRequest,
@@ -27,7 +28,7 @@ from app.modules.pricing.schemas import (
 )
 from app.modules.pricing.service import PricingService, UnitPricingService
 
-router = APIRouter(prefix="/pricing", tags=["Pricing"])
+router = APIRouter(prefix="/pricing", tags=["Pricing"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> PricingService:

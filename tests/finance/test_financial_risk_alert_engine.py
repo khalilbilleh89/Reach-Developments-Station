@@ -585,14 +585,14 @@ class TestPortfolioAlertAggregation:
 class TestRiskAlertEndpoints:
     """Tests for GET /finance/alerts/portfolio and GET /finance/projects/{id}/alerts."""
 
-    def test_portfolio_alerts_endpoint_rejects_unauthenticated(self, client):
+    def test_portfolio_alerts_endpoint_rejects_unauthenticated(self, unauth_client):
         """Unauthenticated caller must receive 401 from the portfolio alerts endpoint."""
-        response = client.get("/api/v1/finance/alerts/portfolio")
+        response = unauth_client.get("/api/v1/finance/alerts/portfolio")
         assert response.status_code == 401
 
-    def test_project_alerts_endpoint_rejects_unauthenticated(self, client):
+    def test_project_alerts_endpoint_rejects_unauthenticated(self, unauth_client):
         """Unauthenticated caller must receive 401 from the project alerts endpoint."""
-        response = client.get("/api/v1/finance/projects/some-id/alerts")
+        response = unauth_client.get("/api/v1/finance/projects/some-id/alerts")
         assert response.status_code == 401
 
     def test_portfolio_alerts_returns_200_when_authenticated(self, auth_client):

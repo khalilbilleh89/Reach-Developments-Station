@@ -76,7 +76,7 @@ from app.modules.finance.risk_alert_engine import FinancialRiskAlertEngine
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
 
-router = APIRouter(prefix="/finance", tags=["Finance"])
+router = APIRouter(prefix="/finance", tags=["Finance"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> FinanceSummaryService:

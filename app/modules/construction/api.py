@@ -40,6 +40,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.schemas import (
     ConstructionCostItemCreate,
@@ -66,7 +67,7 @@ from app.modules.construction.schemas import (
 )
 from app.modules.construction.service import ConstructionService
 
-router = APIRouter(prefix="/construction", tags=["Construction"])
+router = APIRouter(prefix="/construction", tags=["Construction"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> ConstructionService:

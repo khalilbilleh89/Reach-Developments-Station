@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.cashflow.schemas import (
     CashflowForecastCreate,
     CashflowForecastListResponse,
@@ -30,7 +31,7 @@ from app.modules.cashflow.schemas import (
 )
 from app.modules.cashflow.service import CashflowService
 
-router = APIRouter(prefix="/cashflow", tags=["cashflow"])
+router = APIRouter(prefix="/cashflow", tags=["cashflow"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> CashflowService:

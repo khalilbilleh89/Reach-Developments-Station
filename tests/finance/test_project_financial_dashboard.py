@@ -638,9 +638,9 @@ class TestProjectFinancialDashboard:
 class TestProjectFinancialDashboardEndpoint:
     """Tests for GET /finance/projects/{project_id}/dashboard."""
 
-    def test_endpoint_rejects_unauthenticated_requests(self, client):
+    def test_endpoint_rejects_unauthenticated_requests(self, unauth_client):
         """Callers with no Authorization header must be rejected."""
-        response = client.get("/api/v1/finance/projects/some-id/dashboard")
+        response = unauth_client.get("/api/v1/finance/projects/some-id/dashboard")
         assert response.status_code == 401
 
     def test_endpoint_returns_404_for_unknown_project(self, auth_client):

@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.floors.schemas import (
     FloorCreateForBuilding,
     FloorList,
@@ -26,7 +27,7 @@ from app.modules.floors.schemas import (
 )
 from app.modules.floors.service import FloorService
 
-router = APIRouter(tags=["floors"])
+router = APIRouter(tags=["floors"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> FloorService:

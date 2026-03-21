@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.phases.schemas import (
     PhaseCreate,
     PhaseCreateForProject,
@@ -27,7 +28,7 @@ from app.modules.phases.schemas import (
 )
 from app.modules.phases.service import PhaseService
 
-router = APIRouter(tags=["phases"])
+router = APIRouter(tags=["phases"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> PhaseService:

@@ -592,13 +592,13 @@ class TestBuildReceivableSnapshot:
 class TestAnalyticsRebuildEndpoint:
     """Tests for POST /finance/analytics/rebuild."""
 
-    def test_rebuild_endpoint_rejects_request_without_token(self, client):
+    def test_rebuild_endpoint_rejects_request_without_token(self, unauth_client):
         """Callers with no Authorization header must be rejected with 401 or 403.
 
-        The `client` fixture injects only the DB override and sends no Bearer
+        The `unauth_client` fixture injects only the DB override and sends no Bearer
         token, so this test exercises the unauthenticated path.
         """
-        response = client.post("/api/v1/finance/analytics/rebuild")
+        response = unauth_client.post("/api/v1/finance/analytics/rebuild")
         assert response.status_code in (401, 403)
 
     def test_rebuild_endpoint_rejects_non_admin(self, db_session):
