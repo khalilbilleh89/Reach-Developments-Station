@@ -15,9 +15,14 @@ import {
   generateReceivables,
   listContractReceivables,
 } from "@/lib/receivables-api";
+import {
+  getContractPaymentSchedule,
+} from "@/lib/contracts-api";
 import { ApiError } from "@/lib/api-client";
 import type { PaymentPlan, Installment } from "@/lib/payment-plans-types";
 import type { Receivable } from "@/lib/receivables-types";
+import type { ContractPaymentSchedule } from "@/lib/sales-types";
+import { contractPaymentStatusLabel } from "@/lib/sales-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/payment-plans.module.css";
 
@@ -51,6 +56,11 @@ export default function ContractDetailView() {
   const [receivablesError, setReceivablesError] = useState<string | null>(null);
   const [generatingReceivables, setGeneratingReceivables] = useState(false);
 
+  // Contract payment schedule (PR-16)
+  const [paymentSchedule, setPaymentSchedule] = useState<ContractPaymentSchedule[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
   const loadPlan = useCallback(async () => {
     if (!contractId) {
       setLoading(false);
@@ -61,9 +71,11 @@ export default function ContractDetailView() {
     setPlan(null);
     setInstallments([]);
     setReceivables([]);
+    setPaymentSchedule([]);
     setLoading(true);
     setError(null);
     setReceivablesError(null);
+    setScheduleError(null);
     try {
       // Try to load the installment schedule for this contract.
       const schedule = await listInstallments(contractId);
@@ -90,6 +102,24 @@ export default function ContractDetailView() {
       }
     } finally {
       setLoading(false);
+    }
+  }, [contractId]);
+
+  const loadPaymentSchedule = useCallback(async () => {
+    if (!contractId) return;
+    setScheduleLoading(true);
+    setScheduleError(null);
+    try {
+      const data = await getContractPaymentSchedule(contractId);
+      setPaymentSchedule(data.items);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 404) {
+        setPaymentSchedule([]);
+      } else {
+        setScheduleError("Failed to load payment schedule.");
+      }
+    } finally {
+      setScheduleLoading(false);
     }
   }, [contractId]);
 
@@ -121,6 +151,10 @@ export default function ContractDetailView() {
   useEffect(() => {
     loadReceivables();
   }, [loadReceivables]);
+
+  useEffect(() => {
+    loadPaymentSchedule();
+  }, [loadPaymentSchedule]);
 
   async function handleCreatePlan(payload: PaymentPlanCreatePayload): Promise<PaymentPlan> {
     const created = await createPaymentPlan(payload);
@@ -236,6 +270,73 @@ export default function ContractDetailView() {
 
             {hasPlan && !receivablesLoading && receivables.length > 0 && (
               <ReceivablesTable receivables={receivables} />
+            )}
+          </section>
+
+          {/* Contract Payment Schedule (PR-16) */}
+          <section className={styles.section} aria-label="Contract Payment Schedule">
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Contract Payment Schedule</h2>
+            </div>
+
+            {scheduleLoading && (
+              <div className={styles.loadingState}>Loading payment schedule…</div>
+            )}
+
+            {!scheduleLoading && scheduleError && (
+              <div className={styles.errorState}>{scheduleError}</div>
+            )}
+
+            {!scheduleLoading && !scheduleError && paymentSchedule.length === 0 && (
+              <div className={styles.emptyState}>
+                <p className={styles.emptyStateTitle}>No payment schedule</p>
+                <p className={styles.emptyStateBody}>
+                  Activate the contract to automatically generate installment obligations.
+                </p>
+              </div>
+            )}
+
+            {!scheduleLoading && !scheduleError && paymentSchedule.length > 0 && (
+              <div className={styles.tableWrapper}>
+                <table className={styles.table} aria-label="Contract payment schedule">
+                  <thead className={styles.tableHead}>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Due Date</th>
+                      <th scope="col">Amount</th>
+                      <th scope="col">Currency</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Paid Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className={styles.tableBody}>
+                    {paymentSchedule.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.installment_number}</td>
+                        <td>{row.due_date}</td>
+                        <td>{formatCurrency(row.amount)}</td>
+                        <td>{row.currency}</td>
+                        <td>
+                          <span
+                            className={`${styles.statusBadge} ${
+                              row.status === "paid"
+                                ? styles.statusPaid
+                                : row.status === "overdue"
+                                  ? styles.statusOverdue
+                                  : row.status === "cancelled"
+                                    ? styles.statusCancelled
+                                    : styles.statusPending
+                            }`}
+                          >
+                            {contractPaymentStatusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td>{row.paid_at ? new Date(row.paid_at).toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         </>

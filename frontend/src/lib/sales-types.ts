@@ -157,6 +157,48 @@ export interface PaymentPlanPreview {
   nextDueAmount: number | null;
 }
 
+// ---------- Contract payment schedule ------------------------------------
+
+export type ContractPaymentStatus = "pending" | "paid" | "overdue" | "cancelled";
+
+/** Human-readable label for a ContractPaymentStatus value. */
+export function contractPaymentStatusLabel(
+  status: ContractPaymentStatus | string,
+): string {
+  const labels: Record<string, string> = {
+    pending: "Pending",
+    paid: "Paid",
+    overdue: "Overdue",
+    cancelled: "Cancelled",
+  };
+  return (
+    labels[status] ??
+    status
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
+export interface ContractPaymentSchedule {
+  id: string;
+  contract_id: string;
+  installment_number: number;
+  due_date: string;
+  amount: number;
+  currency: string;
+  status: ContractPaymentStatus;
+  paid_at: string | null;
+  payment_reference: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractPaymentScheduleListResponse {
+  total: number;
+  items: ContractPaymentSchedule[];
+}
+
 // ---------- Filter state ------------------------------------------------
 
 /** UI filter state for the sales queue listing page. */

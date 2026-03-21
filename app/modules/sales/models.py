@@ -1,17 +1,18 @@
 """
 sales.models
 
-ORM models for the Sales domain: Buyer, Reservation, SalesContract.
+ORM models for the Sales domain: Buyer, Reservation, SalesContract,
+ContractPaymentSchedule.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Numeric, String
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.sales import ContractStatus, ReservationStatus
+from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
 
 
 class Buyer(Base, TimestampMixin):
@@ -107,4 +108,49 @@ class SalesContract(Base, TimestampMixin):
     buyer: Mapped["Buyer"] = relationship("Buyer", back_populates="contracts")
     reservation: Mapped[Optional["Reservation"]] = relationship(
         "Reservation", back_populates="contract"
+    )
+    payment_schedule: Mapped[list["ContractPaymentSchedule"]] = relationship(
+        "ContractPaymentSchedule",
+        back_populates="contract",
+        order_by="ContractPaymentSchedule.installment_number",
+    )
+
+
+class ContractPaymentSchedule(Base, TimestampMixin):
+    """Installment obligation linked to a sales contract.
+
+    Generated when a contract is activated.  Each row represents a single
+    payment milestone (e.g. reservation deposit, signing, construction,
+    handover).
+    """
+
+    __tablename__ = "contract_payment_schedule"
+
+    contract_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("sales_contracts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    installment_number: Mapped[int] = mapped_column(nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="AED"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=ContractPaymentStatus.PENDING.value,
+        index=True,
+    )
+    paid_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payment_reference: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
+
+    contract: Mapped["SalesContract"] = relationship(
+        "SalesContract", back_populates="payment_schedule"
     )

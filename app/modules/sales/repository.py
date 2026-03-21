@@ -1,20 +1,26 @@
 """
 sales.repository
 
-Data access layer for Buyer, Reservation, and SalesContract entities.
+Data access layer for Buyer, Reservation, SalesContract, and
+ContractPaymentSchedule entities.
 """
 
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.modules.sales.models import Buyer, Reservation, SalesContract
+from app.modules.sales.models import (
+    Buyer,
+    ContractPaymentSchedule,
+    Reservation,
+    SalesContract,
+)
 from app.modules.sales.schemas import (
     BuyerCreate,
     ReservationCreate,
     SalesContractCreate,
 )
-from app.shared.enums.sales import ContractStatus, ReservationStatus
+from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
 
 
 class BuyerRepository:
@@ -181,3 +187,57 @@ class SalesContractRepository:
         self.db.commit()
         self.db.refresh(contract)
         return contract
+
+
+class ContractPaymentScheduleRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, schedule_item: ContractPaymentSchedule) -> ContractPaymentSchedule:
+        self.db.add(schedule_item)
+        self.db.flush()
+        return schedule_item
+
+    def bulk_create(
+        self, items: List[ContractPaymentSchedule]
+    ) -> List[ContractPaymentSchedule]:
+        for item in items:
+            self.db.add(item)
+        self.db.commit()
+        for item in items:
+            self.db.refresh(item)
+        return items
+
+    def list_by_contract(self, contract_id: str) -> List[ContractPaymentSchedule]:
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .filter(ContractPaymentSchedule.contract_id == contract_id)
+            .order_by(ContractPaymentSchedule.installment_number)
+            .all()
+        )
+
+    def get_by_contract_and_installment(
+        self, contract_id: str, installment_number: int
+    ) -> Optional[ContractPaymentSchedule]:
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .filter(
+                ContractPaymentSchedule.contract_id == contract_id,
+                ContractPaymentSchedule.installment_number == installment_number,
+            )
+            .first()
+        )
+
+    def count_by_contract(self, contract_id: str) -> int:
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .filter(ContractPaymentSchedule.contract_id == contract_id)
+            .count()
+        )
+
+    def save(
+        self, item: ContractPaymentSchedule
+    ) -> ContractPaymentSchedule:
+        self.db.commit()
+        self.db.refresh(item)
+        return item
