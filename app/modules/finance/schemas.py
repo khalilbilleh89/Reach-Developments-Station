@@ -284,3 +284,20 @@ class TreasuryMonitoringResponse(BaseModel):
     forecast_next_month: float = Field(..., ge=0)
     project_count: int = Field(..., ge=0)
     project_exposures: List[ProjectExposureEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Analytics fact layer schemas
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsRebuildResponse(BaseModel):
+    """Response model for the analytics rebuild endpoint.
+
+    Returns a summary of how many rows were inserted into each analytics
+    fact table during the rebuild run.
+    """
+
+    revenue_facts_created: int = Field(..., ge=0)
+    collections_facts_created: int = Field(..., ge=0)
+    receivable_snapshots_created: int = Field(..., ge=0)

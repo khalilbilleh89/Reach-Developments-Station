@@ -201,3 +201,34 @@ export interface TreasuryMonitoring {
   projectCount: number;
   projectExposures: ProjectExposure[];
 }
+
+// ---------- Analytics fact layer types --------------------------------
+
+/** Monthly recognized revenue entry from the analytics fact layer. */
+export interface RevenueTrend {
+  projectId: string;
+  unitId: string;
+  month: string;
+  recognizedRevenue: number;
+  contractValue: number;
+}
+
+/** Monthly payment collections entry from the analytics fact layer. */
+export interface CollectionsTrend {
+  projectId: string;
+  paymentDate: string;
+  month: string;
+  amount: number;
+  paymentMethod: string;
+}
+
+/** Receivable aging snapshot entry from the analytics fact layer. */
+export interface ReceivablesTrend {
+  projectId: string;
+  snapshotDate: string;
+  totalReceivables: number;
+  bucket_0_30: number;
+  bucket_31_60: number;
+  bucket_61_90: number;
+  bucket_90_plus: number;
+}

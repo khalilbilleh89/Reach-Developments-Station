@@ -23,6 +23,7 @@ Endpoints
   POST /finance/payments/match-receipt                 — match a payment to installment obligations
   GET /finance/cashflow/forecast                       — portfolio cashflow forecast
   GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast
+  POST /finance/analytics/rebuild                     — rebuild analytics fact tables
 """
 
 from typing import Annotated
@@ -32,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.finance.schemas import (
+    AnalyticsRebuildResponse,
     CollectionsAlertListResponse,
     CollectionsAlertResponse,
     ContractAgingResponse,
@@ -56,6 +58,7 @@ from app.modules.finance.service import (
     ReceiptMatchingService,
     RevenueRecognitionService,
 )
+from app.modules.finance.analytics_service import AnalyticsService
 from app.modules.finance.cashflow_service import CashflowForecastService
 from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
@@ -331,3 +334,34 @@ def get_project_cashflow_forecast(
     Returns 404 if the project does not exist.
     """
     return service.get_project_forecast(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Analytics fact layer endpoint
+# ---------------------------------------------------------------------------
+
+
+def get_analytics_service(db: Session = Depends(get_db)) -> AnalyticsService:
+    return AnalyticsService(db)
+
+
+@router.post(
+    "/analytics/rebuild",
+    response_model=AnalyticsRebuildResponse,
+    status_code=200,
+)
+def rebuild_analytics_facts(
+    service: Annotated[AnalyticsService, Depends(get_analytics_service)],
+) -> AnalyticsRebuildResponse:
+    """Rebuild all analytics fact tables from the current operational data.
+
+    Rebuilds:
+      - fact_revenue        — monthly recognized revenue per project / unit.
+      - fact_collections    — payment collections by project / month.
+      - fact_receivables_snapshot — receivable aging snapshot per project.
+
+    This endpoint is intended for admin use.  It performs a full rebuild of
+    the analytics layer and returns a summary of rows inserted into each
+    fact table.
+    """
+    return service.rebuild_financial_analytics()

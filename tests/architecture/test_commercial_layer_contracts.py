@@ -323,20 +323,26 @@ class TestSalesBoundary:
             )
         )
 
-        # Concrete assertion: finance.models must not define any ORM-mapped
-        # class even after the sales service has written commercial records.
+        # PR-23 introduced analytics fact models into finance.models.  Verify
+        # that the SalesService does not write to any of those fact tables —
+        # only the analytics rebuild endpoint is permitted to write fact rows.
         import app.modules.finance.models as _fin_models
         from sqlalchemy.orm.decl_api import DeclarativeAttributeIntercept
+
+        _ANALYTICS_FACT_MODELS = {"Base", "FactRevenue", "FactCollections", "FactReceivablesSnapshot"}
 
         finance_orm_classes = [
             v
             for v in vars(_fin_models).values()
             if isinstance(v, DeclarativeAttributeIntercept)
         ]
-        assert finance_orm_classes == [], (
-            "finance.models must not define ORM models — finance is a "
-            "read-only aggregation domain; "
-            f"found: {[c.__name__ for c in finance_orm_classes]}"
+
+        # All classes in finance.models must be analytics fact models; no
+        # pricing/sales classes should appear there.
+        non_analytics = [c for c in finance_orm_classes if c.__name__ not in _ANALYTICS_FACT_MODELS]
+        assert non_analytics == [], (
+            "finance.models must not define pricing or sales ORM models; "
+            f"unexpected classes found: {[c.__name__ for c in non_analytics]}"
         )
 
     def test_reservation_requires_unit_to_exist(self, db_session: Session):
@@ -443,9 +449,12 @@ class TestFinanceBoundary:
     """Finance summaries must consume downstream outputs — read-only aggregation."""
 
     def test_finance_models_contain_no_pricing_or_sales_logic(self, db_session: Session):
-        """Finance models.py is intentionally a placeholder — no pricing/sales ORM models."""
+        """finance.models must only define analytics fact models — no pricing/sales ORM models."""
         import app.modules.finance.models as finance_models
         from sqlalchemy.orm.decl_api import DeclarativeAttributeIntercept
+
+        # Analytics fact models are the only ORM classes permitted in finance.models.
+        _ALLOWED_ANALYTICS_MODELS = {"Base", "FactRevenue", "FactCollections", "FactReceivablesSnapshot"}
 
         # Gather any SQLAlchemy mapped classes exported from finance.models
         finance_orm_classes = [
@@ -454,10 +463,14 @@ class TestFinanceBoundary:
             if isinstance(v, DeclarativeAttributeIntercept)
         ]
 
-        assert finance_orm_classes == [], (
-            "finance.models must not define ORM models — finance is a "
-            "read-only aggregation domain; "
-            f"found: {[c.__name__ for c in finance_orm_classes]}"
+        # Filter out the expected analytics fact models.
+        unexpected = [c for c in finance_orm_classes if c.__name__ not in _ALLOWED_ANALYTICS_MODELS]
+
+        assert unexpected == [], (
+            "finance.models must not define pricing or sales ORM models — "
+            "only analytics fact models (FactRevenue, FactCollections, "
+            "FactReceivablesSnapshot) are permitted; "
+            f"unexpected models found: {[c.__name__ for c in unexpected]}"
         )
 
     def test_finance_summary_reads_contracts_downstream(self, db_session: Session):
