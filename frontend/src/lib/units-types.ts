@@ -492,3 +492,21 @@ export interface UnitDynamicAttributesSaveItem {
 export interface UnitDynamicAttributesSaveRequest {
   attributes: UnitDynamicAttributesSaveItem[];
 }
+
+// ---------- Inventory readiness types (PR-11) ----------------------------
+
+/**
+ * Commercial readiness state for a unit.
+ * Returned by GET /api/v1/units/{unitId}/readiness.
+ *
+ * Reports whether the unit is ready for downstream pricing and sales
+ * workflows.  Reason lists are non-empty when the corresponding flag is
+ * false so the UI can surface actionable blocking detail to the user.
+ */
+export interface UnitInventoryReadiness {
+  unit_id: string;
+  is_ready_for_pricing: boolean;
+  is_ready_for_sales: boolean;
+  pricing_blocking_reasons: string[];
+  sales_blocking_reasons: string[];
+}

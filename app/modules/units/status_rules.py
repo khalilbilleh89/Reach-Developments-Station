@@ -18,6 +18,11 @@ _ALLOWED_TRANSITIONS: dict[str, str] = {
 }
 
 
+def allowed_next_state(current: str) -> str | None:
+    """Return the one allowed next state from *current*, or None if terminal."""
+    return _ALLOWED_TRANSITIONS.get(current)
+
+
 def is_valid_transition(current: str, requested: str) -> bool:
     """Return True when *requested* is a valid next state from *current*.
 

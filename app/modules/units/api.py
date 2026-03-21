@@ -30,10 +30,12 @@ from app.modules.units.schemas import (
     UnitDynamicAttributesSaveRequest,
     UnitDynamicAttributeValueResponse,
     UnitList,
+    UnitReadinessResponse,
     UnitResponse,
     UnitUpdate,
 )
 from app.modules.units.service import UnitDynamicAttributeService, UnitService
+from app.shared.enums.project import UnitStatus
 
 router = APIRouter(tags=["units"])
 
@@ -84,11 +86,20 @@ def list_units(
     service: Annotated[UnitService, Depends(get_service)],
     floor_id: Optional[str] = Query(default=None),
     project_id: Optional[str] = Query(default=None),
+    building_id: Optional[str] = Query(default=None),
+    unit_status: Optional[UnitStatus] = Query(default=None, alias="status"),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> UnitList:
-    """List units, optionally filtered by floor or project."""
-    return service.list_units(floor_id=floor_id, project_id=project_id, skip=skip, limit=limit)
+    """List units, optionally filtered by floor, building, project, or status."""
+    return service.list_units(
+        floor_id=floor_id,
+        project_id=project_id,
+        building_id=building_id,
+        unit_status=unit_status.value if unit_status is not None else None,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/units/{unit_id}", response_model=UnitResponse)
@@ -98,6 +109,21 @@ def get_unit(
 ) -> UnitResponse:
     """Get a unit by ID."""
     return service.get_unit(unit_id)
+
+
+@router.get("/units/{unit_id}/readiness", response_model=UnitReadinessResponse)
+def get_unit_readiness(
+    unit_id: str,
+    service: Annotated[UnitService, Depends(get_service)],
+) -> UnitReadinessResponse:
+    """Return the commercial readiness state for a unit.
+
+    Reports whether the unit is ready for pricing and sales workflows,
+    along with blocking reasons when it is not ready.
+
+    Returns 404 if the unit does not exist.
+    """
+    return service.get_unit_readiness(unit_id)
 
 
 @router.patch("/units/{unit_id}", response_model=UnitResponse)
