@@ -268,3 +268,31 @@ export interface PortfolioAnalytics {
   receivablesTrend: ReceivablesTrendEntry[];
   kpis: PortfolioKPI;
 }
+
+// ---------- Project financial dashboard types -------------------------
+
+/** Top-level financial KPIs for a single project. */
+export interface ProjectFinancialKPI {
+  recognizedRevenue: number;
+  deferredRevenue: number;
+  receivablesExposure: number;
+  overdueReceivables: number;
+  overduePercentage: number;
+  forecastNextMonth: number;
+  collectionEfficiency: number;
+}
+
+/** A single period-value pair for a project financial trend. */
+export interface ProjectFinancialTrendEntry {
+  period: string;
+  value: number;
+}
+
+/** Full project-level financial dashboard payload. */
+export interface ProjectFinancialDashboard {
+  projectId: string;
+  kpis: ProjectFinancialKPI;
+  revenueTrend: ProjectFinancialTrendEntry[];
+  collectionsTrend: ProjectFinancialTrendEntry[];
+  receivablesTrend: ProjectFinancialTrendEntry[];
+}

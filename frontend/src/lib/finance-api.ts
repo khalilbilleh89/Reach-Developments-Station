@@ -30,7 +30,10 @@ import type {
   ProjectAging,
   ProjectCashflowForecast,
   ProjectExposure,
+  ProjectFinancialDashboard,
+  ProjectFinancialKPI,
   ProjectFinancialSummary,
+  ProjectFinancialTrendEntry,
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
@@ -634,5 +637,77 @@ export async function getPortfolioAnalytics(): Promise<PortfolioAnalytics> {
     collectionsTrend: raw.collections_trend.map(mapCollectionsTrendEntry),
     receivablesTrend: raw.receivables_trend.map(mapReceivablesTrendEntry),
     kpis: mapPortfolioKPI(raw.kpis),
+  };
+}
+
+// ---------- Project financial dashboard raw shapes -------------------
+
+interface BackendProjectFinancialKPI {
+  recognized_revenue: number;
+  deferred_revenue: number;
+  receivables_exposure: number;
+  overdue_receivables: number;
+  overdue_percentage: number;
+  forecast_next_month: number;
+  collection_efficiency: number;
+}
+
+interface BackendProjectFinancialTrendEntry {
+  period: string;
+  value: number;
+}
+
+interface BackendProjectFinancialDashboard {
+  project_id: string;
+  kpis: BackendProjectFinancialKPI;
+  revenue_trend: BackendProjectFinancialTrendEntry[];
+  collections_trend: BackendProjectFinancialTrendEntry[];
+  receivables_trend: BackendProjectFinancialTrendEntry[];
+}
+
+// ---------- Mapping helpers ------------------------------------------
+
+function mapProjectFinancialKPI(
+  raw: BackendProjectFinancialKPI,
+): ProjectFinancialKPI {
+  return {
+    recognizedRevenue: raw.recognized_revenue,
+    deferredRevenue: raw.deferred_revenue,
+    receivablesExposure: raw.receivables_exposure,
+    overdueReceivables: raw.overdue_receivables,
+    overduePercentage: raw.overdue_percentage,
+    forecastNextMonth: raw.forecast_next_month,
+    collectionEfficiency: raw.collection_efficiency,
+  };
+}
+
+function mapProjectFinancialTrendEntry(
+  raw: BackendProjectFinancialTrendEntry,
+): ProjectFinancialTrendEntry {
+  return {
+    period: raw.period,
+    value: raw.value,
+  };
+}
+
+// ---------- Exported project financial dashboard function ------------
+
+/**
+ * Fetch the full financial dashboard for a single project.
+ *
+ * Backend endpoint: GET /finance/projects/{projectId}/dashboard
+ */
+export async function getProjectFinancialDashboard(
+  projectId: string | number,
+): Promise<ProjectFinancialDashboard> {
+  const raw = await apiFetch<BackendProjectFinancialDashboard>(
+    `/finance/projects/${encodeURIComponent(String(projectId))}/dashboard`,
+  );
+  return {
+    projectId: raw.project_id,
+    kpis: mapProjectFinancialKPI(raw.kpis),
+    revenueTrend: raw.revenue_trend.map(mapProjectFinancialTrendEntry),
+    collectionsTrend: raw.collections_trend.map(mapProjectFinancialTrendEntry),
+    receivablesTrend: raw.receivables_trend.map(mapProjectFinancialTrendEntry),
   };
 }
