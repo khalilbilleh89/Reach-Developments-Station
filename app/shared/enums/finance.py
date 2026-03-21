@@ -120,3 +120,25 @@ class MatchStrategy(str, Enum):
     PARTIAL = "partial"
     MULTI_INSTALLMENT = "multi_installment"
     UNMATCHED = "unmatched"
+
+
+# ---------------------------------------------------------------------------
+# Financial risk alert enumerations
+# ---------------------------------------------------------------------------
+
+
+class RiskAlertSeverity(str, Enum):
+    """Severity tier of a financial risk alert produced by the alert engine."""
+
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class RiskAlertType(str, Enum):
+    """Machine-readable category keys for financial risk alerts."""
+
+    OVERDUE_EXPOSURE = "OVERDUE_EXPOSURE"
+    COLLECTION_EFFICIENCY_COLLAPSE = "COLLECTION_EFFICIENCY_COLLAPSE"
+    RECEIVABLES_SURGE = "RECEIVABLES_SURGE"
+    LIQUIDITY_STRESS = "LIQUIDITY_STRESS"

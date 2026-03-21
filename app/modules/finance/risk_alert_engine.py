@@ -180,6 +180,14 @@ class FinancialRiskAlertEngine:
         Returns a PortfolioRiskResponse whose ``alerts`` list is the
         concatenation of all per-project alerts, sorted by project_id.
         Projects with no alerts contribute nothing to the list.
+
+        Performance note: This method iterates over every project and calls
+        ``scan_project_risks()`` for each one synchronously.  Each call
+        executes multiple DB queries (revenue recognition, receivables aging,
+        cashflow forecast), which creates an N+1 query pattern.  For small-to-
+        medium portfolios this is acceptable within a single request, but as
+        the portfolio grows it may need a bulk-query implementation or a
+        separate background computation step.
         """
         project_ids = self._all_project_ids()
         all_alerts: List[ProjectRiskAlert] = []

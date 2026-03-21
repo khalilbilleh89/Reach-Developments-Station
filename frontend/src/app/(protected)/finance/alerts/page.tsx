@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { getPortfolioAlerts } from "@/lib/finance-api";
 import type { PortfolioRiskResponse, ProjectRiskAlert, RiskAlertSeverity } from "@/lib/finance-types";
@@ -64,9 +65,9 @@ function AlertsTable({ alerts }: AlertsTableProps) {
         {alerts.map((alert, idx) => (
           <tr key={`${alert.projectId}-${alert.alertType}-${idx}`}>
             <td>
-              <a href={`/projects/${encodeURIComponent(alert.projectId)}/financial`}>
+              <Link href={`/projects/${encodeURIComponent(alert.projectId)}/financial`}>
                 {alert.projectId.slice(0, 8)}…
-              </a>
+              </Link>
             </td>
             <td>{alert.alertType}</td>
             <td>

@@ -21,7 +21,7 @@ Test groups:
 """
 
 import pytest
-from datetime import date, timedelta
+from datetime import date
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -458,15 +458,33 @@ class TestLiquidityStressAlert:
         assert liq_alerts == []
 
     def test_no_alert_when_forecast_covers_threshold(self, db_session: Session):
-        """No liquidity stress alert when forecast next month covers ≥ 25% of receivables.
+        """No LIQUIDITY_STRESS alert when forecast next month covers ≥ 25% of receivables.
 
-        We create a project with no pending/overdue installments so that both
-        receivables_exposure and forecast_next_month are 0.  With zero receivables
-        exposure the liquidity check is skipped entirely (division by zero guard),
-        which means no liquidity stress alert fires.
+        Setup:
+          - 1 overdue installment of 80,000   → contributes to receivables_exposure
+          - 1 pending installment of 40,000 due next month
+            → contributes to BOTH receivables_exposure AND forecast_next_month
+
+          Total receivables_exposure = 120,000
+          forecast_next_month        =  40,000
+          liquidity_ratio            =  40,000 / 120,000 ≈ 0.333  >  0.25 threshold
+          Expected result: no LIQUIDITY_STRESS alert.
         """
+        from app.modules.finance.date_utils import next_month_key
+
         pid = _make_project(db_session, "RAE-LIQ-01")
-        # No installments — receivables_exposure = 0, liquidity check skipped
+        uid = _make_unit(db_session, pid, "RAE-L01-U01")
+        cid = _make_contract(db_session, uid, 120_000.0, "RAE-L01-C01", "rael01@test.com")
+
+        # Overdue installment (past due) → in receivables but NOT in next-month forecast
+        _make_installment(db_session, cid, 80_000.0, 1, date(2025, 1, 1), "overdue")
+
+        # Pending installment due next calendar month → in both receivables and forecast
+        key = next_month_key()
+        year, month = int(key[:4]), int(key[5:7])
+        next_month_date = date(year, month, 15)
+        _make_installment(db_session, cid, 40_000.0, 2, next_month_date, "pending")
+
         engine = FinancialRiskAlertEngine(db_session)
         alerts = engine.scan_project_risks(pid)
 
@@ -477,8 +495,6 @@ class TestLiquidityStressAlert:
         self, db_session: Session
     ):
         """LIQUIDITY_STRESS alert fires when forecast < 25% of receivables exposure."""
-        from app.modules.finance.date_utils import next_month_key
-
         pid = _make_project(db_session, "RAE-LIQ-02")
         uid = _make_unit(db_session, pid, "RAE-L02-U01")
         cid = _make_contract(db_session, uid, 200_000.0, "RAE-L02-C01", "rael02@test.com")
@@ -514,9 +530,7 @@ class TestPortfolioAlertAggregation:
         result = engine.scan_portfolio_risks()
 
         assert isinstance(result, PortfolioRiskResponse)
-        # Cannot assert == [] because other tests may have created projects in
-        # the same DB session.  Just verify the type.
-        assert isinstance(result.alerts, list)
+        assert result.alerts == []
 
     def test_multiple_projects_alerts_aggregated(self, db_session: Session):
         """Alerts from multiple projects are all returned in the portfolio response."""

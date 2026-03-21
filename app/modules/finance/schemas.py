@@ -15,6 +15,8 @@ from app.modules.collections.aging_engine import AgingBucket
 
 from datetime import datetime
 
+from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
+
 
 class ProjectFinanceSummaryResponse(BaseModel):
     """Aggregated financial summary for a single project."""
@@ -385,8 +387,8 @@ class ProjectRiskAlert(BaseModel):
     """
 
     project_id: str
-    alert_type: str = Field(..., description="Machine-readable alert category key.")
-    severity: str = Field(..., description="Alert severity: HIGH, MEDIUM, or LOW.")
+    alert_type: RiskAlertType = Field(..., description="Machine-readable alert category key.")
+    severity: RiskAlertSeverity = Field(..., description="Alert severity: HIGH, MEDIUM, or LOW.")
     message: str = Field(..., description="Human-readable description of the risk condition.")
     metric_value: float = Field(..., description="Observed metric value that triggered the alert.")
     threshold: float = Field(..., description="Threshold the metric crossed to trigger the alert.")
