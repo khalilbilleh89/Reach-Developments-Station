@@ -20,8 +20,18 @@ import styles from "@/styles/finance-dashboard.module.css";
  *
  * No financial calculations are performed on this page — all values are
  * sourced directly from the backend project financial dashboard service.
+ *
+ * Route notes:
+ *   generateStaticParams and dynamicParams = false are required by the
+ *   Next.js `output: "export"` configuration used in this project.
+ *   Navigation to this page is done client-side via the Next.js router;
+ *   useParams() provides the real project ID at runtime.
  */
 
+// Satisfies `output: "export"` requirement — consistent with all other
+// dynamic route stubs in this project ([id]/page.tsx, [id]/phases/page.tsx,
+// etc.). Client-side navigation via the Next.js router resolves the real
+// project ID through useParams() at runtime.
 export function generateStaticParams() {
   return [{ id: "_" }];
 }
