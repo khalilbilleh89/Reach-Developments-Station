@@ -189,3 +189,35 @@ class UnmatchedReceiptResponse(BaseModel):
     contract_id: str
     payment_amount: float = Field(..., ge=0)
     reason: str
+
+
+# ---------------------------------------------------------------------------
+# Cashflow forecasting schemas
+# ---------------------------------------------------------------------------
+
+
+class MonthlyForecastEntryResponse(BaseModel):
+    """Projected cash inflow for a single calendar month."""
+
+    month: str = Field(..., description="Calendar month in YYYY-MM format")
+    expected_collections: float = Field(..., ge=0)
+    installment_count: int = Field(..., ge=0)
+
+
+class ProjectCashflowForecastResponse(BaseModel):
+    """Cashflow forecast for a single project."""
+
+    project_id: str
+    total_expected: float = Field(..., ge=0)
+    monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
+
+
+class PortfolioCashflowForecastResponse(BaseModel):
+    """Portfolio-wide cashflow forecast aggregated across all projects."""
+
+    total_expected: float = Field(..., ge=0)
+    project_count: int = Field(..., ge=0)
+    monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
+    project_forecasts: List[ProjectCashflowForecastResponse] = Field(
+        default_factory=list
+    )

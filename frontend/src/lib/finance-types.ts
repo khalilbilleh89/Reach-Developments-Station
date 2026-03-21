@@ -134,3 +134,27 @@ export interface ReceiptMatchResult {
   allocations: MatchedInstallmentAllocation[];
   unallocatedAmount: number;
 }
+
+// ---------- Cashflow forecasting types --------------------------------
+
+/** Monthly expected cash inflow entry in a cashflow forecast. */
+export interface MonthlyForecastEntry {
+  month: string;
+  expectedCollections: number;
+  installmentCount: number;
+}
+
+/** Cashflow forecast for a single project. */
+export interface ProjectCashflowForecast {
+  projectId: string;
+  totalExpected: number;
+  monthlyEntries: MonthlyForecastEntry[];
+}
+
+/** Portfolio-wide cashflow forecast aggregated across all projects. */
+export interface PortfolioCashflowForecast {
+  totalExpected: number;
+  projectCount: number;
+  monthlyEntries: MonthlyForecastEntry[];
+  projectForecasts: ProjectCashflowForecast[];
+}

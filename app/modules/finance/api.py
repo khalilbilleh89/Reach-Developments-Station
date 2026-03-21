@@ -19,6 +19,8 @@ Endpoints
   POST /finance/collections/alerts/generate            — generate alerts from overdue installments
   POST /finance/collections/alerts/{id}/resolve        — resolve a collections alert
   POST /finance/payments/match-receipt                 — match a payment to installment obligations
+  GET /finance/cashflow/forecast                       — portfolio cashflow forecast
+  GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast
 """
 
 from typing import Annotated
@@ -33,8 +35,10 @@ from app.modules.finance.schemas import (
     ContractAgingResponse,
     MatchReceiptRequest,
     PortfolioAgingResponse,
+    PortfolioCashflowForecastResponse,
     PortfolioRevenueOverviewResponse,
     ProjectAgingResponse,
+    ProjectCashflowForecastResponse,
     ProjectFinanceSummaryResponse,
     ProjectRevenueSummaryResponse,
     ReceiptMatchResult,
@@ -48,6 +52,7 @@ from app.modules.finance.service import (
     ReceiptMatchingService,
     RevenueRecognitionService,
 )
+from app.modules.finance.cashflow_service import CashflowForecastService
 from app.shared.enums.finance import AlertSeverity
 
 router = APIRouter(prefix="/finance", tags=["Finance"])
@@ -71,6 +76,10 @@ def get_alert_service(db: Session = Depends(get_db)) -> CollectionsAlertService:
 
 def get_matching_service(db: Session = Depends(get_db)) -> ReceiptMatchingService:
     return ReceiptMatchingService(db)
+
+
+def get_forecast_service(db: Session = Depends(get_db)) -> CashflowForecastService:
+    return CashflowForecastService(db)
 
 
 @router.get(
@@ -231,3 +240,41 @@ def match_payment_receipt(
     Returns the matching strategy and per-installment allocation breakdown.
     """
     return service.match_payment(request)
+
+
+# ---------------------------------------------------------------------------
+# Cashflow forecasting endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/cashflow/forecast",
+    response_model=PortfolioCashflowForecastResponse,
+)
+def get_portfolio_cashflow_forecast(
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+) -> PortfolioCashflowForecastResponse:
+    """Return the portfolio-wide cashflow forecast.
+
+    Aggregates all PENDING and OVERDUE installments across all projects
+    and groups expected collections by calendar month.
+    """
+    return service.get_portfolio_forecast()
+
+
+@router.get(
+    "/cashflow/forecast/project/{project_id}",
+    response_model=ProjectCashflowForecastResponse,
+)
+def get_project_cashflow_forecast(
+    project_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+) -> ProjectCashflowForecastResponse:
+    """Return the cashflow forecast for a single project.
+
+    Aggregates all PENDING and OVERDUE installments for the project
+    and groups expected collections by calendar month.
+
+    Returns 404 if the project does not exist.
+    """
+    return service.get_project_forecast(project_id)
