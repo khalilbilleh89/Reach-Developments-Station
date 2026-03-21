@@ -17,7 +17,7 @@ Edge cases:
 """
 
 import pytest
-from datetime import date, datetime, timezone, timedelta
+from datetime import date
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db

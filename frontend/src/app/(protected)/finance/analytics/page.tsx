@@ -85,7 +85,7 @@ export default function FinanceAnalyticsPage() {
           {/* Revenue Trend */}
           {analytics.revenueTrend.length > 0 ? (
             <>
-              <h3 className={styles.sectionHeading ?? undefined}>
+              <h3 className={styles.sectionHeading}>
                 Revenue Trend
               </h3>
               <table
@@ -115,7 +115,7 @@ export default function FinanceAnalyticsPage() {
           {/* Collections Trend */}
           {analytics.collectionsTrend.length > 0 ? (
             <>
-              <h3 className={styles.sectionHeading ?? undefined}>
+              <h3 className={styles.sectionHeading}>
                 Collections Trend
               </h3>
               <table
@@ -147,7 +147,7 @@ export default function FinanceAnalyticsPage() {
           {/* Receivables Trend */}
           {analytics.receivablesTrend.length > 0 ? (
             <>
-              <h3 className={styles.sectionHeading ?? undefined}>
+              <h3 className={styles.sectionHeading}>
                 Receivables Trend
               </h3>
               <table
