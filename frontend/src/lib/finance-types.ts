@@ -158,3 +158,25 @@ export interface PortfolioCashflowForecast {
   monthlyEntries: MonthlyForecastEntry[];
   projectForecasts: ProjectCashflowForecast[];
 }
+
+// ---------- Portfolio financial summary types -------------------------
+
+/** Per-project metrics within the portfolio financial summary. */
+export interface ProjectFinancialSummary {
+  projectId: string;
+  recognizedRevenue: number;
+  receivablesExposure: number;
+  collectionRate: number;
+}
+
+/** Consolidated financial summary for the entire portfolio. */
+export interface PortfolioFinancialSummary {
+  totalRevenueRecognized: number;
+  totalDeferredRevenue: number;
+  totalReceivables: number;
+  overdueReceivables: number;
+  overdueReceivablesPct: number;
+  forecastNextMonth: number;
+  projectCount: number;
+  projectSummaries: ProjectFinancialSummary[];
+}

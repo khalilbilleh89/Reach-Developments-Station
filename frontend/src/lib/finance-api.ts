@@ -23,8 +23,10 @@ import type {
   MonthlyForecastEntry,
   PortfolioAging,
   PortfolioCashflowForecast,
+  PortfolioFinancialSummary,
   ProjectAging,
   ProjectCashflowForecast,
+  ProjectFinancialSummary,
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
@@ -432,4 +434,60 @@ export async function getProjectCashflowForecast(
     `/finance/cashflow/forecast/project/${encodeURIComponent(projectId)}`,
   );
   return mapProjectCashflowForecast(raw);
+}
+
+// ---------- Raw backend shapes for portfolio financial summary --------
+
+interface BackendProjectFinancialSummary {
+  project_id: string;
+  recognized_revenue: number;
+  receivables_exposure: number;
+  collection_rate: number;
+}
+
+interface BackendPortfolioFinancialSummary {
+  total_revenue_recognized: number;
+  total_deferred_revenue: number;
+  total_receivables: number;
+  overdue_receivables: number;
+  overdue_receivables_pct: number;
+  forecast_next_month: number;
+  project_count: number;
+  project_summaries: BackendProjectFinancialSummary[];
+}
+
+// ---------- Mapping helpers ------------------------------------------
+
+function mapProjectFinancialSummary(
+  raw: BackendProjectFinancialSummary,
+): ProjectFinancialSummary {
+  return {
+    projectId: raw.project_id,
+    recognizedRevenue: raw.recognized_revenue,
+    receivablesExposure: raw.receivables_exposure,
+    collectionRate: raw.collection_rate,
+  };
+}
+
+// ---------- Exported portfolio financial summary function ------------
+
+/**
+ * Fetch the consolidated portfolio financial summary.
+ *
+ * Backend endpoint: GET /finance/portfolio/summary
+ */
+export async function getPortfolioFinancialSummary(): Promise<PortfolioFinancialSummary> {
+  const raw = await apiFetch<BackendPortfolioFinancialSummary>(
+    "/finance/portfolio/summary",
+  );
+  return {
+    totalRevenueRecognized: raw.total_revenue_recognized,
+    totalDeferredRevenue: raw.total_deferred_revenue,
+    totalReceivables: raw.total_receivables,
+    overdueReceivables: raw.overdue_receivables,
+    overdueReceivablesPct: raw.overdue_receivables_pct,
+    forecastNextMonth: raw.forecast_next_month,
+    projectCount: raw.project_count,
+    projectSummaries: raw.project_summaries.map(mapProjectFinancialSummary),
+  };
 }

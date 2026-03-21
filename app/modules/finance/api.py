@@ -8,6 +8,7 @@ Full path:     /api/v1/finance/...
 
 Endpoints
 ---------
+  GET /finance/portfolio/summary                       — portfolio financial summary
   GET /finance/projects/{project_id}/summary           — project financial summary
   GET /finance/contracts/{contract_id}/revenue         — contract revenue recognition
   GET /finance/projects/{project_id}/revenue-summary   — project revenue recognition summary
@@ -36,6 +37,7 @@ from app.modules.finance.schemas import (
     MatchReceiptRequest,
     PortfolioAgingResponse,
     PortfolioCashflowForecastResponse,
+    PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
     ProjectAgingResponse,
     ProjectCashflowForecastResponse,
@@ -53,6 +55,7 @@ from app.modules.finance.service import (
     RevenueRecognitionService,
 )
 from app.modules.finance.cashflow_service import CashflowForecastService
+from app.modules.finance.portfolio_summary_service import PortfolioSummaryService
 from app.shared.enums.finance import AlertSeverity
 
 router = APIRouter(prefix="/finance", tags=["Finance"])
@@ -80,6 +83,28 @@ def get_matching_service(db: Session = Depends(get_db)) -> ReceiptMatchingServic
 
 def get_forecast_service(db: Session = Depends(get_db)) -> CashflowForecastService:
     return CashflowForecastService(db)
+
+
+def get_portfolio_summary_service(
+    db: Session = Depends(get_db),
+) -> PortfolioSummaryService:
+    return PortfolioSummaryService(db)
+
+
+@router.get(
+    "/portfolio/summary",
+    response_model=PortfolioFinancialSummaryResponse,
+)
+def get_portfolio_financial_summary(
+    service: Annotated[PortfolioSummaryService, Depends(get_portfolio_summary_service)],
+) -> PortfolioFinancialSummaryResponse:
+    """Return the consolidated financial summary for the entire portfolio.
+
+    Aggregates recognized revenue, deferred revenue, total receivables,
+    overdue receivables, next-month cashflow forecast, and per-project
+    financial metrics from the existing financial engines.
+    """
+    return service.get_portfolio_summary()
 
 
 @router.get(

@@ -35,6 +35,7 @@ from app.modules.collections.aging_engine import (
     calculate_receivable_age,
     classify_receivable_bucket,
 )
+from app.modules.finance.constants import RECEIVABLE_STATUSES
 from app.modules.finance.repository import FinanceSummaryRepository
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
@@ -63,12 +64,8 @@ from app.modules.buildings.models import Building
 from app.modules.phases.models import Phase
 from app.shared.enums.sales import ContractPaymentStatus
 
-# Statuses that represent collectible outstanding receivables.
-# CANCELLED installments are not receivable obligations and must be excluded.
-_RECEIVABLE_STATUSES = [
-    ContractPaymentStatus.PENDING.value,
-    ContractPaymentStatus.OVERDUE.value,
-]
+# Alias kept for module-internal use; canonical definition lives in constants.py.
+_RECEIVABLE_STATUSES = RECEIVABLE_STATUSES
 
 
 class FinanceSummaryService:
@@ -731,7 +728,9 @@ class CollectionsAlertService:
         self.db.commit()
         return self.get_overdue_alerts()
 
-    def resolve_alert(self, alert_id: str, notes: str | None = None) -> CollectionsAlertResponse:
+    def resolve_alert(
+        self, alert_id: str, notes: str | None = None
+    ) -> CollectionsAlertResponse:
         """Mark an alert as resolved.
 
         Raises HTTP 404 if the alert does not exist.
@@ -741,7 +740,11 @@ class CollectionsAlertService:
 
         from app.modules.collections.models import CollectionsAlert
 
-        alert = self.db.query(CollectionsAlert).filter(CollectionsAlert.id == alert_id).first()
+        alert = (
+            self.db.query(CollectionsAlert)
+            .filter(CollectionsAlert.id == alert_id)
+            .first()
+        )
         if not alert:
             raise HTTPException(
                 status_code=404, detail=f"Alert {alert_id!r} not found."
@@ -840,7 +843,9 @@ class ReceiptMatchingService:
             for inst in outstanding
         ]
 
-        engine_result = match_payment_to_installments(request.payment_amount, obligations)
+        engine_result = match_payment_to_installments(
+            request.payment_amount, obligations
+        )
 
         allocations = [
             MatchedInstallmentAllocation(
