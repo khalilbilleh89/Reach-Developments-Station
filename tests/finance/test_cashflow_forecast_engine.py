@@ -210,6 +210,27 @@ class TestBuildPortfolioForecast:
         project_sum = sum(pf.total_expected for pf in result.project_forecasts)
         assert result.total_expected == pytest.approx(project_sum)
 
+    def test_portfolio_project_forecasts_sorted_by_project_id(self):
+        """Portfolio project_forecasts must be sorted by project_id regardless
+        of dict insertion order — ensuring deterministic API output."""
+        # Insert keys in reverse alphabetical order to verify sorting.
+        project_installments = {
+            "proj-z": [
+                InstallmentLine("c-z", "proj-z", date(2026, 5, 1), 100.0, "pending")
+            ],
+            "proj-a": [
+                InstallmentLine("c-a", "proj-a", date(2026, 5, 1), 200.0, "pending")
+            ],
+            "proj-m": [
+                InstallmentLine("c-m", "proj-m", date(2026, 5, 1), 300.0, "pending")
+            ],
+        }
+        result = build_portfolio_forecast(project_installments)
+        project_ids = [pf.project_id for pf in result.project_forecasts]
+        assert project_ids == sorted(project_ids), (
+            "project_forecasts should be sorted ascending by project_id"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers — DB-backed tests

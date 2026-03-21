@@ -20,8 +20,11 @@ import type {
   CollectionsAlertList,
   ContractAging,
   MatchedInstallmentAllocation,
+  MonthlyForecastEntry,
   PortfolioAging,
+  PortfolioCashflowForecast,
   ProjectAging,
+  ProjectCashflowForecast,
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
@@ -380,7 +383,7 @@ interface BackendPortfolioCashflowForecast {
 
 function mapMonthlyForecastEntry(
   raw: BackendMonthlyForecastEntry,
-): import("./finance-types").MonthlyForecastEntry {
+): MonthlyForecastEntry {
   return {
     month: raw.month,
     expectedCollections: raw.expected_collections,
@@ -390,7 +393,7 @@ function mapMonthlyForecastEntry(
 
 function mapProjectCashflowForecast(
   raw: BackendProjectCashflowForecast,
-): import("./finance-types").ProjectCashflowForecast {
+): ProjectCashflowForecast {
   return {
     projectId: raw.project_id,
     totalExpected: raw.total_expected,
@@ -405,9 +408,7 @@ function mapProjectCashflowForecast(
  *
  * Backend endpoint: GET /finance/cashflow/forecast
  */
-export async function getPortfolioCashflowForecast(): Promise<
-  import("./finance-types").PortfolioCashflowForecast
-> {
+export async function getPortfolioCashflowForecast(): Promise<PortfolioCashflowForecast> {
   const raw = await apiFetch<BackendPortfolioCashflowForecast>(
     "/finance/cashflow/forecast",
   );
@@ -426,7 +427,7 @@ export async function getPortfolioCashflowForecast(): Promise<
  */
 export async function getProjectCashflowForecast(
   projectId: string,
-): Promise<import("./finance-types").ProjectCashflowForecast> {
+): Promise<ProjectCashflowForecast> {
   const raw = await apiFetch<BackendProjectCashflowForecast>(
     `/finance/cashflow/forecast/project/${encodeURIComponent(projectId)}`,
   );

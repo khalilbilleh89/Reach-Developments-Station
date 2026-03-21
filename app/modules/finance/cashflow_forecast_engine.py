@@ -4,15 +4,19 @@ finance.cashflow_forecast_engine
 Core cashflow forecasting engine.
 
 Forecast model:
-  expected_collections = SUM(amount) for installments with status in
-                         (PENDING, OVERDUE) grouped by calendar month.
+  expected_collections = SUM(amount) for installments grouped by calendar month.
 
 Rules:
-  - Only future-due or already-overdue installments are included.
-  - PAID and CANCELLED installments are excluded.
+  - The engine expects only PENDING/OVERDUE installments; PAID/CANCELLED
+    lines are excluded by the service layer before calling this module.
+  - This module does not apply any due_date filtering itself; any rules
+    such as "future-due or already-overdue" are enforced by the caller
+    when preparing the input installment list.
   - Months are represented as YYYY-MM strings for readability and sorting.
   - No SQL is embedded here; all data is passed in by the service layer.
   - Returned entries are sorted ascending by month.
+  - Portfolio project forecasts are sorted ascending by project_id for
+    deterministic API output.
 """
 
 from __future__ import annotations
@@ -138,7 +142,7 @@ def build_portfolio_forecast(
     """
     project_forecasts = [
         build_project_forecast(pid, lines)
-        for pid, lines in project_installments.items()
+        for pid, lines in sorted(project_installments.items())
     ]
 
     # Merge individual project monthly totals into a single timeline.
