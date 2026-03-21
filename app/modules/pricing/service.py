@@ -5,6 +5,7 @@ Application-layer orchestration for pricing workflows.
 Validates domain invariants and coordinates repository and engine calls.
 """
 
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import HTTPException, status
@@ -14,6 +15,7 @@ from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricin
 from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository
 from app.modules.pricing.schemas import (
     DEFAULT_CURRENCY,
+    PricingHistoryResponse,
     PricingReadinessResponse,
     ProjectPriceSummaryItem,
     ProjectPriceSummaryResponse,
@@ -22,6 +24,7 @@ from app.modules.pricing.schemas import (
     UnitPricingDetailResponse,
     UnitPriceResponse,
 )
+from app.modules.pricing.status_rules import is_immutable, is_restricted_status
 from app.modules.units.repository import UnitRepository
 
 
@@ -312,15 +315,39 @@ class UnitPricingService:
 
     Computes final_price = base_price + manual_adjustment server-side.
     Validates that the resulting final_price is non-negative.
+
+    Hardened lifecycle rules:
+    - A unit must be ready for pricing before creating a new record.
+    - Pricing records become immutable after approval.
+    - Only one active (non-archived) record per unit is permitted.
+    - Approved pricing must precede reservation/sales eligibility.
     """
 
     def __init__(self, db: Session) -> None:
         from app.modules.pricing.repository import UnitPricingRepository
         self._pricing_repo = UnitPricingRepository(db)
         self._unit_repo = UnitRepository(db)
+        self._db = db
+
+    # ------------------------------------------------------------------
+    # Readiness enforcement
+    # ------------------------------------------------------------------
+
+    def assert_unit_ready_for_pricing(self, unit_id: str) -> None:
+        """Raise HTTP 422 when *unit_id* is not ready for pricing operations.
+
+        Delegates to UnitService which owns the readiness definition.
+        Raises HTTP 404 when the unit does not exist.
+        """
+        from app.modules.units.service import UnitService
+        UnitService(self._db).assert_unit_ready_for_pricing(unit_id)
+
+    # ------------------------------------------------------------------
+    # Read operations
+    # ------------------------------------------------------------------
 
     def get_unit_pricing(self, unit_id: str):
-        """Return the pricing record for a unit, or raise 404 if not found."""
+        """Return the active pricing record for a unit, or raise 404 if not found."""
         from app.modules.pricing.schemas import UnitPricingResponse
 
         unit = self._unit_repo.get_by_id(unit_id)
@@ -333,15 +360,129 @@ class UnitPricingService:
         if not record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No pricing record found for unit '{unit_id}'.",
+                detail=f"No active pricing record found for unit '{unit_id}'.",
             )
         return UnitPricingResponse.model_validate(record)
 
+    def get_active_pricing(self, unit_id: str):
+        """Return the active pricing record, or None when none exists.
+
+        Does not raise on missing — callers can decide how to handle None.
+        """
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        record = self._pricing_repo.get_by_unit_id(unit_id)
+        if record is None:
+            return None
+        return UnitPricingResponse.model_validate(record)
+
+    def get_pricing_history(self, unit_id: str) -> "PricingHistoryResponse":
+        """Return all pricing records for *unit_id*, including archived, newest first."""
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        unit = self._unit_repo.get_by_id(unit_id)
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit '{unit_id}' not found.",
+            )
+        records = self._pricing_repo.get_all_by_unit_id(unit_id)
+        items = [UnitPricingResponse.model_validate(r) for r in records]
+        return PricingHistoryResponse(unit_id=unit_id, total=len(items), items=items)
+
+    # ------------------------------------------------------------------
+    # Write operations
+    # ------------------------------------------------------------------
+
+    def create_pricing(self, unit_id: str, data) -> "UnitPricingResponse":
+        """Create a new pricing record for *unit_id* under the hardened lifecycle.
+
+        Enforces that the unit is ready for pricing (status 'available').
+        Archives any existing active pricing record before creating a new one.
+        Restricted statuses (approved, archived) are rejected — the record starts
+        as 'draft' by default, but may be created as 'submitted' or 'reviewed'
+        if those values are explicitly supplied.
+        """
+        from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
+
+        # Gate: unit must be ready for pricing.
+        self.assert_unit_ready_for_pricing(unit_id)
+
+        payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
+        base_price = payload.get("base_price", 0.0)
+        manual_adjustment = payload.get("manual_adjustment", 0.0)
+        currency = payload.get("currency", "AED")
+        notes = payload.get("notes", None)
+        # Schema accepts draft/submitted/reviewed; blocks approved/archived.
+        # Default to draft here as an additional safety net.
+        pricing_status = payload.get("pricing_status", "draft")
+
+        final_price = base_price + manual_adjustment
+        if final_price < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Resulting final_price ({final_price}) would be negative. "
+                    "Adjust base_price or manual_adjustment."
+                ),
+            )
+
+        # Archive any existing active record before creating the new one.
+        self._pricing_repo.archive_existing_pricing(unit_id)
+
+        record = self._pricing_repo.create_for_unit(
+            unit_id,
+            base_price=base_price,
+            manual_adjustment=manual_adjustment,
+            final_price=final_price,
+            currency=currency,
+            pricing_status=pricing_status,
+            notes=notes,
+        )
+        return UnitPricingResponse.model_validate(record)
+
+    def approve_pricing(self, pricing_id: str, approved_by: str) -> "UnitPricingResponse":
+        """Approve a pricing record, making it immutable and sales-eligible.
+
+        Sets pricing_status to 'approved', records the approver and timestamp.
+        Raises 404 when the record is not found.
+        Raises 422 when the record is already approved or archived.
+        """
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        record = self._pricing_repo.get_by_id(pricing_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing record '{pricing_id}' not found.",
+            )
+        if record.pricing_status == "approved":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Pricing record is already approved.",
+            )
+        if record.pricing_status == "archived":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Archived pricing records cannot be approved.",
+            )
+        record = self._pricing_repo.update_for_unit(
+            record,
+            pricing_status="approved",
+            approved_by=approved_by,
+            approval_date=datetime.now(timezone.utc),
+        )
+        return UnitPricingResponse.model_validate(record)
+
     def save_unit_pricing(self, unit_id: str, data):
-        """Create or update the pricing record for a unit.
+        """Create or update the pricing record for a unit (backward-compatible upsert).
 
         Calculates final_price = base_price + manual_adjustment.
         Rejects the operation if the resulting final_price would be negative.
+        Rejects the operation if the existing active record is approved (immutable).
+        Enforces unit readiness when creating a new pricing record.
+        Client-supplied ``pricing_status`` values of 'approved' or 'archived' are
+        stripped — approval requires the dedicated endpoint, archival is automatic.
         """
         from app.modules.pricing.schemas import UnitPricingCreate, UnitPricingResponse
 
@@ -354,6 +495,21 @@ class UnitPricingService:
 
         # Resolve field values — merge with existing record if present
         existing = self._pricing_repo.get_by_unit_id(unit_id)
+
+        # Readiness gate: unit must be ready for pricing when creating a new record.
+        if existing is None:
+            self.assert_unit_ready_for_pricing(unit_id)
+
+        # Immutability gate: approved records cannot be edited.
+        if existing and is_immutable(existing.pricing_status):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Pricing record is '{existing.pricing_status}' and cannot be edited. "
+                    "Create a new pricing record to supersede it."
+                ),
+            )
+
         payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
 
         base_price = payload.get("base_price", float(existing.base_price) if existing else 0.0)
@@ -362,8 +518,21 @@ class UnitPricingService:
             float(existing.manual_adjustment) if existing else 0.0,
         )
         currency = payload.get("currency", existing.currency if existing else "AED")
-        pricing_status = payload.get(
-            "pricing_status", existing.pricing_status if existing else "draft"
+
+        # Strip restricted status values — approval must go through the
+        # dedicated approval endpoint, archival is handled by supersede.
+        requested_status = payload.get("pricing_status")
+        if requested_status and is_restricted_status(requested_status):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Cannot set pricing_status to '{requested_status}' via this endpoint. "
+                    "Use POST /pricing/{id}/approve to approve, or POST /units/{id}/pricing "
+                    "to supersede (which archives the current record automatically)."
+                ),
+            )
+        pricing_status = requested_status if requested_status else (
+            existing.pricing_status if existing else "draft"
         )
         notes = payload.get("notes", existing.notes if existing else None)
 
@@ -389,8 +558,63 @@ class UnitPricingService:
         return UnitPricingResponse.model_validate(record)
 
     def get_project_pricing(self, project_id: str) -> "dict[str, UnitPricingResponse]":
-        """Return all pricing records for units in a project, keyed by unit_id."""
+        """Return all active pricing records for units in a project, keyed by unit_id."""
         from app.modules.pricing.schemas import UnitPricingResponse
 
         records = self._pricing_repo.list_by_project(project_id)
         return {r.unit_id: UnitPricingResponse.model_validate(r) for r in records}
+
+    def update_pricing_by_id(self, pricing_id: str, data) -> "UnitPricingResponse":
+        """Update a specific pricing record by its ID.
+
+        Rejected when the record is in an immutable state (approved or archived).
+        Recomputes final_price = base_price + manual_adjustment.
+
+        ``pricing_status`` cannot be changed here — status progression occurs
+        only through dedicated lifecycle endpoints (POST /pricing/{id}/approve
+        for approval, POST /units/{id}/pricing to supersede).
+        """
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        record = self._pricing_repo.get_by_id(pricing_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing record '{pricing_id}' not found.",
+            )
+        if is_immutable(record.pricing_status):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Pricing record is '{record.pricing_status}' and cannot be edited. "
+                    "Create a new pricing record to supersede it."
+                ),
+            )
+
+        payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
+
+        base_price = payload.get("base_price", float(record.base_price))
+        manual_adjustment = payload.get("manual_adjustment", float(record.manual_adjustment))
+        final_price = base_price + manual_adjustment
+
+        if final_price < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Resulting final_price ({final_price}) would be negative. "
+                    "Adjust base_price or manual_adjustment."
+                ),
+            )
+
+        update_kwargs: dict = {
+            "base_price": base_price,
+            "manual_adjustment": manual_adjustment,
+            "final_price": final_price,
+        }
+        # Only price/currency/notes are writable; pricing_status is excluded.
+        for field in ("currency", "notes"):
+            if field in payload:
+                update_kwargs[field] = payload[field]
+
+        record = self._pricing_repo.update_for_unit(record, **update_kwargs)
+        return UnitPricingResponse.model_validate(record)

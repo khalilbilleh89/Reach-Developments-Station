@@ -356,15 +356,19 @@ export interface Project {
 /**
  * Formal pricing status for a unit pricing record.
  * Values mirror the backend pricing_status constraint in the unit_pricing table.
+ * Canonical lifecycle: draft → submitted → approved → archived.
+ * The ``reviewed`` status is retained for backward compatibility.
  */
-export type PricingStatus = "draft" | "reviewed" | "approved";
+export type PricingStatus = "draft" | "submitted" | "reviewed" | "approved" | "archived";
 
 /** Human-readable label for a PricingStatus value. */
 export function pricingStatusLabel(status: PricingStatus | string): string {
   const labels: Record<string, string> = {
     draft: "Draft",
+    submitted: "Submitted",
     reviewed: "Reviewed",
     approved: "Approved",
+    archived: "Archived",
   };
   return labels[status] ?? status;
 }
@@ -382,6 +386,8 @@ export interface UnitPricingRecord {
   currency: string;
   pricing_status: PricingStatus;
   notes: string | null;
+  approved_by: string | null;
+  approval_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -397,6 +403,24 @@ export interface UnitPricingRecordSave {
   currency?: string;
   pricing_status?: PricingStatus;
   notes?: string | null;
+}
+
+/**
+ * Payload for approving a pricing record.
+ * Sent to POST /api/v1/pricing/{pricingId}/approve.
+ */
+export interface PricingApprovalRequest {
+  approved_by: string;
+}
+
+/**
+ * Pricing history response — all records for a unit including archived ones.
+ * Returned by GET /api/v1/units/{unitId}/pricing/history.
+ */
+export interface PricingHistoryResponse {
+  unit_id: string;
+  total: number;
+  items: UnitPricingRecord[];
 }
 
 // ---------- Qualitative pricing attributes types -------------------------

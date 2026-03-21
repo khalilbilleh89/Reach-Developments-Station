@@ -7,9 +7,10 @@ UnitPricingAttributes — attribute-based pricing engine inputs (per-sqm, premiu
 UnitPricing          — formal per-unit pricing record (base_price, adjustment, final_price).
 """
 
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -49,7 +50,9 @@ class UnitPricing(Base, TimestampMixin):
     final_price is always computed in the service layer, never trusted
     from direct client submission.
 
-    One record per unit — enforced by the unique constraint on unit_id.
+    Multiple records per unit are allowed to support pricing history.
+    Only one record per unit should have a non-archived status at any time;
+    this invariant is enforced by the service layer.
     """
 
     __tablename__ = "unit_pricing"
@@ -58,7 +61,6 @@ class UnitPricing(Base, TimestampMixin):
         String(36),
         ForeignKey("units.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
         index=True,
     )
     base_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
@@ -73,3 +75,7 @@ class UnitPricing(Base, TimestampMixin):
         String(20), nullable=False, default="draft"
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    approval_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

@@ -5,13 +5,18 @@ Pydantic request/response schemas for the Pricing Engine API.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 # Authoritative default currency for the platform.  All pricing values inherit
 # this when no explicit currency is available from the pricing record.
 DEFAULT_CURRENCY = "AED"
+
+# Valid pricing status values.  The canonical lifecycle is:
+#   draft → submitted → approved → archived
+# The ``reviewed`` status is retained for backward compatibility.
+_PRICING_STATUS_PATTERN = r"^(draft|submitted|reviewed|approved|archived)$"
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +105,13 @@ class PricingReadinessResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class UnitPricingCreate(BaseModel):
-    """Payload for creating or updating a formal per-unit pricing record."""
+    """Payload for creating or updating a formal per-unit pricing record.
+
+    ``pricing_status`` is intentionally limited to non-terminal values here.
+    Approval must go through POST /pricing/{id}/approve (which stamps
+    ``approved_by`` and ``approval_date``).  Archival is handled automatically
+    by the supersede workflow.
+    """
 
     base_price: float = Field(..., ge=0, description="Base price of the unit. Must be non-negative.")
     manual_adjustment: float = Field(
@@ -110,22 +121,26 @@ class UnitPricingCreate(BaseModel):
     currency: str = Field(default="AED", min_length=1, max_length=10)
     pricing_status: str = Field(
         default="draft",
-        pattern=r"^(draft|reviewed|approved)$",
-        description="Pricing review status: draft | reviewed | approved.",
+        pattern=r"^(draft|submitted|reviewed)$",
+        description="Pricing lifecycle status for create/update: draft | submitted | reviewed.",
     )
     notes: Optional[str] = Field(default=None, description="Optional free-text notes.")
 
 
 class UnitPricingUpdate(BaseModel):
-    """Payload for partially updating a formal per-unit pricing record."""
+    """Payload for partially updating a formal per-unit pricing record.
+
+    ``pricing_status`` is intentionally excluded.  Status progression must
+    occur through dedicated lifecycle endpoints only:
+    - POST /pricing/{id}/approve  — transitions to ``approved``
+    - POST /units/{id}/pricing    — archives existing and creates new ``draft``
+
+    Only price/currency/notes fields are writable here.
+    """
 
     base_price: Optional[float] = Field(default=None, ge=0)
     manual_adjustment: Optional[float] = Field(default=None)
     currency: Optional[str] = Field(default=None, min_length=1, max_length=10)
-    pricing_status: Optional[str] = Field(
-        default=None,
-        pattern=r"^(draft|reviewed|approved)$",
-    )
     notes: Optional[str] = Field(default=None)
 
 
@@ -140,10 +155,26 @@ class UnitPricingResponse(BaseModel):
     currency: str
     pricing_status: str
     notes: Optional[str]
+    approved_by: Optional[str]
+    approval_date: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PricingApprovalRequest(BaseModel):
+    """Payload for approving a pricing record."""
+
+    approved_by: str = Field(..., min_length=1, max_length=255, description="Identifier of the approver.")
+
+
+class PricingHistoryResponse(BaseModel):
+    """Paginated list of all pricing records for a unit (including archived)."""
+
+    unit_id: str
+    total: int
+    items: List[UnitPricingResponse]
 
 
 # ---------------------------------------------------------------------------

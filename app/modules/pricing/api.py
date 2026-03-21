@@ -7,25 +7,32 @@ Endpoints under /pricing.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.pricing.schemas import (
+    PricingApprovalRequest,
     PricingReadinessResponse,
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
     UnitPricingAttributesResponse,
     UnitPricingDetailResponse,
     UnitPriceResponse,
+    UnitPricingResponse,
+    UnitPricingUpdate,
 )
-from app.modules.pricing.service import PricingService
+from app.modules.pricing.service import PricingService, UnitPricingService
 
 router = APIRouter(prefix="/pricing", tags=["Pricing"])
 
 
 def get_service(db: Session = Depends(get_db)) -> PricingService:
     return PricingService(db)
+
+
+def get_unit_pricing_service(db: Session = Depends(get_db)) -> UnitPricingService:
+    return UnitPricingService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -137,3 +144,45 @@ def get_project_price_summary(
 ) -> ProjectPriceSummaryResponse:
     """Get a pricing summary for all priced units in a project."""
     return service.calculate_project_price_summary(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Governed pricing lifecycle endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/{pricing_id}",
+    response_model=UnitPricingResponse,
+    tags=["unit-pricing"],
+)
+def update_pricing_record(
+    pricing_id: str,
+    data: UnitPricingUpdate,
+    service: Annotated[UnitPricingService, Depends(get_unit_pricing_service)],
+) -> UnitPricingResponse:
+    """Update a specific pricing record by ID.
+
+    Rejected when the record is in an immutable state (approved or archived).
+    """
+    return service.update_pricing_by_id(pricing_id, data)
+
+
+@router.post(
+    "/{pricing_id}/approve",
+    response_model=UnitPricingResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["unit-pricing"],
+)
+def approve_pricing_record(
+    pricing_id: str,
+    data: PricingApprovalRequest,
+    service: Annotated[UnitPricingService, Depends(get_unit_pricing_service)],
+) -> UnitPricingResponse:
+    """Approve a pricing record, locking it against further edits.
+
+    Sets pricing_status to 'approved', records the approver identifier
+    and the UTC approval timestamp.  Once approved, the record can only
+    be superseded by creating a new pricing record (which archives this one).
+    """
+    return service.approve_pricing(pricing_id, data.approved_by)
