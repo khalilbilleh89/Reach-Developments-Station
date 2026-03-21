@@ -8,11 +8,20 @@ Enforces business rules for buyers, reservations, and contracts.
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.modules.sales.contract_rules import (
+    assert_contract_has_reservation,
+    assert_reservation_is_converted,
+    assert_valid_contract_transition,
+)
 from app.modules.sales.models import Buyer, Reservation, SalesContract
 from app.modules.sales.repository import (
     BuyerRepository,
     ReservationRepository,
     SalesContractRepository,
+)
+from app.modules.sales.reservation_rules import (
+    assert_reservation_is_convertible,
+    assert_valid_reservation_transition,
 )
 from app.modules.sales.schemas import (
     BuyerCreate,
@@ -29,6 +38,7 @@ from app.modules.sales.schemas import (
     SalesContractUpdate,
 )
 from app.modules.units.repository import UnitRepository
+from app.shared.enums.project import UnitStatus
 from app.shared.enums.sales import ContractStatus, ReservationStatus
 
 
@@ -116,24 +126,18 @@ class SalesService:
 
     def cancel_reservation(self, reservation_id: str) -> ReservationResponse:
         reservation = self._require_reservation(reservation_id)
-        if reservation.status != ReservationStatus.ACTIVE.value:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Only active reservations can be cancelled. "
-                       f"Current status: '{reservation.status}'.",
-            )
+        assert_valid_reservation_transition(
+            reservation.status, ReservationStatus.CANCELLED.value
+        )
         reservation.status = ReservationStatus.CANCELLED.value
         self.reservation_repo.save(reservation)
         return ReservationResponse.model_validate(reservation)
 
     def expire_reservation(self, reservation_id: str) -> ReservationResponse:
         reservation = self._require_reservation(reservation_id)
-        if reservation.status != ReservationStatus.ACTIVE.value:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Only active reservations can be expired. "
-                       f"Current status: '{reservation.status}'.",
-            )
+        assert_valid_reservation_transition(
+            reservation.status, ReservationStatus.EXPIRED.value
+        )
         reservation.status = ReservationStatus.EXPIRED.value
         self.reservation_repo.save(reservation)
         return ReservationResponse.model_validate(reservation)
@@ -175,12 +179,7 @@ class SalesService:
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="Reservation buyer does not match the contract buyer.",
                 )
-            if reservation.status != ReservationStatus.ACTIVE.value:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Reservation '{data.reservation_id}' is not active "
-                           f"and cannot be converted to a contract.",
-                )
+            assert_reservation_is_convertible(reservation.status, data.reservation_id)
 
         # Atomic: create contract and convert reservation in a single commit
         contract = SalesContract(**data.model_dump())
@@ -232,16 +231,38 @@ class SalesService:
 
     def cancel_contract(self, contract_id: str) -> SalesContractResponse:
         contract = self._require_contract(contract_id)
-        if contract.status not in (
-            ContractStatus.DRAFT.value,
-            ContractStatus.ACTIVE.value,
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Only draft or active contracts can be cancelled. "
-                       f"Current status: '{contract.status}'.",
-            )
+        assert_valid_contract_transition(contract.status, ContractStatus.CANCELLED.value)
         contract.status = ContractStatus.CANCELLED.value
+        # Release the unit back to available when a contract is cancelled
+        self._set_unit_status(contract.unit_id, UnitStatus.AVAILABLE.value)
+        self.contract_repo.save(contract)
+        return SalesContractResponse.model_validate(contract)
+
+    def activate_contract(self, contract_id: str) -> SalesContractResponse:
+        """Activate a draft contract, transitioning it to the ACTIVE state.
+
+        Rules enforced:
+          - Contract must be in DRAFT status.
+          - Contract must have a linked reservation.
+          - The linked reservation must be in CONVERTED status.
+          - Unit status is set to UNDER_CONTRACT atomically.
+
+        Raises:
+            404 — if the contract does not exist.
+            422 — if the contract has no reservation linkage.
+            422 — if the transition is not permitted by the state machine.
+            409 — if the linked reservation is not in CONVERTED status.
+        """
+        contract = self._require_contract(contract_id)
+        assert_valid_contract_transition(contract.status, ContractStatus.ACTIVE.value)
+        assert_contract_has_reservation(contract_id, contract.reservation_id)
+
+        # Validate the linked reservation is properly converted
+        reservation = self._require_reservation(contract.reservation_id)
+        assert_reservation_is_converted(contract_id, contract.reservation_id, reservation.status)
+
+        contract.status = ContractStatus.ACTIVE.value
+        self._set_unit_status(contract.unit_id, UnitStatus.UNDER_CONTRACT.value)
         self.contract_repo.save(contract)
         return SalesContractResponse.model_validate(contract)
 
@@ -309,3 +330,14 @@ class SalesService:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Unit '{unit_id}' must have pricing attributes set before it can be reserved.",
             )
+
+    def _set_unit_status(self, unit_id: str, new_unit_status: str) -> None:
+        """Set the unit's availability status on the ORM object without committing.
+
+        The caller is responsible for calling the repository's save() method
+        (which calls db.commit()) to persist the change atomically with the
+        associated contract/reservation update.
+        """
+        unit = self.unit_repo.get_by_id(unit_id)
+        if unit is not None:
+            unit.status = new_unit_status
