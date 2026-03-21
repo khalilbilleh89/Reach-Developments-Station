@@ -358,7 +358,7 @@ class TestPortfolioForecastNextMonth:
         cid = _make_contract(
             db_session, uid, 100_000.0, "PS-FCT-C002", "fct02@test.com"
         )
-        # Installment in month + 3 — not next month
+        # Installment scheduled in the same month next year — explicitly not next month
         today = date.today()
         far_future = date(today.year + 1, today.month, 15)
         _make_installment(db_session, cid, 100_000.0, 1, far_future, "pending")
@@ -451,6 +451,58 @@ class TestProjectFinancialSummaryEntries:
         assert entry is not None
         assert entry.receivables_exposure == pytest.approx(0.0)
         assert entry.collection_rate == pytest.approx(1.0)
+
+    def test_per_contract_clamp_prevents_overpayment_masking_underpayment(
+        self, db_session: Session
+    ):
+        """Per-contract clamping must be applied before summing project totals.
+
+        Scenario:
+          Contract A: price = 100k, paid = 150k  (overpaid)
+          Contract B: price = 100k, paid = 0      (unpaid)
+
+        Incorrect aggregate-then-clamp logic:
+          total_price = 200k, total_paid = 150k → recognized = 150k  ✗
+
+        Correct per-contract-then-sum logic:
+          Contract A: min(150k, 100k) = 100k recognized
+          Contract B: min(0,    100k) = 0    recognized
+          Project total recognized    = 100k  ✓
+        """
+        pid = _make_project(db_session, "PS-PROJ-05")
+
+        # Contract A — overpaid (150k paid on a 100k contract)
+        uid_a = _make_unit(db_session, pid, "PS-PROJ05-UA")
+        cid_a = _make_contract(
+            db_session, uid_a, 100_000.0, "PS-PROJ-C005A", "proj05a@test.com"
+        )
+        _make_installment(db_session, cid_a, 150_000.0, 1, date(2026, 1, 1), "paid")
+
+        # Contract B — unpaid (0 paid on a 100k contract)
+        uid_b = _make_unit(db_session, pid, "PS-PROJ05-UB")
+        cid_b = _make_contract(
+            db_session, uid_b, 100_000.0, "PS-PROJ-C005B", "proj05b@test.com"
+        )
+        _make_installment(
+            db_session,
+            cid_b,
+            100_000.0,
+            1,
+            date.today() + timedelta(days=30),
+            "pending",
+        )
+
+        svc = PortfolioSummaryService(db_session)
+        result = svc.get_portfolio_summary()
+
+        entry = next((e for e in result.project_summaries if e.project_id == pid), None)
+        assert entry is not None
+        # Per-contract clamped sum: 100k (A clamped) + 0 (B unpaid) = 100k
+        assert entry.recognized_revenue == pytest.approx(100_000.0)
+        # Total contract value = 200k, recognized = 100k → rate = 0.5
+        assert entry.collection_rate == pytest.approx(0.5)
+        # Contract B still has 100k outstanding
+        assert entry.receivables_exposure == pytest.approx(100_000.0)
 
 
 # ---------------------------------------------------------------------------

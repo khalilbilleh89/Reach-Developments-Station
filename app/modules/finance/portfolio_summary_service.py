@@ -25,6 +25,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.modules.finance.cashflow_service import CashflowForecastService
+from app.modules.finance.constants import RECEIVABLE_STATUSES
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
     calculate_contract_revenue_recognition,
@@ -43,12 +44,6 @@ from app.modules.floors.models import Floor
 from app.modules.buildings.models import Building
 from app.modules.phases.models import Phase
 from app.shared.enums.sales import ContractPaymentStatus
-
-# Statuses that represent outstanding receivable obligations.
-_RECEIVABLE_STATUSES = [
-    ContractPaymentStatus.PENDING.value,
-    ContractPaymentStatus.OVERDUE.value,
-]
 
 
 def _next_month_key() -> str:
@@ -139,6 +134,11 @@ class PortfolioSummaryService:
 
         Executes three queries regardless of project count to avoid N+1
         round-trips.
+
+        Per-project recognized revenue is computed by summing the per-contract
+        clamped recognition results — NOT by clamping once on the project-level
+        aggregate. This correctly handles the case where one contract is
+        overpaid and another is unpaid within the same project.
         """
         # 1. Fetch all contracts with their project association.
         rows = (
@@ -174,19 +174,27 @@ class PortfolioSummaryService:
             total_contract_value = round(
                 sum(float(c.contract_price) for c in contracts), 2
             )
-            paid_amount = sum(paid_map.get(c.id, 0.0) for c in contracts)
-            data = ContractRevenueData(
-                contract_id="",  # unused at project level
-                contract_total=total_contract_value,
-                paid_amount=paid_amount,
-            )
-            recognition = calculate_contract_revenue_recognition(data)
+
+            # Sum per-contract clamped recognition so that an overpaid contract
+            # cannot inflate the recognized total at the expense of an unpaid one.
+            project_recognized = 0.0
+            for contract in contracts:
+                paid = paid_map.get(contract.id, 0.0)
+                cdata = ContractRevenueData(
+                    contract_id=contract.id,
+                    contract_total=float(contract.contract_price),
+                    paid_amount=paid,
+                )
+                crec = calculate_contract_revenue_recognition(cdata)
+                project_recognized += crec.recognized_revenue
+
+            recognized_revenue = round(project_recognized, 2)
 
             receivables_exposure = round(receivables_map.get(project_id, 0.0), 2)
 
             if total_contract_value > 0:
                 collection_rate = round(
-                    min(recognition.recognized_revenue / total_contract_value, 1.0),
+                    min(recognized_revenue / total_contract_value, 1.0),
                     6,
                 )
             else:
@@ -195,7 +203,7 @@ class PortfolioSummaryService:
             entries.append(
                 ProjectFinancialSummaryEntry(
                     project_id=project_id,
-                    recognized_revenue=recognition.recognized_revenue,
+                    recognized_revenue=recognized_revenue,
                     receivables_exposure=receivables_exposure,
                     collection_rate=collection_rate,
                 )
@@ -222,21 +230,27 @@ class PortfolioSummaryService:
         return {str(cid): float(total) for cid, total in rows}
 
     def _sum_outstanding_by_project(self) -> dict:
-        """Return mapping of project_id → total outstanding amount (single query)."""
+        """Return mapping of project_id → total outstanding amount (single query).
+
+        Anchored on ContractPaymentSchedule and joined forward through the
+        contract → unit → floor → building → phase chain, mirroring the
+        pattern used in CashflowForecastService._load_all_project_installments()
+        and CollectionsAgingService to eliminate join ambiguity.
+        """
         rows = (
             self.db.query(
                 Phase.project_id,
                 func.sum(ContractPaymentSchedule.amount),
             )
+            .select_from(ContractPaymentSchedule)
             .join(
-                SalesContract,
-                ContractPaymentSchedule.contract_id == SalesContract.id,
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
             )
             .join(Unit, SalesContract.unit_id == Unit.id)
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
-            .filter(ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES))
+            .filter(ContractPaymentSchedule.status.in_(RECEIVABLE_STATUSES))
             .group_by(Phase.project_id)
             .all()
         )
