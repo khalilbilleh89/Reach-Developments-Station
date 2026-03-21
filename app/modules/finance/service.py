@@ -152,6 +152,8 @@ class RevenueRecognitionService:
         """Return aggregated revenue recognition for all contracts in a project.
 
         Raises HTTP 404 if the project does not exist.
+        Uses a single grouped query to sum paid installments for all contracts
+        in the project, avoiding N+1 round-trips.
         """
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if not project:
@@ -161,10 +163,23 @@ class RevenueRecognitionService:
             )
 
         contracts = self._get_project_contracts(project_id)
-        contract_details: List[RevenueRecognitionResponse] = []
+        if not contracts:
+            return ProjectRevenueSummaryResponse(
+                project_id=project_id,
+                total_contract_value=0.0,
+                total_recognized_revenue=0.0,
+                total_deferred_revenue=0.0,
+                overall_recognition_percentage=0.0,
+                contract_count=0,
+                contracts=[],
+            )
 
+        contract_ids = [c.id for c in contracts]
+        paid_map = self._sum_paid_installments_bulk(contract_ids)
+
+        contract_details: List[RevenueRecognitionResponse] = []
         for contract in contracts:
-            paid_amount = self._sum_paid_installments(contract.id)
+            paid_amount = paid_map.get(contract.id, 0.0)
             data = ContractRevenueData(
                 contract_id=contract.id,
                 contract_total=float(contract.contract_price),
@@ -203,9 +218,10 @@ class RevenueRecognitionService:
         """Return portfolio-wide revenue recognition overview.
 
         Aggregates across all contracts in all projects.
+        Uses a single grouped query to sum paid installments for all contracts,
+        avoiding N+1 round-trips.
         """
-        # Fetch all contracts with their project_id in a single JOIN query to
-        # avoid N+1 round-trips through the unit hierarchy.
+        # Fetch all contracts with their project_id in a single JOIN query.
         rows = (
             self.db.query(SalesContract, Phase.project_id)
             .join(Unit, SalesContract.unit_id == Unit.id)
@@ -215,13 +231,26 @@ class RevenueRecognitionService:
             .all()
         )
 
+        if not rows:
+            return PortfolioRevenueOverviewResponse(
+                total_contract_value=0.0,
+                total_recognized_revenue=0.0,
+                total_deferred_revenue=0.0,
+                overall_recognition_percentage=0.0,
+                project_count=0,
+                contract_count=0,
+            )
+
+        contract_ids = [contract.id for contract, _ in rows]
+        paid_map = self._sum_paid_installments_bulk(contract_ids)
+
         total_contract_value = 0.0
         total_recognized = 0.0
         total_deferred = 0.0
         project_ids: set[str] = set()
 
         for contract, project_id in rows:
-            paid_amount = self._sum_paid_installments(contract.id)
+            paid_amount = paid_map.get(contract.id, 0.0)
             data = ContractRevenueData(
                 contract_id=contract.id,
                 contract_total=float(contract.contract_price),
@@ -257,8 +286,35 @@ class RevenueRecognitionService:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _sum_paid_installments_bulk(self, contract_ids: List[str]) -> dict:
+        """Return a dict mapping contract_id → paid amount for all given IDs.
+
+        Executes a single grouped query instead of one query per contract.
+        Contracts with no paid installments are absent from the returned dict
+        (callers should use `.get(id, 0.0)`).
+        """
+        if not contract_ids:
+            return {}
+        rows = (
+            self.db.query(
+                ContractPaymentSchedule.contract_id,
+                func.sum(ContractPaymentSchedule.amount),
+            )
+            .filter(
+                ContractPaymentSchedule.contract_id.in_(contract_ids),
+                ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
+            )
+            .group_by(ContractPaymentSchedule.contract_id)
+            .all()
+        )
+        return {cid: float(total) for cid, total in rows}
+
     def _sum_paid_installments(self, contract_id: str) -> float:
-        """Return SUM(amount) for all paid installments of a contract."""
+        """Return SUM(amount) for all paid installments of a single contract.
+
+        Used only by get_contract_revenue() which looks up a single contract.
+        For bulk lookups across many contracts, use _sum_paid_installments_bulk.
+        """
         result = (
             self.db.query(func.coalesce(func.sum(ContractPaymentSchedule.amount), 0))
             .filter(

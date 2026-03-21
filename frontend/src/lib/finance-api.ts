@@ -50,7 +50,7 @@ interface BackendRevenueOverview {
 
 function mapRevenueRecognition(raw: BackendRevenueRecognition): RevenueRecognition {
   return {
-    contract_id: raw.contract_id,
+    contractId: raw.contract_id,
     contractTotal: raw.contract_total,
     recognizedRevenue: raw.recognized_revenue,
     deferredRevenue: raw.deferred_revenue,
@@ -86,7 +86,7 @@ export async function getProjectRevenueSummary(
     `/finance/projects/${projectId}/revenue-summary`,
   );
   return {
-    project_id: raw.project_id,
+    projectId: raw.project_id,
     totalContractValue: raw.total_contract_value,
     totalRecognizedRevenue: raw.total_recognized_revenue,
     totalDeferredRevenue: raw.total_deferred_revenue,

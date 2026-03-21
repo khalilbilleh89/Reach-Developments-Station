@@ -36,26 +36,44 @@ export default function FinanceRevenuePage() {
 
   const [summary, setSummary] = useState<ProjectRevenueSummary | null>(null);
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
-  // Load project list and portfolio overview on mount
+  // Load project list and portfolio overview independently on mount so that
+  // a failure in one does not prevent the other from rendering.
   useEffect(() => {
     setProjectsLoading(true);
     setProjectsError(null);
+    setOverviewError(null);
 
-    Promise.all([getProjects(), getRevenueOverview()])
-      .then(([list, ov]) => {
-        setProjects(list);
-        setOverview(ov);
-        if (list.length > 0) setSelectedProject(list[0]);
-      })
-      .catch((err: unknown) => {
-        setProjectsError(
-          err instanceof Error ? err.message : "Failed to load data.",
-        );
-      })
-      .finally(() => setProjectsLoading(false));
+    Promise.allSettled([getProjects(), getRevenueOverview()]).then(
+      ([projectsResult, overviewResult]) => {
+        if (projectsResult.status === "fulfilled") {
+          const list = projectsResult.value;
+          setProjects(list);
+          if (list.length > 0) setSelectedProject(list[0]);
+        } else {
+          setProjectsError(
+            projectsResult.reason instanceof Error
+              ? projectsResult.reason.message
+              : "Failed to load projects.",
+          );
+        }
+
+        if (overviewResult.status === "fulfilled") {
+          setOverview(overviewResult.value);
+        } else {
+          setOverviewError(
+            overviewResult.reason instanceof Error
+              ? overviewResult.reason.message
+              : "Failed to load portfolio overview.",
+          );
+        }
+
+        setProjectsLoading(false);
+      },
+    );
   }, []);
 
   // Load project revenue summary whenever selected project changes
@@ -84,6 +102,7 @@ export default function FinanceRevenuePage() {
   return (
     <PageContainer title="Revenue Recognition">
       {/* Portfolio overview */}
+      {overviewError && <p className={styles.errorText}>{overviewError}</p>}
       {overview && (
         <div className={styles.kpiGrid}>
           <div className={styles.kpiCard}>
@@ -182,8 +201,8 @@ export default function FinanceRevenuePage() {
               </thead>
               <tbody>
                 {summary.contracts.map((c: RevenueRecognition) => (
-                  <tr key={c.contract_id}>
-                    <td>{c.contract_id}</td>
+                  <tr key={c.contractId}>
+                    <td>{c.contractId}</td>
                     <td>{formatCurrency(c.contractTotal)}</td>
                     <td>{formatCurrency(c.recognizedRevenue)}</td>
                     <td>{formatCurrency(c.deferredRevenue)}</td>

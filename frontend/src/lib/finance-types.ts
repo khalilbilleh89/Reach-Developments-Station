@@ -5,6 +5,9 @@
  * app/modules/finance/schemas.py (RevenueRecognitionResponse,
  * ProjectRevenueSummaryResponse, PortfolioRevenueOverviewResponse).
  *
+ * All fields use camelCase. Backend snake_case fields are mapped in
+ * finance-api.ts before these types are populated.
+ *
  * No financial calculations are performed using these types — they are
  * display models only.
  */
@@ -13,7 +16,7 @@
 
 export interface RevenueRecognition {
   /** UUID of the contract. */
-  contract_id: string;
+  contractId: string;
   /** Total contract value. */
   contractTotal: number;
   /** Sum of all paid installments. */
@@ -27,7 +30,7 @@ export interface RevenueRecognition {
 // ---------- Project-level revenue summary --------------------------------
 
 export interface ProjectRevenueSummary {
-  project_id: string;
+  projectId: string;
   totalContractValue: number;
   totalRecognizedRevenue: number;
   totalDeferredRevenue: number;
