@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.reservations.repository import ReservationRepository
+from app.modules.reservations.reservation_rules import assert_valid_transition
 from app.modules.reservations.schemas import (
     ReservationCreate,
     ReservationListResponse,
@@ -30,27 +31,6 @@ from app.modules.reservations.schemas import (
 )
 from app.modules.units.repository import UnitRepository
 from app.shared.enums.project import UnitStatus
-
-# ---------------------------------------------------------------------------
-# Formal state machine — allowed transitions
-# ---------------------------------------------------------------------------
-
-_ALLOWED_TRANSITIONS: dict[str, list[str]] = {
-    ReservationStatus.draft.value: [
-        ReservationStatus.active.value,
-        ReservationStatus.cancelled.value,
-    ],
-    ReservationStatus.active.value: [
-        ReservationStatus.expired.value,
-        ReservationStatus.cancelled.value,
-        ReservationStatus.converted.value,
-    ],
-    ReservationStatus.expired.value: [
-        ReservationStatus.cancelled.value,
-    ],
-    ReservationStatus.cancelled.value: [],
-    ReservationStatus.converted.value: [],
-}
 
 # Map from new reservation status to the corresponding unit availability status.
 _UNIT_STATUS_MAP: dict[str, str] = {
@@ -204,16 +184,7 @@ class ReservationService:
         current = reservation.status
         target = new_status.value
 
-        allowed = _ALLOWED_TRANSITIONS.get(current, [])
-        if target not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    f"Invalid reservation state transition: "
-                    f"'{current}' → '{target}'. "
-                    f"Allowed from '{current}': {allowed or ['(none — terminal state)']}"
-                ),
-            )
+        assert_valid_transition(current, target)
 
         # Prevent a second ACTIVE reservation on the same unit.
         if target == ReservationStatus.active.value:

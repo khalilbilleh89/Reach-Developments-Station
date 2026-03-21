@@ -442,3 +442,130 @@ def test_convert_reservation_to_contract(client: TestClient):
     # Reservation should be converted
     res_resp = client.get(f"/api/v1/sales/reservations/{res_id}")
     assert res_resp.json()["status"] == "converted"
+
+
+# ---------------------------------------------------------------------------
+# Contract activation endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_activate_contract(client: TestClient):
+    """Activating a draft contract with a converted reservation succeeds."""
+    _, unit_id = _create_priced_unit(client, "PRJ-ACTAPI")
+    buyer_id = _create_buyer(client, "actapi@example.com")
+
+    # Create reservation and convert to contract
+    res_id = client.post(
+        "/api/v1/sales/reservations",
+        json={"unit_id": unit_id, "buyer_id": buyer_id, **_RESERVATION_DATES},
+    ).json()["id"]
+    contract_id = client.post(
+        f"/api/v1/sales/reservations/{res_id}/convert-to-contract",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "reservation_id": res_id,
+            "contract_number": "CNT-ACT-001",
+            "contract_date": "2026-03-13",
+            "contract_price": 500_000.0,
+        },
+    ).json()["id"]
+
+    resp = client.post(f"/api/v1/sales/contracts/{contract_id}/activate")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "active"
+
+
+def test_activate_contract_without_reservation_returns_422(client: TestClient):
+    """Activating a contract with no linked reservation returns 422."""
+    _, unit_id = _create_hierarchy(client, "PRJ-ACTNORES")
+    buyer_id = _create_buyer(client, "actnores@example.com")
+
+    contract_id = client.post(
+        "/api/v1/sales/contracts",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "contract_number": "CNT-NORES-001",
+            "contract_date": "2026-03-13",
+            "contract_price": 500_000.0,
+        },
+    ).json()["id"]
+
+    resp = client.post(f"/api/v1/sales/contracts/{contract_id}/activate")
+    assert resp.status_code == 422
+
+
+def test_activate_contract_not_found(client: TestClient):
+    resp = client.post("/api/v1/sales/contracts/no-such-contract/activate")
+    assert resp.status_code == 404
+
+
+def test_activate_already_active_contract_returns_422(client: TestClient):
+    """Activating an already-active contract returns 422."""
+    _, unit_id = _create_priced_unit(client, "PRJ-DBLACTAPI")
+    buyer_id = _create_buyer(client, "dblactapi@example.com")
+
+    res_id = client.post(
+        "/api/v1/sales/reservations",
+        json={"unit_id": unit_id, "buyer_id": buyer_id, **_RESERVATION_DATES},
+    ).json()["id"]
+    contract_id = client.post(
+        f"/api/v1/sales/reservations/{res_id}/convert-to-contract",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "reservation_id": res_id,
+            "contract_number": "CNT-DBLACT-001",
+            "contract_date": "2026-03-13",
+            "contract_price": 500_000.0,
+        },
+    ).json()["id"]
+
+    client.post(f"/api/v1/sales/contracts/{contract_id}/activate")
+    resp = client.post(f"/api/v1/sales/contracts/{contract_id}/activate")
+    assert resp.status_code == 422
+
+
+def test_get_unit_contracts(client: TestClient):
+    """GET /sales/units/{unit_id}/contracts returns all contracts for a unit."""
+    _, unit_id = _create_hierarchy(client, "PRJ-UCAPI")
+    buyer_id = _create_buyer(client, "ucapi@example.com")
+
+    client.post(
+        "/api/v1/sales/contracts",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "contract_number": "CNT-UC-API-001",
+            "contract_date": "2026-03-13",
+            "contract_price": 300_000.0,
+        },
+    )
+
+    resp = client.get(f"/api/v1/sales/units/{unit_id}/contracts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["unit_id"] == unit_id
+
+
+def test_cancel_contract_state_machine(client: TestClient):
+    """Cancelling a cancelled contract returns 422 (invalid state machine transition)."""
+    _, unit_id = _create_hierarchy(client, "PRJ-CXCSM")
+    buyer_id = _create_buyer(client, "cxcsm@example.com")
+
+    contract_id = client.post(
+        "/api/v1/sales/contracts",
+        json={
+            "unit_id": unit_id,
+            "buyer_id": buyer_id,
+            "contract_number": "CNT-CXCSM-001",
+            "contract_date": "2026-03-13",
+            "contract_price": 300_000.0,
+        },
+    ).json()["id"]
+
+    client.post(f"/api/v1/sales/contracts/{contract_id}/cancel")
+    resp = client.post(f"/api/v1/sales/contracts/{contract_id}/cancel")
+    assert resp.status_code == 422

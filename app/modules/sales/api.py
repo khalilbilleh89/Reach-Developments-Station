@@ -187,3 +187,33 @@ def cancel_contract(
 ) -> SalesContractResponse:
     """Cancel a draft or active contract."""
     return service.cancel_contract(contract_id)
+
+
+@router.post("/contracts/{contract_id}/activate", response_model=SalesContractResponse)
+def activate_contract(
+    contract_id: str,
+    service: Annotated[SalesService, Depends(get_service)],
+) -> SalesContractResponse:
+    """Activate a draft contract.
+
+    Rules:
+      - Contract must be in DRAFT status.
+      - Contract must have a linked reservation.
+      - The linked reservation must be in CONVERTED status.
+
+    Returns 404 if the contract does not exist.
+    Returns 422 if the contract has no reservation or transition is invalid.
+    Returns 409 if the reservation is not in CONVERTED status.
+    """
+    return service.activate_contract(contract_id)
+
+
+@router.get("/units/{unit_id}/contracts", response_model=SalesContractListResponse)
+def get_unit_contracts(
+    unit_id: str,
+    service: Annotated[SalesService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> SalesContractListResponse:
+    """List all contracts for a specific unit."""
+    return service.list_contracts(unit_id=unit_id, skip=skip, limit=limit)
