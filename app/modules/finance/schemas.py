@@ -221,3 +221,34 @@ class PortfolioCashflowForecastResponse(BaseModel):
     project_forecasts: List[ProjectCashflowForecastResponse] = Field(
         default_factory=list
     )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio financial summary schemas
+# ---------------------------------------------------------------------------
+
+
+class ProjectFinancialSummaryEntry(BaseModel):
+    """Per-project metrics within the portfolio financial summary."""
+
+    project_id: str
+    recognized_revenue: float = Field(..., ge=0)
+    receivables_exposure: float = Field(..., ge=0)
+    collection_rate: float = Field(..., ge=0, le=1)
+
+
+class PortfolioFinancialSummaryResponse(BaseModel):
+    """Consolidated financial summary for the entire portfolio.
+
+    Aggregates recognized revenue, receivables exposure, overdue exposure,
+    and next-month cashflow forecast across all projects.
+    """
+
+    total_revenue_recognized: float = Field(..., ge=0)
+    total_deferred_revenue: float = Field(..., ge=0)
+    total_receivables: float = Field(..., ge=0)
+    overdue_receivables: float = Field(..., ge=0)
+    overdue_receivables_pct: float = Field(..., ge=0, le=100)
+    forecast_next_month: float = Field(..., ge=0)
+    project_count: int = Field(..., ge=0)
+    project_summaries: List[ProjectFinancialSummaryEntry] = Field(default_factory=list)
