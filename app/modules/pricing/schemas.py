@@ -297,3 +297,49 @@ class PricingOverrideRequest(BaseModel):
             "Accepted values: sales_manager, development_director, ceo."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Pricing audit trail schemas
+# ---------------------------------------------------------------------------
+
+class PricingAuditEntry(BaseModel):
+    """Single entry in the pricing audit trail.
+
+    Each entry is an immutable snapshot of the pricing record state captured
+    at the moment a governed change event occurred.
+
+    ``change_type`` values:
+      INITIAL       — first pricing record created for a unit.
+      MANUAL_UPDATE — structural fields updated (base_price, notes, currency).
+      PREMIUM_RECALC — price recalculated from updated engine attributes.
+      OVERRIDE      — governed manual_adjustment override applied.
+      APPROVAL      — pricing record approved.
+      ARCHIVE       — pricing record archived (superseded by a new record).
+    """
+
+    id: str
+    pricing_id: str
+    unit_id: str
+    change_type: str
+    base_price: float
+    manual_adjustment: float
+    final_price: float
+    pricing_status: str
+    currency: str
+    override_reason: Optional[str]
+    override_requested_by: Optional[str]
+    override_approved_by: Optional[str]
+    actor: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PricingAuditTrailResponse(BaseModel):
+    """Ordered audit trail for a single pricing record."""
+
+    pricing_id: str
+    unit_id: str
+    total: int
+    entries: List[PricingAuditEntry]

@@ -140,3 +140,73 @@ class UnitPricingRepository:
             )
             .all()
         )
+
+
+class PricingHistoryRepository:
+    """Data access layer for the PricingHistory audit log."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def record_change(
+        self,
+        pricing_id: str,
+        unit_id: str,
+        change_type: str,
+        base_price: float,
+        manual_adjustment: float,
+        final_price: float,
+        pricing_status: str,
+        currency: str = "AED",
+        override_reason: Optional[str] = None,
+        override_requested_by: Optional[str] = None,
+        override_approved_by: Optional[str] = None,
+        actor: Optional[str] = None,
+    ) -> "PricingHistory":
+        """Append an immutable audit entry for a pricing state change.
+
+        Commits immediately after adding the entry, matching the single-record
+        commit pattern used throughout the rest of the repository layer.  Each
+        audit entry is written as its own transaction; callers should ensure the
+        parent pricing operation has already been committed before calling this
+        method so that the audit trail always reflects the persisted state.
+        """
+        from app.modules.pricing.models import PricingHistory
+        entry = PricingHistory(
+            pricing_id=pricing_id,
+            unit_id=unit_id,
+            change_type=change_type,
+            base_price=base_price,
+            manual_adjustment=manual_adjustment,
+            final_price=final_price,
+            pricing_status=pricing_status,
+            currency=currency,
+            override_reason=override_reason,
+            override_requested_by=override_requested_by,
+            override_approved_by=override_approved_by,
+            actor=actor,
+        )
+        self.db.add(entry)
+        self.db.commit()
+        self.db.refresh(entry)
+        return entry
+
+    def get_by_pricing_id(self, pricing_id: str) -> List["PricingHistory"]:
+        """Return all audit entries for a pricing record, oldest first."""
+        from app.modules.pricing.models import PricingHistory
+        return (
+            self.db.query(PricingHistory)
+            .filter(PricingHistory.pricing_id == pricing_id)
+            .order_by(PricingHistory.created_at.asc(), PricingHistory.id.asc())
+            .all()
+        )
+
+    def get_by_unit_id(self, unit_id: str) -> List["PricingHistory"]:
+        """Return all audit entries for all pricing records of a unit, oldest first."""
+        from app.modules.pricing.models import PricingHistory
+        return (
+            self.db.query(PricingHistory)
+            .filter(PricingHistory.unit_id == unit_id)
+            .order_by(PricingHistory.created_at.asc(), PricingHistory.id.asc())
+            .all()
+        )

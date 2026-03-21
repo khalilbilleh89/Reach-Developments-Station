@@ -12,12 +12,21 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
+from app.modules.pricing.models import (
+    CHANGE_TYPE_APPROVAL,
+    CHANGE_TYPE_ARCHIVE,
+    CHANGE_TYPE_INITIAL,
+    CHANGE_TYPE_MANUAL_UPDATE,
+    CHANGE_TYPE_OVERRIDE,
+)
 from app.modules.pricing.override_rules import assert_override_allowed, calculate_override_percent
 from app.modules.pricing.premium_rules import calculate_premium_breakdown
-from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository
+from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository, PricingHistoryRepository
 from app.modules.pricing.schemas import (
     DEFAULT_CURRENCY,
     PremiumBreakdownResponse,
+    PricingAuditEntry,
+    PricingAuditTrailResponse,
     PricingHistoryResponse,
     PricingOverrideRequest,
     PricingReadinessResponse,
@@ -29,7 +38,7 @@ from app.modules.pricing.schemas import (
     UnitPriceResponse,
     UnitPricingResponse,
 )
-from app.modules.pricing.status_rules import is_immutable, is_restricted_status
+from app.modules.pricing.status_rules import ARCHIVED_STATUS, is_immutable, is_restricted_status
 from app.modules.units.repository import UnitRepository
 
 
@@ -406,8 +415,8 @@ class UnitPricingService:
     """
 
     def __init__(self, db: Session) -> None:
-        from app.modules.pricing.repository import UnitPricingRepository
         self._pricing_repo = UnitPricingRepository(db)
+        self._history_repo = PricingHistoryRepository(db)
         self._unit_repo = UnitRepository(db)
         self._db = db
 
@@ -510,7 +519,24 @@ class UnitPricingService:
             )
 
         # Archive any existing active record before creating the new one.
-        self._pricing_repo.archive_existing_pricing(unit_id)
+        # Update the status first, then record the ARCHIVE history entry so that
+        # the audit log reflects the state *after* the archive transition.
+        superseded = self._pricing_repo.get_by_unit_id(unit_id)
+        if superseded is not None:
+            archived = self._pricing_repo.update_for_unit(superseded, pricing_status=ARCHIVED_STATUS)
+            self._history_repo.record_change(
+                pricing_id=archived.id,
+                unit_id=archived.unit_id,
+                change_type=CHANGE_TYPE_ARCHIVE,
+                base_price=float(archived.base_price),
+                manual_adjustment=float(archived.manual_adjustment),
+                final_price=float(archived.final_price),
+                pricing_status=archived.pricing_status,
+                currency=archived.currency,
+                override_reason=archived.override_reason,
+                override_requested_by=archived.override_requested_by,
+                override_approved_by=archived.override_approved_by,
+            )
 
         record = self._pricing_repo.create_for_unit(
             unit_id,
@@ -520,6 +546,17 @@ class UnitPricingService:
             currency=currency,
             pricing_status=pricing_status,
             notes=notes,
+        )
+        # Record history entry for the new pricing record.
+        self._history_repo.record_change(
+            pricing_id=record.id,
+            unit_id=unit_id,
+            change_type=CHANGE_TYPE_INITIAL,
+            base_price=float(record.base_price),
+            manual_adjustment=float(record.manual_adjustment),
+            final_price=float(record.final_price),
+            pricing_status=record.pricing_status,
+            currency=record.currency,
         )
         return UnitPricingResponse.model_validate(record)
 
@@ -553,6 +590,17 @@ class UnitPricingService:
             pricing_status="approved",
             approved_by=approved_by,
             approval_date=datetime.now(timezone.utc),
+        )
+        self._history_repo.record_change(
+            pricing_id=record.id,
+            unit_id=record.unit_id,
+            change_type=CHANGE_TYPE_APPROVAL,
+            base_price=float(record.base_price),
+            manual_adjustment=float(record.manual_adjustment),
+            final_price=float(record.final_price),
+            pricing_status=record.pricing_status,
+            currency=record.currency,
+            actor=approved_by,
         )
         return UnitPricingResponse.model_validate(record)
 
@@ -637,6 +685,17 @@ class UnitPricingService:
             pricing_status=pricing_status,
             notes=notes,
         )
+        change_type = CHANGE_TYPE_INITIAL if existing is None else CHANGE_TYPE_MANUAL_UPDATE
+        self._history_repo.record_change(
+            pricing_id=record.id,
+            unit_id=unit_id,
+            change_type=change_type,
+            base_price=float(record.base_price),
+            manual_adjustment=float(record.manual_adjustment),
+            final_price=float(record.final_price),
+            pricing_status=record.pricing_status,
+            currency=record.currency,
+        )
         return UnitPricingResponse.model_validate(record)
 
     def get_project_pricing(self, project_id: str) -> "dict[str, UnitPricingResponse]":
@@ -705,6 +764,16 @@ class UnitPricingService:
                 update_kwargs[field] = payload[field]
 
         record = self._pricing_repo.update_for_unit(record, **update_kwargs)
+        self._history_repo.record_change(
+            pricing_id=record.id,
+            unit_id=record.unit_id,
+            change_type=CHANGE_TYPE_MANUAL_UPDATE,
+            base_price=float(record.base_price),
+            manual_adjustment=float(record.manual_adjustment),
+            final_price=float(record.final_price),
+            pricing_status=record.pricing_status,
+            currency=record.currency,
+        )
         return UnitPricingResponse.model_validate(record)
 
     def apply_pricing_override(
@@ -769,5 +838,38 @@ class UnitPricingService:
             override_requested_by=data.requested_by,
             override_approved_by=data.requested_by,
         )
+        self._history_repo.record_change(
+            pricing_id=record.id,
+            unit_id=record.unit_id,
+            change_type=CHANGE_TYPE_OVERRIDE,
+            base_price=float(record.base_price),
+            manual_adjustment=float(record.manual_adjustment),
+            final_price=float(record.final_price),
+            pricing_status=record.pricing_status,
+            currency=record.currency,
+            override_reason=data.override_reason,
+            override_requested_by=data.requested_by,
+            override_approved_by=data.requested_by,
+            actor=data.requested_by,
+        )
         return UnitPricingResponse.model_validate(record)
+
+    def get_pricing_audit_trail(self, pricing_id: str) -> "PricingAuditTrailResponse":
+        """Return the full audit trail for a pricing record, oldest first.
+
+        Raises HTTP 404 when the pricing record does not exist.
+        """
+        record = self._pricing_repo.get_by_id(pricing_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing record '{pricing_id}' not found.",
+            )
+        entries = self._history_repo.get_by_pricing_id(pricing_id)
+        return PricingAuditTrailResponse(
+            pricing_id=pricing_id,
+            unit_id=record.unit_id,
+            total=len(entries),
+            entries=[PricingAuditEntry.model_validate(e) for e in entries],
+        )
 

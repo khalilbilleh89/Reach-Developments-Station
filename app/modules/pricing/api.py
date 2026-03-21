@@ -14,6 +14,7 @@ from app.core.dependencies import get_db
 from app.modules.pricing.schemas import (
     PremiumBreakdownResponse,
     PricingApprovalRequest,
+    PricingAuditTrailResponse,
     PricingOverrideRequest,
     PricingReadinessResponse,
     ProjectPriceSummaryResponse,
@@ -243,3 +244,28 @@ def apply_pricing_override(
     Rejected when the override exceeds the caller's role authority.
     """
     return service.apply_pricing_override(pricing_id, data)
+
+
+@router.get(
+    "/{pricing_id}/audit-trail",
+    response_model=PricingAuditTrailResponse,
+    tags=["unit-pricing"],
+)
+def get_pricing_audit_trail(
+    pricing_id: str,
+    service: Annotated[UnitPricingService, Depends(get_unit_pricing_service)],
+) -> PricingAuditTrailResponse:
+    """Return the full audit trail for a pricing record, oldest first.
+
+    Each entry captures a snapshot of the pricing record's state at the
+    moment a governed change event occurred.  Change types:
+      INITIAL       — first pricing record created for a unit.
+      MANUAL_UPDATE — structural fields updated (base_price, notes, currency).
+      PREMIUM_RECALC — price recalculated from updated engine attributes.
+      OVERRIDE      — governed manual_adjustment override applied.
+      APPROVAL      — pricing record approved.
+      ARCHIVE       — pricing record archived (superseded by a new record).
+
+    Raises 404 when the pricing record does not exist.
+    """
+    return service.get_pricing_audit_trail(pricing_id)
