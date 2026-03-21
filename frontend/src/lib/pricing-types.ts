@@ -99,3 +99,62 @@ export interface PricingHistoryResponse {
   total: number;
   items: UnitPricing[];
 }
+
+/**
+ * Detailed premium breakdown for a pricing record.
+ * Returned by GET /api/v1/pricing/{pricingId}/premium-breakdown.
+ *
+ * Shows how the engine-calculated price is composed from the base price per
+ * sqm and each individual premium component.  When ``has_engine_breakdown``
+ * is false, all engine-derived fields are null and only the formal pricing
+ * record values are available.
+ */
+export interface PremiumBreakdownResponse {
+  pricing_id: string;
+  unit_id: string;
+  // Formal pricing record values — always present.
+  base_price: number;
+  manual_adjustment: number;
+  final_price: number;
+  currency: string;
+  // Engine-based breakdown — present only when pricing attributes exist.
+  has_engine_breakdown: boolean;
+  base_price_per_sqm: number | null;
+  unit_area: number | null;
+  engine_base_unit_price: number | null;
+  floor_premium: number | null;
+  view_premium: number | null;
+  corner_premium: number | null;
+  size_adjustment: number | null;
+  custom_adjustment: number | null;
+  premium_total: number | null;
+  engine_final_unit_price: number | null;
+}
+
+/**
+ * Override authority roles supported by the backend override rule engine.
+ * Thresholds: sales_manager ≤ 2%, development_director ≤ 5%, ceo = unlimited.
+ */
+export type OverrideRole = "sales_manager" | "development_director" | "ceo";
+
+/** Human-readable labels for each override role. */
+export const OVERRIDE_ROLE_LABELS: Record<OverrideRole, string> = {
+  sales_manager: "Sales Manager",
+  development_director: "Development Director",
+  ceo: "CEO",
+};
+
+/**
+ * Request payload for applying a governed price override.
+ * Sent to POST /api/v1/pricing/{pricingId}/override.
+ *
+ * The ``override_amount`` replaces the current ``manual_adjustment``.
+ * The override percentage (abs(override_amount) / base_price × 100) must be
+ * within the authority threshold for the caller's ``role``.
+ */
+export interface PricingOverrideRequest {
+  override_amount: number;
+  override_reason: string;
+  requested_by: string;
+  role: OverrideRole;
+}

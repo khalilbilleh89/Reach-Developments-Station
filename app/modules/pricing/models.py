@@ -79,3 +79,6 @@ class UnitPricing(Base, TimestampMixin):
     approval_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_requested_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    override_approved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
