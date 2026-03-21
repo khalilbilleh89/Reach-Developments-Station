@@ -9,6 +9,7 @@ Validates aging logic covering:
   - installment 70 days overdue → 61-90 bucket
   - installment 120 days overdue → 90+ bucket
   - paid installments excluded from aging
+  - cancelled installments excluded from aging
   - contracts without schedules handled gracefully
   - project/portfolio aggregation
   - 404 handling for missing contracts and projects
@@ -399,3 +400,79 @@ class TestCollectionsAgingService:
         bucket_labels = [b.bucket for b in result.aging_buckets]
         assert set(bucket_labels) == set(ALL_BUCKETS)
         assert len(result.aging_buckets) == len(ALL_BUCKETS)
+
+    def test_cancelled_installment_excluded_from_contract_aging(
+        self, db_session: Session
+    ):
+        """Cancelled installments must not appear in contract aging buckets."""
+        pid = _make_project(db_session, "AGE-SVC-10")
+        uid = _make_unit(db_session, pid, "601")
+        cid = _make_contract(db_session, uid, 100_000.0, "CNT-AGE-10", "age10@test.com")
+
+        today = date.today()
+        overdue_date = today - timedelta(days=10)
+        _make_installment(
+            db_session, cid, 40_000.0, 1, overdue_date, status="cancelled"
+        )
+        _make_installment(db_session, cid, 60_000.0, 2, overdue_date, status="pending")
+
+        svc = CollectionsAgingService(db_session)
+        result = svc.get_contract_aging(cid)
+
+        # Only the 60k pending installment should appear; the 40k cancelled is excluded.
+        assert result.outstanding_amount == pytest.approx(60_000.0)
+        bucket_map = {b.bucket: b for b in result.aging_buckets}
+        assert bucket_map[BUCKET_1_30].amount == pytest.approx(60_000.0)
+        assert bucket_map[BUCKET_1_30].installment_count == 1
+
+    def test_cancelled_installment_excluded_from_project_aging(
+        self, db_session: Session
+    ):
+        """Cancelled installments must not appear in project aging buckets."""
+        pid = _make_project(db_session, "AGE-SVC-11")
+        uid = _make_unit(db_session, pid, "701")
+        cid = _make_contract(db_session, uid, 150_000.0, "CNT-AGE-11", "age11@test.com")
+
+        today = date.today()
+        overdue_date = today - timedelta(days=20)
+        _make_installment(
+            db_session, cid, 50_000.0, 1, overdue_date, status="cancelled"
+        )
+        _make_installment(db_session, cid, 100_000.0, 2, overdue_date, status="overdue")
+
+        svc = CollectionsAgingService(db_session)
+        result = svc.get_project_aging(pid)
+
+        # Only the 100k overdue installment should contribute.
+        assert result.total_outstanding == pytest.approx(100_000.0)
+        assert result.installment_count == 1
+        bucket_map = {b.bucket: b for b in result.aging_buckets}
+        assert bucket_map[BUCKET_1_30].amount == pytest.approx(100_000.0)
+
+    def test_cancelled_installment_excluded_from_portfolio_aging(
+        self, db_session: Session
+    ):
+        """Cancelled installments must not appear in portfolio aging buckets."""
+        pid = _make_project(db_session, "AGE-SVC-12")
+        uid = _make_unit(db_session, pid, "801")
+        cid = _make_contract(db_session, uid, 200_000.0, "CNT-AGE-12", "age12@test.com")
+
+        today = date.today()
+        overdue_date = today - timedelta(days=5)
+        _make_installment(
+            db_session, cid, 70_000.0, 1, overdue_date, status="cancelled"
+        )
+        _make_installment(db_session, cid, 80_000.0, 2, overdue_date, status="pending")
+
+        svc = CollectionsAgingService(db_session)
+        result = svc.get_portfolio_aging()
+
+        # Portfolio totals must include only collectible (pending/overdue) installments.
+        bucket_total = round(sum(b.amount for b in result.aging_buckets), 2)
+        assert bucket_total == pytest.approx(result.total_outstanding)
+        # The 80k pending should be in the 1-30 bucket; the 70k cancelled excluded.
+        bucket_map = {b.bucket: b for b in result.aging_buckets}
+        assert bucket_map[BUCKET_1_30].amount == pytest.approx(80_000.0)
+        assert bucket_map[BUCKET_1_30].installment_count == 1
+        assert result.total_outstanding == pytest.approx(80_000.0)
+        assert result.project_count == 1
