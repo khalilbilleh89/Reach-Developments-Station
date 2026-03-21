@@ -344,12 +344,11 @@ class TestCollectionEfficiencyAlert:
         assert alert.threshold == EFFICIENCY_THRESHOLD
         assert alert.metric_value < EFFICIENCY_THRESHOLD
 
-    def test_no_alert_when_no_revenue_data(self, db_session: Session):
-        """No efficiency alert when there is no revenue data (efficiency defaults to 0.0).
+    def test_alert_fires_when_no_revenue_data(self, db_session: Session):
+        """Alert fires for projects with no revenue data (efficiency defaults to 0.0).
 
-        Because 0.0 < EFFICIENCY_THRESHOLD, the alert WILL fire.  This test
-        verifies that the alert fires for zero-revenue projects to surface
-        visibility issues.
+        collection_efficiency = 0.0 < EFFICIENCY_THRESHOLD → alert fires to
+        surface visibility issues for projects with missing analytics data.
         """
         pid = _make_project(db_session, "RAE-EFF-02")
 
@@ -458,24 +457,21 @@ class TestLiquidityStressAlert:
         liq_alerts = [a for a in alerts if a.alert_type == ALERT_LIQUIDITY_STRESS]
         assert liq_alerts == []
 
-    def test_no_alert_when_forecast_is_sufficient(self, db_session: Session):
-        """No alert when forecast next month covers > 25% of receivables."""
-        pid = _make_project(db_session, "RAE-LIQ-01")
-        uid = _make_unit(db_session, pid, "RAE-L01-U01")
-        cid = _make_contract(db_session, uid, 200_000.0, "RAE-L01-C01", "rael01@test.com")
-        # 100k pending — receivables_exposure = 100_000
-        _make_installment(db_session, cid, 100_000.0, 1, date(2026, 12, 1), "pending")
-        # Forecast: next month entry with sufficient value (40% of receivables)
+    def test_no_alert_when_forecast_covers_threshold(self, db_session: Session):
+        """No liquidity stress alert when forecast next month covers ≥ 25% of receivables.
 
-        # We cannot easily seed the cashflow forecast directly because it is
-        # computed from installments dynamically. Instead, make all installments
-        # due next month so forecast_next_month ≥ 25% of receivables_exposure.
-        # Here we rely on the project having no pending installments to keep
-        # receivables_exposure at 0 and avoid the liquidity check entirely.
-        # Because we added a pending installment, we need to ensure the
-        # forecast covers it.  The easiest approach: test that no alert fires
-        # when receivables is 0 (already covered in test_no_alert_when_no_receivables_exposure).
-        # Skip — covered by adjacent tests.
+        We create a project with no pending/overdue installments so that both
+        receivables_exposure and forecast_next_month are 0.  With zero receivables
+        exposure the liquidity check is skipped entirely (division by zero guard),
+        which means no liquidity stress alert fires.
+        """
+        pid = _make_project(db_session, "RAE-LIQ-01")
+        # No installments — receivables_exposure = 0, liquidity check skipped
+        engine = FinancialRiskAlertEngine(db_session)
+        alerts = engine.scan_project_risks(pid)
+
+        liq_alerts = [a for a in alerts if a.alert_type == ALERT_LIQUIDITY_STRESS]
+        assert liq_alerts == []
 
     def test_alert_triggered_when_forecast_is_insufficient(
         self, db_session: Session
