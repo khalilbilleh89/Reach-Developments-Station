@@ -23,13 +23,23 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.modules.collections.aging_engine import (
+    ALL_BUCKETS,
+    AgingBucket,
+    calculate_receivable_age,
+    classify_receivable_bucket,
+)
 from app.modules.finance.repository import FinanceSummaryRepository
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
     calculate_contract_revenue_recognition,
 )
 from app.modules.finance.schemas import (
+    AgingBucketSummary,
+    ContractAgingResponse,
+    PortfolioAgingResponse,
     PortfolioRevenueOverviewResponse,
+    ProjectAgingResponse,
     ProjectFinanceSummaryResponse,
     ProjectRevenueSummaryResponse,
     RevenueRecognitionResponse,
@@ -131,9 +141,7 @@ class RevenueRecognitionService:
         Raises HTTP 404 if the contract does not exist.
         """
         contract = (
-            self.db.query(SalesContract)
-            .filter(SalesContract.id == contract_id)
-            .first()
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
         )
         if not contract:
             raise HTTPException(
@@ -187,15 +195,9 @@ class RevenueRecognitionService:
             )
             contract_details.append(calculate_contract_revenue_recognition(data))
 
-        total_contract_value = round(
-            sum(r.contract_total for r in contract_details), 2
-        )
-        total_recognized = round(
-            sum(r.recognized_revenue for r in contract_details), 2
-        )
-        total_deferred = round(
-            sum(r.deferred_revenue for r in contract_details), 2
-        )
+        total_contract_value = round(sum(r.contract_total for r in contract_details), 2)
+        total_recognized = round(sum(r.recognized_revenue for r in contract_details), 2)
+        total_deferred = round(sum(r.deferred_revenue for r in contract_details), 2)
 
         if total_contract_value > 0:
             overall_pct = round(
@@ -334,5 +336,216 @@ class RevenueRecognitionService:
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
             .filter(Phase.project_id == project_id)
+            .all()
+        )
+
+
+# ---------------------------------------------------------------------------
+# Collections Aging Service
+# ---------------------------------------------------------------------------
+
+
+def _build_bucket_summaries(
+    bucket_amounts: dict[AgingBucket, float],
+    bucket_counts: dict[AgingBucket, int],
+) -> List[AgingBucketSummary]:
+    """Return a list of AgingBucketSummary in canonical bucket order."""
+    return [
+        AgingBucketSummary(
+            bucket=b,
+            amount=round(bucket_amounts.get(b, 0.0), 2),
+            installment_count=bucket_counts.get(b, 0),
+        )
+        for b in ALL_BUCKETS
+    ]
+
+
+class CollectionsAgingService:
+    """Computes receivable aging buckets from payment schedule data.
+
+    Aging model:
+      Outstanding installments are those with status != 'paid'.
+      Each installment is classified into one of five buckets based on how
+      many days past its due_date it falls on the reference date (today).
+
+      Buckets:
+        current  — due_date >= reference_date (not yet overdue)
+        1-30     — 1 to 30 days overdue
+        31-60    — 31 to 60 days overdue
+        61-90    — 61 to 90 days overdue
+        90+      — more than 90 days overdue
+
+    All computations are read-only; no records are created or mutated.
+    """
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_contract_aging(self, contract_id: str) -> ContractAgingResponse:
+        """Return receivable aging breakdown for a single contract.
+
+        Raises HTTP 404 if the contract does not exist.
+        """
+        contract = (
+            self.db.query(SalesContract).filter(SalesContract.id == contract_id).first()
+        )
+        if not contract:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Contract {contract_id!r} not found.",
+            )
+
+        from datetime import date
+
+        today = date.today()
+        installments = (
+            self.db.query(ContractPaymentSchedule)
+            .filter(
+                ContractPaymentSchedule.contract_id == contract_id,
+                ContractPaymentSchedule.status != ContractPaymentStatus.PAID.value,
+            )
+            .all()
+        )
+
+        paid_amount = self._sum_paid_for_contract(contract_id)
+        contract_total = float(contract.contract_price)
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+
+        for inst in installments:
+            days_overdue = calculate_receivable_age(inst.due_date, today)
+            bucket = classify_receivable_bucket(days_overdue)
+            amount = float(inst.amount)
+            bucket_amounts[bucket] = bucket_amounts[bucket] + amount
+            bucket_counts[bucket] = bucket_counts[bucket] + 1
+
+        outstanding = round(sum(bucket_amounts.values()), 2)
+
+        return ContractAgingResponse(
+            contract_id=contract_id,
+            contract_total=round(contract_total, 2),
+            paid_amount=round(paid_amount, 2),
+            outstanding_amount=outstanding,
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    def get_project_aging(self, project_id: str) -> ProjectAgingResponse:
+        """Return aggregated receivable aging for all outstanding installments
+        in a project.
+
+        Raises HTTP 404 if the project does not exist.
+        Uses a single SQL join to avoid N+1 queries.
+        """
+        project = self.db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project {project_id!r} not found.",
+            )
+
+        from datetime import date
+
+        today = date.today()
+        rows = self._get_outstanding_installments_for_project(project_id)
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+
+        for inst in rows:
+            days_overdue = calculate_receivable_age(inst.due_date, today)
+            bucket = classify_receivable_bucket(days_overdue)
+            amount = float(inst.amount)
+            bucket_amounts[bucket] = bucket_amounts[bucket] + amount
+            bucket_counts[bucket] = bucket_counts[bucket] + 1
+
+        total_outstanding = round(sum(bucket_amounts.values()), 2)
+        total_count = sum(bucket_counts.values())
+
+        return ProjectAgingResponse(
+            project_id=project_id,
+            total_outstanding=total_outstanding,
+            installment_count=total_count,
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    def get_portfolio_aging(self) -> PortfolioAgingResponse:
+        """Return portfolio-wide receivable aging distribution.
+
+        Aggregates outstanding installments across all projects in a single
+        join query.
+        """
+        from datetime import date
+
+        today = date.today()
+        rows = (
+            self.db.query(ContractPaymentSchedule, Phase.project_id)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(ContractPaymentSchedule.status != ContractPaymentStatus.PAID.value)
+            .all()
+        )
+
+        bucket_amounts: dict[AgingBucket, float] = {b: 0.0 for b in ALL_BUCKETS}
+        bucket_counts: dict[AgingBucket, int] = {b: 0 for b in ALL_BUCKETS}
+        project_ids: set[str] = set()
+
+        for inst, project_id in rows:
+            days_overdue = calculate_receivable_age(inst.due_date, today)
+            bucket = classify_receivable_bucket(days_overdue)
+            amount = float(inst.amount)
+            bucket_amounts[bucket] = bucket_amounts[bucket] + amount
+            bucket_counts[bucket] = bucket_counts[bucket] + 1
+            project_ids.add(project_id)
+
+        total_outstanding = round(sum(bucket_amounts.values()), 2)
+        total_count = sum(bucket_counts.values())
+
+        return PortfolioAgingResponse(
+            total_outstanding=total_outstanding,
+            installment_count=total_count,
+            project_count=len(project_ids),
+            aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _sum_paid_for_contract(self, contract_id: str) -> float:
+        result = (
+            self.db.query(func.coalesce(func.sum(ContractPaymentSchedule.amount), 0))
+            .filter(
+                ContractPaymentSchedule.contract_id == contract_id,
+                ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
+            )
+            .scalar()
+        )
+        return float(result)
+
+    def _get_outstanding_installments_for_project(self, project_id: str) -> list:
+        """Return all outstanding ContractPaymentSchedule rows for a project."""
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(
+                Phase.project_id == project_id,
+                ContractPaymentSchedule.status != ContractPaymentStatus.PAID.value,
+            )
             .all()
         )

@@ -3,7 +3,8 @@
  *
  * These types mirror the backend Pydantic schemas in
  * app/modules/finance/schemas.py (RevenueRecognitionResponse,
- * ProjectRevenueSummaryResponse, PortfolioRevenueOverviewResponse).
+ * ProjectRevenueSummaryResponse, PortfolioRevenueOverviewResponse,
+ * ContractAgingResponse, ProjectAgingResponse, PortfolioAgingResponse).
  *
  * All fields use camelCase. Backend snake_case fields are mapped in
  * finance-api.ts before these types are populated.
@@ -49,4 +50,41 @@ export interface RevenueOverview {
   overallRecognitionPercentage: number;
   projectCount: number;
   contractCount: number;
+}
+
+// ---------- Receivable aging types ---------------------------------------
+
+/** One of the five canonical aging bucket labels. */
+export type ReceivableAgingBucket = "current" | "1-30" | "31-60" | "61-90" | "90+";
+
+/** Aggregated receivable totals for a single aging bucket. */
+export interface AgingBucketSummary {
+  bucket: ReceivableAgingBucket;
+  amount: number;
+  installmentCount: number;
+}
+
+/** Receivable aging breakdown for a single contract. */
+export interface ContractAging {
+  contractId: string;
+  contractTotal: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  agingBuckets: AgingBucketSummary[];
+}
+
+/** Aggregated receivable aging for all outstanding installments in a project. */
+export interface ProjectAging {
+  projectId: string;
+  totalOutstanding: number;
+  installmentCount: number;
+  agingBuckets: AgingBucketSummary[];
+}
+
+/** Portfolio-wide receivable aging distribution. */
+export interface PortfolioAging {
+  totalOutstanding: number;
+  installmentCount: number;
+  projectCount: number;
+  agingBuckets: AgingBucketSummary[];
 }

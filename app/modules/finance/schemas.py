@@ -11,6 +11,8 @@ from typing import List
 
 from pydantic import BaseModel, Field
 
+from app.modules.collections.aging_engine import AgingBucket
+
 
 class ProjectFinanceSummaryResponse(BaseModel):
     """Aggregated financial summary for a single project."""
@@ -73,3 +75,44 @@ class PortfolioRevenueOverviewResponse(BaseModel):
     overall_recognition_percentage: float = Field(..., ge=0, le=100)
     project_count: int = Field(..., ge=0)
     contract_count: int = Field(..., ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Collections aging schemas
+# ---------------------------------------------------------------------------
+
+
+class AgingBucketSummary(BaseModel):
+    """Aggregated receivable totals for a single aging bucket."""
+
+    bucket: AgingBucket
+    amount: float = Field(..., ge=0)
+    installment_count: int = Field(..., ge=0)
+
+
+class ContractAgingResponse(BaseModel):
+    """Receivable aging breakdown for a single contract."""
+
+    contract_id: str
+    contract_total: float = Field(..., ge=0)
+    paid_amount: float = Field(..., ge=0)
+    outstanding_amount: float = Field(..., ge=0)
+    aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+
+
+class ProjectAgingResponse(BaseModel):
+    """Aggregated receivable aging for all outstanding installments in a project."""
+
+    project_id: str
+    total_outstanding: float = Field(..., ge=0)
+    installment_count: int = Field(..., ge=0)
+    aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+
+
+class PortfolioAgingResponse(BaseModel):
+    """Portfolio-wide receivable aging distribution across all projects."""
+
+    total_outstanding: float = Field(..., ge=0)
+    installment_count: int = Field(..., ge=0)
+    project_count: int = Field(..., ge=0)
+    aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
