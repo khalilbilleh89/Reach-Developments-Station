@@ -17,6 +17,7 @@ All queries are read-only.  Operational finance engine logic is not modified.
 
 from __future__ import annotations
 
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,7 @@ from app.modules.finance.service import (
     CollectionsAgingService,
     RevenueRecognitionService,
 )
+from app.modules.projects.models import Project
 
 
 class ProjectFinancialDashboardService:
@@ -66,11 +68,10 @@ class ProjectFinancialDashboardService:
     ) -> ProjectFinancialDashboardResponse:
         """Return the full financial dashboard payload for a single project.
 
-        Raises HTTP 404 if the project does not exist (delegated to
-        CashflowForecastService._require_project).
+        Raises HTTP 404 if the project does not exist.
         """
         # Validate project exists before doing any other work.
-        self._forecast_svc._require_project(project_id)
+        self._require_project(project_id)
 
         return ProjectFinancialDashboardResponse(
             project_id=project_id,
@@ -250,3 +251,17 @@ class ProjectFinancialDashboardService:
             )
             for snapshot_date, total_receivables in rows
         ]
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _require_project(self, project_id: str) -> Project:
+        """Raise HTTP 404 if the project does not exist in the database."""
+        project = self.db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found.",
+            )
+        return project
