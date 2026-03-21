@@ -15,6 +15,8 @@ from app.modules.collections.aging_engine import AgingBucket
 
 from datetime import datetime
 
+from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
+
 
 class ProjectFinanceSummaryResponse(BaseModel):
     """Aggregated financial summary for a single project."""
@@ -370,6 +372,32 @@ class ProjectFinancialDashboardResponse(BaseModel):
     revenue_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
     collections_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
     receivables_trend: List[ProjectFinancialTrendEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Financial risk alert schemas
+# ---------------------------------------------------------------------------
+
+
+class ProjectRiskAlert(BaseModel):
+    """A single financial risk alert for a project.
+
+    Produced by FinancialRiskAlertEngine when a monitored metric breaches its
+    configured threshold.
+    """
+
+    project_id: str
+    alert_type: RiskAlertType = Field(..., description="Machine-readable alert category key.")
+    severity: RiskAlertSeverity = Field(..., description="Alert severity: HIGH, MEDIUM, or LOW.")
+    message: str = Field(..., description="Human-readable description of the risk condition.")
+    metric_value: float = Field(..., description="Observed metric value that triggered the alert.")
+    threshold: float = Field(..., description="Threshold the metric crossed to trigger the alert.")
+
+
+class PortfolioRiskResponse(BaseModel):
+    """Aggregated financial risk alerts across the entire project portfolio."""
+
+    alerts: List[ProjectRiskAlert] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import type {
   PortfolioCashflowForecast,
   PortfolioFinancialSummary,
   PortfolioKPI,
+  PortfolioRiskResponse,
   ProjectAging,
   ProjectCashflowForecast,
   ProjectExposure,
@@ -35,6 +36,7 @@ import type {
   ProjectFinancialSummary,
   ProjectFinancialTrendEntry,
   ProjectRevenueSummary,
+  ProjectRiskAlert,
   ReceiptMatchResult,
   ReceivableAgingBucket,
   ReceivablesTrendEntry,
@@ -710,4 +712,61 @@ export async function getProjectFinancialDashboard(
     collectionsTrend: raw.collections_trend.map(mapProjectFinancialTrendEntry),
     receivablesTrend: raw.receivables_trend.map(mapProjectFinancialTrendEntry),
   };
+}
+
+// ---------- Raw backend response shapes for risk alerts (internal) ------
+
+interface BackendProjectRiskAlert {
+  project_id: string;
+  alert_type: string;
+  severity: string;
+  message: string;
+  metric_value: number;
+  threshold: number;
+}
+
+interface BackendPortfolioRiskResponse {
+  alerts: BackendProjectRiskAlert[];
+}
+
+// ---------- Mapping helper ---------------------------------------------
+
+function mapProjectRiskAlert(raw: BackendProjectRiskAlert): ProjectRiskAlert {
+  return {
+    projectId: raw.project_id,
+    alertType: raw.alert_type,
+    severity: raw.severity as ProjectRiskAlert["severity"],
+    message: raw.message,
+    metricValue: raw.metric_value,
+    threshold: raw.threshold,
+  };
+}
+
+// ---------- Exported risk alert functions ------------------------------
+
+/**
+ * Fetch financial risk alerts for the entire portfolio.
+ *
+ * Backend endpoint: GET /finance/alerts/portfolio
+ */
+export async function getPortfolioAlerts(): Promise<PortfolioRiskResponse> {
+  const raw =
+    await apiFetch<BackendPortfolioRiskResponse>("/finance/alerts/portfolio");
+  return {
+    alerts: raw.alerts.map(mapProjectRiskAlert),
+  };
+}
+
+/**
+ * Fetch financial risk alerts for a single project.
+ *
+ * Backend endpoint: GET /finance/projects/{projectId}/alerts
+ */
+export async function getProjectAlerts(
+  projectId: string | number,
+): Promise<ProjectRiskAlert[]> {
+  const raw = await apiFetch<BackendProjectRiskAlert[]>(
+    `/finance/projects/${encodeURIComponent(String(projectId))}/alerts`,
+  );
+  return raw.map(mapProjectRiskAlert);
 }
