@@ -197,7 +197,7 @@ class PricingHistoryRepository:
         return (
             self.db.query(PricingHistory)
             .filter(PricingHistory.pricing_id == pricing_id)
-            .order_by(PricingHistory.created_at.asc())
+            .order_by(PricingHistory.created_at.asc(), PricingHistory.id.asc())
             .all()
         )
 
@@ -207,6 +207,6 @@ class PricingHistoryRepository:
         return (
             self.db.query(PricingHistory)
             .filter(PricingHistory.unit_id == unit_id)
-            .order_by(PricingHistory.created_at.asc())
+            .order_by(PricingHistory.created_at.asc(), PricingHistory.id.asc())
             .all()
         )

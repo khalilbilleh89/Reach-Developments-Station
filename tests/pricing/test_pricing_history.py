@@ -18,26 +18,41 @@ from fastapi.testclient import TestClient
 
 def _create_hierarchy(client: TestClient, proj_code: str = "PRJ-AUDIT") -> tuple[str, str]:
     """Create a full project hierarchy and return (project_id, unit_id)."""
-    project_id = client.post(
+    resp = client.post(
         "/api/v1/projects",
         json={"name": "Audit Trail Test Project", "code": proj_code},
-    ).json()["id"]
-    phase_id = client.post(
+    )
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    resp = client.post(
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
-    ).json()["id"]
-    building_id = client.post(
+    )
+    assert resp.status_code == 201
+    phase_id = resp.json()["id"]
+
+    resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
-    ).json()["id"]
-    floor_id = client.post(
+    )
+    assert resp.status_code == 201
+    building_id = resp.json()["id"]
+
+    resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
-    ).json()["id"]
-    unit_id = client.post(
+    )
+    assert resp.status_code == 201
+    floor_id = resp.json()["id"]
+
+    resp = client.post(
         "/api/v1/units",
         json={"floor_id": floor_id, "unit_number": "101", "unit_type": "studio", "internal_area": 85.0},
-    ).json()["id"]
+    )
+    assert resp.status_code == 201
+    unit_id = resp.json()["id"]
+
     return project_id, unit_id
 
 
@@ -56,8 +71,9 @@ _VALID_PRICING_PAYLOAD = {
 def test_audit_trail_created_on_initial_create(client: TestClient):
     """Creating a pricing record must produce an INITIAL audit entry."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT01")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
     resp = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail")
     assert resp.status_code == 200
@@ -80,10 +96,12 @@ def test_audit_trail_created_on_initial_create(client: TestClient):
 def test_audit_trail_approval_appends_entry(client: TestClient):
     """Approving a pricing record must append an APPROVAL audit entry."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT02")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
-    client.post(f"/api/v1/pricing/{pricing_id}/approve", json={"approved_by": "finance-mgr"})
+    resp = client.post(f"/api/v1/pricing/{pricing_id}/approve", json={"approved_by": "finance-mgr"})
+    assert resp.status_code == 200
 
     trail = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail").json()
     assert trail["total"] == 2
@@ -99,8 +117,9 @@ def test_audit_trail_approval_appends_entry(client: TestClient):
 def test_audit_trail_override_appends_entry(client: TestClient):
     """Applying a price override must append an OVERRIDE audit entry."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT03")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
     override_payload = {
         "override_amount": 5_000.0,
@@ -108,7 +127,8 @@ def test_audit_trail_override_appends_entry(client: TestClient):
         "requested_by": "sales-mgr-1",
         "role": "sales_manager",
     }
-    client.post(f"/api/v1/pricing/{pricing_id}/override", json=override_payload)
+    resp = client.post(f"/api/v1/pricing/{pricing_id}/override", json=override_payload)
+    assert resp.status_code == 200
 
     trail = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail").json()
     assert trail["total"] == 2
@@ -128,10 +148,12 @@ def test_audit_trail_override_appends_entry(client: TestClient):
 def test_audit_trail_manual_update_appends_entry(client: TestClient):
     """Updating a pricing record must append a MANUAL_UPDATE audit entry."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT04")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
-    client.put(f"/api/v1/pricing/{pricing_id}", json={"base_price": 520_000.0})
+    resp = client.put(f"/api/v1/pricing/{pricing_id}", json={"base_price": 520_000.0})
+    assert resp.status_code == 200
 
     trail = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail").json()
     assert trail["total"] == 2
@@ -147,15 +169,19 @@ def test_audit_trail_manual_update_appends_entry(client: TestClient):
 def test_audit_trail_archive_on_supersede(client: TestClient):
     """Superseding a pricing record must append an ARCHIVE entry on the old record."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT05")
-    first = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    first_id = first["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    first_id = resp.json()["id"]
 
     # Approve first record then supersede it.
-    client.post(f"/api/v1/pricing/{first_id}/approve", json={"approved_by": "mgr"})
-    client.post(
+    resp = client.post(f"/api/v1/pricing/{first_id}/approve", json={"approved_by": "mgr"})
+    assert resp.status_code == 200
+
+    resp = client.post(
         f"/api/v1/units/{unit_id}/pricing",
         json={**_VALID_PRICING_PAYLOAD, "base_price": 600_000.0},
     )
+    assert resp.status_code == 201
 
     trail = client.get(f"/api/v1/pricing/{first_id}/audit-trail").json()
     change_types = [e["change_type"] for e in trail["entries"]]
@@ -168,11 +194,12 @@ def test_audit_trail_archive_on_supersede(client: TestClient):
 def test_audit_trail_entries_oldest_first(client: TestClient):
     """Audit entries must be returned in chronological order (oldest first)."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT06")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
     # Apply override then approve — produces INITIAL → OVERRIDE → APPROVAL.
-    client.post(
+    resp = client.post(
         f"/api/v1/pricing/{pricing_id}/override",
         json={
             "override_amount": 1_000.0,
@@ -181,7 +208,9 @@ def test_audit_trail_entries_oldest_first(client: TestClient):
             "role": "sales_manager",
         },
     )
-    client.post(f"/api/v1/pricing/{pricing_id}/approve", json={"approved_by": "mgr"})
+    assert resp.status_code == 200
+    resp = client.post(f"/api/v1/pricing/{pricing_id}/approve", json={"approved_by": "mgr"})
+    assert resp.status_code == 200
 
     trail = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail").json()
     change_types = [e["change_type"] for e in trail["entries"]]
@@ -197,8 +226,9 @@ def test_audit_trail_not_found_returns_404(client: TestClient):
 def test_audit_trail_response_shape(client: TestClient):
     """Audit trail response must contain all required fields."""
     _, unit_id = _create_hierarchy(client, "PRJ-AT07")
-    record = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    pricing_id = record["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    pricing_id = resp.json()["id"]
 
     trail = client.get(f"/api/v1/pricing/{pricing_id}/audit-trail").json()
     assert "pricing_id" in trail
@@ -221,21 +251,24 @@ def test_full_lifecycle_audit_trail(client: TestClient):
     _, unit_id = _create_hierarchy(client, "PRJ-AT08")
 
     # Create first pricing record → INITIAL
-    first = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD).json()
-    first_id = first["id"]
+    resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
+    assert resp.status_code == 201
+    first_id = resp.json()["id"]
 
     # Approve first record → APPROVAL
-    client.post(f"/api/v1/pricing/{first_id}/approve", json={"approved_by": "finance-mgr"})
+    resp = client.post(f"/api/v1/pricing/{first_id}/approve", json={"approved_by": "finance-mgr"})
+    assert resp.status_code == 200
 
     # Supersede by creating second record → ARCHIVE on first, INITIAL on second
-    second = client.post(
+    resp = client.post(
         f"/api/v1/units/{unit_id}/pricing",
         json={**_VALID_PRICING_PAYLOAD, "base_price": 600_000.0},
-    ).json()
-    second_id = second["id"]
+    )
+    assert resp.status_code == 201
+    second_id = resp.json()["id"]
 
     # Apply override on second record → OVERRIDE
-    client.post(
+    resp = client.post(
         f"/api/v1/pricing/{second_id}/override",
         json={
             "override_amount": 3_000.0,
@@ -244,6 +277,7 @@ def test_full_lifecycle_audit_trail(client: TestClient):
             "role": "sales_manager",
         },
     )
+    assert resp.status_code == 200
 
     # Check first record's audit trail: INITIAL → APPROVAL → ARCHIVE
     first_trail = client.get(f"/api/v1/pricing/{first_id}/audit-trail").json()

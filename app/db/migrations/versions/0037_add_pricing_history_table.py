@@ -70,7 +70,12 @@ def upgrade() -> None:
         sa.Column("manual_adjustment", sa.Numeric(14, 2), nullable=False),
         sa.Column("final_price", sa.Numeric(14, 2), nullable=False),
         sa.Column("pricing_status", sa.String(20), nullable=False),
-        sa.Column("currency", sa.String(10), nullable=False, server_default="AED"),
+        sa.Column(
+            "currency",
+            sa.String(10),
+            nullable=False,
+            server_default=sa.text("'AED'"),
+        ),
         sa.Column("override_reason", sa.Text, nullable=True),
         sa.Column("override_requested_by", sa.String(255), nullable=True),
         sa.Column("override_approved_by", sa.String(255), nullable=True),
