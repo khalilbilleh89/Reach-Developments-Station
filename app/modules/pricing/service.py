@@ -27,6 +27,7 @@ from app.modules.pricing.schemas import (
     UnitPricingAttributesResponse,
     UnitPricingDetailResponse,
     UnitPriceResponse,
+    UnitPricingResponse,
 )
 from app.modules.pricing.status_rules import is_immutable, is_restricted_status
 from app.modules.units.repository import UnitRepository
@@ -324,8 +325,6 @@ class PricingService:
 
         Raises HTTP 404 when the pricing record does not exist.
         """
-        from app.modules.pricing.schemas import UnitPricingResponse
-
         pricing_record = self.pricing_repo.get_by_id(pricing_id)
         if not pricing_record:
             raise HTTPException(
@@ -723,8 +722,6 @@ class UnitPricingService:
         Raises HTTP 422 when the override exceeds the caller's role authority.
         Raises HTTP 422 when the resulting final_price would be negative.
         """
-        from app.modules.pricing.schemas import UnitPricingResponse
-
         record = self._pricing_repo.get_by_id(pricing_id)
         if not record:
             raise HTTPException(

@@ -716,8 +716,7 @@ class TestPremiumBreakdownEndpoint:
         ).json()
 
         engine_price = client.get(
-            "/api/v1/pricing/unit/"
-            + client.get(f"/api/v1/pricing/{pricing_id}/premium-breakdown").json()["unit_id"]
+            f"/api/v1/pricing/unit/{breakdown['unit_id']}"
         ).json()
 
         assert breakdown["premium_total"] == pytest.approx(engine_price["premium_total"])
