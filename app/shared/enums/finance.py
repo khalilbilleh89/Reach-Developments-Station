@@ -85,3 +85,38 @@ class PaymentMethod(str, Enum):
     CASH = "cash"
     CHEQUE = "cheque"
     OTHER = "other"
+
+
+# ---------------------------------------------------------------------------
+# Collections alerts enumerations
+# ---------------------------------------------------------------------------
+
+
+class AlertSeverity(str, Enum):
+    """Severity tier of a collections alert."""
+
+    WARNING = "warning"
+    CRITICAL = "critical"
+    HIGH_RISK = "high_risk"
+
+
+class AlertType(str, Enum):
+    """Lifecycle type of a collections alert."""
+
+    OVERDUE_7_DAYS = "overdue_7_days"
+    OVERDUE_30_DAYS = "overdue_30_days"
+    OVERDUE_90_DAYS = "overdue_90_days"
+
+
+# ---------------------------------------------------------------------------
+# Receipt matching enumerations
+# ---------------------------------------------------------------------------
+
+
+class MatchStrategy(str, Enum):
+    """Strategy used when matching a payment to installments."""
+
+    EXACT = "exact"
+    PARTIAL = "partial"
+    MULTI_INSTALLMENT = "multi_installment"
+    UNMATCHED = "unmatched"

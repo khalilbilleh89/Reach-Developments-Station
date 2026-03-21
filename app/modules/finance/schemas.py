@@ -7,7 +7,7 @@ All fields represent aggregated financial state computed at query time;
 no raw financial tables are exposed.
 """
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -116,3 +116,74 @@ class PortfolioAgingResponse(BaseModel):
     installment_count: int = Field(..., ge=0)
     project_count: int = Field(..., ge=0)
     aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Collections alert schemas
+# ---------------------------------------------------------------------------
+
+
+class CollectionsAlertResponse(BaseModel):
+    """Response model for a single collections alert."""
+
+    alert_id: str
+    contract_id: str
+    installment_id: str
+    alert_type: str
+    severity: str
+    days_overdue: int = Field(..., ge=0)
+    outstanding_balance: float = Field(..., ge=0)
+    created_at: str
+    resolved_at: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CollectionsAlertListResponse(BaseModel):
+    """Response model for a list of active collections alerts."""
+
+    items: List[CollectionsAlertResponse] = Field(default_factory=list)
+    total: int = Field(..., ge=0)
+
+
+class ResolveAlertRequest(BaseModel):
+    """Payload for resolving a collections alert."""
+
+    notes: Optional[str] = Field(None, max_length=1000)
+
+
+# ---------------------------------------------------------------------------
+# Receipt matching schemas
+# ---------------------------------------------------------------------------
+
+
+class MatchReceiptRequest(BaseModel):
+    """Payload for matching an incoming payment to installment obligations."""
+
+    contract_id: str = Field(..., min_length=1)
+    payment_amount: float = Field(..., gt=0)
+
+
+class MatchedInstallmentAllocation(BaseModel):
+    """Amount allocated to a single installment during matching."""
+
+    installment_id: str
+    allocated_amount: float = Field(..., ge=0)
+
+
+class ReceiptMatchResult(BaseModel):
+    """Result of matching a payment to outstanding installment obligations."""
+
+    contract_id: str
+    payment_amount: float = Field(..., ge=0)
+    strategy: str
+    matched_installment_ids: List[str] = Field(default_factory=list)
+    allocations: List[MatchedInstallmentAllocation] = Field(default_factory=list)
+    unallocated_amount: float = Field(..., ge=0)
+
+
+class UnmatchedReceiptResponse(BaseModel):
+    """Response model when a payment cannot be matched to any obligation."""
+
+    contract_id: str
+    payment_amount: float = Field(..., ge=0)
+    reason: str
