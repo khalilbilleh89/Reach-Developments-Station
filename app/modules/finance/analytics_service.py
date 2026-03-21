@@ -42,10 +42,6 @@ from app.modules.collections.aging_engine import (
 )
 from app.modules.finance.constants import RECEIVABLE_STATUSES
 from app.modules.finance.models import FactCollections, FactReceivablesSnapshot, FactRevenue
-from app.modules.finance.revenue_recognition import (
-    ContractRevenueData,
-    calculate_contract_revenue_recognition,
-)
 from app.modules.finance.schemas import AnalyticsRebuildResponse
 from app.modules.floors.models import Floor
 from app.modules.phases.models import Phase
