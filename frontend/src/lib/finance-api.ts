@@ -26,12 +26,14 @@ import type {
   PortfolioFinancialSummary,
   ProjectAging,
   ProjectCashflowForecast,
+  ProjectExposure,
   ProjectFinancialSummary,
   ProjectRevenueSummary,
   ReceiptMatchResult,
   ReceivableAgingBucket,
   RevenueOverview,
   RevenueRecognition,
+  TreasuryMonitoring,
 } from "./finance-types";
 
 // ---------- Raw backend response shapes (internal) ----------------------
@@ -489,5 +491,57 @@ export async function getPortfolioFinancialSummary(): Promise<PortfolioFinancial
     forecastNextMonth: raw.forecast_next_month,
     projectCount: raw.project_count,
     projectSummaries: raw.project_summaries.map(mapProjectFinancialSummary),
+  };
+}
+
+// ---------- Treasury monitoring raw shapes ---------------------------
+
+interface BackendProjectExposure {
+  project_id: string;
+  receivable_exposure: number;
+  exposure_percentage: number;
+  forecast_inflow: number;
+}
+
+interface BackendTreasuryMonitoring {
+  cash_position: number;
+  receivables_exposure: number;
+  overdue_receivables: number;
+  liquidity_ratio: number;
+  forecast_next_month: number;
+  project_count: number;
+  project_exposures: BackendProjectExposure[];
+}
+
+// ---------- Mapping helpers ------------------------------------------
+
+function mapProjectExposure(raw: BackendProjectExposure): ProjectExposure {
+  return {
+    projectId: raw.project_id,
+    receivableExposure: raw.receivable_exposure,
+    exposurePercentage: raw.exposure_percentage,
+    forecastInflow: raw.forecast_inflow,
+  };
+}
+
+// ---------- Exported treasury monitoring function --------------------
+
+/**
+ * Fetch the portfolio treasury monitoring snapshot.
+ *
+ * Backend endpoint: GET /finance/treasury/monitoring
+ */
+export async function getTreasuryMonitoring(): Promise<TreasuryMonitoring> {
+  const raw = await apiFetch<BackendTreasuryMonitoring>(
+    "/finance/treasury/monitoring",
+  );
+  return {
+    cashPosition: raw.cash_position,
+    receivablesExposure: raw.receivables_exposure,
+    overdueReceivables: raw.overdue_receivables,
+    liquidityRatio: raw.liquidity_ratio,
+    forecastNextMonth: raw.forecast_next_month,
+    projectCount: raw.project_count,
+    projectExposures: raw.project_exposures.map(mapProjectExposure),
   };
 }

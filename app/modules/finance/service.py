@@ -521,17 +521,7 @@ class CollectionsAgingService:
             else_=BUCKET_90_PLUS,
         )
 
-        base_query = (
-            self.db.query(ContractPaymentSchedule)
-            .join(
-                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
-            )
-            .join(Unit, SalesContract.unit_id == Unit.id)
-            .join(Floor, Unit.floor_id == Floor.id)
-            .join(Building, Floor.building_id == Building.id)
-            .join(Phase, Building.phase_id == Phase.id)
-            .filter(ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES))
-        )
+        base_query = self._outstanding_installments_base_query()
 
         # Aggregate by bucket in SQL — returns at most 5 rows.
         bucket_rows = (
@@ -573,9 +563,51 @@ class CollectionsAgingService:
             aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
         )
 
+    def get_project_receivables_map(self) -> dict[str, float]:
+        """Return a mapping of project_id → total outstanding receivables.
+
+        Executes a single GROUP BY query across all projects.  Only PENDING
+        and OVERDUE installments are included; PAID and CANCELLED are excluded.
+
+        Used by TreasuryMonitoringService to compute per-project exposure
+        without issuing N+1 queries.
+        """
+        rows = (
+            self._outstanding_installments_base_query()
+            .with_entities(
+                Phase.project_id,
+                func.sum(ContractPaymentSchedule.amount),
+            )
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {str(pid): float(total) for pid, total in rows}
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _outstanding_installments_base_query(self):
+        """Return a base query for all outstanding installments portfolio-wide.
+
+        The query joins ContractPaymentSchedule forward through the
+        contract → unit → floor → building → phase chain and filters to
+        PENDING and OVERDUE statuses only.
+
+        Callers use ``with_entities()`` to build specific aggregations on
+        top of this base, ensuring the join chain is defined in one place.
+        """
+        return (
+            self.db.query(ContractPaymentSchedule)
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(ContractPaymentSchedule.status.in_(_RECEIVABLE_STATUSES))
+        )
 
     def _sum_paid_for_contract(self, contract_id: str) -> float:
         result = (

@@ -252,3 +252,35 @@ class PortfolioFinancialSummaryResponse(BaseModel):
     forecast_next_month: float = Field(..., ge=0)
     project_count: int = Field(..., ge=0)
     project_summaries: List[ProjectFinancialSummaryEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Treasury monitoring schemas
+# ---------------------------------------------------------------------------
+
+
+class ProjectExposureEntry(BaseModel):
+    """Receivable exposure metrics for a single project within the treasury view."""
+
+    project_id: str
+    receivable_exposure: float = Field(..., ge=0)
+    exposure_percentage: float = Field(..., ge=0, le=100)
+    forecast_inflow: float = Field(..., ge=0)
+
+
+class TreasuryMonitoringResponse(BaseModel):
+    """Portfolio-level treasury monitoring snapshot.
+
+    Provides liquidity and exposure indicators derived from the existing
+    financial engines.  No financial calculations are performed here —
+    values are aggregated from revenue recognition, aging, and cashflow
+    forecast outputs.
+    """
+
+    cash_position: float = Field(..., ge=0)
+    receivables_exposure: float = Field(..., ge=0)
+    overdue_receivables: float = Field(..., ge=0)
+    liquidity_ratio: float = Field(..., ge=0, le=1)
+    forecast_next_month: float = Field(..., ge=0)
+    project_count: int = Field(..., ge=0)
+    project_exposures: List[ProjectExposureEntry] = Field(default_factory=list)
