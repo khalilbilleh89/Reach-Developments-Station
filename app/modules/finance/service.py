@@ -204,14 +204,23 @@ class RevenueRecognitionService:
 
         Aggregates across all contracts in all projects.
         """
-        all_contracts = self.db.query(SalesContract).all()
+        # Fetch all contracts with their project_id in a single JOIN query to
+        # avoid N+1 round-trips through the unit hierarchy.
+        rows = (
+            self.db.query(SalesContract, Phase.project_id)
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .all()
+        )
 
         total_contract_value = 0.0
         total_recognized = 0.0
         total_deferred = 0.0
-        project_ids: set = set()
+        project_ids: set[str] = set()
 
-        for contract in all_contracts:
+        for contract, project_id in rows:
             paid_amount = self._sum_paid_installments(contract.id)
             data = ContractRevenueData(
                 contract_id=contract.id,
@@ -222,25 +231,7 @@ class RevenueRecognitionService:
             total_contract_value += result.contract_total
             total_recognized += result.recognized_revenue
             total_deferred += result.deferred_revenue
-
-            # Collect project_ids via the unit hierarchy
-            unit = self.db.query(Unit).filter(Unit.id == contract.unit_id).first()
-            if unit:
-                floor = self.db.query(Floor).filter(Floor.id == unit.floor_id).first()
-                if floor:
-                    building = (
-                        self.db.query(Building)
-                        .filter(Building.id == floor.building_id)
-                        .first()
-                    )
-                    if building:
-                        phase = (
-                            self.db.query(Phase)
-                            .filter(Phase.id == building.phase_id)
-                            .first()
-                        )
-                        if phase:
-                            project_ids.add(phase.project_id)
+            project_ids.add(project_id)
 
         total_contract_value = round(total_contract_value, 2)
         total_recognized = round(total_recognized, 2)
@@ -259,7 +250,7 @@ class RevenueRecognitionService:
             total_deferred_revenue=total_deferred,
             overall_recognition_percentage=overall_pct,
             project_count=len(project_ids),
-            contract_count=len(all_contracts),
+            contract_count=len(rows),
         )
 
     # ------------------------------------------------------------------
