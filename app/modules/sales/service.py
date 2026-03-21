@@ -19,7 +19,10 @@ from app.modules.sales.repository import (
     ReservationRepository,
     SalesContractRepository,
 )
-from app.modules.sales.reservation_rules import assert_reservation_is_convertible
+from app.modules.sales.reservation_rules import (
+    assert_reservation_is_convertible,
+    assert_valid_reservation_transition,
+)
 from app.modules.sales.schemas import (
     BuyerCreate,
     BuyerListResponse,
@@ -123,24 +126,18 @@ class SalesService:
 
     def cancel_reservation(self, reservation_id: str) -> ReservationResponse:
         reservation = self._require_reservation(reservation_id)
-        if reservation.status != ReservationStatus.ACTIVE.value:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Only active reservations can be cancelled. "
-                       f"Current status: '{reservation.status}'.",
-            )
+        assert_valid_reservation_transition(
+            reservation.status, ReservationStatus.CANCELLED.value
+        )
         reservation.status = ReservationStatus.CANCELLED.value
         self.reservation_repo.save(reservation)
         return ReservationResponse.model_validate(reservation)
 
     def expire_reservation(self, reservation_id: str) -> ReservationResponse:
         reservation = self._require_reservation(reservation_id)
-        if reservation.status != ReservationStatus.ACTIVE.value:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Only active reservations can be expired. "
-                       f"Current status: '{reservation.status}'.",
-            )
+        assert_valid_reservation_transition(
+            reservation.status, ReservationStatus.EXPIRED.value
+        )
         reservation.status = ReservationStatus.EXPIRED.value
         self.reservation_repo.save(reservation)
         return ReservationResponse.model_validate(reservation)

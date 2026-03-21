@@ -26,7 +26,7 @@ from app.modules.reservations.schemas import ReservationStatus
 # Formal state machine — allowed transitions
 # ---------------------------------------------------------------------------
 
-ALLOWED_TRANSITIONS: dict[str, list[str]] = {
+_ALLOWED_TRANSITIONS: dict[str, list[str]] = {
     ReservationStatus.draft.value: [
         ReservationStatus.active.value,
         ReservationStatus.cancelled.value,
@@ -46,7 +46,7 @@ ALLOWED_TRANSITIONS: dict[str, list[str]] = {
 
 def assert_valid_transition(current: str, target: str) -> None:
     """Raise 422 if the requested status transition is not permitted by the state machine."""
-    allowed = ALLOWED_TRANSITIONS.get(current, [])
+    allowed = _ALLOWED_TRANSITIONS.get(current, [])
     if target not in allowed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

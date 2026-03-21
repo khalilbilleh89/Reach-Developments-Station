@@ -1,12 +1,10 @@
 /**
  * contracts-api.ts — frontend API helpers for the sales contract lifecycle.
  *
- * Covers the full contract lifecycle:
+ * Exposes helpers for these contract-related endpoints:
  *   POST  /sales/contracts                            → create
  *   GET   /sales/contracts/{id}                       → get by ID
- *   GET   /sales/contracts?unit_id={unitId}           → list by unit
  *   GET   /sales/units/{unitId}/contracts             → list by unit (dedicated endpoint)
- *   PATCH /sales/contracts/{id}                       → update
  *   POST  /sales/contracts/{id}/activate              → activate
  *   POST  /sales/contracts/{id}/cancel                → cancel
  *   POST  /sales/reservations/{id}/convert-to-contract → convert reservation to contract

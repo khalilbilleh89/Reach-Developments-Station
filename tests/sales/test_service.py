@@ -253,7 +253,7 @@ def test_cancel_reservation(db_session: Session):
     assert cancelled.status == ReservationStatus.CANCELLED
 
 
-def test_cancel_already_cancelled_reservation_raises_409(db_session: Session):
+def test_cancel_already_cancelled_reservation_raises(db_session: Session):
     unit_id = _make_unit(db_session, "PRJ-DBCAN")
     _set_pricing(db_session, unit_id)
     buyer_id = _make_buyer(db_session, "dbcan@example.com")
@@ -265,7 +265,8 @@ def test_cancel_already_cancelled_reservation_raises_409(db_session: Session):
     svc.cancel_reservation(res.id)
     with pytest.raises(HTTPException) as exc_info:
         svc.cancel_reservation(res.id)
-    assert exc_info.value.status_code == 409
+    # State machine raises 422 for invalid transitions (cancelled is terminal)
+    assert exc_info.value.status_code == 422
 
 
 def test_list_reservations(db_session: Session):
@@ -522,8 +523,8 @@ def test_cancel_already_cancelled_contract_raises(db_session: Session):
     svc.cancel_contract(contract.id)
     with pytest.raises(HTTPException) as exc_info:
         svc.cancel_contract(contract.id)
-    # State machine returns 422 for invalid transitions (cancelled is terminal)
-    assert exc_info.value.status_code in (409, 422)
+    # Invalid contract transitions must return 422 (cancelled is terminal)
+    assert exc_info.value.status_code == 422
 
 
 def test_list_contracts(db_session: Session):
@@ -564,6 +565,8 @@ def test_new_reservation_allowed_after_cancellation(db_session: Session):
 
 def test_activate_contract_from_reservation(db_session: Session):
     """A draft contract linked to a converted reservation can be activated."""
+    from app.modules.units.models import Unit
+
     unit_id = _make_unit(db_session, "PRJ-ACT1")
     _set_pricing(db_session, unit_id)
     buyer_id = _make_buyer(db_session, "act1@example.com")
@@ -584,6 +587,10 @@ def test_activate_contract_from_reservation(db_session: Session):
 
     activated = svc.activate_contract(contract.id)
     assert activated.status == ContractStatus.ACTIVE
+
+    # Unit must be marked under_contract after activation
+    unit = db_session.get(Unit, unit_id)
+    assert unit.status == "under_contract"
 
 
 def test_activate_contract_without_reservation_raises_422(db_session: Session):
@@ -650,6 +657,8 @@ def test_activate_cancelled_contract_raises_422(db_session: Session):
 
 def test_cancel_active_contract_raises_422_on_second_cancel(db_session: Session):
     """After cancelling an active contract, a second cancel raises 422 (terminal state)."""
+    from app.modules.units.models import Unit
+
     unit_id = _make_unit(db_session, "PRJ-CACACT")
     _set_pricing(db_session, unit_id)
     buyer_id = _make_buyer(db_session, "cacact@example.com")
@@ -668,9 +677,15 @@ def test_cancel_active_contract_raises_422_on_second_cancel(db_session: Session)
     )
     svc.activate_contract(contract.id)
     svc.cancel_contract(contract.id)
+
+    # Unit must be released back to available after cancellation
+    unit = db_session.get(Unit, unit_id)
+    assert unit.status == "available"
+
     with pytest.raises(HTTPException) as exc_info:
         svc.cancel_contract(contract.id)
-    assert exc_info.value.status_code in (409, 422)
+    # Invalid contract transitions must return 422 (cancelled is terminal)
+    assert exc_info.value.status_code == 422
 
 
 def test_cancel_contract_not_found_raises_404(db_session: Session):
@@ -703,7 +718,23 @@ def test_expire_reservation_lifecycle(db_session: Session):
     # Cannot expire an already-expired reservation
     with pytest.raises(HTTPException) as exc_info:
         svc.expire_reservation(res.id)
-    assert exc_info.value.status_code == 409
+    # State machine raises 422 for invalid transitions (expired → expired is not permitted)
+    assert exc_info.value.status_code == 422
+
+
+def test_cancel_expired_reservation_allowed(db_session: Session):
+    """An expired reservation can be cancelled (expired → cancelled is a valid transition)."""
+    unit_id = _make_unit(db_session, "PRJ-CANEXP")
+    _set_pricing(db_session, unit_id)
+    buyer_id = _make_buyer(db_session, "canexp@example.com")
+
+    svc = SalesService(db_session)
+    res = svc.create_reservation(
+        ReservationCreate(unit_id=unit_id, buyer_id=buyer_id, **_RESERVATION_DATES)
+    )
+    svc.expire_reservation(res.id)
+    cancelled = svc.cancel_reservation(res.id)
+    assert cancelled.status == ReservationStatus.CANCELLED
 
 
 def test_reservation_converted_blocks_new_reservation(db_session: Session):
