@@ -127,7 +127,7 @@ class CashflowForecastService:
         if not project:
             raise HTTPException(
                 status_code=404,
-                detail=f"Project {project_id!r} not found.",
+                detail=f"Project '{project_id}' not found.",
             )
         return project
 
