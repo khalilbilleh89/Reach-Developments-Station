@@ -153,8 +153,13 @@ def allocate_multi_installment_payment(
     """Greedily allocate a payment across multiple installments in order.
 
     Each installment is fully satisfied before the next is touched.
-    Any remainder that does not cover the next installment is left as
-    unallocated.
+    If the remaining amount is insufficient to fully cover the next
+    installment, the remainder is applied as a partial allocation to that
+    installment and no unallocated balance remains.
+
+    If the payment exceeds all installment obligations, the surplus is
+    returned as ``unallocated_amount`` and the strategy is labelled
+    ``MULTI_INSTALLMENT`` (not ``PARTIAL``) to reflect overpayment.
     """
     remaining_cents = _to_cents(payment_amount)
     matched_ids: list[str] = []
@@ -180,7 +185,7 @@ def allocate_multi_installment_payment(
     unallocated = round(remaining_cents / _CENT, 2)
     strategy = (
         MatchStrategy.MULTI_INSTALLMENT
-        if len(matched_ids) > 1
+        if len(matched_ids) > 1 or unallocated > 0
         else MatchStrategy.PARTIAL
     )
     return ReceiptMatchResult(

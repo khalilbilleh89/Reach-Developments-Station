@@ -5,6 +5,7 @@ Revises: 0038
 Create Date: 2026-03-21
 
 PR-19 — Collections Alerts & Receipt Matching
+PR-19A — Collections Alert Integrity & Schema Hardening
 
 Creates the ``collections_alerts`` table — alert records generated when
 installment obligations cross overdue-day thresholds (7 / 30 / 90 days).
@@ -28,6 +29,13 @@ Indexes:
   index on contract_id   — fast lookups by contract.
   index on severity      — supports severity-filtered queries.
   index on created_at    — supports time-ordered queries.
+
+Uniqueness guard:
+
+  uix_collections_alerts_active — PostgreSQL partial unique index on
+  (contract_id, installment_id, alert_type) WHERE resolved_at IS NULL.
+  Prevents duplicate unresolved alerts at the DB level under concurrent
+  generation.  PostgreSQL-only; service-layer checks cover SQLite (tests).
 """
 
 from typing import Sequence, Union
@@ -96,7 +104,23 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
+    # Partial unique index (PostgreSQL only): prevents duplicate unresolved alerts
+    # for the same (contract, installment, alert_type) under concurrent generation.
+    # SQLite (used in tests) does not support partial unique indexes with WHERE;
+    # service-layer checks provide the equivalent guard in SQLite.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "uix_collections_alerts_active",
+            "collections_alerts",
+            ["contract_id", "installment_id", "alert_type"],
+            unique=True,
+            postgresql_where=sa.text("resolved_at IS NULL"),
+        )
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.drop_index("uix_collections_alerts_active", table_name="collections_alerts")
     op.drop_table("collections_alerts")

@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 
 from app.modules.collections.aging_engine import AgingBucket
 
+from datetime import datetime
+
 
 class ProjectFinanceSummaryResponse(BaseModel):
     """Aggregated financial summary for a single project."""
@@ -133,8 +135,8 @@ class CollectionsAlertResponse(BaseModel):
     severity: str
     days_overdue: int = Field(..., ge=0)
     outstanding_balance: float = Field(..., ge=0)
-    created_at: str
-    resolved_at: Optional[str] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
     notes: Optional[str] = None
 
 

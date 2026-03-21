@@ -81,6 +81,14 @@ export interface ProjectAging {
   agingBuckets: AgingBucketSummary[];
 }
 
+/** Portfolio-wide receivable aging distribution. */
+export interface PortfolioAging {
+  totalOutstanding: number;
+  installmentCount: number;
+  projectCount: number;
+  agingBuckets: AgingBucketSummary[];
+}
+
 // ---------- Collections alert types ------------------------------------
 
 /** Severity tier of a collections alert. */

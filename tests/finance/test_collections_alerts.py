@@ -678,3 +678,135 @@ def test_get_alerts_severity_filter(client: TestClient):
     data = resp.json()
     for item in data["items"]:
         assert item["severity"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# PR-19A hardening tests
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_alert_with_empty_string_note_clears_notes(
+    client: TestClient, db_session: Session
+):
+    """resolve_alert accepts empty string — notes should be set to '' not skipped."""
+    from app.modules.collections.models import CollectionsAlert
+
+    pid = _make_project(db_session, "ALT-19A-EMPTY")
+    uid = _make_unit(db_session, pid, "101")
+    cid = _make_contract(db_session, uid, 100_000.0, "CNT-19A-EMPTY", "empty@test.com")
+    overdue_date = date.today() - timedelta(days=10)
+    iid = _make_installment(db_session, cid, 1, overdue_date, 5_000.0, status="overdue")
+
+    alert = CollectionsAlert(
+        contract_id=cid,
+        installment_id=iid,
+        alert_type="overdue_7_days",
+        severity="warning",
+        days_overdue=10,
+        outstanding_balance=5_000.0,
+        notes="original note",
+    )
+    db_session.add(alert)
+    db_session.commit()
+
+    resp = client.post(
+        f"/api/v1/finance/collections/alerts/{alert.id}/resolve",
+        json={"notes": ""},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # Empty string notes should be accepted (not skipped).
+    assert data["notes"] == ""
+    assert data["resolved_at"] is not None
+
+
+def test_resolve_alert_note_none_preserves_existing_notes(
+    client: TestClient, db_session: Session
+):
+    """Passing notes=None should leave existing notes unchanged."""
+    from app.modules.collections.models import CollectionsAlert
+
+    pid = _make_project(db_session, "ALT-19A-NONE")
+    uid = _make_unit(db_session, pid, "101")
+    cid = _make_contract(db_session, uid, 100_000.0, "CNT-19A-NONE", "nonenotes@test.com")
+    overdue_date = date.today() - timedelta(days=10)
+    iid = _make_installment(db_session, cid, 1, overdue_date, 5_000.0, status="overdue")
+
+    alert = CollectionsAlert(
+        contract_id=cid,
+        installment_id=iid,
+        alert_type="overdue_7_days",
+        severity="warning",
+        days_overdue=10,
+        outstanding_balance=5_000.0,
+        notes="keep this note",
+    )
+    db_session.add(alert)
+    db_session.commit()
+
+    resp = client.post(
+        f"/api/v1/finance/collections/alerts/{alert.id}/resolve",
+        json={},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # notes=None means don't change; original note must be preserved.
+    assert data["notes"] == "keep this note"
+
+
+def test_alert_response_timestamps_are_iso_strings(
+    client: TestClient, db_session: Session
+):
+    """created_at and resolved_at must serialize to ISO-format strings."""
+    from app.modules.collections.models import CollectionsAlert
+
+    pid = _make_project(db_session, "ALT-19A-TS")
+    uid = _make_unit(db_session, pid, "101")
+    cid = _make_contract(db_session, uid, 100_000.0, "CNT-19A-TS", "ts@test.com")
+    overdue_date = date.today() - timedelta(days=10)
+    iid = _make_installment(db_session, cid, 1, overdue_date, 5_000.0, status="overdue")
+
+    alert = CollectionsAlert(
+        contract_id=cid,
+        installment_id=iid,
+        alert_type="overdue_7_days",
+        severity="warning",
+        days_overdue=10,
+        outstanding_balance=5_000.0,
+    )
+    db_session.add(alert)
+    db_session.commit()
+
+    # created_at must be a string (ISO format) in the JSON response.
+    resp = client.get("/api/v1/finance/collections/alerts")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    matching = [i for i in items if i["alert_id"] == alert.id]
+    assert len(matching) == 1
+    item = matching[0]
+    # Must be a parseable ISO datetime string.
+    from datetime import datetime
+
+    datetime.fromisoformat(item["created_at"])
+    assert item["resolved_at"] is None
+
+
+def test_invalid_severity_filter_returns_422(client: TestClient):
+    """An invalid severity value must be rejected at the API level."""
+    resp = client.get("/api/v1/finance/collections/alerts?severity=invalid_severity")
+    assert resp.status_code == 422
+
+
+def test_surplus_payment_uses_multi_installment_strategy():
+    """When payment exceeds all installments, strategy should not be PARTIAL."""
+    from app.modules.collections.receipt_matching_service import (
+        InstallmentObligation,
+        MatchStrategy,
+        match_payment_to_installments,
+    )
+
+    inst = InstallmentObligation(id="i-1", installment_number=1, outstanding_amount=100.0)
+    result = match_payment_to_installments(150.0, [inst])
+    # 50 unallocated — must be MULTI_INSTALLMENT, not PARTIAL.
+    assert result.strategy is MatchStrategy.MULTI_INSTALLMENT
+    assert result.unallocated_amount == pytest.approx(50.0)

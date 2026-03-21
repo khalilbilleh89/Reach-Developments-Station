@@ -21,6 +21,7 @@ from typing import List, cast
 
 from fastapi import HTTPException
 from sqlalchemy import case, distinct, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.collections.aging_engine import (
@@ -718,6 +719,14 @@ class CollectionsAlertService:
                 outstanding_balance=candidate.outstanding_balance,
             )
             self.db.add(alert)
+            try:
+                self.db.flush()
+            except IntegrityError:
+                # A concurrent insert raced past the check-then-insert guard and
+                # triggered the DB-level partial unique index.  Roll back the
+                # failed flush and skip this candidate.
+                self.db.rollback()
+                continue
 
         self.db.commit()
         return self.get_overdue_alerts()
@@ -743,7 +752,7 @@ class CollectionsAlertService:
                 detail=f"Alert {alert_id!r} is already resolved.",
             )
         alert.resolved_at = datetime.now(timezone.utc)
-        if notes:
+        if notes is not None:
             alert.notes = notes
         self.db.commit()
         self.db.refresh(alert)
@@ -764,8 +773,8 @@ class CollectionsAlertService:
             severity=alert.severity,
             days_overdue=alert.days_overdue,
             outstanding_balance=float(alert.outstanding_balance),
-            created_at=alert.created_at.isoformat(),
-            resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
+            created_at=alert.created_at,
+            resolved_at=alert.resolved_at,
             notes=alert.notes,
         )
 

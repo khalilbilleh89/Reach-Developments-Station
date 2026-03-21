@@ -48,6 +48,7 @@ from app.modules.finance.service import (
     ReceiptMatchingService,
     RevenueRecognitionService,
 )
+from app.shared.enums.finance import AlertSeverity
 
 router = APIRouter(prefix="/finance", tags=["Finance"])
 
@@ -172,7 +173,7 @@ def get_receivables_aging_overview(
     response_model=CollectionsAlertListResponse,
 )
 def get_collections_alerts(
-    severity: str | None = None,
+    severity: AlertSeverity | None = None,
     service: Annotated[CollectionsAlertService, Depends(get_alert_service)] = ...,
 ) -> CollectionsAlertListResponse:
     """Return all active (unresolved) collections alerts.
@@ -180,7 +181,7 @@ def get_collections_alerts(
     Optional query parameter:
       - ``severity``: filter by severity (warning | critical | high_risk).
     """
-    return service.get_overdue_alerts(severity=severity)
+    return service.get_overdue_alerts(severity=severity.value if severity else None)
 
 
 @router.post(
