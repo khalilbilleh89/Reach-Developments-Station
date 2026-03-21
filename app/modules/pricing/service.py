@@ -12,10 +12,14 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.pricing.engines.pricing_engine import PricingInputs, run_pricing
+from app.modules.pricing.override_rules import assert_override_allowed, calculate_override_percent
+from app.modules.pricing.premium_rules import calculate_premium_breakdown
 from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository
 from app.modules.pricing.schemas import (
     DEFAULT_CURRENCY,
+    PremiumBreakdownResponse,
     PricingHistoryResponse,
+    PricingOverrideRequest,
     PricingReadinessResponse,
     ProjectPriceSummaryItem,
     ProjectPriceSummaryResponse,
@@ -306,6 +310,85 @@ class PricingService:
             total_units_priced=len(items),
             total_value=total_value,
             items=items,
+        )
+
+    def get_premium_breakdown(self, pricing_id: str) -> PremiumBreakdownResponse:
+        """Return a detailed premium breakdown for a pricing record.
+
+        Looks up the formal UnitPricing record by *pricing_id*, then assembles
+        the full premium breakdown from UnitPricingAttributes (if available).
+
+        When no UnitPricingAttributes record exists for the unit,
+        ``has_engine_breakdown`` is False and all engine-derived fields are
+        None.  The formal pricing record values are always included.
+
+        Raises HTTP 404 when the pricing record does not exist.
+        """
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        pricing_record = self.pricing_repo.get_by_id(pricing_id)
+        if not pricing_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing record '{pricing_id}' not found.",
+            )
+
+        unit_id = pricing_record.unit_id
+        attrs = self.attrs_repo.get_by_unit(unit_id)
+
+        if attrs and self._has_complete_pricing_attributes(attrs):
+            unit = self.unit_repo.get_by_id(unit_id)
+            unit_area = self._resolve_unit_area(unit) if unit else None
+            if unit_area is not None:
+                breakdown = calculate_premium_breakdown(
+                    unit_id=unit_id,
+                    unit_area=unit_area,
+                    base_price_per_sqm=float(attrs.base_price_per_sqm),
+                    floor_premium=float(attrs.floor_premium),
+                    view_premium=float(attrs.view_premium),
+                    corner_premium=float(attrs.corner_premium),
+                    size_adjustment=float(attrs.size_adjustment),
+                    custom_adjustment=float(attrs.custom_adjustment),
+                )
+                return PremiumBreakdownResponse(
+                    pricing_id=pricing_id,
+                    unit_id=unit_id,
+                    base_price=float(pricing_record.base_price),
+                    manual_adjustment=float(pricing_record.manual_adjustment),
+                    final_price=float(pricing_record.final_price),
+                    currency=pricing_record.currency,
+                    has_engine_breakdown=True,
+                    base_price_per_sqm=breakdown.base_price_per_sqm,
+                    unit_area=breakdown.unit_area,
+                    engine_base_unit_price=breakdown.base_unit_price,
+                    floor_premium=breakdown.floor_premium,
+                    view_premium=breakdown.view_premium,
+                    corner_premium=breakdown.corner_premium,
+                    size_adjustment=breakdown.size_adjustment,
+                    custom_adjustment=breakdown.custom_adjustment,
+                    premium_total=breakdown.premium_total,
+                    engine_final_unit_price=breakdown.final_unit_price,
+                )
+
+        # No complete attributes — return formal record values only.
+        return PremiumBreakdownResponse(
+            pricing_id=pricing_id,
+            unit_id=unit_id,
+            base_price=float(pricing_record.base_price),
+            manual_adjustment=float(pricing_record.manual_adjustment),
+            final_price=float(pricing_record.final_price),
+            currency=pricing_record.currency,
+            has_engine_breakdown=False,
+            base_price_per_sqm=None,
+            unit_area=None,
+            engine_base_unit_price=None,
+            floor_premium=None,
+            view_premium=None,
+            corner_premium=None,
+            size_adjustment=None,
+            custom_adjustment=None,
+            premium_total=None,
+            engine_final_unit_price=None,
         )
 
 
@@ -618,3 +701,70 @@ class UnitPricingService:
 
         record = self._pricing_repo.update_for_unit(record, **update_kwargs)
         return UnitPricingResponse.model_validate(record)
+
+    def apply_pricing_override(
+        self, pricing_id: str, data: "PricingOverrideRequest"
+    ) -> "UnitPricingResponse":
+        """Apply a governed price override to a pricing record.
+
+        Validates that the requested override is within the authority threshold
+        for the caller's role before applying it.  The ``override_amount``
+        replaces the current ``manual_adjustment``; ``final_price`` is
+        recomputed as ``base_price + override_amount``.
+
+        Override governance rules
+        -------------------------
+        - ≤ 2% of base_price: Sales Manager can self-approve.
+        - ≤ 5% of base_price: Development Director can self-approve.
+        - > 5% of base_price: CEO required.
+
+        Raises HTTP 404 when the pricing record does not exist.
+        Raises HTTP 422 when the record is approved or archived (immutable).
+        Raises HTTP 422 when the override exceeds the caller's role authority.
+        Raises HTTP 422 when the resulting final_price would be negative.
+        """
+        from app.modules.pricing.schemas import UnitPricingResponse
+
+        record = self._pricing_repo.get_by_id(pricing_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing record '{pricing_id}' not found.",
+            )
+
+        if is_immutable(record.pricing_status):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Pricing record is '{record.pricing_status}' and cannot be overridden. "
+                    "Create a new pricing record to supersede it."
+                ),
+            )
+
+        base_price = float(record.base_price)
+        override_amount = data.override_amount
+        override_percent = calculate_override_percent(override_amount, base_price)
+
+        # Validate governance — raises HTTP 422 when not allowed.
+        assert_override_allowed(data.role, override_percent)
+
+        final_price = base_price + override_amount
+        if final_price < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Resulting final_price ({final_price}) would be negative. "
+                    "Adjust override_amount."
+                ),
+            )
+
+        record = self._pricing_repo.update_for_unit(
+            record,
+            manual_adjustment=override_amount,
+            final_price=final_price,
+            override_reason=data.override_reason,
+            override_requested_by=data.requested_by,
+            override_approved_by=data.requested_by,
+        )
+        return UnitPricingResponse.model_validate(record)
+

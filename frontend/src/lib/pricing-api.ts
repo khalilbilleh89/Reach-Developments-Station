@@ -18,8 +18,10 @@
 
 import { apiFetch } from "./api-client";
 import type {
+  PremiumBreakdownResponse,
   PricingApprovalRequest,
   PricingHistoryResponse,
+  PricingOverrideRequest,
   UnitPricing,
   UnitPricingCreateRequest,
   UnitPricingUpdateRequest,
@@ -103,4 +105,50 @@ export async function getPricingHistory(
   unitId: string,
 ): Promise<PricingHistoryResponse> {
   return apiFetch<PricingHistoryResponse>(`/units/${unitId}/pricing/history`);
+}
+
+/**
+ * Return the detailed premium breakdown for a pricing record.
+ *
+ * Shows how the price is composed from base price per sqm and each premium
+ * component (floor, view, corner, size, custom).  When no pricing attributes
+ * exist for the unit, ``has_engine_breakdown`` is false.
+ *
+ * No premium calculation logic is performed here — all computation lives in
+ * the backend pricing engine.
+ *
+ * @throws ApiError 404 when the pricing record does not exist.
+ */
+export async function getPremiumBreakdown(
+  pricingId: string,
+): Promise<PremiumBreakdownResponse> {
+  return apiFetch<PremiumBreakdownResponse>(
+    `/pricing/${pricingId}/premium-breakdown`,
+  );
+}
+
+/**
+ * Apply a governed price override to a pricing record.
+ *
+ * The ``override_amount`` replaces the current ``manual_adjustment``.
+ * The backend validates the override percentage against the authority
+ * threshold for the caller's ``role`` before applying it.
+ *
+ * Authority thresholds (percentage of base_price):
+ * - ≤ 2%: Sales Manager
+ * - ≤ 5%: Development Director
+ * - > 5%: CEO
+ *
+ * @throws ApiError 422 when the override exceeds the caller's role authority.
+ * @throws ApiError 422 when the record is approved or archived (immutable).
+ * @throws ApiError 404 when the pricing record does not exist.
+ */
+export async function requestPricingOverride(
+  pricingId: string,
+  data: PricingOverrideRequest,
+): Promise<UnitPricing> {
+  return apiFetch<UnitPricing>(`/pricing/${pricingId}/override`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }

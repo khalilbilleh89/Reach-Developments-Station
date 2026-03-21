@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.pricing.schemas import (
+    PremiumBreakdownResponse,
     PricingApprovalRequest,
+    PricingOverrideRequest,
     PricingReadinessResponse,
     ProjectPriceSummaryResponse,
     UnitPricingAttributesCreate,
@@ -186,3 +188,54 @@ def approve_pricing_record(
     be superseded by creating a new pricing record (which archives this one).
     """
     return service.approve_pricing(pricing_id, data.approved_by)
+
+
+@router.get(
+    "/{pricing_id}/premium-breakdown",
+    response_model=PremiumBreakdownResponse,
+    tags=["unit-pricing"],
+)
+def get_premium_breakdown(
+    pricing_id: str,
+    service: Annotated[PricingService, Depends(get_service)],
+) -> PremiumBreakdownResponse:
+    """Return a detailed premium breakdown for a pricing record.
+
+    Shows how the price is composed: base price per sqm × area plus each
+    individual premium component (floor, view, corner, size, custom).
+
+    When no UnitPricingAttributes record exists for the unit,
+    ``has_engine_breakdown`` is False and engine-derived fields are None.
+    The formal pricing record values (base_price, manual_adjustment,
+    final_price) are always included.
+    """
+    return service.get_premium_breakdown(pricing_id)
+
+
+@router.post(
+    "/{pricing_id}/override",
+    response_model=UnitPricingResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["unit-pricing"],
+)
+def apply_pricing_override(
+    pricing_id: str,
+    data: PricingOverrideRequest,
+    service: Annotated[UnitPricingService, Depends(get_unit_pricing_service)],
+) -> UnitPricingResponse:
+    """Apply a governed price override to a pricing record.
+
+    Validates the override against role-based authority thresholds before
+    applying it.  The ``override_amount`` replaces the current
+    ``manual_adjustment``; ``final_price`` is recomputed as
+    ``base_price + override_amount``.
+
+    Authority thresholds (percentage of base_price):
+    - ≤ 2%: Sales Manager can self-approve.
+    - ≤ 5%: Development Director can self-approve.
+    - > 5%: CEO required.
+
+    Rejected when the record is approved or archived (immutable).
+    Rejected when the override exceeds the caller's role authority.
+    """
+    return service.apply_pricing_override(pricing_id, data)

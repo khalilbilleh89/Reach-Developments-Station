@@ -157,6 +157,9 @@ class UnitPricingResponse(BaseModel):
     notes: Optional[str]
     approved_by: Optional[str]
     approval_date: Optional[datetime]
+    override_reason: Optional[str]
+    override_requested_by: Optional[str]
+    override_approved_by: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -215,3 +218,81 @@ class UnitPricingDetailResponse(BaseModel):
     engine_inputs: Optional[UnitPricingAttributesResponse]
     pricing_readiness: PricingReadinessResponse
     pricing_record: Optional[UnitPricingResponse]
+
+
+# ---------------------------------------------------------------------------
+# Premium breakdown schemas
+# ---------------------------------------------------------------------------
+
+class PremiumBreakdownResponse(BaseModel):
+    """Detailed premium breakdown for a pricing record.
+
+    Shows how the engine-calculated price is composed from the base price
+    per sqm and each individual premium component.
+
+    ``has_engine_breakdown`` is False when no UnitPricingAttributes record
+    exists for the unit; in that case all engine-derived fields are None.
+    The formal pricing record values (base_price, manual_adjustment,
+    final_price) are always present.
+    """
+
+    pricing_id: str
+    unit_id: str
+    # Formal pricing record values.
+    base_price: float
+    manual_adjustment: float
+    final_price: float
+    currency: str
+    # Engine-based breakdown (present only when pricing attributes exist).
+    has_engine_breakdown: bool
+    base_price_per_sqm: Optional[float]
+    unit_area: Optional[float]
+    engine_base_unit_price: Optional[float]
+    floor_premium: Optional[float]
+    view_premium: Optional[float]
+    corner_premium: Optional[float]
+    size_adjustment: Optional[float]
+    custom_adjustment: Optional[float]
+    premium_total: Optional[float]
+    engine_final_unit_price: Optional[float]
+
+
+# ---------------------------------------------------------------------------
+# Pricing override schemas
+# ---------------------------------------------------------------------------
+
+class PricingOverrideRequest(BaseModel):
+    """Payload for applying a governed price override to a pricing record.
+
+    The ``override_amount`` replaces the current ``manual_adjustment``.
+    The override percentage is computed as abs(override_amount) / base_price × 100
+    and validated against the authority threshold for ``role``.
+
+    All three text fields are mandatory to ensure an auditable paper trail.
+    """
+
+    override_amount: float = Field(
+        ...,
+        description="New manual_adjustment value to apply as the price override.",
+    )
+    override_reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Mandatory justification for the price override.",
+    )
+    requested_by: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Identifier of the user requesting the override.",
+    )
+    role: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description=(
+            "Role of the requester used for authority threshold validation. "
+            "Accepted values: sales_manager, development_director, ceo."
+        ),
+    )
