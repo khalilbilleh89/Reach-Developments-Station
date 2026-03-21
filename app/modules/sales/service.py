@@ -5,7 +5,12 @@ Application-layer orchestration for the Sales domain.
 Enforces business rules for buyers, reservations, and contracts.
 """
 
+from datetime import datetime, timezone
+from datetime import date as date_type
+from datetime import timedelta
+
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.sales.contract_rules import (
@@ -13,9 +18,10 @@ from app.modules.sales.contract_rules import (
     assert_reservation_is_converted,
     assert_valid_contract_transition,
 )
-from app.modules.sales.models import Buyer, Reservation, SalesContract
+from app.modules.sales.models import Buyer, ContractPaymentSchedule, Reservation, SalesContract
 from app.modules.sales.repository import (
     BuyerRepository,
+    ContractPaymentScheduleRepository,
     ReservationRepository,
     SalesContractRepository,
 )
@@ -28,6 +34,9 @@ from app.modules.sales.schemas import (
     BuyerListResponse,
     BuyerResponse,
     BuyerUpdate,
+    ContractPaymentRecordRequest,
+    ContractPaymentScheduleListResponse,
+    ContractPaymentScheduleResponse,
     ReservationCreate,
     ReservationListResponse,
     ReservationResponse,
@@ -39,7 +48,50 @@ from app.modules.sales.schemas import (
 )
 from app.modules.units.repository import UnitRepository
 from app.shared.enums.project import UnitStatus
-from app.shared.enums.sales import ContractStatus, ReservationStatus
+from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
+
+# ---------------------------------------------------------------------------
+# Default payment schedule milestones
+# ---------------------------------------------------------------------------
+# Each tuple is (label, percentage_of_total, days_after_contract_date)
+_DEFAULT_MILESTONES = [
+    ("Reservation Deposit", 0.10, 0),
+    ("Contract Signing",    0.20, 30),
+    ("Construction Milestone", 0.40, 180),
+    ("Handover",            0.30, 365),
+]
+
+
+def _build_installment_items(contract: "SalesContract") -> list["ContractPaymentSchedule"]:
+    """Build default installment rows for a contract without persisting them.
+
+    Rounds early installments to 2 decimal places.  The final installment is
+    set to ``contract_price - sum(earlier_installments)`` so the schedule
+    always totals *exactly* the contract price, regardless of rounding effects.
+    """
+    price = round(float(contract.contract_price), 2)
+    base_date: date_type = contract.contract_date
+    items: list[ContractPaymentSchedule] = []
+    cumulative = 0.0
+    last_idx = len(_DEFAULT_MILESTONES) - 1
+    for i, (_, pct, days) in enumerate(_DEFAULT_MILESTONES):
+        due = base_date + timedelta(days=days)
+        if i == last_idx:
+            amount = round(price - cumulative, 2)
+        else:
+            amount = round(price * pct, 2)
+            cumulative += amount
+        items.append(
+            ContractPaymentSchedule(
+                contract_id=contract.id,
+                installment_number=i + 1,
+                due_date=due,
+                amount=amount,
+                currency="AED",
+                status=ContractPaymentStatus.PENDING.value,
+            )
+        )
+    return items
 
 
 class SalesService:
@@ -49,6 +101,7 @@ class SalesService:
         self.reservation_repo = ReservationRepository(db)
         self.contract_repo = SalesContractRepository(db)
         self.unit_repo = UnitRepository(db)
+        self.payment_schedule_repo = ContractPaymentScheduleRepository(db)
 
     # ------------------------------------------------------------------
     # Buyer operations
@@ -246,6 +299,11 @@ class SalesService:
           - Contract must have a linked reservation.
           - The linked reservation must be in CONVERTED status.
           - Unit status is set to UNDER_CONTRACT atomically.
+          - Default payment schedule is created in the same transaction.
+
+        All state changes (contract status, unit status, installment rows) are
+        committed in a single transaction so that no partial ACTIVE state can
+        exist without a complete payment schedule.
 
         Raises:
             404 — if the contract does not exist.
@@ -261,9 +319,17 @@ class SalesService:
         reservation = self._require_reservation(contract.reservation_id)
         assert_reservation_is_converted(contract_id, contract.reservation_id, reservation.status)
 
+        # Mutate contract and unit — no commit yet
         contract.status = ContractStatus.ACTIVE.value
         self._set_unit_status(contract.unit_id, UnitStatus.UNDER_CONTRACT.value)
-        self.contract_repo.save(contract)
+
+        # Stage installment rows into the same session — no commit yet
+        for item in _build_installment_items(contract):
+            self._db.add(item)
+
+        # Single atomic commit: contract status + unit status + installments
+        self._db.commit()
+        self._db.refresh(contract)
         return SalesContractResponse.model_validate(contract)
 
     def convert_reservation_to_contract(
@@ -341,3 +407,145 @@ class SalesService:
         unit = self.unit_repo.get_by_id(unit_id)
         if unit is not None:
             unit.status = new_unit_status
+
+
+# ---------------------------------------------------------------------------
+# Contract Payment Service
+# ---------------------------------------------------------------------------
+
+
+class ContractPaymentService:
+    """Handles payment schedule generation, recording, and status updates."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        self.contract_repo = SalesContractRepository(db)
+        self.payment_schedule_repo = ContractPaymentScheduleRepository(db)
+
+    # ------------------------------------------------------------------
+    # Schedule management
+    # ------------------------------------------------------------------
+
+    def generate_payment_schedule(
+        self, contract_id: str
+    ) -> ContractPaymentScheduleListResponse:
+        """Generate the default payment schedule for a contract.
+
+        Raises 404 if the contract does not exist.
+        Raises 409 if a schedule already exists (caught at both service and DB
+        level — the DB-level unique constraint on (contract_id, installment_number)
+        is the authoritative concurrency guard).
+        """
+        contract = self._require_contract(contract_id)
+
+        existing = self.payment_schedule_repo.count_by_contract(contract_id)
+        if existing > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Contract '{contract_id}' already has a payment schedule.",
+            )
+
+        items = _build_installment_items(contract)
+        try:
+            saved = self.payment_schedule_repo.bulk_create(items)
+        except IntegrityError:
+            self._db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Contract '{contract_id}' already has a payment schedule.",
+            )
+        return ContractPaymentScheduleListResponse(
+            total=len(saved),
+            items=[ContractPaymentScheduleResponse.model_validate(s) for s in saved],
+        )
+
+    def list_schedule(
+        self, contract_id: str
+    ) -> ContractPaymentScheduleListResponse:
+        """Return all installments for a contract, ordered by installment_number.
+
+        Raises 404 if the contract does not exist.
+        """
+        self._require_contract(contract_id)
+        items = self.payment_schedule_repo.list_by_contract(contract_id)
+        return ContractPaymentScheduleListResponse(
+            total=len(items),
+            items=[ContractPaymentScheduleResponse.model_validate(i) for i in items],
+        )
+
+    def record_payment(
+        self, contract_id: str, data: ContractPaymentRecordRequest
+    ) -> ContractPaymentScheduleResponse:
+        """Mark an installment as PAID.
+
+        Raises 404 if the contract or installment does not exist.
+        Raises 409 if the installment is already paid or cancelled.
+        """
+        self._require_contract(contract_id)
+        item = self.payment_schedule_repo.get_by_contract_and_installment(
+            contract_id, data.installment_number
+        )
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"Installment #{data.installment_number} not found "
+                    f"for contract '{contract_id}'."
+                ),
+            )
+        if item.status == ContractPaymentStatus.PAID.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Installment #{data.installment_number} is already paid.",
+            )
+        if item.status == ContractPaymentStatus.CANCELLED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Installment #{data.installment_number} is cancelled and cannot be paid.",
+            )
+
+        item.status = ContractPaymentStatus.PAID.value
+        item.paid_at = data.paid_at or datetime.now(timezone.utc)
+        if data.payment_reference is not None:
+            item.payment_reference = data.payment_reference
+
+        self.payment_schedule_repo.save(item)
+        return ContractPaymentScheduleResponse.model_validate(item)
+
+    def mark_overdue(self, contract_id: str) -> ContractPaymentScheduleListResponse:
+        """Mark all past-due PENDING installments as OVERDUE.
+
+        Raises 404 if the contract does not exist.
+        """
+        self._require_contract(contract_id)
+        today = date_type.today()
+        items = self.payment_schedule_repo.list_by_contract(contract_id)
+        updated: list[ContractPaymentSchedule] = []
+        for item in items:
+            if (
+                item.status == ContractPaymentStatus.PENDING.value
+                and item.due_date < today
+            ):
+                item.status = ContractPaymentStatus.OVERDUE.value
+                updated.append(item)
+        if updated:
+            self._db.commit()
+            for item in updated:
+                self._db.refresh(item)
+        return ContractPaymentScheduleListResponse(
+            total=len(items),
+            items=[ContractPaymentScheduleResponse.model_validate(i) for i in items],
+        )
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _require_contract(self, contract_id: str) -> SalesContract:
+        contract = self.contract_repo.get_by_id(contract_id)
+        if not contract:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contract '{contract_id}' not found.",
+            )
+        return contract

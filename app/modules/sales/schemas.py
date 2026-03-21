@@ -4,12 +4,12 @@ sales.schemas
 Pydantic request/response schemas for buyers, reservations, and sales contracts.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.shared.enums.sales import ContractStatus, ReservationStatus
+from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
 
 
 # ---------------------------------------------------------------------------
@@ -131,3 +131,49 @@ class SalesContractResponse(BaseModel):
 class SalesContractListResponse(BaseModel):
     total: int
     items: list[SalesContractResponse]
+
+
+# ---------------------------------------------------------------------------
+# ContractPaymentSchedule schemas
+# ---------------------------------------------------------------------------
+
+class ContractPaymentScheduleResponse(BaseModel):
+    id: str
+    contract_id: str
+    installment_number: int
+    due_date: date
+    amount: float
+    currency: str
+    status: ContractPaymentStatus
+    paid_at: Optional[datetime]
+    payment_reference: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ContractPaymentScheduleListResponse(BaseModel):
+    total: int
+    items: list[ContractPaymentScheduleResponse]
+
+
+class ContractPaymentRecordRequest(BaseModel):
+    installment_number: int = Field(..., ge=1)
+    paid_at: Optional[datetime] = None
+    payment_reference: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("paid_at", mode="after")
+    @classmethod
+    def normalize_paid_at_to_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Normalize paid_at to UTC.
+
+        - None passes through unchanged.
+        - Naive datetimes (no tzinfo) are assumed to be UTC and have UTC attached.
+        - Timezone-aware datetimes are converted to UTC.
+        """
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)

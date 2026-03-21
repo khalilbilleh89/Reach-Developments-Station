@@ -15,6 +15,9 @@ from app.modules.sales.schemas import (
     BuyerCreate,
     BuyerListResponse,
     BuyerResponse,
+    ContractPaymentRecordRequest,
+    ContractPaymentScheduleListResponse,
+    ContractPaymentScheduleResponse,
     ReservationCreate,
     ReservationListResponse,
     ReservationResponse,
@@ -24,13 +27,17 @@ from app.modules.sales.schemas import (
     SalesContractResponse,
     SalesContractUpdate,
 )
-from app.modules.sales.service import SalesService
+from app.modules.sales.service import ContractPaymentService, SalesService
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
 
 
 def get_service(db: Session = Depends(get_db)) -> SalesService:
     return SalesService(db)
+
+
+def get_payment_service(db: Session = Depends(get_db)) -> ContractPaymentService:
+    return ContractPaymentService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -217,3 +224,52 @@ def get_unit_contracts(
 ) -> SalesContractListResponse:
     """List all contracts for a specific unit."""
     return service.list_contracts(unit_id=unit_id, skip=skip, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Contract payment schedule endpoints
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/contracts/{contract_id}/payment-schedule",
+    response_model=ContractPaymentScheduleListResponse,
+)
+def get_payment_schedule(
+    contract_id: str,
+    payment_service: Annotated[ContractPaymentService, Depends(get_payment_service)],
+) -> ContractPaymentScheduleListResponse:
+    """List the payment installment schedule for a contract."""
+    return payment_service.list_schedule(contract_id)
+
+
+@router.post(
+    "/contracts/{contract_id}/generate-payment-schedule",
+    response_model=ContractPaymentScheduleListResponse,
+    status_code=201,
+)
+def generate_payment_schedule(
+    contract_id: str,
+    payment_service: Annotated[ContractPaymentService, Depends(get_payment_service)],
+) -> ContractPaymentScheduleListResponse:
+    """Generate the default payment schedule for a contract.
+
+    Returns 409 if a schedule already exists.
+    """
+    return payment_service.generate_payment_schedule(contract_id)
+
+
+@router.post(
+    "/contracts/{contract_id}/payments",
+    response_model=ContractPaymentScheduleResponse,
+)
+def record_payment(
+    contract_id: str,
+    data: ContractPaymentRecordRequest,
+    payment_service: Annotated[ContractPaymentService, Depends(get_payment_service)],
+) -> ContractPaymentScheduleResponse:
+    """Record a payment against a specific installment.
+
+    Returns 404 if the installment does not exist.
+    Returns 409 if the installment is already paid or cancelled.
+    """
+    return payment_service.record_payment(contract_id, data)

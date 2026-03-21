@@ -8,6 +8,9 @@
  *   POST  /sales/contracts/{id}/activate              → activate
  *   POST  /sales/contracts/{id}/cancel                → cancel
  *   POST  /sales/reservations/{id}/convert-to-contract → convert reservation to contract
+ *   GET   /sales/contracts/{id}/payment-schedule      → list installments
+ *   POST  /sales/contracts/{id}/payments              → record payment
+ *   POST  /sales/contracts/{id}/generate-payment-schedule → generate schedule
  *
  * All helpers call the backend via apiFetch.  Errors propagate as ApiError.
  * Note: apiFetch BASE_URL already includes /api/v1; paths here must NOT
@@ -16,6 +19,10 @@
 
 import { apiFetch } from "./api-client";
 import type { ContractStatus } from "./sales-types";
+import type {
+  ContractPaymentSchedule,
+  ContractPaymentScheduleListResponse,
+} from "./sales-types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,6 +172,52 @@ export async function convertReservationToContract(
 ): Promise<SalesContract> {
   return apiFetch<SalesContract>(
     `/sales/reservations/${reservationId}/convert-to-contract`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payment schedule
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the payment installment schedule for a contract.
+ *
+ * GET /api/v1/sales/contracts/{contractId}/payment-schedule
+ *
+ * Returns 404 if the contract does not exist.
+ */
+export async function getContractPaymentSchedule(
+  contractId: string,
+): Promise<ContractPaymentScheduleListResponse> {
+  return apiFetch<ContractPaymentScheduleListResponse>(
+    `/sales/contracts/${contractId}/payment-schedule`,
+  );
+}
+
+export interface ContractPaymentRecordRequest {
+  installment_number: number;
+  paid_at?: string | null;
+  payment_reference?: string | null;
+}
+
+/**
+ * Record a payment against a specific installment.
+ *
+ * POST /api/v1/sales/contracts/{contractId}/payments
+ *
+ * Returns 404 if the installment does not exist.
+ * Returns 409 if the installment is already paid or cancelled.
+ */
+export async function recordContractPayment(
+  contractId: string,
+  data: ContractPaymentRecordRequest,
+): Promise<ContractPaymentSchedule> {
+  return apiFetch<ContractPaymentSchedule>(
+    `/sales/contracts/${contractId}/payments`,
     {
       method: "POST",
       body: JSON.stringify(data),
