@@ -31,7 +31,6 @@ from app.modules.scenario.schemas import (
 )
 from app.core.constants.scenario import (
     ScenarioStatus,
-    VALID_STATUSES,
     VALID_SOURCE_TYPES,
 )
 
