@@ -36,6 +36,7 @@ _VALID_SOURCE_TYPES = {"land", "feasibility", "concept", "general"}
 
 class ScenarioService:
     def __init__(self, db: Session) -> None:
+        self.db = db
         self.scenario_repo = ScenarioRepository(db)
         self.version_repo = ScenarioVersionRepository(db)
 
@@ -149,8 +150,8 @@ class ScenarioService:
                     notes=f"Copied from scenario '{source.name}' v{latest.version_number}.",
                     assumptions_json=latest.assumptions_json,
                     comparison_metrics_json=None,
-                    created_by=latest.created_by,
                 ),
+                created_by=latest.created_by,
             )
 
         return ScenarioResponse.model_validate(new_scenario)
@@ -163,7 +164,9 @@ class ScenarioService:
         """Mark the scenario as approved.
 
         The latest version is marked as the approved version.
-        Any previously approved version for this scenario is cleared first.
+        All mutations are delegated to repository methods; a single db.commit()
+        in this service method makes the full transition atomic so the DB is
+        never left in a half-approved state.
         """
         scenario = self._require_scenario(scenario_id)
         if scenario.status == "archived":
@@ -171,15 +174,16 @@ class ScenarioService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="An archived scenario cannot be approved.",
             )
-        latest = self.version_repo.get_latest(scenario_id)
+        latest = self.version_repo.approve_latest(scenario_id)
         if latest is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Cannot approve a scenario with no versions.",
             )
-        self.version_repo.clear_approved(scenario_id)
-        self.version_repo.set_approved(latest)
-        self.scenario_repo.update_status(scenario, "approved")
+        self.scenario_repo.mark_approved(scenario)
+        # Single commit: all three mutations (clear, approve, status) are atomic.
+        self.db.commit()
+        self.db.refresh(scenario)
         return ScenarioResponse.model_validate(scenario)
 
     def archive_scenario(self, scenario_id: str) -> ScenarioResponse:
@@ -192,10 +196,10 @@ class ScenarioService:
     # ------------------------------------------------------------------
 
     def create_version(
-        self, scenario_id: str, data: ScenarioVersionCreate
+        self, scenario_id: str, data: ScenarioVersionCreate, created_by: Optional[str] = None
     ) -> ScenarioVersionResponse:
         self._require_scenario(scenario_id)
-        version = self.version_repo.create(scenario_id, data)
+        version = self.version_repo.create(scenario_id, data, created_by=created_by)
         return ScenarioVersionResponse.model_validate(version)
 
     def list_versions(self, scenario_id: str) -> ScenarioVersionList:
@@ -228,6 +232,9 @@ class ScenarioService:
         scenario's latest version are surfaced.  No formulas are duplicated
         here; calculation results should be stored in comparison_metrics_json
         by callers after running through the Calculation Engine.
+
+        Latest versions are fetched in a single batch query (no N+1).
+        Results are emitted in the same order as request.scenario_ids.
         """
         scenarios = self.scenario_repo.get_by_ids(request.scenario_ids)
         found_ids = {s.id for s in scenarios}
@@ -238,9 +245,15 @@ class ScenarioService:
                 detail=f"Scenarios not found: {missing}",
             )
 
+        # Batch fetch all latest versions in one query.
+        latest_by_id = self.version_repo.get_latest_for_ids(request.scenario_ids)
+
+        # Build a map for O(1) lookup, then emit in request order.
+        scenarios_by_id = {s.id: s for s in scenarios}
         items: List[ScenarioCompareItem] = []
-        for scenario in scenarios:
-            latest = self.version_repo.get_latest(scenario.id)
+        for sid in request.scenario_ids:
+            scenario = scenarios_by_id[sid]
+            latest = latest_by_id.get(sid)
             items.append(
                 ScenarioCompareItem(
                     scenario_id=scenario.id,

@@ -15,7 +15,7 @@ Module-specific code must never create private scenario records.
 
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -77,6 +77,10 @@ class ScenarioVersion(Base, TimestampMixin):
     """
 
     __tablename__ = "scenario_versions"
+    __table_args__ = (
+        # Guarantee unique version numbers per scenario regardless of concurrency.
+        UniqueConstraint("scenario_id", "version_number", name="uq_scenario_versions_scenario_id_version_number"),
+    )
 
     scenario_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False, index=True

@@ -22,7 +22,6 @@ _VALID_VERSION = {
     "notes": "First version",
     "assumptions_json": {"gdv": 10000000, "cost_per_sqm": 800},
     "comparison_metrics_json": {"irr": 0.18, "profit_margin": 0.22},
-    "created_by": "test-user",
 }
 
 
@@ -155,6 +154,8 @@ def test_create_version(client: TestClient):
     assert data["version_number"] == 1
     assert data["assumptions_json"]["gdv"] == 10000000
     assert data["is_approved"] is False
+    # created_by is set server-side from JWT sub, not from client payload.
+    assert data["created_by"] == "test-user"
 
 
 def test_create_multiple_versions(client: TestClient):
@@ -328,6 +329,22 @@ def test_compare_scenarios_no_versions(client: TestClient):
     for item in resp.json()["scenarios"]:
         assert item["latest_version_number"] is None
         assert item["assumptions_json"] is None
+
+
+def test_compare_scenarios_preserves_request_order(client: TestClient):
+    """compare must return items in the same order as scenario_ids."""
+    id_a = client.post(_BASE, json={"name": "Option A", "source_type": "feasibility"}).json()["id"]
+    id_b = client.post(_BASE, json={"name": "Option B", "source_type": "feasibility"}).json()["id"]
+
+    client.post(f"{_BASE}/{id_a}/versions", json=_VALID_VERSION)
+    client.post(f"{_BASE}/{id_b}/versions", json=_VALID_VERSION)
+
+    # Request B before A
+    resp = client.post(f"{_BASE}/compare", json={"scenario_ids": [id_b, id_a]})
+    assert resp.status_code == 200
+    items = resp.json()["scenarios"]
+    assert items[0]["scenario_id"] == id_b
+    assert items[1]["scenario_id"] == id_a
 
 
 # ---------------------------------------------------------------------------

@@ -64,7 +64,6 @@ class ScenarioVersionCreate(BaseModel):
     notes: Optional[str] = None
     assumptions_json: Optional[Dict[str, Any]] = None
     comparison_metrics_json: Optional[Dict[str, Any]] = None
-    created_by: Optional[str] = Field(None, max_length=255)
 
 
 class ScenarioVersionResponse(BaseModel):

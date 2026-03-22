@@ -4,7 +4,7 @@ Revision ID: 0041
 Revises: 0040
 Create Date: 2026-03-22
 
-PR-ARCH-003 — Scenario Engine Core Framework
+PR-ARCH-003 / PR-ARCH-003A — Scenario Engine Core Framework + Integrity Hardening
 
 Creates the canonical Scenario Engine tables.
 
@@ -25,11 +25,14 @@ scenario_versions
              assumptions_json, comparison_metrics_json, created_by,
              is_approved, created_at, updated_at.
 
-Indexes
--------
+Indexes and Constraints
+-----------------------
   scenarios(code), scenarios(project_id), scenarios(land_id),
   scenarios(base_scenario_id)
   scenario_versions(scenario_id)
+  UNIQUE scenario_versions(scenario_id, version_number)
+  UNIQUE partial index on scenario_versions(scenario_id) WHERE is_approved=true
+    — PostgreSQL only; enforces at most one approved version per scenario.
 """
 
 from typing import Sequence, Union
@@ -112,9 +115,34 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
+        # Unique version numbers per scenario — enforced on all dialects.
+        sa.UniqueConstraint(
+            "scenario_id",
+            "version_number",
+            name="uq_scenario_versions_scenario_id_version_number",
+        ),
     )
+
+    # Partial unique index: at most one approved version per scenario.
+    # Only applied on PostgreSQL; SQLite does not support partial indexes and
+    # the service layer already enforces this invariant.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "uq_scenario_versions_approved_per_scenario",
+            "scenario_versions",
+            ["scenario_id"],
+            unique=True,
+            postgresql_where=sa.text("is_approved = true"),
+        )
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.drop_index(
+            "uq_scenario_versions_approved_per_scenario",
+            table_name="scenario_versions",
+        )
     op.drop_table("scenario_versions")
     op.drop_table("scenarios")

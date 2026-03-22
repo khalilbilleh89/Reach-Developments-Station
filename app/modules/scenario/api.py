@@ -119,9 +119,13 @@ def create_version(
     scenario_id: str,
     data: ScenarioVersionCreate,
     service: Annotated[ScenarioService, Depends(get_service)],
+    payload: Annotated[dict, Depends(get_current_user_payload)],
 ) -> ScenarioVersionResponse:
-    """Add a new version snapshot to a scenario."""
-    return service.create_version(scenario_id, data)
+    """Add a new version snapshot to a scenario.
+
+    created_by is populated server-side from the authenticated user (JWT sub).
+    """
+    return service.create_version(scenario_id, data, created_by=payload.get("sub"))
 
 
 @router.get("/{scenario_id}/versions", response_model=ScenarioVersionList)
