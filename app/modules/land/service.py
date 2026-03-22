@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.calculation_engine.areas import calculate_buildable_area, calculate_sellable_area
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
 from app.modules.land.schemas import (
     LandAssumptionCreate,
@@ -162,15 +163,17 @@ class LandService:
                 detail=f"Land parcel '{parcel_id}' not found.",
             )
 
-        # Derived calculations
+        # Derived calculations via the centralized Calculation Engine
         buildable_area: Optional[float] = None
         sellable_area: Optional[float] = None
 
         if parcel.land_area_sqm is not None and parcel.permitted_far is not None:
-            buildable_area = float(parcel.land_area_sqm) * float(parcel.permitted_far)
+            buildable_area = calculate_buildable_area(
+                float(parcel.land_area_sqm), float(parcel.permitted_far)
+            )
 
         if buildable_area is not None and data.expected_sellable_ratio is not None:
-            sellable_area = buildable_area * data.expected_sellable_ratio
+            sellable_area = calculate_sellable_area(buildable_area, data.expected_sellable_ratio)
 
         assumptions = self.assumptions_repo.create(parcel_id, data, buildable_area, sellable_area)
         return LandAssumptionResponse.model_validate(assumptions)
