@@ -11,12 +11,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.feasibility.engines.feasibility_engine import FeasibilityInputs, run_feasibility
-from app.modules.feasibility.break_even_engine import (
+from app.core.calculation_engine.registry import (
     calculate_break_even_price_per_sqm,
-    calculate_break_even_units_sqm,
+    calculate_break_even_sellable_sqm,
     calculate_equity_multiple,
+    calculate_irr,
 )
-from app.modules.feasibility.irr_engine import calculate_irr
 from app.modules.feasibility.scenario_runner import run_sensitivity_scenarios
 from app.modules.feasibility.repository import (
     FeasibilityAssumptionsRepository,
@@ -175,7 +175,7 @@ class FeasibilityService:
         break_even_price = calculate_break_even_price_per_sqm(
             outputs.total_cost, inputs.sellable_area_sqm
         )
-        break_even_units = calculate_break_even_units_sqm(
+        break_even_units = calculate_break_even_sellable_sqm(
             outputs.total_cost, inputs.avg_sale_price_per_sqm
         )
         scenario_outputs = run_sensitivity_scenarios(inputs)
