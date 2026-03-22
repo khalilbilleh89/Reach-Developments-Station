@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.scenario.models import Scenario, ScenarioVersion
 from app.modules.scenario.schemas import ScenarioCreate, ScenarioVersionCreate
+from app.core.constants.scenario import ScenarioStatus
 
 
 class ScenarioRepository:
@@ -90,7 +91,7 @@ class ScenarioRepository:
 
     def mark_approved(self, scenario: Scenario) -> None:
         """Set status to 'approved'. Does NOT commit — caller coordinates the commit."""
-        scenario.status = "approved"
+        scenario.status = ScenarioStatus.APPROVED.value
 
     def get_by_ids(self, scenario_ids: List[str]) -> List[Scenario]:
         return self.db.query(Scenario).filter(Scenario.id.in_(scenario_ids)).all()

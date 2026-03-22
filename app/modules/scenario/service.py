@@ -29,9 +29,11 @@ from app.modules.scenario.schemas import (
     ScenarioVersionList,
     ScenarioVersionResponse,
 )
-
-_VALID_STATUSES = {"draft", "approved", "archived"}
-_VALID_SOURCE_TYPES = {"land", "feasibility", "concept", "general"}
+from app.core.constants.scenario import (
+    ScenarioStatus,
+    VALID_STATUSES,
+    VALID_SOURCE_TYPES,
+)
 
 
 class ScenarioService:
@@ -67,10 +69,10 @@ class ScenarioService:
     # ------------------------------------------------------------------
 
     def create_scenario(self, data: ScenarioCreate) -> ScenarioResponse:
-        if data.source_type not in _VALID_SOURCE_TYPES:
+        if data.source_type not in VALID_SOURCE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"source_type must be one of: {sorted(_VALID_SOURCE_TYPES)}.",
+                detail=f"source_type must be one of: {sorted(VALID_SOURCE_TYPES)}.",
             )
         scenario = self.scenario_repo.create(data)
         return ScenarioResponse.model_validate(scenario)
@@ -169,7 +171,7 @@ class ScenarioService:
         never left in a half-approved state.
         """
         scenario = self._require_scenario(scenario_id)
-        if scenario.status == "archived":
+        if scenario.status == ScenarioStatus.ARCHIVED.value:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="An archived scenario cannot be approved.",
@@ -188,7 +190,7 @@ class ScenarioService:
 
     def archive_scenario(self, scenario_id: str) -> ScenarioResponse:
         scenario = self._require_scenario(scenario_id)
-        self.scenario_repo.update_status(scenario, "archived")
+        self.scenario_repo.update_status(scenario, ScenarioStatus.ARCHIVED.value)
         return ScenarioResponse.model_validate(scenario)
 
     # ------------------------------------------------------------------

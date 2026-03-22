@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE
+
 
 # ---------------------------------------------------------------------------
 # Scenario schemas
@@ -20,7 +22,7 @@ from pydantic import BaseModel, Field
 class ScenarioCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     code: Optional[str] = Field(None, max_length=100)
-    source_type: str = Field("feasibility", max_length=50)
+    source_type: str = Field(DEFAULT_SCENARIO_SOURCE_TYPE, max_length=50)
     project_id: Optional[str] = None
     land_id: Optional[str] = None
     notes: Optional[str] = None
