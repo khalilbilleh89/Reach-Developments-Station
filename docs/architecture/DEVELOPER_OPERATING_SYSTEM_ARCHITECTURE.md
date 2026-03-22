@@ -121,7 +121,7 @@ Covers construction scope, milestone tracking, progress reporting, and stage gat
 
 Covers pricing, sales reservations, contracts, payment plans, commissions, and sales exceptions.
 
-**Modules:** Pricing, Sales, Payment Plans, Commissions, Sales Exceptions & Incentives
+**Modules (conceptual):** Pricing (pricing, pricing_attributes), Sales, Reservations, Payment Plans, Commissions, Sales Exceptions & Incentives
 
 ### Layer 8 — Financial Control Engine
 
@@ -226,7 +226,7 @@ Project
 │   │   │
 │   │   └── Construction             (Project / Phase / Building level)
 │
-└── Analytics / Finance Summary  (Project / Portfolio level)
+├── Analytics / Finance Summary  (Project / Portfolio level)
 └── Settings                     (System-level; no project FK)
 ```
 
@@ -290,11 +290,14 @@ Project
 - Title transfer workflow
 - Post-sale document management
 
+_The Registry module is a cross-cutting capability that intentionally spans multiple architecture layers and is modeled outside the primary nine-layer stack._
+
 ### Settings Module
 
 - Pricing policies
 - Commission policies
 - Project templates
+- Architecture layer: **System-level / cross-cutting** (applies across all feature modules)
 
 ---
 
@@ -302,7 +305,7 @@ Project
 
 ### Cross-Layer Rules
 
-All cross-layer logic must pass through service layers. Direct database manipulation across layers is **forbidden**.
+All cross-layer logic must pass through service layers. While `docs/SYSTEM_RULES.md` generally describes direct cross-module data manipulation as *discouraged*, this architecture document tightens that rule for this platform: direct database manipulation across layers is **forbidden**.
 
 **Forbidden cross-layer behavior:**
 
