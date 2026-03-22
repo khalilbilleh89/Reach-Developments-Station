@@ -24,15 +24,41 @@ class LandParcelCreate(BaseModel):
     city: Optional[str] = Field(None, max_length=100)
     district: Optional[str] = Field(None, max_length=100)
     address: Optional[str] = Field(None, max_length=500)
+    # Identity & cadastral reference
+    plot_number: Optional[str] = Field(None, max_length=100)
+    cadastral_id: Optional[str] = Field(None, max_length=100)
+    title_reference: Optional[str] = Field(None, max_length=255)
+    location_link: Optional[str] = Field(None, max_length=1000)
+    municipality: Optional[str] = Field(None, max_length=100)
+    submarket: Optional[str] = Field(None, max_length=100)
+    # Physical / dimensional attributes
     land_area_sqm: Optional[float] = Field(None, gt=0)
     frontage_m: Optional[float] = Field(None, gt=0)
     depth_m: Optional[float] = Field(None, gt=0)
+    buildable_area_sqm: Optional[float] = Field(None, gt=0)
+    sellable_area_sqm: Optional[float] = Field(None, gt=0)
+    coverage_ratio: Optional[float] = Field(None, ge=0, le=1)
+    density_ratio: Optional[float] = Field(None, ge=0)
+    front_setback_m: Optional[float] = Field(None, ge=0)
+    side_setback_m: Optional[float] = Field(None, ge=0)
+    rear_setback_m: Optional[float] = Field(None, ge=0)
     zoning_category: Optional[str] = Field(None, max_length=100)
     permitted_far: Optional[float] = Field(None, gt=0)
     max_height_m: Optional[float] = Field(None, gt=0)
     max_floors: Optional[int] = Field(None, ge=1)
     corner_plot: bool = False
     utilities_available: bool = False
+    access_notes: Optional[str] = None
+    utilities_notes: Optional[str] = None
+    # Acquisition economics
+    acquisition_price: Optional[float] = Field(None, ge=0)
+    transaction_cost: Optional[float] = Field(None, ge=0)
+    currency: Optional[str] = Field(None, max_length=10)
+    asking_price_per_sqm: Optional[float] = Field(None, ge=0)
+    supported_price_per_sqm: Optional[float] = Field(None, ge=0)
+    # Governance / provenance
+    assumption_notes: Optional[str] = None
+    source_notes: Optional[str] = None
     status: LandParcelStatus = LandParcelStatus.DRAFT
 
 
@@ -42,15 +68,41 @@ class LandParcelUpdate(BaseModel):
     city: Optional[str] = Field(None, max_length=100)
     district: Optional[str] = Field(None, max_length=100)
     address: Optional[str] = Field(None, max_length=500)
+    # Identity & cadastral reference
+    plot_number: Optional[str] = Field(None, max_length=100)
+    cadastral_id: Optional[str] = Field(None, max_length=100)
+    title_reference: Optional[str] = Field(None, max_length=255)
+    location_link: Optional[str] = Field(None, max_length=1000)
+    municipality: Optional[str] = Field(None, max_length=100)
+    submarket: Optional[str] = Field(None, max_length=100)
+    # Physical / dimensional attributes
     land_area_sqm: Optional[float] = Field(None, gt=0)
     frontage_m: Optional[float] = Field(None, gt=0)
     depth_m: Optional[float] = Field(None, gt=0)
+    buildable_area_sqm: Optional[float] = Field(None, gt=0)
+    sellable_area_sqm: Optional[float] = Field(None, gt=0)
+    coverage_ratio: Optional[float] = Field(None, ge=0, le=1)
+    density_ratio: Optional[float] = Field(None, ge=0)
+    front_setback_m: Optional[float] = Field(None, ge=0)
+    side_setback_m: Optional[float] = Field(None, ge=0)
+    rear_setback_m: Optional[float] = Field(None, ge=0)
     zoning_category: Optional[str] = Field(None, max_length=100)
     permitted_far: Optional[float] = Field(None, gt=0)
     max_height_m: Optional[float] = Field(None, gt=0)
     max_floors: Optional[int] = Field(None, ge=1)
     corner_plot: Optional[bool] = None
     utilities_available: Optional[bool] = None
+    access_notes: Optional[str] = None
+    utilities_notes: Optional[str] = None
+    # Acquisition economics
+    acquisition_price: Optional[float] = Field(None, ge=0)
+    transaction_cost: Optional[float] = Field(None, ge=0)
+    currency: Optional[str] = Field(None, max_length=10)
+    asking_price_per_sqm: Optional[float] = Field(None, ge=0)
+    supported_price_per_sqm: Optional[float] = Field(None, ge=0)
+    # Governance / provenance
+    assumption_notes: Optional[str] = None
+    source_notes: Optional[str] = None
     status: Optional[LandParcelStatus] = None
 
 
@@ -63,15 +115,41 @@ class LandParcelResponse(BaseModel):
     city: Optional[str]
     district: Optional[str]
     address: Optional[str]
+    # Identity & cadastral reference
+    plot_number: Optional[str]
+    cadastral_id: Optional[str]
+    title_reference: Optional[str]
+    location_link: Optional[str]
+    municipality: Optional[str]
+    submarket: Optional[str]
+    # Physical / dimensional attributes
     land_area_sqm: Optional[float]
     frontage_m: Optional[float]
     depth_m: Optional[float]
+    buildable_area_sqm: Optional[float]
+    sellable_area_sqm: Optional[float]
+    coverage_ratio: Optional[float]
+    density_ratio: Optional[float]
+    front_setback_m: Optional[float]
+    side_setback_m: Optional[float]
+    rear_setback_m: Optional[float]
     zoning_category: Optional[str]
     permitted_far: Optional[float]
     max_height_m: Optional[float]
     max_floors: Optional[int]
     corner_plot: bool
     utilities_available: bool
+    access_notes: Optional[str]
+    utilities_notes: Optional[str]
+    # Acquisition economics
+    acquisition_price: Optional[float]
+    transaction_cost: Optional[float]
+    currency: Optional[str]
+    asking_price_per_sqm: Optional[float]
+    supported_price_per_sqm: Optional[float]
+    # Governance / provenance
+    assumption_notes: Optional[str]
+    source_notes: Optional[str]
     status: LandParcelStatus
     created_at: datetime
     updated_at: datetime
