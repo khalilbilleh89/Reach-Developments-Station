@@ -7,7 +7,6 @@ Validates domain invariants and coordinates repository and engine calls.
 
 from typing import Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.feasibility.engines.feasibility_engine import FeasibilityInputs, run_feasibility
@@ -40,6 +39,7 @@ from app.shared.enums.finance import (
     FeasibilityRiskLevel,
     FeasibilityViabilityStatus,
 )
+from app.core.errors import ResourceNotFoundError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Viability thresholds — v1 business policy
@@ -116,9 +116,9 @@ class FeasibilityService:
         if project_id is not None:
             project = self.project_repo.get_by_id(project_id)
             if not project:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Project '{project_id}' not found.",
+                raise ResourceNotFoundError(
+                    f"Project '{project_id}' not found.",
+                    details={"project_id": project_id},
                 )
 
     def _require_scenario_if_present(self, scenario_id: Optional[str]) -> None:
@@ -126,9 +126,9 @@ class FeasibilityService:
         if scenario_id is not None:
             scenario = self.scenario_repo.get_by_id(scenario_id)
             if not scenario:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Scenario '{scenario_id}' not found.",
+                raise ResourceNotFoundError(
+                    f"Scenario '{scenario_id}' not found.",
+                    details={"scenario_id": scenario_id},
                 )
 
     # ------------------------------------------------------------------
@@ -144,9 +144,9 @@ class FeasibilityService:
     def get_feasibility_run(self, run_id: str) -> FeasibilityRunResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         return FeasibilityRunResponse.model_validate(run)
 
@@ -167,9 +167,9 @@ class FeasibilityService:
     def update_feasibility_run(self, run_id: str, data: FeasibilityRunUpdate) -> FeasibilityRunResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         updated = self.run_repo.update(run, data)
         return FeasibilityRunResponse.model_validate(updated)
@@ -183,9 +183,9 @@ class FeasibilityService:
     ) -> FeasibilityAssumptionsResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         assumptions = self.assumptions_repo.upsert(run_id, data)
         return FeasibilityAssumptionsResponse.model_validate(assumptions)
@@ -193,15 +193,15 @@ class FeasibilityService:
     def get_assumptions(self, run_id: str) -> FeasibilityAssumptionsResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         assumptions = self.assumptions_repo.get_by_run(run_id)
         if not assumptions:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No assumptions found for feasibility run '{run_id}'.",
+            raise ResourceNotFoundError(
+                f"No assumptions found for feasibility run '{run_id}'.",
+                details={"run_id": run_id},
             )
         return FeasibilityAssumptionsResponse.model_validate(assumptions)
 
@@ -260,15 +260,15 @@ class FeasibilityService:
     def run_feasibility_calculation(self, run_id: str) -> FeasibilityResultResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         assumptions = self.assumptions_repo.get_by_run(run_id)
         if not assumptions:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"Assumptions must be set before calculating feasibility run '{run_id}'.",
+            raise ValidationError(
+                f"Assumptions must be set before calculating feasibility run '{run_id}'.",
+                details={"run_id": run_id},
             )
         # Validate all required fields are present
         required_fields = [
@@ -282,9 +282,9 @@ class FeasibilityService:
         ]
         for field in required_fields:
             if getattr(assumptions, field) is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=f"Assumption field '{field}' is required but missing.",
+                raise ValidationError(
+                    f"Assumption field '{field}' is required but missing.",
+                    details={"run_id": run_id, "field": field},
                 )
 
         inputs = FeasibilityInputs(
@@ -301,15 +301,15 @@ class FeasibilityService:
     def get_feasibility_result(self, run_id: str) -> FeasibilityResultResponse:
         run = self.run_repo.get_by_id(run_id)
         if not run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Feasibility run '{run_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
             )
         result = self.result_repo.get_by_run(run_id)
         if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No result found for feasibility run '{run_id}'. Run the calculation first.",
+            raise ResourceNotFoundError(
+                f"No result found for feasibility run '{run_id}'. Run the calculation first.",
+                details={"run_id": run_id},
             )
         return FeasibilityResultResponse.model_validate(result)
 

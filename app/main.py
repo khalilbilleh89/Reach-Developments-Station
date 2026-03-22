@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.bootstrap import seed_admin_user
 from app.core.config import settings
 from app.core.database import SessionLocal, check_db_connection
+from app.core.error_handlers import register_error_handlers
 from app.core.logging import logger
 from app.modules.auth.api import router as auth_router
 from app.modules.buildings.api import router as buildings_router
@@ -94,6 +95,8 @@ app = FastAPI(
     debug=settings.APP_DEBUG,
     lifespan=lifespan,
 )
+
+register_error_handlers(app)
 
 # Asset hierarchy routers
 _API_PREFIX = settings.API_V1_PREFIX

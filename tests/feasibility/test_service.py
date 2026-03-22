@@ -5,9 +5,9 @@ Validates business logic, project linkage, and assumption completeness checks.
 """
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.errors import ResourceNotFoundError, ValidationError
 from app.modules.feasibility.schemas import FeasibilityAssumptionsCreate, FeasibilityRunCreate
 from app.modules.feasibility.service import FeasibilityService
 from app.shared.enums.finance import FeasibilityScenarioType
@@ -56,21 +56,19 @@ def test_create_feasibility_run(db_session: Session):
 
 def test_create_feasibility_run_invalid_project(db_session: Session):
     service = FeasibilityService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.create_feasibility_run(
             FeasibilityRunCreate(
                 project_id="no-such-project",
                 scenario_name="Test",
             )
         )
-    assert exc_info.value.status_code == 404
 
 
 def test_get_feasibility_run_not_found(db_session: Session):
     service = FeasibilityService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.get_feasibility_run("no-such-run")
-    assert exc_info.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -91,9 +89,8 @@ def test_update_assumptions(db_session: Session):
 
 def test_update_assumptions_invalid_run(db_session: Session):
     service = FeasibilityService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.update_assumptions("no-such-run", _VALID_ASSUMPTIONS)
-    assert exc_info.value.status_code == 404
 
 
 def test_get_assumptions_not_set_raises_404(db_session: Session):
@@ -102,9 +99,8 @@ def test_get_assumptions_not_set_raises_404(db_session: Session):
     run = service.create_feasibility_run(
         FeasibilityRunCreate(project_id=project_id, scenario_name="Base")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.get_assumptions(run.id)
-    assert exc_info.value.status_code == 404
 
 
 def test_upsert_assumptions_replaces_existing(db_session: Session):
@@ -151,16 +147,14 @@ def test_run_feasibility_calculation_without_assumptions_raises_422(db_session: 
     run = service.create_feasibility_run(
         FeasibilityRunCreate(project_id=project_id, scenario_name="Base")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ValidationError):
         service.run_feasibility_calculation(run.id)
-    assert exc_info.value.status_code == 422
 
 
 def test_run_feasibility_calculation_invalid_run_raises_404(db_session: Session):
     service = FeasibilityService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.run_feasibility_calculation("no-such-run")
-    assert exc_info.value.status_code == 404
 
 
 def test_get_feasibility_result_not_calculated_raises_404(db_session: Session):
@@ -169,9 +163,8 @@ def test_get_feasibility_result_not_calculated_raises_404(db_session: Session):
     run = service.create_feasibility_run(
         FeasibilityRunCreate(project_id=project_id, scenario_name="Base")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.get_feasibility_result(run.id)
-    assert exc_info.value.status_code == 404
 
 
 def test_recalculate_replaces_result(db_session: Session):
@@ -254,13 +247,12 @@ def test_create_feasibility_run_with_scenario_id(db_session: Session):
 
 
 def test_create_feasibility_run_invalid_scenario_raises_404(db_session: Session):
-    """FeasibilityRun creation with a non-existent scenario_id must raise 404."""
+    """FeasibilityRun creation with a non-existent scenario_id must raise ResourceNotFoundError."""
     service = FeasibilityService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.create_feasibility_run(
             FeasibilityRunCreate(scenario_name="Test", scenario_id="no-such-scenario")
         )
-    assert exc_info.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -398,9 +390,8 @@ def test_run_feasibility_for_scenario_invalid_project(db_session: Session):
         sales_cost_ratio=0.03,
         development_period_months=24,
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.run_feasibility_for_scenario(req)
-    assert exc_info.value.status_code == 404
 
 
 def test_run_feasibility_for_scenario_with_scenario_id(db_session: Session):
@@ -429,16 +420,15 @@ def test_run_feasibility_for_scenario_with_scenario_id(db_session: Session):
 
 def test_create_run_and_run_for_scenario_use_same_project_validation(db_session: Session):
     """Both create_feasibility_run and run_feasibility_for_scenario must reject
-    the same invalid project_id with 404, confirming shared validation logic."""
+    the same invalid project_id with ResourceNotFoundError, confirming shared validation logic."""
     service = FeasibilityService(db_session)
 
-    with pytest.raises(HTTPException) as exc1:
+    with pytest.raises(ResourceNotFoundError):
         service.create_feasibility_run(
             FeasibilityRunCreate(project_id="no-such", scenario_name="Test A")
         )
-    assert exc1.value.status_code == 404
 
-    with pytest.raises(HTTPException) as exc2:
+    with pytest.raises(ResourceNotFoundError):
         service.run_feasibility_for_scenario(
             FeasibilityRunRequest(
                 project_id="no-such",
@@ -452,20 +442,18 @@ def test_create_run_and_run_for_scenario_use_same_project_validation(db_session:
                 development_period_months=24,
             )
         )
-    assert exc2.value.status_code == 404
 
 
 def test_create_run_and_run_for_scenario_use_same_scenario_validation(db_session: Session):
-    """Both code paths must reject the same invalid scenario_id with 404."""
+    """Both code paths must reject the same invalid scenario_id with ResourceNotFoundError."""
     service = FeasibilityService(db_session)
 
-    with pytest.raises(HTTPException) as exc1:
+    with pytest.raises(ResourceNotFoundError):
         service.create_feasibility_run(
             FeasibilityRunCreate(scenario_id="no-such", scenario_name="Test A")
         )
-    assert exc1.value.status_code == 404
 
-    with pytest.raises(HTTPException) as exc2:
+    with pytest.raises(ResourceNotFoundError):
         service.run_feasibility_for_scenario(
             FeasibilityRunRequest(
                 scenario_id="no-such",
@@ -479,7 +467,6 @@ def test_create_run_and_run_for_scenario_use_same_scenario_validation(db_session
                 development_period_months=24,
             )
         )
-    assert exc2.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -508,10 +495,9 @@ def test_partial_state_run_and_assumptions_persisted_without_result(db_session: 
     fetched_assumptions = service.get_assumptions(run.id)
     assert fetched_assumptions.run_id == run.id
 
-    # But no result exists yet — get_feasibility_result must return 404.
-    with pytest.raises(HTTPException) as exc_info:
+    # But no result exists yet — get_feasibility_result must raise ResourceNotFoundError.
+    with pytest.raises(ResourceNotFoundError):
         service.get_feasibility_result(run.id)
-    assert exc_info.value.status_code == 404
 
 
 def test_partial_state_can_be_recovered_by_calculate(db_session: Session):
@@ -522,7 +508,7 @@ def test_partial_state_can_be_recovered_by_calculate(db_session: Session):
     service.update_assumptions(run.id, _VALID_ASSUMPTIONS)
 
     # Confirm partial state.
-    with pytest.raises(HTTPException):
+    with pytest.raises(ResourceNotFoundError):
         service.get_feasibility_result(run.id)
 
     # Recover by re-running the calculation step.

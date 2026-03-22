@@ -12,7 +12,6 @@ Rules enforced here:
 
 from typing import List, Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.scenario.repository import ScenarioRepository, ScenarioVersionRepository
@@ -33,6 +32,7 @@ from app.core.constants.scenario import (
     ScenarioStatus,
     VALID_SOURCE_TYPES,
 )
+from app.core.errors import ResourceNotFoundError, ValidationError
 
 
 class ScenarioService:
@@ -48,18 +48,18 @@ class ScenarioService:
     def _require_scenario(self, scenario_id: str):
         scenario = self.scenario_repo.get_by_id(scenario_id)
         if not scenario:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Scenario '{scenario_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Scenario '{scenario_id}' not found.",
+                details={"scenario_id": scenario_id},
             )
         return scenario
 
     def _require_version(self, version_id: str):
         version = self.version_repo.get_by_id(version_id)
         if not version:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"ScenarioVersion '{version_id}' not found.",
+            raise ResourceNotFoundError(
+                f"ScenarioVersion '{version_id}' not found.",
+                details={"version_id": version_id},
             )
         return version
 
@@ -69,9 +69,9 @@ class ScenarioService:
 
     def create_scenario(self, data: ScenarioCreate) -> ScenarioResponse:
         if data.source_type not in VALID_SOURCE_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"source_type must be one of: {sorted(VALID_SOURCE_TYPES)}.",
+            raise ValidationError(
+                f"source_type must be one of: {sorted(VALID_SOURCE_TYPES)}.",
+                details={"source_type": data.source_type},
             )
         scenario = self.scenario_repo.create(data)
         return ScenarioResponse.model_validate(scenario)
@@ -171,15 +171,15 @@ class ScenarioService:
         """
         scenario = self._require_scenario(scenario_id)
         if scenario.status == ScenarioStatus.ARCHIVED.value:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="An archived scenario cannot be approved.",
+            raise ValidationError(
+                "An archived scenario cannot be approved.",
+                details={"scenario_id": scenario_id},
             )
         latest = self.version_repo.approve_latest(scenario_id)
         if latest is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Cannot approve a scenario with no versions.",
+            raise ValidationError(
+                "Cannot approve a scenario with no versions.",
+                details={"scenario_id": scenario_id},
             )
         self.scenario_repo.mark_approved(scenario)
         # Single commit: all three mutations (clear, approve, status) are atomic.
@@ -216,9 +216,9 @@ class ScenarioService:
         self._require_scenario(scenario_id)
         latest = self.version_repo.get_latest(scenario_id)
         if latest is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No versions found for scenario '{scenario_id}'.",
+            raise ResourceNotFoundError(
+                f"No versions found for scenario '{scenario_id}'.",
+                details={"scenario_id": scenario_id},
             )
         return ScenarioVersionResponse.model_validate(latest)
 
@@ -241,9 +241,9 @@ class ScenarioService:
         found_ids = {s.id for s in scenarios}
         missing = [sid for sid in request.scenario_ids if sid not in found_ids]
         if missing:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Scenarios not found: {missing}",
+            raise ResourceNotFoundError(
+                f"Scenarios not found: {missing}",
+                details={"missing_ids": missing},
             )
 
         # Batch fetch all latest versions in one query.

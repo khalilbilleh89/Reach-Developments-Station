@@ -6,9 +6,9 @@ boundary protection for the Land Underwriting domain.
 """
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.errors import ConflictError, ResourceNotFoundError
 from app.modules.land.schemas import (
     LandAssumptionCreate,
     LandParcelCreate,
@@ -76,9 +76,9 @@ def test_create_parcel_without_project(db_session: Session):
 
 
 def test_create_parcel_invalid_project_raises_404(db_session: Session):
-    """Providing a non-existent project_id raises HTTP 404."""
+    """Providing a non-existent project_id raises ResourceNotFoundError."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.create_parcel(
             LandParcelCreate(
                 project_id="no-such-project",
@@ -86,30 +86,27 @@ def test_create_parcel_invalid_project_raises_404(db_session: Session):
                 parcel_code="PCL-BAD",
             )
         )
-    assert exc_info.value.status_code == 404
 
 
 def test_create_parcel_duplicate_code_in_project_raises_409(db_session: Session):
-    """Duplicate parcel_code within the same project raises HTTP 409."""
+    """Duplicate parcel_code within the same project raises ConflictError."""
     project_id = _make_project(db_session)
     service = LandService(db_session)
     service.create_parcel(
         LandParcelCreate(project_id=project_id, parcel_name="First", parcel_code="PCL-DUP")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError):
         service.create_parcel(
             LandParcelCreate(project_id=project_id, parcel_name="Second", parcel_code="PCL-DUP")
         )
-    assert exc_info.value.status_code == 409
 
 
 def test_create_standalone_parcel_duplicate_code_raises_409(db_session: Session):
-    """Duplicate parcel_code among standalone parcels raises HTTP 409."""
+    """Duplicate parcel_code among standalone parcels raises ConflictError."""
     service = LandService(db_session)
     service.create_parcel(LandParcelCreate(parcel_name="First SA", parcel_code="PCL-SA-DUP"))
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError):
         service.create_parcel(LandParcelCreate(parcel_name="Second SA", parcel_code="PCL-SA-DUP"))
-    assert exc_info.value.status_code == 409
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +122,10 @@ def test_get_parcel_by_id(db_session: Session):
 
 
 def test_get_parcel_not_found_raises_404(db_session: Session):
-    """get_parcel raises HTTP 404 for an unknown ID."""
+    """get_parcel raises ResourceNotFoundError for an unknown ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.get_parcel("no-such-parcel")
-    assert exc_info.value.status_code == 404
 
 
 def test_list_parcels_without_filter(db_session: Session):
@@ -168,11 +164,10 @@ def test_update_parcel_status(db_session: Session):
 
 
 def test_update_parcel_not_found_raises_404(db_session: Session):
-    """update_parcel raises HTTP 404 for an unknown parcel ID."""
+    """update_parcel raises ResourceNotFoundError for an unknown parcel ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.update_parcel("no-such-parcel", LandParcelUpdate(city="Dubai"))
-    assert exc_info.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -213,19 +208,17 @@ def test_create_assumptions_without_far_skips_derivation(db_session: Session):
 
 
 def test_create_assumptions_invalid_parcel_raises_404(db_session: Session):
-    """create_assumptions raises HTTP 404 for an unknown parcel ID."""
+    """create_assumptions raises ResourceNotFoundError for an unknown parcel ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.create_assumptions("no-such-parcel", LandAssumptionCreate(target_use="mixed_use"))
-    assert exc_info.value.status_code == 404
 
 
 def test_get_assumptions_invalid_parcel_raises_404(db_session: Session):
-    """get_assumptions raises HTTP 404 for an unknown parcel ID."""
+    """get_assumptions raises ResourceNotFoundError for an unknown parcel ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.get_assumptions("no-such-parcel")
-    assert exc_info.value.status_code == 404
 
 
 def test_assumptions_pre_project_parcel(db_session: Session):
@@ -296,22 +289,20 @@ def test_create_valuation_without_assumptions_has_no_derived_values(db_session: 
 
 
 def test_create_valuation_invalid_parcel_raises_404(db_session: Session):
-    """create_valuation raises HTTP 404 for an unknown parcel ID."""
+    """create_valuation raises ResourceNotFoundError for an unknown parcel ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.create_valuation(
             "no-such-parcel",
             LandValuationCreate(scenario_name="X", scenario_type=LandScenarioType.BASE),
         )
-    assert exc_info.value.status_code == 404
 
 
 def test_list_valuations_invalid_parcel_raises_404(db_session: Session):
-    """list_valuations raises HTTP 404 for an unknown parcel ID."""
+    """list_valuations raises ResourceNotFoundError for an unknown parcel ID."""
     service = LandService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ResourceNotFoundError):
         service.list_valuations("no-such-parcel")
-    assert exc_info.value.status_code == 404
 
 
 def test_valuation_pre_project_parcel(db_session: Session):

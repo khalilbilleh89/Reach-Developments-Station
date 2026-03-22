@@ -7,7 +7,6 @@ Handles validation, derived area calculations, and valuation computations.
 
 from typing import Dict, List, Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,6 +30,7 @@ from app.modules.land.schemas import (
     LandValuationResponse,
 )
 from app.modules.projects.repository import ProjectRepository
+from app.core.errors import ConflictError, ResourceNotFoundError
 
 
 class LandService:
@@ -113,22 +113,22 @@ class LandService:
         if data.project_id is not None:
             project = self.project_repo.get_by_id(data.project_id)
             if not project:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Project '{data.project_id}' not found.",
+                raise ResourceNotFoundError(
+                    f"Project '{data.project_id}' not found.",
+                    details={"project_id": data.project_id},
                 )
             existing = self.parcel_repo.get_by_project_and_code(data.project_id, data.parcel_code)
             if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'.",
+                raise ConflictError(
+                    f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'.",
+                    details={"parcel_code": data.parcel_code, "project_id": data.project_id},
                 )
         else:
             existing = self.parcel_repo.get_standalone_by_code(data.parcel_code)
             if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"A standalone parcel with code '{data.parcel_code}' already exists.",
+                raise ConflictError(
+                    f"A standalone parcel with code '{data.parcel_code}' already exists.",
+                    details={"parcel_code": data.parcel_code},
                 )
         try:
             parcel = self.parcel_repo.create(data)
@@ -136,20 +136,19 @@ class LandService:
             self.parcel_repo.db.rollback()
             if data.project_id is None:
                 detail = f"A standalone parcel with code '{data.parcel_code}' already exists."
+                details = {"parcel_code": data.parcel_code}
             else:
                 detail = f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'."
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=detail,
-            )
+                details = {"parcel_code": data.parcel_code, "project_id": data.project_id}
+            raise ConflictError(detail, details=details)
         return self._build_parcel_response(parcel)
 
     def get_parcel(self, parcel_id: str) -> LandParcelResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         return self._build_parcel_response(parcel)
 
@@ -164,9 +163,9 @@ class LandService:
     def update_parcel(self, parcel_id: str, data: LandParcelUpdate) -> LandParcelResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         updated = self.parcel_repo.update(parcel, data)
         return self._build_parcel_response(updated)
@@ -174,30 +173,30 @@ class LandService:
     def delete_parcel(self, parcel_id: str) -> None:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         self.parcel_repo.delete(parcel)
 
     def assign_to_project(self, parcel_id: str, project_id: str) -> LandParcelResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         project = self.project_repo.get_by_id(project_id)
         if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{project_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Project '{project_id}' not found.",
+                details={"project_id": project_id},
             )
         # Check that parcel is not already assigned to a different project
         if parcel.project_id is not None and parcel.project_id != project_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Land parcel '{parcel_id}' is already assigned to project '{parcel.project_id}'.",
+            raise ConflictError(
+                f"Land parcel '{parcel_id}' is already assigned to project '{parcel.project_id}'.",
+                details={"parcel_id": parcel_id, "existing_project_id": parcel.project_id},
             )
         # Already assigned to the target project — idempotent success
         if parcel.project_id == project_id:
@@ -205,9 +204,9 @@ class LandService:
         # Check for code conflict within target project
         existing = self.parcel_repo.get_by_project_and_code(project_id, parcel.parcel_code)
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+            raise ConflictError(
+                f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+                details={"parcel_code": parcel.parcel_code, "project_id": project_id},
             )
         # Perform assignment — guard against concurrency-driven IntegrityError
         try:
@@ -216,9 +215,9 @@ class LandService:
             self.parcel_repo.db.refresh(parcel)
         except IntegrityError:
             self.parcel_repo.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+            raise ConflictError(
+                f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
+                details={"parcel_code": parcel.parcel_code, "project_id": project_id},
             )
         return self._build_parcel_response(parcel)
 
@@ -229,9 +228,9 @@ class LandService:
     def create_assumptions(self, parcel_id: str, data: LandAssumptionCreate) -> LandAssumptionResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
 
         # Derived calculations via the centralized Calculation Engine
@@ -252,9 +251,9 @@ class LandService:
     def get_assumptions(self, parcel_id: str) -> List[LandAssumptionResponse]:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         assumptions = self.assumptions_repo.get_by_parcel(parcel_id)
         return [LandAssumptionResponse.model_validate(a) for a in assumptions]
@@ -266,9 +265,9 @@ class LandService:
     def create_valuation(self, parcel_id: str, data: LandValuationCreate) -> LandValuationResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
 
         # Retrieve latest assumptions to obtain sellable area (if any)
@@ -303,9 +302,9 @@ class LandService:
     def list_valuations(self, parcel_id: str) -> List[LandValuationResponse]:
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
         valuations = self.valuation_repo.list_by_parcel(parcel_id)
         return [LandValuationResponse.model_validate(v) for v in valuations]
@@ -315,9 +314,9 @@ class LandService:
 
         parcel = self.parcel_repo.get_by_id(parcel_id)
         if not parcel:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Land parcel '{parcel_id}' not found.",
+            raise ResourceNotFoundError(
+                f"Land parcel '{parcel_id}' not found.",
+                details={"parcel_id": parcel_id},
             )
 
         inputs = ValuationInputs(
