@@ -80,13 +80,14 @@ const labelStyle: React.CSSProperties = {
 
 interface FieldProps {
   label: string;
+  htmlFor: string;
   children: React.ReactNode;
 }
 
-function Field({ label, children }: FieldProps) {
+function Field({ label, htmlFor, children }: FieldProps) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={labelStyle}>{label}</label>
+      <label htmlFor={htmlFor} style={labelStyle}>{label}</label>
       {children}
     </div>
   );
@@ -192,7 +193,7 @@ function parcelToFormState(parcel: LandParcel | null): FormState {
     utilities_notes: s(parcel?.utilities_notes),
     acquisition_price: n(parcel?.acquisition_price),
     transaction_cost: n(parcel?.transaction_cost),
-    currency: s(parcel?.currency) || "AED",
+    currency: parcel ? s(parcel.currency) : "AED",
     asking_price_per_sqm: n(parcel?.asking_price_per_sqm),
     supported_price_per_sqm: n(parcel?.supported_price_per_sqm),
     assumption_notes: s(parcel?.assumption_notes),
@@ -349,8 +350,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
       {/* ── Section 1: Identity & Cadastral ──────────────────────────── */}
       <SectionCard title="Identity & Cadastral">
         <Row>
-          <Field label="Parcel Name *">
+          <Field label="Parcel Name *" htmlFor="parcel_name">
             <input
+              id="parcel_name"
               type="text"
               style={inputStyle}
               value={form.parcel_name}
@@ -360,8 +362,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
             />
           </Field>
           {!isEdit ? (
-            <Field label="Parcel Code *">
+            <Field label="Parcel Code *" htmlFor="parcel_code">
               <input
+                id="parcel_code"
                 type="text"
                 style={inputStyle}
                 value={form.parcel_code}
@@ -371,8 +374,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               />
             </Field>
           ) : (
-            <Field label="Parcel Code">
+            <Field label="Parcel Code" htmlFor="parcel_code_readonly">
               <input
+                id="parcel_code_readonly"
                 type="text"
                 style={{ ...inputStyle, background: "var(--color-surface-alt, #f9fafb)", cursor: "not-allowed" }}
                 value={form.parcel_code}
@@ -383,8 +387,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           )}
         </Row>
         <Row>
-          <Field label="City">
+          <Field label="City" htmlFor="city">
             <input
+              id="city"
               type="text"
               style={inputStyle}
               value={form.city}
@@ -392,8 +397,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               placeholder="e.g. Dubai"
             />
           </Field>
-          <Field label="Country">
+          <Field label="Country" htmlFor="country">
             <input
+              id="country"
               type="text"
               style={inputStyle}
               value={form.country}
@@ -403,8 +409,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="District">
+          <Field label="District" htmlFor="district">
             <input
+              id="district"
               type="text"
               style={inputStyle}
               value={form.district}
@@ -412,8 +419,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               placeholder="e.g. Al Barsha"
             />
           </Field>
-          <Field label="Municipality">
+          <Field label="Municipality" htmlFor="municipality">
             <input
+              id="municipality"
               type="text"
               style={inputStyle}
               value={form.municipality}
@@ -423,8 +431,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Submarket">
+          <Field label="Submarket" htmlFor="submarket">
             <input
+              id="submarket"
               type="text"
               style={inputStyle}
               value={form.submarket}
@@ -432,8 +441,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               placeholder="e.g. JVC"
             />
           </Field>
-          <Field label="Plot Number">
+          <Field label="Plot Number" htmlFor="plot_number">
             <input
+              id="plot_number"
               type="text"
               style={inputStyle}
               value={form.plot_number}
@@ -443,8 +453,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Cadastral ID">
+          <Field label="Cadastral ID" htmlFor="cadastral_id">
             <input
+              id="cadastral_id"
               type="text"
               style={inputStyle}
               value={form.cadastral_id}
@@ -452,8 +463,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               placeholder="e.g. 12345"
             />
           </Field>
-          <Field label="Title Reference">
+          <Field label="Title Reference" htmlFor="title_reference">
             <input
+              id="title_reference"
               type="text"
               style={inputStyle}
               value={form.title_reference}
@@ -462,8 +474,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
             />
           </Field>
         </Row>
-        <Field label="Address">
+        <Field label="Address" htmlFor="address">
           <input
+            id="address"
             type="text"
             style={inputStyle}
             value={form.address}
@@ -471,8 +484,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
             placeholder="Full address"
           />
         </Field>
-        <Field label="Location Link (URL)">
+        <Field label="Location Link (URL)" htmlFor="location_link">
           <input
+            id="location_link"
             type="url"
             style={inputStyle}
             value={form.location_link}
@@ -485,8 +499,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
       {/* ── Section 2: Physical / Zoning ─────────────────────────────── */}
       <SectionCard title="Physical / Zoning">
         <Row>
-          <Field label="Land Area (m²)">
+          <Field label="Land Area (m²)" htmlFor="land_area_sqm">
             <input
+              id="land_area_sqm"
               type="number"
               style={inputStyle}
               value={form.land_area_sqm}
@@ -496,8 +511,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={0.01}
             />
           </Field>
-          <Field label="Permitted FAR">
+          <Field label="Permitted FAR" htmlFor="permitted_far">
             <input
+              id="permitted_far"
               type="number"
               style={inputStyle}
               value={form.permitted_far}
@@ -509,8 +525,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Buildable Area (m²)">
+          <Field label="Buildable Area (m²)" htmlFor="buildable_area_sqm">
             <input
+              id="buildable_area_sqm"
               type="number"
               style={inputStyle}
               value={form.buildable_area_sqm}
@@ -520,8 +537,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={0.01}
             />
           </Field>
-          <Field label="Sellable Area (m²)">
+          <Field label="Sellable Area (m²)" htmlFor="sellable_area_sqm">
             <input
+              id="sellable_area_sqm"
               type="number"
               style={inputStyle}
               value={form.sellable_area_sqm}
@@ -533,8 +551,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Frontage (m)">
+          <Field label="Frontage (m)" htmlFor="frontage_m">
             <input
+              id="frontage_m"
               type="number"
               style={inputStyle}
               value={form.frontage_m}
@@ -544,8 +563,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={0.01}
             />
           </Field>
-          <Field label="Depth (m)">
+          <Field label="Depth (m)" htmlFor="depth_m">
             <input
+              id="depth_m"
               type="number"
               style={inputStyle}
               value={form.depth_m}
@@ -557,8 +577,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Zoning Category">
+          <Field label="Zoning Category" htmlFor="zoning_category">
             <input
+              id="zoning_category"
               type="text"
               style={inputStyle}
               value={form.zoning_category}
@@ -566,8 +587,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               placeholder="e.g. Residential"
             />
           </Field>
-          <Field label="Max Height (m)">
+          <Field label="Max Height (m)" htmlFor="max_height_m">
             <input
+              id="max_height_m"
               type="number"
               style={inputStyle}
               value={form.max_height_m}
@@ -579,8 +601,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Max Floors">
+          <Field label="Max Floors" htmlFor="max_floors">
             <input
+              id="max_floors"
               type="number"
               style={inputStyle}
               value={form.max_floors}
@@ -590,8 +613,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={1}
             />
           </Field>
-          <Field label="Coverage Ratio">
+          <Field label="Coverage Ratio" htmlFor="coverage_ratio">
             <input
+              id="coverage_ratio"
               type="number"
               style={inputStyle}
               value={form.coverage_ratio}
@@ -604,8 +628,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Density Ratio">
+          <Field label="Density Ratio" htmlFor="density_ratio">
             <input
+              id="density_ratio"
               type="number"
               style={inputStyle}
               value={form.density_ratio}
@@ -618,8 +643,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           <div />
         </Row>
         <Row>
-          <Field label="Front Setback (m)">
+          <Field label="Front Setback (m)" htmlFor="front_setback_m">
             <input
+              id="front_setback_m"
               type="number"
               style={inputStyle}
               value={form.front_setback_m}
@@ -629,8 +655,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={0.1}
             />
           </Field>
-          <Field label="Side Setback (m)">
+          <Field label="Side Setback (m)" htmlFor="side_setback_m">
             <input
+              id="side_setback_m"
               type="number"
               style={inputStyle}
               value={form.side_setback_m}
@@ -641,8 +668,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
             />
           </Field>
         </Row>
-        <Field label="Rear Setback (m)">
+        <Field label="Rear Setback (m)" htmlFor="rear_setback_m">
           <input
+            id="rear_setback_m"
             type="number"
             style={{ ...inputStyle, maxWidth: "calc(50% - 6px)" }}
             value={form.rear_setback_m}
@@ -671,8 +699,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </label>
         </div>
         {form.utilities_available && (
-          <Field label="Utilities Notes">
+          <Field label="Utilities Notes" htmlFor="utilities_notes">
             <textarea
+              id="utilities_notes"
               style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
               value={form.utilities_notes}
               onChange={(e) => set("utilities_notes", e.target.value)}
@@ -680,8 +709,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
             />
           </Field>
         )}
-        <Field label="Access Notes">
+        <Field label="Access Notes" htmlFor="access_notes">
           <textarea
+            id="access_notes"
             style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
             value={form.access_notes}
             onChange={(e) => set("access_notes", e.target.value)}
@@ -693,8 +723,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
       {/* ── Section 3: Acquisition Economics ────────────────────────── */}
       <SectionCard title="Acquisition Economics">
         <Row>
-          <Field label="Acquisition Price">
+          <Field label="Acquisition Price" htmlFor="acquisition_price">
             <input
+              id="acquisition_price"
               type="number"
               style={inputStyle}
               value={form.acquisition_price}
@@ -704,8 +735,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={1000}
             />
           </Field>
-          <Field label="Transaction Cost">
+          <Field label="Transaction Cost" htmlFor="transaction_cost">
             <input
+              id="transaction_cost"
               type="number"
               style={inputStyle}
               value={form.transaction_cost}
@@ -717,8 +749,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Currency">
+          <Field label="Currency" htmlFor="currency">
             <input
+              id="currency"
               type="text"
               style={inputStyle}
               value={form.currency}
@@ -727,8 +760,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               maxLength={10}
             />
           </Field>
-          <Field label="Asking Price / m²">
+          <Field label="Asking Price / m²" htmlFor="asking_price_per_sqm">
             <input
+              id="asking_price_per_sqm"
               type="number"
               style={inputStyle}
               value={form.asking_price_per_sqm}
@@ -740,8 +774,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
         </Row>
         <Row>
-          <Field label="Supported Price / m²">
+          <Field label="Supported Price / m²" htmlFor="supported_price_per_sqm">
             <input
+              id="supported_price_per_sqm"
               type="number"
               style={inputStyle}
               value={form.supported_price_per_sqm}
@@ -753,8 +788,9 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
           </Field>
           <div />
         </Row>
-        <Field label="Status">
+        <Field label="Status" htmlFor="status">
           <select
+            id="status"
             style={inputStyle}
             value={form.status}
             onChange={(e) => set("status", e.target.value as LandStatus)}
@@ -769,16 +805,18 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
 
       {/* ── Section 4: Notes / Provenance ───────────────────────────── */}
       <SectionCard title="Notes / Provenance">
-        <Field label="Assumption Notes">
+        <Field label="Assumption Notes" htmlFor="assumption_notes">
           <textarea
+            id="assumption_notes"
             style={{ ...inputStyle, resize: "vertical", minHeight: 72 }}
             value={form.assumption_notes}
             onChange={(e) => set("assumption_notes", e.target.value)}
             placeholder="Key assumptions, deal context, buyer/seller notes…"
           />
         </Field>
-        <Field label="Source Notes">
+        <Field label="Source Notes" htmlFor="source_notes">
           <textarea
+            id="source_notes"
             style={{ ...inputStyle, resize: "vertical", minHeight: 72 }}
             value={form.source_notes}
             onChange={(e) => set("source_notes", e.target.value)}

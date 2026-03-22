@@ -204,7 +204,7 @@ function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 280px",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(240px, 280px)",
           gap: 24,
           alignItems: "start",
         }}
@@ -214,7 +214,7 @@ function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
           onSave={handleSave}
           onCancel={onClose}
         />
-        <div>
+        <div style={{ minWidth: 0 }}>
           <LandParcelMetricsPanel parcel={updatedParcel} />
         </div>
       </div>
