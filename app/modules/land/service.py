@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.calculation_engine.areas import calculate_buildable_area, calculate_sellable_area
+from app.core.calculation_engine.registry import calculate_buildable_area, calculate_sellable_area
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
 from app.modules.land.schemas import (
     LandAssumptionCreate,

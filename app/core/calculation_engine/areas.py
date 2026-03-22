@@ -51,7 +51,9 @@ def calculate_sellable_area(buildable_area_sqm: float, sellable_ratio: float) ->
         Total buildable (gross floor) area. Must be positive.
     sellable_ratio:
         Fraction of buildable area that is sellable, e.g. 0.85 for 85 %.
-        Must be in (0, 1].
+        Must be positive. Values above 1.0 are accepted (e.g. when leasable
+        gross floor area differs from net lettable area) but callers should
+        ensure this reflects a valid underwriting assumption.
     """
     if buildable_area_sqm <= 0.0 or sellable_ratio <= 0.0:
         return 0.0

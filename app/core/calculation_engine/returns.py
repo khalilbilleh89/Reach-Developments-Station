@@ -92,9 +92,12 @@ def build_development_cashflows(
     gdv:
         Gross Development Value received at the end of the period.
     development_period_months:
-        Length of the development period in months.
+        Length of the development period in months. Must be positive.
+        Returns an empty list when this value is <= 0.
     """
-    n = max(development_period_months, 1)
+    if development_period_months <= 0:
+        return []
+    n = development_period_months
     monthly_cost = total_cost / n
     cashflows: List[float] = [-monthly_cost] * n
     cashflows[-1] += gdv
@@ -214,6 +217,8 @@ def calculate_npv(
     """
     if not cashflows:
         return 0.0
+    if annual_discount_rate <= -1.0:
+        raise ValueError("annual_discount_rate must be greater than -1.0")
     monthly_rate = (1.0 + annual_discount_rate) ** (1.0 / 12) - 1.0
     return _npv(monthly_rate, cashflows)
 

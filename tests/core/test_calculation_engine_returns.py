@@ -157,6 +157,24 @@ def test_irr_returns_float():
 
 
 # ---------------------------------------------------------------------------
+# build_development_cashflows
+# ---------------------------------------------------------------------------
+
+
+def test_build_cashflows_standard_length():
+    cashflows = build_development_cashflows(1_000_000.0, 3_000_000.0, 24)
+    assert len(cashflows) == 24
+
+
+def test_build_cashflows_zero_months_returns_empty():
+    assert build_development_cashflows(1_000_000.0, 3_000_000.0, 0) == []
+
+
+def test_build_cashflows_negative_months_returns_empty():
+    assert build_development_cashflows(1_000_000.0, 3_000_000.0, -6) == []
+
+
+# ---------------------------------------------------------------------------
 # calculate_npv
 # ---------------------------------------------------------------------------
 
@@ -175,6 +193,18 @@ def test_npv_negative_for_unprofitable_cashflows():
 
 def test_npv_empty_cashflows_returns_zero():
     assert calculate_npv([], 0.10) == 0.0
+
+
+def test_npv_discount_rate_exactly_minus_one_raises():
+    cashflows = build_development_cashflows(1_000_000.0, 2_000_000.0, 12)
+    with pytest.raises(ValueError, match="annual_discount_rate"):
+        calculate_npv(cashflows, -1.0)
+
+
+def test_npv_discount_rate_below_minus_one_raises():
+    cashflows = build_development_cashflows(1_000_000.0, 2_000_000.0, 12)
+    with pytest.raises(ValueError, match="annual_discount_rate"):
+        calculate_npv(cashflows, -1.5)
 
 
 def test_npv_higher_discount_reduces_value():

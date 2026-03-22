@@ -113,8 +113,12 @@ def aggregate_staged_installments(
     """
     result: List[float] = [0.0] * max(period_months, 0)
     for entry in installment_schedule:
-        month = entry.get("month", -1)
+        raw_month = entry.get("month", None)
         amount = entry.get("amount", 0.0)
+        try:
+            month = int(raw_month)
+        except (TypeError, ValueError):
+            continue
         if 0 <= month < period_months:
             result[month] += float(amount)
     return result

@@ -3,9 +3,11 @@ app.core.calculation_engine.types
 
 Typed input/output dataclass contracts for the Calculation Engine.
 
-All engine functions accept and return these dataclasses so consumers have
-a stable, versioned interface that is independent of any ORM, HTTP, or
-persistence concern.
+Composite runner / entry-point functions in the calculation engine accept
+and return these dataclasses so consumers have a stable, versioned
+interface that is independent of any ORM, HTTP, or persistence concern.
+Lower-level helper functions may still operate on scalar values or lists
+directly where appropriate.
 
 No database access, service orchestration, or HTTP logic belongs here.
 """

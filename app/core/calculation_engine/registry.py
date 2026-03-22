@@ -13,7 +13,11 @@ from __future__ import annotations
 
 from typing import List
 
-from app.core.calculation_engine.areas import run_area_calculations
+from app.core.calculation_engine.areas import (
+    calculate_buildable_area,
+    calculate_sellable_area,
+    run_area_calculations,
+)
 from app.core.calculation_engine.cashflow import run_cashflow_analysis
 from app.core.calculation_engine.land import run_land_calculations
 from app.core.calculation_engine.pricing import run_unit_pricing
@@ -106,6 +110,8 @@ __all__ = [
     "calculate_break_even_price_per_sqm",
     "calculate_break_even_sellable_sqm",
     "build_development_cashflows",
+    "calculate_buildable_area",
+    "calculate_sellable_area",
     # Types
     "AreaInputs",
     "AreaOutputs",

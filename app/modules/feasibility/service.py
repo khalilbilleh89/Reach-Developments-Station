@@ -11,13 +11,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.modules.feasibility.engines.feasibility_engine import FeasibilityInputs, run_feasibility
-from app.core.calculation_engine.returns import (
+from app.core.calculation_engine.registry import (
     calculate_break_even_price_per_sqm,
     calculate_break_even_sellable_sqm,
     calculate_equity_multiple,
     calculate_irr,
-    build_development_cashflows,
-    calculate_npv,
 )
 from app.modules.feasibility.scenario_runner import run_sensitivity_scenarios
 from app.modules.feasibility.repository import (

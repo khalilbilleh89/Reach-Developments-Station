@@ -193,6 +193,36 @@ def test_aggregate_staged_installments_zero_period():
     assert result == []
 
 
+def test_aggregate_staged_installments_string_month_skipped():
+    """Non-int month value is silently skipped."""
+    schedule = [
+        {"month": "two", "amount": 50_000.0},
+        {"month": 1, "amount": 100_000.0},
+    ]
+    result = aggregate_staged_installments(schedule, 6)
+    assert result[1] == pytest.approx(100_000.0)
+    assert result[0] == 0.0
+
+
+def test_aggregate_staged_installments_float_month_coerced():
+    """Float month values are coerced to int (truncated)."""
+    schedule = [{"month": 2.9, "amount": 75_000.0}]
+    result = aggregate_staged_installments(schedule, 6)
+    assert result[2] == pytest.approx(75_000.0)
+    assert sum(result) == pytest.approx(75_000.0)
+
+
+def test_aggregate_staged_installments_none_month_skipped():
+    """None month value is silently skipped."""
+    schedule = [
+        {"month": None, "amount": 50_000.0},
+        {"month": 0, "amount": 100_000.0},
+    ]
+    result = aggregate_staged_installments(schedule, 4)
+    assert result[0] == pytest.approx(100_000.0)
+    assert sum(result) == pytest.approx(100_000.0)
+
+
 # ---------------------------------------------------------------------------
 # run_cashflow_analysis — composite runner
 # ---------------------------------------------------------------------------
