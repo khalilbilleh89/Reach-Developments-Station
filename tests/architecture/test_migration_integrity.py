@@ -58,6 +58,7 @@ import app.modules.registry.models  # noqa: F401
 import app.modules.reservations.models  # noqa: F401
 import app.modules.sales.models  # noqa: F401
 import app.modules.sales_exceptions.models  # noqa: F401
+import app.modules.scenario.models  # noqa: F401
 import app.modules.settings.models  # noqa: F401
 import app.modules.units.models  # noqa: F401
 
