@@ -148,15 +148,23 @@ class LandInputs:
     gdv: float
     total_development_cost: float  # excluding land acquisition
     developer_margin_target: float  # decimal fraction, e.g. 0.20 for 20 %
+    transaction_cost: float = 0.0  # stamp duty, legal, agent fees, etc.
 
 
 @dataclass(frozen=True)
 class LandOutputs:
     """Derived land underwriting metrics."""
 
+    # Acquisition-basis metrics (computed from acquisition_price only)
     land_price_per_sqm: float  # acquisition_price / land_area_sqm
     land_price_per_buildable_sqm: float  # acquisition_price / buildable_area_sqm
     land_price_per_sellable_sqm: float  # acquisition_price / sellable_area_sqm
+    # Effective-basis metrics (acquisition_price + transaction_cost)
+    effective_land_basis: float  # acquisition_price + transaction_cost
+    effective_land_price_per_gross_sqm: float  # effective_land_basis / land_area_sqm
+    effective_land_price_per_buildable_sqm: float  # effective_land_basis / buildable_area_sqm
+    effective_land_price_per_sellable_sqm: float  # effective_land_basis / sellable_area_sqm
+    # Residual / margin metrics (require GDV and cost assumptions)
     residual_land_value: float  # gdv - total_development_cost - target_profit
     max_supported_acquisition_price: float  # same as residual_land_value
     margin_impact: float  # residual_land_value / gdv

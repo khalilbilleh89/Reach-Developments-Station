@@ -19,7 +19,10 @@ from app.core.calculation_engine.areas import (
     run_area_calculations,
 )
 from app.core.calculation_engine.cashflow import run_cashflow_analysis
-from app.core.calculation_engine.land import run_land_calculations
+from app.core.calculation_engine.land import (
+    calculate_effective_land_basis,
+    run_land_calculations,
+)
 from app.core.calculation_engine.pricing import run_unit_pricing
 from app.core.calculation_engine.returns import (
     build_development_cashflows,
@@ -62,6 +65,16 @@ def calculate_land_basis(inputs: LandInputs) -> LandOutputs:
     return run_land_calculations(inputs)
 
 
+def calculate_land_underwriting_metrics(inputs: LandInputs) -> LandOutputs:
+    """Compute the full set of land underwriting metrics from structured inputs.
+
+    Stable façade for land basis hardening. Computes acquisition basis,
+    effective basis (including transaction costs), and residual metrics
+    from a single typed input.
+    """
+    return run_land_calculations(inputs)
+
+
 def calculate_price_adjustment(inputs: PricingInputs) -> PricingOutputs:
     """Compute unit pricing with premiums, escalation, and discount."""
     return run_unit_pricing(inputs)
@@ -98,6 +111,7 @@ __all__ = [
     # Composite runners
     "calculate_returns",
     "calculate_land_basis",
+    "calculate_land_underwriting_metrics",
     "calculate_price_adjustment",
     "calculate_areas",
     "calculate_cashflow",
@@ -112,6 +126,7 @@ __all__ = [
     "build_development_cashflows",
     "calculate_buildable_area",
     "calculate_sellable_area",
+    "calculate_effective_land_basis",
     # Types
     "AreaInputs",
     "AreaOutputs",

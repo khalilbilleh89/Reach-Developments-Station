@@ -8,6 +8,7 @@ acquisition price, and sensitivity of RLV to margin targets and cost changes.
 import pytest
 
 from app.core.calculation_engine.land import (
+    calculate_effective_land_basis,
     calculate_land_price_per_buildable_sqm,
     calculate_land_price_per_sellable_sqm,
     calculate_land_price_per_sqm,
@@ -195,3 +196,143 @@ def test_run_land_calculations_zero_areas_return_zero_basis():
     assert outputs.land_price_per_sqm == 0.0
     assert outputs.land_price_per_buildable_sqm == 0.0
     assert outputs.land_price_per_sellable_sqm == 0.0
+
+
+# ---------------------------------------------------------------------------
+# calculate_effective_land_basis
+# ---------------------------------------------------------------------------
+
+
+def test_effective_land_basis_with_transaction_cost():
+    """Effective basis includes acquisition price AND transaction costs."""
+    # AED 5M acquisition + AED 250K transaction costs → AED 5.25M effective
+    basis = calculate_effective_land_basis(5_000_000.0, 250_000.0)
+    assert basis == pytest.approx(5_250_000.0)
+
+
+def test_effective_land_basis_zero_transaction_cost():
+    """Effective basis equals acquisition price when transaction cost is zero."""
+    basis = calculate_effective_land_basis(5_000_000.0, 0.0)
+    assert basis == pytest.approx(5_000_000.0)
+
+
+def test_effective_land_basis_high_transaction_cost():
+    """Transaction costs materially change effective basis."""
+    # 10 % transaction cost on a 10M parcel → 11M effective
+    basis = calculate_effective_land_basis(10_000_000.0, 1_000_000.0)
+    assert basis == pytest.approx(11_000_000.0)
+
+
+# ---------------------------------------------------------------------------
+# run_land_calculations — effective basis fields
+# ---------------------------------------------------------------------------
+
+
+def test_run_land_calculations_effective_basis_included():
+    """run_land_calculations populates effective_land_basis correctly."""
+    # acquisition=5M, transaction_cost=500K → effective=5.5M
+    inputs = LandInputs(
+        land_area_sqm=1_000.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=2_500.0,
+        sellable_area_sqm=2_000.0,
+        gdv=20_000_000.0,
+        total_development_cost=14_000_000.0,
+        developer_margin_target=0.20,
+        transaction_cost=500_000.0,
+    )
+    outputs = run_land_calculations(inputs)
+
+    assert outputs.effective_land_basis == pytest.approx(5_500_000.0)
+    # effective per gross sqm = 5.5M / 1000 = 5500
+    assert outputs.effective_land_price_per_gross_sqm == pytest.approx(5_500.0)
+    # effective per buildable sqm = 5.5M / 2500 = 2200
+    assert outputs.effective_land_price_per_buildable_sqm == pytest.approx(2_200.0)
+    # effective per sellable sqm = 5.5M / 2000 = 2750
+    assert outputs.effective_land_price_per_sellable_sqm == pytest.approx(2_750.0)
+
+
+def test_run_land_calculations_zero_transaction_cost_effective_equals_acquisition():
+    """With zero transaction cost, effective basis == acquisition price."""
+    inputs = LandInputs(
+        land_area_sqm=1_000.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=2_500.0,
+        sellable_area_sqm=2_000.0,
+        gdv=20_000_000.0,
+        total_development_cost=14_000_000.0,
+        developer_margin_target=0.20,
+        transaction_cost=0.0,
+    )
+    outputs = run_land_calculations(inputs)
+
+    assert outputs.effective_land_basis == pytest.approx(5_000_000.0)
+    assert outputs.effective_land_price_per_gross_sqm == pytest.approx(5_000.0)
+    assert outputs.effective_land_price_per_buildable_sqm == pytest.approx(2_000.0)
+    assert outputs.effective_land_price_per_sellable_sqm == pytest.approx(2_500.0)
+
+
+def test_run_land_calculations_default_transaction_cost_backward_compat():
+    """LandInputs without transaction_cost defaults to 0 (backward compat)."""
+    inputs = LandInputs(
+        land_area_sqm=1_000.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=2_500.0,
+        sellable_area_sqm=2_000.0,
+        gdv=20_000_000.0,
+        total_development_cost=14_000_000.0,
+        developer_margin_target=0.20,
+    )
+    outputs = run_land_calculations(inputs)
+    # With default transaction_cost=0, effective basis == acquisition price
+    assert outputs.effective_land_basis == pytest.approx(5_000_000.0)
+    assert outputs.effective_land_price_per_gross_sqm == pytest.approx(5_000.0)
+
+
+def test_run_land_calculations_effective_basis_zero_areas_return_zero():
+    """Effective per-sqm metrics return 0.0 when areas are zero."""
+    inputs = LandInputs(
+        land_area_sqm=0.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=0.0,
+        sellable_area_sqm=0.0,
+        gdv=10_000_000.0,
+        total_development_cost=8_000_000.0,
+        developer_margin_target=0.20,
+        transaction_cost=500_000.0,
+    )
+    outputs = run_land_calculations(inputs)
+    assert outputs.effective_land_basis == pytest.approx(5_500_000.0)
+    assert outputs.effective_land_price_per_gross_sqm == 0.0
+    assert outputs.effective_land_price_per_buildable_sqm == 0.0
+    assert outputs.effective_land_price_per_sellable_sqm == 0.0
+
+
+def test_run_land_calculations_transaction_cost_increases_effective_prices():
+    """Adding transaction cost increases all effective per-sqm prices."""
+    base_inputs = LandInputs(
+        land_area_sqm=1_000.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=2_500.0,
+        sellable_area_sqm=2_000.0,
+        gdv=20_000_000.0,
+        total_development_cost=14_000_000.0,
+        developer_margin_target=0.20,
+        transaction_cost=0.0,
+    )
+    with_cost_inputs = LandInputs(
+        land_area_sqm=1_000.0,
+        acquisition_price=5_000_000.0,
+        buildable_area_sqm=2_500.0,
+        sellable_area_sqm=2_000.0,
+        gdv=20_000_000.0,
+        total_development_cost=14_000_000.0,
+        developer_margin_target=0.20,
+        transaction_cost=500_000.0,
+    )
+    base_out = run_land_calculations(base_inputs)
+    with_cost_out = run_land_calculations(with_cost_inputs)
+
+    assert with_cost_out.effective_land_price_per_gross_sqm > base_out.effective_land_price_per_gross_sqm
+    assert with_cost_out.effective_land_price_per_buildable_sqm > base_out.effective_land_price_per_buildable_sqm
+    assert with_cost_out.effective_land_price_per_sellable_sqm > base_out.effective_land_price_per_sellable_sqm

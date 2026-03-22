@@ -51,6 +51,23 @@ function formatArea(sqm: number | null): string {
   return `${sqm.toLocaleString()} m²`;
 }
 
+function formatCurrency(value: number | null, currency?: string | null): string {
+  if (value === null || value === undefined) return "—";
+  const prefix = currency ? `${currency} ` : "";
+  if (Math.abs(value) >= 1_000_000) {
+    return `${prefix}${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (Math.abs(value) >= 1_000) {
+    return `${prefix}${(value / 1_000).toFixed(1)}K`;
+  }
+  return `${prefix}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function formatPerSqm(value: number | null): string {
+  if (value === null || value === undefined) return "—";
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " /m²";
+}
+
 // ---------------------------------------------------------------------------
 // Create parcel modal
 // ---------------------------------------------------------------------------
@@ -381,6 +398,7 @@ export default function LandPage() {
   const underReviewCount = parcels.filter((p) => p.status === "under_review").length;
   const approvedCount = parcels.filter((p) => p.status === "approved").length;
   const totalAreaSqm = parcels.reduce((sum, p) => sum + (p.land_area_sqm ?? 0), 0);
+  const totalEffectiveBasis = parcels.reduce((sum, p) => sum + (p.effective_land_basis ?? 0), 0);
 
   return (
     <PageContainer
@@ -396,12 +414,20 @@ export default function LandPage() {
       </div>
 
       {/* Total area summary */}
-      {totalAreaSqm > 0 && (
+      {(totalAreaSqm > 0 || totalEffectiveBasis > 0) && (
         <div className={styles.kpiGrid3} style={{ marginBottom: "var(--space-6)" }}>
-          <MetricCard
-            title="Total Land Area"
-            value={`${totalAreaSqm.toLocaleString()} m²`}
-          />
+          {totalAreaSqm > 0 && (
+            <MetricCard
+              title="Total Land Area"
+              value={`${totalAreaSqm.toLocaleString()} m²`}
+            />
+          )}
+          {totalEffectiveBasis > 0 && (
+            <MetricCard
+              title="Total Effective Basis"
+              value={formatCurrency(totalEffectiveBasis)}
+            />
+          )}
         </div>
       )}
 
@@ -482,90 +508,92 @@ export default function LandPage() {
       {/* Parcels table */}
       {!loading && parcels.length > 0 && (
         <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Code</th>
-                <th>Location</th>
-                <th>Area</th>
-                <th>Zoning</th>
-                <th>Status</th>
-                <th>Project</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parcels.map((parcel) => (
-                <tr key={parcel.id}>
-                  <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                    {parcel.parcel_code}
-                  </td>
-                  <td>
-                    {[parcel.city, parcel.country].filter(Boolean).join(", ") || "—"}
-                  </td>
-                  <td>{formatArea(parcel.land_area_sqm)}</td>
-                  <td>{parcel.zoning_category ?? "—"}</td>
-                  <td>
-                    <span className={`${styles.badge} ${statusBadgeClass(parcel.status)}`}>
-                      {formatStatus(parcel.status)}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                    {parcel.project_id ? (
-                      <span style={{ fontFamily: "monospace" }}>
-                        {parcel.project_id.substring(0, 8)}…
-                      </span>
-                    ) : (
-                      <em>Unassigned</em>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <select
-                        value={parcel.status}
-                        onChange={(e) =>
-                          handleStatusChange(parcel.id, e.target.value as LandStatus)
-                        }
-                        style={{
-                          padding: "4px 8px",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 4,
-                          fontSize: "0.8rem",
-                          background: "var(--color-surface)",
-                          cursor: "pointer",
-                        }}
-                        aria-label={`Change status for ${parcel.parcel_name}`}
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="under_review">Under Review</option>
-                        <option value="approved">Approved</option>
-                        <option value="archived">Archived</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(parcel.id)}
-                        disabled={deletingId === parcel.id}
-                        style={{
-                          padding: "4px 10px",
-                          border: "1px solid #fca5a5",
-                          borderRadius: 4,
-                          background: "#fef2f2",
-                          color: "#b91c1c",
-                          cursor: deletingId === parcel.id ? "not-allowed" : "pointer",
-                          fontSize: "0.8rem",
-                        }}
-                        aria-label={`Delete ${parcel.parcel_name}`}
-                      >
-                        {deletingId === parcel.id ? "…" : "Delete"}
-                      </button>
-                    </div>
-                  </td>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Code</th>
+                  <th>Location</th>
+                  <th>Area</th>
+                  <th>Effective Basis</th>
+                  <th>Gross $/m²</th>
+                  <th>Buildable $/m²</th>
+                  <th>Zoning</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {parcels.map((parcel) => (
+                  <tr key={parcel.id}>
+                    <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                      {parcel.parcel_code}
+                    </td>
+                    <td>
+                      {[parcel.city, parcel.country].filter(Boolean).join(", ") || "—"}
+                    </td>
+                    <td>{formatArea(parcel.land_area_sqm)}</td>
+                    <td style={{ fontWeight: 500, color: parcel.effective_land_basis != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                      {formatCurrency(parcel.effective_land_basis)}
+                    </td>
+                    <td style={{ color: parcel.gross_land_price_per_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                      {formatPerSqm(parcel.gross_land_price_per_sqm)}
+                    </td>
+                    <td style={{ color: parcel.effective_land_price_per_buildable_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                      {formatPerSqm(parcel.effective_land_price_per_buildable_sqm)}
+                    </td>
+                    <td>{parcel.zoning_category ?? "—"}</td>
+                    <td>
+                      <span className={`${styles.badge} ${statusBadgeClass(parcel.status)}`}>
+                        {formatStatus(parcel.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <select
+                          value={parcel.status}
+                          onChange={(e) =>
+                            handleStatusChange(parcel.id, e.target.value as LandStatus)
+                          }
+                          style={{
+                            padding: "4px 8px",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: 4,
+                            fontSize: "0.8rem",
+                            background: "var(--color-surface)",
+                            cursor: "pointer",
+                          }}
+                          aria-label={`Change status for ${parcel.parcel_name}`}
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="under_review">Under Review</option>
+                          <option value="approved">Approved</option>
+                          <option value="archived">Archived</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(parcel.id)}
+                          disabled={deletingId === parcel.id}
+                          style={{
+                            padding: "4px 10px",
+                            border: "1px solid #fca5a5",
+                            borderRadius: 4,
+                            background: "#fef2f2",
+                            color: "#b91c1c",
+                            cursor: deletingId === parcel.id ? "not-allowed" : "pointer",
+                            fontSize: "0.8rem",
+                          }}
+                          aria-label={`Delete ${parcel.parcel_name}`}
+                        >
+                          {deletingId === parcel.id ? "…" : "Delete"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
         </div>
       )}
 
