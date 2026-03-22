@@ -18,6 +18,7 @@ from app.modules.feasibility.schemas import (
     FeasibilityResultResponse,
     FeasibilityRunCreate,
     FeasibilityRunList,
+    FeasibilityRunRequest,
     FeasibilityRunResponse,
     FeasibilityRunUpdate,
 )
@@ -115,5 +116,31 @@ def get_results(
     service: Annotated[FeasibilityService, Depends(get_service)],
 ) -> FeasibilityResultResponse:
     """Get the calculated feasibility results for a run."""
+    return service.get_feasibility_result(run_id)
+
+
+# ---------------------------------------------------------------------------
+# Convenience endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/run", response_model=FeasibilityResultResponse, status_code=201)
+def run_feasibility(
+    data: FeasibilityRunRequest,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityResultResponse:
+    """Create a run, set assumptions, execute calculation, and return results in one request.
+
+    This convenience endpoint combines run creation, assumption setting, and
+    calculation into a single atomic operation for scenario-based evaluation.
+    """
+    return service.run_feasibility_for_scenario(data)
+
+
+@router.get("/{run_id}", response_model=FeasibilityResultResponse)
+def get_feasibility_result_by_run(
+    run_id: str,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityResultResponse:
+    """Get the calculated feasibility results for a run (convenience alias)."""
     return service.get_feasibility_result(run_id)
 

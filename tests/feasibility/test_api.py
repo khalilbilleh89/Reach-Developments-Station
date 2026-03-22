@@ -398,3 +398,147 @@ def test_standalone_and_project_runs_coexist(client: TestClient):
     assert proj_resp.status_code == 200
     assert proj_resp.json()["total"] == 1
     assert proj_resp.json()["items"][0]["project_id"] == project_id
+
+
+# ---------------------------------------------------------------------------
+# Scenario linkage (PR-FEAS-001)
+# ---------------------------------------------------------------------------
+
+def _create_scenario(client: TestClient, name: str = "Test Scenario") -> str:
+    resp = client.post(
+        "/api/v1/scenarios",
+        json={"name": name, "code": name[:10].replace(" ", "-"), "source_type": "feasibility"},
+    )
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+def test_create_run_with_scenario_id(client: TestClient):
+    """POST /api/v1/feasibility/runs with scenario_id should link the run."""
+    scenario_id = _create_scenario(client, name="Baseline Scenario")
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Scenario-Linked Run", "scenario_id": scenario_id},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["scenario_id"] == scenario_id
+
+
+def test_create_run_with_invalid_scenario_id(client: TestClient):
+    """POST /api/v1/feasibility/runs with non-existent scenario_id should return 404."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Bad Scenario Run", "scenario_id": "no-such-scenario"},
+    )
+    assert resp.status_code == 404
+
+
+def test_run_response_includes_scenario_id_field(client: TestClient):
+    """GET /api/v1/feasibility/runs/{id} response must include scenario_id field."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "No Scenario Run"},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["id"]
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 200
+    assert "scenario_id" in resp.json()
+    assert resp.json()["scenario_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Viability fields in result (PR-FEAS-001)
+# ---------------------------------------------------------------------------
+
+def test_calculate_result_includes_viability_fields(client: TestClient):
+    """POST /api/v1/feasibility/runs/{id}/calculate result must include viability fields."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Viability"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "viability_status" in data
+    assert "risk_level" in data
+    assert "decision" in data
+    assert "payback_period" in data
+    assert data["viability_status"] == "VIABLE"
+    assert data["decision"] == "VIABLE"
+
+
+# ---------------------------------------------------------------------------
+# POST /feasibility/run convenience endpoint (PR-FEAS-001)
+# ---------------------------------------------------------------------------
+
+_FULL_RUN_PAYLOAD = {
+    "scenario_name": "Quick Run",
+    "sellable_area_sqm": 1000.0,
+    "avg_sale_price_per_sqm": 3000.0,
+    "construction_cost_per_sqm": 800.0,
+    "soft_cost_ratio": 0.10,
+    "finance_cost_ratio": 0.05,
+    "sales_cost_ratio": 0.03,
+    "development_period_months": 24,
+}
+
+
+def test_post_feasibility_run_convenience_endpoint(client: TestClient):
+    """POST /api/v1/feasibility/run should create run + calculate + return result."""
+    resp = client.post("/api/v1/feasibility/run", json=_FULL_RUN_PAYLOAD)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["gdv"] == pytest.approx(3_000_000.0)
+    assert data["viability_status"] == "VIABLE"
+    assert data["decision"] == "VIABLE"
+    assert data["risk_level"] is not None
+    assert data["payback_period"] is not None
+
+
+def test_post_feasibility_run_with_project_and_scenario(client: TestClient):
+    """POST /api/v1/feasibility/run with valid project_id and scenario_id."""
+    project_id = _create_project(client, code="PRJ-FRUN")
+    scenario_id = _create_scenario(client, name="Run Scenario")
+    payload = {**_FULL_RUN_PAYLOAD, "project_id": project_id, "scenario_id": scenario_id}
+    resp = client.post("/api/v1/feasibility/run", json=payload)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["gdv"] is not None
+    assert data["viability_status"] is not None
+
+
+def test_post_feasibility_run_invalid_project(client: TestClient):
+    """POST /api/v1/feasibility/run with non-existent project_id must return 404."""
+    payload = {**_FULL_RUN_PAYLOAD, "project_id": "no-such-project"}
+    resp = client.post("/api/v1/feasibility/run", json=payload)
+    assert resp.status_code == 404
+
+
+def test_post_feasibility_run_invalid_scenario(client: TestClient):
+    """POST /api/v1/feasibility/run with non-existent scenario_id must return 404."""
+    payload = {**_FULL_RUN_PAYLOAD, "scenario_id": "no-such-scenario"}
+    resp = client.post("/api/v1/feasibility/run", json=payload)
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /feasibility/{run_id} convenience alias (PR-FEAS-001)
+# ---------------------------------------------------------------------------
+
+def test_get_feasibility_result_by_run_alias(client: TestClient):
+    """GET /api/v1/feasibility/{run_id} should return the feasibility result."""
+    resp = client.post("/api/v1/feasibility/run", json=_FULL_RUN_PAYLOAD)
+    assert resp.status_code == 201
+    run_id = resp.json()["run_id"]
+    resp = client.get(f"/api/v1/feasibility/{run_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == run_id
+    assert data["viability_status"] == "VIABLE"
+
+
+def test_get_feasibility_result_alias_not_found(client: TestClient):
+    """GET /api/v1/feasibility/{run_id} for unknown run must return 404."""
+    resp = client.get("/api/v1/feasibility/no-such-run")
+    assert resp.status_code == 404

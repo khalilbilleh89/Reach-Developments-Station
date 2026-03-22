@@ -142,3 +142,32 @@ class RiskAlertType(str, Enum):
     COLLECTION_EFFICIENCY_COLLAPSE = "COLLECTION_EFFICIENCY_COLLAPSE"
     RECEIVABLES_SURGE = "RECEIVABLES_SURGE"
     LIQUIDITY_STRESS = "LIQUIDITY_STRESS"
+
+
+# ---------------------------------------------------------------------------
+# Feasibility viability enumerations
+# ---------------------------------------------------------------------------
+
+
+class FeasibilityViabilityStatus(str, Enum):
+    """Overall viability rating produced by the feasibility evaluation."""
+
+    VIABLE = "VIABLE"
+    MARGINAL = "MARGINAL"
+    NOT_VIABLE = "NOT_VIABLE"
+
+
+class FeasibilityRiskLevel(str, Enum):
+    """Risk level associated with a feasibility evaluation."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class FeasibilityDecision(str, Enum):
+    """Decision recommendation produced by the feasibility engine."""
+
+    VIABLE = "VIABLE"
+    MARGINAL = "MARGINAL"
+    NOT_VIABLE = "NOT_VIABLE"
