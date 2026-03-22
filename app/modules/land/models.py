@@ -45,9 +45,31 @@ class LandParcel(Base, TimestampMixin):
     district: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
+    # ---------------------------------------------------------------------------
+    # Identity & cadastral reference
+    # ---------------------------------------------------------------------------
+    plot_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    cadastral_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    title_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    location_link: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    municipality: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    submarket: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    # ---------------------------------------------------------------------------
+    # Physical / dimensional attributes
+    # ---------------------------------------------------------------------------
     land_area_sqm: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     frontage_m: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     depth_m: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+
+    buildable_area_sqm: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    sellable_area_sqm: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    coverage_ratio: Mapped[Optional[float]] = mapped_column(Numeric(6, 4), nullable=True)
+    density_ratio: Mapped[Optional[float]] = mapped_column(Numeric(8, 4), nullable=True)
+
+    front_setback_m: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    side_setback_m: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    rear_setback_m: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
 
     zoning_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     permitted_far: Mapped[Optional[float]] = mapped_column(Numeric(6, 3), nullable=True)
@@ -56,6 +78,24 @@ class LandParcel(Base, TimestampMixin):
 
     corner_plot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     utilities_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    access_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    utilities_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # ---------------------------------------------------------------------------
+    # Acquisition economics
+    # ---------------------------------------------------------------------------
+    acquisition_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    transaction_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    currency: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    asking_price_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    supported_price_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+
+    # ---------------------------------------------------------------------------
+    # Governance / provenance
+    # ---------------------------------------------------------------------------
+    assumption_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default=LandParcelStatus.DRAFT.value
