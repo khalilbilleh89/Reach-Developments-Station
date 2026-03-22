@@ -130,6 +130,24 @@ class LandValuationRepository:
             .all()
         )
 
+    def get_latest_engine_valuation(self, parcel_id: str) -> Optional[LandValuation]:
+        """Return the most recently created engine valuation for a parcel.
+
+        Only returns valuations that have engine-computed RLV data
+        (``max_land_bid IS NOT NULL``). Returns ``None`` when no such
+        valuation exists.
+        """
+        return (
+            self.db.query(LandValuation)
+            .filter(
+                LandValuation.parcel_id == parcel_id,
+                LandValuation.max_land_bid.isnot(None),
+            )
+            .order_by(LandValuation.created_at.desc())
+            .limit(1)
+            .first()
+        )
+
     def create_from_engine(
         self,
         parcel_id: str,

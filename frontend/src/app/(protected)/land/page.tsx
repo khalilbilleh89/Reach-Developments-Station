@@ -534,13 +534,13 @@ export default function LandPage() {
                       {[parcel.city, parcel.country].filter(Boolean).join(", ") || "—"}
                     </td>
                     <td>{formatArea(parcel.land_area_sqm)}</td>
-                    <td style={{ fontWeight: 500, color: parcel.effective_land_basis ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                    <td style={{ fontWeight: 500, color: parcel.effective_land_basis != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
                       {formatCurrency(parcel.effective_land_basis)}
                     </td>
-                    <td style={{ color: parcel.gross_land_price_per_sqm ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                    <td style={{ color: parcel.gross_land_price_per_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
                       {formatPerSqm(parcel.gross_land_price_per_sqm)}
                     </td>
-                    <td style={{ color: parcel.effective_land_price_per_buildable_sqm ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                    <td style={{ color: parcel.effective_land_price_per_buildable_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
                       {formatPerSqm(parcel.effective_land_price_per_buildable_sqm)}
                     </td>
                     <td>{parcel.zoning_category ?? "—"}</td>

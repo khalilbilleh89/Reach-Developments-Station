@@ -86,16 +86,14 @@ class LandService:
             "effective_land_price_per_sellable_sqm": outputs.effective_land_price_per_sellable_sqm if sellable_area_sqm > 0 else None,
         }
 
-        # Enrich with residual metrics from the latest engine valuation if available
-        valuations = self.valuation_repo.list_by_parcel(parcel.id)
-        if valuations:
-            # Use the most recently created valuation that has engine-computed RLV data
-            engine_valuations = [v for v in valuations if v.max_land_bid is not None]
-            if engine_valuations:
-                latest = engine_valuations[-1]
-                metrics["supported_acquisition_price"] = float(latest.max_land_bid) if latest.max_land_bid is not None else None
-                metrics["residual_land_value"] = float(latest.residual_land_value) if latest.residual_land_value is not None else None
-                metrics["margin_impact"] = float(latest.residual_margin) if latest.residual_margin is not None else None
+        # Enrich with residual metrics from the latest engine valuation if available.
+        # Uses a single deterministic query (ORDER BY created_at DESC LIMIT 1) to
+        # avoid an N+1 load of all valuations and to ensure a consistent result.
+        latest = self.valuation_repo.get_latest_engine_valuation(parcel.id)
+        if latest is not None:
+            metrics["supported_acquisition_price"] = float(latest.max_land_bid) if latest.max_land_bid is not None else None
+            metrics["residual_land_value"] = float(latest.residual_land_value) if latest.residual_land_value is not None else None
+            metrics["margin_impact"] = float(latest.residual_margin) if latest.residual_margin is not None else None
 
         return metrics
 
