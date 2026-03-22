@@ -18,6 +18,7 @@ from typing import Optional
 from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE, DEFAULT_SCENARIO_STATUS
 from app.db.base import Base, TimestampMixin
 
 
@@ -36,8 +37,8 @@ class Scenario(Base, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
-    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="feasibility")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=DEFAULT_SCENARIO_STATUS)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default=DEFAULT_SCENARIO_SOURCE_TYPE)
     project_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     land_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     base_scenario_id: Mapped[Optional[str]] = mapped_column(
