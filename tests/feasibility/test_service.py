@@ -421,3 +421,115 @@ def test_run_feasibility_for_scenario_with_scenario_id(db_session: Session):
     result = service.run_feasibility_for_scenario(req)
     assert result.gdv == pytest.approx(3_000_000.0)
     assert result.viability_status is not None
+
+
+# ---------------------------------------------------------------------------
+# Shared validation helper consistency (PR-FEAS-001A)
+# ---------------------------------------------------------------------------
+
+def test_create_run_and_run_for_scenario_use_same_project_validation(db_session: Session):
+    """Both create_feasibility_run and run_feasibility_for_scenario must reject
+    the same invalid project_id with 404, confirming shared validation logic."""
+    service = FeasibilityService(db_session)
+
+    with pytest.raises(HTTPException) as exc1:
+        service.create_feasibility_run(
+            FeasibilityRunCreate(project_id="no-such", scenario_name="Test A")
+        )
+    assert exc1.value.status_code == 404
+
+    with pytest.raises(HTTPException) as exc2:
+        service.run_feasibility_for_scenario(
+            FeasibilityRunRequest(
+                project_id="no-such",
+                scenario_name="Test B",
+                sellable_area_sqm=1000.0,
+                avg_sale_price_per_sqm=3000.0,
+                construction_cost_per_sqm=800.0,
+                soft_cost_ratio=0.10,
+                finance_cost_ratio=0.05,
+                sales_cost_ratio=0.03,
+                development_period_months=24,
+            )
+        )
+    assert exc2.value.status_code == 404
+
+
+def test_create_run_and_run_for_scenario_use_same_scenario_validation(db_session: Session):
+    """Both code paths must reject the same invalid scenario_id with 404."""
+    service = FeasibilityService(db_session)
+
+    with pytest.raises(HTTPException) as exc1:
+        service.create_feasibility_run(
+            FeasibilityRunCreate(scenario_id="no-such", scenario_name="Test A")
+        )
+    assert exc1.value.status_code == 404
+
+    with pytest.raises(HTTPException) as exc2:
+        service.run_feasibility_for_scenario(
+            FeasibilityRunRequest(
+                scenario_id="no-such",
+                scenario_name="Test B",
+                sellable_area_sqm=1000.0,
+                avg_sale_price_per_sqm=3000.0,
+                construction_cost_per_sqm=800.0,
+                soft_cost_ratio=0.10,
+                finance_cost_ratio=0.05,
+                sales_cost_ratio=0.03,
+                development_period_months=24,
+            )
+        )
+    assert exc2.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Partial-state behaviour (PR-FEAS-001A)
+#
+# POST /feasibility/run performs sequential DB operations, not a single
+# transaction.  If the calculation step raises, the run + assumptions already
+# persisted remain retrievable.  This documents and validates that behaviour.
+# ---------------------------------------------------------------------------
+
+def test_partial_state_run_and_assumptions_persisted_without_result(db_session: Session):
+    """A run with assumptions but no result is a valid intermediate state.
+
+    This test documents the expected partial-state outcome: a run created via
+    the step-by-step API (create run → set assumptions) has no result until
+    POST .../calculate is called.  The run and assumptions are independently
+    retrievable.
+    """
+    service = FeasibilityService(db_session)
+    run = service.create_feasibility_run(FeasibilityRunCreate(scenario_name="Partial State"))
+    service.update_assumptions(run.id, _VALID_ASSUMPTIONS)
+
+    # Run exists and assumptions are persisted.
+    fetched_run = service.get_feasibility_run(run.id)
+    assert fetched_run.id == run.id
+    fetched_assumptions = service.get_assumptions(run.id)
+    assert fetched_assumptions.run_id == run.id
+
+    # But no result exists yet — get_feasibility_result must return 404.
+    with pytest.raises(HTTPException) as exc_info:
+        service.get_feasibility_result(run.id)
+    assert exc_info.value.status_code == 404
+
+
+def test_partial_state_can_be_recovered_by_calculate(db_session: Session):
+    """A run in partial state (run + assumptions, no result) can be recovered
+    by calling run_feasibility_calculation — no new run needs to be created."""
+    service = FeasibilityService(db_session)
+    run = service.create_feasibility_run(FeasibilityRunCreate(scenario_name="Recoverable"))
+    service.update_assumptions(run.id, _VALID_ASSUMPTIONS)
+
+    # Confirm partial state.
+    with pytest.raises(HTTPException):
+        service.get_feasibility_result(run.id)
+
+    # Recover by re-running the calculation step.
+    result = service.run_feasibility_calculation(run.id)
+    assert result.gdv == pytest.approx(3_000_000.0)
+    assert result.viability_status is not None
+
+    # Result is now persistently retrievable.
+    fetched = service.get_feasibility_result(run.id)
+    assert fetched.run_id == run.id

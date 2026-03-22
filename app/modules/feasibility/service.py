@@ -42,17 +42,29 @@ from app.shared.enums.finance import (
 )
 
 # ---------------------------------------------------------------------------
-# Viability thresholds
+# Viability thresholds — v1 business policy
+#
+# These thresholds represent the initial classification policy for the
+# Developer Operating System and are subject to future configuration or
+# market-specific overrides.  They are not universal finance law.
+#
+# profit_margin >= 20 %            → VIABLE
+# 10 % <= profit_margin < 20 %     → MARGINAL
+# profit_margin < 10 %             → NOT_VIABLE
+#
+# irr >= 25 %                      → LOW risk
+# 15 % <= irr < 25 %               → MEDIUM risk
+# irr < 15 %                       → HIGH risk
 # ---------------------------------------------------------------------------
 
-_VIABLE_MARGIN_THRESHOLD = 0.20       # profit_margin >= 20 % → VIABLE
-_MARGINAL_MARGIN_THRESHOLD = 0.10     # 10 % ≤ profit_margin < 20 % → MARGINAL
-_LOW_RISK_IRR_THRESHOLD = 0.25        # irr >= 25 % → LOW risk
-_MEDIUM_RISK_IRR_THRESHOLD = 0.15     # 15 % ≤ irr < 25 % → MEDIUM risk
+_VIABLE_MARGIN_THRESHOLD = 0.20
+_MARGINAL_MARGIN_THRESHOLD = 0.10
+_LOW_RISK_IRR_THRESHOLD = 0.25
+_MEDIUM_RISK_IRR_THRESHOLD = 0.15
 
 
 def _evaluate_viability(profit_margin: float) -> FeasibilityViabilityStatus:
-    """Determine viability status from profit margin."""
+    """Classify project viability from profit margin (v1 policy thresholds)."""
     if profit_margin >= _VIABLE_MARGIN_THRESHOLD:
         return FeasibilityViabilityStatus.VIABLE
     if profit_margin >= _MARGINAL_MARGIN_THRESHOLD:
@@ -61,7 +73,7 @@ def _evaluate_viability(profit_margin: float) -> FeasibilityViabilityStatus:
 
 
 def _evaluate_risk_level(irr: float) -> FeasibilityRiskLevel:
-    """Determine risk level from annualised IRR."""
+    """Classify risk level from annualised IRR (v1 policy thresholds)."""
     if irr >= _LOW_RISK_IRR_THRESHOLD:
         return FeasibilityRiskLevel.LOW
     if irr >= _MEDIUM_RISK_IRR_THRESHOLD:
@@ -96,32 +108,36 @@ class FeasibilityService:
         self.scenario_repo = ScenarioRepository(db)
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Internal helpers — shared validation guards
     # ------------------------------------------------------------------
 
-    def _require_scenario(self, scenario_id: str):
-        scenario = self.scenario_repo.get_by_id(scenario_id)
-        if not scenario:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Scenario '{scenario_id}' not found.",
-            )
-        return scenario
+    def _validate_project_if_present(self, project_id: Optional[str]) -> None:
+        """Raise 404 if project_id is provided but does not exist."""
+        if project_id is not None:
+            project = self.project_repo.get_by_id(project_id)
+            if not project:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Project '{project_id}' not found.",
+                )
+
+    def _require_scenario_if_present(self, scenario_id: Optional[str]) -> None:
+        """Raise 404 if scenario_id is provided but does not exist."""
+        if scenario_id is not None:
+            scenario = self.scenario_repo.get_by_id(scenario_id)
+            if not scenario:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Scenario '{scenario_id}' not found.",
+                )
 
     # ------------------------------------------------------------------
     # Run operations
     # ------------------------------------------------------------------
 
     def create_feasibility_run(self, data: FeasibilityRunCreate) -> FeasibilityRunResponse:
-        if data.project_id is not None:
-            project = self.project_repo.get_by_id(data.project_id)
-            if not project:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Project '{data.project_id}' not found.",
-                )
-        if data.scenario_id is not None:
-            self._require_scenario(data.scenario_id)
+        self._validate_project_if_present(data.project_id)
+        self._require_scenario_if_present(data.scenario_id)
         run = self.run_repo.create(data)
         return FeasibilityRunResponse.model_validate(run)
 
@@ -307,16 +323,17 @@ class FeasibilityService:
         This is the convenience endpoint that maps to POST /feasibility/run.
         All inline assumptions are required; scenario_id is optional and used
         for lineage tracking only.
+
+        Persistence behaviour: run creation, assumption upsert, and result
+        persistence are sequential DB operations, not wrapped in a single
+        transaction.  If the calculation step fails after the run and
+        assumptions have been persisted, those earlier records will remain.
+        The result can then be obtained by retrying POST /feasibility/runs/{id}/calculate
+        once the error is resolved.
         """
-        if data.project_id is not None:
-            project = self.project_repo.get_by_id(data.project_id)
-            if not project:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Project '{data.project_id}' not found.",
-                )
-        if data.scenario_id is not None:
-            self._require_scenario(data.scenario_id)
+        # Validate references first so no DB records are created on invalid input.
+        self._validate_project_if_present(data.project_id)
+        self._require_scenario_if_present(data.scenario_id)
 
         run_create = FeasibilityRunCreate(
             project_id=data.project_id,
@@ -325,7 +342,7 @@ class FeasibilityService:
             scenario_type=data.scenario_type,
             notes=data.notes,
         )
-        run = self.run_repo.create(run_create)
+        run_response = self.create_feasibility_run(run_create)
 
         assumptions_create = FeasibilityAssumptionsCreate(
             sellable_area_sqm=data.sellable_area_sqm,
@@ -336,7 +353,7 @@ class FeasibilityService:
             sales_cost_ratio=data.sales_cost_ratio,
             development_period_months=data.development_period_months,
         )
-        self.assumptions_repo.upsert(run.id, assumptions_create)
+        self.assumptions_repo.upsert(run_response.id, assumptions_create)
 
         inputs = FeasibilityInputs(
             sellable_area_sqm=data.sellable_area_sqm,
@@ -347,5 +364,6 @@ class FeasibilityService:
             sales_cost_ratio=data.sales_cost_ratio,
             development_period_months=data.development_period_months,
         )
-        return self._execute_calculation(run.id, inputs)
+        return self._execute_calculation(run_response.id, inputs)
+
 
