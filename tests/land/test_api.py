@@ -568,3 +568,312 @@ def test_assign_parcel_idempotent(client: TestClient):
     second = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_id}")
     assert second.status_code == 200
     assert second.json()["project_id"] == project_id
+
+# ---------------------------------------------------------------------------
+# Patch semantics tests (PR-LAND-003)
+# ---------------------------------------------------------------------------
+
+def test_patch_preserves_omitted_fields(client: TestClient):
+    """PATCH with partial payload must not nullify fields that were not included."""
+    project_id = _create_project(client, code="PRJ-PATCH-001")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-001")
+    parcel_id = parcel["id"]
+
+    # Set extra fields on creation via another PATCH
+    setup = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "country": "UAE",
+            "acquisition_price": 5_000_000.0,
+            "transaction_cost": 200_000.0,
+            "zoning_category": "Residential",
+        },
+    )
+    assert setup.status_code == 200
+
+    # Now patch only the asking price — other fields must survive
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"asking_price_per_sqm": 5500.0},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["asking_price_per_sqm"] == 5500.0
+    # Fields not in the patch payload are preserved
+    assert body["country"] == "UAE"
+    assert body["acquisition_price"] == 5_000_000.0
+    assert body["transaction_cost"] == 200_000.0
+    assert body["zoning_category"] == "Residential"
+    assert body["city"] == "Dubai"
+
+
+def test_patch_returns_computed_metrics(client: TestClient):
+    """PATCH response must include recalculated basis metrics when acquisition_price is set."""
+    project_id = _create_project(client, code="PRJ-PATCH-002")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-002")
+    parcel_id = parcel["id"]
+
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "acquisition_price": 5_000_000.0,
+            "transaction_cost": 200_000.0,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # effective_land_basis = acquisition_price + transaction_cost
+    assert body["effective_land_basis"] == pytest.approx(5_200_000.0)
+    # gross_land_price_per_sqm = acquisition_price / land_area_sqm = 5_000_000 / 10_000
+    assert body["gross_land_price_per_sqm"] == pytest.approx(500.0)
+
+
+def test_patch_cadastral_fields(client: TestClient):
+    """PATCH should persist cadastral reference fields correctly."""
+    project_id = _create_project(client, code="PRJ-PATCH-003")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-003")
+    parcel_id = parcel["id"]
+
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "plot_number": "1234-A",
+            "cadastral_id": "CAD-9999",
+            "title_reference": "TD-2024-001",
+            "municipality": "Dubai Municipality",
+            "submarket": "JVC",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["plot_number"] == "1234-A"
+    assert body["cadastral_id"] == "CAD-9999"
+    assert body["title_reference"] == "TD-2024-001"
+    assert body["municipality"] == "Dubai Municipality"
+    assert body["submarket"] == "JVC"
+
+
+def test_patch_physical_fields(client: TestClient):
+    """PATCH should update buildable and sellable area fields."""
+    project_id = _create_project(client, code="PRJ-PATCH-004")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-004")
+    parcel_id = parcel["id"]
+
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "buildable_area_sqm": 25000.0,
+            "sellable_area_sqm": 20000.0,
+            "front_setback_m": 5.0,
+            "side_setback_m": 3.0,
+            "rear_setback_m": 3.0,
+            "max_floors": 12,
+            "corner_plot": True,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["buildable_area_sqm"] == 25000.0
+    assert body["sellable_area_sqm"] == 20000.0
+    assert body["front_setback_m"] == 5.0
+    assert body["side_setback_m"] == 3.0
+    assert body["rear_setback_m"] == 3.0
+    assert body["max_floors"] == 12
+    assert body["corner_plot"] is True
+
+
+def test_patch_computed_metrics_with_buildable_area(client: TestClient):
+    """When acquisition_price and buildable_area_sqm are both set, per-buildable metric is returned."""
+    project_id = _create_project(client, code="PRJ-PATCH-005")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-005")
+    parcel_id = parcel["id"]
+
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "acquisition_price": 5_000_000.0,
+            "transaction_cost": 0.0,
+            "buildable_area_sqm": 25000.0,
+            "sellable_area_sqm": 20000.0,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # effective_land_price_per_buildable_sqm = 5_000_000 / 25_000 = 200
+    assert body["effective_land_price_per_buildable_sqm"] == pytest.approx(200.0)
+    # effective_land_price_per_sellable_sqm = 5_000_000 / 20_000 = 250
+    assert body["effective_land_price_per_sellable_sqm"] == pytest.approx(250.0)
+
+
+def test_patch_invalid_payload_rejected(client: TestClient):
+    """PATCH with negative acquisition_price should be rejected with 422."""
+    project_id = _create_project(client, code="PRJ-PATCH-006")
+    parcel = _create_parcel(client, project_id, code="PCL-PATCH-006")
+    parcel_id = parcel["id"]
+
+    response = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"acquisition_price": -1000.0},
+    )
+    assert response.status_code == 422
+
+
+def test_patch_nonexistent_parcel_returns_404(client: TestClient):
+    """PATCH on a non-existent parcel ID should return 404."""
+    response = client.patch(
+        "/api/v1/land/parcels/nonexistent-uuid",
+        json={"city": "Abu Dhabi"},
+    )
+    assert response.status_code == 404
+
+
+def test_get_parcel_includes_computed_metrics(client: TestClient):
+    """GET /api/v1/land/parcels/{id} must include computed metrics when acquisition_price is set."""
+    project_id = _create_project(client, code="PRJ-GET-001")
+    parcel = _create_parcel(client, project_id, code="PCL-GET-001")
+    parcel_id = parcel["id"]
+
+    # Set acquisition price
+    client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"acquisition_price": 10_000_000.0, "transaction_cost": 400_000.0},
+    )
+
+    response = client.get(f"/api/v1/land/parcels/{parcel_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["effective_land_basis"] == pytest.approx(10_400_000.0)
+    assert body["gross_land_price_per_sqm"] is not None
+
+
+def test_workflow_broker_updates_asking_price(client: TestClient):
+    """Simulate broker updating asking price only — other fields must be preserved."""
+    project_id = _create_project(client, code="PRJ-WF-001")
+    # Initial parcel with full data
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={
+            "project_id": project_id,
+            "parcel_name": "Downtown Site",
+            "parcel_code": "PCL-WF-001",
+            "city": "Dubai",
+            "country": "UAE",
+            "land_area_sqm": 8000.0,
+            "acquisition_price": 6_000_000.0,
+            "transaction_cost": 240_000.0,
+            "zoning_category": "Mixed-Use",
+            "asking_price_per_sqm": 750.0,
+        },
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    # Broker revises the asking price
+    patch_resp = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"asking_price_per_sqm": 820.0},
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    assert body["asking_price_per_sqm"] == 820.0
+    # All other fields unchanged
+    assert body["city"] == "Dubai"
+    assert body["country"] == "UAE"
+    assert body["acquisition_price"] == 6_000_000.0
+    assert body["transaction_cost"] == 240_000.0
+    assert body["zoning_category"] == "Mixed-Use"
+    # Computed metrics still present
+    assert body["effective_land_basis"] == pytest.approx(6_240_000.0)
+
+
+def test_workflow_legal_adds_cadastral_id(client: TestClient):
+    """Legal team adds cadastral_id after initial intake without disturbing other data."""
+    project_id = _create_project(client, code="PRJ-WF-002")
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={
+            "project_id": project_id,
+            "parcel_name": "Pending Title Site",
+            "parcel_code": "PCL-WF-002",
+            "city": "Abu Dhabi",
+            "land_area_sqm": 5000.0,
+            "acquisition_price": 3_000_000.0,
+        },
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    patch_resp = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"cadastral_id": "CAD-ABU-12345", "title_reference": "TD-2024-ABD-001"},
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    assert body["cadastral_id"] == "CAD-ABU-12345"
+    assert body["title_reference"] == "TD-2024-ABD-001"
+    # Original fields preserved
+    assert body["city"] == "Abu Dhabi"
+    assert body["acquisition_price"] == 3_000_000.0
+    # Computed metrics still present
+    assert body["effective_land_basis"] == pytest.approx(3_000_000.0)
+
+
+def test_workflow_planner_adds_buildable_area(client: TestClient):
+    """Planner adds buildable area — new per-buildable metric should appear after patch."""
+    project_id = _create_project(client, code="PRJ-WF-003")
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={
+            "project_id": project_id,
+            "parcel_name": "Development Site",
+            "parcel_code": "PCL-WF-003",
+            "city": "Sharjah",
+            "land_area_sqm": 12000.0,
+            "acquisition_price": 4_800_000.0,
+        },
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    # Before: no buildable area → per-buildable metric is null
+    get_resp = client.get(f"/api/v1/land/parcels/{parcel_id}")
+    assert get_resp.json()["effective_land_price_per_buildable_sqm"] is None
+
+    # Planner provides buildable area
+    patch_resp = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={"buildable_area_sqm": 30000.0},
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    # effective_land_price_per_buildable_sqm = 4_800_000 / 30_000 = 160
+    assert body["effective_land_price_per_buildable_sqm"] == pytest.approx(160.0)
+
+
+def test_workflow_sparse_parcel_remains_editable(client: TestClient):
+    """A parcel created with only required fields (sparse) must be patchable without errors."""
+    # Standalone parcel — no project, minimal fields
+    resp = client.post(
+        "/api/v1/land/parcels",
+        json={"parcel_name": "Sparse Site", "parcel_code": "PCL-SPARSE-001"},
+    )
+    assert resp.status_code == 201
+    parcel_id = resp.json()["id"]
+
+    # Should be fully editable
+    patch_resp = client.patch(
+        f"/api/v1/land/parcels/{parcel_id}",
+        json={
+            "city": "Ajman",
+            "land_area_sqm": 3000.0,
+            "zoning_category": "Industrial",
+            "status": "under_review",
+        },
+    )
+    assert patch_resp.status_code == 200
+    body = patch_resp.json()
+    assert body["city"] == "Ajman"
+    assert body["land_area_sqm"] == 3000.0
+    assert body["status"] == "under_review"
+    # Computed metrics null because no acquisition_price yet
+    assert body["effective_land_basis"] is None

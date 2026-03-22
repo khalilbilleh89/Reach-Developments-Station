@@ -18,25 +18,46 @@ export interface LandParcel {
   project_id: string | null;
   parcel_name: string;
   parcel_code: string;
+  // Location
   country: string | null;
   city: string | null;
   district: string | null;
   address: string | null;
+  municipality: string | null;
+  submarket: string | null;
+  // Identity & cadastral reference
+  plot_number: string | null;
+  cadastral_id: string | null;
+  title_reference: string | null;
+  location_link: string | null;
+  // Physical / dimensional
   land_area_sqm: number | null;
   frontage_m: number | null;
   depth_m: number | null;
   buildable_area_sqm: number | null;
   sellable_area_sqm: number | null;
-  acquisition_price: number | null;
-  transaction_cost: number | null;
-  asking_price_per_sqm: number | null;
-  supported_price_per_sqm: number | null;
+  coverage_ratio: number | null;
+  density_ratio: number | null;
+  front_setback_m: number | null;
+  side_setback_m: number | null;
+  rear_setback_m: number | null;
   zoning_category: string | null;
   permitted_far: number | null;
   max_height_m: number | null;
   max_floors: number | null;
   corner_plot: boolean;
   utilities_available: boolean;
+  access_notes: string | null;
+  utilities_notes: string | null;
+  // Acquisition economics
+  acquisition_price: number | null;
+  transaction_cost: number | null;
+  currency: string | null;
+  asking_price_per_sqm: number | null;
+  supported_price_per_sqm: number | null;
+  // Governance / provenance
+  assumption_notes: string | null;
+  source_notes: string | null;
   status: LandStatus;
   created_at: string;
   updated_at: string;
@@ -60,10 +81,18 @@ export interface LandParcelCreate {
   project_id?: string | null;
   parcel_name: string;
   parcel_code: string;
+  // Location
   country?: string | null;
   city?: string | null;
   district?: string | null;
   address?: string | null;
+  municipality?: string | null;
+  submarket?: string | null;
+  // Identity & cadastral reference
+  plot_number?: string | null;
+  cadastral_id?: string | null;
+  title_reference?: string | null;
+  location_link?: string | null;
   // Physical / dimensional attributes
   land_area_sqm?: number | null;
   frontage_m?: number | null;
@@ -72,12 +101,17 @@ export interface LandParcelCreate {
   sellable_area_sqm?: number | null;
   coverage_ratio?: number | null;
   density_ratio?: number | null;
+  front_setback_m?: number | null;
+  side_setback_m?: number | null;
+  rear_setback_m?: number | null;
   zoning_category?: string | null;
   permitted_far?: number | null;
   max_height_m?: number | null;
   max_floors?: number | null;
   corner_plot?: boolean;
   utilities_available?: boolean;
+  access_notes?: string | null;
+  utilities_notes?: string | null;
   // Acquisition economics
   acquisition_price?: number | null;
   transaction_cost?: number | null;
@@ -92,10 +126,18 @@ export interface LandParcelCreate {
 
 export interface LandParcelUpdate {
   parcel_name?: string | null;
+  // Location
   country?: string | null;
   city?: string | null;
   district?: string | null;
   address?: string | null;
+  municipality?: string | null;
+  submarket?: string | null;
+  // Identity & cadastral reference
+  plot_number?: string | null;
+  cadastral_id?: string | null;
+  title_reference?: string | null;
+  location_link?: string | null;
   // Physical / dimensional attributes
   land_area_sqm?: number | null;
   frontage_m?: number | null;
@@ -104,12 +146,17 @@ export interface LandParcelUpdate {
   sellable_area_sqm?: number | null;
   coverage_ratio?: number | null;
   density_ratio?: number | null;
+  front_setback_m?: number | null;
+  side_setback_m?: number | null;
+  rear_setback_m?: number | null;
   zoning_category?: string | null;
   permitted_far?: number | null;
   max_height_m?: number | null;
   max_floors?: number | null;
   corner_plot?: boolean | null;
   utilities_available?: boolean | null;
+  access_notes?: string | null;
+  utilities_notes?: string | null;
   // Acquisition economics
   acquisition_price?: number | null;
   transaction_cost?: number | null;

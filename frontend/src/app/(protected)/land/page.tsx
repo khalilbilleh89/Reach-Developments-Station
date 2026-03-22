@@ -8,8 +8,16 @@ import {
   createLandParcel,
   updateLandParcel,
   deleteLandParcel,
+  getLandParcel,
 } from "@/lib/land-api";
-import type { LandParcel, LandParcelCreate, LandStatus } from "@/lib/land-types";
+import type {
+  LandParcel,
+  LandParcelCreate,
+  LandParcelUpdate,
+  LandStatus,
+} from "@/lib/land-types";
+import { LandParcelForm } from "./components/LandParcelForm";
+import { LandParcelMetricsPanel } from "./components/LandParcelMetricsPanel";
 import styles from "@/styles/demo-shell.module.css";
 
 // ---------------------------------------------------------------------------
@@ -69,6 +77,82 @@ function formatPerSqm(value: number | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// Shared modal shell
+// ---------------------------------------------------------------------------
+
+interface ModalShellProps {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+}
+
+function ModalShell({ title, onClose, children, wide }: ModalShellProps) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="parcel-dialog-title"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        zIndex: 1000,
+        overflowY: "auto",
+        padding: "40px 16px",
+      }}
+    >
+      <div
+        style={{
+          background: "var(--color-surface)",
+          borderRadius: 12,
+          padding: 32,
+          width: wide ? 760 : 520,
+          maxWidth: "100%",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 24,
+          }}
+        >
+          <h2
+            id="parcel-dialog-title"
+            style={{ margin: 0, fontSize: "1.125rem", fontWeight: 600 }}
+          >
+            {title}
+          </h2>
+          <button
+            type="button"
+            aria-label="Close dialog"
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "1.25rem",
+              color: "var(--color-text-muted)",
+              lineHeight: 1,
+              padding: "2px 6px",
+            }}
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Create parcel modal
 // ---------------------------------------------------------------------------
 
@@ -78,240 +162,63 @@ interface CreateParcelModalProps {
 }
 
 function CreateParcelModal({ onClose, onCreated }: CreateParcelModalProps) {
-  const [parcelName, setParcelName] = useState("");
-  const [parcelCode, setParcelCode] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [landAreaSqm, setLandAreaSqm] = useState("");
-  const [zoningCategory, setZoningCategory] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!parcelName.trim() || !parcelCode.trim()) {
-        setError("Parcel name and code are required.");
-        return;
-      }
-      setSubmitting(true);
-      setError(null);
-      const data: LandParcelCreate = {
-        parcel_name: parcelName.trim(),
-        parcel_code: parcelCode.trim(),
-        city: city.trim() || null,
-        country: country.trim() || null,
-        land_area_sqm: landAreaSqm ? parseFloat(landAreaSqm) : null,
-        zoning_category: zoningCategory.trim() || null,
-      };
-      try {
-        await createLandParcel(data);
-        onCreated();
-      } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : "Failed to create land parcel.",
-        );
-      } finally {
-        setSubmitting(false);
-      }
+  const handleSave = useCallback(
+    async (data: LandParcelCreate | LandParcelUpdate) => {
+      await createLandParcel(data as LandParcelCreate);
+      onCreated();
     },
-    [parcelName, parcelCode, city, country, landAreaSqm, zoningCategory, onCreated],
+    [onCreated],
   );
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-parcel-dialog-title"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.4)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-    >
+    <ModalShell title="New Land Parcel" onClose={onClose} wide>
+      <LandParcelForm parcel={null} onSave={handleSave} onCancel={onClose} />
+    </ModalShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit parcel modal
+// ---------------------------------------------------------------------------
+
+interface EditParcelModalProps {
+  parcel: LandParcel;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
+  const [updatedParcel, setUpdatedParcel] = useState<LandParcel>(parcel);
+
+  const handleSave = useCallback(
+    async (data: LandParcelCreate | LandParcelUpdate) => {
+      const result = await updateLandParcel(parcel.id, data as LandParcelUpdate);
+      setUpdatedParcel(result);
+      onSaved();
+    },
+    [parcel.id, onSaved],
+  );
+
+  return (
+    <ModalShell title={`Edit — ${parcel.parcel_name}`} onClose={onClose} wide>
       <div
         style={{
-          background: "var(--color-surface)",
-          borderRadius: 12,
-          padding: 32,
-          width: 480,
-          maxWidth: "90vw",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+          display: "grid",
+          gridTemplateColumns: "1fr 280px",
+          gap: 24,
+          alignItems: "start",
         }}
       >
-        <h2
-          id="create-parcel-dialog-title"
-          style={{ margin: "0 0 24px", fontSize: "1.125rem", fontWeight: 600 }}
-        >
-          New Land Parcel
-        </h2>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-              Parcel Name *
-            </label>
-            <input
-              type="text"
-              value={parcelName}
-              onChange={(e) => setParcelName(e.target.value)}
-              placeholder="e.g. Al Barsha North Site"
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                border: "1px solid var(--color-border)",
-                borderRadius: 6,
-                fontSize: "0.875rem",
-                boxSizing: "border-box",
-              }}
-              required
-            />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-              Parcel Code *
-            </label>
-            <input
-              type="text"
-              value={parcelCode}
-              onChange={(e) => setParcelCode(e.target.value)}
-              placeholder="e.g. PCL-001"
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                border: "1px solid var(--color-border)",
-                borderRadius: 6,
-                fontSize: "0.875rem",
-                boxSizing: "border-box",
-              }}
-              required
-            />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-                City
-              </label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="e.g. Dubai"
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  fontSize: "0.875rem",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-                Country
-              </label>
-              <input
-                type="text"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. UAE"
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  fontSize: "0.875rem",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-                Area (m²)
-              </label>
-              <input
-                type="number"
-                value={landAreaSqm}
-                onChange={(e) => setLandAreaSqm(e.target.value)}
-                placeholder="e.g. 10000"
-                min={0.01}
-                step={0.01}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  fontSize: "0.875rem",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontSize: "0.875rem", fontWeight: 500 }}>
-                Zoning
-              </label>
-              <input
-                type="text"
-                value={zoningCategory}
-                onChange={(e) => setZoningCategory(e.target.value)}
-                placeholder="e.g. Residential"
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  fontSize: "0.875rem",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-          </div>
-          {error && (
-            <p style={{ color: "#b91c1c", fontSize: "0.875rem", marginBottom: 16 }}>
-              {error}
-            </p>
-          )}
-          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: "8px 20px",
-                border: "1px solid var(--color-border)",
-                borderRadius: 6,
-                background: "transparent",
-                cursor: "pointer",
-                fontSize: "0.875rem",
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                padding: "8px 20px",
-                border: "none",
-                borderRadius: 6,
-                background: "var(--color-primary, #2563eb)",
-                color: "#fff",
-                cursor: submitting ? "not-allowed" : "pointer",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-              }}
-            >
-              {submitting ? "Creating…" : "Create Parcel"}
-            </button>
-          </div>
-        </form>
+        <LandParcelForm
+          parcel={updatedParcel}
+          onSave={handleSave}
+          onCancel={onClose}
+        />
+        <div>
+          <LandParcelMetricsPanel parcel={updatedParcel} />
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -323,7 +230,8 @@ function CreateParcelModal({ onClose, onCreated }: CreateParcelModalProps) {
  * Land inventory page — land parcel management dashboard.
  *
  * Shows KPI summary and a table of land parcels. Supports create,
- * status update, and delete operations.
+ * edit (full structured form with grouped sections), status update,
+ * and delete operations. Computed metrics remain display-only.
  */
 export default function LandPage() {
   const [parcels, setParcels] = useState<LandParcel[]>([]);
@@ -331,6 +239,7 @@ export default function LandPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingParcel, setEditingParcel] = useState<LandParcel | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchParcels = useCallback(() => {
@@ -358,6 +267,25 @@ export default function LandPage() {
     setShowCreateModal(false);
     fetchParcels();
   }, [fetchParcels]);
+
+  const handleSaved = useCallback(() => {
+    setEditingParcel(null);
+    fetchParcels();
+  }, [fetchParcels]);
+
+  const handleEdit = useCallback(
+    async (parcelId: string) => {
+      try {
+        const fresh = await getLandParcel(parcelId);
+        setEditingParcel(fresh);
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load parcel details.",
+        );
+      }
+    },
+    [],
+  );
 
   const handleStatusChange = useCallback(
     async (parcelId: string, newStatus: LandStatus) => {
@@ -508,92 +436,139 @@ export default function LandPage() {
       {/* Parcels table */}
       {!loading && parcels.length > 0 && (
         <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Code</th>
-                  <th>Location</th>
-                  <th>Area</th>
-                  <th>Effective Basis</th>
-                  <th>Gross $/m²</th>
-                  <th>Buildable $/m²</th>
-                  <th>Zoning</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Location</th>
+                <th>Area</th>
+                <th>Effective Basis</th>
+                <th>Gross /m²</th>
+                <th>Buildable /m²</th>
+                <th>Zoning</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parcels.map((parcel) => (
+                <tr key={parcel.id}>
+                  <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
+                  <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                    {parcel.parcel_code}
+                  </td>
+                  <td>
+                    {[parcel.city, parcel.country].filter(Boolean).join(", ") || "—"}
+                  </td>
+                  <td>{formatArea(parcel.land_area_sqm)}</td>
+                  <td
+                    style={{
+                      fontWeight: 500,
+                      color:
+                        parcel.effective_land_basis != null
+                          ? "var(--color-text)"
+                          : "var(--color-text-muted)",
+                    }}
+                  >
+                    {formatCurrency(parcel.effective_land_basis, parcel.currency)}
+                  </td>
+                  <td
+                    style={{
+                      color:
+                        parcel.gross_land_price_per_sqm != null
+                          ? "var(--color-text)"
+                          : "var(--color-text-muted)",
+                    }}
+                  >
+                    {formatPerSqm(parcel.gross_land_price_per_sqm)}
+                  </td>
+                  <td
+                    style={{
+                      color:
+                        parcel.effective_land_price_per_buildable_sqm != null
+                          ? "var(--color-text)"
+                          : "var(--color-text-muted)",
+                    }}
+                  >
+                    {formatPerSqm(parcel.effective_land_price_per_buildable_sqm)}
+                  </td>
+                  <td>{parcel.zoning_category ?? "—"}</td>
+                  <td>
+                    <span
+                      className={`${styles.badge} ${statusBadgeClass(parcel.status)}`}
+                    >
+                      {formatStatus(parcel.status)}
+                    </span>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      {/* Quick status change */}
+                      <select
+                        value={parcel.status}
+                        onChange={(e) =>
+                          handleStatusChange(
+                            parcel.id,
+                            e.target.value as LandStatus,
+                          )
+                        }
+                        style={{
+                          padding: "4px 8px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          fontSize: "0.8rem",
+                          background: "var(--color-surface)",
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Change status for ${parcel.parcel_name}`}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="under_review">Under Review</option>
+                        <option value="approved">Approved</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                      {/* Edit button */}
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(parcel.id)}
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                          color: "var(--color-text)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`Edit ${parcel.parcel_name}`}
+                      >
+                        Edit
+                      </button>
+                      {/* Delete button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(parcel.id)}
+                        disabled={deletingId === parcel.id}
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid #fca5a5",
+                          borderRadius: 4,
+                          background: "#fef2f2",
+                          color: "#b91c1c",
+                          cursor:
+                            deletingId === parcel.id ? "not-allowed" : "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`Delete ${parcel.parcel_name}`}
+                      >
+                        {deletingId === parcel.id ? "…" : "Delete"}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {parcels.map((parcel) => (
-                  <tr key={parcel.id}>
-                    <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                      {parcel.parcel_code}
-                    </td>
-                    <td>
-                      {[parcel.city, parcel.country].filter(Boolean).join(", ") || "—"}
-                    </td>
-                    <td>{formatArea(parcel.land_area_sqm)}</td>
-                    <td style={{ fontWeight: 500, color: parcel.effective_land_basis != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
-                      {formatCurrency(parcel.effective_land_basis)}
-                    </td>
-                    <td style={{ color: parcel.gross_land_price_per_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
-                      {formatPerSqm(parcel.gross_land_price_per_sqm)}
-                    </td>
-                    <td style={{ color: parcel.effective_land_price_per_buildable_sqm != null ? "var(--color-text)" : "var(--color-text-muted)" }}>
-                      {formatPerSqm(parcel.effective_land_price_per_buildable_sqm)}
-                    </td>
-                    <td>{parcel.zoning_category ?? "—"}</td>
-                    <td>
-                      <span className={`${styles.badge} ${statusBadgeClass(parcel.status)}`}>
-                        {formatStatus(parcel.status)}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <select
-                          value={parcel.status}
-                          onChange={(e) =>
-                            handleStatusChange(parcel.id, e.target.value as LandStatus)
-                          }
-                          style={{
-                            padding: "4px 8px",
-                            border: "1px solid var(--color-border)",
-                            borderRadius: 4,
-                            fontSize: "0.8rem",
-                            background: "var(--color-surface)",
-                            cursor: "pointer",
-                          }}
-                          aria-label={`Change status for ${parcel.parcel_name}`}
-                        >
-                          <option value="draft">Draft</option>
-                          <option value="under_review">Under Review</option>
-                          <option value="approved">Approved</option>
-                          <option value="archived">Archived</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(parcel.id)}
-                          disabled={deletingId === parcel.id}
-                          style={{
-                            padding: "4px 10px",
-                            border: "1px solid #fca5a5",
-                            borderRadius: 4,
-                            background: "#fef2f2",
-                            color: "#b91c1c",
-                            cursor: deletingId === parcel.id ? "not-allowed" : "pointer",
-                            fontSize: "0.8rem",
-                          }}
-                          aria-label={`Delete ${parcel.parcel_name}`}
-                        >
-                          {deletingId === parcel.id ? "…" : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -602,6 +577,15 @@ export default function LandPage() {
         <CreateParcelModal
           onClose={() => setShowCreateModal(false)}
           onCreated={handleCreated}
+        />
+      )}
+
+      {/* Edit modal */}
+      {editingParcel && (
+        <EditParcelModal
+          parcel={editingParcel}
+          onClose={() => setEditingParcel(null)}
+          onSaved={handleSaved}
         />
       )}
     </PageContainer>
