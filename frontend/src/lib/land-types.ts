@@ -25,6 +25,12 @@ export interface LandParcel {
   land_area_sqm: number | null;
   frontage_m: number | null;
   depth_m: number | null;
+  buildable_area_sqm: number | null;
+  sellable_area_sqm: number | null;
+  acquisition_price: number | null;
+  transaction_cost: number | null;
+  asking_price_per_sqm: number | null;
+  supported_price_per_sqm: number | null;
   zoning_category: string | null;
   permitted_far: number | null;
   max_height_m: number | null;
@@ -34,6 +40,15 @@ export interface LandParcel {
   status: LandStatus;
   created_at: string;
   updated_at: string;
+  // Computed land basis metrics (server-derived — read-only)
+  effective_land_basis: number | null;
+  gross_land_price_per_sqm: number | null;
+  effective_land_price_per_gross_sqm: number | null;
+  effective_land_price_per_buildable_sqm: number | null;
+  effective_land_price_per_sellable_sqm: number | null;
+  supported_acquisition_price: number | null;
+  residual_land_value: number | null;
+  margin_impact: number | null;
 }
 
 export interface LandParcelList {

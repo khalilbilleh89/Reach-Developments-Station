@@ -5,13 +5,19 @@ Business logic for the Land Underwriting domain.
 Handles validation, derived area calculations, and valuation computations.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.calculation_engine.registry import calculate_buildable_area, calculate_sellable_area
+from app.core.calculation_engine.registry import (
+    LandInputs,
+    calculate_buildable_area,
+    calculate_land_underwriting_metrics,
+    calculate_sellable_area,
+)
+from app.modules.land.models import LandParcel
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
 from app.modules.land.schemas import (
     LandAssumptionCreate,
@@ -33,6 +39,73 @@ class LandService:
         self.assumptions_repo = LandAssumptionsRepository(db)
         self.valuation_repo = LandValuationRepository(db)
         self.project_repo = ProjectRepository(db)
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _compute_parcel_metrics(self, parcel: LandParcel) -> Dict[str, Optional[float]]:
+        """Compute land basis metrics from parcel fields via Calculation Engine.
+
+        Always-computable metrics (when acquisition_price is available):
+          effective_land_basis, gross_land_price_per_sqm,
+          effective_land_price_per_gross_sqm, effective_land_price_per_buildable_sqm,
+          effective_land_price_per_sellable_sqm.
+
+        Conditionally-computable metrics (from latest engine valuation if available):
+          supported_acquisition_price, residual_land_value, margin_impact.
+
+        Returns null for any metric whose required inputs are absent.
+        """
+        if parcel.acquisition_price is None:
+            return {}
+
+        acquisition_price = float(parcel.acquisition_price)
+        transaction_cost = float(parcel.transaction_cost) if parcel.transaction_cost is not None else 0.0
+        land_area_sqm = float(parcel.land_area_sqm) if parcel.land_area_sqm is not None else 0.0
+        buildable_area_sqm = float(parcel.buildable_area_sqm) if parcel.buildable_area_sqm is not None else 0.0
+        sellable_area_sqm = float(parcel.sellable_area_sqm) if parcel.sellable_area_sqm is not None else 0.0
+
+        inputs = LandInputs(
+            land_area_sqm=land_area_sqm,
+            acquisition_price=acquisition_price,
+            buildable_area_sqm=buildable_area_sqm,
+            sellable_area_sqm=sellable_area_sqm,
+            gdv=0.0,
+            total_development_cost=0.0,
+            developer_margin_target=0.0,
+            transaction_cost=transaction_cost,
+        )
+        outputs = calculate_land_underwriting_metrics(inputs)
+
+        metrics: Dict[str, Optional[float]] = {
+            "effective_land_basis": outputs.effective_land_basis,
+            "gross_land_price_per_sqm": outputs.land_price_per_sqm if land_area_sqm > 0 else None,
+            "effective_land_price_per_gross_sqm": outputs.effective_land_price_per_gross_sqm if land_area_sqm > 0 else None,
+            "effective_land_price_per_buildable_sqm": outputs.effective_land_price_per_buildable_sqm if buildable_area_sqm > 0 else None,
+            "effective_land_price_per_sellable_sqm": outputs.effective_land_price_per_sellable_sqm if sellable_area_sqm > 0 else None,
+        }
+
+        # Enrich with residual metrics from the latest engine valuation if available
+        valuations = self.valuation_repo.list_by_parcel(parcel.id)
+        if valuations:
+            # Use the most recently created valuation that has engine-computed RLV data
+            engine_valuations = [v for v in valuations if v.max_land_bid is not None]
+            if engine_valuations:
+                latest = engine_valuations[-1]
+                metrics["supported_acquisition_price"] = float(latest.max_land_bid) if latest.max_land_bid is not None else None
+                metrics["residual_land_value"] = float(latest.residual_land_value) if latest.residual_land_value is not None else None
+                metrics["margin_impact"] = float(latest.residual_margin) if latest.residual_margin is not None else None
+
+        return metrics
+
+    def _build_parcel_response(self, parcel: LandParcel) -> LandParcelResponse:
+        """Build a LandParcelResponse enriched with computed basis metrics."""
+        response = LandParcelResponse.model_validate(parcel)
+        metrics = self._compute_parcel_metrics(parcel)
+        if metrics:
+            return response.model_copy(update=metrics)
+        return response
 
     # ------------------------------------------------------------------
     # Parcel operations
@@ -71,7 +144,7 @@ class LandService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=detail,
             )
-        return LandParcelResponse.model_validate(parcel)
+        return self._build_parcel_response(parcel)
 
     def get_parcel(self, parcel_id: str) -> LandParcelResponse:
         parcel = self.parcel_repo.get_by_id(parcel_id)
@@ -80,13 +153,13 @@ class LandService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Land parcel '{parcel_id}' not found.",
             )
-        return LandParcelResponse.model_validate(parcel)
+        return self._build_parcel_response(parcel)
 
     def list_parcels(self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100) -> LandParcelList:
         parcels = self.parcel_repo.list(project_id=project_id, skip=skip, limit=limit)
         total = self.parcel_repo.count(project_id=project_id)
         return LandParcelList(
-            items=[LandParcelResponse.model_validate(p) for p in parcels],
+            items=[self._build_parcel_response(p) for p in parcels],
             total=total,
         )
 
@@ -98,7 +171,7 @@ class LandService:
                 detail=f"Land parcel '{parcel_id}' not found.",
             )
         updated = self.parcel_repo.update(parcel, data)
-        return LandParcelResponse.model_validate(updated)
+        return self._build_parcel_response(updated)
 
     def delete_parcel(self, parcel_id: str) -> None:
         parcel = self.parcel_repo.get_by_id(parcel_id)
@@ -130,7 +203,7 @@ class LandService:
             )
         # Already assigned to the target project — idempotent success
         if parcel.project_id == project_id:
-            return LandParcelResponse.model_validate(parcel)
+            return self._build_parcel_response(parcel)
         # Check for code conflict within target project
         existing = self.parcel_repo.get_by_project_and_code(project_id, parcel.parcel_code)
         if existing:
@@ -149,7 +222,7 @@ class LandService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"A parcel with code '{parcel.parcel_code}' already exists in project '{project_id}'.",
             )
-        return LandParcelResponse.model_validate(parcel)
+        return self._build_parcel_response(parcel)
 
     # ------------------------------------------------------------------
     # Assumptions operations

@@ -153,6 +153,15 @@ class LandParcelResponse(BaseModel):
     status: LandParcelStatus
     created_at: datetime
     updated_at: datetime
+    # Computed land basis metrics (derived — never client-supplied)
+    effective_land_basis: Optional[float] = None
+    gross_land_price_per_sqm: Optional[float] = None
+    effective_land_price_per_gross_sqm: Optional[float] = None
+    effective_land_price_per_buildable_sqm: Optional[float] = None
+    effective_land_price_per_sellable_sqm: Optional[float] = None
+    supported_acquisition_price: Optional[float] = None
+    residual_land_value: Optional[float] = None
+    margin_impact: Optional[float] = None
 
     model_config = {"from_attributes": True}
 

@@ -7,6 +7,8 @@ Covers:
 - Land price per sqm (acquisition basis).
 - Land price per buildable sqm.
 - Land price per sellable sqm.
+- Effective land basis (acquisition price + transaction costs).
+- Effective land price per gross / buildable / sellable sqm.
 - Residual Land Value (RLV).
 - Maximum supported acquisition price.
 - Margin impact of the land basis.
@@ -61,6 +63,19 @@ def calculate_land_price_per_sellable_sqm(
     if sellable_area_sqm <= 0.0:
         return 0.0
     return acquisition_price / sellable_area_sqm
+
+
+def calculate_effective_land_basis(
+    acquisition_price: float,
+    transaction_cost: float,
+) -> float:
+    """Effective land basis = acquisition price + transaction costs.
+
+    Transaction costs include stamp duty, legal fees, agent commissions,
+    and any other costs directly attributable to the land acquisition.
+    The effective basis reflects the true all-in cost of the land position.
+    """
+    return acquisition_price + transaction_cost
 
 
 def calculate_residual_land_value(
@@ -119,6 +134,7 @@ def run_land_calculations(inputs: LandInputs) -> LandOutputs:
     LandOutputs
         All derived land underwriting metrics.
     """
+    # Acquisition-basis metrics
     land_price_per_sqm = calculate_land_price_per_sqm(
         inputs.acquisition_price, inputs.land_area_sqm
     )
@@ -128,6 +144,22 @@ def run_land_calculations(inputs: LandInputs) -> LandOutputs:
     land_price_per_sellable_sqm = calculate_land_price_per_sellable_sqm(
         inputs.acquisition_price, inputs.sellable_area_sqm
     )
+
+    # Effective-basis metrics (includes transaction cost)
+    effective_basis = calculate_effective_land_basis(
+        inputs.acquisition_price, inputs.transaction_cost
+    )
+    effective_land_price_per_gross_sqm = calculate_land_price_per_sqm(
+        effective_basis, inputs.land_area_sqm
+    )
+    effective_land_price_per_buildable_sqm = calculate_land_price_per_buildable_sqm(
+        effective_basis, inputs.buildable_area_sqm
+    )
+    effective_land_price_per_sellable_sqm = calculate_land_price_per_sellable_sqm(
+        effective_basis, inputs.sellable_area_sqm
+    )
+
+    # Residual / margin metrics
     rlv = calculate_residual_land_value(
         inputs.gdv,
         inputs.total_development_cost,
@@ -139,6 +171,10 @@ def run_land_calculations(inputs: LandInputs) -> LandOutputs:
         land_price_per_sqm=land_price_per_sqm,
         land_price_per_buildable_sqm=land_price_per_buildable_sqm,
         land_price_per_sellable_sqm=land_price_per_sellable_sqm,
+        effective_land_basis=effective_basis,
+        effective_land_price_per_gross_sqm=effective_land_price_per_gross_sqm,
+        effective_land_price_per_buildable_sqm=effective_land_price_per_buildable_sqm,
+        effective_land_price_per_sellable_sqm=effective_land_price_per_sellable_sqm,
         residual_land_value=rlv,
         max_supported_acquisition_price=rlv,
         margin_impact=margin_impact,
