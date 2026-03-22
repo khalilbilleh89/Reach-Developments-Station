@@ -9,12 +9,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def _create_project(client: TestClient, code: str = "PRJ-EXP") -> str:
-    resp = client.post("/api/v1/projects", json={"name": "Expanded Land Test Project", "code": code})
-    assert resp.status_code == 201
-    return resp.json()["id"]
-
-
 def _minimal_parcel(client: TestClient, code: str = "PCL-EXP-001") -> dict:
     """Create a standalone parcel with minimum required fields and return response body."""
     resp = client.post(
