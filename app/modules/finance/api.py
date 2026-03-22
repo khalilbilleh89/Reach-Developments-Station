@@ -396,7 +396,6 @@ def get_analytics_dashboard_service(
 )
 def get_portfolio_analytics(
     service: Annotated[AnalyticsDashboardService, Depends(get_analytics_dashboard_service)],
-    _: Annotated[dict, Depends(get_current_user_payload)],
 ) -> PortfolioAnalyticsResponse:
     """Return the portfolio analytics dashboard.
 
@@ -435,7 +434,6 @@ def get_project_financial_dashboard(
         ProjectFinancialDashboardService,
         Depends(get_project_financial_dashboard_service),
     ],
-    _: Annotated[dict, Depends(get_current_user_payload)],
 ) -> ProjectFinancialDashboardResponse:
     """Return the full financial dashboard for a single project.
 
@@ -471,7 +469,6 @@ def get_risk_alert_engine(
 )
 def get_portfolio_risk_alerts(
     service: Annotated[FinancialRiskAlertEngine, Depends(get_risk_alert_engine)],
-    _: Annotated[dict, Depends(get_current_user_payload)],
 ) -> PortfolioRiskResponse:
     """Return financial risk alerts for the entire portfolio.
 
@@ -495,7 +492,6 @@ def get_portfolio_risk_alerts(
 def get_project_risk_alerts(
     project_id: str,
     service: Annotated[FinancialRiskAlertEngine, Depends(get_risk_alert_engine)],
-    _: Annotated[dict, Depends(get_current_user_payload)],
 ) -> list[ProjectRiskAlert]:
     """Return financial risk alerts for a single project.
 

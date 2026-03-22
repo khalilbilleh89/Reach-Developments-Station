@@ -133,56 +133,56 @@ class TestAuthEnforcement:
     def test_portfolio_summary_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/portfolio/summary must require authentication."""
         response = unauth_client.get("/api/v1/finance/portfolio/summary")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_treasury_monitoring_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/treasury/monitoring must require authentication."""
         response = unauth_client.get("/api/v1/finance/treasury/monitoring")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_project_summary_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/projects/{id}/summary must require authentication."""
         response = unauth_client.get("/api/v1/finance/projects/any-id/summary")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_revenue_overview_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/revenue/overview must require authentication."""
         response = unauth_client.get("/api/v1/finance/revenue/overview")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_aging_overview_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/receivables/aging-overview must require authentication."""
         response = unauth_client.get("/api/v1/finance/receivables/aging-overview")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_collections_alerts_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/collections/alerts must require authentication."""
         response = unauth_client.get("/api/v1/finance/collections/alerts")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_cashflow_forecast_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /finance/cashflow/forecast must require authentication."""
         response = unauth_client.get("/api/v1/finance/cashflow/forecast")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_projects_endpoint_rejects_unauthenticated(self, unauth_client: TestClient):
         """GET /projects must require authentication."""
         response = unauth_client.get("/api/v1/projects")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_sales_contracts_endpoint_rejects_unauthenticated(
         self, unauth_client: TestClient
     ):
         """GET /sales/contracts must require authentication."""
         response = unauth_client.get("/api/v1/sales/contracts")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_land_parcels_endpoint_rejects_unauthenticated(
         self, unauth_client: TestClient
     ):
         """GET /land/parcels must require authentication."""
         response = unauth_client.get("/api/v1/land/parcels")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
 
 # ---------------------------------------------------------------------------

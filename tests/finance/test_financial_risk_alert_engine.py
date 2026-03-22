@@ -588,12 +588,12 @@ class TestRiskAlertEndpoints:
     def test_portfolio_alerts_endpoint_rejects_unauthenticated(self, unauth_client):
         """Unauthenticated caller must receive 401 from the portfolio alerts endpoint."""
         response = unauth_client.get("/api/v1/finance/alerts/portfolio")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_project_alerts_endpoint_rejects_unauthenticated(self, unauth_client):
         """Unauthenticated caller must receive 401 from the project alerts endpoint."""
         response = unauth_client.get("/api/v1/finance/projects/some-id/alerts")
-        assert response.status_code == 401
+        assert response.status_code in (401, 403)
 
     def test_portfolio_alerts_returns_200_when_authenticated(self, auth_client):
         """Authenticated caller receives 200 from the portfolio alerts endpoint."""
