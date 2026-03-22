@@ -8,9 +8,6 @@ serialised API values that existing modules depend on.
 
 import importlib
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Import smoke tests — each sub-module must import without error
 # ---------------------------------------------------------------------------
