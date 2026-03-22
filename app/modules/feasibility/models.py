@@ -15,7 +15,7 @@ from sqlalchemy import ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.finance import FeasibilityScenarioType
+from app.shared.enums.finance import FeasibilityDecision, FeasibilityRiskLevel, FeasibilityScenarioType, FeasibilityViabilityStatus
 
 if TYPE_CHECKING:
     from app.modules.projects.models import Project
@@ -32,6 +32,9 @@ class FeasibilityRun(Base, TimestampMixin):
 
     project_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    scenario_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("scenarios.id", ondelete="SET NULL"), nullable=True, index=True
     )
     scenario_name: Mapped[str] = mapped_column(String(255), nullable=False)
     scenario_type: Mapped[str] = mapped_column(
@@ -98,6 +101,11 @@ class FeasibilityResult(Base, TimestampMixin):
     break_even_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     break_even_units: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
     scenario_outputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    viability_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    risk_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    decision: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    payback_period: Mapped[Optional[float]] = mapped_column(Numeric(10, 4), nullable=True)
 
     run: Mapped["FeasibilityRun"] = relationship("FeasibilityRun", back_populates="result")
 

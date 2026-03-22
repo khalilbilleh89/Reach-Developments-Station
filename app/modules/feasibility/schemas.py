@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.shared.enums.finance import FeasibilityScenarioType
+from app.shared.enums.finance import FeasibilityDecision, FeasibilityRiskLevel, FeasibilityScenarioType, FeasibilityViabilityStatus
 
 
 # ---------------------------------------------------------------------------
@@ -18,6 +18,7 @@ from app.shared.enums.finance import FeasibilityScenarioType
 
 class FeasibilityRunCreate(BaseModel):
     project_id: Optional[str] = None
+    scenario_id: Optional[str] = None
     scenario_name: str = Field(..., min_length=1, max_length=255)
     scenario_type: FeasibilityScenarioType = FeasibilityScenarioType.BASE
     notes: Optional[str] = None
@@ -32,6 +33,7 @@ class FeasibilityRunUpdate(BaseModel):
 class FeasibilityRunResponse(BaseModel):
     id: str
     project_id: Optional[str]
+    scenario_id: Optional[str]
     scenario_name: str
     scenario_type: FeasibilityScenarioType
     notes: Optional[str]
@@ -110,8 +112,33 @@ class FeasibilityResultResponse(BaseModel):
     break_even_price: Optional[float]
     break_even_units: Optional[float]
     scenario_outputs: Optional[dict]
+    viability_status: Optional[FeasibilityViabilityStatus]
+    risk_level: Optional[FeasibilityRiskLevel]
+    decision: Optional[FeasibilityDecision]
+    payback_period: Optional[float]
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Convenience endpoint schemas
+# ---------------------------------------------------------------------------
+
+class FeasibilityRunRequest(BaseModel):
+    """Payload for the convenience POST /feasibility/run endpoint."""
+
+    project_id: Optional[str] = None
+    scenario_id: Optional[str] = None
+    scenario_name: str = Field("Auto Run", min_length=1, max_length=255)
+    scenario_type: FeasibilityScenarioType = FeasibilityScenarioType.BASE
+    sellable_area_sqm: float = Field(..., gt=0)
+    avg_sale_price_per_sqm: float = Field(..., gt=0)
+    construction_cost_per_sqm: float = Field(..., gt=0)
+    soft_cost_ratio: float = Field(..., ge=0, le=1)
+    finance_cost_ratio: float = Field(..., ge=0, le=1)
+    sales_cost_ratio: float = Field(..., ge=0, le=1)
+    development_period_months: int = Field(..., ge=1)
+    notes: Optional[str] = None
 

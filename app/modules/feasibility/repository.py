@@ -24,6 +24,7 @@ class FeasibilityRunRepository:
     def create(self, data: FeasibilityRunCreate) -> FeasibilityRun:
         run = FeasibilityRun(
             project_id=data.project_id,
+            scenario_id=data.scenario_id,
             scenario_name=data.scenario_name,
             scenario_type=data.scenario_type.value,
             notes=data.notes,
@@ -122,6 +123,10 @@ class FeasibilityResultRepository:
         break_even_price: float,
         break_even_units: float,
         scenario_outputs: dict,
+        viability_status: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        decision: Optional[str] = None,
+        payback_period: Optional[float] = None,
     ) -> FeasibilityResult:
         """Create or replace the result for a run (one result per run)."""
         existing = self.get_by_run(run_id)
@@ -140,6 +145,10 @@ class FeasibilityResultRepository:
             existing.break_even_price = break_even_price
             existing.break_even_units = break_even_units
             existing.scenario_outputs = scenario_outputs
+            existing.viability_status = viability_status
+            existing.risk_level = risk_level
+            existing.decision = decision
+            existing.payback_period = payback_period
             self.db.commit()
             self.db.refresh(existing)
             return existing
@@ -159,6 +168,10 @@ class FeasibilityResultRepository:
             break_even_price=break_even_price,
             break_even_units=break_even_units,
             scenario_outputs=scenario_outputs,
+            viability_status=viability_status,
+            risk_level=risk_level,
+            decision=decision,
+            payback_period=payback_period,
         )
         self.db.add(result)
         self.db.commit()
