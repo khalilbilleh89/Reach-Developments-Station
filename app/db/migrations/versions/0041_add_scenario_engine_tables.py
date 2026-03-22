@@ -67,7 +67,7 @@ def upgrade() -> None:
             nullable=True,
             index=True,
         ),
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column("notes", sa.Text, nullable=True),
         sa.Column(
             "created_at",
@@ -102,7 +102,7 @@ def upgrade() -> None:
         sa.Column("assumptions_json", sa.JSON, nullable=True),
         sa.Column("comparison_metrics_json", sa.JSON, nullable=True),
         sa.Column("created_by", sa.String(255), nullable=True),
-        sa.Column("is_approved", sa.Boolean, nullable=False, server_default=sa.text("0")),
+        sa.Column("is_approved", sa.Boolean, nullable=False, server_default=sa.text("false")),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
