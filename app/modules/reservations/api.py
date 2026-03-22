@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.reservations.schemas import (
     ReservationCreate,
     ReservationListResponse,
@@ -25,7 +26,7 @@ from app.modules.reservations.schemas import (
 )
 from app.modules.reservations.service import ReservationService
 
-router = APIRouter(tags=["reservations"])
+router = APIRouter(tags=["reservations"], dependencies=[Depends(get_current_user_payload)])
 
 
 def _svc(db: Session = Depends(get_db)) -> ReservationService:

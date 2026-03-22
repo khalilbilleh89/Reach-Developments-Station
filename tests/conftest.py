@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.dependencies import get_db
 from app.db.base import Base
+from app.modules.auth.security import get_current_user_payload
 
 # Import all models so SQLAlchemy registers them with Base.metadata
 import app.modules.projects.models  # noqa: F401  (also registers ProjectAttributeDefinition/Option)
@@ -62,7 +63,27 @@ def db_session():
 
 @pytest.fixture(scope="function")
 def client(db_session):
-    """TestClient that injects the in-memory test database session."""
+    """TestClient that injects the in-memory test database session and a mock authenticated user."""
+
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    def override_get_current_user_payload():
+        return {"sub": "test-user", "roles": ["admin"]}
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_payload] = override_get_current_user_payload
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def unauth_client(db_session):
+    """TestClient without authentication, for testing 401/403 rejection."""
 
     def override_get_db():
         try:

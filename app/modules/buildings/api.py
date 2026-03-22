@@ -15,10 +15,11 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.buildings.schemas import BuildingCreateForPhase, BuildingList, BuildingResponse, BuildingUpdate
 from app.modules.buildings.service import BuildingService
 
-router = APIRouter(tags=["buildings"])
+router = APIRouter(tags=["buildings"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> BuildingService:

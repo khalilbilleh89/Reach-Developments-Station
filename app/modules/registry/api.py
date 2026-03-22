@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.registry.schemas import (
     RegistrationCaseCreate,
     RegistrationCaseListResponse,
@@ -36,7 +37,7 @@ from app.modules.registry.schemas import (
 )
 from app.modules.registry.service import RegistryService
 
-router = APIRouter(prefix="/registry", tags=["Registry"])
+router = APIRouter(prefix="/registry", tags=["Registry"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> RegistryService:
@@ -190,6 +191,7 @@ legacy_router = APIRouter(
     prefix="/registration",
     tags=["Registry"],
     include_in_schema=False,
+    dependencies=[Depends(get_current_user_payload)],
 )
 
 legacy_router.add_api_route(

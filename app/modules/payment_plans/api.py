@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.payment_plans.schemas import (
     PaymentPlanCreate,
     PaymentPlanGenerateRequest,
@@ -47,7 +48,7 @@ from app.modules.payment_plans.schemas import (
 )
 from app.modules.payment_plans.service import PaymentPlanService
 
-router = APIRouter(prefix="/payment-plans", tags=["Payment Plans"])
+router = APIRouter(prefix="/payment-plans", tags=["Payment Plans"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> PaymentPlanService:

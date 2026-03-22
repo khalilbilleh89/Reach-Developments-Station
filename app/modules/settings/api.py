@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.settings.schemas import (
     CommissionPolicyCreate,
     CommissionPolicyList,
@@ -47,7 +48,7 @@ from app.modules.settings.schemas import (
 )
 from app.modules.settings.service import SettingsService
 
-router = APIRouter(prefix="/settings", tags=["Settings"])
+router = APIRouter(prefix="/settings", tags=["Settings"], dependencies=[Depends(get_current_user_payload)])
 
 DbDep = Annotated[Session, Depends(get_db)]
 

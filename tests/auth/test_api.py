@@ -86,14 +86,14 @@ def test_login_unknown_email_returns_401(client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-def test_me_returns_user_profile(client: TestClient):
-    reg_resp = client.post(
+def test_me_returns_user_profile(unauth_client: TestClient):
+    reg_resp = unauth_client.post(
         "/api/v1/auth/register",
         json={"email": "me@example.com", "password": "password123"},
     )
     token = reg_resp.json()["access_token"]
 
-    resp = client.get(
+    resp = unauth_client.get(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -105,13 +105,13 @@ def test_me_returns_user_profile(client: TestClient):
     assert "roles" in data
 
 
-def test_me_without_token_returns_401(client: TestClient):
-    resp = client.get("/api/v1/auth/me")
+def test_me_without_token_returns_401(unauth_client: TestClient):
+    resp = unauth_client.get("/api/v1/auth/me")
     assert resp.status_code in (401, 403)
 
 
-def test_me_with_invalid_token_returns_401(client: TestClient):
-    resp = client.get(
+def test_me_with_invalid_token_returns_401(unauth_client: TestClient):
+    resp = unauth_client.get(
         "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalidtoken"},
     )

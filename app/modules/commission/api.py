@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.commission.schemas import (
     CommissionPayoutListResponse,
     CommissionPayoutRequest,
@@ -41,7 +42,7 @@ from app.modules.commission.schemas import (
 )
 from app.modules.commission.service import CommissionService
 
-router = APIRouter(prefix="/commission", tags=["commission"])
+router = APIRouter(prefix="/commission", tags=["commission"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> CommissionService:

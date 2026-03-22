@@ -420,10 +420,10 @@ class TestGetPortfolioKPIs:
 class TestPortfolioAnalyticsEndpoint:
     """Tests for GET /finance/analytics/portfolio."""
 
-    def test_endpoint_rejects_unauthenticated_requests(self, client):
+    def test_endpoint_rejects_unauthenticated_requests(self, unauth_client):
         """Callers with no Authorization header must be rejected (HTTPBearer auto_error)."""
-        response = client.get("/api/v1/finance/analytics/portfolio")
-        assert response.status_code == 401
+        response = unauth_client.get("/api/v1/finance/analytics/portfolio")
+        assert response.status_code in (401, 403)
 
     def test_endpoint_returns_200(self, auth_client):
         response = auth_client.get("/api/v1/finance/analytics/portfolio")

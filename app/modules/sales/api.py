@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.sales.schemas import (
     BuyerCreate,
     BuyerListResponse,
@@ -29,7 +30,7 @@ from app.modules.sales.schemas import (
 )
 from app.modules.sales.service import ContractPaymentService, SalesService
 
-router = APIRouter(prefix="/sales", tags=["Sales"])
+router = APIRouter(prefix="/sales", tags=["Sales"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> SalesService:

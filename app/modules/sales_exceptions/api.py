@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.sales_exceptions.schemas import (
     SalesExceptionApproval,
     SalesExceptionCreate,
@@ -34,7 +35,7 @@ from app.modules.sales_exceptions.schemas import (
 )
 from app.modules.sales_exceptions.service import SalesExceptionService
 
-router = APIRouter(prefix="/sales-exceptions", tags=["sales-exceptions"])
+router = APIRouter(prefix="/sales-exceptions", tags=["sales-exceptions"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> SalesExceptionService:

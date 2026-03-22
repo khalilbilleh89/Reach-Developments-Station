@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
 from app.modules.projects.schemas import (
     AttributeDefinitionCreate,
     AttributeDefinitionList,
@@ -28,7 +29,7 @@ from app.modules.projects.schemas import (
 from app.modules.projects.service import ProjectService
 from app.shared.enums.project import ProjectStatus
 
-router = APIRouter(prefix="/projects", tags=["Projects"])
+router = APIRouter(prefix="/projects", tags=["Projects"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> ProjectService:
