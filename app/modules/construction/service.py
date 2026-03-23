@@ -24,11 +24,13 @@ from app.core.errors import ValidationError as DomainValidationError
 from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
+    ConstructionContractorRepository,
     ConstructionCostItemRepository,
     ConstructionDashboardRepository,
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
     ConstructionMilestoneDependencyRepository,
+    ConstructionProcurementPackageRepository,
     ConstructionProgressUpdateRepository,
     ConstructionScopeRepository,
 )
@@ -49,6 +51,10 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    ContractorCreate,
+    ContractorList,
+    ContractorResponse,
+    ContractorUpdate,
     CriticalPathResponse,
     EngineeringItemCreate,
     EngineeringItemList,
@@ -62,6 +68,12 @@ from app.modules.construction.schemas import (
     MilestoneProgressRow,
     MilestoneProgressUpdate,
     MilestoneVarianceRow,
+    PackageAssignContractorRequest,
+    ProcurementOverviewResponse,
+    ProcurementPackageCreate,
+    ProcurementPackageList,
+    ProcurementPackageResponse,
+    ProcurementPackageUpdate,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
@@ -84,6 +96,8 @@ class ConstructionService:
         self.cost_repo = ConstructionCostItemRepository(db)
         self.dashboard_repo = ConstructionDashboardRepository(db)
         self.dependency_repo = ConstructionMilestoneDependencyRepository(db)
+        self.contractor_repo = ConstructionContractorRepository(db)
+        self.package_repo = ConstructionProcurementPackageRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -1091,5 +1105,244 @@ class ConstructionService:
             project_cost_variance=result.project_cost_variance,
             project_overrun_percent=result.project_overrun_percent,
             milestones=milestone_rows,
+        )
+
+    # ── Contractor operations (PR-CONSTR-043) ────────────────────────────────
+
+    def create_contractor(self, data: ContractorCreate) -> ContractorResponse:
+        """Create a contractor record after rejecting duplicate codes."""
+        existing = self.contractor_repo.get_by_code(data.contractor_code)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Contractor with code '{data.contractor_code}' already exists."
+                ),
+            )
+        try:
+            contractor = self.contractor_repo.create(data)
+        except IntegrityError:
+            self.contractor_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Contractor with code '{data.contractor_code}' already exists."
+                ),
+            )
+        return ContractorResponse.model_validate(contractor)
+
+    def list_contractors(self, skip: int = 0, limit: int = 100) -> ContractorList:
+        """Return a paginated list of contractors."""
+        contractors = self.contractor_repo.list(skip=skip, limit=limit)
+        total = self.contractor_repo.count()
+        return ContractorList(
+            items=[ContractorResponse.model_validate(c) for c in contractors],
+            total=total,
+        )
+
+    def get_contractor(self, contractor_id: str) -> ContractorResponse:
+        """Return a single contractor or raise 404."""
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+        return ContractorResponse.model_validate(contractor)
+
+    def update_contractor(
+        self, contractor_id: str, data: ContractorUpdate
+    ) -> ContractorResponse:
+        """Update a contractor record."""
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+        contractor = self.contractor_repo.update(contractor, data)
+        return ContractorResponse.model_validate(contractor)
+
+    def delete_contractor(self, contractor_id: str) -> None:
+        """Delete a contractor record."""
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+        self.contractor_repo.delete(contractor)
+
+    # ── Procurement package operations (PR-CONSTR-043) ───────────────────────
+
+    def create_procurement_package(
+        self, data: ProcurementPackageCreate
+    ) -> ProcurementPackageResponse:
+        """Create a procurement package after validating scope and uniqueness."""
+        scope = self.scope_repo.get_by_id(data.scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{data.scope_id}' not found.",
+            )
+        existing = self.package_repo.get_by_scope_and_code(
+            data.scope_id, data.package_code
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Procurement package with code '{data.package_code}' "
+                    f"already exists in scope '{data.scope_id}'."
+                ),
+            )
+        if data.contractor_id is not None:
+            contractor = self.contractor_repo.get_by_id(data.contractor_id)
+            if not contractor:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Contractor '{data.contractor_id}' not found.",
+                )
+        try:
+            package = self.package_repo.create(data)
+        except IntegrityError:
+            self.package_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Procurement package with code '{data.package_code}' "
+                    f"already exists in scope '{data.scope_id}'."
+                ),
+            )
+        return ProcurementPackageResponse.model_validate(package)
+
+    def list_procurement_packages(
+        self, scope_id: str, skip: int = 0, limit: int = 100
+    ) -> ProcurementPackageList:
+        """Return paginated procurement packages for a scope."""
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        packages = self.package_repo.list_for_scope(
+            scope_id, skip=skip, limit=limit
+        )
+        total = self.package_repo.count_for_scope(scope_id)
+        return ProcurementPackageList(
+            items=[ProcurementPackageResponse.model_validate(p) for p in packages],
+            total=total,
+        )
+
+    def get_procurement_package(self, package_id: str) -> ProcurementPackageResponse:
+        """Return a single procurement package or raise 404."""
+        package = self.package_repo.get_by_id(package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Procurement package '{package_id}' not found.",
+            )
+        return ProcurementPackageResponse.model_validate(package)
+
+    def update_procurement_package(
+        self, package_id: str, data: ProcurementPackageUpdate
+    ) -> ProcurementPackageResponse:
+        """Update a procurement package."""
+        package = self.package_repo.get_by_id(package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Procurement package '{package_id}' not found.",
+            )
+        package = self.package_repo.update(package, data)
+        return ProcurementPackageResponse.model_validate(package)
+
+    def delete_procurement_package(self, package_id: str) -> None:
+        """Delete a procurement package."""
+        package = self.package_repo.get_by_id(package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Procurement package '{package_id}' not found.",
+            )
+        self.package_repo.delete(package)
+
+    def assign_contractor_to_package(
+        self,
+        package_id: str,
+        data: PackageAssignContractorRequest,
+    ) -> ProcurementPackageResponse:
+        """Assign a contractor to a procurement package."""
+        package = self.package_repo.get_by_id(package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Procurement package '{package_id}' not found.",
+            )
+        contractor = self.contractor_repo.get_by_id(data.contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{data.contractor_id}' not found.",
+            )
+        package = self.package_repo.assign_contractor(package, data.contractor_id)
+        return ProcurementPackageResponse.model_validate(package)
+
+    def link_package_to_milestone(
+        self, package_id: str, milestone_id: str
+    ) -> ProcurementPackageResponse:
+        """Link a procurement package to a construction milestone."""
+        package = self.package_repo.get_by_id(package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Procurement package '{package_id}' not found.",
+            )
+        milestone = self.milestone_repo.get_by_id(milestone_id)
+        if not milestone:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction milestone '{milestone_id}' not found.",
+            )
+        if milestone.scope_id != package.scope_id:
+            raise DomainValidationError(
+                "Milestone does not belong to the same scope as the package."
+            )
+        self.package_repo.link_milestone(package, milestone)
+        return ProcurementPackageResponse.model_validate(package)
+
+    def get_scope_procurement_overview(
+        self, scope_id: str
+    ) -> ProcurementOverviewResponse:
+        """Return a procurement execution summary for a construction scope."""
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        packages = self.package_repo.list_all_for_scope(scope_id)
+
+        total_planned = sum(
+            (p.planned_value or Decimal("0.00")) for p in packages
+        )
+        total_awarded = sum(
+            (p.awarded_value or Decimal("0.00")) for p in packages
+        )
+
+        packages_by_status: dict[str, int] = {}
+        for p in packages:
+            packages_by_status[p.status] = packages_by_status.get(p.status, 0) + 1
+
+        return ProcurementOverviewResponse(
+            scope_id=scope_id,
+            total_packages=len(packages),
+            total_planned_value=total_planned,
+            total_awarded_value=total_awarded,
+            uncommitted_value=total_planned - total_awarded,
+            packages_by_status=packages_by_status,
+            packages=[ProcurementPackageResponse.model_validate(p) for p in packages],
         )
 

@@ -4,9 +4,11 @@ construction.repository
 Data access layer for the Construction domain.
 """
 
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, over, select
 from sqlalchemy.orm import Session
@@ -32,6 +34,18 @@ from app.modules.construction.schemas import (
     MilestoneDependencyCreate,
     ProgressUpdateCreate,
 )
+
+if TYPE_CHECKING:
+    from app.modules.construction.models import (
+        ConstructionContractor,
+        ConstructionProcurementPackage,
+    )
+    from app.modules.construction.schemas import (
+        ContractorCreate,
+        ContractorUpdate,
+        ProcurementPackageCreate,
+        ProcurementPackageUpdate,
+    )
 
 
 class ConstructionScopeRepository:
@@ -701,5 +715,195 @@ class ConstructionMilestoneDependencyRepository:
 
     def delete(self, dep: ConstructionMilestoneDependency) -> None:
         self.db.delete(dep)
+        self.db.commit()
+
+
+class ConstructionContractorRepository:
+    """Persistence and retrieval for construction contractors."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, data: ContractorCreate) -> ConstructionContractor:
+        from app.modules.construction.models import ConstructionContractor
+
+        contractor = ConstructionContractor(**data.model_dump())
+        self.db.add(contractor)
+        self.db.commit()
+        self.db.refresh(contractor)
+        return contractor
+
+    def get_by_id(self, contractor_id: str) -> Optional[ConstructionContractor]:
+        from app.modules.construction.models import ConstructionContractor
+
+        return (
+            self.db.query(ConstructionContractor)
+            .filter(ConstructionContractor.id == contractor_id)
+            .first()
+        )
+
+    def get_by_code(self, contractor_code: str) -> Optional[ConstructionContractor]:
+        from app.modules.construction.models import ConstructionContractor
+
+        return (
+            self.db.query(ConstructionContractor)
+            .filter(ConstructionContractor.contractor_code == contractor_code)
+            .first()
+        )
+
+    def list(self, skip: int = 0, limit: int = 100) -> List[ConstructionContractor]:
+        from app.modules.construction.models import ConstructionContractor
+
+        return (
+            self.db.query(ConstructionContractor)
+            .order_by(ConstructionContractor.contractor_name, ConstructionContractor.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self) -> int:
+        from app.modules.construction.models import ConstructionContractor
+
+        return self.db.query(ConstructionContractor).count()
+
+    def update(
+        self,
+        contractor: ConstructionContractor,
+        data: ContractorUpdate,
+    ) -> ConstructionContractor:
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(contractor, field, value)
+        self.db.commit()
+        self.db.refresh(contractor)
+        return contractor
+
+    def delete(self, contractor: ConstructionContractor) -> None:
+        self.db.delete(contractor)
+        self.db.commit()
+
+
+class ConstructionProcurementPackageRepository:
+    """Persistence and retrieval for construction procurement packages."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, data: ProcurementPackageCreate) -> ConstructionProcurementPackage:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        package = ConstructionProcurementPackage(**data.model_dump())
+        self.db.add(package)
+        self.db.commit()
+        self.db.refresh(package)
+        return package
+
+    def get_by_id(self, package_id: str) -> Optional[ConstructionProcurementPackage]:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .filter(ConstructionProcurementPackage.id == package_id)
+            .first()
+        )
+
+    def get_by_scope_and_code(
+        self, scope_id: str, package_code: str
+    ) -> Optional[ConstructionProcurementPackage]:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .filter(
+                ConstructionProcurementPackage.scope_id == scope_id,
+                ConstructionProcurementPackage.package_code == package_code,
+            )
+            .first()
+        )
+
+    def list_for_scope(
+        self, scope_id: str, skip: int = 0, limit: int = 100
+    ) -> List[ConstructionProcurementPackage]:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .filter(ConstructionProcurementPackage.scope_id == scope_id)
+            .order_by(
+                ConstructionProcurementPackage.package_code,
+                ConstructionProcurementPackage.id,
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def list_all_for_scope(
+        self, scope_id: str
+    ) -> List[ConstructionProcurementPackage]:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .filter(ConstructionProcurementPackage.scope_id == scope_id)
+            .order_by(ConstructionProcurementPackage.package_code)
+            .all()
+        )
+
+    def count_for_scope(self, scope_id: str) -> int:
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .filter(ConstructionProcurementPackage.scope_id == scope_id)
+            .count()
+        )
+
+    def update(
+        self,
+        package: ConstructionProcurementPackage,
+        data: ProcurementPackageUpdate,
+    ) -> ConstructionProcurementPackage:
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(package, field, value)
+        self.db.commit()
+        self.db.refresh(package)
+        return package
+
+    def assign_contractor(
+        self, package: ConstructionProcurementPackage, contractor_id: Optional[str]
+    ) -> ConstructionProcurementPackage:
+        package.contractor_id = contractor_id
+        self.db.commit()
+        self.db.refresh(package)
+        return package
+
+    def link_milestone(
+        self,
+        package: ConstructionProcurementPackage,
+        milestone: "ConstructionMilestone",
+    ) -> None:
+        if milestone not in package.milestones:
+            package.milestones.append(milestone)
+            self.db.commit()
+
+    def unlink_milestone(
+        self,
+        package: ConstructionProcurementPackage,
+        milestone: "ConstructionMilestone",
+    ) -> None:
+        if milestone in package.milestones:
+            package.milestones.remove(milestone)
+            self.db.commit()
+
+    def list_milestones_for_package(
+        self, package: ConstructionProcurementPackage
+    ) -> List["ConstructionMilestone"]:
+        return list(package.milestones)
+
+    def delete(self, package: ConstructionProcurementPackage) -> None:
+        self.db.delete(package)
         self.db.commit()
 

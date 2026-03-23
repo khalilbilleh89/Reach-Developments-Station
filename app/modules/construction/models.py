@@ -8,6 +8,8 @@ ConstructionMilestone      — individual delivery milestones within a scope (Co
 ConstructionEngineeringItem — engineering tasks / deliverables within a scope (Engineering side).
 ConstructionProgressUpdate  — periodic progress report entries linked to a milestone.
 ConstructionCostItem        — cost line items tracked at the scope level (budget/committed/actual).
+ConstructionContractor      — contractor registry within the construction module.
+ConstructionProcurementPackage — procurement packages linked to scopes and contractors.
 
 Hierarchy positioning:
   Project (optional) → Phase (optional) → Building (optional)
@@ -16,14 +18,17 @@ Hierarchy positioning:
   ConstructionScope
     ├── ConstructionEngineeringItem  (Engineering workspace)
     ├── ConstructionCostItem         (Cost tracking workspace)
-    └── ConstructionMilestone        (Contractor workspace)
-         └── ConstructionProgressUpdate  (Progress history)
+    ├── ConstructionMilestone        (Contractor workspace)
+    │    └── ConstructionProgressUpdate  (Progress history)
+    └── ConstructionProcurementPackage  (Procurement execution)
+         └── ConstructionContractor      (Contractor registry)
 """
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     Date,
     DateTime,
@@ -33,13 +38,22 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.shared.enums.construction import ConstructionStatus, EngineeringStatus, MilestoneStatus
+from app.shared.enums.construction import (
+    ConstructionStatus,
+    ContractorStatus,
+    ContractorType,
+    EngineeringStatus,
+    MilestoneStatus,
+    ProcurementPackageStatus,
+    ProcurementPackageType,
+)
 
 if TYPE_CHECKING:
     pass  # future cross-module relationships
@@ -101,6 +115,12 @@ class ConstructionScope(Base, TimestampMixin):
         back_populates="scope",
         cascade="all, delete-orphan",
         order_by="ConstructionCostItem.created_at",
+    )
+    procurement_packages: Mapped[List["ConstructionProcurementPackage"]] = relationship(
+        "ConstructionProcurementPackage",
+        back_populates="scope",
+        cascade="all, delete-orphan",
+        order_by="ConstructionProcurementPackage.created_at",
     )
 
 
@@ -169,6 +189,12 @@ class ConstructionMilestone(Base, TimestampMixin):
         foreign_keys="ConstructionMilestoneDependency.predecessor_id",
         back_populates="predecessor",
         cascade="all, delete-orphan",
+    )
+    # procurement packages linked to this milestone (PR-CONSTR-043)
+    packages: Mapped[List["ConstructionProcurementPackage"]] = relationship(
+        "ConstructionProcurementPackage",
+        secondary="construction_package_milestones",
+        back_populates="milestones",
     )
 
 
@@ -333,4 +359,119 @@ class ConstructionMilestoneDependency(Base, TimestampMixin):
         "ConstructionMilestone",
         foreign_keys=[successor_id],
         back_populates="predecessor_links",
+    )
+
+
+# ── Package-Milestone join table (PR-CONSTR-043) ─────────────────────────────
+
+construction_package_milestones = Table(
+    "construction_package_milestones",
+    Base.metadata,
+    sa.Column(
+        "package_id",
+        String(36),
+        ForeignKey("construction_procurement_packages.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    sa.Column(
+        "milestone_id",
+        String(36),
+        ForeignKey("construction_milestones.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
+class ConstructionContractor(Base, TimestampMixin):
+    """Contractor registered within the construction module.
+
+    Represents an entity (company or individual) that may be responsible for
+    one or more procurement packages. Contractor records are scoped to the
+    construction module and do not cross into commercial or finance layers.
+    """
+
+    __tablename__ = "construction_contractors"
+    __table_args__ = (
+        UniqueConstraint("contractor_code", name="uq_construction_contractor_code"),
+    )
+
+    contractor_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    contractor_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    contractor_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ContractorType.MAIN_CONTRACTOR.value,
+    )
+    contact_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ContractorStatus.ACTIVE.value,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    packages: Mapped[List["ConstructionProcurementPackage"]] = relationship(
+        "ConstructionProcurementPackage",
+        back_populates="contractor",
+    )
+
+
+class ConstructionProcurementPackage(Base, TimestampMixin):
+    """Procurement package within a construction scope.
+
+    Tracks the award status, planned/awarded value, and the responsible
+    contractor for a discrete work package. Packages are linked to the
+    milestones they cover via the construction_package_milestones join table.
+    """
+
+    __tablename__ = "construction_procurement_packages"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_id",
+            "package_code",
+            name="uq_procurement_package_scope_code",
+        ),
+    )
+
+    scope_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_scopes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contractor_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("construction_contractors.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    package_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    package_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    package_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ProcurementPackageType.OTHER.value,
+    )
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ProcurementPackageStatus.DRAFT.value,
+    )
+    planned_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    awarded_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    scope: Mapped["ConstructionScope"] = relationship(
+        "ConstructionScope", back_populates="procurement_packages"
+    )
+    contractor: Mapped[Optional["ConstructionContractor"]] = relationship(
+        "ConstructionContractor", back_populates="packages"
+    )
+    milestones: Mapped[List["ConstructionMilestone"]] = relationship(
+        "ConstructionMilestone",
+        secondary="construction_package_milestones",
+        back_populates="packages",
     )
