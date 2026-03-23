@@ -7,14 +7,12 @@ All fields represent aggregated financial state computed at query time;
 no raw financial tables are exposed.
 """
 
+from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.modules.collections.aging_engine import AgingBucket
-
-from datetime import datetime
-
 from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
 
 
@@ -194,12 +192,12 @@ class UnmatchedReceiptResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Cashflow forecasting schemas
+# Cashflow forecasting schemas  (legacy — v1 simple forecast)
 # ---------------------------------------------------------------------------
 
 
 class MonthlyForecastEntryResponse(BaseModel):
-    """Projected cash inflow for a single calendar month."""
+    """Projected cash inflow for a single calendar month (legacy simple format)."""
 
     month: str = Field(..., description="Calendar month in YYYY-MM format")
     expected_collections: float = Field(..., ge=0)
@@ -207,7 +205,7 @@ class MonthlyForecastEntryResponse(BaseModel):
 
 
 class ProjectCashflowForecastResponse(BaseModel):
-    """Cashflow forecast for a single project."""
+    """Cashflow forecast for a single project (legacy simple format)."""
 
     project_id: str
     total_expected: float = Field(..., ge=0)
@@ -215,12 +213,159 @@ class ProjectCashflowForecastResponse(BaseModel):
 
 
 class PortfolioCashflowForecastResponse(BaseModel):
-    """Portfolio-wide cashflow forecast aggregated across all projects."""
+    """Portfolio-wide cashflow forecast aggregated across all projects (legacy simple format)."""
 
     total_expected: float = Field(..., ge=0)
     project_count: int = Field(..., ge=0)
     monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
     project_forecasts: List[ProjectCashflowForecastResponse] = Field(
+        default_factory=list
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cashflow forecasting schemas  (PR-33 comprehensive forecast)
+# ---------------------------------------------------------------------------
+
+
+class CashflowForecastAssumptions(BaseModel):
+    """Forecast assumption parameters controlling collection probability model.
+
+    Attributes
+    ----------
+    collection_probability:
+        Fraction of outstanding balance expected to be collected (0.0–1.0).
+        Default 1.0 = deterministic 100% collection.
+    carry_forward_overdue:
+        When True, installments overdue before the window start are carried
+        into the first period bucket.
+    include_paid_in_schedule:
+        When True, already-paid installments are counted in scheduled_amount
+        so that it reflects the full contractual obligation.
+    """
+
+    collection_probability: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Collection probability applied to outstanding installments (0–1).",
+    )
+    carry_forward_overdue: bool = Field(
+        default=True,
+        description="Include pre-window overdue installments in the first period bucket.",
+    )
+    include_paid_in_schedule: bool = Field(
+        default=True,
+        description="Count paid installments in scheduled_amount for period completeness.",
+    )
+
+    @field_validator("collection_probability")
+    @classmethod
+    def _validate_probability(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("collection_probability must be between 0.0 and 1.0")
+        return v
+
+
+class CashflowPeriodRow(BaseModel):
+    """Rich per-period cashflow row in the comprehensive forecast response.
+
+    All monetary amounts are in the project currency (AED by default).
+    """
+
+    period_start: date = Field(..., description="First day of the forecast period.")
+    period_end: date = Field(..., description="Last day of the forecast period.")
+    period_label: str = Field(..., description="Period identifier in YYYY-MM format.")
+
+    scheduled_amount: float = Field(
+        ...,
+        ge=0,
+        description="Total contractual amount due in this period.",
+    )
+    collected_amount: float = Field(
+        ...,
+        ge=0,
+        description="Amount already settled for installments in this period.",
+    )
+    expected_amount: float = Field(
+        ...,
+        ge=0,
+        description="Expected future collections: outstanding × collection_probability.",
+    )
+    variance_to_schedule: float = Field(
+        ...,
+        description="expected_amount − scheduled_amount (negative = shortfall).",
+    )
+    cumulative_expected_amount: float = Field(
+        ...,
+        ge=0,
+        description="Running cumulative expected collections from window start.",
+    )
+    installment_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of installments falling in this period.",
+    )
+
+
+class CashflowForecastSummaryResponse(BaseModel):
+    """High-level totals across all periods in the forecast window."""
+
+    scheduled_total: float = Field(..., ge=0)
+    collected_total: float = Field(..., ge=0)
+    expected_total: float = Field(..., ge=0)
+    variance_to_schedule: float = Field(
+        ...,
+        description="expected_total − scheduled_total (negative = shortfall).",
+    )
+
+
+class ContractCashflowForecastResponse(BaseModel):
+    """Comprehensive cashflow forecast for a single contract.
+
+    Returned by GET /finance/contracts/{contract_id}/cashflow-forecast.
+    """
+
+    scope_type: str = Field(default="contract")
+    contract_id: str
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: CashflowForecastAssumptions
+    summary: CashflowForecastSummaryResponse
+    periods: List[CashflowPeriodRow] = Field(default_factory=list)
+
+
+class ProjectCashflowForecastV2Response(BaseModel):
+    """Comprehensive cashflow forecast for a single project.
+
+    Returned by GET /finance/projects/{project_id}/cashflow-forecast.
+    """
+
+    scope_type: str = Field(default="project")
+    project_id: str
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: CashflowForecastAssumptions
+    summary: CashflowForecastSummaryResponse
+    periods: List[CashflowPeriodRow] = Field(default_factory=list)
+
+
+class PortfolioCashflowForecastV2Response(BaseModel):
+    """Comprehensive cashflow forecast aggregated across the entire portfolio.
+
+    Returned by GET /finance/portfolio/cashflow-forecast.
+    """
+
+    scope_type: str = Field(default="portfolio")
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: CashflowForecastAssumptions
+    summary: CashflowForecastSummaryResponse
+    periods: List[CashflowPeriodRow] = Field(default_factory=list)
+    project_forecasts: List[ProjectCashflowForecastV2Response] = Field(
         default_factory=list
     )
 

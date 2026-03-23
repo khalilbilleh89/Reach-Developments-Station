@@ -15,7 +15,8 @@ Validates:
 
 import pytest
 from datetime import date
-from fastapi import HTTPException
+
+from app.core.errors import ResourceNotFoundError
 from sqlalchemy.orm import Session
 
 from app.modules.finance.cashflow_forecast_engine import (
@@ -416,11 +417,10 @@ class TestCashflowForecastService:
         assert len(result.monthly_entries) == 1
 
     def test_project_forecast_not_found(self, db_session: Session):
-        """Missing project raises HTTP 404."""
+        """Missing project raises ResourceNotFoundError (maps to HTTP 404)."""
         svc = CashflowForecastService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ResourceNotFoundError):
             svc.get_project_forecast("non-existent-id")
-        assert exc_info.value.status_code == 404
 
     def test_portfolio_forecast_empty(self, db_session: Session):
         """Portfolio with no outstanding installments returns zero totals."""
