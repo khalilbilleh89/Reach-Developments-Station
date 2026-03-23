@@ -26,6 +26,9 @@ Endpoints
   GET /finance/contracts/{contract_id}/cashflow-forecast — contract cashflow forecast (PR-33)
   GET /finance/projects/{project_id}/cashflow-forecast   — project cashflow forecast (PR-33)
   GET /finance/portfolio/cashflow-forecast               — portfolio cashflow forecast (PR-33)
+  GET /finance/projects/{project_id}/construction-cashflow — project construction cashflow (PR-FIN-034)
+  GET /finance/phases/{phase_id}/construction-cashflow     — phase construction cashflow (PR-FIN-034)
+  GET /finance/portfolio/construction-cashflow             — portfolio construction cashflow (PR-FIN-034)
   POST /finance/analytics/rebuild                      — rebuild analytics fact tables
   GET /finance/analytics/portfolio                     — portfolio analytics dashboard
   GET /finance/projects/{project_id}/dashboard         — project financial dashboard
@@ -47,17 +50,21 @@ from app.modules.finance.schemas import (
     CollectionsAlertResponse,
     ContractAgingResponse,
     ContractCashflowForecastResponse,
+    ConstructionForecastAssumptionsSchema,
     MatchReceiptRequest,
+    PhaseConstructionCashflowResponse,
     PortfolioAgingResponse,
     PortfolioAnalyticsResponse,
     PortfolioCashflowForecastResponse,
     PortfolioCashflowForecastV2Response,
+    PortfolioConstructionCashflowResponse,
     PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
     PortfolioRiskResponse,
     ProjectAgingResponse,
     ProjectCashflowForecastResponse,
     ProjectCashflowForecastV2Response,
+    ProjectConstructionCashflowResponse,
     ProjectFinanceSummaryResponse,
     ProjectFinancialDashboardResponse,
     ProjectRevenueSummaryResponse,
@@ -83,6 +90,7 @@ from app.modules.finance.project_financial_dashboard_service import ProjectFinan
 from app.modules.finance.risk_alert_engine import FinancialRiskAlertEngine
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
+from app.modules.finance.constants import ConstructionSpreadMethod
 
 router = APIRouter(prefix="/finance", tags=["Finance"], dependencies=[Depends(get_current_user_payload)])
 
@@ -483,6 +491,132 @@ def get_portfolio_cashflow_forecast_v2(
         include_paid_in_schedule=include_paid_in_schedule,
     )
     return service.get_portfolio_forecast_v2(start_date, end_date, assumptions)
+
+
+# ---------------------------------------------------------------------------
+# Construction cashflow forecast endpoints  (PR-FIN-034)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/projects/{project_id}/construction-cashflow",
+    response_model=ProjectConstructionCashflowResponse,
+    summary="Project construction cashflow forecast",
+)
+def get_project_construction_cashflow(
+    project_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
+    ),
+    include_committed: bool = Query(
+        default=True,
+        description="Use committed costs as the basis for expected_cost when available.",
+    ),
+) -> ProjectConstructionCashflowResponse:
+    """Return the construction cashflow forecast for a single project.
+
+    Produces monthly planned / committed / expected cost breakdowns across the
+    requested date window.
+
+    Returns 404 if the project does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=spread_method.value,
+        include_committed=include_committed,
+    )
+    return service.get_project_construction_forecast(project_id, start_date, end_date, assumptions)
+
+
+@router.get(
+    "/phases/{phase_id}/construction-cashflow",
+    response_model=PhaseConstructionCashflowResponse,
+    summary="Phase construction cashflow forecast",
+)
+def get_phase_construction_cashflow(
+    phase_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
+    ),
+    include_committed: bool = Query(
+        default=True,
+        description="Use committed costs as the basis for expected_cost when available.",
+    ),
+) -> PhaseConstructionCashflowResponse:
+    """Return the construction cashflow forecast for a single project phase.
+
+    Produces monthly planned / committed / expected cost breakdowns across the
+    requested date window.
+
+    Returns 404 if the phase does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=spread_method.value,
+        include_committed=include_committed,
+    )
+    return service.get_phase_construction_forecast(phase_id, start_date, end_date, assumptions)
+
+
+@router.get(
+    "/portfolio/construction-cashflow",
+    response_model=PortfolioConstructionCashflowResponse,
+    summary="Portfolio construction cashflow forecast",
+)
+def get_portfolio_construction_cashflow(
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
+    ),
+    include_committed: bool = Query(
+        default=True,
+        description="Use committed costs as the basis for expected_cost when available.",
+    ),
+) -> PortfolioConstructionCashflowResponse:
+    """Return the construction cashflow forecast across the entire portfolio.
+
+    Aggregates all project construction costs and produces monthly planned /
+    committed / expected cost breakdowns alongside per-project sub-forecasts.
+
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=spread_method.value,
+        include_committed=include_committed,
+    )
+    return service.get_portfolio_construction_forecast(start_date, end_date, assumptions)
 
 
 # ---------------------------------------------------------------------------

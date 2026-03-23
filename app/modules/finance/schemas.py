@@ -13,6 +13,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.modules.collections.aging_engine import AgingBucket
+from app.modules.finance.constants import ConstructionSpreadMethod
 from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
 
 
@@ -595,4 +596,140 @@ class ScenarioRevenueScheduleResponse(BaseModel):
     )
     total_revenue: float = Field(
         ..., ge=0, description="Sum of all period revenues."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Construction cashflow forecast schemas  (PR-FIN-034)
+# ---------------------------------------------------------------------------
+
+
+class ConstructionForecastAssumptionsSchema(BaseModel):
+    """Assumption parameters for the construction cashflow forecast.
+
+    Attributes
+    ----------
+    execution_probability:
+        Probability (0–1) that planned construction work executes as scheduled.
+        Default 1.0 = deterministic full execution.
+    spread_method:
+        Distribution method for spreading costs across months ("linear" default).
+    include_committed:
+        When True and committed_amount > 0, committed costs override plan.
+    """
+
+    execution_probability: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    )
+    spread_method: str = Field(
+        default=ConstructionSpreadMethod.LINEAR.value,
+        description=(
+            "Cost spread method: 'linear' distributes costs uniformly; "
+            "'s_curve' is reserved for future use."
+        ),
+    )
+    include_committed: bool = Field(
+        default=True,
+        description="Use committed costs as the basis for expected_cost when available.",
+    )
+
+    @field_validator("execution_probability")
+    @classmethod
+    def _validate_probability(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("execution_probability must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("spread_method")
+    @classmethod
+    def _validate_spread_method(cls, v: str) -> str:
+        allowed = {m.value for m in ConstructionSpreadMethod}
+        if v not in allowed:
+            raise ValueError(
+                f"spread_method '{v}' is not supported. "
+                f"Allowed values: {sorted(allowed)}"
+            )
+        return v
+
+
+class ConstructionCashflowSummaryResponse(BaseModel):
+    """High-level totals across all periods in the construction forecast window."""
+
+    planned_total: float = Field(..., ge=0, description="Total planned construction cost.")
+    expected_total: float = Field(..., ge=0, description="Total expected construction cost.")
+    variance_to_plan: float = Field(..., description="expected_total − planned_total.")
+
+
+class ConstructionCashflowPeriodRow(BaseModel):
+    """Per-period construction cashflow row."""
+
+    period_label: str = Field(..., description="Period identifier in YYYY-MM format.")
+    planned_cost: float = Field(..., ge=0, description="Planned cost allocated to this period.")
+    committed_cost: float = Field(
+        ..., ge=0, description="Committed contractor cost allocated to this period."
+    )
+    expected_cost: float = Field(
+        ..., ge=0, description="Expected cost: base_cost × execution_probability."
+    )
+    variance_to_plan: float = Field(
+        ..., description="expected_cost − planned_cost (negative = shortfall)."
+    )
+    cumulative_cost: float = Field(
+        ..., ge=0, description="Running cumulative expected cost from window start."
+    )
+    cost_item_count: int = Field(
+        ..., ge=0, description="Number of cost records contributing to this period."
+    )
+
+
+class ProjectConstructionCashflowResponse(BaseModel):
+    """Construction cashflow forecast for a single project.
+
+    Returned by GET /finance/projects/{project_id}/construction-cashflow.
+    """
+
+    scope_type: str = Field(default="project")
+    project_id: str
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: ConstructionForecastAssumptionsSchema
+    summary: ConstructionCashflowSummaryResponse
+    periods: List[ConstructionCashflowPeriodRow] = Field(default_factory=list)
+
+
+class PhaseConstructionCashflowResponse(BaseModel):
+    """Construction cashflow forecast for a single project phase.
+
+    Returned by GET /finance/phases/{phase_id}/construction-cashflow.
+    """
+
+    scope_type: str = Field(default="phase")
+    phase_id: str
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: ConstructionForecastAssumptionsSchema
+    summary: ConstructionCashflowSummaryResponse
+    periods: List[ConstructionCashflowPeriodRow] = Field(default_factory=list)
+
+
+class PortfolioConstructionCashflowResponse(BaseModel):
+    """Construction cashflow forecast aggregated across the entire portfolio.
+
+    Returned by GET /finance/portfolio/construction-cashflow.
+    """
+
+    scope_type: str = Field(default="portfolio")
+    start_date: date
+    end_date: date
+    granularity: str = Field(default="monthly")
+    assumptions: ConstructionForecastAssumptionsSchema
+    summary: ConstructionCashflowSummaryResponse
+    periods: List[ConstructionCashflowPeriodRow] = Field(default_factory=list)
+    project_forecasts: List[ProjectConstructionCashflowResponse] = Field(
+        default_factory=list
     )
