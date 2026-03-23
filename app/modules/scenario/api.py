@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
+from app.modules.scenario.financial_scenario_service import FinancialScenarioService
 from app.modules.scenario.schemas import (
+    FinancialScenarioCompareRequest,
+    FinancialScenarioCompareResponse,
+    FinancialScenarioRunCreate,
+    FinancialScenarioRunList,
+    FinancialScenarioRunResponse,
     ScenarioCompareRequest,
     ScenarioCompareResponse,
     ScenarioCreate,
@@ -38,6 +44,10 @@ router = APIRouter(
 
 def get_service(db: Session = Depends(get_db)) -> ScenarioService:
     return ScenarioService(db)
+
+
+def get_financial_service(db: Session = Depends(get_db)) -> FinancialScenarioService:
+    return FinancialScenarioService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -181,3 +191,85 @@ def compare_scenarios(
 ) -> ScenarioCompareResponse:
     """Return side-by-side comparison metadata for a list of scenario IDs."""
     return service.compare_scenarios(request)
+
+
+# ---------------------------------------------------------------------------
+# Financial scenario runs
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{scenario_id}/financial-runs",
+    response_model=FinancialScenarioRunResponse,
+    status_code=201,
+)
+def create_financial_run(
+    scenario_id: str,
+    payload: FinancialScenarioRunCreate,
+    service: Annotated[FinancialScenarioService, Depends(get_financial_service)],
+) -> FinancialScenarioRunResponse:
+    """Create and execute a financial scenario run.
+
+    Merges optional override values on top of baseline assumptions, delegates
+    all financial calculations to the Calculation Engine via the Financial
+    Scenario Engine, and persists the result.
+    """
+    return service.create_run(scenario_id, payload)
+
+
+@router.get(
+    "/{scenario_id}/financial-runs",
+    response_model=FinancialScenarioRunList,
+)
+def list_financial_runs(
+    scenario_id: str,
+    service: Annotated[FinancialScenarioService, Depends(get_financial_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> FinancialScenarioRunList:
+    """List all financial scenario runs for a given scenario."""
+    return service.list_runs(scenario_id, skip=skip, limit=limit)
+
+
+@router.get(
+    "/{scenario_id}/financial-runs/{run_id}",
+    response_model=FinancialScenarioRunResponse,
+)
+def get_financial_run(
+    scenario_id: str,
+    run_id: str,
+    service: Annotated[FinancialScenarioService, Depends(get_financial_service)],
+) -> FinancialScenarioRunResponse:
+    """Get a specific financial scenario run by ID."""
+    return service.get_run(scenario_id, run_id)
+
+
+@router.delete("/{scenario_id}/financial-runs/{run_id}", status_code=204)
+def delete_financial_run(
+    scenario_id: str,
+    run_id: str,
+    service: Annotated[FinancialScenarioService, Depends(get_financial_service)],
+) -> None:
+    """Delete a financial scenario run."""
+    service.delete_run(scenario_id, run_id)
+
+
+# ---------------------------------------------------------------------------
+# Financial scenario run comparison
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/financial-runs/compare",
+    response_model=FinancialScenarioCompareResponse,
+)
+def compare_financial_runs(
+    request: FinancialScenarioCompareRequest,
+    service: Annotated[FinancialScenarioService, Depends(get_financial_service)],
+) -> FinancialScenarioCompareResponse:
+    """Compare multiple financial scenario runs side-by-side.
+
+    The first run ID in the list is treated as the baseline.  Delta metrics
+    for all other runs are expressed relative to the baseline.
+    """
+    return service.compare_runs(request)
