@@ -70,8 +70,8 @@ def get_scenario_revenue_schedule(
         default=RecognitionStrategy.ON_CONTRACT_SIGNING,
         description=(
             "Revenue recognition strategy to apply.  "
-            "Supported values: on_contract_signing (default), "
-            "on_construction_progress, on_unit_delivery."
+            "Supported: on_contract_signing (default), on_unit_delivery.  "
+            "on_construction_progress is rejected (milestone data not yet persisted)."
         ),
     ),
 ) -> ScenarioRevenueScheduleResponse:
@@ -84,10 +84,12 @@ def get_scenario_revenue_schedule(
     ----------------------
     - **on_contract_signing** *(default)*: revenue recognized in the month
       the sales contract was signed.
-    - **on_construction_progress**: revenue distributed across periods
-      proportional to construction milestone completion percentages.
     - **on_unit_delivery**: revenue recognized in the month the unit is
-      delivered to the buyer.
+      delivered to the buyer.  Contracts without a recorded delivery date
+      fall back to the contract signing month.
+    - **on_construction_progress**: not currently supported via this
+      endpoint — returns HTTP 422 because construction milestone data is
+      not yet persisted in the schema.
 
     Response example
     ----------------
@@ -104,6 +106,7 @@ def get_scenario_revenue_schedule(
     ```
 
     Raises HTTP 404 when the scenario does not exist.
+    Raises HTTP 422 when ``on_construction_progress`` is requested.
     """
     result = service.get_revenue_schedule(
         scenario_id=scenario_id,

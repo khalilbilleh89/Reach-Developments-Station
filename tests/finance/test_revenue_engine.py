@@ -227,6 +227,52 @@ class TestRevenueEngineOnConstructionProgress:
         assert periods["2026-02"] == pytest.approx(200_000.0)
         assert result.total_revenue == pytest.approx(300_000.0)
 
+    def test_dirty_cumulative_exceeds_100_clamped(self):
+        """Milestone percentages > 100 are clamped; no negative revenue is emitted."""
+        # First period reports 120% (dirty data) — should be treated as 100%.
+        milestones = {"2026-01": 120.0, "2026-02": 130.0}
+        sales = [_sale("c-001", 400_000.0, date(2026, 1, 1), milestones=milestones)]
+        result = generate_revenue_schedule(
+            _input("s-030", sales, RecognitionStrategy.ON_CONSTRUCTION_PROGRESS)
+        )
+
+        for entry in result.revenue_schedule:
+            assert entry.revenue >= 0.0, "no period may have negative revenue"
+        assert result.total_revenue == pytest.approx(400_000.0)
+
+    def test_dirty_all_progress_in_first_period(self):
+        """When 100% is reported in the very first period the remainder is zero."""
+        milestones = {"2026-01": 100.0, "2026-02": 100.0}
+        sales = [_sale("c-001", 500_000.0, date(2026, 1, 1), milestones=milestones)]
+        result = generate_revenue_schedule(
+            _input("s-031", sales, RecognitionStrategy.ON_CONSTRUCTION_PROGRESS)
+        )
+
+        periods = {e.period: e.revenue for e in result.revenue_schedule}
+        assert periods["2026-01"] == pytest.approx(500_000.0)
+        # Second period should be zero (already fully allocated).
+        assert periods.get("2026-02", 0.0) == pytest.approx(0.0)
+        assert result.total_revenue == pytest.approx(500_000.0)
+
+    def test_non_negativity_under_dirty_inputs_invariant(self):
+        """Non-negativity invariant holds for a range of dirty milestone inputs."""
+        dirty_cases = [
+            {"2026-01": 150.0},                         # single period >100
+            {"2026-01": 200.0, "2026-02": 100.0},       # first > 100, second decrease
+            {"2026-01": 0.0, "2026-02": 0.0, "2026-03": 200.0},  # spike in last
+        ]
+        for milestones in dirty_cases:
+            sales = [
+                _sale("c-x", 300_000.0, date(2026, 1, 1), milestones=milestones)
+            ]
+            result = generate_revenue_schedule(
+                _input("s-dirty", sales, RecognitionStrategy.ON_CONSTRUCTION_PROGRESS)
+            )
+            for entry in result.revenue_schedule:
+                assert entry.revenue >= 0.0, (
+                    f"negative revenue {entry.revenue} for milestones {milestones}"
+                )
+
 
 # ---------------------------------------------------------------------------
 # Schedule result invariants
@@ -452,12 +498,30 @@ class TestScenarioRevenueService:
         assert result.total_revenue == 0.0
 
     def test_strategy_propagated_to_result(self, db_session: Session):
+        """on_signing and on_unit_delivery return expected strategy labels."""
         sid = _make_scenario(db_session, "Scenario RE-SVC-04")
         svc = ScenarioRevenueService(db_session)
 
-        for strategy in RecognitionStrategy:
+        supported = [
+            RecognitionStrategy.ON_CONTRACT_SIGNING,
+            RecognitionStrategy.ON_UNIT_DELIVERY,
+        ]
+        for strategy in supported:
             result = svc.get_revenue_schedule(sid, strategy)
             assert result.strategy == strategy.value
+
+    def test_on_construction_progress_raises_validation_error(
+        self, db_session: Session
+    ):
+        """on_construction_progress is unsupported via the DB-backed service."""
+        from app.core.errors import ValidationError
+
+        sid = _make_scenario(db_session, "Scenario RE-SVC-05-CP")
+        svc = ScenarioRevenueService(db_session)
+        with pytest.raises(ValidationError):
+            svc.get_revenue_schedule(
+                sid, RecognitionStrategy.ON_CONSTRUCTION_PROGRESS
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -501,15 +565,29 @@ class TestRevenueRouterApi:
         assert data["revenue_schedule"][0]["period"] == "2026-06"
 
     def test_strategy_query_param_accepted(self, client, db_session: Session):
+        """on_signing and on_unit_delivery are accepted by the API."""
         sid = _make_scenario(db_session, "API Scenario RE-API-03")
 
-        for strategy in RecognitionStrategy:
+        supported = [
+            RecognitionStrategy.ON_CONTRACT_SIGNING,
+            RecognitionStrategy.ON_UNIT_DELIVERY,
+        ]
+        for strategy in supported:
             resp = client.get(
                 f"/api/v1/finance/revenue/{sid}",
                 params={"strategy": strategy.value},
             )
             assert resp.status_code == 200
             assert resp.json()["strategy"] == strategy.value
+
+    def test_on_construction_progress_returns_422(self, client, db_session: Session):
+        """on_construction_progress is rejected at the API layer."""
+        sid = _make_scenario(db_session, "API Scenario RE-API-CP")
+        resp = client.get(
+            f"/api/v1/finance/revenue/{sid}",
+            params={"strategy": RecognitionStrategy.ON_CONSTRUCTION_PROGRESS.value},
+        )
+        assert resp.status_code == 422
 
     def test_invalid_strategy_returns_422(self, client, db_session: Session):
         sid = _make_scenario(db_session, "API Scenario RE-API-04")

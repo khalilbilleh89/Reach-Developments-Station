@@ -25,7 +25,8 @@ ON_CONSTRUCTION_PROGRESS
 ON_UNIT_DELIVERY
     Revenue is recognized in full in the calendar month that the unit is
     delivered to the buyer (i.e. handover date).  Contracts without a
-    delivery date are deferred to the last month of the schedule window.
+    delivery date fall back to recognizing revenue in the same calendar
+    month as the contract signing date (i.e. behave like ON_CONTRACT_SIGNING).
 """
 
 from dataclasses import dataclass, field

@@ -15,9 +15,9 @@ ON_CONTRACT_SIGNING
 
 ON_UNIT_DELIVERY
     Each contract's total is allocated to the calendar month its
-    delivery_date falls in.  Contracts without a delivery_date are
-    allocated to the last period present in the schedule, or to
-    the current month when the schedule is otherwise empty.
+    delivery_date falls in.  Contracts without a delivery_date fall back
+    to the calendar month of their contract_date so that revenue is never
+    silently dropped.
 
 ON_CONSTRUCTION_PROGRESS
     Each contract's total is distributed across periods in proportion to
@@ -150,17 +150,29 @@ def _schedule_on_construction_progress(
         allocated = 0.0
 
         for i, period in enumerate(sorted_periods):
-            cumulative_pct = float(milestones[period])
+            # Clamp cumulative percentage to [0, 100] to guard against dirty data.
+            raw_cumulative = float(milestones[period])
+            cumulative_pct = max(0.0, min(raw_cumulative, 100.0))
             incremental_pct = max(cumulative_pct - previous_pct, 0.0)
             previous_pct = cumulative_pct
 
-            if i < len(sorted_periods) - 1:
-                period_revenue = round(
+            # Remaining unallocated contract value (may differ slightly due to rounding).
+            remaining = round(sale.contract_total - allocated, 2)
+
+            if remaining <= 0:
+                # Contract fully allocated already; skip remaining periods.
+                period_revenue = 0.0
+            elif i < len(sorted_periods) - 1:
+                # Intermediate milestone: allocate based on incremental percentage,
+                # capped to the remaining balance to prevent over-allocation.
+                nominal_revenue = round(
                     sale.contract_total * incremental_pct / 100.0, 2
                 )
+                period_revenue = min(max(nominal_revenue, 0.0), remaining)
             else:
-                # Last milestone: allocate the remainder to avoid rounding drift.
-                period_revenue = round(sale.contract_total - allocated, 2)
+                # Last milestone: allocate the non-negative remainder to avoid
+                # rounding drift and to guarantee total_revenue == contract_total.
+                period_revenue = max(remaining, 0.0)
 
             buckets[period] += period_revenue
             allocated += period_revenue
