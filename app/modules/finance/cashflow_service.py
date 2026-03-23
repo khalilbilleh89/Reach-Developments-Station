@@ -198,7 +198,13 @@ class CashflowForecastService:
 
         assumptions = _schema_to_assumptions(assumptions_schema)
         installments = self._load_contract_installments(contract_id)
-        result = compute_contract_forecast(contract_id, installments, start_date, end_date, assumptions)
+        result = compute_contract_forecast(
+            contract_id,
+            installments,
+            start_date,
+            end_date,
+            assumptions,
+        )
 
         _logger.debug(
             "Contract cashflow forecast computed: contract=%s periods=%d",
@@ -366,7 +372,12 @@ class CashflowForecastService:
     # ------------------------------------------------------------------
 
     def _load_contract_installments(self, contract_id: str) -> List[InstallmentRecord]:
-        """Return all non-cancelled installment records for a single contract."""
+        """Return all non-cancelled installment records for a single contract.
+
+        Queries directly on ContractPaymentSchedule filtered by contract_id
+        without the Unit→Floor→Building→Phase join chain, since no hierarchy
+        data is needed for a contract-scoped forecast.
+        """
         rows = (
             self.db.query(
                 ContractPaymentSchedule.contract_id,
@@ -374,11 +385,6 @@ class CashflowForecastService:
                 ContractPaymentSchedule.amount,
                 ContractPaymentSchedule.status,
             )
-            .join(SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id)
-            .join(Unit, SalesContract.unit_id == Unit.id)
-            .join(Floor, Unit.floor_id == Floor.id)
-            .join(Building, Floor.building_id == Building.id)
-            .join(Phase, Building.phase_id == Phase.id)
             .filter(
                 ContractPaymentSchedule.contract_id == contract_id,
                 ContractPaymentSchedule.status.in_(_ALL_ACTIVE_STATUSES),

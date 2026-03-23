@@ -15,7 +15,7 @@ Validates:
 
 import pytest
 from datetime import date
-from fastapi import HTTPException
+
 from app.core.errors import ResourceNotFoundError
 from sqlalchemy.orm import Session
 

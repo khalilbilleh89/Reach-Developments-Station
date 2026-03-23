@@ -20,7 +20,6 @@ Validates:
 """
 
 import calendar
-
 import pytest
 from datetime import date
 
@@ -28,10 +27,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ResourceNotFoundError, ValidationError
 from app.modules.finance.cashflow_engine import (
-    CashflowForecastResult,
     ForecastAssumptions,
     InstallmentRecord,
-    PortfolioCashflowResult,
     compute_contract_forecast,
     compute_portfolio_forecast,
     compute_project_forecast,
@@ -150,6 +147,45 @@ class TestComputeContractForecast:
         assert result.summary.scheduled_total == pytest.approx(0.0)
         for p in result.periods:
             assert p.installment_count == 0
+
+    def test_pending_pre_window_not_carried_forward(self):
+        """PENDING pre-window installments must NOT be carried forward (only OVERDUE)."""
+        lines = [
+            InstallmentRecord("c-001", "p-001", date(2026, 3, 1), 50_000.0, 0.0, "pending"),
+        ]
+        assumptions = ForecastAssumptions(carry_forward_overdue=True)
+        result = compute_contract_forecast("c-001", lines, self.START, self.END, assumptions)
+
+        assert result.summary.scheduled_total == pytest.approx(0.0)
+        for p in result.periods:
+            assert p.installment_count == 0
+
+    def test_window_start_mid_month_excludes_earlier_same_month_installments(self):
+        """Installment due before start_date in the same month must be excluded.
+
+        This verifies that filtering uses the actual start_date, not the first
+        day of the start month.
+        """
+        lines = [
+            InstallmentRecord("c-001", "p-001", date(2026, 4, 1), 100_000.0, 0.0, "pending"),  # excluded
+            InstallmentRecord("c-001", "p-001", date(2026, 4, 20), 200_000.0, 0.0, "pending"),  # included
+        ]
+        result = compute_contract_forecast("c-001", lines, date(2026, 4, 15), date(2026, 4, 30))
+        assert result.summary.scheduled_total == pytest.approx(200_000.0)
+        assert result.summary.expected_total == pytest.approx(200_000.0)
+
+    def test_window_end_mid_month_excludes_later_same_month_installments(self):
+        """Installment due after end_date in the same month must be excluded.
+
+        This verifies that filtering uses the actual end_date, not the last
+        day of the end month.
+        """
+        lines = [
+            InstallmentRecord("c-001", "p-001", date(2026, 6, 10), 150_000.0, 0.0, "pending"),  # included
+            InstallmentRecord("c-001", "p-001", date(2026, 6, 25), 250_000.0, 0.0, "pending"),  # excluded
+        ]
+        result = compute_contract_forecast("c-001", lines, date(2026, 6, 1), date(2026, 6, 15))
+        assert result.summary.scheduled_total == pytest.approx(150_000.0)
 
     def test_post_window_installments_excluded(self):
         """Installments due after end_date are excluded from all periods."""
@@ -663,17 +699,13 @@ class TestCashflowForecastApiV2:
         assert resp.status_code == 404
 
     def test_contract_forecast_endpoint_422_for_invalid_dates(self, client):
-        resp = client.post(
-            "/api/v1/projects",
-            json={"name": "CF V2 Test", "code": "CFV2-001"},
-        )
-        assert resp.status_code == 201
-        # start_date after end_date returns 422
+        # start_date after end_date must always return 422 since date-window
+        # validation is performed before the contract-existence check.
         resp = client.get(
             "/api/v1/finance/contracts/some-cid/cashflow-forecast"
             "?start_date=2026-09-01&end_date=2026-01-01"
         )
-        assert resp.status_code in (404, 422)
+        assert resp.status_code == 422
 
     def test_project_forecast_v2_endpoint_404_for_missing_project(self, client):
         resp = client.get(

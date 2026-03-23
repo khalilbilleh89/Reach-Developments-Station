@@ -205,6 +205,8 @@ def _assign_installments_to_buckets(
     installments: List[InstallmentRecord],
     buckets: List[tuple[date, date]],
     assumptions: ForecastAssumptions,
+    window_start: date,
+    window_end: date,
 ) -> Dict[str, List[InstallmentRecord]]:
     """Assign each installment to a bucket label.
 
@@ -213,16 +215,18 @@ def _assign_installments_to_buckets(
       They contribute to scheduled_amount and collected_amount.
     * PENDING/OVERDUE installments within the window are assigned normally.
     * If assumptions.carry_forward_overdue is True, OVERDUE installments
-      whose due_date falls *before* the first bucket start are carried into
-      the first bucket.
-    * Installments with due_date after the last bucket end are excluded
-      (outside the window).
+      whose due_date falls *before* window_start are carried into the first
+      bucket.  Only OVERDUE status qualifies; PENDING pre-window installments
+      are excluded.
+    * Installments with due_date after window_end are excluded.
+    * Filtering uses the caller-supplied window_start/window_end dates
+      (not the month boundary of the first/last bucket) to avoid including
+      installments that fall in the same month but outside the window.
     """
     if not buckets:
         return {}
 
     first_start = buckets[0][0]
-    last_end = buckets[-1][1]
 
     # Build label → (start, end) lookup for O(1) lookup during assignment.
     label_lookup: Dict[str, tuple[date, date]] = {
@@ -243,13 +247,12 @@ def _assign_installments_to_buckets(
 
         due = inst.due_date
 
-        if due < first_start:
-            # Pre-window installment.
-            if not is_paid and assumptions.carry_forward_overdue:
+        if due < window_start:
+            # Pre-window installment: only OVERDUE items are carried forward.
+            if inst.status == "overdue" and assumptions.carry_forward_overdue:
                 assigned[first_label].append(inst)
-            # Paid pre-window installments are outside the forecast window —
-            # they are excluded to avoid double-counting collected amounts.
-        elif due > last_end:
+            # Paid and PENDING pre-window installments are excluded.
+        elif due > window_end:
             # Post-window installment — exclude.
             pass
         else:
@@ -293,7 +296,7 @@ def compute_contract_forecast(
         assumptions = ForecastAssumptions()
 
     buckets = _generate_monthly_buckets(start_date, end_date)
-    assigned = _assign_installments_to_buckets(installments, buckets, assumptions)
+    assigned = _assign_installments_to_buckets(installments, buckets, assumptions, start_date, end_date)
     periods = _build_periods(buckets, assigned, assumptions)
     summary = _build_summary(periods)
 
@@ -340,7 +343,7 @@ def compute_project_forecast(
         assumptions = ForecastAssumptions()
 
     buckets = _generate_monthly_buckets(start_date, end_date)
-    assigned = _assign_installments_to_buckets(installments, buckets, assumptions)
+    assigned = _assign_installments_to_buckets(installments, buckets, assumptions, start_date, end_date)
     periods = _build_periods(buckets, assigned, assumptions)
     summary = _build_summary(periods)
 
