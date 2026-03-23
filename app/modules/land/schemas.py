@@ -250,6 +250,40 @@ class LandValuationResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Zoning Regulation Engine schemas
+# ---------------------------------------------------------------------------
+
+class ZoningEvaluateRequest(BaseModel):
+    """Request payload for POST /land/zoning/evaluate."""
+
+    land_area: float = Field(..., gt=0, description="Total parcel area in sqm")
+    far: float = Field(..., gt=0, description="Floor Area Ratio (e.g. 3.5)")
+    coverage_ratio: float = Field(..., gt=0, le=1, description="Site coverage fraction (0–1)")
+    max_height_m: float = Field(..., gt=0, description="Maximum permitted building height in metres")
+    floor_height_m: float = Field(..., gt=0, description="Storey height in metres")
+    parking_ratio: float = Field(..., ge=0, description="Parking spaces per unit")
+    setback_front: float = Field(default=0.0, ge=0, description="Front setback in metres")
+    setback_side: float = Field(default=0.0, ge=0, description="Side setback in metres")
+    setback_rear: float = Field(default=0.0, ge=0, description="Rear setback in metres")
+    avg_unit_size_sqm: Optional[float] = Field(
+        default=None, gt=0, description="Average unit size in sqm (required for unit-capacity output)"
+    )
+
+
+class ZoningResultResponse(BaseModel):
+    """Response payload for POST /land/zoning/evaluate."""
+
+    max_buildable_area: float
+    max_footprint_area: float
+    max_floors: int
+    setback_adjusted_area: float
+    effective_footprint: float
+    effective_buildable_area: float
+    estimated_unit_capacity: Optional[int]
+    parking_required: int
+
+
+# ---------------------------------------------------------------------------
 # LandValuationEngine schemas — engine-driven residual valuation
 # ---------------------------------------------------------------------------
 
