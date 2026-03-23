@@ -3,7 +3,7 @@ Tests for the PR-FIN-036 Construction Financing & Draw Schedule Engine.
 
 Validates:
   - debt / equity allocation correctness with default 60/40 split
-  - debt + equity equals financed_cost per period
+  - debt + equity equals financed_cost per period (residual approach)
   - cumulative_debt and cumulative_equity are monotonically non-decreasing
   - financing_start_offset defers financing by N periods
   - financing_probability scales period costs before allocation
@@ -20,13 +20,14 @@ Validates:
   - service layer raises ResourceNotFoundError for unknown project
   - service layer raises ResourceNotFoundError for unknown phase
   - service layer raises ValidationError for inverted date window
+  - schema rejects loan_draw_method != pro_rata with 422
+  - schema rejects equity_injection_method != pro_rata with 422
+  - schema rejects debt_ratio + equity_ratio != 1.0 with 422
   - API endpoint returns 200 with valid parameters
-  - API endpoint returns 422 for inverted date window
+  - API endpoint returns 422 for inverted date window (deterministic)
   - API endpoint returns 404 for unknown project
   - API endpoint returns 404 for unknown phase
   - debt_ratio query parameter is respected
-  - financing_probability query parameter is respected
-  - financing_start_offset query parameter is respected
   - period_label format is YYYY-MM
   - portfolio API endpoint returns 200 with valid parameters
   - portfolio project_results is list
@@ -35,6 +36,8 @@ Validates:
 import pytest
 from datetime import date
 from unittest.mock import MagicMock
+
+from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import ResourceNotFoundError, ValidationError
 from app.modules.finance.construction_cashflow_engine import ConstructionCashflowPeriodResult
@@ -490,74 +493,107 @@ class TestCashflowServiceConstructionFinancing:
 
 
 # ---------------------------------------------------------------------------
+# Schema validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestConstructionFinancingAssumptionsSchema:
+    """Tests for ConstructionFinancingAssumptionsSchema validators."""
+
+    def test_default_schema_is_valid(self):
+        schema = ConstructionFinancingAssumptionsSchema()
+        assert schema.debt_ratio == pytest.approx(0.60)
+        assert schema.equity_ratio == pytest.approx(0.40)
+        assert schema.loan_draw_method == "pro_rata"
+        assert schema.equity_injection_method == "pro_rata"
+
+    def test_ratios_must_sum_to_one(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(debt_ratio=0.60, equity_ratio=0.20)
+
+    def test_overfunded_ratios_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(debt_ratio=0.70, equity_ratio=0.50)
+
+    def test_custom_valid_ratios_accepted(self):
+        schema = ConstructionFinancingAssumptionsSchema(debt_ratio=0.70, equity_ratio=0.30)
+        assert schema.debt_ratio == pytest.approx(0.70)
+        assert schema.equity_ratio == pytest.approx(0.30)
+
+    def test_unsupported_loan_draw_method_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(loan_draw_method="front_loaded")
+
+    def test_unsupported_loan_draw_method_back_loaded_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(loan_draw_method="back_loaded")
+
+    def test_unsupported_equity_injection_method_upfront_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(
+                equity_injection_method="upfront",
+            )
+
+    def test_unsupported_equity_injection_method_on_demand_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(
+                equity_injection_method="on_demand",
+            )
+
+    def test_unknown_loan_draw_method_rejected(self):
+        with pytest.raises(PydanticValidationError):
+            ConstructionFinancingAssumptionsSchema(loan_draw_method="unknown_method")
+
+    def test_100_pct_debt_accepted(self):
+        schema = ConstructionFinancingAssumptionsSchema(debt_ratio=1.0, equity_ratio=0.0)
+        assert schema.debt_ratio == pytest.approx(1.0)
+
+    def test_100_pct_equity_accepted(self):
+        schema = ConstructionFinancingAssumptionsSchema(debt_ratio=0.0, equity_ratio=1.0)
+        assert schema.equity_ratio == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
 # API endpoint tests
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def test_client():
-    """Create a FastAPI test client with a mocked DB session."""
-    from fastapi.testclient import TestClient
-    from app.main import app
-
-    return TestClient(app, raise_server_exceptions=False)
-
-
-@pytest.fixture
-def auth_headers(test_client):
-    """Obtain a valid auth token."""
-    resp = test_client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin@example.com", "password": "admin"},
-    )
-    if resp.status_code != 200:
-        pytest.skip("Auth not available in test environment")
-    token = resp.json().get("access_token", "")
-    return {"Authorization": f"Bearer {token}"}
-
-
 class TestConstructionFinancingAPI:
-    """API endpoint tests — structural validation only (no real DB)."""
+    """API endpoint tests using the shared conftest `client` fixture.
+
+    The `client` fixture (from tests/conftest.py) injects an in-memory SQLite
+    DB and overrides the auth dependency, so tests run deterministically without
+    a real login flow.
+    """
 
     BASE = "/api/v1/finance"
 
-    def test_project_financing_endpoint_returns_422_for_inverted_dates(
-        self, test_client, auth_headers
-    ):
-        resp = test_client.get(
+    def test_project_financing_endpoint_returns_422_for_inverted_dates(self, client):
+        """Inverted date window must always return 422 (_validate_date_window runs first)."""
+        resp = client.get(
             f"{self.BASE}/projects/some-id/construction-financing",
             params={"start_date": "2026-12-31", "end_date": "2026-01-01"},
-            headers=auth_headers,
         )
-        # Either 422 (validation error) or 404 (project not found after date check)
-        # Both are acceptable: 404 means project lookup happened first.
-        assert resp.status_code in (404, 422)
+        assert resp.status_code == 422
 
-    def test_project_financing_endpoint_returns_404_for_unknown_project(
-        self, test_client, auth_headers
-    ):
-        resp = test_client.get(
+    def test_project_financing_endpoint_returns_404_for_unknown_project(self, client):
+        resp = client.get(
             f"{self.BASE}/projects/nonexistent-project-xyz/construction-financing",
             params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
-            headers=auth_headers,
         )
         assert resp.status_code == 404
 
-    def test_phase_financing_endpoint_returns_404_for_unknown_phase(
-        self, test_client, auth_headers
-    ):
-        resp = test_client.get(
+    def test_phase_financing_endpoint_returns_404_for_unknown_phase(self, client):
+        resp = client.get(
             f"{self.BASE}/phases/nonexistent-phase-xyz/construction-financing",
             params={"start_date": "2026-01-01", "end_date": "2026-12-31"},
-            headers=auth_headers,
         )
         assert resp.status_code == 404
 
-    def test_portfolio_financing_endpoint_returns_200(self, test_client, auth_headers):
-        resp = test_client.get(
+    def test_portfolio_financing_endpoint_returns_200(self, client):
+        resp = client.get(
             f"{self.BASE}/portfolio/construction-financing",
             params={"start_date": "2026-01-01", "end_date": "2026-03-31"},
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -566,18 +602,15 @@ class TestConstructionFinancingAPI:
         assert "periods" in data
         assert "project_results" in data
 
-    def test_portfolio_financing_returns_422_for_inverted_dates(
-        self, test_client, auth_headers
-    ):
-        resp = test_client.get(
+    def test_portfolio_financing_returns_422_for_inverted_dates(self, client):
+        resp = client.get(
             f"{self.BASE}/portfolio/construction-financing",
             params={"start_date": "2026-12-31", "end_date": "2026-01-01"},
-            headers=auth_headers,
         )
         assert resp.status_code == 422
 
-    def test_portfolio_financing_debt_ratio_query_param(self, test_client, auth_headers):
-        resp = test_client.get(
+    def test_portfolio_financing_debt_ratio_query_param(self, client):
+        resp = client.get(
             f"{self.BASE}/portfolio/construction-financing",
             params={
                 "start_date": "2026-01-01",
@@ -585,20 +618,16 @@ class TestConstructionFinancingAPI:
                 "debt_ratio": 0.80,
                 "equity_ratio": 0.20,
             },
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["assumptions"]["debt_ratio"] == pytest.approx(0.80)
         assert data["assumptions"]["equity_ratio"] == pytest.approx(0.20)
 
-    def test_portfolio_financing_summary_fields_non_negative(
-        self, test_client, auth_headers
-    ):
-        resp = test_client.get(
+    def test_portfolio_financing_summary_fields_non_negative(self, client):
+        resp = client.get(
             f"{self.BASE}/portfolio/construction-financing",
             params={"start_date": "2026-01-01", "end_date": "2026-06-30"},
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         summary = resp.json()["summary"]
@@ -607,3 +636,41 @@ class TestConstructionFinancingAPI:
         assert summary["total_equity"] >= 0.0
         assert summary["debt_to_cost_ratio"] >= 0.0
         assert summary["equity_to_cost_ratio"] >= 0.0
+
+    def test_unsupported_loan_draw_method_returns_422(self, client):
+        """front_loaded is a declared enum value but not yet implemented; must return 422."""
+        resp = client.get(
+            f"{self.BASE}/portfolio/construction-financing",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-03-31",
+                "loan_draw_method": "front_loaded",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_unsupported_equity_injection_method_returns_422(self, client):
+        """upfront is a declared enum value but not yet implemented; must return 422."""
+        resp = client.get(
+            f"{self.BASE}/portfolio/construction-financing",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-03-31",
+                "equity_injection_method": "upfront",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_mismatched_ratios_returns_422(self, client):
+        """debt_ratio + equity_ratio != 1.0 must return 422."""
+        resp = client.get(
+            f"{self.BASE}/portfolio/construction-financing",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-03-31",
+                "debt_ratio": 0.60,
+                "equity_ratio": 0.20,
+            },
+        )
+        assert resp.status_code == 422
+

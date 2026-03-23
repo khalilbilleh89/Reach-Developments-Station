@@ -43,9 +43,11 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import ValidationError as _PydanticValidationError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.core.errors import ValidationError as DomainValidationError
 from app.modules.finance.schemas import (
     AnalyticsRebuildResponse,
     CashflowForecastAssumptions,
@@ -101,6 +103,10 @@ from app.modules.finance.constants import (
     ConstructionEquityInjectionMethod,
     ConstructionLoanDrawMethod,
     ConstructionSpreadMethod,
+    DEFAULT_DEBT_RATIO,
+    DEFAULT_EQUITY_RATIO,
+    DEFAULT_FINANCING_PROBABILITY,
+    DEFAULT_FINANCING_START_OFFSET,
 )
 
 router = APIRouter(prefix="/finance", tags=["Finance"], dependencies=[Depends(get_current_user_payload)])
@@ -128,6 +134,36 @@ def get_matching_service(db: Session = Depends(get_db)) -> ReceiptMatchingServic
 
 def get_forecast_service(db: Session = Depends(get_db)) -> CashflowForecastService:
     return CashflowForecastService(db)
+
+
+def _build_financing_assumptions_schema(
+    debt_ratio: float,
+    equity_ratio: float,
+    loan_draw_method: ConstructionLoanDrawMethod,
+    equity_injection_method: ConstructionEquityInjectionMethod,
+    financing_start_offset: int,
+    financing_probability: float,
+) -> ConstructionFinancingAssumptionsSchema:
+    """Build and validate a ConstructionFinancingAssumptionsSchema.
+
+    Converts any Pydantic ValidationError raised during schema construction
+    into a domain ValidationError (HTTP 422) so the API contract is consistent.
+    """
+    try:
+        return ConstructionFinancingAssumptionsSchema(
+            debt_ratio=debt_ratio,
+            equity_ratio=equity_ratio,
+            loan_draw_method=loan_draw_method.value,
+            equity_injection_method=equity_injection_method.value,
+            financing_start_offset=financing_start_offset,
+            financing_probability=financing_probability,
+        )
+    except _PydanticValidationError as exc:
+        first_msg = exc.errors()[0].get("msg", str(exc)) if exc.errors() else str(exc)
+        raise DomainValidationError(
+            f"Invalid construction financing assumptions: {first_msg}",
+            details={"validation_errors": exc.errors()},
+        ) from exc
 
 
 def get_portfolio_summary_service(
@@ -646,13 +682,13 @@ def get_project_construction_financing(
     start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
     end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
     debt_ratio: float = Query(
-        default=0.60,
+        default=DEFAULT_DEBT_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by debt (0–1).",
     ),
     equity_ratio: float = Query(
-        default=0.40,
+        default=DEFAULT_EQUITY_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by equity (0–1).",
@@ -666,12 +702,12 @@ def get_project_construction_financing(
         description="Equity injection method: 'pro_rata' allocates equity proportionally.",
     ),
     financing_start_offset: int = Query(
-        default=0,
+        default=DEFAULT_FINANCING_START_OFFSET,
         ge=0,
         description="Number of periods before financing begins.",
     ),
     financing_probability: float = Query(
-        default=1.0,
+        default=DEFAULT_FINANCING_PROBABILITY,
         ge=0.0,
         le=1.0,
         description="Probability that financing is required in each period (0–1).",
@@ -696,11 +732,11 @@ def get_project_construction_financing(
         spread_method=ConstructionSpreadMethod.LINEAR.value,
         include_committed=True,
     )
-    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+    financing_assumptions = _build_financing_assumptions_schema(
         debt_ratio=debt_ratio,
         equity_ratio=equity_ratio,
-        loan_draw_method=loan_draw_method.value,
-        equity_injection_method=equity_injection_method.value,
+        loan_draw_method=loan_draw_method,
+        equity_injection_method=equity_injection_method,
         financing_start_offset=financing_start_offset,
         financing_probability=financing_probability,
     )
@@ -720,13 +756,13 @@ def get_phase_construction_financing(
     start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
     end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
     debt_ratio: float = Query(
-        default=0.60,
+        default=DEFAULT_DEBT_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by debt (0–1).",
     ),
     equity_ratio: float = Query(
-        default=0.40,
+        default=DEFAULT_EQUITY_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by equity (0–1).",
@@ -740,12 +776,12 @@ def get_phase_construction_financing(
         description="Equity injection method.",
     ),
     financing_start_offset: int = Query(
-        default=0,
+        default=DEFAULT_FINANCING_START_OFFSET,
         ge=0,
         description="Number of periods before financing begins.",
     ),
     financing_probability: float = Query(
-        default=1.0,
+        default=DEFAULT_FINANCING_PROBABILITY,
         ge=0.0,
         le=1.0,
         description="Probability that financing is required in each period (0–1).",
@@ -767,11 +803,11 @@ def get_phase_construction_financing(
         spread_method=ConstructionSpreadMethod.LINEAR.value,
         include_committed=True,
     )
-    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+    financing_assumptions = _build_financing_assumptions_schema(
         debt_ratio=debt_ratio,
         equity_ratio=equity_ratio,
-        loan_draw_method=loan_draw_method.value,
-        equity_injection_method=equity_injection_method.value,
+        loan_draw_method=loan_draw_method,
+        equity_injection_method=equity_injection_method,
         financing_start_offset=financing_start_offset,
         financing_probability=financing_probability,
     )
@@ -790,13 +826,13 @@ def get_portfolio_construction_financing(
     start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
     end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
     debt_ratio: float = Query(
-        default=0.60,
+        default=DEFAULT_DEBT_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by debt (0–1).",
     ),
     equity_ratio: float = Query(
-        default=0.40,
+        default=DEFAULT_EQUITY_RATIO,
         ge=0.0,
         le=1.0,
         description="Proportion of construction cost funded by equity (0–1).",
@@ -810,12 +846,12 @@ def get_portfolio_construction_financing(
         description="Equity injection method.",
     ),
     financing_start_offset: int = Query(
-        default=0,
+        default=DEFAULT_FINANCING_START_OFFSET,
         ge=0,
         description="Number of periods before financing begins.",
     ),
     financing_probability: float = Query(
-        default=1.0,
+        default=DEFAULT_FINANCING_PROBABILITY,
         ge=0.0,
         le=1.0,
         description="Probability that financing is required in each period (0–1).",
@@ -839,11 +875,11 @@ def get_portfolio_construction_financing(
         spread_method=ConstructionSpreadMethod.LINEAR.value,
         include_committed=True,
     )
-    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+    financing_assumptions = _build_financing_assumptions_schema(
         debt_ratio=debt_ratio,
         equity_ratio=equity_ratio,
-        loan_draw_method=loan_draw_method.value,
-        equity_injection_method=equity_injection_method.value,
+        loan_draw_method=loan_draw_method,
+        equity_injection_method=equity_injection_method,
         financing_start_offset=financing_start_offset,
         financing_probability=financing_probability,
     )

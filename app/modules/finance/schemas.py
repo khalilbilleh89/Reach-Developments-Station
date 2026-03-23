@@ -10,7 +10,7 @@ no raw financial tables are exposed.
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.modules.collections.aging_engine import AgingBucket
 from app.modules.finance.constants import (
@@ -809,6 +809,12 @@ class ConstructionFinancingAssumptionsSchema(BaseModel):
                 f"loan_draw_method '{v}' is not supported. "
                 f"Allowed values: {sorted(allowed)}"
             )
+        pro_rata = ConstructionLoanDrawMethod.PRO_RATA.value
+        if v != pro_rata:
+            raise ValueError(
+                f"loan_draw_method '{v}' is not supported yet. "
+                f"Only '{pro_rata}' is currently implemented."
+            )
         return v
 
     @field_validator("equity_injection_method")
@@ -820,7 +826,26 @@ class ConstructionFinancingAssumptionsSchema(BaseModel):
                 f"equity_injection_method '{v}' is not supported. "
                 f"Allowed values: {sorted(allowed)}"
             )
+        pro_rata = ConstructionEquityInjectionMethod.PRO_RATA.value
+        if v != pro_rata:
+            raise ValueError(
+                f"equity_injection_method '{v}' is not supported yet. "
+                f"Only '{pro_rata}' is currently implemented."
+            )
         return v
+
+    @model_validator(mode="after")
+    def _validate_ratios_sum_to_one(self) -> "ConstructionFinancingAssumptionsSchema":
+        total = self.debt_ratio + self.equity_ratio
+        # 1e-6 tolerance accommodates floating-point representation errors
+        # (e.g. 0.1 + 0.9 == 0.9999999... in IEEE-754).  Any larger deviation
+        # indicates a genuine misconfiguration of the capital stack.
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(
+                f"debt_ratio ({self.debt_ratio}) + equity_ratio ({self.equity_ratio}) "
+                f"must equal 1.0, but got {total:.6f}."
+            )
+        return self
 
 
 class ConstructionDrawScheduleSummaryResponse(BaseModel):

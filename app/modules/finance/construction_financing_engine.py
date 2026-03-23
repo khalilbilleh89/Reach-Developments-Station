@@ -333,7 +333,8 @@ def _compute_draw_periods_and_summary(
         financed_cost = round(cp.expected_cost * assumptions.financing_probability, 2)
 
         debt_draw = round(financed_cost * assumptions.debt_ratio, 2)
-        equity_contribution = round(financed_cost * assumptions.equity_ratio, 2)
+        # Compute equity as the residual so debt + equity == financed_cost after rounding.
+        equity_contribution = round(financed_cost - debt_draw, 2)
 
         cumulative_debt = round(cumulative_debt + debt_draw, 2)
         cumulative_equity = round(cumulative_equity + equity_contribution, 2)
