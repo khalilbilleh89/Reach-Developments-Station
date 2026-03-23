@@ -48,33 +48,20 @@ jest.mock("@/components/shell/AppShell.module.css", () => ({}));
 jest.mock("@/components/shell/AppHeader.module.css", () => ({}));
 jest.mock("@/components/shell/SidebarNav.module.css", () => ({}));
 
+import * as authLib from "@/lib/auth";
+
 // ---------- Helpers ------------------------------------------------------
 
-/** Make localStorage return a valid token. */
+const mockGetToken = authLib.getToken as jest.Mock;
+
+/** Make the auth lib return a valid token. */
 function withToken() {
-  Object.defineProperty(window, "localStorage", {
-    value: {
-      getItem: (key: string) =>
-        key === "reach_access_token" ? "fake-token-123" : null,
-      setItem: jest.fn(),
-      removeItem: jest.fn(),
-      clear: jest.fn(),
-    },
-    writable: true,
-  });
+  mockGetToken.mockReturnValue("fake-token-123");
 }
 
-/** Make localStorage return no token. */
+/** Make the auth lib return no token. */
 function withoutToken() {
-  Object.defineProperty(window, "localStorage", {
-    value: {
-      getItem: () => null,
-      setItem: jest.fn(),
-      removeItem: jest.fn(),
-      clear: jest.fn(),
-    },
-    writable: true,
-  });
+  mockGetToken.mockReturnValue(null);
 }
 
 // ---------- Tests --------------------------------------------------------

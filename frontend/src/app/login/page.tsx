@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
+import { getToken, setToken } from "@/lib/auth";
 
 /**
  * Login page.
@@ -22,11 +23,8 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("reach_access_token");
-      if (token) {
-        router.push("/dashboard");
-      }
+    if (getToken()) {
+      router.push("/dashboard");
     }
   }, [router]);
 
@@ -51,7 +49,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      localStorage.setItem("reach_access_token", data.access_token);
+      setToken(data.access_token);
       router.push("/dashboard");
     } catch {
       setError("Could not reach the server. Please try again.");
