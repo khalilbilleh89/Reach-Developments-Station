@@ -659,6 +659,7 @@ class ConstructionCashflowSummaryResponse(BaseModel):
     """High-level totals across all periods in the construction forecast window."""
 
     planned_total: float = Field(..., ge=0, description="Total planned construction cost.")
+    committed_total: float = Field(..., ge=0, description="Total committed construction cost.")
     expected_total: float = Field(..., ge=0, description="Total expected construction cost.")
     variance_to_plan: float = Field(..., description="expected_total − planned_total.")
 
