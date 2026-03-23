@@ -17,7 +17,12 @@ from app.core.calculation_engine.registry import (
     calculate_sellable_area,
 )
 from app.modules.land.models import LandAssembly, LandParcel
-from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
+from app.modules.land.repository import (
+    LandAssemblyRepository,
+    LandAssumptionsRepository,
+    LandParcelRepository,
+    LandValuationRepository,
+)
 from app.modules.land.schemas import (
     LandAssumptionCreate,
     LandAssumptionResponse,
@@ -37,6 +42,7 @@ from app.modules.land.schemas import (
 from app.modules.projects.repository import ProjectRepository
 from app.core.errors import ConflictError, ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.modules.land.aggregation_engine import ParcelMetrics, aggregate_parcels
 
 _logger = get_logger("reach_developments.land")
 
@@ -47,7 +53,6 @@ class LandService:
         self.assumptions_repo = LandAssumptionsRepository(db)
         self.valuation_repo = LandValuationRepository(db)
         self.project_repo = ProjectRepository(db)
-        from app.modules.land.repository import LandAssemblyRepository
         self.assembly_repo = LandAssemblyRepository(db)
 
     # ------------------------------------------------------------------
@@ -350,23 +355,21 @@ class LandService:
     def _build_assembly_response(self, assembly: "LandAssembly") -> LandAssemblyResponse:
         """Build a LandAssemblyResponse including member parcel summaries."""
         parcel_ids = self.assembly_repo.get_parcel_ids(assembly.id)
-        parcels_out: list = []
-        for pid in parcel_ids:
-            parcel = self.parcel_repo.get_by_id(pid)
-            if parcel is not None:
-                parcels_out.append(
-                    LandAssemblyParcelSummary(
-                        parcel_id=parcel.id,
-                        parcel_name=parcel.parcel_name,
-                        parcel_code=parcel.parcel_code,
-                        land_area_sqm=float(parcel.land_area_sqm) if parcel.land_area_sqm else None,
-                        frontage_m=float(parcel.frontage_m) if parcel.frontage_m else None,
-                        zoning_category=parcel.zoning_category,
-                        acquisition_price=(
-                            float(parcel.acquisition_price) if parcel.acquisition_price else None
-                        ),
-                    )
-                )
+        parcels_out = self.assembly_repo.get_parcels_for_assembly(parcel_ids)
+        parcel_summaries = [
+            LandAssemblyParcelSummary(
+                parcel_id=p.id,
+                parcel_name=p.parcel_name,
+                parcel_code=p.parcel_code,
+                land_area_sqm=float(p.land_area_sqm) if p.land_area_sqm is not None else None,
+                frontage_m=float(p.frontage_m) if p.frontage_m is not None else None,
+                zoning_category=p.zoning_category,
+                acquisition_price=(
+                    float(p.acquisition_price) if p.acquisition_price is not None else None
+                ),
+            )
+            for p in parcels_out
+        ]
         return LandAssemblyResponse(
             id=assembly.id,
             assembly_name=assembly.assembly_name,
@@ -374,26 +377,32 @@ class LandService:
             notes=assembly.notes,
             status=assembly.status,
             parcel_count=assembly.parcel_count,
-            total_area_sqm=float(assembly.total_area_sqm) if assembly.total_area_sqm else None,
+            total_area_sqm=(
+                float(assembly.total_area_sqm) if assembly.total_area_sqm is not None else None
+            ),
             total_frontage_m=(
-                float(assembly.total_frontage_m) if assembly.total_frontage_m else None
+                float(assembly.total_frontage_m)
+                if assembly.total_frontage_m is not None
+                else None
             ),
             total_acquisition_price=(
                 float(assembly.total_acquisition_price)
-                if assembly.total_acquisition_price
+                if assembly.total_acquisition_price is not None
                 else None
             ),
             total_transaction_cost=(
                 float(assembly.total_transaction_cost)
-                if assembly.total_transaction_cost
+                if assembly.total_transaction_cost is not None
                 else None
             ),
             effective_land_basis=(
-                float(assembly.effective_land_basis) if assembly.effective_land_basis else None
+                float(assembly.effective_land_basis)
+                if assembly.effective_land_basis is not None
+                else None
             ),
             weighted_permitted_far=(
                 float(assembly.weighted_permitted_far)
-                if assembly.weighted_permitted_far
+                if assembly.weighted_permitted_far is not None
                 else None
             ),
             dominant_zoning_category=assembly.dominant_zoning_category,
@@ -402,7 +411,7 @@ class LandService:
             has_corner_plot=assembly.has_corner_plot,
             assembly_results_json=assembly.assembly_results_json,
             parcel_ids=parcel_ids,
-            parcels=parcels_out,
+            parcels=parcel_summaries,
             created_at=assembly.created_at,
             updated_at=assembly.updated_at,
         )
@@ -414,11 +423,15 @@ class LandService:
             assembly_code=assembly.assembly_code,
             status=assembly.status,
             parcel_count=assembly.parcel_count,
-            total_area_sqm=float(assembly.total_area_sqm) if assembly.total_area_sqm else None,
+            total_area_sqm=(
+                float(assembly.total_area_sqm) if assembly.total_area_sqm is not None else None
+            ),
             mixed_zoning=assembly.mixed_zoning,
             dominant_zoning_category=assembly.dominant_zoning_category,
             effective_land_basis=(
-                float(assembly.effective_land_basis) if assembly.effective_land_basis else None
+                float(assembly.effective_land_basis)
+                if assembly.effective_land_basis is not None
+                else None
             ),
             created_at=assembly.created_at,
             updated_at=assembly.updated_at,
@@ -426,7 +439,6 @@ class LandService:
 
     def _parcels_to_metrics(self, parcels: list) -> list:
         """Convert ORM LandParcel records to ParcelMetrics for the engine."""
-        from app.modules.land.aggregation_engine import ParcelMetrics
         return [
             ParcelMetrics(
                 parcel_id=p.id,
@@ -450,8 +462,6 @@ class LandService:
 
     def create_assembly(self, data: LandAssemblyCreate) -> LandAssemblyResponse:
         """Validate, aggregate, and persist a new land parcel assembly."""
-        from app.modules.land.aggregation_engine import aggregate_parcels
-
         # Check assembly code uniqueness
         existing = self.assembly_repo.get_by_code(data.assembly_code)
         if existing:
@@ -495,14 +505,22 @@ class LandService:
         metrics = self._parcels_to_metrics(parcels)
         result = aggregate_parcels(metrics)
 
-        assembly = self.assembly_repo.create(
-            assembly_name=data.assembly_name,
-            assembly_code=data.assembly_code,
-            notes=data.notes,
-            status=data.status.value,
-            parcel_ids=data.parcel_ids,
-            result=result,
-        )
+        try:
+            assembly = self.assembly_repo.create(
+                assembly_name=data.assembly_name,
+                assembly_code=data.assembly_code,
+                notes=data.notes,
+                status=data.status.value,
+                parcel_ids=data.parcel_ids,
+                result=result,
+            )
+        except IntegrityError:
+            self.assembly_repo.db.rollback()
+            raise ConflictError(
+                f"An assembly with code '{data.assembly_code}' already exists or a parcel "
+                "is already assigned to another assembly.",
+                details={"assembly_code": data.assembly_code},
+            )
         _logger.info(
             "Land assembly created: id=%s code=%r parcels=%d",
             assembly.id,
@@ -542,11 +560,11 @@ class LandService:
 
         Loads the current member parcel records, re-runs the aggregation
         engine, updates the assembly snapshot, and returns the refreshed
-        response.  If a member parcel has been deleted since the assembly
-        was created, it is silently skipped during recomputation.
+        response.  Member parcels that have been deleted since the assembly
+        was created are silently skipped.  If *all* member parcels have been
+        deleted a ValidationError(422) is raised, because the engine requires
+        at least one parcel to produce meaningful aggregate outputs.
         """
-        from app.modules.land.aggregation_engine import aggregate_parcels
-
         assembly = self.assembly_repo.get_by_id(assembly_id)
         if not assembly:
             raise ResourceNotFoundError(

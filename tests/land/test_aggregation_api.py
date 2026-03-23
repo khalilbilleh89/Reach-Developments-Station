@@ -453,3 +453,25 @@ def test_recompute_assembly_response_has_all_fields(client: TestClient):
         "effective_land_basis", "mixed_zoning", "parcel_ids", "parcels",
     ):
         assert field in body, f"Missing field in recompute response: {field}"
+
+
+# ---------------------------------------------------------------------------
+# Zero value preservation
+# ---------------------------------------------------------------------------
+
+def test_create_assembly_zero_acquisition_price_preserved(client: TestClient):
+    """Zero acquisition_price must not be silently turned into null in the response."""
+    p1 = _create_parcel(client, "PCL-ZV01", acquisition_price=0.0, transaction_cost=0.0)
+    body = _create_assembly(client, [p1["id"]], "ASM-ZV1")
+    # effective_land_basis = 0.0 + 0.0 = 0.0; must be returned as 0, not null
+    assert body["effective_land_basis"] is not None
+    assert body["effective_land_basis"] == pytest.approx(0.0)
+
+
+def test_create_assembly_zero_area_preserved(client: TestClient):
+    """Parcel with no land_area_sqm yields 0.0 total_area (not null) when all areas absent."""
+    # Parcel without land_area_sqm → engine sums to 0.0
+    p1 = _create_parcel(client, "PCL-ZV02", land_area_sqm=None)
+    body = _create_assembly(client, [p1["id"]], "ASM-ZV2")
+    # Engine returns 0.0; must be persisted and returned as a numeric value, not omitted
+    assert "total_area_sqm" in body

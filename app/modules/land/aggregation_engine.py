@@ -15,7 +15,7 @@ total_acquisition_price     = sum of parcel acquisition_price (parcels with None
 total_transaction_cost      = sum of parcel transaction_cost (parcels with None excluded)
 effective_land_basis        = total_acquisition_price + total_transaction_cost
 weighted_permitted_far      = area-weighted average FAR across parcels that have both
-                              land_area_sqm and permitted_far set; None when none qualify
+                              land_area_sqm > 0 and permitted_far > 0; None when none qualify
 dominant_zoning_category    = most common zoning_category across parcels (by count);
                               None when no parcel carries a zoning_category
 mixed_zoning                = True when > 1 distinct zoning_category is present

@@ -220,17 +220,11 @@ class LandAssemblyRepository:
             notes=notes,
             status=status,
             parcel_count=result.parcel_count,
-            total_area_sqm=result.total_area_sqm if result.total_area_sqm else None,
-            total_frontage_m=result.total_frontage_m if result.total_frontage_m else None,
-            total_acquisition_price=(
-                result.total_acquisition_price if result.total_acquisition_price else None
-            ),
-            total_transaction_cost=(
-                result.total_transaction_cost if result.total_transaction_cost else None
-            ),
-            effective_land_basis=(
-                result.effective_land_basis if result.effective_land_basis else None
-            ),
+            total_area_sqm=result.total_area_sqm,
+            total_frontage_m=result.total_frontage_m,
+            total_acquisition_price=result.total_acquisition_price,
+            total_transaction_cost=result.total_transaction_cost,
+            effective_land_basis=result.effective_land_basis,
             weighted_permitted_far=result.weighted_permitted_far,
             dominant_zoning_category=result.dominant_zoning_category,
             mixed_zoning=result.mixed_zoning,
@@ -296,17 +290,11 @@ class LandAssemblyRepository:
     ) -> LandAssembly:
         """Update snapshot fields on an existing assembly after recomputation."""
         assembly.parcel_count = result.parcel_count
-        assembly.total_area_sqm = result.total_area_sqm if result.total_area_sqm else None
-        assembly.total_frontage_m = result.total_frontage_m if result.total_frontage_m else None
-        assembly.total_acquisition_price = (
-            result.total_acquisition_price if result.total_acquisition_price else None
-        )
-        assembly.total_transaction_cost = (
-            result.total_transaction_cost if result.total_transaction_cost else None
-        )
-        assembly.effective_land_basis = (
-            result.effective_land_basis if result.effective_land_basis else None
-        )
+        assembly.total_area_sqm = result.total_area_sqm
+        assembly.total_frontage_m = result.total_frontage_m
+        assembly.total_acquisition_price = result.total_acquisition_price
+        assembly.total_transaction_cost = result.total_transaction_cost
+        assembly.effective_land_basis = result.effective_land_basis
         assembly.weighted_permitted_far = result.weighted_permitted_far
         assembly.dominant_zoning_category = result.dominant_zoning_category
         assembly.mixed_zoning = result.mixed_zoning
@@ -339,13 +327,32 @@ class LandAssemblyRepository:
     # ------------------------------------------------------------------
 
     def get_parcel_ids(self, assembly_id: str) -> List[str]:
-        """Return the list of parcel IDs that belong to an assembly."""
+        """Return the ordered list of parcel IDs that belong to an assembly.
+
+        Ordered by (created_at, parcel_id) to guarantee stable, deterministic
+        ordering across queries and DB backends.
+        """
         rows = (
             self.db.query(LandAssemblyParcel.parcel_id)
             .filter(LandAssemblyParcel.assembly_id == assembly_id)
+            .order_by(LandAssemblyParcel.created_at, LandAssemblyParcel.parcel_id)
             .all()
         )
         return [row[0] for row in rows]
+
+    def get_parcels_for_assembly(self, parcel_ids: List[str]) -> List[LandParcel]:
+        """Fetch all LandParcel records for the given IDs in a single query.
+
+        Parcels whose IDs are not found (e.g. deleted since assembly creation)
+        are omitted from the result.  Ordering follows the supplied id list.
+        """
+        if not parcel_ids:
+            return []
+        parcels_by_id = {
+            p.id: p
+            for p in self.db.query(LandParcel).filter(LandParcel.id.in_(parcel_ids)).all()
+        }
+        return [parcels_by_id[pid] for pid in parcel_ids if pid in parcels_by_id]
 
     def get_assembly_id_for_parcel(self, parcel_id: str) -> Optional[str]:
         """Return the assembly_id that currently owns a parcel, or None."""
