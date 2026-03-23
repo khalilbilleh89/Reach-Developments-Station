@@ -111,6 +111,7 @@ class ConstructionCashflowSummary:
     """High-level totals across all periods in the forecast window."""
 
     planned_total: float
+    committed_total: float  # sum of committed costs across all periods
     expected_total: float
     variance_to_plan: float  # expected_total − planned_total
 
@@ -434,9 +435,11 @@ def compute_portfolio_construction_cashflow(
         )
 
     planned_total = round(sum(p.planned_cost for p in portfolio_periods), 2)
+    committed_total = round(sum(p.committed_cost for p in portfolio_periods), 2)
     expected_total = round(sum(p.expected_cost for p in portfolio_periods), 2)
     summary = ConstructionCashflowSummary(
         planned_total=planned_total,
+        committed_total=committed_total,
         expected_total=expected_total,
         variance_to_plan=round(expected_total - planned_total, 2),
     )
@@ -516,9 +519,11 @@ def _compute_periods_and_summary(
         )
 
     planned_total = round(sum(p.planned_cost for p in periods), 2)
+    committed_total = round(sum(p.committed_cost for p in periods), 2)
     expected_total = round(sum(p.expected_cost for p in periods), 2)
     summary = ConstructionCashflowSummary(
         planned_total=planned_total,
+        committed_total=committed_total,
         expected_total=expected_total,
         variance_to_plan=round(expected_total - planned_total, 2),
     )

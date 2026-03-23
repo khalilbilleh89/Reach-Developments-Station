@@ -1,5 +1,5 @@
 """
-Tests for the PR-FIN-034 Construction Cashflow Forecast Engine.
+Tests for the PR-FIN-034 / PR-FIN-035 Construction Cashflow Forecast Engine.
 
 Validates:
   - linear spread accuracy across full execution windows
@@ -35,6 +35,7 @@ Validates:
   - cost_item_count reflects distinct contributing records
   - cumulative_cost in portfolio equals sum across all project periods
   - planned_total in summary equals sum of period planned_cost
+  - committed_total in summary equals sum of period committed_cost
   - expected_total in summary equals sum of period expected_cost
 """
 
@@ -318,6 +319,20 @@ class TestComputeProjectConstructionCashflow:
             sum(p.expected_cost for p in result.periods)
         )
 
+    def test_summary_committed_total_equals_sum_of_period_committed(self):
+        """summary.committed_total == sum of all period committed_cost values."""
+        records = [_record(1_200_000.0, 600_000.0, date(2026, 1, 1), date(2026, 12, 31))]
+        result = compute_project_construction_cashflow("p-001", records, self.START, self.END)
+        assert result.summary.committed_total == pytest.approx(
+            sum(p.committed_cost for p in result.periods)
+        )
+
+    def test_summary_committed_total_is_zero_when_no_committed_costs(self):
+        """summary.committed_total == 0.0 when all committed_amount values are zero."""
+        records = [_record(1_200_000.0, 0.0, date(2026, 1, 1), date(2026, 12, 31))]
+        result = compute_project_construction_cashflow("p-001", records, self.START, self.END)
+        assert result.summary.committed_total == pytest.approx(0.0)
+
 
 class TestComputePhaseConstructionCashflow:
     """Tests for compute_phase_construction_cashflow — pure calculations, no DB."""
@@ -420,6 +435,9 @@ class TestComputePortfolioConstructionCashflow:
         )
         assert result.summary.planned_total == pytest.approx(
             sum(p.planned_cost for p in result.periods)
+        )
+        assert result.summary.committed_total == pytest.approx(
+            sum(p.committed_cost for p in result.periods)
         )
         assert result.summary.expected_total == pytest.approx(
             sum(p.expected_cost for p in result.periods)
@@ -677,6 +695,7 @@ class TestConstructionCashflowAPIEndpoints:
         body = resp.json()
         summary = body["summary"]
         assert "planned_total" in summary
+        assert "committed_total" in summary
         assert "expected_total" in summary
         assert "variance_to_plan" in summary
 

@@ -741,6 +741,7 @@ def _construction_period_to_row(period: object) -> ConstructionCashflowPeriodRow
 def _construction_summary_to_response(summary: object) -> ConstructionCashflowSummaryResponse:
     return ConstructionCashflowSummaryResponse(
         planned_total=summary.planned_total,
+        committed_total=summary.committed_total,
         expected_total=summary.expected_total,
         variance_to_plan=summary.variance_to_plan,
     )
