@@ -2,13 +2,18 @@
 Request logging middleware.
 
 Assigns a correlation ID to every inbound HTTP request and emits a
-structured log record after the response has been sent, including:
+structured log record after the application has generated the response,
+including:
 
     - request_id  — unique correlation ID for the request
     - method      — HTTP method (GET, POST, …)
     - path        — request path
     - status      — HTTP response status code
-    - duration_ms — elapsed time in milliseconds
+    - duration_ms — elapsed time in milliseconds to generate the response
+
+Unhandled exceptions are caught, logged at ERROR level with status 500,
+and then re-raised so that registered error handlers can still process
+the response.
 """
 
 import time
@@ -35,9 +40,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         set_request_id(request_id)
 
         start = time.monotonic()
-        response = await call_next(request)
-        duration_ms = round((time.monotonic() - start) * 1000)
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log_context = {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status": 500,
+                "duration_ms": duration_ms,
+            }
+            _logger.error(
+                "%(method)s %(path)s → %(status)s (%(duration_ms)sms)",
+                log_context,
+                extra=log_context,
+            )
+            raise
 
+        duration_ms = round((time.monotonic() - start) * 1000)
         log_context = {
             "request_id": request_id,
             "method": request.method,

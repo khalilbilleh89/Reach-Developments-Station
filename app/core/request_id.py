@@ -3,8 +3,9 @@ Core request ID utility.
 
 Provides request-scoped correlation IDs that are injected into each
 HTTP request by the request logging middleware.  The ID is stored in
-a context variable so it can be included in service-level log records
-without being threaded through every function call.
+a context variable so it can be accessed from anywhere in the call
+stack (for example by logging utilities) without being threaded
+through every function call.
 """
 
 import uuid
