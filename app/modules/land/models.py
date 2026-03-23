@@ -3,10 +3,15 @@ land.models
 
 ORM models for the Land Underwriting domain.
 Entities: LandParcel → LandAssumptions + LandValuation
+          LandAssembly ←→ LandParcel (via LandAssemblyParcel join table)
 
 Land parcels are independent pre-project entities. project_id is optional:
 a parcel can exist before any project is created and can be linked to a
 project later in the development lifecycle.
+
+Land assemblies aggregate multiple parcels into a combined development site.
+Parcel records remain canonical; assembly stores a recomputable aggregate
+snapshot derived from them.
 """
 
 from datetime import date
@@ -108,6 +113,9 @@ class LandParcel(Base, TimestampMixin):
     valuations: Mapped[List["LandValuation"]] = relationship(
         "LandValuation", back_populates="parcel", cascade="all, delete-orphan"
     )
+    assembly_memberships: Mapped[List["LandAssemblyParcel"]] = relationship(
+        "LandAssemblyParcel", back_populates="parcel", cascade="all, delete-orphan"
+    )
 
 
 class LandAssumptions(Base, TimestampMixin):
@@ -161,3 +169,81 @@ class LandValuation(Base, TimestampMixin):
     valuation_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     parcel: Mapped["LandParcel"] = relationship("LandParcel", back_populates="valuations")
+
+
+class LandAssembly(Base, TimestampMixin):
+    """A named assembly of multiple land parcels evaluated as a combined development site.
+
+    The assembly stores an aggregate snapshot of parcel metrics.  Snapshot fields
+    (total_area_sqm, weighted_permitted_far, etc.) are derived by the
+    aggregation engine and persisted for fast retrieval.  They can be recomputed
+    at any time from the canonical parcel source records.
+    """
+
+    __tablename__ = "land_assemblies"
+
+    assembly_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    assembly_code: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=LandParcelStatus.DRAFT.value
+    )
+
+    # ---------------------------------------------------------------------------
+    # Aggregated snapshot fields  (computed by aggregation engine, stored here)
+    # ---------------------------------------------------------------------------
+    parcel_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    total_area_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    total_frontage_m: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    total_acquisition_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    total_transaction_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    effective_land_basis: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    weighted_permitted_far: Mapped[Optional[float]] = mapped_column(Numeric(8, 4), nullable=True)
+    dominant_zoning_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mixed_zoning: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    has_utilities: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    has_corner_plot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    assembly_results_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    assembly_parcels: Mapped[List["LandAssemblyParcel"]] = relationship(
+        "LandAssemblyParcel", back_populates="assembly", cascade="all, delete-orphan"
+    )
+
+
+class LandAssemblyParcel(Base, TimestampMixin):
+    """Join table recording which parcels belong to which assembly.
+
+    Constraints
+    -----------
+    - A parcel may appear in at most one assembly at a time
+      (unique constraint on parcel_id).
+    - The same parcel cannot appear twice in the same assembly
+      (unique constraint on assembly_id + parcel_id).
+    """
+
+    __tablename__ = "land_assembly_parcels"
+    __table_args__ = (
+        UniqueConstraint("assembly_id", "parcel_id", name="uq_assembly_parcel"),
+        UniqueConstraint("parcel_id", name="uq_parcel_single_assembly"),
+    )
+
+    assembly_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("land_assemblies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parcel_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("land_parcels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    assembly: Mapped["LandAssembly"] = relationship(
+        "LandAssembly", back_populates="assembly_parcels"
+    )
+    parcel: Mapped["LandParcel"] = relationship(
+        "LandParcel", back_populates="assembly_memberships"
+    )
