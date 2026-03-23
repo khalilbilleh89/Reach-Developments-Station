@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
+import { getToken } from "@/lib/auth";
 
 /**
  * Protected layout — wraps all authenticated routes.
@@ -25,10 +26,7 @@ export default function ProtectedLayout({
   const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("reach_access_token")
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.push("/login");
