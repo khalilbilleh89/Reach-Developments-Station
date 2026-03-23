@@ -23,14 +23,21 @@ from app.modules.land.schemas import (
     LandValuationCreate,
     LandValuationEngineRequest,
     LandValuationResponse,
+    ZoningEvaluateRequest,
+    ZoningResultResponse,
 )
 from app.modules.land.service import LandService
+from app.modules.land.zoning_service import ZoningService
 
 router = APIRouter(prefix="/land", tags=["land"], dependencies=[Depends(get_current_user_payload)])
 
 
 def get_service(db: Session = Depends(get_db)) -> LandService:
     return LandService(db)
+
+
+def get_zoning_service() -> ZoningService:
+    return ZoningService()
 
 
 # ---------------------------------------------------------------------------
@@ -154,3 +161,21 @@ def run_valuation_engine(
       land_value = GDV − (construction_cost + soft_costs) − target_profit
     """
     return service.calculate_land_valuation(parcel_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Zoning evaluation endpoint
+# ---------------------------------------------------------------------------
+
+@router.post("/zoning/evaluate", response_model=ZoningResultResponse)
+def evaluate_zoning(
+    data: ZoningEvaluateRequest,
+    service: Annotated[ZoningService, Depends(get_zoning_service)],
+) -> ZoningResultResponse:
+    """Evaluate zoning capacity from parcel and regulation parameters.
+
+    Accepts zoning inputs (FAR, coverage ratio, height, setbacks, parking ratio)
+    and returns derived development limits including maximum buildable area,
+    effective footprint, floor count, and parking requirements.
+    """
+    return service.evaluate(data)
