@@ -1055,7 +1055,7 @@ class ConstructionService:
                 detail=f"Construction scope '{scope_id}' not found.",
             )
 
-        milestones = self.milestone_repo.list(scope_id=scope_id)
+        milestones = self.milestone_repo.list_all_for_scope(scope_id)
 
         cost_inputs = [
             MilestoneCostData(

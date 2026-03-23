@@ -296,7 +296,7 @@ def test_get_scope_cost_multiple_milestones_aggregate(client: TestClient) -> Non
     scope = _create_scope(client, project_id)
     m1 = _create_milestone(client, scope["id"], sequence=1, name="Phase1")
     m2 = _create_milestone(client, scope["id"], sequence=2, name="Phase2")
-    m3 = _create_milestone(client, scope["id"], sequence=3, name="Phase3")
+    _create_milestone(client, scope["id"], sequence=3, name="Phase3")
 
     _post_cost(client, m1["id"], {"planned_cost": 10000.00, "actual_cost": 11000.00})
     _post_cost(client, m2["id"], {"planned_cost": 20000.00, "actual_cost": 18000.00})
@@ -334,3 +334,56 @@ def test_cost_fields_appear_in_milestone_response(client: TestClient) -> None:
     assert Decimal(data2["planned_cost"]) == Decimal("9999.99")
     assert Decimal(data2["actual_cost"]) == Decimal("9999.99")
     assert data2["cost_last_updated_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Pagination integrity — >100 milestones
+# ---------------------------------------------------------------------------
+
+
+def test_scope_cost_aggregation_not_truncated_by_pagination(client: TestClient) -> None:
+    """Scope with 101 milestones must return all rows — not a paginated 100-row subset."""
+    project_id = _create_project(client, "CA-040")
+    scope = _create_scope(client, project_id)
+
+    milestone_count = 101
+    cost_per_milestone = Decimal("1000.00")
+
+    for i in range(1, milestone_count + 1):
+        m = _create_milestone(client, scope["id"], sequence=i, name=f"M{i}")
+        _post_cost(client, m["id"], {"planned_cost": float(cost_per_milestone),
+                                     "actual_cost": float(cost_per_milestone)})
+
+    resp = _get_scope_cost(client, scope["id"])
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert len(data["milestones"]) == milestone_count
+    expected_total = cost_per_milestone * milestone_count
+    assert Decimal(data["project_budget"]) == expected_total
+    assert Decimal(data["project_actual_cost"]) == expected_total
+    assert Decimal(data["project_cost_variance"]) == Decimal("0.00")
+
+
+def test_scope_cost_endpoint_returns_full_aggregate_for_large_scope(client: TestClient) -> None:
+    """Project-level budget/variance aggregates must include all milestones, not just first 100."""
+    project_id = _create_project(client, "CA-041")
+    scope = _create_scope(client, project_id)
+
+    # Create 101 milestones: first 100 at 1000 planned/actual, milestone 101 at 5000 planned/9000 actual
+    for i in range(1, 101):
+        m = _create_milestone(client, scope["id"], sequence=i, name=f"M{i}")
+        _post_cost(client, m["id"], {"planned_cost": 1000.00, "actual_cost": 1000.00})
+
+    m101 = _create_milestone(client, scope["id"], sequence=101, name="M101-overrun")
+    _post_cost(client, m101["id"], {"planned_cost": 5000.00, "actual_cost": 9000.00})
+
+    resp = _get_scope_cost(client, scope["id"])
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Without the fix, milestone 101 would be silently excluded and variance would be 0
+    assert len(data["milestones"]) == 101
+    assert Decimal(data["project_budget"]) == Decimal("105000.00")   # 100×1000 + 5000
+    assert Decimal(data["project_actual_cost"]) == Decimal("109000.00")  # 100×1000 + 9000
+    assert Decimal(data["project_cost_variance"]) == Decimal("4000.00")
