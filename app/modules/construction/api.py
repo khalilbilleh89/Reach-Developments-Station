@@ -61,6 +61,10 @@ Endpoints:
   POST   /api/v1/construction/packages/{package_id}/assign-contractor
   POST   /api/v1/construction/packages/{package_id}/milestones/{milestone_id}
   GET    /api/v1/construction/scopes/{scope_id}/procurement-overview
+
+  GET    /api/v1/construction/scopes/{scope_id}/risk-alerts
+  GET    /api/v1/construction/scopes/{scope_id}/procurement-risk
+  GET    /api/v1/construction/contractors/{contractor_id}/performance
 """
 
 from typing import Annotated, Optional
@@ -88,6 +92,7 @@ from app.modules.construction.schemas import (
     ConstructionScopeUpdate,
     ContractorCreate,
     ContractorList,
+    ContractorPerformanceSummaryResponse,
     ContractorResponse,
     ContractorUpdate,
     CriticalPathResponse,
@@ -106,11 +111,13 @@ from app.modules.construction.schemas import (
     ProcurementPackageList,
     ProcurementPackageResponse,
     ProcurementPackageUpdate,
+    ProcurementRiskOverviewResponse,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
     ScopeMilestoneCostResponse,
     ScopeProgressResponse,
+    ScopeRiskAlertListResponse,
     ScopeScheduleResponse,
     ScopeVarianceResponse,
 )
@@ -735,3 +742,42 @@ def get_scope_procurement_overview(
 ) -> ProcurementOverviewResponse:
     """Return procurement execution summary for a construction scope."""
     return service.get_scope_procurement_overview(scope_id)
+
+
+# ── Risk Alert endpoints (PR-CONSTR-044) ─────────────────────────────────────
+
+
+@router.get(
+    "/scopes/{scope_id}/risk-alerts",
+    response_model=ScopeRiskAlertListResponse,
+)
+def get_scope_risk_alerts(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeRiskAlertListResponse:
+    """Return construction execution risk alerts for a scope."""
+    return service.get_scope_risk_alerts(scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/procurement-risk",
+    response_model=ProcurementRiskOverviewResponse,
+)
+def get_scope_procurement_risk(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementRiskOverviewResponse:
+    """Return procurement risk overview for a construction scope."""
+    return service.get_scope_procurement_risk(scope_id)
+
+
+@router.get(
+    "/contractors/{contractor_id}/performance",
+    response_model=ContractorPerformanceSummaryResponse,
+)
+def get_contractor_performance(
+    contractor_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ContractorPerformanceSummaryResponse:
+    """Return performance summary and risk alerts for a contractor."""
+    return service.get_contractor_performance(contractor_id)

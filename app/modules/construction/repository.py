@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, over, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.buildings.models import Building
 from app.modules.construction.models import (
@@ -906,4 +906,39 @@ class ConstructionProcurementPackageRepository:
     def delete(self, package: ConstructionProcurementPackage) -> None:
         self.db.delete(package)
         self.db.commit()
+
+
+class ConstructionRiskRepository:
+    """Read-only data loading for construction risk alert computation."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def load_scope_packages_with_milestones(
+        self, scope_id: str
+    ) -> List[ConstructionProcurementPackage]:
+        """Return all packages for a scope with milestones eagerly loaded."""
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .options(joinedload(ConstructionProcurementPackage.milestones))
+            .filter(ConstructionProcurementPackage.scope_id == scope_id)
+            .order_by(ConstructionProcurementPackage.package_code)
+            .all()
+        )
+
+    def load_contractor_packages_with_milestones(
+        self, contractor_id: str
+    ) -> List[ConstructionProcurementPackage]:
+        """Return all packages assigned to a contractor with milestones loaded."""
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        return (
+            self.db.query(ConstructionProcurementPackage)
+            .options(joinedload(ConstructionProcurementPackage.milestones))
+            .filter(ConstructionProcurementPackage.contractor_id == contractor_id)
+            .order_by(ConstructionProcurementPackage.package_code)
+            .all()
+        )
 
