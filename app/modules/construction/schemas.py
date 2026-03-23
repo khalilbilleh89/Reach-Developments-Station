@@ -72,6 +72,7 @@ class ConstructionMilestoneCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     sequence: int = Field(..., ge=1)
+    duration_days: Optional[int] = Field(None, ge=0)
     status: MilestoneStatus = MilestoneStatus.PENDING
     target_date: Optional[date] = None
     completion_date: Optional[date] = None
@@ -82,6 +83,7 @@ class ConstructionMilestoneUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     sequence: Optional[int] = Field(None, ge=1)
+    duration_days: Optional[int] = Field(None, ge=0)
     status: Optional[MilestoneStatus] = None
     target_date: Optional[date] = None
     completion_date: Optional[date] = None
@@ -94,6 +96,7 @@ class ConstructionMilestoneResponse(BaseModel):
     name: str
     description: Optional[str]
     sequence: int
+    duration_days: Optional[int]
     status: MilestoneStatus
     target_date: Optional[date]
     completion_date: Optional[date]
@@ -432,3 +435,74 @@ class ConstructionDashboardResponse(BaseModel):
     variance_to_budget: Decimal
     variance_to_commitment: Decimal
     scopes: List[ConstructionDashboardScopeSummary]
+
+
+# ── Milestone Dependency ─────────────────────────────────────────────────────
+
+
+class MilestoneDependencyCreate(BaseModel):
+    """Create a finish-to-start dependency between two milestones."""
+
+    predecessor_id: str = Field(..., description="ID of the predecessor milestone")
+    successor_id: str = Field(..., description="ID of the successor milestone")
+    lag_days: int = Field(default=0, ge=0, description="Waiting days after predecessor finishes")
+
+    @model_validator(mode="after")
+    def no_self_dependency(self) -> "MilestoneDependencyCreate":
+        if self.predecessor_id == self.successor_id:
+            raise ValueError("A milestone cannot depend on itself.")
+        return self
+
+
+class MilestoneDependencyResponse(BaseModel):
+    id: str
+    predecessor_id: str
+    successor_id: str
+    lag_days: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MilestoneDependencyList(BaseModel):
+    items: List[MilestoneDependencyResponse]
+    total: int
+
+
+# ── Schedule Results ─────────────────────────────────────────────────────────
+
+
+class SchedulePhaseRow(BaseModel):
+    """CPM output row for a single milestone."""
+
+    milestone_id: str
+    milestone_name: str
+    duration_days: int
+    earliest_start: int
+    earliest_finish: int
+    latest_start: int
+    latest_finish: int
+    total_float: int
+    is_critical: bool
+    delay_days: int
+
+
+class ScopeScheduleResponse(BaseModel):
+    """Full CPM schedule result for a construction scope."""
+
+    scope_id: str
+    project_duration: int
+    critical_path: List[str]
+    phases: List[SchedulePhaseRow]
+
+
+class CriticalPathResponse(BaseModel):
+    """Critical path summary for a construction scope."""
+
+    scope_id: str
+    project_duration: int
+    critical_path_milestone_ids: List[str]
+    critical_path_milestone_names: List[str]
+    total_phases: int
+    critical_phases: int

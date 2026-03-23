@@ -7,11 +7,18 @@ Validates project / phase / building linkage and enforces milestone
 lifecycle rules within each scope.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
+    from app.modules.construction.schedule_engine import SchedulePhase
 
 from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.exceptions import ConstructionConflictError
@@ -20,9 +27,11 @@ from app.modules.construction.repository import (
     ConstructionDashboardRepository,
     ConstructionEngineeringItemRepository,
     ConstructionMilestoneRepository,
+    ConstructionMilestoneDependencyRepository,
     ConstructionProgressUpdateRepository,
     ConstructionScopeRepository,
 )
+from app.modules.construction.schedule_engine import compute_schedule
 from app.modules.construction.schemas import (
     ConstructionCostItemCreate,
     ConstructionCostItemList,
@@ -39,13 +48,19 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    CriticalPathResponse,
     EngineeringItemCreate,
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    MilestoneDependencyCreate,
+    MilestoneDependencyList,
+    MilestoneDependencyResponse,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    SchedulePhaseRow,
+    ScopeScheduleResponse,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -59,6 +74,7 @@ class ConstructionService:
         self.progress_repo = ConstructionProgressUpdateRepository(db)
         self.cost_repo = ConstructionCostItemRepository(db)
         self.dashboard_repo = ConstructionDashboardRepository(db)
+        self.dependency_repo = ConstructionMilestoneDependencyRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -578,4 +594,204 @@ class ConstructionService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Building '{building_id}' not found.",
                 )
+
+    # ── Dependency operations ─────────────────────────────────────────────────
+
+    def create_dependency(
+        self, data: MilestoneDependencyCreate
+    ) -> MilestoneDependencyResponse:
+        """Create a finish-to-start dependency between two milestones.
+
+        Validates:
+        - Both milestones exist.
+        - Dependency pair is unique (no duplicates).
+        - Resulting graph contains no cycles.
+        """
+        predecessor = self.milestone_repo.get_by_id(data.predecessor_id)
+        if not predecessor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Predecessor milestone '{data.predecessor_id}' not found.",
+            )
+        successor = self.milestone_repo.get_by_id(data.successor_id)
+        if not successor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Successor milestone '{data.successor_id}' not found.",
+            )
+
+        existing = self.dependency_repo.get_by_pair(
+            data.predecessor_id, data.successor_id
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Dependency from '{data.predecessor_id}' to "
+                    f"'{data.successor_id}' already exists."
+                ),
+            )
+
+        # Determine the shared scope for cycle validation.
+        # Build a prospective graph combining existing deps + new dep for the scope.
+        scope_id = successor.scope_id
+        milestones = self.dependency_repo.get_milestones_with_dependencies(scope_id)
+        existing_deps = self.dependency_repo.list_for_scope(scope_id)
+
+        prospective_phases = self._build_schedule_phases(milestones, existing_deps)
+        # Add the proposed dependency to check for cycles
+        for sp in prospective_phases:
+            if sp.phase_id == data.successor_id:
+                if data.predecessor_id not in sp.predecessor_ids:
+                    sp.predecessor_ids.append(data.predecessor_id)
+                    sp.lag_days[data.predecessor_id] = data.lag_days
+                break
+
+        from app.modules.construction.schedule_engine import detect_cycle
+
+        cycle = detect_cycle(prospective_phases)
+        if cycle is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Adding this dependency would create a circular dependency: "
+                    f"{' → '.join(cycle)}"
+                ),
+            )
+
+        try:
+            dep = self.dependency_repo.create(data)
+        except IntegrityError:
+            self.dependency_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Dependency from '{data.predecessor_id}' to "
+                    f"'{data.successor_id}' already exists."
+                ),
+            )
+        return MilestoneDependencyResponse.model_validate(dep)
+
+    def get_dependency(self, dependency_id: str) -> MilestoneDependencyResponse:
+        dep = self.dependency_repo.get_by_id(dependency_id)
+        if not dep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Dependency '{dependency_id}' not found.",
+            )
+        return MilestoneDependencyResponse.model_validate(dep)
+
+    def list_dependencies_for_scope(self, scope_id: str) -> MilestoneDependencyList:
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        deps = self.dependency_repo.list_for_scope(scope_id)
+        return MilestoneDependencyList(
+            items=[MilestoneDependencyResponse.model_validate(d) for d in deps],
+            total=len(deps),
+        )
+
+    def delete_dependency(self, dependency_id: str) -> None:
+        dep = self.dependency_repo.get_by_id(dependency_id)
+        if not dep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Dependency '{dependency_id}' not found.",
+            )
+        self.dependency_repo.delete(dep)
+
+    # ── Schedule operations ───────────────────────────────────────────────────
+
+    def get_scope_schedule(self, scope_id: str) -> ScopeScheduleResponse:
+        """Compute and return the full CPM schedule for a construction scope."""
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+        milestones = self.dependency_repo.get_milestones_with_dependencies(scope_id)
+        deps = self.dependency_repo.list_for_scope(scope_id)
+        schedule_phases = self._build_schedule_phases(milestones, deps)
+
+        try:
+            output = compute_schedule(schedule_phases)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            )
+
+        id_to_name = {m.id: m.name for m in milestones}
+        id_to_duration = {m.id: (m.duration_days or 0) for m in milestones}
+        rows = [
+            SchedulePhaseRow(
+                milestone_id=r.phase_id,
+                milestone_name=id_to_name.get(r.phase_id, r.phase_id),
+                duration_days=id_to_duration.get(r.phase_id, 0),
+                earliest_start=r.earliest_start,
+                earliest_finish=r.earliest_finish,
+                latest_start=r.latest_start,
+                latest_finish=r.latest_finish,
+                total_float=r.total_float,
+                is_critical=r.is_critical,
+                delay_days=r.delay_days,
+            )
+            for r in output.phases
+        ]
+        return ScopeScheduleResponse(
+            scope_id=scope_id,
+            project_duration=output.project_duration,
+            critical_path=output.critical_path,
+            phases=rows,
+        )
+
+    def get_critical_path(self, scope_id: str) -> CriticalPathResponse:
+        """Return the critical path summary for a construction scope."""
+        schedule = self.get_scope_schedule(scope_id)
+        critical_ids = schedule.critical_path
+        id_to_name = {r.milestone_id: r.milestone_name for r in schedule.phases}
+        return CriticalPathResponse(
+            scope_id=scope_id,
+            project_duration=schedule.project_duration,
+            critical_path_milestone_ids=critical_ids,
+            critical_path_milestone_names=[
+                id_to_name.get(mid, mid) for mid in critical_ids
+            ],
+            total_phases=len(schedule.phases),
+            critical_phases=len(critical_ids),
+        )
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_schedule_phases(
+        milestones: list["ConstructionMilestone"],
+        deps: list["ConstructionMilestoneDependency"],
+    ) -> list["SchedulePhase"]:
+        """Convert ORM milestones and dependency records to SchedulePhase objects."""
+        from app.modules.construction.schedule_engine import SchedulePhase
+
+        dep_map: dict[str, list[tuple[str, int]]] = {}
+        for d in deps:
+            dep_map.setdefault(d.successor_id, []).append(
+                (d.predecessor_id, d.lag_days)
+            )
+
+        phases: list[SchedulePhase] = []
+        for m in milestones:
+            predecessor_ids = [p for p, _ in dep_map.get(m.id, [])]
+            lag_days = {p: lag for p, lag in dep_map.get(m.id, [])}
+            phases.append(
+                SchedulePhase(
+                    phase_id=m.id,
+                    duration_days=m.duration_days or 0,
+                    predecessor_ids=predecessor_ids,
+                    lag_days=lag_days,
+                )
+            )
+        return phases
 
