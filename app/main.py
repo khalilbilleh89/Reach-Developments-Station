@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal, check_db_connection
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import logger
+from app.core.middleware.request_logging import RequestLoggingMiddleware
 from app.modules.auth.api import router as auth_router
 from app.modules.buildings.api import router as buildings_router
 from app.modules.collections.api import router as collections_router
@@ -97,6 +98,7 @@ app = FastAPI(
 )
 
 register_error_handlers(app)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Asset hierarchy routers
 _API_PREFIX = settings.API_V1_PREFIX
