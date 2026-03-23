@@ -804,7 +804,7 @@ class ConstructionRiskAlertResponse(BaseModel):
 
     alert_code: str
     severity: str
-    scope_id: str
+    scope_id: Optional[str] = None
     contractor_id: Optional[str] = None
     package_id: Optional[str] = None
     milestone_id: Optional[str] = None

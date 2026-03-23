@@ -81,8 +81,8 @@ SEVERITY_LOW = "LOW"
 # Statuses that count as "active" for a milestone
 _ACTIVE_MILESTONE_STATUSES = {"in_progress", "delayed"}
 
-# Package statuses where award has not yet occurred
-_UNAWARDED_PACKAGE_STATUSES = {"draft", "tendering", "evaluation", "on_hold"}
+# Package statuses where award has not yet occurred (mutually exclusive with _BLOCKED)
+_UNAWARDED_PACKAGE_STATUSES = {"draft", "tendering", "evaluation"}
 
 # Package statuses treated as stalled candidates
 _STALLED_PACKAGE_STATUSES = {"tendering", "evaluation"}
@@ -205,7 +205,8 @@ class ConstructionRiskAlert:
     severity:
         One of HIGH / MEDIUM / LOW.
     scope_id:
-        The scope affected by this alert.
+        The scope affected by this alert.  None for contractor-level alerts
+        where a single scope cannot be determined.
     contractor_id:
         Contractor affected, if applicable.
     package_id:
@@ -222,7 +223,7 @@ class ConstructionRiskAlert:
 
     alert_code: str
     severity: str
-    scope_id: str
+    scope_id: Optional[str] = None
     contractor_id: Optional[str] = None
     package_id: Optional[str] = None
     milestone_id: Optional[str] = None
@@ -480,17 +481,11 @@ def _compute_contractor_performance(
 
     alerts: List[ConstructionRiskAlert] = []
 
-    # Determine scope_id from first milestone's package (use a placeholder if none)
-    # Alerts without a specific scope need a scope_id; use "N/A" when not determinable.
-    # In practice, the service layer always provides scope context.
-    scope_id = "N/A"
-
     if delay_ratio is not None and delay_ratio > DELAY_RATIO_THRESHOLD:
         alerts.append(
             ConstructionRiskAlert(
                 alert_code=ALERT_CONTRACTOR_HIGH_DELAY_RATIO,
                 severity=SEVERITY_HIGH,
-                scope_id=scope_id,
                 contractor_id=data.contractor_id,
                 message=(
                     f"Contractor '{data.contractor_name}' has a delay ratio of "
@@ -507,7 +502,6 @@ def _compute_contractor_performance(
             ConstructionRiskAlert(
                 alert_code=ALERT_CONTRACTOR_HIGH_OVERRUN_RATIO,
                 severity=SEVERITY_MEDIUM,
-                scope_id=scope_id,
                 contractor_id=data.contractor_id,
                 message=(
                     f"Contractor '{data.contractor_name}' has an overrun ratio of "

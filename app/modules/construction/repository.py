@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, over, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from app.modules.buildings.models import Building
 from app.modules.construction.models import (
@@ -922,7 +922,7 @@ class ConstructionRiskRepository:
 
         return (
             self.db.query(ConstructionProcurementPackage)
-            .options(joinedload(ConstructionProcurementPackage.milestones))
+            .options(selectinload(ConstructionProcurementPackage.milestones))
             .filter(ConstructionProcurementPackage.scope_id == scope_id)
             .order_by(ConstructionProcurementPackage.package_code)
             .all()
@@ -936,7 +936,7 @@ class ConstructionRiskRepository:
 
         return (
             self.db.query(ConstructionProcurementPackage)
-            .options(joinedload(ConstructionProcurementPackage.milestones))
+            .options(selectinload(ConstructionProcurementPackage.milestones))
             .filter(ConstructionProcurementPackage.contractor_id == contractor_id)
             .order_by(ConstructionProcurementPackage.package_code)
             .all()

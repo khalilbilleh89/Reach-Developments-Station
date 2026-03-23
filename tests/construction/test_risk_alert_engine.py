@@ -171,6 +171,16 @@ def test_awarded_package_active_milestone_no_unawarded_alert() -> None:
     assert ALERT_UNAWARDED_PACKAGE_ACTIVE_MILESTONE not in _alert_codes(alerts)
 
 
+def test_on_hold_package_does_not_trigger_unawarded_alert() -> None:
+    # on_hold is in _BLOCKED, not _UNAWARDED — must not produce UNAWARDED alert
+    ms = [_milestone("M1", status="in_progress")]
+    pkg = _package(status="on_hold", milestones=ms)
+    alerts = evaluate_scope_risk_alerts(_scope(packages=[pkg]))
+    assert ALERT_UNAWARDED_PACKAGE_ACTIVE_MILESTONE not in _alert_codes(alerts)
+    # It should instead produce CANCELLED_PACKAGE_MILESTONE_LINK
+    assert ALERT_CANCELLED_PACKAGE_MILESTONE_LINK in _alert_codes(alerts)
+
+
 def test_unawarded_alert_severity_is_high() -> None:
     ms = [_milestone("M1", status="in_progress")]
     pkg = _package(status="draft", milestones=ms)
@@ -352,6 +362,26 @@ def test_contractor_delay_alert_severity_is_high() -> None:
     assert found[0].severity == SEVERITY_HIGH
 
 
+def test_contractor_delay_alert_scope_id_is_none() -> None:
+    # Contractor-level alerts do not carry a scope_id
+    ms = [_milestone("M1", status="delayed"), _milestone("M2", status="delayed")]
+    summary = evaluate_contractor_performance(_contractor(milestones=ms))
+    found = [a for a in summary.alerts if a.alert_code == ALERT_CONTRACTOR_HIGH_DELAY_RATIO]
+    assert found
+    assert found[0].scope_id is None
+
+
+def test_contractor_overrun_alert_scope_id_is_none() -> None:
+    ms = [
+        _milestone("M1", planned_cost="1000", actual_cost="1500"),
+        _milestone("M2", planned_cost="1000", actual_cost="1500"),
+    ]
+    summary = evaluate_contractor_performance(_contractor(milestones=ms))
+    found = [a for a in summary.alerts if a.alert_code == ALERT_CONTRACTOR_HIGH_OVERRUN_RATIO]
+    assert found
+    assert found[0].scope_id is None
+
+
 def test_contractor_performance_counts_are_correct() -> None:
     ms = [
         _milestone("M1", status="delayed"),
@@ -462,6 +492,15 @@ def test_procurement_risk_counts_unawarded_packages() -> None:
     summary = evaluate_procurement_risk(_scope(packages=[p1, p2, p3]))
     assert summary.total_packages == 3
     assert summary.unawarded_packages == 2
+
+
+def test_procurement_risk_on_hold_not_counted_as_unawarded() -> None:
+    # on_hold is classified as blocked, not unawarded
+    p1 = _package(pkg_id="P1", status="on_hold")
+    p2 = _package(pkg_id="P2", status="draft")
+    summary = evaluate_procurement_risk(_scope(packages=[p1, p2]))
+    assert summary.unawarded_packages == 1   # only draft
+    assert summary.cancelled_or_on_hold_packages == 1  # only on_hold
 
 
 def test_procurement_risk_counts_stalled_packages() -> None:

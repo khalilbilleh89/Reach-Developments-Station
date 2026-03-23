@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
+    from app.modules.construction.risk_alert_engine import ScopeRiskData
     from app.modules.construction.schedule_engine import SchedulePhase
 
 from app.core.errors import ValidationError as DomainValidationError
@@ -1354,7 +1355,7 @@ class ConstructionService:
 
     # ── Risk Alert operations (PR-CONSTR-044) ────────────────────────────────
 
-    def _build_scope_risk_data(self, scope_id: str) -> object:
+    def _build_scope_risk_data(self, scope_id: str) -> "ScopeRiskData":
         """Build ScopeRiskData from DB records for risk engine consumption."""
         from datetime import datetime, timezone
 
