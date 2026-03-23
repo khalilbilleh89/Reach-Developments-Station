@@ -1119,7 +1119,16 @@ class ConstructionService:
                     f"Contractor with code '{data.contractor_code}' already exists."
                 ),
             )
-        contractor = self.contractor_repo.create(data)
+        try:
+            contractor = self.contractor_repo.create(data)
+        except IntegrityError:
+            self.contractor_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Contractor with code '{data.contractor_code}' already exists."
+                ),
+            )
         return ContractorResponse.model_validate(contractor)
 
     def list_contractors(self, skip: int = 0, limit: int = 100) -> ContractorList:
@@ -1194,7 +1203,17 @@ class ConstructionService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Contractor '{data.contractor_id}' not found.",
                 )
-        package = self.package_repo.create(data)
+        try:
+            package = self.package_repo.create(data)
+        except IntegrityError:
+            self.package_repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Procurement package with code '{data.package_code}' "
+                    f"already exists in scope '{data.scope_id}'."
+                ),
+            )
         return ProcurementPackageResponse.model_validate(package)
 
     def list_procurement_packages(

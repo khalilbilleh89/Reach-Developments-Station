@@ -4,9 +4,11 @@ construction.repository
 Data access layer for the Construction domain.
 """
 
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, over, select
 from sqlalchemy.orm import Session
@@ -27,15 +29,23 @@ from app.modules.construction.schemas import (
     ConstructionMilestoneUpdate,
     ConstructionScopeCreate,
     ConstructionScopeUpdate,
-    ContractorCreate,
-    ContractorUpdate,
     EngineeringItemCreate,
     EngineeringItemUpdate,
     MilestoneDependencyCreate,
-    ProcurementPackageCreate,
-    ProcurementPackageUpdate,
     ProgressUpdateCreate,
 )
+
+if TYPE_CHECKING:
+    from app.modules.construction.models import (
+        ConstructionContractor,
+        ConstructionProcurementPackage,
+    )
+    from app.modules.construction.schemas import (
+        ContractorCreate,
+        ContractorUpdate,
+        ProcurementPackageCreate,
+        ProcurementPackageUpdate,
+    )
 
 
 class ConstructionScopeRepository:
@@ -714,7 +724,7 @@ class ConstructionContractorRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create(self, data: "ContractorCreate") -> "ConstructionContractor":
+    def create(self, data: ContractorCreate) -> ConstructionContractor:
         from app.modules.construction.models import ConstructionContractor
 
         contractor = ConstructionContractor(**data.model_dump())
@@ -723,7 +733,7 @@ class ConstructionContractorRepository:
         self.db.refresh(contractor)
         return contractor
 
-    def get_by_id(self, contractor_id: str) -> Optional["ConstructionContractor"]:
+    def get_by_id(self, contractor_id: str) -> Optional[ConstructionContractor]:
         from app.modules.construction.models import ConstructionContractor
 
         return (
@@ -732,7 +742,7 @@ class ConstructionContractorRepository:
             .first()
         )
 
-    def get_by_code(self, contractor_code: str) -> Optional["ConstructionContractor"]:
+    def get_by_code(self, contractor_code: str) -> Optional[ConstructionContractor]:
         from app.modules.construction.models import ConstructionContractor
 
         return (
@@ -741,7 +751,7 @@ class ConstructionContractorRepository:
             .first()
         )
 
-    def list(self, skip: int = 0, limit: int = 100) -> List["ConstructionContractor"]:
+    def list(self, skip: int = 0, limit: int = 100) -> List[ConstructionContractor]:
         from app.modules.construction.models import ConstructionContractor
 
         return (
@@ -757,7 +767,11 @@ class ConstructionContractorRepository:
 
         return self.db.query(ConstructionContractor).count()
 
-    def update(self, contractor: "ConstructionContractor", data: "ContractorUpdate") -> "ConstructionContractor":
+    def update(
+        self,
+        contractor: ConstructionContractor,
+        data: ContractorUpdate,
+    ) -> ConstructionContractor:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(contractor, field, value)
@@ -765,7 +779,7 @@ class ConstructionContractorRepository:
         self.db.refresh(contractor)
         return contractor
 
-    def delete(self, contractor: "ConstructionContractor") -> None:
+    def delete(self, contractor: ConstructionContractor) -> None:
         self.db.delete(contractor)
         self.db.commit()
 
@@ -776,7 +790,7 @@ class ConstructionProcurementPackageRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create(self, data: "ProcurementPackageCreate") -> "ConstructionProcurementPackage":
+    def create(self, data: ProcurementPackageCreate) -> ConstructionProcurementPackage:
         from app.modules.construction.models import ConstructionProcurementPackage
 
         package = ConstructionProcurementPackage(**data.model_dump())
@@ -785,7 +799,7 @@ class ConstructionProcurementPackageRepository:
         self.db.refresh(package)
         return package
 
-    def get_by_id(self, package_id: str) -> Optional["ConstructionProcurementPackage"]:
+    def get_by_id(self, package_id: str) -> Optional[ConstructionProcurementPackage]:
         from app.modules.construction.models import ConstructionProcurementPackage
 
         return (
@@ -796,7 +810,7 @@ class ConstructionProcurementPackageRepository:
 
     def get_by_scope_and_code(
         self, scope_id: str, package_code: str
-    ) -> Optional["ConstructionProcurementPackage"]:
+    ) -> Optional[ConstructionProcurementPackage]:
         from app.modules.construction.models import ConstructionProcurementPackage
 
         return (
@@ -810,7 +824,7 @@ class ConstructionProcurementPackageRepository:
 
     def list_for_scope(
         self, scope_id: str, skip: int = 0, limit: int = 100
-    ) -> List["ConstructionProcurementPackage"]:
+    ) -> List[ConstructionProcurementPackage]:
         from app.modules.construction.models import ConstructionProcurementPackage
 
         return (
@@ -827,7 +841,7 @@ class ConstructionProcurementPackageRepository:
 
     def list_all_for_scope(
         self, scope_id: str
-    ) -> List["ConstructionProcurementPackage"]:
+    ) -> List[ConstructionProcurementPackage]:
         from app.modules.construction.models import ConstructionProcurementPackage
 
         return (
@@ -848,9 +862,9 @@ class ConstructionProcurementPackageRepository:
 
     def update(
         self,
-        package: "ConstructionProcurementPackage",
-        data: "ProcurementPackageUpdate",
-    ) -> "ConstructionProcurementPackage":
+        package: ConstructionProcurementPackage,
+        data: ProcurementPackageUpdate,
+    ) -> ConstructionProcurementPackage:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(package, field, value)
@@ -859,8 +873,8 @@ class ConstructionProcurementPackageRepository:
         return package
 
     def assign_contractor(
-        self, package: "ConstructionProcurementPackage", contractor_id: Optional[str]
-    ) -> "ConstructionProcurementPackage":
+        self, package: ConstructionProcurementPackage, contractor_id: Optional[str]
+    ) -> ConstructionProcurementPackage:
         package.contractor_id = contractor_id
         self.db.commit()
         self.db.refresh(package)
@@ -868,7 +882,7 @@ class ConstructionProcurementPackageRepository:
 
     def link_milestone(
         self,
-        package: "ConstructionProcurementPackage",
+        package: ConstructionProcurementPackage,
         milestone: "ConstructionMilestone",
     ) -> None:
         if milestone not in package.milestones:
@@ -877,7 +891,7 @@ class ConstructionProcurementPackageRepository:
 
     def unlink_milestone(
         self,
-        package: "ConstructionProcurementPackage",
+        package: ConstructionProcurementPackage,
         milestone: "ConstructionMilestone",
     ) -> None:
         if milestone in package.milestones:
@@ -885,11 +899,11 @@ class ConstructionProcurementPackageRepository:
             self.db.commit()
 
     def list_milestones_for_package(
-        self, package: "ConstructionProcurementPackage"
+        self, package: ConstructionProcurementPackage
     ) -> List["ConstructionMilestone"]:
         return list(package.milestones)
 
-    def delete(self, package: "ConstructionProcurementPackage") -> None:
+    def delete(self, package: ConstructionProcurementPackage) -> None:
         self.db.delete(package)
         self.db.commit()
 

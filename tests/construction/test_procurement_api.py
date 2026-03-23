@@ -27,7 +27,6 @@ Error cases:
 
 from decimal import Decimal
 
-import httpx
 from fastapi.testclient import TestClient
 
 
