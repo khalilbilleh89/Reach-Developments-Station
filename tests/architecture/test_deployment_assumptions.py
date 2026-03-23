@@ -118,11 +118,11 @@ class TestHealthEndpoint:
         )
 
     def test_health_db_endpoint_exists(self, client: TestClient):
-        """/health/db must exist and return a non-5xx status."""
-        with patch("app.main.check_db_connection", return_value=True):
-            resp = client.get("/health/db")
+        """/health/ready must exist and return a non-5xx status."""
+        with patch("app.api.health.is_database_reachable", return_value=True):
+            resp = client.get("/health/ready")
         assert resp.status_code < 500, (
-            f"/health/db returned {resp.status_code} — server error on health check."
+            f"/health/ready returned {resp.status_code} — server error on health check."
         )
 
 

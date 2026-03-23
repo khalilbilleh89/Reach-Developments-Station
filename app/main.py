@@ -16,9 +16,10 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.api.health import router as health_router
 from app.core.bootstrap import seed_admin_user
 from app.core.config import settings
-from app.core.database import SessionLocal, check_db_connection
+from app.core.database import SessionLocal
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import logger
 from app.core.middleware.request_logging import RequestLoggingMiddleware
@@ -100,6 +101,9 @@ app = FastAPI(
 register_error_handlers(app)
 app.add_middleware(RequestLoggingMiddleware)
 
+# Health and diagnostics endpoints (no authentication required)
+app.include_router(health_router)
+
 # Asset hierarchy routers
 _API_PREFIX = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=_API_PREFIX)
@@ -134,25 +138,6 @@ if _FRONTEND_STATIC_DIR.is_dir():
         StaticFiles(directory=str(_FRONTEND_STATIC_DIR)),
         name="nextjs-static",
     )
-
-
-@app.get("/health", tags=["health"])
-async def health_check() -> JSONResponse:
-    """Application health check endpoint."""
-    return JSONResponse({"status": "ok", "service": "reach-developments-station"})
-
-
-@app.get("/health/db", tags=["health"])
-async def health_db() -> JSONResponse:
-    """Database connectivity health check endpoint."""
-    reachable = check_db_connection()
-    if reachable:
-        return JSONResponse({"status": "ok", "database": "reachable"})
-    return JSONResponse(
-        {"status": "error", "database": "unreachable"},
-        status_code=503,
-    )
-
 
 def _safe_resolve(base: Path, rel: str) -> Path | None:
     """Resolve a path relative to base and verify it stays within base.
