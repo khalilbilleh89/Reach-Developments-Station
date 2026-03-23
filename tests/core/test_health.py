@@ -14,7 +14,6 @@ Validates:
 
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.core.health import get_health, get_liveness, get_readiness

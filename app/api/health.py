@@ -23,19 +23,19 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-async def health_check() -> JSONResponse:
+def health_check() -> JSONResponse:
     """Return basic service health with timestamp."""
     return JSONResponse(get_health())
 
 
 @router.get("/health/live")
-async def health_live() -> JSONResponse:
+def health_live() -> JSONResponse:
     """Liveness check — confirms the application process is running."""
     return JSONResponse(get_liveness())
 
 
 @router.get("/health/ready")
-async def health_ready() -> JSONResponse:
+def health_ready() -> JSONResponse:
     """Readiness check — confirms the application can serve requests.
 
     Returns HTTP 200 when the database is reachable.
