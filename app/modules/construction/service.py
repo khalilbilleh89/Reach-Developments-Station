@@ -57,11 +57,16 @@ from app.modules.construction.schemas import (
     MilestoneDependencyCreate,
     MilestoneDependencyList,
     MilestoneDependencyResponse,
+    MilestoneProgressRow,
+    MilestoneProgressUpdate,
+    MilestoneVarianceRow,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
     SchedulePhaseRow,
+    ScopeProgressResponse,
     ScopeScheduleResponse,
+    ScopeVarianceResponse,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -775,6 +780,174 @@ class ConstructionService:
             critical_phases=len(critical_ids),
         )
 
+    # ── Progress tracking operations ──────────────────────────────────────────
+
+    def update_milestone_progress(
+        self, milestone_id: str, data: MilestoneProgressUpdate
+    ) -> ConstructionMilestoneResponse:
+        """Update actual progress fields on a construction milestone."""
+        from datetime import datetime, timezone
+
+        milestone = self.milestone_repo.get_by_id(milestone_id)
+        if not milestone:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction milestone '{milestone_id}' not found.",
+            )
+
+        milestone.progress_percent = data.progress_percent
+        if data.actual_start_day is not None:
+            milestone.actual_start_day = data.actual_start_day
+        if data.actual_finish_day is not None:
+            milestone.actual_finish_day = data.actual_finish_day
+        milestone.last_progress_update_at = datetime.now(timezone.utc)
+
+        self.milestone_repo.db.commit()
+        self.milestone_repo.db.refresh(milestone)
+        return ConstructionMilestoneResponse.model_validate(milestone)
+
+    def get_scope_progress(self, scope_id: str) -> ScopeProgressResponse:
+        """Return aggregated progress overview for a construction scope."""
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        milestones = self.milestone_repo.list(scope_id=scope_id)
+        total = len(milestones)
+        started = sum(
+            1 for m in milestones if m.actual_start_day is not None
+        )
+        completed = sum(
+            1 for m in milestones
+            if (m.progress_percent is not None and m.progress_percent >= 100.0)
+            or m.actual_finish_day is not None
+        )
+
+        if total > 0:
+            overall_pct = sum(
+                (m.progress_percent or 0.0) for m in milestones
+            ) / total
+        else:
+            overall_pct = 0.0
+
+        rows = [
+            MilestoneProgressRow(
+                milestone_id=m.id,
+                milestone_name=m.name,
+                sequence=m.sequence,
+                progress_percent=m.progress_percent,
+                actual_start_day=m.actual_start_day,
+                actual_finish_day=m.actual_finish_day,
+                last_progress_update_at=m.last_progress_update_at,
+            )
+            for m in milestones
+        ]
+
+        return ScopeProgressResponse(
+            scope_id=scope_id,
+            total_milestones=total,
+            started_milestones=started,
+            completed_milestones=completed,
+            overall_completion_percent=round(overall_pct, 2),
+            milestones=rows,
+        )
+
+    def get_scope_schedule_variance(self, scope_id: str) -> ScopeVarianceResponse:
+        """Return schedule variance analysis for a construction scope."""
+        from app.modules.construction.variance_engine import (
+            MilestoneProgress,
+            compute_variance,
+        )
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        # Load milestones and dependencies
+        milestones = self.dependency_repo.get_milestones_with_dependencies(scope_id)
+        deps = self.dependency_repo.list_for_scope(scope_id)
+
+        # Compute the pure CPM planned schedule (without actual_start_day) so that
+        # planned_start / planned_finish represent the original schedule baseline.
+        planned_phases = self._build_schedule_phases_planned(milestones, deps)
+        try:
+            planned_output = compute_schedule(planned_phases)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            )
+
+        planned_map = {r.phase_id: r for r in planned_output.phases}
+        id_to_name = {m.id: m.name for m in milestones}
+
+        # Load progress data from the full milestone list
+        all_milestones = self.milestone_repo.list(scope_id=scope_id)
+        progress_data = {m.id: m for m in all_milestones}
+
+        # Build MilestoneProgress inputs using planned (unshifted) dates
+        progress_inputs = []
+        for m in milestones:
+            if m.id not in planned_map:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Milestone '{m.id}' could not be scheduled — "
+                        "ensure all milestones have valid duration_days and no circular dependencies."
+                    ),
+                )
+            plan = planned_map[m.id]
+            prog = progress_data.get(m.id)
+            progress_inputs.append(
+                MilestoneProgress(
+                    milestone_id=m.id,
+                    planned_start=plan.earliest_start,
+                    planned_finish=plan.earliest_finish,
+                    is_critical=plan.is_critical,
+                    actual_start_day=prog.actual_start_day if prog else None,
+                    actual_finish_day=prog.actual_finish_day if prog else None,
+                    progress_percent=prog.progress_percent if prog else None,
+                )
+            )
+
+        variance_result = compute_variance(
+            scope_id=scope_id,
+            milestones=progress_inputs,
+            critical_path=planned_output.critical_path,
+        )
+
+        variance_rows = [
+            MilestoneVarianceRow(
+                milestone_id=vr.milestone_id,
+                milestone_name=id_to_name.get(vr.milestone_id, vr.milestone_id),
+                planned_start=vr.planned_start,
+                planned_finish=vr.planned_finish,
+                actual_start_day=vr.actual_start_day,
+                actual_finish_day=vr.actual_finish_day,
+                progress_percent=vr.progress_percent,
+                schedule_variance_days=vr.schedule_variance_days,
+                completion_variance_days=vr.completion_variance_days,
+                milestone_status=vr.milestone_status.value,
+                is_critical=vr.is_critical,
+                risk_exposed=vr.risk_exposed,
+            )
+            for vr in variance_result.milestones
+        ]
+
+        return ScopeVarianceResponse(
+            scope_id=scope_id,
+            project_delay_days=variance_result.project_delay_days,
+            critical_path_shift=variance_result.critical_path_shift,
+            affected_milestones=variance_result.affected_milestones,
+            milestones=variance_rows,
+        )
+
     # ── Private helpers ───────────────────────────────────────────────────────
 
     @staticmethod
@@ -782,7 +955,11 @@ class ConstructionService:
         milestones: list["ConstructionMilestone"],
         deps: list["ConstructionMilestoneDependency"],
     ) -> list["SchedulePhase"]:
-        """Convert ORM milestones and dependency records to SchedulePhase objects."""
+        """Convert ORM milestones and dependency records to SchedulePhase objects.
+
+        Passes actual_start_day through so the effective schedule reflects
+        any delays already recorded on milestones.
+        """
         from app.modules.construction.schedule_engine import SchedulePhase
 
         dep_map: dict[str, list[tuple[str, int]]] = {}
@@ -801,6 +978,40 @@ class ConstructionService:
                     duration_days=m.duration_days or 0,
                     predecessor_ids=predecessor_ids,
                     lag_days=lag_days,
+                    actual_start_day=m.actual_start_day,
+                )
+            )
+        return phases
+
+    @staticmethod
+    def _build_schedule_phases_planned(
+        milestones: list["ConstructionMilestone"],
+        deps: list["ConstructionMilestoneDependency"],
+    ) -> list["SchedulePhase"]:
+        """Build SchedulePhase objects using planned data only (no actual_start_day).
+
+        Used to compute the pure CPM baseline for variance analysis so that
+        planned_start / planned_finish are unaffected by actual progress.
+        """
+        from app.modules.construction.schedule_engine import SchedulePhase
+
+        dep_map: dict[str, list[tuple[str, int]]] = {}
+        for d in deps:
+            dep_map.setdefault(d.successor_id, []).append(
+                (d.predecessor_id, d.lag_days)
+            )
+
+        phases: list[SchedulePhase] = []
+        for m in milestones:
+            predecessor_ids = [p for p, _ in dep_map.get(m.id, [])]
+            lag_days = {p: lag for p, lag in dep_map.get(m.id, [])}
+            phases.append(
+                SchedulePhase(
+                    phase_id=m.id,
+                    duration_days=m.duration_days or 0,
+                    predecessor_ids=predecessor_ids,
+                    lag_days=lag_days,
+                    actual_start_day=None,
                 )
             )
         return phases

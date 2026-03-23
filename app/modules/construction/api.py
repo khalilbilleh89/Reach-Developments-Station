@@ -15,6 +15,7 @@ Endpoints:
   GET    /api/v1/construction/milestones/{milestone_id}
   PATCH  /api/v1/construction/milestones/{milestone_id}
   DELETE /api/v1/construction/milestones/{milestone_id}
+  POST   /api/v1/construction/milestones/{milestone_id}/progress
 
   POST   /api/v1/construction/milestones/{milestone_id}/progress-updates
   GET    /api/v1/construction/milestones/{milestone_id}/progress-updates
@@ -41,6 +42,8 @@ Endpoints:
   GET    /api/v1/construction/scopes/{scope_id}/schedule
   POST   /api/v1/construction/scopes/{scope_id}/schedule/recompute
   GET    /api/v1/construction/scopes/{scope_id}/critical-path
+  GET    /api/v1/construction/scopes/{scope_id}/progress
+  GET    /api/v1/construction/scopes/{scope_id}/variance
 """
 
 from typing import Annotated, Optional
@@ -74,10 +77,13 @@ from app.modules.construction.schemas import (
     MilestoneDependencyCreate,
     MilestoneDependencyList,
     MilestoneDependencyResponse,
+    MilestoneProgressUpdate,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    ScopeProgressResponse,
     ScopeScheduleResponse,
+    ScopeVarianceResponse,
 )
 from app.modules.construction.service import ConstructionService
 
@@ -210,6 +216,20 @@ def delete_milestone(
     """Delete a construction milestone."""
     service.delete_milestone(milestone_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/milestones/{milestone_id}/progress",
+    response_model=ConstructionMilestoneResponse,
+)
+def update_milestone_progress(
+    milestone_id: str,
+    data: MilestoneProgressUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionMilestoneResponse:
+    """Record actual progress (progress_percent, actual_start_day, actual_finish_day)
+    on a construction milestone."""
+    return service.update_milestone_progress(milestone_id, data)
 
 
 # ── Progress update endpoints ────────────────────────────────────────────────
@@ -489,3 +509,27 @@ def get_critical_path(
 ) -> CriticalPathResponse:
     """Return the critical path summary for a construction scope."""
     return service.get_critical_path(scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/progress",
+    response_model=ScopeProgressResponse,
+)
+def get_scope_progress(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeProgressResponse:
+    """Return aggregated milestone progress overview for a construction scope."""
+    return service.get_scope_progress(scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/variance",
+    response_model=ScopeVarianceResponse,
+)
+def get_scope_variance(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeVarianceResponse:
+    """Return schedule variance analysis (planned vs actual) for a construction scope."""
+    return service.get_scope_schedule_variance(scope_id)
