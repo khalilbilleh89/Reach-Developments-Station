@@ -46,6 +46,21 @@ Endpoints:
   GET    /api/v1/construction/scopes/{scope_id}/critical-path
   GET    /api/v1/construction/scopes/{scope_id}/progress
   GET    /api/v1/construction/scopes/{scope_id}/variance
+
+  POST   /api/v1/construction/contractors
+  GET    /api/v1/construction/contractors
+  GET    /api/v1/construction/contractors/{contractor_id}
+  PATCH  /api/v1/construction/contractors/{contractor_id}
+  DELETE /api/v1/construction/contractors/{contractor_id}
+
+  POST   /api/v1/construction/packages
+  GET    /api/v1/construction/scopes/{scope_id}/packages
+  GET    /api/v1/construction/packages/{package_id}
+  PATCH  /api/v1/construction/packages/{package_id}
+  DELETE /api/v1/construction/packages/{package_id}
+  POST   /api/v1/construction/packages/{package_id}/assign-contractor
+  POST   /api/v1/construction/packages/{package_id}/milestones/{milestone_id}
+  GET    /api/v1/construction/scopes/{scope_id}/procurement-overview
 """
 
 from typing import Annotated, Optional
@@ -71,6 +86,10 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    ContractorCreate,
+    ContractorList,
+    ContractorResponse,
+    ContractorUpdate,
     CriticalPathResponse,
     EngineeringItemCreate,
     EngineeringItemList,
@@ -81,6 +100,12 @@ from app.modules.construction.schemas import (
     MilestoneDependencyList,
     MilestoneDependencyResponse,
     MilestoneProgressUpdate,
+    PackageAssignContractorRequest,
+    ProcurementOverviewResponse,
+    ProcurementPackageCreate,
+    ProcurementPackageList,
+    ProcurementPackageResponse,
+    ProcurementPackageUpdate,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
@@ -565,3 +590,148 @@ def get_scope_milestone_cost(
 ) -> ScopeMilestoneCostResponse:
     """Return milestone-level cost variance overview for a construction scope."""
     return service.get_scope_milestone_cost(scope_id)
+
+
+# ── Contractor endpoints (PR-CONSTR-043) ─────────────────────────────────────
+
+
+@router.post("/contractors", response_model=ContractorResponse, status_code=201)
+def create_contractor(
+    data: ContractorCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ContractorResponse:
+    """Create a new contractor record."""
+    return service.create_contractor(data)
+
+
+@router.get("/contractors", response_model=ContractorList)
+def list_contractors(
+    service: Annotated[ConstructionService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> ContractorList:
+    """List all contractors."""
+    return service.list_contractors(skip=skip, limit=limit)
+
+
+@router.get("/contractors/{contractor_id}", response_model=ContractorResponse)
+def get_contractor(
+    contractor_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ContractorResponse:
+    """Get a contractor by ID."""
+    return service.get_contractor(contractor_id)
+
+
+@router.patch("/contractors/{contractor_id}", response_model=ContractorResponse)
+def update_contractor(
+    contractor_id: str,
+    data: ContractorUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ContractorResponse:
+    """Update a contractor record."""
+    return service.update_contractor(contractor_id, data)
+
+
+@router.delete("/contractors/{contractor_id}", status_code=204)
+def delete_contractor(
+    contractor_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete a contractor record."""
+    service.delete_contractor(contractor_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Procurement package endpoints (PR-CONSTR-043) ────────────────────────────
+
+
+@router.post("/packages", response_model=ProcurementPackageResponse, status_code=201)
+def create_procurement_package(
+    data: ProcurementPackageCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementPackageResponse:
+    """Create a new procurement package within a construction scope."""
+    return service.create_procurement_package(data)
+
+
+@router.get(
+    "/scopes/{scope_id}/packages",
+    response_model=ProcurementPackageList,
+)
+def list_procurement_packages(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> ProcurementPackageList:
+    """List procurement packages for a construction scope."""
+    return service.list_procurement_packages(scope_id=scope_id, skip=skip, limit=limit)
+
+
+@router.get("/packages/{package_id}", response_model=ProcurementPackageResponse)
+def get_procurement_package(
+    package_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementPackageResponse:
+    """Get a procurement package by ID."""
+    return service.get_procurement_package(package_id)
+
+
+@router.patch("/packages/{package_id}", response_model=ProcurementPackageResponse)
+def update_procurement_package(
+    package_id: str,
+    data: ProcurementPackageUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementPackageResponse:
+    """Update a procurement package."""
+    return service.update_procurement_package(package_id, data)
+
+
+@router.delete("/packages/{package_id}", status_code=204)
+def delete_procurement_package(
+    package_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete a procurement package."""
+    service.delete_procurement_package(package_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/packages/{package_id}/assign-contractor",
+    response_model=ProcurementPackageResponse,
+)
+def assign_contractor_to_package(
+    package_id: str,
+    data: PackageAssignContractorRequest,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementPackageResponse:
+    """Assign a contractor to a procurement package."""
+    return service.assign_contractor_to_package(package_id, data)
+
+
+@router.post(
+    "/packages/{package_id}/milestones/{milestone_id}",
+    response_model=ProcurementPackageResponse,
+    status_code=200,
+)
+def link_package_to_milestone(
+    package_id: str,
+    milestone_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementPackageResponse:
+    """Link a procurement package to a construction milestone."""
+    return service.link_package_to_milestone(package_id, milestone_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/procurement-overview",
+    response_model=ProcurementOverviewResponse,
+)
+def get_scope_procurement_overview(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProcurementOverviewResponse:
+    """Return procurement execution summary for a construction scope."""
+    return service.get_scope_procurement_overview(scope_id)

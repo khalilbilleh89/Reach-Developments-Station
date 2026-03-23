@@ -10,7 +10,15 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.shared.enums.construction import ConstructionStatus, EngineeringStatus, MilestoneStatus
+from app.shared.enums.construction import (
+    ConstructionStatus,
+    ContractorStatus,
+    ContractorType,
+    EngineeringStatus,
+    MilestoneStatus,
+    ProcurementPackageStatus,
+    ProcurementPackageType,
+)
 
 
 # ── ConstructionScope ────────────────────────────────────────────────────────
@@ -650,3 +658,139 @@ class ScopeMilestoneCostResponse(BaseModel):
     project_cost_variance: Decimal
     project_overrun_percent: Optional[Decimal]
     milestones: List[MilestoneCostRow]
+
+
+# ── Contractor ───────────────────────────────────────────────────────────────
+
+
+class ContractorCreate(BaseModel):
+    contractor_code: str = Field(..., min_length=1, max_length=50)
+    contractor_name: str = Field(..., min_length=1, max_length=255)
+    contractor_type: ContractorType = ContractorType.MAIN_CONTRACTOR
+    contact_name: Optional[str] = Field(None, max_length=255)
+    contact_email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    status: ContractorStatus = ContractorStatus.ACTIVE
+    notes: Optional[str] = None
+
+
+class ContractorUpdate(BaseModel):
+    contractor_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    contractor_type: Optional[ContractorType] = None
+    contact_name: Optional[str] = Field(None, max_length=255)
+    contact_email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    status: Optional[ContractorStatus] = None
+    notes: Optional[str] = None
+
+
+class ContractorResponse(BaseModel):
+    id: str
+    contractor_code: str
+    contractor_name: str
+    contractor_type: ContractorType
+    contact_name: Optional[str]
+    contact_email: Optional[str]
+    phone: Optional[str]
+    status: ContractorStatus
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ContractorList(BaseModel):
+    items: List[ContractorResponse]
+    total: int
+
+
+# ── ProcurementPackage ───────────────────────────────────────────────────────
+
+
+class ProcurementPackageCreate(BaseModel):
+    scope_id: str
+    package_code: str = Field(..., min_length=1, max_length=50)
+    package_name: str = Field(..., min_length=1, max_length=255)
+    package_type: ProcurementPackageType = ProcurementPackageType.OTHER
+    status: ProcurementPackageStatus = ProcurementPackageStatus.DRAFT
+    planned_value: Optional[Decimal] = None
+    awarded_value: Optional[Decimal] = None
+    contractor_id: Optional[str] = None
+    notes: Optional[str] = None
+
+    @field_validator("planned_value", "awarded_value")
+    @classmethod
+    def values_non_negative(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v < 0:
+            raise ValueError("Value must be non-negative.")
+        return v
+
+
+class ProcurementPackageUpdate(BaseModel):
+    package_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    package_type: Optional[ProcurementPackageType] = None
+    status: Optional[ProcurementPackageStatus] = None
+    planned_value: Optional[Decimal] = None
+    awarded_value: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+    @field_validator("planned_value", "awarded_value")
+    @classmethod
+    def values_non_negative(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v < 0:
+            raise ValueError("Value must be non-negative.")
+        return v
+
+
+class ProcurementPackageResponse(BaseModel):
+    id: str
+    scope_id: str
+    contractor_id: Optional[str]
+    package_code: str
+    package_name: str
+    package_type: ProcurementPackageType
+    status: ProcurementPackageStatus
+    planned_value: Optional[Decimal]
+    awarded_value: Optional[Decimal]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProcurementPackageList(BaseModel):
+    items: List[ProcurementPackageResponse]
+    total: int
+
+
+# ── Procurement Assignment / Linkage ─────────────────────────────────────────
+
+
+class PackageAssignContractorRequest(BaseModel):
+    contractor_id: str
+
+
+class PackageLinkMilestoneRequest(BaseModel):
+    milestone_id: str
+
+
+# ── Procurement Overview ─────────────────────────────────────────────────────
+
+
+class ProcurementPackageStatusCount(BaseModel):
+    status: ProcurementPackageStatus
+    count: int
+
+
+class ProcurementOverviewResponse(BaseModel):
+    """Aggregated procurement summary for a construction scope."""
+
+    scope_id: str
+    total_packages: int
+    total_planned_value: Decimal
+    total_awarded_value: Decimal
+    uncommitted_value: Decimal
+    packages_by_status: Dict[str, int]
+    packages: List[ProcurementPackageResponse]
