@@ -688,7 +688,7 @@ def test_calculate_payout_cross_project_plan_returns_422(client: TestClient):
         json={"sale_contract_id": contract_id, "commission_plan_id": plan_b_id},
     )
     assert resp.status_code == 422, resp.text
-    assert "project" in resp.json()["detail"].lower()
+    assert "project" in resp.json()["message"].lower()
 
 
 def test_add_slab_after_approved_payout_returns_409(client: TestClient):
@@ -738,7 +738,7 @@ def test_calculate_payout_slab_not_starting_at_zero_returns_422(client: TestClie
         json={"sale_contract_id": contract_id, "commission_plan_id": plan_id},
     )
     assert resp.status_code == 422, resp.text
-    assert "range_from" in resp.json()["detail"] or "start at 0" in resp.json()["detail"]
+    assert "range_from" in resp.json()["message"] or "start at 0" in resp.json()["message"]
 
 
 def test_detail_payout_includes_lines(client: TestClient):

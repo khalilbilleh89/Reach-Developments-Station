@@ -228,4 +228,4 @@ def test_delete_project_with_phases_returns_409(client: TestClient):
     )
     response = client.delete(f"/api/v1/projects/{project_id}")
     assert response.status_code == 409
-    assert "dependent phase records" in response.json()["detail"]
+    assert "dependent phase records" in response.json()["message"]

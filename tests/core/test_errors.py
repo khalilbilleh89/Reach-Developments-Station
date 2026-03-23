@@ -7,11 +7,20 @@ Validates the global error handling framework:
   - API response structure produced by the global handler
   - detail propagation
   - error codes constants
+  - HTTPException and RequestValidationError normalization
+  - jsonable_encoder safety for non-JSON-serializable details
 """
+
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.constants.error_codes import (
     CONFLICT,
@@ -237,6 +246,40 @@ def _build_test_app() -> FastAPI:
     def raise_internal():
         raise AppError()
 
+    # HTTPException normalization
+    @app.get("/http-404")
+    def raise_http_404():
+        raise StarletteHTTPException(status_code=404, detail="Page not found")
+
+    @app.get("/http-403")
+    def raise_http_403():
+        raise StarletteHTTPException(status_code=403, detail="Forbidden")
+
+    @app.get("/http-dict-detail")
+    def raise_http_dict():
+        raise StarletteHTTPException(status_code=400, detail={"reason": "bad value"})
+
+    # RequestValidationError: Pydantic body validation
+    class _Item(BaseModel):
+        name: str
+        price: float
+
+    @app.post("/validated-body")
+    def validated_body(item: _Item):
+        return item
+
+    # non-JSON-serializable details (UUID, datetime, Decimal)
+    @app.get("/non-serializable-details")
+    def raise_with_non_serializable():
+        raise ResourceNotFoundError(
+            "Resource missing.",
+            details={
+                "resource_id": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+                "created_at": datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+                "amount": Decimal("99.99"),
+            },
+        )
+
     return app
 
 
@@ -299,3 +342,93 @@ class TestFastAPIIntegration:
         for path in ["/not-found", "/validation", "/permission", "/conflict", "/internal"]:
             body = error_client.get(path).json()
             assert set(body.keys()) == {"code", "message", "details"}, f"Failed for {path}"
+
+
+# ---------------------------------------------------------------------------
+# HTTPException normalization
+# ---------------------------------------------------------------------------
+
+
+class TestHTTPExceptionHandler:
+    def test_http_404_status(self, error_client):
+        assert error_client.get("/http-404").status_code == 404
+
+    def test_http_404_body_structure(self, error_client):
+        body = error_client.get("/http-404").json()
+        assert set(body.keys()) == {"code", "message", "details"}
+
+    def test_http_404_code_field(self, error_client):
+        body = error_client.get("/http-404").json()
+        assert body["code"] == "HTTP_404"
+
+    def test_http_404_message(self, error_client):
+        body = error_client.get("/http-404").json()
+        assert body["message"] == "Page not found"
+
+    def test_http_403_status(self, error_client):
+        assert error_client.get("/http-403").status_code == 403
+
+    def test_http_403_body_structure(self, error_client):
+        body = error_client.get("/http-403").json()
+        assert set(body.keys()) == {"code", "message", "details"}
+
+    def test_http_dict_detail_uses_details_field(self, error_client):
+        """When HTTPException.detail is a dict, it goes into 'details'."""
+        body = error_client.get("/http-dict-detail").json()
+        assert body["details"] == {"reason": "bad value"}
+        assert body["code"] == "HTTP_400"
+        assert body["message"] == "HTTP error: see details."
+
+
+# ---------------------------------------------------------------------------
+# RequestValidationError normalization
+# ---------------------------------------------------------------------------
+
+
+class TestRequestValidationHandler:
+    def test_missing_body_field_returns_422(self, error_client):
+        resp = error_client.post("/validated-body", json={})
+        assert resp.status_code == 422
+
+    def test_missing_body_field_body_structure(self, error_client):
+        body = error_client.post("/validated-body", json={}).json()
+        assert set(body.keys()) == {"code", "message", "details"}
+
+    def test_missing_body_field_code(self, error_client):
+        body = error_client.post("/validated-body", json={}).json()
+        assert body["code"] == VALIDATION_ERROR
+
+    def test_missing_body_field_message(self, error_client):
+        body = error_client.post("/validated-body", json={}).json()
+        assert body["message"] == "Request validation failed."
+
+    def test_missing_body_field_details_has_validation_errors(self, error_client):
+        body = error_client.post("/validated-body", json={}).json()
+        assert "validation_errors" in body["details"]
+        assert isinstance(body["details"]["validation_errors"], list)
+        assert len(body["details"]["validation_errors"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# jsonable_encoder safety — non-JSON-serializable details
+# ---------------------------------------------------------------------------
+
+
+class TestJsonableEncoderSafety:
+    def test_uuid_in_details_does_not_raise(self, error_client):
+        """UUID in details must be serialized to a string, not raise TypeError."""
+        resp = error_client.get("/non-serializable-details")
+        assert resp.status_code == 404
+
+    def test_uuid_in_details_serialized_as_string(self, error_client):
+        body = error_client.get("/non-serializable-details").json()
+        assert body["details"]["resource_id"] == "12345678-1234-5678-1234-567812345678"
+
+    def test_datetime_in_details_serialized(self, error_client):
+        body = error_client.get("/non-serializable-details").json()
+        assert isinstance(body["details"]["created_at"], str)
+
+    def test_decimal_in_details_serialized(self, error_client):
+        body = error_client.get("/non-serializable-details").json()
+        # Decimal is encoded as float by jsonable_encoder
+        assert body["details"]["amount"] is not None

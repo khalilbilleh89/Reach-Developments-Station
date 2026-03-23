@@ -407,7 +407,7 @@ def test_generate_returns_409_if_schedule_already_exists(client: TestClient):
 
     second = client.post("/api/v1/payment-plans/generate", json=payload)
     assert second.status_code == 409
-    detail = second.json()["detail"].lower()
+    detail = second.json()["message"].lower()
     assert "already" in detail or "regenerate" in detail
 
 

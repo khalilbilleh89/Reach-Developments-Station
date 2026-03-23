@@ -131,7 +131,7 @@ def test_cannot_activate_phase_when_prior_phase_not_completed(client: TestClient
         json={"status": "active"},
     )
     assert resp.status_code == 422
-    assert "sequence" in resp.json()["detail"].lower() or "preceding" in resp.json()["detail"].lower()
+    assert "sequence" in resp.json()["message"].lower() or "preceding" in resp.json()["message"].lower()
 
 
 def test_can_activate_phase_when_no_prior_phase(client: TestClient):

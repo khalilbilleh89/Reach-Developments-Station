@@ -323,7 +323,7 @@ def test_duplicate_active_contract_returns_409(client: TestClient):
     )
     assert resp.status_code == 409
     # Error message must mention the actual blocking statuses
-    detail = resp.json()["detail"].lower()
+    detail = resp.json()["message"].lower()
     assert "draft" in detail or "active" in detail
 
 

@@ -601,7 +601,7 @@ class TestOverrideEndpoint:
             },
         )
         assert resp.status_code == 422
-        assert "Development Director" in resp.json()["detail"]
+        assert "Development Director" in resp.json()["message"]
 
     def test_override_approved_record_returns_422(self, client: TestClient):
         pricing_id = self._setup(client, "PRJ-OVAPI3")
@@ -829,4 +829,4 @@ class TestOverrideGovernancePutEndpoint:
             },
         )
         assert resp.status_code == 422
-        assert "Development Director" in resp.json()["detail"]
+        assert "Development Director" in resp.json()["message"]
