@@ -29,6 +29,9 @@ Endpoints
   GET /finance/projects/{project_id}/construction-cashflow — project construction cashflow (PR-FIN-034)
   GET /finance/phases/{phase_id}/construction-cashflow     — phase construction cashflow (PR-FIN-034)
   GET /finance/portfolio/construction-cashflow             — portfolio construction cashflow (PR-FIN-034)
+  GET /finance/projects/{project_id}/construction-financing — project financing (PR-FIN-036)
+  GET /finance/phases/{phase_id}/construction-financing     — phase financing (PR-FIN-036)
+  GET /finance/portfolio/construction-financing             — portfolio financing (PR-FIN-036)
   POST /finance/analytics/rebuild                      — rebuild analytics fact tables
   GET /finance/analytics/portfolio                     — portfolio analytics dashboard
   GET /finance/projects/{project_id}/dashboard         — project financial dashboard
@@ -50,14 +53,17 @@ from app.modules.finance.schemas import (
     CollectionsAlertResponse,
     ContractAgingResponse,
     ContractCashflowForecastResponse,
+    ConstructionFinancingAssumptionsSchema,
     ConstructionForecastAssumptionsSchema,
     MatchReceiptRequest,
     PhaseConstructionCashflowResponse,
+    PhaseConstructionFinancingResponse,
     PortfolioAgingResponse,
     PortfolioAnalyticsResponse,
     PortfolioCashflowForecastResponse,
     PortfolioCashflowForecastV2Response,
     PortfolioConstructionCashflowResponse,
+    PortfolioConstructionFinancingResponse,
     PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
     PortfolioRiskResponse,
@@ -65,6 +71,7 @@ from app.modules.finance.schemas import (
     ProjectCashflowForecastResponse,
     ProjectCashflowForecastV2Response,
     ProjectConstructionCashflowResponse,
+    ProjectConstructionFinancingResponse,
     ProjectFinanceSummaryResponse,
     ProjectFinancialDashboardResponse,
     ProjectRevenueSummaryResponse,
@@ -90,7 +97,11 @@ from app.modules.finance.project_financial_dashboard_service import ProjectFinan
 from app.modules.finance.risk_alert_engine import FinancialRiskAlertEngine
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
-from app.modules.finance.constants import ConstructionSpreadMethod
+from app.modules.finance.constants import (
+    ConstructionEquityInjectionMethod,
+    ConstructionLoanDrawMethod,
+    ConstructionSpreadMethod,
+)
 
 router = APIRouter(prefix="/finance", tags=["Finance"], dependencies=[Depends(get_current_user_payload)])
 
@@ -620,8 +631,225 @@ def get_portfolio_construction_cashflow(
 
 
 # ---------------------------------------------------------------------------
-# Analytics fact layer endpoint
+# Construction financing endpoints  (PR-FIN-036)
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/projects/{project_id}/construction-financing",
+    response_model=ProjectConstructionFinancingResponse,
+    summary="Project construction financing draw schedule",
+)
+def get_project_construction_financing(
+    project_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    debt_ratio: float = Query(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by debt (0–1).",
+    ),
+    equity_ratio: float = Query(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by equity (0–1).",
+    ),
+    loan_draw_method: ConstructionLoanDrawMethod = Query(
+        default=ConstructionLoanDrawMethod.PRO_RATA,
+        description="Debt drawdown method: 'pro_rata' allocates debt proportionally each period.",
+    ),
+    equity_injection_method: ConstructionEquityInjectionMethod = Query(
+        default=ConstructionEquityInjectionMethod.PRO_RATA,
+        description="Equity injection method: 'pro_rata' allocates equity proportionally.",
+    ),
+    financing_start_offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of periods before financing begins.",
+    ),
+    financing_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that financing is required in each period (0–1).",
+    ),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+) -> ProjectConstructionFinancingResponse:
+    """Return the construction financing draw schedule for a single project.
+
+    Produces period-by-period debt draw and equity contribution schedules
+    derived from the project's construction cashflow forecast.
+
+    Returns 404 if the project does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    cashflow_assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=ConstructionSpreadMethod.LINEAR.value,
+        include_committed=True,
+    )
+    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+        debt_ratio=debt_ratio,
+        equity_ratio=equity_ratio,
+        loan_draw_method=loan_draw_method.value,
+        equity_injection_method=equity_injection_method.value,
+        financing_start_offset=financing_start_offset,
+        financing_probability=financing_probability,
+    )
+    return service.compute_project_construction_financing(
+        project_id, start_date, end_date, cashflow_assumptions, financing_assumptions
+    )
+
+
+@router.get(
+    "/phases/{phase_id}/construction-financing",
+    response_model=PhaseConstructionFinancingResponse,
+    summary="Phase construction financing draw schedule",
+)
+def get_phase_construction_financing(
+    phase_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    debt_ratio: float = Query(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by debt (0–1).",
+    ),
+    equity_ratio: float = Query(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by equity (0–1).",
+    ),
+    loan_draw_method: ConstructionLoanDrawMethod = Query(
+        default=ConstructionLoanDrawMethod.PRO_RATA,
+        description="Debt drawdown method.",
+    ),
+    equity_injection_method: ConstructionEquityInjectionMethod = Query(
+        default=ConstructionEquityInjectionMethod.PRO_RATA,
+        description="Equity injection method.",
+    ),
+    financing_start_offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of periods before financing begins.",
+    ),
+    financing_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that financing is required in each period (0–1).",
+    ),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+) -> PhaseConstructionFinancingResponse:
+    """Return the construction financing draw schedule for a single project phase.
+
+    Returns 404 if the phase does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    cashflow_assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=ConstructionSpreadMethod.LINEAR.value,
+        include_committed=True,
+    )
+    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+        debt_ratio=debt_ratio,
+        equity_ratio=equity_ratio,
+        loan_draw_method=loan_draw_method.value,
+        equity_injection_method=equity_injection_method.value,
+        financing_start_offset=financing_start_offset,
+        financing_probability=financing_probability,
+    )
+    return service.compute_phase_construction_financing(
+        phase_id, start_date, end_date, cashflow_assumptions, financing_assumptions
+    )
+
+
+@router.get(
+    "/portfolio/construction-financing",
+    response_model=PortfolioConstructionFinancingResponse,
+    summary="Portfolio construction financing draw schedule",
+)
+def get_portfolio_construction_financing(
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    debt_ratio: float = Query(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by debt (0–1).",
+    ),
+    equity_ratio: float = Query(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by equity (0–1).",
+    ),
+    loan_draw_method: ConstructionLoanDrawMethod = Query(
+        default=ConstructionLoanDrawMethod.PRO_RATA,
+        description="Debt drawdown method.",
+    ),
+    equity_injection_method: ConstructionEquityInjectionMethod = Query(
+        default=ConstructionEquityInjectionMethod.PRO_RATA,
+        description="Equity injection method.",
+    ),
+    financing_start_offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of periods before financing begins.",
+    ),
+    financing_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that financing is required in each period (0–1).",
+    ),
+    execution_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Probability that planned construction work executes (0–1).",
+    ),
+) -> PortfolioConstructionFinancingResponse:
+    """Return the construction financing draw schedule across the entire portfolio.
+
+    Aggregates debt draw and equity contribution schedules across all projects
+    and produces monthly financing breakdowns alongside per-project sub-schedules.
+
+    Returns 422 if start_date is after end_date.
+    """
+    cashflow_assumptions = ConstructionForecastAssumptionsSchema(
+        execution_probability=execution_probability,
+        spread_method=ConstructionSpreadMethod.LINEAR.value,
+        include_committed=True,
+    )
+    financing_assumptions = ConstructionFinancingAssumptionsSchema(
+        debt_ratio=debt_ratio,
+        equity_ratio=equity_ratio,
+        loan_draw_method=loan_draw_method.value,
+        equity_injection_method=equity_injection_method.value,
+        financing_start_offset=financing_start_offset,
+        financing_probability=financing_probability,
+    )
+    return service.compute_portfolio_construction_financing(
+        start_date, end_date, cashflow_assumptions, financing_assumptions
+    )
 
 
 def get_analytics_service(db: Session = Depends(get_db)) -> AnalyticsService:
