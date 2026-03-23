@@ -436,3 +436,83 @@ def test_predecessor_outside_phase_set_treated_as_day_zero() -> None:
     b = _find(output, "B")
     assert b.earliest_start == 0
     assert b.earliest_finish == 5
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_phase_id_raises_value_error() -> None:
+    """Two SchedulePhase objects with the same phase_id must be rejected."""
+    phases = [
+        _phase("A", 5),
+        _phase("A", 10),  # duplicate
+    ]
+    with pytest.raises(ValueError, match="[Dd]uplicate"):
+        compute_schedule(phases)
+
+
+def test_negative_duration_raises_value_error() -> None:
+    phases = [_phase("A", -1)]
+    with pytest.raises(ValueError, match="[Nn]egative|duration"):
+        compute_schedule(phases)
+
+
+def test_negative_lag_raises_value_error() -> None:
+    phases = [
+        _phase("A", 5),
+        _phase("B", 5, predecessors=["A"], lag_days={"A": -3}),
+    ]
+    with pytest.raises(ValueError, match="[Nn]egative|lag"):
+        compute_schedule(phases)
+
+
+def test_zero_duration_is_valid() -> None:
+    """duration_days == 0 is explicitly allowed."""
+    phases = [_phase("A", 0)]
+    output = compute_schedule(phases)
+    a = _find(output, "A")
+    assert a.earliest_start == 0
+    assert a.earliest_finish == 0
+
+
+def test_zero_lag_is_valid() -> None:
+    """lag_days == 0 is explicitly allowed."""
+    phases = [
+        _phase("A", 5),
+        _phase("B", 5, predecessors=["A"], lag_days={"A": 0}),
+    ]
+    output = compute_schedule(phases)
+    b = _find(output, "B")
+    assert b.earliest_start == 5
+
+
+# ---------------------------------------------------------------------------
+# Deterministic ordering
+# ---------------------------------------------------------------------------
+
+
+def test_topological_order_matches_input_order_for_independent_phases() -> None:
+    """Independent phases should appear in the same order as input."""
+    phases = [
+        _phase("Z", 5),
+        _phase("M", 5),
+        _phase("A", 5),
+    ]
+    output = compute_schedule(phases)
+    phase_ids = [r.phase_id for r in output.phases]
+    assert phase_ids == ["Z", "M", "A"]
+
+
+def test_topological_order_is_stable_for_same_input() -> None:
+    """Calling compute_schedule twice with the same input yields the same order."""
+    phases = [
+        _phase("A", 10),
+        _phase("B", 15),
+        _phase("C", 5, predecessors=["A", "B"]),
+    ]
+    out1 = compute_schedule(phases)
+    out2 = compute_schedule(phases)
+    assert [r.phase_id for r in out1.phases] == [r.phase_id for r in out2.phases]
+    assert out1.critical_path == out2.critical_path

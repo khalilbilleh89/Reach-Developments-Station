@@ -161,24 +161,33 @@ def _topological_sort(phases: List[SchedulePhase]) -> List[str]:
     """Return a topological ordering of phase_ids.
 
     Assumes the graph is already validated to be acyclic.
+    Uses the original input order as a stable tie-breaker so that output
+    ordering is deterministic across runs.
     """
-    ids = {p.phase_id for p in phases}
+    # Build a stable index map from the input list order
+    input_index: Dict[str, int] = {p.phase_id: i for i, p in enumerate(phases)}
+    ids = list(input_index.keys())  # ordered by input position
+
     in_degree: Dict[str, int] = {pid: 0 for pid in ids}
     adj: Dict[str, List[str]] = {pid: [] for pid in ids}
 
     for p in phases:
         for pred in p.predecessor_ids:
-            if pred in ids:
+            if pred in input_index:
                 adj[pred].append(p.phase_id)
                 in_degree[p.phase_id] += 1
 
-    queue: deque[str] = deque(pid for pid in ids if in_degree[pid] == 0)
+    # Seed queue in input order to guarantee determinism
+    queue: deque[str] = deque(
+        pid for pid in ids if in_degree[pid] == 0
+    )
     order: List[str] = []
 
     while queue:
         node = queue.popleft()
         order.append(node)
-        for nxt in adj[node]:
+        # Sort successors by input_index so adjacency traversal is also stable
+        for nxt in sorted(adj[node], key=lambda x: input_index.get(x, 0)):
             in_degree[nxt] -= 1
             if in_degree[nxt] == 0:
                 queue.append(nxt)
@@ -292,12 +301,34 @@ def compute_schedule(phases: List[SchedulePhase]) -> ScheduleOutput:
     Raises
     ------
     ValueError
-        If the dependency graph contains a cycle.
+        If inputs violate invariants (duplicate phase_id, negative duration or
+        lag) or the dependency graph contains a cycle.
     """
     if not phases:
         return ScheduleOutput(phases=[], project_duration=0, critical_path=[])
 
-    # Validate graph
+    # ── Input validation ──────────────────────────────────────────────────────
+    seen_ids: set[str] = set()
+    for p in phases:
+        if p.phase_id in seen_ids:
+            raise ValueError(
+                f"Duplicate phase_id '{p.phase_id}' in schedule input. "
+                "Each phase_id must be unique."
+            )
+        seen_ids.add(p.phase_id)
+        if p.duration_days < 0:
+            raise ValueError(
+                f"Phase '{p.phase_id}' has negative duration_days "
+                f"({p.duration_days}). Duration must be >= 0."
+            )
+        for pred_id, lag in p.lag_days.items():
+            if lag < 0:
+                raise ValueError(
+                    f"Phase '{p.phase_id}' has negative lag_days ({lag}) "
+                    f"for predecessor '{pred_id}'. Lag must be >= 0."
+                )
+
+    # ── Cycle detection ───────────────────────────────────────────────────────
     cycle = detect_cycle(phases)
     if cycle is not None:
         raise ValueError(

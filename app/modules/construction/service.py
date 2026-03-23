@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
     from app.modules.construction.schedule_engine import SchedulePhase
 
+from app.core.errors import ValidationError as DomainValidationError
 from app.modules.buildings.repository import BuildingRepository
 from app.modules.construction.exceptions import ConstructionConflictError
 from app.modules.construction.repository import (
@@ -618,6 +619,15 @@ class ConstructionService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Successor milestone '{data.successor_id}' not found.",
+            )
+
+        # Reject cross-scope dependencies — both milestones must share a scope
+        if predecessor.scope_id != successor.scope_id:
+            raise DomainValidationError(
+                f"Predecessor milestone '{data.predecessor_id}' belongs to scope "
+                f"'{predecessor.scope_id}', but successor milestone "
+                f"'{data.successor_id}' belongs to scope '{successor.scope_id}'. "
+                "Dependencies must connect milestones within the same scope."
             )
 
         existing = self.dependency_repo.get_by_pair(

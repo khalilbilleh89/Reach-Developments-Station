@@ -639,7 +639,11 @@ class ConstructionMilestoneDependencyRepository:
         )
 
     def list_for_scope(self, scope_id: str) -> List[ConstructionMilestoneDependency]:
-        """Return all dependencies whose predecessor or successor belongs to the scope."""
+        """Return all dependencies where BOTH predecessor and successor belong to the scope.
+
+        Using AND (not OR) ensures schedule computation only sees fully
+        in-scope edges and is not polluted by any cross-scope records.
+        """
         from sqlalchemy import select as sa_select
 
         milestone_ids_subq = sa_select(ConstructionMilestone.id).where(
@@ -649,7 +653,7 @@ class ConstructionMilestoneDependencyRepository:
             self.db.query(ConstructionMilestoneDependency)
             .filter(
                 ConstructionMilestoneDependency.predecessor_id.in_(milestone_ids_subq)
-                | ConstructionMilestoneDependency.successor_id.in_(milestone_ids_subq)
+                & ConstructionMilestoneDependency.successor_id.in_(milestone_ids_subq)
             )
             .order_by(
                 ConstructionMilestoneDependency.predecessor_id,

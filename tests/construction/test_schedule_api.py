@@ -69,7 +69,8 @@ def _create_dependency(
             "lag_days": lag_days,
         },
     )
-    return resp.json() if resp.status_code == 201 else resp
+    assert resp.status_code == 201
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +235,44 @@ def test_create_circular_dependency_returns_409(client: TestClient) -> None:
         json={"predecessor_id": m2["id"], "successor_id": m1["id"]},
     )
     assert resp2.status_code == 409
+
+
+def test_create_cross_scope_dependency_returns_422(client: TestClient) -> None:
+    """Milestones from different scopes must be rejected."""
+    project_a = _create_project(client, "DEP-009A")
+    project_b = _create_project(client, "DEP-009B")
+    scope_a = _create_scope(client, project_a, name="Scope A")
+    scope_b = _create_scope(client, project_b, name="Scope B")
+    m1 = _create_milestone(client, scope_a["id"], sequence=1, name="M1", duration_days=5)
+    m2 = _create_milestone(client, scope_b["id"], sequence=1, name="M2", duration_days=5)
+
+    resp = client.post(
+        "/api/v1/construction/dependencies",
+        json={"predecessor_id": m1["id"], "successor_id": m2["id"]},
+    )
+    assert resp.status_code == 422
+
+
+def test_list_scope_dependencies_excludes_cross_scope_edges(client: TestClient) -> None:
+    """list_for_scope returns only dependencies fully within the scope."""
+    project_a = _create_project(client, "DEP-010A")
+    project_b = _create_project(client, "DEP-010B")
+    scope_a = _create_scope(client, project_a, name="Scope X")
+    scope_b = _create_scope(client, project_b, name="Scope Y")
+    m1 = _create_milestone(client, scope_a["id"], sequence=1, name="M1", duration_days=5)
+    m2 = _create_milestone(client, scope_a["id"], sequence=2, name="M2", duration_days=5)
+    # in-scope dependency
+    _create_dependency(client, m1["id"], m2["id"])
+
+    # verify listing for scope_a includes the in-scope dep
+    resp = client.get(f"/api/v1/construction/scopes/{scope_a['id']}/dependencies")
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+    # scope_b has no milestones with dependencies — its listing should be empty
+    resp_b = client.get(f"/api/v1/construction/scopes/{scope_b['id']}/dependencies")
+    assert resp_b.status_code == 200
+    assert resp_b.json()["total"] == 0
 
 
 # ---------------------------------------------------------------------------
