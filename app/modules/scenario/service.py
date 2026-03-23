@@ -33,6 +33,9 @@ from app.core.constants.scenario import (
     VALID_SOURCE_TYPES,
 )
 from app.core.errors import ResourceNotFoundError, ValidationError
+from app.core.logging import get_logger
+
+_logger = get_logger("reach_developments.scenario")
 
 
 class ScenarioService:
@@ -74,6 +77,7 @@ class ScenarioService:
                 details={"source_type": data.source_type},
             )
         scenario = self.scenario_repo.create(data)
+        _logger.info("Scenario created: id=%s name=%r", scenario.id, scenario.name)
         return ScenarioResponse.model_validate(scenario)
 
     def get_scenario(self, scenario_id: str) -> ScenarioResponse:
@@ -185,6 +189,7 @@ class ScenarioService:
         # Single commit: all three mutations (clear, approve, status) are atomic.
         self.db.commit()
         self.db.refresh(scenario)
+        _logger.info("Scenario approved: id=%s", scenario_id)
         return ScenarioResponse.model_validate(scenario)
 
     def archive_scenario(self, scenario_id: str) -> ScenarioResponse:

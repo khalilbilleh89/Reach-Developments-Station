@@ -40,6 +40,9 @@ from app.shared.enums.finance import (
     FeasibilityViabilityStatus,
 )
 from app.core.errors import ResourceNotFoundError, ValidationError
+from app.core.logging import get_logger
+
+_logger = get_logger("reach_developments.feasibility")
 
 # ---------------------------------------------------------------------------
 # Viability thresholds — v1 business policy
@@ -139,6 +142,7 @@ class FeasibilityService:
         self._validate_project_if_present(data.project_id)
         self._require_scenario_if_present(data.scenario_id)
         run = self.run_repo.create(data)
+        _logger.info("Feasibility run created: id=%s", run.id)
         return FeasibilityRunResponse.model_validate(run)
 
     def get_feasibility_run(self, run_id: str) -> FeasibilityRunResponse:
@@ -254,6 +258,12 @@ class FeasibilityService:
             risk_level=risk.value,
             decision=decision.value,
             payback_period=payback,
+        )
+        _logger.info(
+            "Feasibility calculation complete: run_id=%s viability=%s risk=%s",
+            run_id,
+            viability.value,
+            risk.value,
         )
         return FeasibilityResultResponse.model_validate(result)
 

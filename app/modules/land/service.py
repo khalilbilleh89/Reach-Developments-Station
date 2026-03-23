@@ -31,6 +31,9 @@ from app.modules.land.schemas import (
 )
 from app.modules.projects.repository import ProjectRepository
 from app.core.errors import ConflictError, ResourceNotFoundError
+from app.core.logging import get_logger
+
+_logger = get_logger("reach_developments.land")
 
 
 class LandService:
@@ -141,6 +144,7 @@ class LandService:
                 detail = f"Parcel with code '{data.parcel_code}' already exists in project '{data.project_id}'."
                 details = {"parcel_code": data.parcel_code, "project_id": data.project_id}
             raise ConflictError(detail, details=details)
+        _logger.info("Land parcel created: id=%s code=%r", parcel.id, parcel.parcel_code)
         return self._build_parcel_response(parcel)
 
     def get_parcel(self, parcel_id: str) -> LandParcelResponse:
@@ -329,4 +333,5 @@ class LandService:
         outputs = run_land_valuation(inputs)
 
         valuation = self.valuation_repo.create_from_engine(parcel_id, data, outputs)
+        _logger.info("Land engine valuation created: parcel_id=%s", parcel_id)
         return LandValuationResponse.model_validate(valuation)
