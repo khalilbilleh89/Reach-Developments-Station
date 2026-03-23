@@ -18,8 +18,9 @@ ON_CONSTRUCTION_PROGRESS
     Revenue is recognized proportionally as construction milestones are
     reached.  The proportion of the contract price recognized each period
     equals the construction-completion percentage for that period.  When
-    milestone data is unavailable the engine falls back to equal monthly
-    distribution across the construction duration.
+    milestone data is unavailable for a contract the engine falls back to
+    ON_CONTRACT_SIGNING behaviour, recognizing the full contract value in
+    the period the contract was signed.
 
 ON_UNIT_DELIVERY
     Revenue is recognized in full in the calendar month that the unit is
