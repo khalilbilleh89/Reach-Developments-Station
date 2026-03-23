@@ -140,6 +140,13 @@ class ConstructionMilestone(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
+    # ── Cost tracking fields (PR-CONSTR-042) ──────────────────────────────────
+    planned_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    actual_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    cost_last_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="milestones"
     )

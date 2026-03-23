@@ -153,6 +153,19 @@ class ConstructionMilestoneRepository:
             query = query.filter(ConstructionMilestone.scope_id == scope_id)
         return query.order_by(ConstructionMilestone.scope_id, ConstructionMilestone.sequence).offset(skip).limit(limit).all()
 
+    def list_all_for_scope(self, scope_id: str) -> List[ConstructionMilestone]:
+        """Return all milestones for a scope without pagination.
+
+        Used by aggregation workflows (e.g. cost variance) that must operate
+        over the full milestone set to produce correct project-level totals.
+        """
+        return (
+            self.db.query(ConstructionMilestone)
+            .filter(ConstructionMilestone.scope_id == scope_id)
+            .order_by(ConstructionMilestone.sequence)
+            .all()
+        )
+
     def count(self, scope_id: Optional[str] = None) -> int:
         query = self.db.query(ConstructionMilestone)
         if scope_id:

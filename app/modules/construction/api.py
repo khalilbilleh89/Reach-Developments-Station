@@ -16,6 +16,7 @@ Endpoints:
   PATCH  /api/v1/construction/milestones/{milestone_id}
   DELETE /api/v1/construction/milestones/{milestone_id}
   POST   /api/v1/construction/milestones/{milestone_id}/progress
+  POST   /api/v1/construction/milestones/{milestone_id}/cost
 
   POST   /api/v1/construction/milestones/{milestone_id}/progress-updates
   GET    /api/v1/construction/milestones/{milestone_id}/progress-updates
@@ -30,6 +31,7 @@ Endpoints:
   POST   /api/v1/construction/scopes/{scope_id}/cost-items
   GET    /api/v1/construction/scopes/{scope_id}/cost-items
   GET    /api/v1/construction/scopes/{scope_id}/cost-summary
+  GET    /api/v1/construction/scopes/{scope_id}/cost
   GET    /api/v1/construction/cost-items/{cost_item_id}
   PATCH  /api/v1/construction/cost-items/{cost_item_id}
   DELETE /api/v1/construction/cost-items/{cost_item_id}
@@ -74,6 +76,7 @@ from app.modules.construction.schemas import (
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    MilestoneCostUpdate,
     MilestoneDependencyCreate,
     MilestoneDependencyList,
     MilestoneDependencyResponse,
@@ -81,6 +84,7 @@ from app.modules.construction.schemas import (
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    ScopeMilestoneCostResponse,
     ScopeProgressResponse,
     ScopeScheduleResponse,
     ScopeVarianceResponse,
@@ -533,3 +537,31 @@ def get_scope_variance(
 ) -> ScopeVarianceResponse:
     """Return schedule variance analysis (planned vs actual) for a construction scope."""
     return service.get_scope_schedule_variance(scope_id)
+
+
+# ── Milestone cost endpoints ─────────────────────────────────────────────────
+
+
+@router.post(
+    "/milestones/{milestone_id}/cost",
+    response_model=ConstructionMilestoneResponse,
+)
+def update_milestone_cost(
+    milestone_id: str,
+    data: MilestoneCostUpdate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ConstructionMilestoneResponse:
+    """Record planned_cost and/or actual_cost on a construction milestone."""
+    return service.update_milestone_cost(milestone_id, data)
+
+
+@router.get(
+    "/scopes/{scope_id}/cost",
+    response_model=ScopeMilestoneCostResponse,
+)
+def get_scope_milestone_cost(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeMilestoneCostResponse:
+    """Return milestone-level cost variance overview for a construction scope."""
+    return service.get_scope_milestone_cost(scope_id)

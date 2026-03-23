@@ -105,6 +105,9 @@ class ConstructionMilestoneResponse(BaseModel):
     actual_finish_day: Optional[int]
     progress_percent: Optional[float]
     last_progress_update_at: Optional[datetime]
+    planned_cost: Optional[Decimal]
+    actual_cost: Optional[Decimal]
+    cost_last_updated_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
@@ -595,3 +598,55 @@ class ScopeVarianceResponse(BaseModel):
     critical_path_shift: bool
     affected_milestones: List[str]
     milestones: List[MilestoneVarianceRow]
+
+
+# ── Milestone Cost Update ────────────────────────────────────────────────────
+
+
+class MilestoneCostUpdate(BaseModel):
+    """Request body for POST /construction/milestones/{id}/cost."""
+
+    planned_cost: Optional[Decimal] = None
+    actual_cost: Optional[Decimal] = None
+
+    @field_validator("planned_cost", "actual_cost")
+    @classmethod
+    def costs_non_negative(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v < 0:
+            raise ValueError("Cost values must be non-negative.")
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_cost_provided(self) -> "MilestoneCostUpdate":
+        if self.planned_cost is None and self.actual_cost is None:
+            raise ValueError(
+                "At least one of planned_cost or actual_cost must be provided."
+            )
+        return self
+
+
+# ── Scope Milestone Cost Overview ────────────────────────────────────────────
+
+
+class MilestoneCostRow(BaseModel):
+    """Cost summary row for a single milestone."""
+
+    milestone_id: str
+    milestone_name: str
+    sequence: int
+    planned_cost: Optional[Decimal]
+    actual_cost: Optional[Decimal]
+    cost_variance: Optional[Decimal]
+    cost_variance_percent: Optional[Decimal]
+    cost_last_updated_at: Optional[datetime]
+
+
+class ScopeMilestoneCostResponse(BaseModel):
+    """Milestone-level cost variance overview for a construction scope."""
+
+    scope_id: str
+    project_budget: Decimal
+    project_actual_cost: Decimal
+    project_cost_variance: Decimal
+    project_overrun_percent: Optional[Decimal]
+    milestones: List[MilestoneCostRow]

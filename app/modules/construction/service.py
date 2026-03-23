@@ -54,6 +54,8 @@ from app.modules.construction.schemas import (
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    MilestoneCostRow,
+    MilestoneCostUpdate,
     MilestoneDependencyCreate,
     MilestoneDependencyList,
     MilestoneDependencyResponse,
@@ -64,6 +66,7 @@ from app.modules.construction.schemas import (
     ProgressUpdateList,
     ProgressUpdateResponse,
     SchedulePhaseRow,
+    ScopeMilestoneCostResponse,
     ScopeProgressResponse,
     ScopeScheduleResponse,
     ScopeVarianceResponse,
@@ -1015,4 +1018,78 @@ class ConstructionService:
                 )
             )
         return phases
+
+    # ── Cost tracking operations ──────────────────────────────────────────────
+
+    def update_milestone_cost(
+        self, milestone_id: str, data: MilestoneCostUpdate
+    ) -> ConstructionMilestoneResponse:
+        """Update planned_cost and/or actual_cost on a construction milestone."""
+        from datetime import datetime, timezone
+
+        milestone = self.milestone_repo.get_by_id(milestone_id)
+        if not milestone:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction milestone '{milestone_id}' not found.",
+            )
+
+        if data.planned_cost is not None:
+            milestone.planned_cost = data.planned_cost
+        if data.actual_cost is not None:
+            milestone.actual_cost = data.actual_cost
+        milestone.cost_last_updated_at = datetime.now(timezone.utc)
+
+        self.milestone_repo.db.commit()
+        self.milestone_repo.db.refresh(milestone)
+        return ConstructionMilestoneResponse.model_validate(milestone)
+
+    def get_scope_milestone_cost(self, scope_id: str) -> ScopeMilestoneCostResponse:
+        """Return milestone-level cost variance overview for a construction scope."""
+        from app.modules.construction.cost_engine import MilestoneCostData, compute_cost_variance
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        milestones = self.milestone_repo.list_all_for_scope(scope_id)
+
+        cost_inputs = [
+            MilestoneCostData(
+                milestone_id=m.id,
+                planned_cost=m.planned_cost,
+                actual_cost=m.actual_cost,
+            )
+            for m in milestones
+        ]
+
+        result = compute_cost_variance(scope_id=scope_id, milestones=cost_inputs)
+
+        id_to_milestone = {m.id: m for m in milestones}
+
+        milestone_rows = [
+            MilestoneCostRow(
+                milestone_id=cv.milestone_id,
+                milestone_name=id_to_milestone[cv.milestone_id].name,
+                sequence=id_to_milestone[cv.milestone_id].sequence,
+                planned_cost=cv.planned_cost,
+                actual_cost=cv.actual_cost,
+                cost_variance=cv.cost_variance,
+                cost_variance_percent=cv.cost_variance_percent,
+                cost_last_updated_at=id_to_milestone[cv.milestone_id].cost_last_updated_at,
+            )
+            for cv in result.milestones
+        ]
+
+        return ScopeMilestoneCostResponse(
+            scope_id=scope_id,
+            project_budget=result.project_budget,
+            project_actual_cost=result.project_actual_cost,
+            project_cost_variance=result.project_cost_variance,
+            project_overrun_percent=result.project_overrun_percent,
+            milestones=milestone_rows,
+        )
 
