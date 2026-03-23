@@ -180,7 +180,7 @@ def test_api_invalid_transition_error_message_describes_allowed(client: TestClie
 
     response = client.patch(f"/api/v1/units/{unit_id}", json={"status": "registered"})
     assert response.status_code == 422
-    detail = response.json()["detail"]
+    detail = response.json()["message"]
     assert "available" in detail
     assert "reserved" in detail
 
@@ -199,7 +199,7 @@ def test_api_terminal_state_error_message_has_no_further_transitions(
 
     response = client.patch(f"/api/v1/units/{unit_id}", json={"status": "available"})
     assert response.status_code == 422
-    detail = response.json()["detail"]
+    detail = response.json()["message"]
     assert "No further transitions allowed" in detail
     assert "none" not in detail
 

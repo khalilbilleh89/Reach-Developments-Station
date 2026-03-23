@@ -422,7 +422,7 @@ def test_sparse_patch_gross_area_below_existing_internal_area_rejected(client: T
         json={"gross_area": 50.0},  # 50 < 80 → invalid effective state
     )
     assert response.status_code == 422
-    assert "gross_area" in response.json()["detail"]
+    assert "gross_area" in response.json()["message"]
 
 
 def test_sparse_patch_gross_area_valid_against_existing_internal_area_accepted(client: TestClient):
@@ -448,7 +448,7 @@ def test_sparse_patch_livable_area_above_existing_internal_area_rejected(client:
         json={"livable_area": 80.0},  # 80 > 60 → invalid effective state
     )
     assert response.status_code == 422
-    assert "livable_area" in response.json()["detail"]
+    assert "livable_area" in response.json()["message"]
 
 
 def test_sparse_patch_livable_area_valid_against_existing_internal_area_accepted(client: TestClient):

@@ -59,7 +59,7 @@ def test_create_pricing_unit_not_ready_rejected(client: TestClient):
     client.patch(f"/api/v1/units/{unit_id}", json={"status": "reserved"})
     resp = client.post(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
     assert resp.status_code == 422
-    assert "not ready for pricing" in resp.json()["detail"].lower()
+    assert "not ready for pricing" in resp.json()["message"].lower()
 
 
 def test_create_pricing_available_unit_succeeds(client: TestClient):
@@ -156,7 +156,7 @@ def test_approved_pricing_cannot_be_updated_via_put(client: TestClient):
         json={**_VALID_PRICING_PAYLOAD, "base_price": 999_000.0},
     )
     assert resp.status_code == 422
-    assert "immutable" in resp.json()["detail"].lower() or "approved" in resp.json()["detail"].lower()
+    assert "immutable" in resp.json()["message"].lower() or "approved" in resp.json()["message"].lower()
 
 
 def test_approved_pricing_cannot_be_updated_via_pricing_put(client: TestClient):
@@ -367,7 +367,7 @@ def test_legacy_put_unit_readiness_on_new_record(client: TestClient):
     client.patch(f"/api/v1/units/{unit_id}", json={"status": "reserved"})
     resp = client.put(f"/api/v1/units/{unit_id}/pricing", json=_VALID_PRICING_PAYLOAD)
     assert resp.status_code == 422
-    assert "not ready for pricing" in resp.json()["detail"].lower()
+    assert "not ready for pricing" in resp.json()["message"].lower()
 
 
 def test_legacy_put_updates_existing_approved_is_blocked(client: TestClient):

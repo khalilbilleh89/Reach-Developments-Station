@@ -7,8 +7,9 @@ Validates create / list / update behaviour for parcels, assumptions, and valuati
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
+
+from app.core.errors import ConflictError
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.land.schemas import LandParcelCreate
@@ -408,7 +409,7 @@ def test_standalone_parcel_duplicate_code_rejected(client: TestClient):
         json={"parcel_name": "Second Standalone", "parcel_code": "PCL-DUP-STANDALONE"},
     )
     assert resp2.status_code == 409
-    assert "PCL-DUP-STANDALONE" in resp2.json()["detail"]
+    assert "PCL-DUP-STANDALONE" in resp2.json()["message"]
 
 
 def test_standalone_parcel_integrity_error_maps_to_409(db_session):
@@ -426,10 +427,9 @@ def test_standalone_parcel_integrity_error_maps_to_409(db_session):
         "create",
         side_effect=IntegrityError("duplicate", {}, Exception("unique constraint")),
     ):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ConflictError) as exc_info:
             service.create_parcel(data)
-    assert exc_info.value.status_code == 409
-    assert "PCL-RACE" in exc_info.value.detail
+    assert "PCL-RACE" in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +529,7 @@ def test_assign_parcel_409_already_assigned_to_different_project(client: TestCli
 
     response = client.post(f"/api/v1/land/parcels/{parcel_id}/assign-project/{project_b_id}")
     assert response.status_code == 409
-    assert project_a_id in response.json()["detail"]
+    assert project_a_id in response.json()["message"]
 
 
 def test_assign_parcel_409_same_code_in_target_project(client: TestClient):
@@ -548,7 +548,7 @@ def test_assign_parcel_409_same_code_in_target_project(client: TestClient):
 
     response = client.post(f"/api/v1/land/parcels/{standalone_id}/assign-project/{project_id}")
     assert response.status_code == 409
-    assert "PCL-CODE-CONFLICT" in response.json()["detail"]
+    assert "PCL-CODE-CONFLICT" in response.json()["message"]
 
 
 def test_assign_parcel_idempotent(client: TestClient):
