@@ -16,6 +16,7 @@ from app.modules.construction.models import (
     ConstructionCostItem,
     ConstructionEngineeringItem,
     ConstructionMilestone,
+    ConstructionMilestoneDependency,
     ConstructionProgressUpdate,
     ConstructionScope,
 )
@@ -28,6 +29,7 @@ from app.modules.construction.schemas import (
     ConstructionScopeUpdate,
     EngineeringItemCreate,
     EngineeringItemUpdate,
+    MilestoneDependencyCreate,
     ProgressUpdateCreate,
 )
 
@@ -597,3 +599,94 @@ class ConstructionDashboardRepository:
                 Decimal(str(row.actual)),
             )
         return result
+
+
+class ConstructionMilestoneDependencyRepository:
+    """Persistence and retrieval for construction milestone dependencies."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(self, data: MilestoneDependencyCreate) -> ConstructionMilestoneDependency:
+        dep = ConstructionMilestoneDependency(
+            predecessor_id=data.predecessor_id,
+            successor_id=data.successor_id,
+            lag_days=data.lag_days,
+        )
+        self.db.add(dep)
+        self.db.commit()
+        self.db.refresh(dep)
+        return dep
+
+    def get_by_id(self, dependency_id: str) -> Optional[ConstructionMilestoneDependency]:
+        return (
+            self.db.query(ConstructionMilestoneDependency)
+            .filter(ConstructionMilestoneDependency.id == dependency_id)
+            .first()
+        )
+
+    def get_by_pair(
+        self, predecessor_id: str, successor_id: str
+    ) -> Optional[ConstructionMilestoneDependency]:
+        """Return an existing dependency for the given predecessor/successor pair."""
+        return (
+            self.db.query(ConstructionMilestoneDependency)
+            .filter(
+                ConstructionMilestoneDependency.predecessor_id == predecessor_id,
+                ConstructionMilestoneDependency.successor_id == successor_id,
+            )
+            .first()
+        )
+
+    def list_for_scope(self, scope_id: str) -> List[ConstructionMilestoneDependency]:
+        """Return all dependencies where BOTH predecessor and successor belong to the scope.
+
+        Using AND (not OR) ensures schedule computation only sees fully
+        in-scope edges and is not polluted by any cross-scope records.
+        """
+        from sqlalchemy import select as sa_select
+
+        milestone_ids_subq = sa_select(ConstructionMilestone.id).where(
+            ConstructionMilestone.scope_id == scope_id
+        )
+        return (
+            self.db.query(ConstructionMilestoneDependency)
+            .filter(
+                ConstructionMilestoneDependency.predecessor_id.in_(milestone_ids_subq)
+                & ConstructionMilestoneDependency.successor_id.in_(milestone_ids_subq)
+            )
+            .order_by(
+                ConstructionMilestoneDependency.predecessor_id,
+                ConstructionMilestoneDependency.successor_id,
+            )
+            .all()
+        )
+
+    def list_for_milestone(
+        self, milestone_id: str
+    ) -> List[ConstructionMilestoneDependency]:
+        """Return all dependencies where the milestone is predecessor or successor."""
+        return (
+            self.db.query(ConstructionMilestoneDependency)
+            .filter(
+                (ConstructionMilestoneDependency.predecessor_id == milestone_id)
+                | (ConstructionMilestoneDependency.successor_id == milestone_id)
+            )
+            .all()
+        )
+
+    def get_milestones_with_dependencies(
+        self, scope_id: str
+    ) -> List[ConstructionMilestone]:
+        """Return all milestones for a scope (for schedule computation)."""
+        return (
+            self.db.query(ConstructionMilestone)
+            .filter(ConstructionMilestone.scope_id == scope_id)
+            .order_by(ConstructionMilestone.sequence)
+            .all()
+        )
+
+    def delete(self, dep: ConstructionMilestoneDependency) -> None:
+        self.db.delete(dep)
+        self.db.commit()
+

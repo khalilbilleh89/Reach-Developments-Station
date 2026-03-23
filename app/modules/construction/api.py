@@ -32,6 +32,15 @@ Endpoints:
   GET    /api/v1/construction/cost-items/{cost_item_id}
   PATCH  /api/v1/construction/cost-items/{cost_item_id}
   DELETE /api/v1/construction/cost-items/{cost_item_id}
+
+  POST   /api/v1/construction/dependencies
+  GET    /api/v1/construction/scopes/{scope_id}/dependencies
+  GET    /api/v1/construction/dependencies/{dependency_id}
+  DELETE /api/v1/construction/dependencies/{dependency_id}
+
+  GET    /api/v1/construction/scopes/{scope_id}/schedule
+  POST   /api/v1/construction/scopes/{scope_id}/schedule/recompute
+  GET    /api/v1/construction/scopes/{scope_id}/critical-path
 """
 
 from typing import Annotated, Optional
@@ -57,13 +66,18 @@ from app.modules.construction.schemas import (
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
+    CriticalPathResponse,
     EngineeringItemCreate,
     EngineeringItemList,
     EngineeringItemResponse,
     EngineeringItemUpdate,
+    MilestoneDependencyCreate,
+    MilestoneDependencyList,
+    MilestoneDependencyResponse,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    ScopeScheduleResponse,
 )
 from app.modules.construction.service import ConstructionService
 
@@ -390,3 +404,88 @@ def delete_cost_item(
     """Delete a cost item."""
     service.delete_cost_item(cost_item_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Dependency endpoints ─────────────────────────────────────────────────────
+
+
+@router.post("/dependencies", response_model=MilestoneDependencyResponse, status_code=201)
+def create_dependency(
+    data: MilestoneDependencyCreate,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> MilestoneDependencyResponse:
+    """Create a finish-to-start dependency between two construction milestones."""
+    return service.create_dependency(data)
+
+
+@router.get(
+    "/scopes/{scope_id}/dependencies",
+    response_model=MilestoneDependencyList,
+)
+def list_scope_dependencies(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> MilestoneDependencyList:
+    """List all milestone dependencies for a construction scope."""
+    return service.list_dependencies_for_scope(scope_id)
+
+
+@router.get(
+    "/dependencies/{dependency_id}",
+    response_model=MilestoneDependencyResponse,
+)
+def get_dependency(
+    dependency_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> MilestoneDependencyResponse:
+    """Get a specific milestone dependency by ID."""
+    return service.get_dependency(dependency_id)
+
+
+@router.delete("/dependencies/{dependency_id}", status_code=204)
+def delete_dependency(
+    dependency_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> Response:
+    """Delete a milestone dependency."""
+    service.delete_dependency(dependency_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Schedule endpoints ───────────────────────────────────────────────────────
+
+
+@router.get(
+    "/scopes/{scope_id}/schedule",
+    response_model=ScopeScheduleResponse,
+)
+def get_scope_schedule(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeScheduleResponse:
+    """Compute and return the full CPM schedule for a construction scope."""
+    return service.get_scope_schedule(scope_id)
+
+
+@router.post(
+    "/scopes/{scope_id}/schedule/recompute",
+    response_model=ScopeScheduleResponse,
+)
+def recompute_scope_schedule(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeScheduleResponse:
+    """Recompute and return the CPM schedule for a construction scope."""
+    return service.get_scope_schedule(scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/critical-path",
+    response_model=CriticalPathResponse,
+)
+def get_critical_path(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> CriticalPathResponse:
+    """Return the critical path summary for a construction scope."""
+    return service.get_critical_path(scope_id)

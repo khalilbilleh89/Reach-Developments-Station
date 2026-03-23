@@ -111,6 +111,7 @@ class ConstructionMilestone(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -128,6 +129,20 @@ class ConstructionMilestone(Base, TimestampMixin):
         back_populates="milestone",
         cascade="all, delete-orphan",
         order_by="ConstructionProgressUpdate.reported_at",
+    )
+    # dependencies where this milestone is the successor
+    predecessor_links: Mapped[List["ConstructionMilestoneDependency"]] = relationship(
+        "ConstructionMilestoneDependency",
+        foreign_keys="ConstructionMilestoneDependency.successor_id",
+        back_populates="successor",
+        cascade="all, delete-orphan",
+    )
+    # dependencies where this milestone is the predecessor
+    successor_links: Mapped[List["ConstructionMilestoneDependency"]] = relationship(
+        "ConstructionMilestoneDependency",
+        foreign_keys="ConstructionMilestoneDependency.predecessor_id",
+        back_populates="predecessor",
+        cascade="all, delete-orphan",
     )
 
 
@@ -244,4 +259,52 @@ class ConstructionCostItem(Base, TimestampMixin):
 
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="cost_items"
+    )
+
+
+class ConstructionMilestoneDependency(Base, TimestampMixin):
+    """Finish-to-Start dependency between two construction milestones.
+
+    Semantics: the successor milestone cannot start until the predecessor
+    milestone has finished (plus any optional lag).
+
+    Constraints
+    -----------
+    - predecessor_id and successor_id must be different (no self-dependency).
+    - The (predecessor_id, successor_id) pair must be unique.
+    - Circular dependencies are rejected at the service layer.
+    """
+
+    __tablename__ = "construction_milestone_dependencies"
+    __table_args__ = (
+        UniqueConstraint(
+            "predecessor_id",
+            "successor_id",
+            name="uq_milestone_dependency",
+        ),
+    )
+
+    predecessor_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_milestones.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    successor_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("construction_milestones.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lag_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    predecessor: Mapped["ConstructionMilestone"] = relationship(
+        "ConstructionMilestone",
+        foreign_keys=[predecessor_id],
+        back_populates="successor_links",
+    )
+    successor: Mapped["ConstructionMilestone"] = relationship(
+        "ConstructionMilestone",
+        foreign_keys=[successor_id],
+        back_populates="predecessor_links",
     )
