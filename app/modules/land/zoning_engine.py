@@ -77,7 +77,7 @@ def calculate_max_footprint_area(land_area: float, coverage_ratio: float) -> flo
 def calculate_max_floors(max_height_m: float, floor_height_m: float) -> int:
     """Maximum floors = floor(max_height_m / floor_height_m).
 
-    Returns 0 when floor_height_m is zero to avoid division by zero.
+    Returns 0 when floor_height_m is non-positive (<= 0.0) to avoid invalid division.
     """
     if floor_height_m <= 0.0:
         return 0
@@ -95,7 +95,11 @@ def calculate_setback_adjusted_area(
     Assumes a square plot: side = sqrt(land_area).
     When all setbacks are zero the original land_area is returned unchanged.
     The result is clamped to a minimum of 0.0.
+
+    Returns 0.0 when land_area is non-positive to avoid a ValueError from sqrt().
     """
+    if land_area <= 0.0:
+        return 0.0
     if setback_front == 0.0 and setback_side == 0.0 and setback_rear == 0.0:
         return land_area
     side = sqrt(land_area)
@@ -137,9 +141,9 @@ def calculate_estimated_unit_capacity(
 ) -> Optional[int]:
     """Estimated unit capacity = floor(effective_buildable_area / avg_unit_size_sqm).
 
-    Returns None when avg_unit_size_sqm is not provided or is zero.
+    Returns None when avg_unit_size_sqm is not provided or is non-positive.
     """
-    if not avg_unit_size_sqm:
+    if avg_unit_size_sqm is None or avg_unit_size_sqm <= 0.0:
         return None
     return floor(effective_buildable_area / avg_unit_size_sqm)
 

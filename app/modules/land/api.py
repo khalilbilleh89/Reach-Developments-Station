@@ -36,6 +36,10 @@ def get_service(db: Session = Depends(get_db)) -> LandService:
     return LandService(db)
 
 
+def get_zoning_service() -> ZoningService:
+    return ZoningService()
+
+
 # ---------------------------------------------------------------------------
 # Parcel endpoints
 # ---------------------------------------------------------------------------
@@ -166,6 +170,7 @@ def run_valuation_engine(
 @router.post("/zoning/evaluate", response_model=ZoningResultResponse)
 def evaluate_zoning(
     data: ZoningEvaluateRequest,
+    service: Annotated[ZoningService, Depends(get_zoning_service)],
 ) -> ZoningResultResponse:
     """Evaluate zoning capacity from parcel and regulation parameters.
 
@@ -173,4 +178,4 @@ def evaluate_zoning(
     and returns derived development limits including maximum buildable area,
     effective footprint, floor count, and parking requirements.
     """
-    return ZoningService().evaluate(data)
+    return service.evaluate(data)

@@ -145,6 +145,17 @@ def test_setback_adjusted_area_clamped_to_zero():
     assert result == pytest.approx(0.0)
 
 
+def test_setback_adjusted_area_zero_land_area():
+    """Zero land_area returns 0.0 without raising an error."""
+    assert calculate_setback_adjusted_area(0.0, 0.0, 0.0, 0.0) == pytest.approx(0.0)
+
+
+def test_setback_adjusted_area_negative_land_area():
+    """Negative land_area returns 0.0 without calling sqrt() or raising an error."""
+    assert calculate_setback_adjusted_area(-500.0, 5.0, 3.0, 5.0) == pytest.approx(0.0)
+    assert calculate_setback_adjusted_area(-500.0, 0.0, 0.0, 0.0) == pytest.approx(0.0)
+
+
 def test_setback_adjusted_area_only_side_setbacks():
     """Only side setbacks reduce width, not depth."""
     side = sqrt(10_000.0)
@@ -222,6 +233,11 @@ def test_estimated_unit_capacity_none_when_no_unit_size():
 def test_estimated_unit_capacity_none_when_zero_unit_size():
     """Returns None when avg_unit_size_sqm is zero (avoids division by zero)."""
     assert calculate_estimated_unit_capacity(35_000.0, 0.0) is None
+
+
+def test_estimated_unit_capacity_none_when_negative_unit_size():
+    """Returns None when avg_unit_size_sqm is negative (non-positive guard)."""
+    assert calculate_estimated_unit_capacity(35_000.0, -50.0) is None
 
 
 # ---------------------------------------------------------------------------
