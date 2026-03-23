@@ -65,7 +65,7 @@ from app.modules.units.models import Unit
 from app.modules.floors.models import Floor
 from app.modules.buildings.models import Building
 from app.modules.phases.models import Phase
-from app.shared.enums.sales import ContractPaymentStatus, ContractStatus
+from app.shared.enums.sales import ContractPaymentStatus
 
 _logger = get_logger("reach_developments.finance.cashflow_service")
 

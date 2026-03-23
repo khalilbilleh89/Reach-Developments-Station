@@ -19,6 +19,8 @@ Validates:
   - missing scope returns 404
 """
 
+import calendar
+
 import pytest
 from datetime import date
 
@@ -210,14 +212,10 @@ class TestComputeContractForecast:
         result = compute_contract_forecast("c-001", [], self.START, self.END)
         for period in result.periods:
             assert period.period_start.day == 1
-            last_day = (
-                period.period_end.day
-            )
-            import calendar
             _, expected_last = calendar.monthrange(
                 period.period_end.year, period.period_end.month
             )
-            assert last_day == expected_last
+            assert period.period_end.day == expected_last
 
     def test_single_month_window(self):
         """A window spanning a single month produces exactly one period."""
