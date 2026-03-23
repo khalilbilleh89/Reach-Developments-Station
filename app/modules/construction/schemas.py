@@ -101,6 +101,10 @@ class ConstructionMilestoneResponse(BaseModel):
     target_date: Optional[date]
     completion_date: Optional[date]
     notes: Optional[str]
+    actual_start_day: Optional[int]
+    actual_finish_day: Optional[int]
+    progress_percent: Optional[float]
+    last_progress_update_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
@@ -506,3 +510,86 @@ class CriticalPathResponse(BaseModel):
     critical_path_milestone_names: List[str]
     total_phases: int
     critical_phases: int
+
+
+# ── Milestone Progress Update ────────────────────────────────────────────────
+
+
+class MilestoneProgressUpdate(BaseModel):
+    """Request body for POST /construction/milestones/{id}/progress."""
+
+    progress_percent: float = Field(..., ge=0.0, le=100.0)
+    actual_start_day: Optional[int] = Field(None, ge=0)
+    actual_finish_day: Optional[int] = Field(None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_progress_rules(self) -> "MilestoneProgressUpdate":
+        if self.progress_percent > 0 and self.actual_start_day is None:
+            raise ValueError("actual_start_day is required when progress_percent > 0.")
+        if self.actual_finish_day is not None and self.progress_percent < 100.0:
+            raise ValueError(
+                "progress_percent must be 100 when actual_finish_day is provided."
+            )
+        if (
+            self.actual_start_day is not None
+            and self.actual_finish_day is not None
+            and self.actual_finish_day < self.actual_start_day
+        ):
+            raise ValueError("actual_finish_day must be >= actual_start_day.")
+        return self
+
+
+# ── Scope Progress Overview ──────────────────────────────────────────────────
+
+
+class MilestoneProgressRow(BaseModel):
+    """Progress summary row for a single milestone."""
+
+    milestone_id: str
+    milestone_name: str
+    sequence: int
+    progress_percent: Optional[float]
+    actual_start_day: Optional[int]
+    actual_finish_day: Optional[int]
+    last_progress_update_at: Optional[datetime]
+
+
+class ScopeProgressResponse(BaseModel):
+    """Aggregated progress overview for a construction scope."""
+
+    scope_id: str
+    total_milestones: int
+    started_milestones: int
+    completed_milestones: int
+    overall_completion_percent: float
+    milestones: List[MilestoneProgressRow]
+
+
+# ── Schedule Variance ────────────────────────────────────────────────────────
+
+
+class MilestoneVarianceRow(BaseModel):
+    """Schedule variance row for a single milestone."""
+
+    milestone_id: str
+    milestone_name: str
+    planned_start: int
+    planned_finish: int
+    actual_start_day: Optional[int]
+    actual_finish_day: Optional[int]
+    progress_percent: Optional[float]
+    schedule_variance_days: Optional[int]
+    completion_variance_days: Optional[int]
+    milestone_status: str
+    is_critical: bool
+    risk_exposed: bool
+
+
+class ScopeVarianceResponse(BaseModel):
+    """Full schedule variance analysis for a construction scope."""
+
+    scope_id: str
+    project_delay_days: int
+    critical_path_shift: bool
+    affected_milestones: List[str]
+    milestones: List[MilestoneVarianceRow]

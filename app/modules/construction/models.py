@@ -24,7 +24,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -120,6 +120,14 @@ class ConstructionMilestone(Base, TimestampMixin):
     target_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     completion_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # ── Progress tracking fields (PR-CONSTR-041) ──────────────────────────────
+    actual_start_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    actual_finish_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    progress_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_progress_update_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     scope: Mapped["ConstructionScope"] = relationship(
         "ConstructionScope", back_populates="milestones"
