@@ -100,3 +100,63 @@ DEFAULT_EXECUTION_PROBABILITY: float = 1.0
 
 # Default cost spread method for construction cashflow forecasting.
 DEFAULT_SPREAD_METHOD: str = "linear"
+
+
+# ---------------------------------------------------------------------------
+# Construction financing enumerations  (PR-FIN-036)
+# ---------------------------------------------------------------------------
+
+
+class ConstructionLoanDrawMethod(str, Enum):
+    """Method used to determine when and how debt is drawn down.
+
+    PRO_RATA
+        Debt is drawn proportionally in each period based on the debt_ratio.
+        debt_draw = period_cost × debt_ratio
+
+    FRONT_LOADED
+        Debt is drawn first; equity injected only after debt is exhausted
+        (reserved for future PRs).
+
+    BACK_LOADED
+        Equity is injected first; debt drawn after equity is exhausted
+        (reserved for future PRs).
+    """
+
+    PRO_RATA = "pro_rata"
+    FRONT_LOADED = "front_loaded"
+    BACK_LOADED = "back_loaded"
+
+
+class ConstructionEquityInjectionMethod(str, Enum):
+    """Method used to determine when equity contributions are made.
+
+    PRO_RATA
+        Equity is contributed proportionally in each period based on the
+        equity_ratio.  equity_contribution = period_cost × equity_ratio
+
+    UPFRONT
+        All equity is injected in the first active period
+        (reserved for future PRs).
+
+    ON_DEMAND
+        Equity is injected only when a funding gap exists after debt drawdown
+        (reserved for future PRs).
+    """
+
+    PRO_RATA = "pro_rata"
+    UPFRONT = "upfront"
+    ON_DEMAND = "on_demand"
+
+
+# Default proportion of construction cost funded by debt.
+DEFAULT_DEBT_RATIO: float = 0.60
+
+# Default proportion of construction cost funded by equity (1 − debt_ratio).
+DEFAULT_EQUITY_RATIO: float = 0.40
+
+# Default financing probability (probability that financing will be required).
+DEFAULT_FINANCING_PROBABILITY: float = 1.0
+
+# Default offset (months) from construction start before financing begins.
+DEFAULT_FINANCING_START_OFFSET: int = 0

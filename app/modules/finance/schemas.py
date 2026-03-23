@@ -10,10 +10,18 @@ no raw financial tables are exposed.
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.modules.collections.aging_engine import AgingBucket
-from app.modules.finance.constants import ConstructionSpreadMethod
+from app.modules.finance.constants import (
+    ConstructionEquityInjectionMethod,
+    ConstructionLoanDrawMethod,
+    ConstructionSpreadMethod,
+    DEFAULT_DEBT_RATIO,
+    DEFAULT_EQUITY_RATIO,
+    DEFAULT_FINANCING_PROBABILITY,
+    DEFAULT_FINANCING_START_OFFSET,
+)
 from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
 
 
@@ -732,5 +740,183 @@ class PortfolioConstructionCashflowResponse(BaseModel):
     summary: ConstructionCashflowSummaryResponse
     periods: List[ConstructionCashflowPeriodRow] = Field(default_factory=list)
     project_forecasts: List[ProjectConstructionCashflowResponse] = Field(
+        default_factory=list
+    )
+
+
+# ---------------------------------------------------------------------------
+# Construction financing schemas  (PR-FIN-036)
+# ---------------------------------------------------------------------------
+
+
+class ConstructionFinancingAssumptionsSchema(BaseModel):
+    """Assumption parameters for the construction financing draw schedule engine.
+
+    Attributes
+    ----------
+    debt_ratio:
+        Proportion of each period's construction cost funded by debt (0–1).
+    equity_ratio:
+        Proportion of each period's construction cost funded by equity (0–1).
+    loan_draw_method:
+        Method used to schedule debt drawdowns.  Default "pro_rata".
+    equity_injection_method:
+        Method used to schedule equity contributions.  Default "pro_rata".
+    financing_start_offset:
+        Number of periods before financing begins.  Default 0.
+    financing_probability:
+        Probability (0–1) that financing will be required in each period.
+    """
+
+    debt_ratio: float = Field(
+        default=DEFAULT_DEBT_RATIO,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by debt (0–1).",
+    )
+    equity_ratio: float = Field(
+        default=DEFAULT_EQUITY_RATIO,
+        ge=0.0,
+        le=1.0,
+        description="Proportion of construction cost funded by equity (0–1).",
+    )
+    loan_draw_method: str = Field(
+        default=ConstructionLoanDrawMethod.PRO_RATA.value,
+        description="Method used to schedule debt drawdowns.",
+    )
+    equity_injection_method: str = Field(
+        default=ConstructionEquityInjectionMethod.PRO_RATA.value,
+        description="Method used to schedule equity contributions.",
+    )
+    financing_start_offset: int = Field(
+        default=DEFAULT_FINANCING_START_OFFSET,
+        ge=0,
+        description="Periods before financing begins (0 = starts immediately).",
+    )
+    financing_probability: float = Field(
+        default=DEFAULT_FINANCING_PROBABILITY,
+        ge=0.0,
+        le=1.0,
+        description="Probability that financing is required in each period (0–1).",
+    )
+
+    @field_validator("loan_draw_method")
+    @classmethod
+    def _validate_loan_draw_method(cls, v: str) -> str:
+        allowed = {m.value for m in ConstructionLoanDrawMethod}
+        if v not in allowed:
+            raise ValueError(
+                f"loan_draw_method '{v}' is not supported. "
+                f"Allowed values: {sorted(allowed)}"
+            )
+        pro_rata = ConstructionLoanDrawMethod.PRO_RATA.value
+        if v != pro_rata:
+            raise ValueError(
+                f"loan_draw_method '{v}' is not supported yet. "
+                f"Only '{pro_rata}' is currently implemented."
+            )
+        return v
+
+    @field_validator("equity_injection_method")
+    @classmethod
+    def _validate_equity_injection_method(cls, v: str) -> str:
+        allowed = {m.value for m in ConstructionEquityInjectionMethod}
+        if v not in allowed:
+            raise ValueError(
+                f"equity_injection_method '{v}' is not supported. "
+                f"Allowed values: {sorted(allowed)}"
+            )
+        pro_rata = ConstructionEquityInjectionMethod.PRO_RATA.value
+        if v != pro_rata:
+            raise ValueError(
+                f"equity_injection_method '{v}' is not supported yet. "
+                f"Only '{pro_rata}' is currently implemented."
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _validate_ratios_sum_to_one(self) -> "ConstructionFinancingAssumptionsSchema":
+        total = self.debt_ratio + self.equity_ratio
+        # 1e-6 tolerance accommodates floating-point representation errors
+        # (e.g. 0.1 + 0.9 == 0.9999999... in IEEE-754).  Any larger deviation
+        # indicates a genuine misconfiguration of the capital stack.
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(
+                f"debt_ratio ({self.debt_ratio}) + equity_ratio ({self.equity_ratio}) "
+                f"must equal 1.0, but got {total:.6f}."
+            )
+        return self
+
+
+class ConstructionDrawScheduleSummaryResponse(BaseModel):
+    """Aggregated financing totals across all periods in the draw schedule."""
+
+    total_cost: float = Field(..., ge=0, description="Total construction cost financed.")
+    total_debt: float = Field(..., ge=0, description="Total debt drawn across all periods.")
+    total_equity: float = Field(
+        ..., ge=0, description="Total equity contributed across all periods."
+    )
+    debt_to_cost_ratio: float = Field(
+        ..., ge=0, description="Ratio of total debt to total construction cost."
+    )
+    equity_to_cost_ratio: float = Field(
+        ..., ge=0, description="Ratio of total equity to total construction cost."
+    )
+
+
+class ConstructionDrawPeriodRow(BaseModel):
+    """Per-period construction financing row."""
+
+    period_label: str = Field(..., description="YYYY-MM label for the period.")
+    period_cost: float = Field(..., ge=0, description="Construction cost for this period.")
+    debt_draw: float = Field(..., ge=0, description="Debt drawdown allocated to this period.")
+    equity_contribution: float = Field(
+        ..., ge=0, description="Equity injection allocated to this period."
+    )
+    cumulative_debt: float = Field(
+        ..., ge=0, description="Running cumulative debt drawn up to this period."
+    )
+    cumulative_equity: float = Field(
+        ..., ge=0, description="Running cumulative equity contributed up to this period."
+    )
+
+
+class ProjectConstructionFinancingResponse(BaseModel):
+    """Construction financing draw schedule for a single project.
+
+    Returned by GET /finance/projects/{project_id}/construction-financing.
+    """
+
+    scope_type: str = Field(default="project")
+    project_id: str
+    assumptions: ConstructionFinancingAssumptionsSchema
+    summary: ConstructionDrawScheduleSummaryResponse
+    periods: List[ConstructionDrawPeriodRow] = Field(default_factory=list)
+
+
+class PhaseConstructionFinancingResponse(BaseModel):
+    """Construction financing draw schedule for a single project phase.
+
+    Returned by GET /finance/phases/{phase_id}/construction-financing.
+    """
+
+    scope_type: str = Field(default="phase")
+    phase_id: str
+    assumptions: ConstructionFinancingAssumptionsSchema
+    summary: ConstructionDrawScheduleSummaryResponse
+    periods: List[ConstructionDrawPeriodRow] = Field(default_factory=list)
+
+
+class PortfolioConstructionFinancingResponse(BaseModel):
+    """Construction financing draw schedule aggregated across the entire portfolio.
+
+    Returned by GET /finance/portfolio/construction-financing.
+    """
+
+    scope_type: str = Field(default="portfolio")
+    assumptions: ConstructionFinancingAssumptionsSchema
+    summary: ConstructionDrawScheduleSummaryResponse
+    periods: List[ConstructionDrawPeriodRow] = Field(default_factory=list)
+    project_results: List[ProjectConstructionFinancingResponse] = Field(
         default_factory=list
     )

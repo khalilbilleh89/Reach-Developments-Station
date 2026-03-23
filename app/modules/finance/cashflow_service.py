@@ -50,6 +50,12 @@ from app.modules.finance.construction_cashflow_engine import (
     compute_portfolio_construction_cashflow,
     compute_project_construction_cashflow,
 )
+from app.modules.finance.construction_financing_engine import (
+    ConstructionFinancingAssumptions,
+    compute_phase_construction_financing,
+    compute_portfolio_construction_financing,
+    compute_project_construction_financing,
+)
 from app.modules.finance.cashflow_forecast_engine import (
     InstallmentLine,
     build_portfolio_forecast,
@@ -61,16 +67,22 @@ from app.modules.finance.schemas import (
     CashflowPeriodRow,
     ConstructionCashflowPeriodRow,
     ConstructionCashflowSummaryResponse,
+    ConstructionDrawPeriodRow,
+    ConstructionDrawScheduleSummaryResponse,
+    ConstructionFinancingAssumptionsSchema,
     ConstructionForecastAssumptionsSchema,
     ContractCashflowForecastResponse,
     MonthlyForecastEntryResponse,
     PhaseConstructionCashflowResponse,
+    PhaseConstructionFinancingResponse,
     PortfolioCashflowForecastResponse,
     PortfolioCashflowForecastV2Response,
     PortfolioConstructionCashflowResponse,
+    PortfolioConstructionFinancingResponse,
     ProjectCashflowForecastResponse,
     ProjectCashflowForecastV2Response,
     ProjectConstructionCashflowResponse,
+    ProjectConstructionFinancingResponse,
 )
 from app.modules.projects.models import Project
 from app.modules.sales.models import ContractPaymentSchedule, SalesContract
@@ -394,6 +406,138 @@ class CashflowForecastService:
         )
         return _construction_result_to_portfolio_response(
             result, assumptions_schema or ConstructionForecastAssumptionsSchema()
+        )
+
+    # ------------------------------------------------------------------
+    # Construction financing  (PR-FIN-036)
+    # ------------------------------------------------------------------
+
+    def compute_project_construction_financing(
+        self,
+        project_id: str,
+        start_date: date,
+        end_date: date,
+        cashflow_assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+        financing_assumptions_schema: Optional[ConstructionFinancingAssumptionsSchema] = None,
+    ) -> ProjectConstructionFinancingResponse:
+        """Return the construction financing draw schedule for a single project.
+
+        Derives the draw schedule from the project's construction cashflow
+        forecast and the supplied capital stack assumptions.
+
+        Raises
+        ------
+        ResourceNotFoundError
+            When the project does not exist.
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+        self._require_project(project_id)
+
+        cashflow_assumptions = _schema_to_construction_assumptions(cashflow_assumptions_schema)
+        cost_records = self._load_project_construction_costs(project_id)
+        cashflow_result = compute_project_construction_cashflow(
+            project_id, cost_records, start_date, end_date, cashflow_assumptions
+        )
+
+        financing_assumptions = _schema_to_financing_assumptions(financing_assumptions_schema)
+        result = compute_project_construction_financing(
+            project_id, cashflow_result.periods, financing_assumptions
+        )
+
+        _logger.debug(
+            "Project construction financing computed: project_id=%s periods=%d",
+            project_id,
+            len(result.periods),
+        )
+        return _financing_result_to_project_response(
+            result,
+            project_id,
+            financing_assumptions_schema or ConstructionFinancingAssumptionsSchema(),
+        )
+
+    def compute_phase_construction_financing(
+        self,
+        phase_id: str,
+        start_date: date,
+        end_date: date,
+        cashflow_assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+        financing_assumptions_schema: Optional[ConstructionFinancingAssumptionsSchema] = None,
+    ) -> PhaseConstructionFinancingResponse:
+        """Return the construction financing draw schedule for a single phase.
+
+        Raises
+        ------
+        ResourceNotFoundError
+            When the phase does not exist.
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+        self._require_phase(phase_id)
+
+        cashflow_assumptions = _schema_to_construction_assumptions(cashflow_assumptions_schema)
+        cost_records = self._load_phase_construction_costs(phase_id)
+        cashflow_result = compute_phase_construction_cashflow(
+            phase_id, cost_records, start_date, end_date, cashflow_assumptions
+        )
+
+        financing_assumptions = _schema_to_financing_assumptions(financing_assumptions_schema)
+        result = compute_phase_construction_financing(
+            phase_id, cashflow_result.periods, financing_assumptions
+        )
+
+        _logger.debug(
+            "Phase construction financing computed: phase_id=%s periods=%d",
+            phase_id,
+            len(result.periods),
+        )
+        return _financing_result_to_phase_response(
+            result,
+            phase_id,
+            financing_assumptions_schema or ConstructionFinancingAssumptionsSchema(),
+        )
+
+    def compute_portfolio_construction_financing(
+        self,
+        start_date: date,
+        end_date: date,
+        cashflow_assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+        financing_assumptions_schema: Optional[ConstructionFinancingAssumptionsSchema] = None,
+    ) -> PortfolioConstructionFinancingResponse:
+        """Return the construction financing draw schedule across the entire portfolio.
+
+        Raises
+        ------
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+
+        cashflow_assumptions = _schema_to_construction_assumptions(cashflow_assumptions_schema)
+        project_cost_records = self._load_all_project_construction_costs()
+
+        # Compute per-project cashflow periods first.
+        project_cashflow_periods = {
+            pid: compute_project_construction_cashflow(
+                pid, records, start_date, end_date, cashflow_assumptions
+            ).periods
+            for pid, records in project_cost_records.items()
+        }
+
+        financing_assumptions = _schema_to_financing_assumptions(financing_assumptions_schema)
+        result = compute_portfolio_construction_financing(
+            project_cashflow_periods, financing_assumptions
+        )
+
+        _logger.debug(
+            "Portfolio construction financing computed: projects=%d periods=%d",
+            len(result.project_results),
+            len(result.periods),
+        )
+        return _financing_result_to_portfolio_response(
+            result, financing_assumptions_schema or ConstructionFinancingAssumptionsSchema()
         )
 
     # ------------------------------------------------------------------
@@ -796,4 +940,92 @@ def _construction_result_to_portfolio_response(
         summary=_construction_summary_to_response(result.summary),
         periods=[_construction_period_to_row(p) for p in result.periods],
         project_forecasts=project_responses,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Construction financing helpers  (PR-FIN-036)
+# ---------------------------------------------------------------------------
+
+
+def _schema_to_financing_assumptions(
+    schema: Optional[ConstructionFinancingAssumptionsSchema],
+) -> ConstructionFinancingAssumptions:
+    """Convert Pydantic financing schema to engine ConstructionFinancingAssumptions."""
+    if schema is None:
+        return ConstructionFinancingAssumptions()
+    return ConstructionFinancingAssumptions(
+        debt_ratio=schema.debt_ratio,
+        equity_ratio=schema.equity_ratio,
+        loan_draw_method=schema.loan_draw_method,
+        equity_injection_method=schema.equity_injection_method,
+        financing_start_offset=schema.financing_start_offset,
+        financing_probability=schema.financing_probability,
+    )
+
+
+def _financing_draw_period_to_row(period: object) -> ConstructionDrawPeriodRow:
+    """Convert a ConstructionDrawPeriodResult to the Pydantic schema row."""
+    return ConstructionDrawPeriodRow(
+        period_label=period.period_label,
+        period_cost=period.period_cost,
+        debt_draw=period.debt_draw,
+        equity_contribution=period.equity_contribution,
+        cumulative_debt=period.cumulative_debt,
+        cumulative_equity=period.cumulative_equity,
+    )
+
+
+def _financing_summary_to_response(summary: object) -> ConstructionDrawScheduleSummaryResponse:
+    return ConstructionDrawScheduleSummaryResponse(
+        total_cost=summary.total_cost,
+        total_debt=summary.total_debt,
+        total_equity=summary.total_equity,
+        debt_to_cost_ratio=summary.debt_to_cost_ratio,
+        equity_to_cost_ratio=summary.equity_to_cost_ratio,
+    )
+
+
+def _financing_result_to_project_response(
+    result: object,
+    project_id: str,
+    assumptions_schema: ConstructionFinancingAssumptionsSchema,
+) -> ProjectConstructionFinancingResponse:
+    return ProjectConstructionFinancingResponse(
+        scope_type=result.scope_type,
+        project_id=project_id,
+        assumptions=assumptions_schema,
+        summary=_financing_summary_to_response(result.summary),
+        periods=[_financing_draw_period_to_row(p) for p in result.periods],
+    )
+
+
+def _financing_result_to_phase_response(
+    result: object,
+    phase_id: str,
+    assumptions_schema: ConstructionFinancingAssumptionsSchema,
+) -> PhaseConstructionFinancingResponse:
+    return PhaseConstructionFinancingResponse(
+        scope_type=result.scope_type,
+        phase_id=phase_id,
+        assumptions=assumptions_schema,
+        summary=_financing_summary_to_response(result.summary),
+        periods=[_financing_draw_period_to_row(p) for p in result.periods],
+    )
+
+
+def _financing_result_to_portfolio_response(
+    result: object,
+    assumptions_schema: ConstructionFinancingAssumptionsSchema,
+) -> PortfolioConstructionFinancingResponse:
+    project_responses = [
+        _financing_result_to_project_response(pr, pr.scope_id, assumptions_schema)
+        for pr in result.project_results
+    ]
+    return PortfolioConstructionFinancingResponse(
+        scope_type=result.scope_type,
+        assumptions=assumptions_schema,
+        summary=_financing_summary_to_response(result.summary),
+        periods=[_financing_draw_period_to_row(p) for p in result.periods],
+        project_results=project_responses,
     )
