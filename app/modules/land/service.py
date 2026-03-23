@@ -16,7 +16,7 @@ from app.core.calculation_engine.registry import (
     calculate_land_underwriting_metrics,
     calculate_sellable_area,
 )
-from app.modules.land.models import LandParcel
+from app.modules.land.models import LandAssembly, LandParcel
 from app.modules.land.repository import LandAssumptionsRepository, LandParcelRepository, LandValuationRepository
 from app.modules.land.schemas import (
     LandAssumptionCreate,
@@ -347,7 +347,7 @@ class LandService:
     # Assembly operations
     # ------------------------------------------------------------------
 
-    def _build_assembly_response(self, assembly: "LandParcel") -> LandAssemblyResponse:
+    def _build_assembly_response(self, assembly: "LandAssembly") -> LandAssemblyResponse:
         """Build a LandAssemblyResponse including member parcel summaries."""
         parcel_ids = self.assembly_repo.get_parcel_ids(assembly.id)
         parcels_out: list = []
@@ -407,7 +407,7 @@ class LandService:
             updated_at=assembly.updated_at,
         )
 
-    def _build_assembly_summary(self, assembly: "LandParcel") -> LandAssemblySummary:
+    def _build_assembly_summary(self, assembly: "LandAssembly") -> LandAssemblySummary:
         return LandAssemblySummary(
             id=assembly.id,
             assembly_name=assembly.assembly_name,
