@@ -21,8 +21,11 @@ Endpoints
   POST /finance/collections/alerts/generate            — generate alerts from overdue installments
   POST /finance/collections/alerts/{id}/resolve        — resolve a collections alert
   POST /finance/payments/match-receipt                 — match a payment to installment obligations
-  GET /finance/cashflow/forecast                       — portfolio cashflow forecast
-  GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast
+  GET /finance/cashflow/forecast                       — portfolio cashflow forecast (legacy)
+  GET /finance/cashflow/forecast/project/{project_id} — project cashflow forecast (legacy)
+  GET /finance/contracts/{contract_id}/cashflow-forecast — contract cashflow forecast (PR-33)
+  GET /finance/projects/{project_id}/cashflow-forecast   — project cashflow forecast (PR-33)
+  GET /finance/portfolio/cashflow-forecast               — portfolio cashflow forecast (PR-33)
   POST /finance/analytics/rebuild                      — rebuild analytics fact tables
   GET /finance/analytics/portfolio                     — portfolio analytics dashboard
   GET /finance/projects/{project_id}/dashboard         — project financial dashboard
@@ -30,26 +33,31 @@ Endpoints
   GET /finance/projects/{project_id}/alerts            — project risk alerts
 """
 
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.finance.schemas import (
     AnalyticsRebuildResponse,
+    CashflowForecastAssumptions,
     CollectionsAlertListResponse,
     CollectionsAlertResponse,
     ContractAgingResponse,
+    ContractCashflowForecastResponse,
     MatchReceiptRequest,
     PortfolioAgingResponse,
     PortfolioAnalyticsResponse,
     PortfolioCashflowForecastResponse,
+    PortfolioCashflowForecastV2Response,
     PortfolioFinancialSummaryResponse,
     PortfolioRevenueOverviewResponse,
     PortfolioRiskResponse,
     ProjectAgingResponse,
     ProjectCashflowForecastResponse,
+    ProjectCashflowForecastV2Response,
     ProjectFinanceSummaryResponse,
     ProjectFinancialDashboardResponse,
     ProjectRevenueSummaryResponse,
@@ -311,7 +319,7 @@ def match_payment_receipt(
 
 
 # ---------------------------------------------------------------------------
-# Cashflow forecasting endpoints
+# Cashflow forecasting endpoints — legacy simple forecast
 # ---------------------------------------------------------------------------
 
 
@@ -346,6 +354,135 @@ def get_project_cashflow_forecast(
     Returns 404 if the project does not exist.
     """
     return service.get_project_forecast(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Cashflow forecasting endpoints — PR-33 comprehensive forecast
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/contracts/{contract_id}/cashflow-forecast",
+    response_model=ContractCashflowForecastResponse,
+    summary="Contract cashflow forecast",
+)
+def get_contract_cashflow_forecast(
+    contract_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    collection_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Collection probability applied to outstanding installments (0–1).",
+    ),
+    carry_forward_overdue: bool = Query(
+        default=True,
+        description="Include pre-window overdue installments in the first period bucket.",
+    ),
+    include_paid_in_schedule: bool = Query(
+        default=True,
+        description="Count paid installments in scheduled_amount for completeness.",
+    ),
+) -> ContractCashflowForecastResponse:
+    """Return the comprehensive cashflow forecast for a single contract.
+
+    The forecast separates contractual scheduled amounts from expected
+    collections and already-collected amounts, producing a per-period
+    breakdown for the requested date window.
+
+    Returns 404 if the contract does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = CashflowForecastAssumptions(
+        collection_probability=collection_probability,
+        carry_forward_overdue=carry_forward_overdue,
+        include_paid_in_schedule=include_paid_in_schedule,
+    )
+    return service.get_contract_forecast_v2(contract_id, start_date, end_date, assumptions)
+
+
+@router.get(
+    "/projects/{project_id}/cashflow-forecast",
+    response_model=ProjectCashflowForecastV2Response,
+    summary="Project cashflow forecast",
+)
+def get_project_cashflow_forecast_v2(
+    project_id: str,
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    collection_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Collection probability applied to outstanding installments (0–1).",
+    ),
+    carry_forward_overdue: bool = Query(
+        default=True,
+        description="Include pre-window overdue installments in the first period bucket.",
+    ),
+    include_paid_in_schedule: bool = Query(
+        default=True,
+        description="Count paid installments in scheduled_amount for completeness.",
+    ),
+) -> ProjectCashflowForecastV2Response:
+    """Return the comprehensive cashflow forecast for a single project.
+
+    Aggregates all non-cancelled installments across all contracts in the
+    project and produces a monthly scheduled / collected / expected breakdown
+    for the requested date window.
+
+    Returns 404 if the project does not exist.
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = CashflowForecastAssumptions(
+        collection_probability=collection_probability,
+        carry_forward_overdue=carry_forward_overdue,
+        include_paid_in_schedule=include_paid_in_schedule,
+    )
+    return service.get_project_forecast_v2(project_id, start_date, end_date, assumptions)
+
+
+@router.get(
+    "/portfolio/cashflow-forecast",
+    response_model=PortfolioCashflowForecastV2Response,
+    summary="Portfolio cashflow forecast",
+)
+def get_portfolio_cashflow_forecast_v2(
+    service: Annotated[CashflowForecastService, Depends(get_forecast_service)],
+    start_date: date = Query(..., description="Forecast window start date (YYYY-MM-DD)."),
+    end_date: date = Query(..., description="Forecast window end date (YYYY-MM-DD)."),
+    collection_probability: float = Query(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Collection probability applied to outstanding installments (0–1).",
+    ),
+    carry_forward_overdue: bool = Query(
+        default=True,
+        description="Include pre-window overdue installments in the first period bucket.",
+    ),
+    include_paid_in_schedule: bool = Query(
+        default=True,
+        description="Count paid installments in scheduled_amount for completeness.",
+    ),
+) -> PortfolioCashflowForecastV2Response:
+    """Return the comprehensive cashflow forecast across the entire portfolio.
+
+    Aggregates all non-cancelled installments for every project in the portfolio
+    and produces monthly scheduled / collected / expected breakdowns alongside
+    per-project sub-forecasts for the requested date window.
+
+    Returns 422 if start_date is after end_date.
+    """
+    assumptions = CashflowForecastAssumptions(
+        collection_probability=collection_probability,
+        carry_forward_overdue=carry_forward_overdue,
+        include_paid_in_schedule=include_paid_in_schedule,
+    )
+    return service.get_portfolio_forecast_v2(start_date, end_date, assumptions)
 
 
 # ---------------------------------------------------------------------------
