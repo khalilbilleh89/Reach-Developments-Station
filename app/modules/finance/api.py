@@ -90,6 +90,7 @@ from app.modules.finance.project_financial_dashboard_service import ProjectFinan
 from app.modules.finance.risk_alert_engine import FinancialRiskAlertEngine
 from app.modules.finance.treasury_monitoring_service import TreasuryMonitoringService
 from app.shared.enums.finance import AlertSeverity
+from app.modules.finance.constants import ConstructionSpreadMethod
 
 router = APIRouter(prefix="/finance", tags=["Finance"], dependencies=[Depends(get_current_user_payload)])
 
@@ -513,9 +514,9 @@ def get_project_construction_cashflow(
         le=1.0,
         description="Probability that planned construction work executes (0–1).",
     ),
-    spread_method: str = Query(
-        default="linear",
-        description="Cost spread method: 'linear' or 's_curve'.",
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
     ),
     include_committed: bool = Query(
         default=True,
@@ -532,7 +533,7 @@ def get_project_construction_cashflow(
     """
     assumptions = ConstructionForecastAssumptionsSchema(
         execution_probability=execution_probability,
-        spread_method=spread_method,
+        spread_method=spread_method.value,
         include_committed=include_committed,
     )
     return service.get_project_construction_forecast(project_id, start_date, end_date, assumptions)
@@ -554,9 +555,9 @@ def get_phase_construction_cashflow(
         le=1.0,
         description="Probability that planned construction work executes (0–1).",
     ),
-    spread_method: str = Query(
-        default="linear",
-        description="Cost spread method: 'linear' or 's_curve'.",
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
     ),
     include_committed: bool = Query(
         default=True,
@@ -573,7 +574,7 @@ def get_phase_construction_cashflow(
     """
     assumptions = ConstructionForecastAssumptionsSchema(
         execution_probability=execution_probability,
-        spread_method=spread_method,
+        spread_method=spread_method.value,
         include_committed=include_committed,
     )
     return service.get_phase_construction_forecast(phase_id, start_date, end_date, assumptions)
@@ -594,9 +595,9 @@ def get_portfolio_construction_cashflow(
         le=1.0,
         description="Probability that planned construction work executes (0–1).",
     ),
-    spread_method: str = Query(
-        default="linear",
-        description="Cost spread method: 'linear' or 's_curve'.",
+    spread_method: ConstructionSpreadMethod = Query(
+        default=ConstructionSpreadMethod.LINEAR,
+        description="Cost spread method: 'linear' distributes costs uniformly; 's_curve' is reserved.",
     ),
     include_committed: bool = Query(
         default=True,
@@ -612,7 +613,7 @@ def get_portfolio_construction_cashflow(
     """
     assumptions = ConstructionForecastAssumptionsSchema(
         execution_probability=execution_probability,
-        spread_method=spread_method,
+        spread_method=spread_method.value,
         include_committed=include_committed,
     )
     return service.get_portfolio_construction_forecast(start_date, end_date, assumptions)

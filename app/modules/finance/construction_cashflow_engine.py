@@ -59,8 +59,8 @@ class ConstructionCostRecord:
     project_id: str
     phase_id: str
     cost_category: str  # e.g. "structural" | "finishing" | "infrastructure"
-    planned_amount: float  # planned construction cost
-    committed_amount: float  # signed contractor commitments (0 if none)
+    planned_amount: float  # planned construction cost (non-negative)
+    committed_amount: float  # signed contractor commitments; must be >= 0 (0 if none)
     start_date: date  # execution start
     end_date: date  # execution completion
 
@@ -211,7 +211,11 @@ def _spread_cost_to_buckets(
         return {}
 
     planned_per_month = record.planned_amount / record_months
-    committed_per_month = record.committed_amount / record_months if record.committed_amount > 0 else 0.0
+    committed_per_month = (
+        record.committed_amount / record_months
+        if record.committed_amount > 0
+        else 0.0
+    )
 
     # Build set of labels covered by this record's execution window.
     record_labels: List[str] = []
@@ -269,12 +273,16 @@ def compute_project_construction_cashflow(
         If start_date is after end_date.
     """
     if start_date > end_date:
-        raise ValueError(f"start_date ({start_date}) must not be after end_date ({end_date})")
+        raise ValueError(
+            f"start_date ({start_date}) must not be after end_date ({end_date})"
+        )
 
     if assumptions is None:
         assumptions = ConstructionForecastAssumptions()
 
-    periods, summary = _compute_periods_and_summary(cost_records, start_date, end_date, assumptions)
+    periods, summary = _compute_periods_and_summary(
+        cost_records, start_date, end_date, assumptions
+    )
 
     return ConstructionCashflowForecastResult(
         scope_type="project",
@@ -321,12 +329,16 @@ def compute_phase_construction_cashflow(
         If start_date is after end_date.
     """
     if start_date > end_date:
-        raise ValueError(f"start_date ({start_date}) must not be after end_date ({end_date})")
+        raise ValueError(
+            f"start_date ({start_date}) must not be after end_date ({end_date})"
+        )
 
     if assumptions is None:
         assumptions = ConstructionForecastAssumptions()
 
-    periods, summary = _compute_periods_and_summary(cost_records, start_date, end_date, assumptions)
+    periods, summary = _compute_periods_and_summary(
+        cost_records, start_date, end_date, assumptions
+    )
 
     return ConstructionCashflowForecastResult(
         scope_type="phase",
@@ -370,7 +382,9 @@ def compute_portfolio_construction_cashflow(
         If start_date is after end_date.
     """
     if start_date > end_date:
-        raise ValueError(f"start_date ({start_date}) must not be after end_date ({end_date})")
+        raise ValueError(
+            f"start_date ({start_date}) must not be after end_date ({end_date})"
+        )
 
     if assumptions is None:
         assumptions = ConstructionForecastAssumptions()

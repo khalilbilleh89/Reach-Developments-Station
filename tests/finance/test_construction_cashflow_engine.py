@@ -679,3 +679,24 @@ class TestConstructionCashflowAPIEndpoints:
         assert "planned_total" in summary
         assert "expected_total" in summary
         assert "variance_to_plan" in summary
+
+    def test_invalid_spread_method_returns_422(self, client, db_session):
+        """An unsupported spread_method value must return 422 (enum validation)."""
+        project = Project(name="Test Project SM 422", code="CCSM422")
+        db_session.add(project)
+        db_session.commit()
+
+        resp = client.get(
+            self._url_project(project.id),
+            params={
+                "start_date": self.START,
+                "end_date": self.END,
+                "spread_method": "invalid_method",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_schema_spread_method_validator_rejects_unknown_value(self):
+        """ConstructionForecastAssumptionsSchema raises ValueError for unknown spread_method."""
+        with pytest.raises(ValueError):
+            ConstructionForecastAssumptionsSchema(spread_method="turbo_spread")

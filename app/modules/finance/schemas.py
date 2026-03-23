@@ -13,6 +13,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.modules.collections.aging_engine import AgingBucket
+from app.modules.finance.constants import ConstructionSpreadMethod
 from app.shared.enums.finance import RiskAlertSeverity, RiskAlertType
 
 
@@ -624,8 +625,11 @@ class ConstructionForecastAssumptionsSchema(BaseModel):
         description="Probability that planned construction work executes (0–1).",
     )
     spread_method: str = Field(
-        default="linear",
-        description="Cost spread method: 'linear' or 's_curve'.",
+        default=ConstructionSpreadMethod.LINEAR.value,
+        description=(
+            "Cost spread method: 'linear' distributes costs uniformly; "
+            "'s_curve' is reserved for future use."
+        ),
     )
     include_committed: bool = Field(
         default=True,
@@ -637,6 +641,17 @@ class ConstructionForecastAssumptionsSchema(BaseModel):
     def _validate_probability(cls, v: float) -> float:
         if not 0.0 <= v <= 1.0:
             raise ValueError("execution_probability must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("spread_method")
+    @classmethod
+    def _validate_spread_method(cls, v: str) -> str:
+        allowed = {m.value for m in ConstructionSpreadMethod}
+        if v not in allowed:
+            raise ValueError(
+                f"spread_method '{v}' is not supported. "
+                f"Allowed values: {sorted(allowed)}"
+            )
         return v
 
 
