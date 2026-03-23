@@ -17,6 +17,7 @@ from typing import Optional
 
 from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Float
 
 from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE, DEFAULT_SCENARIO_STATUS
 from app.db.base import Base, TimestampMixin
@@ -65,6 +66,12 @@ class Scenario(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="ScenarioVersion.version_number",
     )
+    financial_runs: Mapped[list["FinancialScenarioRun"]] = relationship(
+        "FinancialScenarioRun",
+        back_populates="scenario",
+        cascade="all, delete-orphan",
+        order_by="FinancialScenarioRun.created_at",
+    )
 
 
 class ScenarioVersion(Base, TimestampMixin):
@@ -95,3 +102,39 @@ class ScenarioVersion(Base, TimestampMixin):
     is_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     scenario: Mapped["Scenario"] = relationship("Scenario", back_populates="versions")
+
+
+class FinancialScenarioRun(Base, TimestampMixin):
+    """A persisted financial scenario run produced by the Financial Scenario Engine.
+
+    Each run captures the full set of merged assumptions actually used, the
+    return metrics produced by the Calculation Engine, and optional metadata
+    such as a human-readable label and whether this run is the baseline for
+    comparison purposes.
+
+    A run belongs to a parent Scenario.  Multiple runs per scenario are
+    supported (base case, alternatives, sensitivity runs).
+
+    Architecture rule: all financial calculations are delegated to the
+    Calculation Engine; this model only stores inputs and outputs.
+    """
+
+    __tablename__ = "financial_scenario_runs"
+
+    scenario_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String(255), nullable=False, default="Base Case")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    assumptions_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    results_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Denormalised scalar metrics for fast querying / comparison without JSON parsing
+    irr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    npv: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    roi: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    developer_margin: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gross_profit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    scenario: Mapped["Scenario"] = relationship("Scenario", back_populates="financial_runs")
