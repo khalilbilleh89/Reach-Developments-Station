@@ -13,7 +13,7 @@ Error cases:
 - 422 on invalid progress payloads
 """
 
-import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 
@@ -56,7 +56,7 @@ def _post_progress(
     client: TestClient,
     milestone_id: str,
     payload: dict,
-) -> dict:
+) -> "httpx.Response":
     resp = client.post(
         f"/api/v1/construction/milestones/{milestone_id}/progress",
         json=payload,
@@ -169,6 +169,18 @@ def test_update_progress_finish_requires_100_percent(client: TestClient) -> None
     assert resp.status_code == 422
 
 
+def test_update_progress_finish_without_start_rejected(client: TestClient) -> None:
+    project_id = _create_project(client, "PV-019")
+    scope = _create_scope(client, project_id)
+    m = _create_milestone(client, scope["id"])
+
+    resp = _post_progress(client, m["id"], {
+        "progress_percent": 100.0,
+        "actual_finish_day": 10,
+    })
+    assert resp.status_code == 422
+
+
 def test_update_progress_finish_before_start_rejected(client: TestClient) -> None:
     project_id = _create_project(client, "PV-018")
     scope = _create_scope(client, project_id)
@@ -221,7 +233,7 @@ def test_scope_progress_partial(client: TestClient) -> None:
     project_id = _create_project(client, "PV-022")
     scope = _create_scope(client, project_id)
     m1 = _create_milestone(client, scope["id"], sequence=1, name="M1")
-    m2 = _create_milestone(client, scope["id"], sequence=2, name="M2")
+    _create_milestone(client, scope["id"], sequence=2, name="M2")
 
     _post_progress(client, m1["id"], {"progress_percent": 50.0, "actual_start_day": 0})
 

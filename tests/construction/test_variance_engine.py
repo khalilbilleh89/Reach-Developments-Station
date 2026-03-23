@@ -12,8 +12,6 @@ Validates:
 - Edge cases (zero variance, completed milestones, off-critical-path delays)
 """
 
-import pytest
-
 from app.modules.construction.variance_engine import (
     MilestoneProgress,
     MilestoneVarianceResult,
@@ -304,6 +302,38 @@ def test_three_phase_chain_delay_propagates_to_all_downstream() -> None:
     assert c.risk_exposed is True
     assert "B" in result.affected_milestones
     assert "C" in result.affected_milestones
+
+
+def test_late_finish_without_late_start_triggers_delay() -> None:
+    """A critical milestone that starts on time but finishes late also raises project_delay_days."""
+    milestones = [
+        _mp("A", 0, 10, is_critical=True, actual_start_day=0,
+            actual_finish_day=14, progress_percent=100.0),
+        _mp("B", 10, 20, is_critical=True),
+    ]
+    result = compute_variance("scope-1", milestones, ["A", "B"])
+
+    a = _find(result, "A")
+    assert a.schedule_variance_days == 0   # started on time
+    assert a.completion_variance_days == 4  # finished 4 days late
+    assert result.project_delay_days == 4
+    assert result.critical_path_shift is True
+    assert _find(result, "B").risk_exposed is True
+
+
+def test_finish_slippage_on_critical_path_exposes_downstream() -> None:
+    """Late finish (not late start) on critical path propagates risk to downstream."""
+    milestones = [
+        _mp("A", 0, 5, is_critical=True, actual_start_day=0,
+            actual_finish_day=8, progress_percent=100.0),
+        _mp("B", 5, 15, is_critical=True),
+        _mp("C", 15, 25, is_critical=True),
+    ]
+    result = compute_variance("scope-1", milestones, ["A", "B", "C"])
+
+    assert result.project_delay_days == 3   # actual_finish_day(8) - planned_finish(5)
+    assert _find(result, "B").risk_exposed is True
+    assert _find(result, "C").risk_exposed is True
 
 
 # ---------------------------------------------------------------------------

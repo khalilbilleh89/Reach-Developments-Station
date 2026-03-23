@@ -249,11 +249,18 @@ def compute_variance(
 
         derived_status = _derive_status(mp)
 
-        # Accumulate critical-path delay
-        if mp.is_critical and schedule_variance is not None and schedule_variance > 0:
-            max_critical_delay = max(max_critical_delay, schedule_variance)
-            if mp.milestone_id in cp_index:
-                delayed_critical_indices.append(cp_index[mp.milestone_id])
+        # Accumulate critical-path delay (consider both start and finish variance)
+        if mp.is_critical:
+            effective_delay = 0
+            if schedule_variance is not None:
+                effective_delay = max(effective_delay, schedule_variance)
+            if completion_variance is not None:
+                effective_delay = max(effective_delay, completion_variance)
+
+            if effective_delay > 0:
+                max_critical_delay = max(max_critical_delay, effective_delay)
+                if mp.milestone_id in cp_index:
+                    delayed_critical_indices.append(cp_index[mp.milestone_id])
 
         results.append(
             MilestoneVarianceResult(

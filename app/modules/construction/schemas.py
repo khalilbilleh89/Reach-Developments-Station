@@ -526,6 +526,8 @@ class MilestoneProgressUpdate(BaseModel):
     def validate_progress_rules(self) -> "MilestoneProgressUpdate":
         if self.progress_percent > 0 and self.actual_start_day is None:
             raise ValueError("actual_start_day is required when progress_percent > 0.")
+        if self.actual_finish_day is not None and self.actual_start_day is None:
+            raise ValueError("actual_start_day is required when actual_finish_day is provided.")
         if self.actual_finish_day is not None and self.progress_percent < 100.0:
             raise ValueError(
                 "progress_percent must be 100 when actual_finish_day is provided."

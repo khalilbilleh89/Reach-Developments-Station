@@ -892,21 +892,29 @@ class ConstructionService:
         progress_data = {m.id: m for m in all_milestones}
 
         # Build MilestoneProgress inputs using planned (unshifted) dates
-        progress_inputs = [
-            MilestoneProgress(
-                milestone_id=m.id,
-                planned_start=planned_map[m.id].earliest_start if m.id in planned_map else 0,
-                planned_finish=planned_map[m.id].earliest_finish if m.id in planned_map else 0,
-                is_critical=planned_map[m.id].is_critical if m.id in planned_map else False,
-                actual_start_day=progress_data[m.id].actual_start_day
-                if m.id in progress_data else None,
-                actual_finish_day=progress_data[m.id].actual_finish_day
-                if m.id in progress_data else None,
-                progress_percent=progress_data[m.id].progress_percent
-                if m.id in progress_data else None,
+        progress_inputs = []
+        for m in milestones:
+            if m.id not in planned_map:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Milestone '{m.id}' could not be scheduled — "
+                        "ensure all milestones have valid duration_days and no circular dependencies."
+                    ),
+                )
+            plan = planned_map[m.id]
+            prog = progress_data.get(m.id)
+            progress_inputs.append(
+                MilestoneProgress(
+                    milestone_id=m.id,
+                    planned_start=plan.earliest_start,
+                    planned_finish=plan.earliest_finish,
+                    is_critical=plan.is_critical,
+                    actual_start_day=prog.actual_start_day if prog else None,
+                    actual_finish_day=prog.actual_finish_day if prog else None,
+                    progress_percent=prog.progress_percent if prog else None,
+                )
             )
-            for m in milestones
-        ]
 
         variance_result = compute_variance(
             scope_id=scope_id,
