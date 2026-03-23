@@ -43,6 +43,13 @@ from app.modules.finance.cashflow_engine import (
     compute_portfolio_forecast,
     compute_project_forecast,
 )
+from app.modules.finance.construction_cashflow_engine import (
+    ConstructionCostRecord,
+    ConstructionForecastAssumptions,
+    compute_phase_construction_cashflow,
+    compute_portfolio_construction_cashflow,
+    compute_project_construction_cashflow,
+)
 from app.modules.finance.cashflow_forecast_engine import (
     InstallmentLine,
     build_portfolio_forecast,
@@ -52,12 +59,18 @@ from app.modules.finance.schemas import (
     CashflowForecastAssumptions,
     CashflowForecastSummaryResponse,
     CashflowPeriodRow,
+    ConstructionCashflowPeriodRow,
+    ConstructionCashflowSummaryResponse,
+    ConstructionForecastAssumptionsSchema,
     ContractCashflowForecastResponse,
     MonthlyForecastEntryResponse,
+    PhaseConstructionCashflowResponse,
     PortfolioCashflowForecastResponse,
     PortfolioCashflowForecastV2Response,
+    PortfolioConstructionCashflowResponse,
     ProjectCashflowForecastResponse,
     ProjectCashflowForecastV2Response,
+    ProjectConstructionCashflowResponse,
 )
 from app.modules.projects.models import Project
 from app.modules.sales.models import ContractPaymentSchedule, SalesContract
@@ -281,6 +294,141 @@ class CashflowForecastService:
                 details={"start_date": str(start_date), "end_date": str(end_date)},
             )
 
+    # ------------------------------------------------------------------
+    # Construction cashflow forecast  (PR-FIN-034)
+    # ------------------------------------------------------------------
+
+    def get_project_construction_forecast(
+        self,
+        project_id: str,
+        start_date: date,
+        end_date: date,
+        assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+    ) -> ProjectConstructionCashflowResponse:
+        """Return the construction cashflow forecast for a single project.
+
+        Raises
+        ------
+        ResourceNotFoundError
+            When the project does not exist.
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+        self._require_project(project_id)
+
+        assumptions = _schema_to_construction_assumptions(assumptions_schema)
+        cost_records = self._load_project_construction_costs(project_id)
+        result = compute_project_construction_cashflow(
+            project_id, cost_records, start_date, end_date, assumptions
+        )
+
+        _logger.debug(
+            "Project construction cashflow forecast computed: project_id=%s periods=%d",
+            project_id,
+            len(result.periods),
+        )
+        return _construction_result_to_project_response(
+            result, assumptions_schema or ConstructionForecastAssumptionsSchema()
+        )
+
+    def get_phase_construction_forecast(
+        self,
+        phase_id: str,
+        start_date: date,
+        end_date: date,
+        assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+    ) -> PhaseConstructionCashflowResponse:
+        """Return the construction cashflow forecast for a single phase.
+
+        Raises
+        ------
+        ResourceNotFoundError
+            When the phase does not exist.
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+        self._require_phase(phase_id)
+
+        assumptions = _schema_to_construction_assumptions(assumptions_schema)
+        cost_records = self._load_phase_construction_costs(phase_id)
+        result = compute_phase_construction_cashflow(
+            phase_id, cost_records, start_date, end_date, assumptions
+        )
+
+        _logger.debug(
+            "Phase construction cashflow forecast computed: phase_id=%s periods=%d",
+            phase_id,
+            len(result.periods),
+        )
+        return _construction_result_to_phase_response(
+            result, assumptions_schema or ConstructionForecastAssumptionsSchema()
+        )
+
+    def get_portfolio_construction_forecast(
+        self,
+        start_date: date,
+        end_date: date,
+        assumptions_schema: Optional[ConstructionForecastAssumptionsSchema] = None,
+    ) -> PortfolioConstructionCashflowResponse:
+        """Return the construction cashflow forecast across the entire portfolio.
+
+        Raises
+        ------
+        ValidationError
+            When start_date is after end_date.
+        """
+        self._validate_date_window(start_date, end_date)
+
+        assumptions = _schema_to_construction_assumptions(assumptions_schema)
+        project_cost_records = self._load_all_project_construction_costs()
+        result = compute_portfolio_construction_cashflow(
+            project_cost_records, start_date, end_date, assumptions
+        )
+
+        _logger.debug(
+            "Portfolio construction cashflow forecast computed: projects=%d periods=%d",
+            len(result.project_forecasts),
+            len(result.periods),
+        )
+        return _construction_result_to_portfolio_response(
+            result, assumptions_schema or ConstructionForecastAssumptionsSchema()
+        )
+
+    # ------------------------------------------------------------------
+    # Construction cost loading helpers  (PR-FIN-034)
+    # These return empty lists until a construction cost model is added.
+    # The engine is fully functional with real data once the model exists.
+    # ------------------------------------------------------------------
+
+    def _load_project_construction_costs(
+        self, project_id: str
+    ) -> List[ConstructionCostRecord]:
+        """Load construction cost records for a single project.
+
+        Returns an empty list until the ConstructionCost model is introduced.
+        """
+        return []
+
+    def _load_phase_construction_costs(
+        self, phase_id: str
+    ) -> List[ConstructionCostRecord]:
+        """Load construction cost records for a single phase.
+
+        Returns an empty list until the ConstructionCost model is introduced.
+        """
+        return []
+
+    def _load_all_project_construction_costs(
+        self,
+    ) -> Dict[str, List[ConstructionCostRecord]]:
+        """Load construction cost records grouped by project_id.
+
+        Returns an empty dict until the ConstructionCost model is introduced.
+        """
+        return {}
+
     def _require_project(self, project_id: str) -> Project:
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if not project:
@@ -296,6 +444,12 @@ class CashflowForecastService:
         if not contract:
             raise ResourceNotFoundError(f"Contract '{contract_id}' not found.")
         return contract
+
+    def _require_phase(self, phase_id: str) -> Phase:
+        phase = self.db.query(Phase).filter(Phase.id == phase_id).first()
+        if not phase:
+            raise ResourceNotFoundError(f"Phase '{phase_id}' not found.")
+        return phase
 
     # ------------------------------------------------------------------
     # DB loading helpers — legacy engine (PENDING + OVERDUE only)
@@ -549,5 +703,96 @@ def _result_to_portfolio_response(
         assumptions=assumptions_schema,
         summary=_summary_to_response(result.summary),
         periods=[_period_to_row(p) for p in result.periods],
+        project_forecasts=project_responses,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Construction cashflow helpers  (PR-FIN-034)
+# ---------------------------------------------------------------------------
+
+
+def _schema_to_construction_assumptions(
+    schema: Optional[ConstructionForecastAssumptionsSchema],
+) -> ConstructionForecastAssumptions:
+    """Convert Pydantic assumptions schema to the engine ConstructionForecastAssumptions."""
+    if schema is None:
+        return ConstructionForecastAssumptions()
+    return ConstructionForecastAssumptions(
+        execution_probability=schema.execution_probability,
+        cost_spread_method=schema.spread_method,
+        include_committed=schema.include_committed,
+    )
+
+
+def _construction_period_to_row(period: object) -> ConstructionCashflowPeriodRow:
+    """Convert a ConstructionCashflowPeriodResult to the Pydantic schema row."""
+    return ConstructionCashflowPeriodRow(
+        period_label=period.period_label,
+        planned_cost=period.planned_cost,
+        committed_cost=period.committed_cost,
+        expected_cost=period.expected_cost,
+        variance_to_plan=period.variance_to_plan,
+        cumulative_cost=period.cumulative_cost,
+        cost_item_count=period.cost_item_count,
+    )
+
+
+def _construction_summary_to_response(summary: object) -> ConstructionCashflowSummaryResponse:
+    return ConstructionCashflowSummaryResponse(
+        planned_total=summary.planned_total,
+        expected_total=summary.expected_total,
+        variance_to_plan=summary.variance_to_plan,
+    )
+
+
+def _construction_result_to_project_response(
+    result: object,
+    assumptions_schema: ConstructionForecastAssumptionsSchema,
+) -> ProjectConstructionCashflowResponse:
+    return ProjectConstructionCashflowResponse(
+        scope_type=result.scope_type,
+        project_id=result.scope_id,
+        start_date=result.start_date,
+        end_date=result.end_date,
+        granularity=result.granularity,
+        assumptions=assumptions_schema,
+        summary=_construction_summary_to_response(result.summary),
+        periods=[_construction_period_to_row(p) for p in result.periods],
+    )
+
+
+def _construction_result_to_phase_response(
+    result: object,
+    assumptions_schema: ConstructionForecastAssumptionsSchema,
+) -> PhaseConstructionCashflowResponse:
+    return PhaseConstructionCashflowResponse(
+        scope_type=result.scope_type,
+        phase_id=result.scope_id,
+        start_date=result.start_date,
+        end_date=result.end_date,
+        granularity=result.granularity,
+        assumptions=assumptions_schema,
+        summary=_construction_summary_to_response(result.summary),
+        periods=[_construction_period_to_row(p) for p in result.periods],
+    )
+
+
+def _construction_result_to_portfolio_response(
+    result: object,
+    assumptions_schema: ConstructionForecastAssumptionsSchema,
+) -> PortfolioConstructionCashflowResponse:
+    project_responses = [
+        _construction_result_to_project_response(pf, assumptions_schema)
+        for pf in result.project_forecasts
+    ]
+    return PortfolioConstructionCashflowResponse(
+        scope_type=result.scope_type,
+        start_date=result.start_date,
+        end_date=result.end_date,
+        granularity=result.granularity,
+        assumptions=assumptions_schema,
+        summary=_construction_summary_to_response(result.summary),
+        periods=[_construction_period_to_row(p) for p in result.periods],
         project_forecasts=project_responses,
     )

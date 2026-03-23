@@ -65,3 +65,38 @@ DEFAULT_COLLECTION_PROBABILITY: float = 1.0
 # When True, installments overdue before the forecast window are carried
 # into the first period of the window by default.
 DEFAULT_CARRY_FORWARD_OVERDUE: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Construction cashflow forecast enumerations  (PR-FIN-034)
+# ---------------------------------------------------------------------------
+
+
+class ConstructionSpreadMethod(str, Enum):
+    """Method used to distribute construction costs across forecast periods.
+
+    LINEAR
+        Costs are distributed uniformly across the execution window.
+        monthly_cost = planned_amount / duration_months
+
+    S_CURVE
+        Costs follow an S-curve distribution (reserved for future PRs).
+    """
+
+    LINEAR = "linear"
+    S_CURVE = "s_curve"
+
+
+class ConstructionForecastScope(str, Enum):
+    """Scope level at which a construction cashflow forecast is computed."""
+
+    PROJECT = "project"
+    PHASE = "phase"
+    PORTFOLIO = "portfolio"
+
+
+# Default probability that planned construction work will execute.
+DEFAULT_EXECUTION_PROBABILITY: float = 1.0
+
+# Default cost spread method for construction cashflow forecasting.
+DEFAULT_SPREAD_METHOD: str = "linear"
