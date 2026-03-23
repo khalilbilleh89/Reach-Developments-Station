@@ -25,14 +25,37 @@ jest.mock("../auth", () => ({
 const mockGetToken = auth.getToken as jest.Mock;
 const mockClearToken = auth.clearToken as jest.Mock;
 
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// ---------------------------------------------------------------------------
+// Global browser object setup / teardown
+// ---------------------------------------------------------------------------
 
-// Capture window.location.replace calls
+// Capture and restore global.fetch so the override does not leak into other
+// test files running in the same Jest worker.
+const originalFetch = global.fetch;
+const mockFetch = jest.fn();
+
+// Capture and restore window.location so the override does not leak.  Save
+// the original descriptor so it can be re-applied verbatim in afterAll.
+const originalLocationDescriptor = Object.getOwnPropertyDescriptor(
+  window,
+  "location",
+);
 const mockLocationReplace = jest.fn();
-Object.defineProperty(window, "location", {
-  value: { replace: mockLocationReplace },
-  writable: true,
+
+beforeAll(() => {
+  global.fetch = mockFetch;
+  Object.defineProperty(window, "location", {
+    value: { replace: mockLocationReplace },
+    writable: true,
+    configurable: true,
+  });
+});
+
+afterAll(() => {
+  global.fetch = originalFetch;
+  if (originalLocationDescriptor) {
+    Object.defineProperty(window, "location", originalLocationDescriptor);
+  }
 });
 
 // ---------------------------------------------------------------------------
