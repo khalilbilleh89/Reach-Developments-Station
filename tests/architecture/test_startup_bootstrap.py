@@ -76,26 +76,26 @@ def test_health_endpoint_returns_200_after_startup(client: TestClient):
 
 
 def test_health_db_endpoint_exists(client: TestClient):
-    """/health/db must exist and return a non-5xx response."""
-    with patch("app.main.check_db_connection", return_value=True):
-        resp = client.get("/health/db")
+    """/health/ready must exist and return a non-5xx response."""
+    with patch("app.api.health.is_database_reachable", return_value=True):
+        resp = client.get("/health/ready")
     assert resp.status_code in (200, 503)
 
 
 def test_health_db_ok_when_database_reachable(client: TestClient):
-    """/health/db returns 200 when the database connection succeeds."""
-    with patch("app.main.check_db_connection", return_value=True):
-        resp = client.get("/health/db")
+    """/health/ready returns 200 when the database connection succeeds."""
+    with patch("app.api.health.is_database_reachable", return_value=True):
+        resp = client.get("/health/ready")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    assert resp.json()["status"] == "ready"
 
 
 def test_health_db_error_when_database_unreachable(client: TestClient):
-    """/health/db returns 503 when the database connection fails."""
-    with patch("app.main.check_db_connection", return_value=False):
-        resp = client.get("/health/db")
+    """/health/ready returns 503 when the database connection fails."""
+    with patch("app.api.health.is_database_reachable", return_value=False):
+        resp = client.get("/health/ready")
     assert resp.status_code == 503
-    assert resp.json()["status"] == "error"
+    assert resp.json()["status"] == "unavailable"
 
 
 # ---------------------------------------------------------------------------
