@@ -296,3 +296,86 @@ class LandValuationEngineRequest(BaseModel):
     developer_margin_target: float = Field(..., ge=0, le=1)
     sellable_area_sqm: float = Field(..., gt=0)
     valuation_notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Land Assembly schemas — multi-parcel aggregation
+# ---------------------------------------------------------------------------
+
+class LandAssemblyCreate(BaseModel):
+    """Request body for creating a new land assembly."""
+
+    assembly_name: str = Field(..., min_length=1, max_length=255)
+    assembly_code: str = Field(..., min_length=1, max_length=100)
+    parcel_ids: List[str] = Field(..., min_length=1)
+    notes: Optional[str] = None
+    status: LandParcelStatus = LandParcelStatus.DRAFT
+
+
+class LandAssemblyParcelSummary(BaseModel):
+    """Lightweight per-member parcel summary embedded in assembly responses."""
+
+    parcel_id: str
+    parcel_name: str
+    parcel_code: str
+    land_area_sqm: Optional[float]
+    frontage_m: Optional[float]
+    zoning_category: Optional[str]
+    acquisition_price: Optional[float]
+
+    model_config = {"from_attributes": True}
+
+
+class LandAssemblyResponse(BaseModel):
+    """Full assembly detail response."""
+
+    id: str
+    assembly_name: str
+    assembly_code: str
+    notes: Optional[str]
+    status: LandParcelStatus
+    # Aggregate snapshot fields
+    parcel_count: int
+    total_area_sqm: Optional[float]
+    total_frontage_m: Optional[float]
+    total_acquisition_price: Optional[float]
+    total_transaction_cost: Optional[float]
+    effective_land_basis: Optional[float]
+    weighted_permitted_far: Optional[float]
+    dominant_zoning_category: Optional[str]
+    mixed_zoning: bool
+    has_utilities: bool
+    has_corner_plot: bool
+    assembly_results_json: Optional[Dict[str, Any]]
+    # Member parcels
+    parcel_ids: List[str]
+    parcels: List[LandAssemblyParcelSummary]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LandAssemblySummary(BaseModel):
+    """Condensed assembly record for list responses."""
+
+    id: str
+    assembly_name: str
+    assembly_code: str
+    status: LandParcelStatus
+    parcel_count: int
+    total_area_sqm: Optional[float]
+    mixed_zoning: bool
+    dominant_zoning_category: Optional[str]
+    effective_land_basis: Optional[float]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LandAssemblyList(BaseModel):
+    """Paginated list of assembly summaries."""
+
+    items: List[LandAssemblySummary]
+    total: int

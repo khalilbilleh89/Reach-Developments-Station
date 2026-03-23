@@ -1,14 +1,21 @@
 """
 land.repository
 
-Data access layer for LandParcel, LandAssumptions, and LandValuation entities.
+Data access layer for LandParcel, LandAssumptions, LandValuation, and
+LandAssembly / LandAssemblyParcel entities.
 """
 
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.modules.land.models import LandAssumptions, LandParcel, LandValuation
+from app.modules.land.models import (
+    LandAssembly,
+    LandAssemblyParcel,
+    LandAssumptions,
+    LandParcel,
+    LandValuation,
+)
 from app.modules.land.schemas import (
     LandAssumptionCreate,
     LandParcelCreate,
@@ -17,6 +24,7 @@ from app.modules.land.schemas import (
     LandValuationEngineRequest,
 )
 from app.modules.land.engines.valuation_engine import ValuationOutputs
+from app.modules.land.aggregation_engine import AssemblyAggregationResult
 
 
 class LandParcelRepository:
@@ -180,3 +188,170 @@ class LandValuationRepository:
         self.db.commit()
         self.db.refresh(valuation)
         return valuation
+
+
+class LandAssemblyRepository:
+    """Data access layer for LandAssembly and LandAssemblyParcel entities.
+
+    Business math and validation logic must not appear here.  This layer
+    handles only persistence and retrieval.
+    """
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    # ------------------------------------------------------------------
+    # Assembly CRUD
+    # ------------------------------------------------------------------
+
+    def create(
+        self,
+        assembly_name: str,
+        assembly_code: str,
+        notes: Optional[str],
+        status: str,
+        parcel_ids: List[str],
+        result: AssemblyAggregationResult,
+    ) -> LandAssembly:
+        """Persist a new assembly and its parcel membership records."""
+        assembly = LandAssembly(
+            assembly_name=assembly_name,
+            assembly_code=assembly_code,
+            notes=notes,
+            status=status,
+            parcel_count=result.parcel_count,
+            total_area_sqm=result.total_area_sqm if result.total_area_sqm else None,
+            total_frontage_m=result.total_frontage_m if result.total_frontage_m else None,
+            total_acquisition_price=(
+                result.total_acquisition_price if result.total_acquisition_price else None
+            ),
+            total_transaction_cost=(
+                result.total_transaction_cost if result.total_transaction_cost else None
+            ),
+            effective_land_basis=(
+                result.effective_land_basis if result.effective_land_basis else None
+            ),
+            weighted_permitted_far=result.weighted_permitted_far,
+            dominant_zoning_category=result.dominant_zoning_category,
+            mixed_zoning=result.mixed_zoning,
+            has_utilities=result.has_utilities,
+            has_corner_plot=result.has_corner_plot,
+            assembly_results_json={
+                "parcel_count": result.parcel_count,
+                "total_area_sqm": result.total_area_sqm,
+                "total_frontage_m": result.total_frontage_m,
+                "total_acquisition_price": result.total_acquisition_price,
+                "total_transaction_cost": result.total_transaction_cost,
+                "effective_land_basis": result.effective_land_basis,
+                "weighted_permitted_far": result.weighted_permitted_far,
+                "dominant_zoning_category": result.dominant_zoning_category,
+                "mixed_zoning": result.mixed_zoning,
+                "has_utilities": result.has_utilities,
+                "has_corner_plot": result.has_corner_plot,
+                "zoning_category_counts": result.zoning_category_counts,
+            },
+        )
+        self.db.add(assembly)
+        self.db.flush()  # obtain assembly.id before creating join records
+
+        for parcel_id in parcel_ids:
+            membership = LandAssemblyParcel(
+                assembly_id=assembly.id,
+                parcel_id=parcel_id,
+            )
+            self.db.add(membership)
+
+        self.db.commit()
+        self.db.refresh(assembly)
+        return assembly
+
+    def get_by_id(self, assembly_id: str) -> Optional[LandAssembly]:
+        return (
+            self.db.query(LandAssembly)
+            .filter(LandAssembly.id == assembly_id)
+            .first()
+        )
+
+    def get_by_code(self, assembly_code: str) -> Optional[LandAssembly]:
+        return (
+            self.db.query(LandAssembly)
+            .filter(LandAssembly.assembly_code == assembly_code)
+            .first()
+        )
+
+    def list(self, skip: int = 0, limit: int = 100) -> List[LandAssembly]:
+        return (
+            self.db.query(LandAssembly)
+            .order_by(LandAssembly.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count(self) -> int:
+        return self.db.query(LandAssembly).count()
+
+    def update_aggregation(
+        self, assembly: LandAssembly, result: AssemblyAggregationResult
+    ) -> LandAssembly:
+        """Update snapshot fields on an existing assembly after recomputation."""
+        assembly.parcel_count = result.parcel_count
+        assembly.total_area_sqm = result.total_area_sqm if result.total_area_sqm else None
+        assembly.total_frontage_m = result.total_frontage_m if result.total_frontage_m else None
+        assembly.total_acquisition_price = (
+            result.total_acquisition_price if result.total_acquisition_price else None
+        )
+        assembly.total_transaction_cost = (
+            result.total_transaction_cost if result.total_transaction_cost else None
+        )
+        assembly.effective_land_basis = (
+            result.effective_land_basis if result.effective_land_basis else None
+        )
+        assembly.weighted_permitted_far = result.weighted_permitted_far
+        assembly.dominant_zoning_category = result.dominant_zoning_category
+        assembly.mixed_zoning = result.mixed_zoning
+        assembly.has_utilities = result.has_utilities
+        assembly.has_corner_plot = result.has_corner_plot
+        assembly.assembly_results_json = {
+            "parcel_count": result.parcel_count,
+            "total_area_sqm": result.total_area_sqm,
+            "total_frontage_m": result.total_frontage_m,
+            "total_acquisition_price": result.total_acquisition_price,
+            "total_transaction_cost": result.total_transaction_cost,
+            "effective_land_basis": result.effective_land_basis,
+            "weighted_permitted_far": result.weighted_permitted_far,
+            "dominant_zoning_category": result.dominant_zoning_category,
+            "mixed_zoning": result.mixed_zoning,
+            "has_utilities": result.has_utilities,
+            "has_corner_plot": result.has_corner_plot,
+            "zoning_category_counts": result.zoning_category_counts,
+        }
+        self.db.commit()
+        self.db.refresh(assembly)
+        return assembly
+
+    def delete(self, assembly: LandAssembly) -> None:
+        self.db.delete(assembly)
+        self.db.commit()
+
+    # ------------------------------------------------------------------
+    # Membership queries
+    # ------------------------------------------------------------------
+
+    def get_parcel_ids(self, assembly_id: str) -> List[str]:
+        """Return the list of parcel IDs that belong to an assembly."""
+        rows = (
+            self.db.query(LandAssemblyParcel.parcel_id)
+            .filter(LandAssemblyParcel.assembly_id == assembly_id)
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    def get_assembly_id_for_parcel(self, parcel_id: str) -> Optional[str]:
+        """Return the assembly_id that currently owns a parcel, or None."""
+        row = (
+            self.db.query(LandAssemblyParcel.assembly_id)
+            .filter(LandAssemblyParcel.parcel_id == parcel_id)
+            .first()
+        )
+        return row[0] if row else None

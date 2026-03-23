@@ -16,6 +16,9 @@ from app.modules.auth.security import get_current_user_payload
 from app.modules.land.schemas import (
     LandAssumptionCreate,
     LandAssumptionResponse,
+    LandAssemblyCreate,
+    LandAssemblyList,
+    LandAssemblyResponse,
     LandParcelCreate,
     LandParcelList,
     LandParcelResponse,
@@ -179,3 +182,68 @@ def evaluate_zoning(
     effective footprint, floor count, and parking requirements.
     """
     return service.evaluate(data)
+
+
+# ---------------------------------------------------------------------------
+# Assembly endpoints  — multi-parcel aggregation
+# ---------------------------------------------------------------------------
+
+@router.post("/assemblies", response_model=LandAssemblyResponse, status_code=201)
+def create_assembly(
+    data: LandAssemblyCreate,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandAssemblyResponse:
+    """Create a land parcel assembly from multiple parcels.
+
+    Validates all parcel IDs, rejects duplicate IDs, rejects parcels already
+    assigned to another assembly, runs the aggregation engine, and persists the
+    assembly snapshot.
+    """
+    return service.create_assembly(data)
+
+
+@router.get("/assemblies", response_model=LandAssemblyList)
+def list_assemblies(
+    service: Annotated[LandService, Depends(get_service)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> LandAssemblyList:
+    """List all land parcel assemblies (paginated)."""
+    return service.list_assemblies(skip=skip, limit=limit)
+
+
+@router.get("/assemblies/{assembly_id}", response_model=LandAssemblyResponse)
+def get_assembly(
+    assembly_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandAssemblyResponse:
+    """Get a land parcel assembly by ID."""
+    return service.get_assembly(assembly_id)
+
+
+@router.delete("/assemblies/{assembly_id}", status_code=204, response_class=Response)
+def delete_assembly(
+    assembly_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> Response:
+    """Delete a land parcel assembly.
+
+    Member parcels are NOT deleted — only the assembly record and memberships
+    are removed.
+    """
+    service.delete_assembly(assembly_id)
+    return Response(status_code=204)
+
+
+@router.post("/assemblies/{assembly_id}/recompute", response_model=LandAssemblyResponse)
+def recompute_assembly(
+    assembly_id: str,
+    service: Annotated[LandService, Depends(get_service)],
+) -> LandAssemblyResponse:
+    """Recompute aggregate metrics for an assembly from current parcel data.
+
+    Re-runs the aggregation engine against the current state of each member
+    parcel and updates the stored snapshot.  Useful after parcel attributes
+    (area, zoning, acquisition price, etc.) have been updated.
+    """
+    return service.recompute_assembly(assembly_id)
