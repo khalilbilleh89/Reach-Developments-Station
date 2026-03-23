@@ -183,7 +183,7 @@ class FinancialScenarioService:
             scenario_id=scenario_id,
             result=result,
             is_baseline=payload.is_baseline,
-            notes=payload.assumptions.notes,
+            notes=result.assumptions_used.get("notes"),
         )
         _logger.info(
             "FinancialScenarioRun created: id=%s scenario_id=%s label=%r irr=%.4f",

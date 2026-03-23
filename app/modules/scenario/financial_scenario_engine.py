@@ -76,8 +76,9 @@ class FinancialScenarioAssumptions:
         cost inflation scenario).  Applied before calculation.
     debt_ratio:
         Debt portion of funding as a decimal fraction (e.g. 0.65 = 65% debt).
-        equity_invested is recalculated as total_cost * (1 - debt_ratio) when
-        this override is provided and equity_invested is not explicitly set.
+        When this override is provided, it takes precedence and
+        equity_invested is recalculated as total_cost * (1 - debt_ratio),
+        even if equity_invested was explicitly set.
     label:
         Human-readable label for this scenario run (e.g. "Base Case",
         "Slower Sales", "Price Uplift").
