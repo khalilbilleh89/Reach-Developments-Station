@@ -49,6 +49,7 @@ A construction scope can attach at the project, phase, or building level. The sc
 | `GET` | `/api/v1/construction/milestones/{milestone_id}` | Get a milestone |
 | `PATCH` | `/api/v1/construction/milestones/{milestone_id}` | Update a milestone |
 | `DELETE` | `/api/v1/construction/milestones/{milestone_id}` | Delete a milestone |
+| `POST` | `/api/v1/construction/milestones/{milestone_id}/cost` | Update milestone cost (planned/actual) |
 | `POST` | `/api/v1/construction/milestones/{milestone_id}/progress-updates` | Add a progress update |
 | `GET` | `/api/v1/construction/milestones/{milestone_id}/progress-updates` | List progress updates |
 | `GET` | `/api/v1/construction/progress-updates/{update_id}` | Get a progress update |
@@ -60,6 +61,7 @@ A construction scope can attach at the project, phase, or building level. The sc
 | `POST` | `/api/v1/construction/scopes/{scope_id}/cost-items` | Add a cost item |
 | `GET` | `/api/v1/construction/scopes/{scope_id}/cost-items` | List cost items |
 | `GET` | `/api/v1/construction/scopes/{scope_id}/cost-summary` | Aggregated cost summary |
+| `GET` | `/api/v1/construction/scopes/{scope_id}/cost` | Milestone-level cost variance overview |
 | `GET` | `/api/v1/construction/cost-items/{cost_item_id}` | Get a cost item |
 | `PATCH` | `/api/v1/construction/cost-items/{cost_item_id}` | Update a cost item |
 | `DELETE` | `/api/v1/construction/cost-items/{cost_item_id}` | Delete a cost item |
