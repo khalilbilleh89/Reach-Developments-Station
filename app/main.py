@@ -28,6 +28,7 @@ from app.modules.buildings.api import router as buildings_router
 from app.modules.collections.api import router as collections_router
 from app.modules.feasibility.api import router as feasibility_router
 from app.modules.finance.api import router as finance_router
+from app.modules.finance.revenue_router import router as finance_revenue_router
 from app.modules.floors.api import router as floors_router
 from app.modules.land.api import router as land_router
 from app.modules.payment_plans.api import router as payment_plans_router
@@ -119,6 +120,9 @@ app.include_router(sales_router, prefix=_API_PREFIX)
 app.include_router(payment_plans_router, prefix=_API_PREFIX)
 app.include_router(collections_router, prefix=_API_PREFIX)
 app.include_router(finance_router, prefix=_API_PREFIX)
+# Revenue Recognition Engine router — registered after finance_router so that
+# the static /finance/revenue/overview path takes priority over /{scenario_id}.
+app.include_router(finance_revenue_router, prefix=_API_PREFIX)
 app.include_router(registry_router, prefix=_API_PREFIX)
 app.include_router(registration_legacy_router, prefix=_API_PREFIX)  # temporary compat alias, see registry/api.py
 app.include_router(sales_exceptions_router, prefix=_API_PREFIX)

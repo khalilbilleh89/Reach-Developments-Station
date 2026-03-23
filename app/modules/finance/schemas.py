@@ -415,3 +415,39 @@ class AnalyticsRebuildResponse(BaseModel):
     revenue_facts_created: int = Field(..., ge=0)
     collections_facts_created: int = Field(..., ge=0)
     receivable_snapshots_created: int = Field(..., ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Scenario-based revenue schedule schemas  (PR-FIN-032)
+# ---------------------------------------------------------------------------
+
+
+class RevenueScheduleEntryResponse(BaseModel):
+    """Revenue recognized in a single calendar period."""
+
+    period: str = Field(..., description="Calendar month in YYYY-MM format.")
+    revenue: float = Field(..., ge=0, description="Revenue recognized in this period.")
+
+
+class ScenarioRevenueScheduleResponse(BaseModel):
+    """Revenue schedule for a development scenario.
+
+    The schedule lists the revenue recognized in each calendar period
+    according to the selected recognition strategy.
+    """
+
+    scenario_id: str = Field(..., description="Identifier of the originating scenario.")
+    strategy: str = Field(
+        ...,
+        description=(
+            "Recognition strategy applied: on_contract_signing, "
+            "on_construction_progress, or on_unit_delivery."
+        ),
+    )
+    revenue_schedule: List[RevenueScheduleEntryResponse] = Field(
+        default_factory=list,
+        description="Chronologically ordered list of period-revenue entries.",
+    )
+    total_revenue: float = Field(
+        ..., ge=0, description="Sum of all period revenues."
+    )
