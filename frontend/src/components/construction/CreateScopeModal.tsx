@@ -4,8 +4,10 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { ConstructionScopeCreate, ConstructionStatus } from "@/lib/construction-types";
+import { listProjects } from "@/lib/projects-api";
+import type { Project } from "@/lib/projects-types";
 import styles from "@/styles/construction.module.css";
 
 interface CreateScopeModalProps {
@@ -22,6 +24,16 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
   const [targetEndDate, setTargetEndDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listProjects({ limit: 500 })
+      .then((res) => setProjects(res.items))
+      .catch(() => setProjectsError("Failed to load projects. Please refresh and try again."))
+      .finally(() => setLoadingProjects(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,8 +41,8 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
       setError("Name is required.");
       return;
     }
-    if (!projectId.trim()) {
-      setError("Project ID is required.");
+    if (!projectId) {
+      setError("Project is required.");
       return;
     }
     setSubmitting(true);
@@ -97,17 +109,29 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
 
           <div className={styles.formField}>
             <label htmlFor="scope-project-id" className={styles.formLabel}>
-              Project ID <span aria-hidden>*</span>
+              Project <span aria-hidden>*</span>
             </label>
-            <input
-              id="scope-project-id"
-              type="text"
-              className={styles.formInput}
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              placeholder="Project UUID"
-              required
-            />
+            {projectsError ? (
+              <div className={styles.modalError}>{projectsError}</div>
+            ) : (
+              <select
+                id="scope-project-id"
+                className={styles.formSelect}
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                disabled={loadingProjects || submitting}
+                required
+              >
+                <option value="">
+                  {loadingProjects ? "Loading projects…" : "Select a project…"}
+                </option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className={styles.formField}>
