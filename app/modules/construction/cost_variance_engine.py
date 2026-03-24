@@ -153,39 +153,51 @@ def compute_cost_variance(
         )
         return ContractorCostVarianceResult()
 
-    total_planned = sum((p.planned_cost for p in assessed), Decimal("0.00"))  # type: ignore[misc]
-    total_actual = sum((p.actual_cost for p in assessed), Decimal("0.00"))  # type: ignore[misc]
+    total_planned = Decimal("0.00")
+    total_actual = Decimal("0.00")
+    for p in assessed:
+        planned = p.planned_cost
+        actual = p.actual_cost
+        assert planned is not None and actual is not None
+        total_planned += planned
+        total_actual += actual
     total_variance = total_actual - total_planned
 
-    over_budget_pkgs = [
-        p
-        for p in assessed
-        if p.actual_cost is not None and p.actual_cost > p.planned_cost  # type: ignore[operator]
-    ]
+    over_budget_pkgs: List[PackageCostInput] = []
+    for p in assessed:
+        planned = p.planned_cost
+        actual = p.actual_cost
+        assert planned is not None and actual is not None
+        if actual > planned:
+            over_budget_pkgs.append(p)
     over_budget_count = len(over_budget_pkgs)
     cost_overrun_rate: Optional[float] = over_budget_count / len(assessed)
 
     # average_cost_variance_pct: mean % variance across packages with non-zero planned
-    variance_pcts: List[float] = [
-        float(
-            (p.actual_cost - p.planned_cost) / p.planned_cost * Decimal("100")  # type: ignore[operator]
-        )
-        for p in assessed
-        if p.planned_cost is not None and p.planned_cost > Decimal("0")
-    ]
+    variance_pcts: List[float] = []
+    for p in assessed:
+        planned = p.planned_cost
+        actual = p.actual_cost
+        assert planned is not None and actual is not None
+        if planned > Decimal("0"):
+            variance_pcts.append(
+                float((actual - planned) / planned * Decimal("100"))
+            )
     average_cost_variance_pct: Optional[float] = None
     if variance_pcts:
         average_cost_variance_pct = round(sum(variance_pcts) / len(variance_pcts), 2)
 
     # max_cost_overrun_pct: highest single-package overrun %
     max_cost_overrun_pct: Optional[float] = None
-    overrun_pcts: List[float] = [
-        float(
-            (p.actual_cost - p.planned_cost) / p.planned_cost * Decimal("100")  # type: ignore[operator]
-        )
-        for p in over_budget_pkgs
-        if p.planned_cost is not None and p.planned_cost > Decimal("0")
-    ]
+    overrun_pcts: List[float] = []
+    for p in over_budget_pkgs:
+        planned = p.planned_cost
+        actual = p.actual_cost
+        assert planned is not None and actual is not None
+        if planned > Decimal("0"):
+            overrun_pcts.append(
+                float((actual - planned) / planned * Decimal("100"))
+            )
     if overrun_pcts:
         max_cost_overrun_pct = round(max(overrun_pcts), 2)
 

@@ -25,7 +25,6 @@ from decimal import Decimal
 import pytest
 
 from app.modules.construction.cost_variance_engine import (
-    ContractorCostVarianceResult,
     PackageCostInput,
     compute_cost_variance,
 )
