@@ -268,6 +268,14 @@ class ContractorScorecard:
     ranking_sort_score:
         Internal-use sort key for scope ranking.  Equals reliability_index.
         Not exposed in the public API response.
+    watchlist_status:
+        Highest-severity escalation tier: ``Critical`` / ``Escalate`` /
+        ``Watch`` / ``Normal``.
+    breach_reasons:
+        Human-readable list of all triggered breach conditions.
+    escalation_score:
+        Internal numeric severity: Critical=3, Escalate=2, Watch=1,
+        Normal=0.  Not exposed in the public API response.
     """
 
     contractor_id: str
@@ -301,6 +309,9 @@ class ContractorScorecard:
     reliability_band: Optional[str] = None
     reliability_confidence: Optional[str] = None
     ranking_sort_score: Optional[float] = None
+    watchlist_status: Optional[str] = None
+    breach_reasons: List[str] = field(default_factory=list)
+    escalation_score: int = 0
 
 
 @dataclass
@@ -610,6 +621,24 @@ def compute_contractor_scorecard(
         )
     )
 
+    from app.modules.construction.scope_escalation_engine import (
+        ContractorEscalationInput,
+        compute_contractor_escalation,
+    )
+
+    escalation = compute_contractor_escalation(
+        ContractorEscalationInput(
+            contractor_id=data.contractor_id,
+            reliability_index=reliability.reliability_index,
+            reliability_band=reliability.reliability_band,
+            delay_rate=variance.delay_rate,
+            average_delay_days=variance.average_delay_days,
+            cost_overrun_rate=cost_metrics.cost_overrun_rate,
+            average_cost_variance_pct=cost_metrics.average_cost_variance_pct,
+            risk_signal_count=data.risk_signal_count,
+        )
+    )
+
     return ContractorScorecard(
         contractor_id=data.contractor_id,
         contractor_name=data.contractor_name,
@@ -644,6 +673,9 @@ def compute_contractor_scorecard(
         reliability_band=reliability.reliability_band,
         reliability_confidence=reliability.reliability_confidence,
         ranking_sort_score=reliability.ranking_sort_score,
+        watchlist_status=escalation.watchlist_status,
+        breach_reasons=escalation.breach_reasons,
+        escalation_score=escalation.escalation_score,
     )
 
 

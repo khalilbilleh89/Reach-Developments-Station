@@ -1643,6 +1643,8 @@ class ConstructionService:
             reliability_index=sc.reliability_index,
             reliability_band=sc.reliability_band,
             reliability_confidence=sc.reliability_confidence,
+            watchlist_status=sc.watchlist_status,
+            breach_reasons=sc.breach_reasons,
         )
 
     def get_contractor_scorecard(
@@ -1840,9 +1842,22 @@ class ConstructionService:
             for inp in inputs
         ]
 
+        contractors_on_watch = sum(
+            1 for sc in scorecards if sc.watchlist_status == "Watch"
+        )
+        contractors_escalated = sum(
+            1 for sc in scorecards if sc.watchlist_status == "Escalate"
+        )
+        contractors_critical = sum(
+            1 for sc in scorecards if sc.watchlist_status == "Critical"
+        )
+
         return ScopeContractorScorecardListResponse(
             scope_id=scope_id,
             total_contractors=len(scorecards),
+            contractors_on_watch=contractors_on_watch,
+            contractors_escalated=contractors_escalated,
+            contractors_critical=contractors_critical,
             scorecards=scorecards,
         )
 
