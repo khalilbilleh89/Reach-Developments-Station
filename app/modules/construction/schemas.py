@@ -794,3 +794,61 @@ class ProcurementOverviewResponse(BaseModel):
     uncommitted_value: Decimal
     packages_by_status: Dict[str, int]
     packages: List[ProcurementPackageResponse]
+
+
+# ── Construction Risk Alerts (PR-CONSTR-044) ─────────────────────────────────
+
+
+class ConstructionRiskAlertResponse(BaseModel):
+    """A single construction risk alert."""
+
+    alert_code: str
+    severity: str
+    scope_id: Optional[str] = None
+    contractor_id: Optional[str] = None
+    package_id: Optional[str] = None
+    milestone_id: Optional[str] = None
+    message: str
+    metric_value: Optional[float] = None
+    threshold: Optional[float] = None
+
+
+class ScopeRiskAlertListResponse(BaseModel):
+    """Risk alert listing for a construction scope."""
+
+    scope_id: str
+    total_alerts: int
+    alerts: List[ConstructionRiskAlertResponse]
+
+
+# ── Contractor Performance (PR-CONSTR-044) ───────────────────────────────────
+
+
+class ContractorPerformanceSummaryResponse(BaseModel):
+    """Derived performance summary for a single contractor."""
+
+    contractor_id: str
+    contractor_name: str
+    total_milestones: int
+    delayed_milestones: int
+    over_budget_milestones: int
+    delay_ratio: Optional[float]
+    overrun_ratio: Optional[float]
+    alerts: List[ConstructionRiskAlertResponse]
+
+
+# ── Procurement Risk Overview (PR-CONSTR-044) ────────────────────────────────
+
+
+class ProcurementRiskOverviewResponse(BaseModel):
+    """Aggregated procurement risk summary for a construction scope."""
+
+    scope_id: str
+    total_packages: int
+    unawarded_packages: int
+    stalled_packages: int
+    cancelled_or_on_hold_packages: int
+    total_planned_value: Decimal
+    total_awarded_value: Decimal
+    uncommitted_value: Decimal
+    alerts: List[ConstructionRiskAlertResponse]

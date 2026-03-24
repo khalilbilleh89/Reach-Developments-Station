@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
+    from app.modules.construction.risk_alert_engine import ScopeRiskData
     from app.modules.construction.schedule_engine import SchedulePhase
 
 from app.core.errors import ValidationError as DomainValidationError
@@ -32,6 +33,7 @@ from app.modules.construction.repository import (
     ConstructionMilestoneDependencyRepository,
     ConstructionProcurementPackageRepository,
     ConstructionProgressUpdateRepository,
+    ConstructionRiskRepository,
     ConstructionScopeRepository,
 )
 from app.modules.construction.schedule_engine import compute_schedule
@@ -47,12 +49,14 @@ from app.modules.construction.schemas import (
     ConstructionMilestoneList,
     ConstructionMilestoneResponse,
     ConstructionMilestoneUpdate,
+    ConstructionRiskAlertResponse,
     ConstructionScopeCreate,
     ConstructionScopeList,
     ConstructionScopeResponse,
     ConstructionScopeUpdate,
     ContractorCreate,
     ContractorList,
+    ContractorPerformanceSummaryResponse,
     ContractorResponse,
     ContractorUpdate,
     CriticalPathResponse,
@@ -74,12 +78,14 @@ from app.modules.construction.schemas import (
     ProcurementPackageList,
     ProcurementPackageResponse,
     ProcurementPackageUpdate,
+    ProcurementRiskOverviewResponse,
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
     SchedulePhaseRow,
     ScopeMilestoneCostResponse,
     ScopeProgressResponse,
+    ScopeRiskAlertListResponse,
     ScopeScheduleResponse,
     ScopeVarianceResponse,
 )
@@ -98,6 +104,7 @@ class ConstructionService:
         self.dependency_repo = ConstructionMilestoneDependencyRepository(db)
         self.contractor_repo = ConstructionContractorRepository(db)
         self.package_repo = ConstructionProcurementPackageRepository(db)
+        self.risk_repo = ConstructionRiskRepository(db)
         self.project_repo = ProjectRepository(db)
         self.phase_repo = PhaseRepository(db)
         self.building_repo = BuildingRepository(db)
@@ -1346,3 +1353,167 @@ class ConstructionService:
             packages=[ProcurementPackageResponse.model_validate(p) for p in packages],
         )
 
+    # ── Risk Alert operations (PR-CONSTR-044) ────────────────────────────────
+
+    def _build_scope_risk_data(self, scope_id: str) -> "ScopeRiskData":
+        """Build ScopeRiskData from DB records for risk engine consumption."""
+        from datetime import datetime, timezone
+
+        from app.modules.construction.risk_alert_engine import (
+            MilestoneRiskData,
+            PackageRiskData,
+            ScopeRiskData,
+        )
+
+        packages = self.risk_repo.load_scope_packages_with_milestones(scope_id)
+        now = datetime.now(timezone.utc)
+        pkg_inputs = []
+        for pkg in packages:
+            updated = pkg.updated_at
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            days_since = max(0, (now - updated).days)
+            milestones = [
+                MilestoneRiskData(
+                    milestone_id=m.id,
+                    status=m.status,
+                    planned_cost=m.planned_cost,
+                    actual_cost=m.actual_cost,
+                )
+                for m in pkg.milestones
+            ]
+            pkg_inputs.append(
+                PackageRiskData(
+                    package_id=pkg.id,
+                    scope_id=pkg.scope_id,
+                    contractor_id=pkg.contractor_id,
+                    status=pkg.status,
+                    planned_value=pkg.planned_value,
+                    awarded_value=pkg.awarded_value,
+                    days_since_update=days_since,
+                    linked_milestones=milestones,
+                )
+            )
+        return ScopeRiskData(scope_id=scope_id, packages=pkg_inputs)
+
+    @staticmethod
+    def _alerts_to_responses(
+        alerts: list,
+    ) -> list:
+        """Convert engine ConstructionRiskAlert objects to response schemas."""
+        return [
+            ConstructionRiskAlertResponse(
+                alert_code=a.alert_code,
+                severity=a.severity,
+                scope_id=a.scope_id,
+                contractor_id=a.contractor_id,
+                package_id=a.package_id,
+                milestone_id=a.milestone_id,
+                message=a.message,
+                metric_value=a.metric_value,
+                threshold=a.threshold,
+            )
+            for a in alerts
+        ]
+
+    def get_scope_risk_alerts(self, scope_id: str) -> ScopeRiskAlertListResponse:
+        """Return construction risk alerts for a scope."""
+        from app.modules.construction.risk_alert_engine import evaluate_scope_risk_alerts
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        scope_data = self._build_scope_risk_data(scope_id)
+        alerts = evaluate_scope_risk_alerts(scope_data)
+        alert_responses = self._alerts_to_responses(alerts)
+
+        return ScopeRiskAlertListResponse(
+            scope_id=scope_id,
+            total_alerts=len(alert_responses),
+            alerts=alert_responses,
+        )
+
+    def get_scope_procurement_risk(
+        self, scope_id: str
+    ) -> ProcurementRiskOverviewResponse:
+        """Return procurement risk overview for a construction scope."""
+        from app.modules.construction.risk_alert_engine import evaluate_procurement_risk
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        scope_data = self._build_scope_risk_data(scope_id)
+        summary = evaluate_procurement_risk(scope_data)
+        alert_responses = self._alerts_to_responses(summary.alerts)
+
+        return ProcurementRiskOverviewResponse(
+            scope_id=scope_id,
+            total_packages=summary.total_packages,
+            unawarded_packages=summary.unawarded_packages,
+            stalled_packages=summary.stalled_packages,
+            cancelled_or_on_hold_packages=summary.cancelled_or_on_hold_packages,
+            total_planned_value=summary.total_planned_value,
+            total_awarded_value=summary.total_awarded_value,
+            uncommitted_value=summary.uncommitted_value,
+            alerts=alert_responses,
+        )
+
+    def get_contractor_performance(
+        self, contractor_id: str
+    ) -> ContractorPerformanceSummaryResponse:
+        """Return performance summary and risk alerts for a single contractor."""
+        from app.modules.construction.risk_alert_engine import (
+            ContractorRiskData,
+            MilestoneRiskData,
+            evaluate_contractor_performance,
+        )
+
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+
+        packages = self.risk_repo.load_contractor_packages_with_milestones(
+            contractor_id
+        )
+
+        all_milestones = [
+            MilestoneRiskData(
+                milestone_id=m.id,
+                status=m.status,
+                planned_cost=m.planned_cost,
+                actual_cost=m.actual_cost,
+            )
+            for pkg in packages
+            for m in pkg.milestones
+        ]
+
+        contractor_data = ContractorRiskData(
+            contractor_id=contractor_id,
+            contractor_name=contractor.contractor_name,
+            all_milestones=all_milestones,
+        )
+
+        summary = evaluate_contractor_performance(contractor_data)
+        alert_responses = self._alerts_to_responses(summary.alerts)
+
+        return ContractorPerformanceSummaryResponse(
+            contractor_id=summary.contractor_id,
+            contractor_name=summary.contractor_name,
+            total_milestones=summary.total_milestones,
+            delayed_milestones=summary.delayed_milestones,
+            over_budget_milestones=summary.over_budget_milestones,
+            delay_ratio=summary.delay_ratio,
+            overrun_ratio=summary.overrun_ratio,
+            alerts=alert_responses,
+        )
