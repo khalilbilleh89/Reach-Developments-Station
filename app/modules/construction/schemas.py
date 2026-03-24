@@ -890,6 +890,8 @@ class ContractorScorecardResponse(BaseModel):
     reliability_index: Optional[float] = None
     reliability_band: Optional[str] = None
     reliability_confidence: Optional[str] = None
+    watchlist_status: Optional[str] = None
+    breach_reasons: List[str] = Field(default_factory=list)
 
 
 # ── Contractor Trend (PR-CONSTR-045) ─────────────────────────────────────────
@@ -951,4 +953,7 @@ class ScopeContractorScorecardListResponse(BaseModel):
 
     scope_id: str
     total_contractors: int
+    contractors_on_watch: int = 0
+    contractors_escalated: int = 0
+    contractors_critical: int = 0
     scorecards: List[ContractorScorecardResponse]
