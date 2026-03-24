@@ -3,7 +3,7 @@ concept_design.schemas
 
 Pydantic request/response schemas for the Concept Design API.
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-054
 """
 
 from __future__ import annotations
@@ -65,6 +65,10 @@ class ConceptOptionResponse(BaseModel):
     gross_floor_area: Optional[float]
     building_count: Optional[int]
     floor_count: Optional[int]
+    is_promoted: bool
+    promoted_at: Optional[datetime]
+    promoted_project_id: Optional[str]
+    promotion_notes: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -155,3 +159,35 @@ class ConceptOptionComparisonResponse(BaseModel):
     best_efficiency_option_id: Optional[str]
     best_unit_count_option_id: Optional[str]
     rows: List[ConceptOptionComparisonRowResponse]
+
+
+# ---------------------------------------------------------------------------
+# Concept Option Promotion schemas — PR-CONCEPT-054
+# ---------------------------------------------------------------------------
+
+
+class ConceptPromotionRequest(BaseModel):
+    """Request payload for promoting a concept option into project structuring.
+
+    target_project_id is required when the concept option has no project_id
+    already set.  If the concept option is already linked to a project,
+    this field is ignored.
+
+    phase_name overrides the default generated phase name.
+    promotion_notes is stored on the concept option for audit purposes.
+    """
+
+    target_project_id: Optional[str] = None
+    phase_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    promotion_notes: Optional[str] = None
+
+
+class ConceptPromotionResponse(BaseModel):
+    """Response returned after a successful concept option promotion."""
+
+    concept_option_id: str
+    promoted_project_id: str
+    promoted_phase_id: str
+    promoted_phase_name: str
+    promoted_at: datetime
+    promotion_notes: Optional[str]

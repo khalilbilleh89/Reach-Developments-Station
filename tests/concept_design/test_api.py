@@ -2,9 +2,9 @@
 Tests for the Concept Design API endpoints.
 
 Validates HTTP behaviour, request/response contracts, and full workflow
-including unit-mix addition and summary computation.
+including unit-mix addition, summary computation, and concept option promotion.
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-054
 """
 
 import pytest
@@ -437,3 +437,282 @@ def test_compare_populated_result_fields(client: TestClient):
     assert row_a["is_best_sellable_area"] is False
     assert row_a["sellable_area_delta_vs_best"] < 0
     assert row_a["is_best_unit_count"] is True
+
+
+# ---------------------------------------------------------------------------
+# Promotion endpoint — PR-CONCEPT-054
+# ---------------------------------------------------------------------------
+
+def _create_promotable_option(
+    client: TestClient,
+    project_id: str,
+    *,
+    name: str = "Promotable Option",
+    status: str = "active",
+) -> dict:
+    """Create a concept option with full structural data ready for promotion."""
+    option = _create_option(
+        client,
+        name=name,
+        project_id=project_id,
+        status=status,
+        gross_floor_area=12000.0,
+    )
+    # Patch building/floor counts
+    resp = client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"building_count": 2, "floor_count": 8},
+    )
+    assert resp.status_code == 200
+    option = resp.json()
+
+    # Add a unit-mix line
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 50, "avg_sellable_area": 75.0},
+    )
+    assert resp.status_code == 201
+    return option
+
+
+def test_promote_concept_option_success(client: TestClient):
+    """POST /{id}/promote — happy path returns 201 with promotion response."""
+    project_id = _create_project(client, "PRJ-PROMO-001")
+    option = _create_promotable_option(client, project_id)
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["concept_option_id"] == option["id"]
+    assert data["promoted_project_id"] == project_id
+    assert "promoted_phase_id" in data
+    assert data["promoted_phase_name"].startswith("Phase 1")
+    assert "promoted_at" in data
+
+
+def test_promote_sets_is_promoted_flag(client: TestClient):
+    """After promotion the concept option should have is_promoted=True."""
+    project_id = _create_project(client, "PRJ-PROMO-002")
+    option = _create_promotable_option(client, project_id)
+
+    client.post(f"/api/v1/concept-options/{option['id']}/promote", json={})
+
+    resp = client.get(f"/api/v1/concept-options/{option['id']}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_promoted"] is True
+    assert data["promoted_project_id"] == project_id
+    assert data["promoted_at"] is not None
+
+
+def test_promote_with_target_project_id(client: TestClient):
+    """Promotion with target_project_id on an unlinked option."""
+    project_id = _create_project(client, "PRJ-PROMO-003")
+    # Create option without project link
+    option = _create_option(client, name="Unlinked Option")
+    # Add structural data
+    client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"building_count": 1, "floor_count": 5},
+    )
+    client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "2BR", "units_count": 30, "avg_sellable_area": 100.0},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={"target_project_id": project_id},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["promoted_project_id"] == project_id
+
+
+def test_promote_with_custom_phase_name(client: TestClient):
+    """Promotion with a custom phase_name should use that name."""
+    project_id = _create_project(client, "PRJ-PROMO-004")
+    option = _create_promotable_option(client, project_id, name="Design A")
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={"phase_name": "Concept Delivery Phase"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["promoted_phase_name"] == "Concept Delivery Phase"
+
+
+def test_promote_with_promotion_notes(client: TestClient):
+    """Promotion notes should be stored and returned."""
+    project_id = _create_project(client, "PRJ-PROMO-005")
+    option = _create_promotable_option(client, project_id)
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={"promotion_notes": "Board approved on 2026-03-24."},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["promotion_notes"] == "Board approved on 2026-03-24."
+
+    # Notes should also be stored on the option
+    option_resp = client.get(f"/api/v1/concept-options/{option['id']}")
+    assert option_resp.json()["promotion_notes"] == "Board approved on 2026-03-24."
+
+
+def test_promote_already_promoted_returns_409(client: TestClient):
+    """Promoting an already-promoted option should return 409 Conflict."""
+    project_id = _create_project(client, "PRJ-PROMO-006")
+    option = _create_promotable_option(client, project_id)
+
+    client.post(f"/api/v1/concept-options/{option['id']}/promote", json={})
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 409
+
+
+def test_promote_archived_option_returns_422(client: TestClient):
+    """Promoting an archived option should return 422."""
+    project_id = _create_project(client, "PRJ-PROMO-007")
+    option = _create_promotable_option(client, project_id, status="draft")
+    client.patch(
+        f"/api/v1/concept-options/{option['id']}", json={"status": "archived"}
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 422
+
+
+def test_promote_option_missing_building_count_returns_422(client: TestClient):
+    """Promoting without building_count should return 422."""
+    project_id = _create_project(client, "PRJ-PROMO-008")
+    option = _create_option(client, name="No Building Count", project_id=project_id)
+    # Only floor_count, no building_count
+    client.patch(f"/api/v1/concept-options/{option['id']}", json={"floor_count": 5})
+    client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 10},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 422
+
+
+def test_promote_option_missing_floor_count_returns_422(client: TestClient):
+    """Promoting without floor_count should return 422."""
+    project_id = _create_project(client, "PRJ-PROMO-009")
+    option = _create_option(client, name="No Floor Count", project_id=project_id)
+    client.patch(f"/api/v1/concept-options/{option['id']}", json={"building_count": 2})
+    client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 10},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 422
+
+
+def test_promote_option_missing_mix_lines_returns_422(client: TestClient):
+    """Promoting without unit mix lines should return 422."""
+    project_id = _create_project(client, "PRJ-PROMO-010")
+    option = _create_option(client, name="No Mix Lines", project_id=project_id)
+    client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"building_count": 2, "floor_count": 5},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 422
+
+
+def test_promote_option_no_project_no_target_returns_422(client: TestClient):
+    """Promoting without project link and no target_project_id should return 422."""
+    option = _create_option(client, name="Unlinked No Target")
+    client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"building_count": 1, "floor_count": 4},
+    )
+    client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 20},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert resp.status_code == 422
+
+
+def test_promote_not_found_returns_404(client: TestClient):
+    """Promoting a non-existent option should return 404."""
+    resp = client.post(
+        "/api/v1/concept-options/no-such-id/promote",
+        json={},
+    )
+    assert resp.status_code == 404
+
+
+def test_promote_with_unknown_target_project_id_returns_404(client: TestClient):
+    """Promoting with a non-existent target_project_id should return 404."""
+    option = _create_option(client, name="No Valid Project")
+    client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"building_count": 1, "floor_count": 3},
+    )
+    client.post(
+        f"/api/v1/concept-options/{option['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 10},
+    )
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={"target_project_id": "no-such-project"},
+    )
+    assert resp.status_code == 404
+
+
+def test_promote_creates_phase_under_project(client: TestClient):
+    """Promotion must create a phase that is retrievable via the phases API."""
+    project_id = _create_project(client, "PRJ-PROMO-011")
+    option = _create_promotable_option(client, project_id, name="Phase Check Option")
+
+    promo_resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert promo_resp.status_code == 201
+    phase_id = promo_resp.json()["promoted_phase_id"]
+
+    phase_resp = client.get(f"/api/v1/phases/{phase_id}")
+    assert phase_resp.status_code == 200
+    phase_data = phase_resp.json()
+    assert phase_data["project_id"] == project_id
+    assert phase_data["sequence"] == 1
+    assert phase_data["status"] == "planned"
+
+
+def test_promote_conflicting_project_ids_returns_422(client: TestClient):
+    """Supplying a target_project_id that differs from the option's project_id returns 422."""
+    project_id = _create_project(client, "PRJ-PROMO-012")
+    other_project_id = _create_project(client, "PRJ-PROMO-012B")
+    option = _create_promotable_option(client, project_id)
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote",
+        json={"target_project_id": other_project_id},
+    )
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body.get("code") == "VALIDATION_ERROR"

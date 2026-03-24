@@ -3,11 +3,12 @@ concept_design.repository
 
 Data access layer for ConceptOption and ConceptUnitMixLine entities.
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-054
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy.orm import Session, selectinload
@@ -111,6 +112,22 @@ class ConceptOptionRepository:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(option, field, value)
+        self.db.commit()
+        self.db.refresh(option)
+        return option
+
+    def update_promotion_fields(
+        self,
+        option: ConceptOption,
+        promoted_project_id: str,
+        promoted_at: datetime,
+        promotion_notes: Optional[str],
+    ) -> ConceptOption:
+        """Persist promotion metadata on the concept option."""
+        option.is_promoted = True
+        option.promoted_project_id = promoted_project_id
+        option.promoted_at = promoted_at
+        option.promotion_notes = promotion_notes
         self.db.commit()
         self.db.refresh(option)
         return option
