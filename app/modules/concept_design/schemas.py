@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +38,20 @@ class ConceptOptionUpdate(BaseModel):
     gross_floor_area: Optional[float] = Field(default=None, gt=0)
     building_count: Optional[int] = Field(default=None, ge=1)
     floor_count: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def reject_explicit_null_for_non_nullable_fields(self) -> "ConceptOptionUpdate":
+        """Prevent callers from explicitly nulling out non-nullable DB fields.
+
+        name and status are NOT NULL in the database.  If a client sends
+        ``{"name": null}`` or ``{"status": null}`` the value would appear in
+        model_fields_set with None, which would propagate to the ORM and cause
+        a DB-level IntegrityError.  Catch and reject it here cleanly.
+        """
+        for field in ("name", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"'{field}' cannot be set to null.")
+        return self
 
 
 class ConceptOptionResponse(BaseModel):

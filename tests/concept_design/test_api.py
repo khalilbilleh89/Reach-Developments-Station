@@ -91,6 +91,28 @@ def test_create_concept_option_missing_name(client: TestClient):
     assert resp.status_code == 422
 
 
+def test_create_concept_option_unknown_project_id(client: TestClient):
+    """POST with a non-existent project_id should return 404."""
+    resp = client.post(
+        "/api/v1/concept-options",
+        json={"name": "Orphan Option", "project_id": "no-such-project"},
+    )
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body.get("code") == "RESOURCE_NOT_FOUND"
+
+
+def test_create_concept_option_unknown_scenario_id(client: TestClient):
+    """POST with a non-existent scenario_id should return 404."""
+    resp = client.post(
+        "/api/v1/concept-options",
+        json={"name": "Orphan Option", "scenario_id": "no-such-scenario"},
+    )
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body.get("code") == "RESOURCE_NOT_FOUND"
+
+
 # ---------------------------------------------------------------------------
 # Get concept option
 # ---------------------------------------------------------------------------
@@ -180,6 +202,26 @@ def test_update_concept_option_partial(client: TestClient):
     assert data["name"] == "Keep Name"
     assert data["status"] == "archived"
     assert data["gross_floor_area"] == 5000.0
+
+
+def test_update_concept_option_null_name_rejected(client: TestClient):
+    """PATCH with explicit null for 'name' should return 422."""
+    option = _create_option(client, name="Stable Name")
+    resp = client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"name": None},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_concept_option_null_status_rejected(client: TestClient):
+    """PATCH with explicit null for 'status' should return 422."""
+    option = _create_option(client, name="Stable Status")
+    resp = client.patch(
+        f"/api/v1/concept-options/{option['id']}",
+        json={"status": None},
+    )
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------

@@ -32,6 +32,8 @@ from app.modules.concept_design.schemas import (
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
 )
+from app.modules.projects.repository import ProjectRepository
+from app.modules.scenario.repository import ScenarioRepository
 
 _logger = get_logger("reach_developments.concept_design")
 
@@ -40,12 +42,40 @@ class ConceptDesignService:
     def __init__(self, db: Session) -> None:
         self.option_repo = ConceptOptionRepository(db)
         self.mix_repo = ConceptUnitMixLineRepository(db)
+        self.project_repo = ProjectRepository(db)
+        self.scenario_repo = ScenarioRepository(db)
+
+    # ------------------------------------------------------------------
+    # Linked-resource validators
+    # ------------------------------------------------------------------
+
+    def _validate_project_if_present(self, project_id: Optional[str]) -> None:
+        """Raise ResourceNotFoundError if project_id is provided but does not exist."""
+        if project_id is not None:
+            project = self.project_repo.get_by_id(project_id)
+            if not project:
+                raise ResourceNotFoundError(
+                    f"Project '{project_id}' not found.",
+                    details={"project_id": project_id},
+                )
+
+    def _validate_scenario_if_present(self, scenario_id: Optional[str]) -> None:
+        """Raise ResourceNotFoundError if scenario_id is provided but does not exist."""
+        if scenario_id is not None:
+            scenario = self.scenario_repo.get_by_id(scenario_id)
+            if not scenario:
+                raise ResourceNotFoundError(
+                    f"Scenario '{scenario_id}' not found.",
+                    details={"scenario_id": scenario_id},
+                )
 
     # ------------------------------------------------------------------
     # ConceptOption CRUD
     # ------------------------------------------------------------------
 
     def create_concept_option(self, data: ConceptOptionCreate) -> ConceptOptionResponse:
+        self._validate_project_if_present(data.project_id)
+        self._validate_scenario_if_present(data.scenario_id)
         option = self.option_repo.create(data)
         _logger.info("ConceptOption created id=%s name=%r", option.id, option.name)
         return ConceptOptionResponse.model_validate(option)
