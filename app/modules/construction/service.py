@@ -1563,6 +1563,7 @@ class ConstructionService:
                 planned_cost=m.planned_cost,
                 actual_cost=m.actual_cost,
                 completion_date=m.completion_date,
+                target_date=m.target_date,
             )
             for pkg in packages
             for m in pkg.milestones
@@ -1598,7 +1599,7 @@ class ConstructionService:
             contractor_name=contractor_name,
             milestones=milestone_inputs,
             packages=package_inputs,
-            ratio_alert_count=high_alert_count,
+            risk_signal_count=high_alert_count,
         )
 
     @staticmethod
@@ -1612,15 +1613,16 @@ class ConstructionService:
             total_milestones=sc.total_milestones,
             completed_milestones=sc.completed_milestones,
             delayed_milestones=sc.delayed_milestones,
+            on_time_milestones=sc.on_time_milestones,
             over_budget_milestones=sc.over_budget_milestones,
             assessed_cost_milestones=sc.assessed_cost_milestones,
             delayed_ratio=sc.delayed_ratio,
-            completion_ratio=sc.completion_ratio,
+            on_time_rate=sc.on_time_rate,
             overrun_ratio=sc.overrun_ratio,
             avg_cost_variance_percent=sc.avg_cost_variance_percent,
             active_packages=sc.active_packages,
             completed_packages=sc.completed_packages,
-            ratio_alert_count=sc.ratio_alert_count,
+            risk_signal_count=sc.risk_signal_count,
             schedule_score=sc.schedule_score,
             cost_score=sc.cost_score,
             risk_score=sc.risk_score,
@@ -1706,10 +1708,10 @@ class ConstructionService:
     ) -> "list[ContractorScorecardInput]":
         """Build scorecard inputs for all contractors in a scope efficiently.
 
-        Loads all scope packages with milestones in a single query, groups
-        them by contractor_id in memory, then loads contractor records in a
-        second query.  This avoids N+1 DB calls when building scope-wide
-        scorecard or ranking responses.
+        Uses ``load_scope_milestone_dataset`` from the repository to load all
+        packages and milestones in a single query and contractors in a second
+        query.  Groups milestone data by contractor_id in memory to eliminate
+        N+1 DB calls when building scope-wide scorecard or ranking responses.
         """
         from app.modules.construction.contractor_scorecard_engine import (
             ContractorScorecardInput,
@@ -1722,8 +1724,8 @@ class ConstructionService:
             evaluate_contractor_performance,
         )
 
-        # Single query: all packages + milestones for the scope
-        packages = self.risk_repo.load_scope_packages_with_milestones(scope_id)
+        # Single query set: packages + milestones + contractors for the scope
+        contractors, packages = self.risk_repo.load_scope_milestone_dataset(scope_id)
 
         # Group packages and milestones by contractor_id
         pkg_by_contractor: dict[str, list] = {}
@@ -1735,10 +1737,7 @@ class ConstructionService:
         if not pkg_by_contractor:
             return []
 
-        # Single query: load all relevant contractor records
-        contractors = self.risk_repo.load_contractors_by_ids(
-            list(pkg_by_contractor.keys())
-        )
+        # Build contractor name map from already-loaded contractor records
         contractor_name_map = {c.id: c.contractor_name for c in contractors}
 
         inputs: list[ContractorScorecardInput] = []
@@ -1752,6 +1751,7 @@ class ConstructionService:
                     planned_cost=m.planned_cost,
                     actual_cost=m.actual_cost,
                     completion_date=m.completion_date,
+                    target_date=m.target_date,
                 )
                 for pkg in pkgs
                 for m in pkg.milestones
@@ -1778,7 +1778,7 @@ class ConstructionService:
                 all_milestones=risk_milestones,
             )
             perf_summary = evaluate_contractor_performance(contractor_risk)
-            ratio_alert_count = sum(
+            risk_signal_count = sum(
                 1 for a in perf_summary.alerts if a.severity == "HIGH"
             )
 
@@ -1788,7 +1788,7 @@ class ConstructionService:
                     contractor_name=contractor_name,
                     milestones=milestone_inputs,
                     packages=package_inputs,
-                    ratio_alert_count=ratio_alert_count,
+                    risk_signal_count=risk_signal_count,
                 )
             )
 

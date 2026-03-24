@@ -1,12 +1,12 @@
 """
 Tests for the Contractor Scorecard Engine.
 
-PR-CONSTR-045 — Contractor Scorecards & Trend Analytics
+PR-CONSTR-045 / PR-CONSTR-045A — Contractor Scorecards & Trend Analytics
 
 Validates:
 - delayed ratio calculation
 - overrun ratio calculation
-- on-time completion ratio
+- on-time rate calculation (completion_date <= target_date)
 - combined performance score composition
 - ranking tie-break behavior (deterministic by contractor_id)
 - trend delta calculations
@@ -45,6 +45,7 @@ def _milestone(
     planned_cost: str | None = None,
     actual_cost: str | None = None,
     completion_date: date | None = None,
+    target_date: date | None = None,
 ) -> MilestoneScorecardData:
     return MilestoneScorecardData(
         milestone_id=mid,
@@ -52,6 +53,7 @@ def _milestone(
         planned_cost=Decimal(planned_cost) if planned_cost is not None else None,
         actual_cost=Decimal(actual_cost) if actual_cost is not None else None,
         completion_date=completion_date,
+        target_date=target_date,
     )
 
 
@@ -64,14 +66,14 @@ def _contractor(
     name: str = "Test Corp",
     milestones: list[MilestoneScorecardData] | None = None,
     packages: list[PackageScorecardData] | None = None,
-    ratio_alert_count: int = 0,
+    risk_signal_count: int = 0,
 ) -> ContractorScorecardInput:
     return ContractorScorecardInput(
         contractor_id=cid,
         contractor_name=name,
         milestones=milestones or [],
         packages=packages or [],
-        ratio_alert_count=ratio_alert_count,
+        risk_signal_count=risk_signal_count,
     )
 
 
@@ -85,13 +87,14 @@ def test_empty_contractor_scorecard_defaults() -> None:
     assert sc.total_milestones == 0
     assert sc.completed_milestones == 0
     assert sc.delayed_milestones == 0
+    assert sc.on_time_milestones == 0
     assert sc.delayed_ratio is None
-    assert sc.completion_ratio is None
+    assert sc.on_time_rate is None
     assert sc.overrun_ratio is None
     assert sc.avg_cost_variance_percent is None
     assert sc.active_packages == 0
     assert sc.completed_packages == 0
-    assert sc.ratio_alert_count == 0
+    assert sc.risk_signal_count == 0
     # All components should be 100 with no negative data
     assert sc.schedule_score == 100.0
     assert sc.cost_score == 100.0
@@ -171,41 +174,85 @@ def test_overrun_ratio_ignores_milestones_without_both_costs() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Completion ratio calculation
+# On-time rate calculation
 # ---------------------------------------------------------------------------
 
 
-def test_completion_ratio_some_completed() -> None:
+def test_on_time_rate_completed_before_target() -> None:
+    """Milestones completed on or before their target_date count as on-time."""
     milestones = [
-        _milestone("M1", status="completed"),
-        _milestone("M2", status="pending"),
-        _milestone("M3", status="delayed"),
-        _milestone("M4", status="completed"),
+        _milestone(
+            "M1", status="completed",
+            completion_date=date(2024, 1, 10),
+            target_date=date(2024, 1, 15),
+        ),
+        _milestone(
+            "M2", status="completed",
+            completion_date=date(2024, 2, 20),
+            target_date=date(2024, 2, 15),  # late
+        ),
     ]
     sc = compute_contractor_scorecard(_contractor(milestones=milestones))
     assert sc.completed_milestones == 2
-    assert sc.completion_ratio == pytest.approx(0.5)
+    assert sc.on_time_milestones == 1
+    assert sc.on_time_rate == pytest.approx(0.5)
 
 
-def test_completion_ratio_none_when_no_milestones() -> None:
-    sc = compute_contractor_scorecard(_contractor())
-    assert sc.completion_ratio is None
+def test_on_time_rate_exact_target_date_counts_as_on_time() -> None:
+    """A milestone completed exactly on target_date is on-time."""
+    milestones = [
+        _milestone(
+            "M1", status="completed",
+            completion_date=date(2024, 1, 15),
+            target_date=date(2024, 1, 15),
+        ),
+    ]
+    sc = compute_contractor_scorecard(_contractor(milestones=milestones))
+    assert sc.on_time_milestones == 1
+    assert sc.on_time_rate == pytest.approx(1.0)
 
 
-def test_completion_ratio_zero_when_no_completions() -> None:
+def test_on_time_rate_none_when_no_completions() -> None:
     milestones = [_milestone("M1", status="pending")]
     sc = compute_contractor_scorecard(_contractor(milestones=milestones))
-    assert sc.completion_ratio == pytest.approx(0.0)
+    assert sc.on_time_milestones == 0
+    assert sc.on_time_rate is None
 
 
-def test_completion_ratio_one_when_all_completed() -> None:
+def test_on_time_rate_none_when_no_milestones() -> None:
+    sc = compute_contractor_scorecard(_contractor())
+    assert sc.on_time_milestones == 0
+    assert sc.on_time_rate is None
+
+
+def test_on_time_rate_zero_when_no_target_dates_set() -> None:
+    """Completed milestones without target_date do not count as on-time."""
     milestones = [
-        _milestone("M1", status="completed"),
-        _milestone("M2", status="completed"),
+        _milestone("M1", status="completed", completion_date=date(2024, 1, 10)),
+        _milestone("M2", status="completed", completion_date=date(2024, 2, 10)),
     ]
     sc = compute_contractor_scorecard(_contractor(milestones=milestones))
     assert sc.completed_milestones == 2
-    assert sc.completion_ratio == pytest.approx(1.0)
+    assert sc.on_time_milestones == 0
+    assert sc.on_time_rate == pytest.approx(0.0)
+
+
+def test_on_time_rate_all_on_time() -> None:
+    milestones = [
+        _milestone(
+            "M1", status="completed",
+            completion_date=date(2024, 1, 10),
+            target_date=date(2024, 1, 15),
+        ),
+        _milestone(
+            "M2", status="completed",
+            completion_date=date(2024, 2, 10),
+            target_date=date(2024, 2, 20),
+        ),
+    ]
+    sc = compute_contractor_scorecard(_contractor(milestones=milestones))
+    assert sc.on_time_milestones == 2
+    assert sc.on_time_rate == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -232,13 +279,13 @@ def test_performance_score_is_weighted_composite() -> None:
 
 
 def test_risk_score_deducted_per_high_alert() -> None:
-    sc = compute_contractor_scorecard(_contractor(ratio_alert_count=3))
+    sc = compute_contractor_scorecard(_contractor(risk_signal_count=3))
     # 100 - 3*10 = 70
     assert sc.risk_score == pytest.approx(70.0)
 
 
 def test_risk_score_floors_at_zero() -> None:
-    sc = compute_contractor_scorecard(_contractor(ratio_alert_count=15))
+    sc = compute_contractor_scorecard(_contractor(risk_signal_count=15))
     assert sc.risk_score == pytest.approx(0.0)
 
 
@@ -248,7 +295,7 @@ def test_performance_score_floors_at_zero() -> None:
         _milestone("M1", status="delayed", planned_cost="100", actual_cost="200"),
     ]
     sc = compute_contractor_scorecard(
-        _contractor(milestones=milestones, ratio_alert_count=15)
+        _contractor(milestones=milestones, risk_signal_count=15)
     )
     assert sc.performance_score >= 0.0
 

@@ -865,15 +865,16 @@ class ContractorScorecardResponse(BaseModel):
     total_milestones: int
     completed_milestones: int
     delayed_milestones: int
+    on_time_milestones: int
     over_budget_milestones: int
     assessed_cost_milestones: int
     delayed_ratio: Optional[float]
-    completion_ratio: Optional[float]
+    on_time_rate: Optional[float]
     overrun_ratio: Optional[float]
     avg_cost_variance_percent: Optional[float]
     active_packages: int
     completed_packages: int
-    ratio_alert_count: int
+    risk_signal_count: int
     schedule_score: float
     cost_score: float
     risk_score: float
