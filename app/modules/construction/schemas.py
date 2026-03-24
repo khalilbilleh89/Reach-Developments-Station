@@ -883,6 +883,10 @@ class ContractorScorecardResponse(BaseModel):
     median_delay_days: Optional[float]
     max_delay_days: Optional[int]
     delay_rate: Optional[float]
+    total_cost_variance: Optional[Decimal]
+    average_cost_variance_pct: Optional[float]
+    max_cost_overrun_pct: Optional[float]
+    cost_overrun_rate: Optional[float]
 
 
 # ── Contractor Trend (PR-CONSTR-045) ─────────────────────────────────────────

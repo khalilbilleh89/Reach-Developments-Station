@@ -142,10 +142,16 @@ class PackageScorecardData:
         Matches ConstructionProcurementPackage.id.
     status:
         ProcurementPackageStatus value string.
+    planned_value:
+        Budgeted value for the package.  None if not set.
+    awarded_value:
+        Awarded/actual value for the package.  None if not recorded.
     """
 
     package_id: str
     status: str
+    planned_value: Optional[Decimal] = None
+    awarded_value: Optional[Decimal] = None
 
 
 @dataclass
@@ -240,6 +246,18 @@ class ContractorScorecard:
         delayed_milestones / assessed_milestones where ``assessed`` means
         the milestone has both completion_date and target_date set.  None
         if no assessed milestones.
+    total_cost_variance:
+        Sum of (actual_cost − planned_cost) across assessed packages.
+        None if no assessed packages.
+    average_cost_variance_pct:
+        Mean percentage cost variance across assessed packages.
+        None if no assessed packages with non-zero planned value.
+    max_cost_overrun_pct:
+        Highest single-package overrun percentage.  None if no package
+        is over budget.
+    cost_overrun_rate:
+        over_budget_packages / assessed_packages.  None if no assessed
+        packages.
     """
 
     contractor_id: str
@@ -265,6 +283,10 @@ class ContractorScorecard:
     median_delay_days: Optional[float] = None
     max_delay_days: Optional[int] = None
     delay_rate: Optional[float] = None
+    total_cost_variance: Optional[Decimal] = None
+    average_cost_variance_pct: Optional[float] = None
+    max_cost_overrun_pct: Optional[float] = None
+    cost_overrun_rate: Optional[float] = None
 
 
 @dataclass
@@ -511,6 +533,10 @@ def compute_contractor_scorecard(
     ContractorScorecard
         Derived KPIs and scores for the contractor.
     """
+    from app.modules.construction.cost_variance_engine import (
+        PackageCostInput,
+        compute_cost_variance,
+    )
     from app.modules.construction.schedule_variance_engine import (
         MilestoneVarianceInput,
         compute_schedule_variance,
@@ -541,6 +567,17 @@ def compute_contractor_scorecard(
         ]
     )
 
+    cost_metrics = compute_cost_variance(
+        [
+            PackageCostInput(
+                package_id=p.package_id,
+                planned_cost=p.planned_value,
+                actual_cost=p.awarded_value,
+            )
+            for p in data.packages
+        ]
+    )
+
     return ContractorScorecard(
         contractor_id=data.contractor_id,
         contractor_name=data.contractor_name,
@@ -565,6 +602,12 @@ def compute_contractor_scorecard(
         median_delay_days=variance.median_delay_days,
         max_delay_days=variance.max_delay_days,
         delay_rate=variance.delay_rate,
+        total_cost_variance=(
+            cost_metrics.total_cost_variance if cost_metrics.assessed_packages > 0 else None
+        ),
+        average_cost_variance_pct=cost_metrics.average_cost_variance_pct,
+        max_cost_overrun_pct=cost_metrics.max_cost_overrun_pct,
+        cost_overrun_rate=cost_metrics.cost_overrun_rate,
     )
 
 
