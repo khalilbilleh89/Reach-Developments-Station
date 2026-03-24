@@ -178,7 +178,7 @@ function parcelToFormState(parcel: LandParcel | null): FormState {
     depth_m: n(parcel?.depth_m),
     buildable_area_sqm: n(parcel?.buildable_area_sqm),
     sellable_area_sqm: n(parcel?.sellable_area_sqm),
-    coverage_ratio: n(parcel?.coverage_ratio),
+    coverage_ratio: parcel?.coverage_ratio != null ? String(parcel.coverage_ratio * 100) : "",
     density_ratio: n(parcel?.density_ratio),
     front_setback_m: n(parcel?.front_setback_m),
     side_setback_m: n(parcel?.side_setback_m),
@@ -224,7 +224,7 @@ function formStateToCreate(f: FormState): LandParcelCreate {
     depth_m: optNum(f.depth_m),
     buildable_area_sqm: optNum(f.buildable_area_sqm),
     sellable_area_sqm: optNum(f.sellable_area_sqm),
-    coverage_ratio: optNum(f.coverage_ratio),
+    coverage_ratio: f.coverage_ratio.trim() ? parseFloat(f.coverage_ratio) / 100 : null,
     density_ratio: optNum(f.density_ratio),
     front_setback_m: optNum(f.front_setback_m),
     side_setback_m: optNum(f.side_setback_m),
@@ -269,7 +269,7 @@ function formStateToUpdate(f: FormState): LandParcelUpdate {
     depth_m: optNum(f.depth_m),
     buildable_area_sqm: optNum(f.buildable_area_sqm),
     sellable_area_sqm: optNum(f.sellable_area_sqm),
-    coverage_ratio: optNum(f.coverage_ratio),
+    coverage_ratio: f.coverage_ratio.trim() ? parseFloat(f.coverage_ratio) / 100 : null,
     density_ratio: optNum(f.density_ratio),
     front_setback_m: optNum(f.front_setback_m),
     side_setback_m: optNum(f.side_setback_m),
@@ -613,17 +613,17 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               step={1}
             />
           </Field>
-          <Field label="Coverage Ratio" htmlFor="coverage_ratio">
+          <Field label="Coverage Ratio (%)" htmlFor="coverage_ratio">
             <input
               id="coverage_ratio"
               type="number"
               style={inputStyle}
               value={form.coverage_ratio}
               onChange={(e) => set("coverage_ratio", e.target.value)}
-              placeholder="0.0–1.0"
+              placeholder="e.g. 50 for 50%"
               min={0}
-              max={1}
-              step={0.01}
+              max={100}
+              step={0.1}
             />
           </Field>
         </Row>
@@ -732,7 +732,7 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               onChange={(e) => set("acquisition_price", e.target.value)}
               placeholder="e.g. 5500000"
               min={0}
-              step={1000}
+              step="any"
             />
           </Field>
           <Field label="Transaction Cost" htmlFor="transaction_cost">
@@ -744,7 +744,7 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               onChange={(e) => set("transaction_cost", e.target.value)}
               placeholder="e.g. 220000"
               min={0}
-              step={1000}
+              step="any"
             />
           </Field>
         </Row>
@@ -769,7 +769,7 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               onChange={(e) => set("asking_price_per_sqm", e.target.value)}
               placeholder="e.g. 5500"
               min={0}
-              step={100}
+              step="any"
             />
           </Field>
         </Row>
@@ -783,7 +783,7 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               onChange={(e) => set("supported_price_per_sqm", e.target.value)}
               placeholder="e.g. 4800"
               min={0}
-              step={100}
+              step="any"
             />
           </Field>
           <div />
