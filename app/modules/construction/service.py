@@ -1915,7 +1915,9 @@ class ConstructionService:
         """Return a project-level construction risk rollup.
 
         Aggregates contractor scorecard outputs from all scopes in the
-        project into a single risk summary.
+        project into a single risk summary.  All packages and milestones for
+        the project are loaded in a fixed number of SQL queries (independent
+        of the number of scopes) and processed in memory.
 
         Parameters
         ----------
@@ -1934,13 +1936,22 @@ class ConstructionService:
             When the project does not exist.
         """
         from app.modules.construction.contractor_scorecard_engine import (
+            ContractorScorecardInput,
+            MilestoneScorecardData,
+            PackageScorecardData,
             compute_contractor_scorecard,
         )
         from app.modules.construction.portfolio_risk_rollup_engine import (
             ProjectRiskInput,
             ScorecardRollupInput,
-            compute_project_construction_risk,
+            compute_project_construction_risk as _compute_project_risk_rollup,
         )
+        from app.modules.construction.risk_alert_engine import (
+            ContractorRiskData,
+            MilestoneRiskData,
+            evaluate_contractor_performance,
+        )
+        from app.modules.construction.scope_escalation_engine import STATUS_NORMAL
 
         project = self.project_repo.get_by_id(project_id)
         if not project:
@@ -1950,23 +1961,87 @@ class ConstructionService:
             )
 
         scopes = self.dashboard_repo.list_scopes_for_project(project_id)
+        scope_ids = [s.id for s in scopes]
+
+        # Load all packages+milestones for the project in a fixed number of queries
+        contractors, all_packages = self.risk_repo.load_project_milestone_dataset(scope_ids)
+        contractor_name_map = {c.id: c.contractor_name for c in contractors}
+
+        # Group packages by (scope_id, contractor_id) — each combination is
+        # one contractor-scope entry in the rollup
+        pkgs_by_scope_contractor: dict[tuple[str, str], list] = {}
+        for pkg in all_packages:
+            if pkg.contractor_id is None:
+                continue
+            key = (pkg.scope_id, pkg.contractor_id)
+            pkgs_by_scope_contractor.setdefault(key, []).append(pkg)
 
         scorecard_inputs: list[ScorecardRollupInput] = []
-        for scope in scopes:
-            inputs = self._build_scope_scorecard_inputs(scope.id)
-            for inp in inputs:
-                sc = compute_contractor_scorecard(inp)
-                scorecard_inputs.append(
-                    ScorecardRollupInput(
-                        contractor_id=sc.contractor_id,
-                        watchlist_status=sc.watchlist_status or "Normal",
-                        escalation_score=sc.escalation_score,
-                        breach_reasons=sc.breach_reasons,
-                        reliability_index=sc.reliability_index,
-                    )
-                )
+        for (_scope_id, contractor_id), pkgs in pkgs_by_scope_contractor.items():
+            contractor_name = contractor_name_map.get(contractor_id, contractor_id)
 
-        rollup = compute_project_construction_risk(
+            milestone_inputs: list[MilestoneScorecardData] = [
+                MilestoneScorecardData(
+                    milestone_id=m.id,
+                    status=m.status,
+                    planned_cost=m.planned_cost,
+                    actual_cost=m.actual_cost,
+                    completion_date=m.completion_date,
+                    target_date=m.target_date,
+                )
+                for pkg in pkgs
+                for m in pkg.milestones
+            ]
+            package_inputs: list[PackageScorecardData] = [
+                PackageScorecardData(
+                    package_id=pkg.id,
+                    status=pkg.status,
+                    planned_value=pkg.planned_value,
+                    awarded_value=pkg.awarded_value,
+                )
+                for pkg in pkgs
+            ]
+
+            risk_milestones = [
+                MilestoneRiskData(
+                    milestone_id=m.id,
+                    status=m.status,
+                    planned_cost=m.planned_cost,
+                    actual_cost=m.actual_cost,
+                )
+                for pkg in pkgs
+                for m in pkg.milestones
+            ]
+            contractor_risk = ContractorRiskData(
+                contractor_id=contractor_id,
+                contractor_name=contractor_name,
+                all_milestones=risk_milestones,
+            )
+            perf_summary = evaluate_contractor_performance(contractor_risk)
+            risk_signal_count = sum(
+                1 for a in perf_summary.alerts if a.severity == "HIGH"
+            )
+
+            sc = compute_contractor_scorecard(
+                ContractorScorecardInput(
+                    contractor_id=contractor_id,
+                    contractor_name=contractor_name,
+                    milestones=milestone_inputs,
+                    packages=package_inputs,
+                    risk_signal_count=risk_signal_count,
+                )
+            )
+            scorecard_inputs.append(
+                ScorecardRollupInput(
+                    contractor_id=sc.contractor_id,
+                    watchlist_status=sc.watchlist_status or STATUS_NORMAL,
+                    escalation_score=sc.escalation_score,
+                    breach_reasons=sc.breach_reasons,
+                    reliability_index=sc.reliability_index,
+                )
+            )
+
+        rollup = _compute_project_risk_rollup(
             ProjectRiskInput(
                 project_id=project_id,
                 contractor_scorecards=scorecard_inputs,

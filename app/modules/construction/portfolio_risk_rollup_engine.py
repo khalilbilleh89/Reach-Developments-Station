@@ -43,6 +43,13 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.modules.construction.scope_escalation_engine import (
+    STATUS_CRITICAL,
+    STATUS_ESCALATE,
+    STATUS_NORMAL,
+    STATUS_WATCH,
+)
+
 logger = logging.getLogger(__name__)
 
 # Number of top breach reasons to surface in the rollup
@@ -183,13 +190,13 @@ def compute_project_construction_risk(
 
     # ── Escalation distribution counts ───────────────────────────────────────
     contractors_on_watch = sum(
-        1 for sc in scorecards if sc.watchlist_status == "Watch"
+        1 for sc in scorecards if sc.watchlist_status == STATUS_WATCH
     )
     contractors_escalated = sum(
-        1 for sc in scorecards if sc.watchlist_status == "Escalate"
+        1 for sc in scorecards if sc.watchlist_status == STATUS_ESCALATE
     )
     contractors_critical = sum(
-        1 for sc in scorecards if sc.watchlist_status == "Critical"
+        1 for sc in scorecards if sc.watchlist_status == STATUS_CRITICAL
     )
 
     # ── Composite risk score ──────────────────────────────────────────────────
@@ -208,12 +215,15 @@ def compute_project_construction_risk(
     # ── Top breach reasons ────────────────────────────────────────────────────
     reason_counter: Counter[str] = Counter()
     for sc in scorecards:
-        if sc.watchlist_status != "Normal":
+        if sc.watchlist_status != STATUS_NORMAL:
             reason_counter.update(sc.breach_reasons)
 
-    top_breach_reasons = [
-        reason for reason, _ in reason_counter.most_common(TOP_BREACH_REASON_LIMIT)
-    ]
+    # Sort count DESC then reason ASC for deterministic output under tied counts
+    sorted_reasons = sorted(
+        reason_counter.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    top_breach_reasons = [reason for reason, _ in sorted_reasons[:TOP_BREACH_REASON_LIMIT]]
 
     # ── Highest-risk contractor ───────────────────────────────────────────────
     # Primary sort key  : escalation_score DESC (highest severity first)

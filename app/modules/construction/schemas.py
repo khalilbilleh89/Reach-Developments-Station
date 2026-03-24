@@ -966,7 +966,12 @@ class ProjectConstructionRiskResponse(BaseModel):
     """Project-level construction risk rollup aggregated from contractor scorecards."""
 
     project_id: str
-    contractors_total: int
+    contractors_total: int = Field(
+        description=(
+            "Total number of contractor-scope entries assessed. "
+            "A contractor active in multiple scopes contributes one entry per scope."
+        )
+    )
     contractors_on_watch: int
     contractors_escalated: int
     contractors_critical: int
