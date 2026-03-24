@@ -1569,7 +1569,12 @@ class ConstructionService:
             for m in pkg.milestones
         ]
         package_inputs: list[PackageScorecardData] = [
-            PackageScorecardData(package_id=pkg.id, status=pkg.status)
+            PackageScorecardData(
+                package_id=pkg.id,
+                status=pkg.status,
+                planned_value=pkg.planned_value,
+                awarded_value=pkg.awarded_value,
+            )
             for pkg in packages
         ]
 
@@ -1631,6 +1636,10 @@ class ConstructionService:
             median_delay_days=sc.median_delay_days,
             max_delay_days=sc.max_delay_days,
             delay_rate=sc.delay_rate,
+            total_cost_variance=sc.total_cost_variance,
+            average_cost_variance_pct=sc.average_cost_variance_pct,
+            max_cost_overrun_pct=sc.max_cost_overrun_pct,
+            cost_overrun_rate=sc.cost_overrun_rate,
         )
 
     def get_contractor_scorecard(
@@ -1762,7 +1771,12 @@ class ConstructionService:
                 for m in pkg.milestones
             ]
             package_inputs: list[PackageScorecardData] = [
-                PackageScorecardData(package_id=pkg.id, status=pkg.status)
+                PackageScorecardData(
+                    package_id=pkg.id,
+                    status=pkg.status,
+                    planned_value=pkg.planned_value,
+                    awarded_value=pkg.awarded_value,
+                )
                 for pkg in pkgs
             ]
 
