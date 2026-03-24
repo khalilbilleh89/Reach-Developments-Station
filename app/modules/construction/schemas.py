@@ -957,3 +957,19 @@ class ScopeContractorScorecardListResponse(BaseModel):
     contractors_escalated: int = 0
     contractors_critical: int = 0
     scorecards: List[ContractorScorecardResponse]
+
+
+# ── Portfolio Risk Rollup (PR-CONSTR-050) ─────────────────────────────────────
+
+
+class ProjectConstructionRiskResponse(BaseModel):
+    """Project-level construction risk rollup aggregated from contractor scorecards."""
+
+    project_id: str
+    contractors_total: int
+    contractors_on_watch: int
+    contractors_escalated: int
+    contractors_critical: int
+    project_risk_score: float
+    top_breach_reasons: List[str] = Field(default_factory=list)
+    highest_risk_contractor: Optional[str] = None

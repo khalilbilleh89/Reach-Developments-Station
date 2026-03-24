@@ -98,6 +98,7 @@ from app.modules.construction.schemas import (
     ScopeRiskAlertListResponse,
     ScopeScheduleResponse,
     ScopeVarianceResponse,
+    ProjectConstructionRiskResponse,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -1903,4 +1904,82 @@ class ConstructionService:
                 )
                 for row in ranking
             ],
+        )
+
+    # ── Portfolio Risk Rollup (PR-CONSTR-050) ─────────────────────────────────
+
+    def compute_project_construction_risk(
+        self,
+        project_id: str,
+    ) -> ProjectConstructionRiskResponse:
+        """Return a project-level construction risk rollup.
+
+        Aggregates contractor scorecard outputs from all scopes in the
+        project into a single risk summary.
+
+        Parameters
+        ----------
+        project_id:
+            Matches the development project identifier.
+
+        Returns
+        -------
+        ProjectConstructionRiskResponse
+            Aggregated contractor risk counts, composite risk score, top
+            breach reasons, and the highest-risk contractor identifier.
+
+        Raises
+        ------
+        HTTPException (404)
+            When the project does not exist.
+        """
+        from app.modules.construction.contractor_scorecard_engine import (
+            compute_contractor_scorecard,
+        )
+        from app.modules.construction.portfolio_risk_rollup_engine import (
+            ProjectRiskInput,
+            ScorecardRollupInput,
+            compute_project_construction_risk,
+        )
+
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project '{project_id}' not found.",
+            )
+
+        scopes = self.dashboard_repo.list_scopes_for_project(project_id)
+
+        scorecard_inputs: list[ScorecardRollupInput] = []
+        for scope in scopes:
+            inputs = self._build_scope_scorecard_inputs(scope.id)
+            for inp in inputs:
+                sc = compute_contractor_scorecard(inp)
+                scorecard_inputs.append(
+                    ScorecardRollupInput(
+                        contractor_id=sc.contractor_id,
+                        watchlist_status=sc.watchlist_status or "Normal",
+                        escalation_score=sc.escalation_score,
+                        breach_reasons=sc.breach_reasons,
+                        reliability_index=sc.reliability_index,
+                    )
+                )
+
+        rollup = compute_project_construction_risk(
+            ProjectRiskInput(
+                project_id=project_id,
+                contractor_scorecards=scorecard_inputs,
+            )
+        )
+
+        return ProjectConstructionRiskResponse(
+            project_id=rollup.project_id,
+            contractors_total=rollup.contractors_total,
+            contractors_on_watch=rollup.contractors_on_watch,
+            contractors_escalated=rollup.contractors_escalated,
+            contractors_critical=rollup.contractors_critical,
+            project_risk_score=rollup.project_risk_score,
+            top_breach_reasons=rollup.top_breach_reasons,
+            highest_risk_contractor=rollup.highest_risk_contractor,
         )
