@@ -64,14 +64,14 @@ def _contractor(
     name: str = "Test Corp",
     milestones: list[MilestoneScorecardData] | None = None,
     packages: list[PackageScorecardData] | None = None,
-    high_risk_alert_count: int = 0,
+    ratio_alert_count: int = 0,
 ) -> ContractorScorecardInput:
     return ContractorScorecardInput(
         contractor_id=cid,
         contractor_name=name,
         milestones=milestones or [],
         packages=packages or [],
-        high_risk_alert_count=high_risk_alert_count,
+        ratio_alert_count=ratio_alert_count,
     )
 
 
@@ -86,12 +86,12 @@ def test_empty_contractor_scorecard_defaults() -> None:
     assert sc.completed_milestones == 0
     assert sc.delayed_milestones == 0
     assert sc.delayed_ratio is None
-    assert sc.on_time_completion_ratio is None
+    assert sc.completion_ratio is None
     assert sc.overrun_ratio is None
     assert sc.avg_cost_variance_percent is None
     assert sc.active_packages == 0
     assert sc.completed_packages == 0
-    assert sc.high_risk_alert_count == 0
+    assert sc.ratio_alert_count == 0
     # All components should be 100 with no negative data
     assert sc.schedule_score == 100.0
     assert sc.cost_score == 100.0
@@ -171,25 +171,41 @@ def test_overrun_ratio_ignores_milestones_without_both_costs() -> None:
 
 
 # ---------------------------------------------------------------------------
-# On-time completion ratio
+# Completion ratio calculation
 # ---------------------------------------------------------------------------
 
 
-def test_on_time_completion_ratio_all_completed() -> None:
+def test_completion_ratio_some_completed() -> None:
+    milestones = [
+        _milestone("M1", status="completed"),
+        _milestone("M2", status="pending"),
+        _milestone("M3", status="delayed"),
+        _milestone("M4", status="completed"),
+    ]
+    sc = compute_contractor_scorecard(_contractor(milestones=milestones))
+    assert sc.completed_milestones == 2
+    assert sc.completion_ratio == pytest.approx(0.5)
+
+
+def test_completion_ratio_none_when_no_milestones() -> None:
+    sc = compute_contractor_scorecard(_contractor())
+    assert sc.completion_ratio is None
+
+
+def test_completion_ratio_zero_when_no_completions() -> None:
+    milestones = [_milestone("M1", status="pending")]
+    sc = compute_contractor_scorecard(_contractor(milestones=milestones))
+    assert sc.completion_ratio == pytest.approx(0.0)
+
+
+def test_completion_ratio_one_when_all_completed() -> None:
     milestones = [
         _milestone("M1", status="completed"),
         _milestone("M2", status="completed"),
     ]
     sc = compute_contractor_scorecard(_contractor(milestones=milestones))
     assert sc.completed_milestones == 2
-    assert sc.on_time_milestones == 2
-    assert sc.on_time_completion_ratio == pytest.approx(1.0)
-
-
-def test_on_time_completion_ratio_none_when_no_completions() -> None:
-    milestones = [_milestone("M1", status="pending")]
-    sc = compute_contractor_scorecard(_contractor(milestones=milestones))
-    assert sc.on_time_completion_ratio is None
+    assert sc.completion_ratio == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +232,13 @@ def test_performance_score_is_weighted_composite() -> None:
 
 
 def test_risk_score_deducted_per_high_alert() -> None:
-    sc = compute_contractor_scorecard(_contractor(high_risk_alert_count=3))
+    sc = compute_contractor_scorecard(_contractor(ratio_alert_count=3))
     # 100 - 3*10 = 70
     assert sc.risk_score == pytest.approx(70.0)
 
 
 def test_risk_score_floors_at_zero() -> None:
-    sc = compute_contractor_scorecard(_contractor(high_risk_alert_count=15))
+    sc = compute_contractor_scorecard(_contractor(ratio_alert_count=15))
     assert sc.risk_score == pytest.approx(0.0)
 
 
@@ -232,7 +248,7 @@ def test_performance_score_floors_at_zero() -> None:
         _milestone("M1", status="delayed", planned_cost="100", actual_cost="200"),
     ]
     sc = compute_contractor_scorecard(
-        _contractor(milestones=milestones, high_risk_alert_count=15)
+        _contractor(milestones=milestones, ratio_alert_count=15)
     )
     assert sc.performance_score >= 0.0
 

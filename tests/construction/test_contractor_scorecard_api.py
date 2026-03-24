@@ -212,11 +212,11 @@ def test_contractor_scorecard_response_fields_present(client: TestClient) -> Non
     data = resp.json()
     required_fields = [
         "contractor_id", "contractor_name", "total_milestones",
-        "completed_milestones", "delayed_milestones", "on_time_milestones",
+        "completed_milestones", "delayed_milestones",
         "over_budget_milestones", "assessed_cost_milestones",
-        "delayed_ratio", "on_time_completion_ratio", "overrun_ratio",
+        "delayed_ratio", "completion_ratio", "overrun_ratio",
         "avg_cost_variance_percent", "active_packages", "completed_packages",
-        "high_risk_alert_count", "schedule_score", "cost_score",
+        "ratio_alert_count", "schedule_score", "cost_score",
         "risk_score", "performance_score",
     ]
     for field in required_fields:

@@ -942,17 +942,11 @@ class ConstructionRiskRepository:
             .all()
         )
 
-    def load_scope_contractors_with_packages_and_milestones(
-        self, scope_id: str
-    ) -> List["ConstructionContractor"]:
-        """Return all contractors linked to a scope via packages, with data loaded."""
-        from app.modules.construction.models import (
-            ConstructionContractor,
-            ConstructionProcurementPackage,
-        )
+    def load_scope_contractor_ids(self, scope_id: str) -> List[str]:
+        """Return the distinct contractor IDs linked to a scope via packages."""
+        from app.modules.construction.models import ConstructionProcurementPackage
 
-        # Find distinct contractor IDs in this scope
-        contractor_ids = (
+        rows = (
             self.db.query(ConstructionProcurementPackage.contractor_id)
             .filter(
                 ConstructionProcurementPackage.scope_id == scope_id,
@@ -961,13 +955,19 @@ class ConstructionRiskRepository:
             .distinct()
             .all()
         )
-        ids = [row[0] for row in contractor_ids if row[0] is not None]
-        if not ids:
-            return []
+        return [row[0] for row in rows if row[0] is not None]
 
+    def load_contractors_by_ids(
+        self, contractor_ids: List[str]
+    ) -> List["ConstructionContractor"]:
+        """Return contractor records for the given IDs, ordered by name."""
+        from app.modules.construction.models import ConstructionContractor
+
+        if not contractor_ids:
+            return []
         return (
             self.db.query(ConstructionContractor)
-            .filter(ConstructionContractor.id.in_(ids))
+            .filter(ConstructionContractor.id.in_(contractor_ids))
             .order_by(ConstructionContractor.contractor_name)
             .all()
         )

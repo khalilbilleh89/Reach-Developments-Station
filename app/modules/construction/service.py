@@ -1598,7 +1598,7 @@ class ConstructionService:
             contractor_name=contractor_name,
             milestones=milestone_inputs,
             packages=package_inputs,
-            high_risk_alert_count=high_alert_count,
+            ratio_alert_count=high_alert_count,
         )
 
     @staticmethod
@@ -1612,16 +1612,15 @@ class ConstructionService:
             total_milestones=sc.total_milestones,
             completed_milestones=sc.completed_milestones,
             delayed_milestones=sc.delayed_milestones,
-            on_time_milestones=sc.on_time_milestones,
             over_budget_milestones=sc.over_budget_milestones,
             assessed_cost_milestones=sc.assessed_cost_milestones,
             delayed_ratio=sc.delayed_ratio,
-            on_time_completion_ratio=sc.on_time_completion_ratio,
+            completion_ratio=sc.completion_ratio,
             overrun_ratio=sc.overrun_ratio,
             avg_cost_variance_percent=sc.avg_cost_variance_percent,
             active_packages=sc.active_packages,
             completed_packages=sc.completed_packages,
-            high_risk_alert_count=sc.high_risk_alert_count,
+            ratio_alert_count=sc.ratio_alert_count,
             schedule_score=sc.schedule_score,
             cost_score=sc.cost_score,
             risk_score=sc.risk_score,
@@ -1701,6 +1700,102 @@ class ConstructionService:
             periods_analysed=trend.periods_analysed,
         )
 
+    def _build_scope_scorecard_inputs(
+        self,
+        scope_id: str,
+    ) -> "list[ContractorScorecardInput]":
+        """Build scorecard inputs for all contractors in a scope efficiently.
+
+        Loads all scope packages with milestones in a single query, groups
+        them by contractor_id in memory, then loads contractor records in a
+        second query.  This avoids N+1 DB calls when building scope-wide
+        scorecard or ranking responses.
+        """
+        from app.modules.construction.contractor_scorecard_engine import (
+            ContractorScorecardInput,
+            MilestoneScorecardData,
+            PackageScorecardData,
+        )
+        from app.modules.construction.risk_alert_engine import (
+            ContractorRiskData,
+            MilestoneRiskData,
+            evaluate_contractor_performance,
+        )
+
+        # Single query: all packages + milestones for the scope
+        packages = self.risk_repo.load_scope_packages_with_milestones(scope_id)
+
+        # Group packages and milestones by contractor_id
+        pkg_by_contractor: dict[str, list] = {}
+        for pkg in packages:
+            if pkg.contractor_id is None:
+                continue
+            pkg_by_contractor.setdefault(pkg.contractor_id, []).append(pkg)
+
+        if not pkg_by_contractor:
+            return []
+
+        # Single query: load all relevant contractor records
+        contractors = self.risk_repo.load_contractors_by_ids(
+            list(pkg_by_contractor.keys())
+        )
+        contractor_name_map = {c.id: c.contractor_name for c in contractors}
+
+        inputs: list[ContractorScorecardInput] = []
+        for contractor_id, pkgs in pkg_by_contractor.items():
+            contractor_name = contractor_name_map.get(contractor_id, contractor_id)
+
+            milestone_inputs: list[MilestoneScorecardData] = [
+                MilestoneScorecardData(
+                    milestone_id=m.id,
+                    status=m.status,
+                    planned_cost=m.planned_cost,
+                    actual_cost=m.actual_cost,
+                    completion_date=m.completion_date,
+                )
+                for pkg in pkgs
+                for m in pkg.milestones
+            ]
+            package_inputs: list[PackageScorecardData] = [
+                PackageScorecardData(package_id=pkg.id, status=pkg.status)
+                for pkg in pkgs
+            ]
+
+            # Compute ratio alert count in memory from the already-loaded data
+            risk_milestones = [
+                MilestoneRiskData(
+                    milestone_id=m.id,
+                    status=m.status,
+                    planned_cost=m.planned_cost,
+                    actual_cost=m.actual_cost,
+                )
+                for pkg in pkgs
+                for m in pkg.milestones
+            ]
+            contractor_risk = ContractorRiskData(
+                contractor_id=contractor_id,
+                contractor_name=contractor_name,
+                all_milestones=risk_milestones,
+            )
+            perf_summary = evaluate_contractor_performance(contractor_risk)
+            ratio_alert_count = sum(
+                1 for a in perf_summary.alerts if a.severity == "HIGH"
+            )
+
+            inputs.append(
+                ContractorScorecardInput(
+                    contractor_id=contractor_id,
+                    contractor_name=contractor_name,
+                    milestones=milestone_inputs,
+                    packages=package_inputs,
+                    ratio_alert_count=ratio_alert_count,
+                )
+            )
+
+        # Sort deterministically by contractor_name for consistent output
+        inputs.sort(key=lambda i: i.contractor_name)
+        return inputs
+
     def list_scope_contractor_scorecards(
         self,
         scope_id: str,
@@ -1717,18 +1812,11 @@ class ConstructionService:
                 detail=f"Construction scope '{scope_id}' not found.",
             )
 
-        contractors = self.risk_repo.load_scope_contractors_with_packages_and_milestones(
-            scope_id
-        )
-        scorecards = []
-        for contractor in contractors:
-            inp = self._build_contractor_scorecard_input(
-                contractor_id=contractor.id,
-                contractor_name=contractor.contractor_name,
-                scope_id=scope_id,
-            )
-            sc = compute_contractor_scorecard(inp)
-            scorecards.append(self._scorecard_to_response(sc))
+        inputs = self._build_scope_scorecard_inputs(scope_id)
+        scorecards = [
+            self._scorecard_to_response(compute_contractor_scorecard(inp))
+            for inp in inputs
+        ]
 
         return ScopeContractorScorecardListResponse(
             scope_id=scope_id,
@@ -1742,7 +1830,6 @@ class ConstructionService:
     ) -> ScopeContractorRankingResponse:
         """Return ranked contractor list for a construction scope."""
         from app.modules.construction.contractor_scorecard_engine import (
-            ContractorScorecardInput,
             compute_scope_contractor_ranking,
         )
 
@@ -1753,17 +1840,7 @@ class ConstructionService:
                 detail=f"Construction scope '{scope_id}' not found.",
             )
 
-        contractors = self.risk_repo.load_scope_contractors_with_packages_and_milestones(
-            scope_id
-        )
-        inputs: list[ContractorScorecardInput] = [
-            self._build_contractor_scorecard_input(
-                contractor_id=c.id,
-                contractor_name=c.contractor_name,
-                scope_id=scope_id,
-            )
-            for c in contractors
-        ]
+        inputs = self._build_scope_scorecard_inputs(scope_id)
         ranking = compute_scope_contractor_ranking(inputs)
 
         return ScopeContractorRankingResponse(
