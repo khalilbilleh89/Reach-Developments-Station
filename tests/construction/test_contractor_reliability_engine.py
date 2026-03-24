@@ -193,7 +193,7 @@ def test_severe_delay_and_cost_overrun_critical_band() -> None:
 
 
 def test_all_delayed_no_cost_data() -> None:
-    """100% delayed milestones, no packages → schedule discipline drives to Critical."""
+    """100% delayed milestones, no packages → overall Watch band (~60 index)."""
     result = compute_contractor_reliability(
         _inp(
             on_time_rate=0.0,

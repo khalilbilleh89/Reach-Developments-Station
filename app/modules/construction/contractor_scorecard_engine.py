@@ -660,15 +660,21 @@ def compute_scope_contractor_ranking(
     Returns
     -------
     List[ScopeContractorRankingRow]
-        Rows sorted by ranking_sort_score descending, then reliability_index
-        descending, then contractor_id ascending for deterministic output.
-        Falls back to performance_score descending when ranking_sort_score
-        is not available.
+        Rows sorted by ``ranking_sort_score`` descending, then
+        ``reliability_index`` descending, then ``contractor_id`` ascending
+        for deterministic tie-breaking.  Contractors whose ``ranking_sort_score``
+        is ``None`` are sorted last (treated as negative infinity before
+        negation).
     """
     scorecards = [compute_contractor_scorecard(inp) for inp in inputs]
-    # Primary sort: ranking_sort_score DESC (None treated as -inf)
-    # Secondary sort: reliability_index DESC (None treated as -inf)
-    # Tertiary sort: contractor_id ASC for deterministic tie-breaking
+    # Primary sort:   ranking_sort_score DESC  (None → sorted last)
+    # Secondary sort: reliability_index DESC   (None → sorted last)
+    # Tertiary sort:  contractor_id ASC        (deterministic tie-breaking)
+    #
+    # Python's sort is stable, so None-valued contractors that share the same
+    # contractor_id ordering remain in their original relative position.
+    # None is mapped to float("-inf") before negation so it sorts as +inf →
+    # last in descending order.
     scorecards.sort(
         key=lambda s: (
             -(s.ranking_sort_score if s.ranking_sort_score is not None else float("-inf")),

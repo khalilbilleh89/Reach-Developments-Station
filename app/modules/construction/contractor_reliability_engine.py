@@ -62,10 +62,10 @@ Confidence Layer
 -----------------
 Thin evidence (few milestones, few packages) reduces statistical confidence.
 
-    Evidence thresholds:
-        Low    — assessed_milestones < 3  AND assessed_packages < 2
-        Medium — assessed_milestones < 10 AND assessed_packages < 5
+    Evidence thresholds (evaluated in order, High → Medium → Low):
         High   — assessed_milestones >= 10 OR  assessed_packages >= 5
+        Medium — otherwise, if assessed_milestones >= 3 OR assessed_packages >= 2
+        Low    — otherwise (very thin evidence)
 
     (``assessed_milestones`` = milestones contributing to delay_rate;
      ``assessed_packages``  = packages contributing to cost_overrun_rate.)
@@ -73,8 +73,8 @@ Thin evidence (few milestones, few packages) reduces statistical confidence.
 Ranking Sort Score
 ------------------
 An internal-use float for deterministic ranking.  It equals
-``reliability_index`` when both are present.  None when reliability_index
-is not computable.
+``reliability_index`` and is always populated for results produced by
+:func:`compute_contractor_reliability`.
 
 ranking_sort_score is intentionally not exposed in the public API response
 to keep the contract clean; the caller may use it internally for ordering.
@@ -189,18 +189,21 @@ class ContractorReliabilityResult:
     Parameters
     ----------
     reliability_index:
-        Composite reliability score 0–100.  Higher is better.
-        None when insufficient evidence is available to compute a score.
+        Composite reliability score 0–100.  Higher is better.  Always
+        populated for results produced by
+        :func:`compute_contractor_reliability`.
     reliability_band:
         Human-readable band: ``Elite`` / ``Strong`` / ``Watch`` / ``Critical``.
-        None when ``reliability_index`` is None.
+        Always populated for results produced by
+        :func:`compute_contractor_reliability`.
     reliability_confidence:
         Statistical confidence in the score based on evidence volume:
-        ``Low`` / ``Medium`` / ``High``.
-        None when ``reliability_index`` is None.
+        ``Low`` / ``Medium`` / ``High``.  Always populated for results
+        produced by :func:`compute_contractor_reliability`.
     ranking_sort_score:
         Internal-use float for deterministic ranking.  Equals
-        ``reliability_index`` when computable, otherwise None.
+        ``reliability_index`` and is always populated for results produced
+        by :func:`compute_contractor_reliability`.
         Not intended for public API exposure.
     """
 
