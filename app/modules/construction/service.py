@@ -22,6 +22,10 @@ if TYPE_CHECKING:
         ContractorScorecardInput,
     )
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
+    from app.modules.construction.portfolio_risk_rollup_engine import (
+        ProjectRiskRollup,
+        ScorecardRollupInput,
+    )
     from app.modules.construction.risk_alert_engine import ScopeRiskData
     from app.modules.construction.schedule_engine import SchedulePhase
 
@@ -99,6 +103,7 @@ from app.modules.construction.schemas import (
     ScopeScheduleResponse,
     ScopeVarianceResponse,
     ProjectConstructionRiskResponse,
+    ProjectConstructionExecutiveSummaryResponse,
 )
 from app.modules.phases.repository import PhaseRepository
 from app.modules.projects.repository import ProjectRepository
@@ -1908,16 +1913,16 @@ class ConstructionService:
 
     # ── Portfolio Risk Rollup (PR-CONSTR-050) ─────────────────────────────────
 
-    def compute_project_construction_risk(
+    def _build_project_risk_rollup(
         self,
         project_id: str,
-    ) -> ProjectConstructionRiskResponse:
-        """Return a project-level construction risk rollup.
+    ) -> tuple[ProjectRiskRollup, list[ScorecardRollupInput]]:
+        """Shared orchestration helper for project risk rollup computation.
 
-        Aggregates contractor scorecard outputs from all scopes in the
-        project into a single risk summary.  All packages and milestones for
-        the project are loaded in a fixed number of SQL queries (independent
-        of the number of scopes) and processed in memory.
+        Loads all package and milestone data for the project in a fixed number
+        of SQL queries, builds contractor scorecards, and returns both the
+        aggregated ``ProjectRiskRollup`` dataclass and the individual
+        ``ScorecardRollupInput`` list used to produce it.
 
         Parameters
         ----------
@@ -1926,9 +1931,9 @@ class ConstructionService:
 
         Returns
         -------
-        ProjectConstructionRiskResponse
-            Aggregated contractor risk counts, composite risk score, top
-            breach reasons, and the highest-risk contractor identifier.
+        tuple[ProjectRiskRollup, list[ScorecardRollupInput]]
+            The project-level risk rollup and the per-contractor scorecard
+            summaries.
 
         Raises
         ------
@@ -2048,6 +2053,37 @@ class ConstructionService:
             )
         )
 
+        return rollup, scorecard_inputs
+
+    def compute_project_construction_risk(
+        self,
+        project_id: str,
+    ) -> ProjectConstructionRiskResponse:
+        """Return a project-level construction risk rollup.
+
+        Aggregates contractor scorecard outputs from all scopes in the
+        project into a single risk summary.  All packages and milestones for
+        the project are loaded in a fixed number of SQL queries (independent
+        of the number of scopes) and processed in memory.
+
+        Parameters
+        ----------
+        project_id:
+            Matches the development project identifier.
+
+        Returns
+        -------
+        ProjectConstructionRiskResponse
+            Aggregated contractor risk counts, composite risk score, top
+            breach reasons, and the highest-risk contractor identifier.
+
+        Raises
+        ------
+        HTTPException (404)
+            When the project does not exist.
+        """
+        rollup, _scorecard_inputs = self._build_project_risk_rollup(project_id)
+
         return ProjectConstructionRiskResponse(
             project_id=rollup.project_id,
             contractors_total=rollup.contractors_total,
@@ -2057,4 +2093,63 @@ class ConstructionService:
             project_risk_score=rollup.project_risk_score,
             top_breach_reasons=rollup.top_breach_reasons,
             highest_risk_contractor=rollup.highest_risk_contractor,
+        )
+
+    # ── Construction Executive Summary (PR-CONSTR-051) ────────────────────────
+
+    def compute_project_construction_executive_summary(
+        self,
+        project_id: str,
+    ) -> ProjectConstructionExecutiveSummaryResponse:
+        """Return an executive-ready construction health summary for a project.
+
+        Orchestrates the project risk rollup and passes the result through
+        the executive summary engine to produce a single consolidated
+        response suitable for dashboards and leadership review.
+
+        Parameters
+        ----------
+        project_id:
+            Matches the development project identifier.
+
+        Returns
+        -------
+        ProjectConstructionExecutiveSummaryResponse
+            Single-response project construction health snapshot including
+            health status, risk score, contractor counts, breach reasons,
+            highest-risk contractor, and priority actions.
+
+        Raises
+        ------
+        HTTPException (404)
+            When the project does not exist.
+        """
+        from app.modules.construction.construction_executive_summary_engine import (
+            ConstructionExecutiveSummaryInput,
+            compute_construction_executive_summary,
+        )
+
+        # Reuse the shared orchestration helper — raises 404 if project unknown.
+        rollup, scorecard_inputs = self._build_project_risk_rollup(project_id)
+
+        summary = compute_construction_executive_summary(
+            ConstructionExecutiveSummaryInput(
+                project_id=project_id,
+                project_risk_rollup=rollup,
+                contractor_scorecards=scorecard_inputs,
+            )
+        )
+
+        return ProjectConstructionExecutiveSummaryResponse(
+            project_id=summary.project_id,
+            construction_health_status=summary.construction_health_status,
+            project_risk_score=summary.project_risk_score,
+            contractors_total=summary.contractors_total,
+            contractors_on_watch=summary.contractors_on_watch,
+            contractors_escalated=summary.contractors_escalated,
+            contractors_critical=summary.contractors_critical,
+            top_breach_reasons=summary.top_breach_reasons,
+            highest_risk_contractor=summary.highest_risk_contractor,
+            priority_actions=summary.priority_actions,
+            summary_generated_at=summary.summary_generated_at,
         )

@@ -70,6 +70,8 @@ Endpoints:
   GET    /api/v1/construction/contractors/{contractor_id}/trend
   GET    /api/v1/construction/scopes/{scope_id}/contractor-scorecards
   GET    /api/v1/construction/scopes/{scope_id}/contractor-ranking
+
+  GET    /api/v1/construction/projects/{project_id}/summary
 """
 
 from typing import Annotated, Optional
@@ -123,6 +125,7 @@ from app.modules.construction.schemas import (
     ProgressUpdateList,
     ProgressUpdateResponse,
     ProjectConstructionRiskResponse,
+    ProjectConstructionExecutiveSummaryResponse,
     ScopeContractorRankingResponse,
     ScopeContractorScorecardListResponse,
     ScopeMilestoneCostResponse,
@@ -859,3 +862,18 @@ def get_project_construction_risk(
 ) -> ProjectConstructionRiskResponse:
     """Return project-level construction risk rollup aggregated from contractor scorecards."""
     return service.compute_project_construction_risk(project_id)
+
+
+# ── Construction Executive Summary (PR-CONSTR-051) ────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/summary",
+    response_model=ProjectConstructionExecutiveSummaryResponse,
+)
+def get_project_construction_executive_summary(
+    project_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProjectConstructionExecutiveSummaryResponse:
+    """Return a single executive-ready construction health summary for a project."""
+    return service.compute_project_construction_executive_summary(project_id)
