@@ -7,12 +7,13 @@ Endpoints
 ---------
 POST   /concept-options
 GET    /concept-options
+GET    /concept-options/compare
 GET    /concept-options/{concept_option_id}
 PATCH  /concept-options/{concept_option_id}
 POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-053
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.concept_design.schemas import (
+    ConceptOptionComparisonResponse,
     ConceptOptionCreate,
     ConceptOptionListResponse,
     ConceptOptionResponse,
@@ -77,6 +79,27 @@ def list_concept_options(
         scenario_id=scenario_id,
         skip=skip,
         limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Comparison endpoint — PR-CONCEPT-053
+# ---------------------------------------------------------------------------
+
+@router.get("/compare", response_model=ConceptOptionComparisonResponse)
+def compare_concept_options(
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+    project_id: Optional[str] = Query(default=None),
+    scenario_id: Optional[str] = Query(default=None),
+) -> ConceptOptionComparisonResponse:
+    """Return a structured side-by-side comparison of all concept options.
+
+    Exactly one of ``project_id`` or ``scenario_id`` must be provided.
+    Supplying both or neither returns HTTP 422.
+    """
+    return service.compare_concept_options(
+        project_id=project_id,
+        scenario_id=scenario_id,
     )
 
 

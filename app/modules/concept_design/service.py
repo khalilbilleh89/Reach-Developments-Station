@@ -16,14 +16,20 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import ResourceNotFoundError
+from app.core.errors import ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.modules.concept_design.comparison_engine import (
+    ConceptOptionComparisonInput,
+    compute_concept_comparison,
+)
 from app.modules.concept_design.engine import MixLineInput, run_concept_engine
 from app.modules.concept_design.repository import (
     ConceptOptionRepository,
     ConceptUnitMixLineRepository,
 )
 from app.modules.concept_design.schemas import (
+    ConceptOptionComparisonResponse,
+    ConceptOptionComparisonRowResponse,
     ConceptOptionCreate,
     ConceptOptionListResponse,
     ConceptOptionResponse,
@@ -193,5 +199,104 @@ class ConceptDesignService:
             mix_lines=[
                 ConceptUnitMixLineResponse.model_validate(line)
                 for line in option.mix_lines
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # Comparison (multi-option side-by-side)
+    # ------------------------------------------------------------------
+
+    def compare_concept_options(
+        self,
+        project_id: Optional[str] = None,
+        scenario_id: Optional[str] = None,
+    ) -> ConceptOptionComparisonResponse:
+        """Return a structured comparison of all concept options for a project or scenario.
+
+        Exactly one of *project_id* or *scenario_id* must be provided.
+        Supplying both or neither raises :class:`~app.core.errors.ValidationError`.
+        """
+        if project_id is not None and scenario_id is not None:
+            raise ValidationError(
+                "Provide either 'project_id' or 'scenario_id', not both.",
+                details={"project_id": project_id, "scenario_id": scenario_id},
+            )
+        if project_id is None and scenario_id is None:
+            raise ValidationError(
+                "Either 'project_id' or 'scenario_id' must be provided.",
+            )
+
+        if project_id is not None:
+            self._validate_project_if_present(project_id)
+            options = self.option_repo.list_by_project_id(project_id)
+            basis = "project"
+        else:
+            self._validate_scenario_if_present(scenario_id)
+            options = self.option_repo.list_by_scenario_id(scenario_id)  # type: ignore[arg-type]
+            basis = "scenario"
+
+        comparison_inputs = []
+        for option in options:
+            mix_inputs = [
+                MixLineInput(
+                    unit_type=line.unit_type,
+                    units_count=line.units_count,
+                    avg_sellable_area=(
+                        float(line.avg_sellable_area)
+                        if line.avg_sellable_area is not None
+                        else None
+                    ),
+                )
+                for line in option.mix_lines
+            ]
+            metrics = run_concept_engine(
+                mix_lines=mix_inputs,
+                gross_floor_area=(
+                    float(option.gross_floor_area)
+                    if option.gross_floor_area is not None
+                    else None
+                ),
+            )
+            comparison_inputs.append(
+                ConceptOptionComparisonInput(
+                    concept_option_id=option.id,
+                    name=option.name,
+                    status=option.status,
+                    unit_count=metrics.unit_count,
+                    sellable_area=metrics.sellable_area,
+                    efficiency_ratio=metrics.efficiency_ratio,
+                    average_unit_area=metrics.average_unit_area,
+                    building_count=option.building_count,
+                    floor_count=option.floor_count,
+                )
+            )
+
+        result = compute_concept_comparison(comparison_inputs, basis)
+
+        return ConceptOptionComparisonResponse(
+            comparison_basis=result.comparison_basis,
+            option_count=result.option_count,
+            best_sellable_area_option_id=result.best_sellable_area_option_id,
+            best_efficiency_option_id=result.best_efficiency_option_id,
+            best_unit_count_option_id=result.best_unit_count_option_id,
+            rows=[
+                ConceptOptionComparisonRowResponse(
+                    concept_option_id=row.concept_option_id,
+                    name=row.name,
+                    status=row.status,
+                    unit_count=row.unit_count,
+                    sellable_area=row.sellable_area,
+                    efficiency_ratio=row.efficiency_ratio,
+                    average_unit_area=row.average_unit_area,
+                    building_count=row.building_count,
+                    floor_count=row.floor_count,
+                    sellable_area_delta_vs_best=row.sellable_area_delta_vs_best,
+                    efficiency_delta_vs_best=row.efficiency_delta_vs_best,
+                    unit_count_delta_vs_best=row.unit_count_delta_vs_best,
+                    is_best_sellable_area=row.is_best_sellable_area,
+                    is_best_efficiency=row.is_best_efficiency,
+                    is_best_unit_count=row.is_best_unit_count,
+                )
+                for row in result.rows
             ],
         )

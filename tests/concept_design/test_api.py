@@ -314,3 +314,127 @@ def test_summary_with_mix_lines(client: TestClient):
 def test_summary_not_found(client: TestClient):
     resp = client.get("/api/v1/concept-options/no-such-id/summary")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Comparison endpoint — PR-CONCEPT-053
+# ---------------------------------------------------------------------------
+
+
+def test_compare_by_project_id(client: TestClient):
+    """GET /compare?project_id=... returns 200 with comparison result."""
+    project_id = _create_project(client, "PRJ-CMPAPI-001")
+    opt_a = _create_option(client, name="Option A", project_id=project_id, gross_floor_area=12000.0)
+    opt_b = _create_option(client, name="Option B", project_id=project_id, gross_floor_area=11000.0)
+
+    client.post(
+        f"/api/v1/concept-options/{opt_a['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 60, "avg_sellable_area": 75.0},
+    )
+    client.post(
+        f"/api/v1/concept-options/{opt_a['id']}/unit-mix",
+        json={"unit_type": "2BR", "units_count": 40, "avg_sellable_area": 115.0},
+    )  # sellable = 9100
+    client.post(
+        f"/api/v1/concept-options/{opt_b['id']}/unit-mix",
+        json={"unit_type": "1BR", "units_count": 50, "avg_sellable_area": 90.0},
+    )  # sellable = 4500
+
+    resp = client.get(f"/api/v1/concept-options/compare?project_id={project_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["comparison_basis"] == "project"
+    assert data["option_count"] == 2
+    assert len(data["rows"]) == 2
+    # opt_a has higher sellable area
+    assert data["best_sellable_area_option_id"] == opt_a["id"]
+    assert data["best_unit_count_option_id"] == opt_a["id"]
+
+
+def test_compare_by_scenario_id(client: TestClient):
+    """GET /compare?scenario_id=... returns 200 with comparison result."""
+    project_id = _create_project(client, "PRJ-CMPAPI-002")
+    scenario_resp = client.post(
+        "/api/v1/scenarios",
+        json={"project_id": project_id, "name": "Test Scenario"},
+    )
+    assert scenario_resp.status_code == 201
+    scenario_id = scenario_resp.json()["id"]
+
+    opt_resp = client.post(
+        "/api/v1/concept-options",
+        json={"name": "Scenario Opt", "scenario_id": scenario_id},
+    )
+    assert opt_resp.status_code == 201
+    opt = opt_resp.json()
+
+    resp = client.get(f"/api/v1/concept-options/compare?scenario_id={scenario_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["comparison_basis"] == "scenario"
+    assert data["option_count"] == 1
+    assert data["rows"][0]["concept_option_id"] == opt["id"]
+
+
+def test_compare_neither_param_returns_422(client: TestClient):
+    """GET /compare with no params returns 422."""
+    resp = client.get("/api/v1/concept-options/compare")
+    assert resp.status_code == 422
+
+
+def test_compare_both_params_returns_422(client: TestClient):
+    """GET /compare with both project_id and scenario_id returns 422."""
+    project_id = _create_project(client, "PRJ-CMPAPI-003")
+    resp = client.get(
+        f"/api/v1/concept-options/compare?project_id={project_id}&scenario_id=some-id"
+    )
+    assert resp.status_code == 422
+
+
+def test_compare_empty_result_when_no_options(client: TestClient):
+    """GET /compare returns 200 with empty rows when project exists but has no options."""
+    project_id = _create_project(client, "PRJ-CMPAPI-004")
+    resp = client.get(f"/api/v1/concept-options/compare?project_id={project_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["option_count"] == 0
+    assert data["rows"] == []
+    assert data["best_sellable_area_option_id"] is None
+
+
+def test_compare_populated_result_fields(client: TestClient):
+    """GET /compare populated result includes correct best-option and delta fields."""
+    project_id = _create_project(client, "PRJ-CMPAPI-005")
+    opt_a = _create_option(client, name="Mid Rise", project_id=project_id, gross_floor_area=12000.0)
+    opt_b = _create_option(client, name="Tall Tower", project_id=project_id, gross_floor_area=14000.0)
+
+    # opt_a: 100 units, sellable=9100
+    client.post(f"/api/v1/concept-options/{opt_a['id']}/unit-mix",
+                json={"unit_type": "1BR", "units_count": 60, "avg_sellable_area": 75.0})
+    client.post(f"/api/v1/concept-options/{opt_a['id']}/unit-mix",
+                json={"unit_type": "2BR", "units_count": 40, "avg_sellable_area": 115.0})
+
+    # opt_b: 92 units, sellable=9600
+    client.post(f"/api/v1/concept-options/{opt_b['id']}/unit-mix",
+                json={"unit_type": "1BR", "units_count": 50, "avg_sellable_area": 80.0})
+    client.post(f"/api/v1/concept-options/{opt_b['id']}/unit-mix",
+                json={"unit_type": "2BR", "units_count": 42, "avg_sellable_area": 130.0})
+    # opt_b sellable = 50*80 + 42*130 = 4000 + 5460 = 9460
+
+    resp = client.get(f"/api/v1/concept-options/compare?project_id={project_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["option_count"] == 2
+    assert data["best_unit_count_option_id"] == opt_a["id"]
+    assert data["best_sellable_area_option_id"] == opt_b["id"]
+
+    rows_by_id = {r["concept_option_id"]: r for r in data["rows"]}
+    row_b = rows_by_id[opt_b["id"]]
+    assert row_b["is_best_sellable_area"] is True
+    assert abs(row_b["sellable_area_delta_vs_best"]) < 0.01
+
+    row_a = rows_by_id[opt_a["id"]]
+    assert row_a["is_best_sellable_area"] is False
+    assert row_a["sellable_area_delta_vs_best"] < 0
+    assert row_a["is_best_unit_count"] is True

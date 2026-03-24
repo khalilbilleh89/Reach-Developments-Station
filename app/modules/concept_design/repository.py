@@ -87,6 +87,26 @@ class ConceptOptionRepository:
             query = query.filter(ConceptOption.scenario_id == scenario_id)
         return query.count()
 
+    def list_by_project_id(self, project_id: str) -> List[ConceptOption]:
+        """Return all concept options for a project, with mix lines eagerly loaded."""
+        return (
+            self.db.query(ConceptOption)
+            .options(selectinload(ConceptOption.mix_lines))
+            .filter(ConceptOption.project_id == project_id)
+            .order_by(ConceptOption.id.asc())
+            .all()
+        )
+
+    def list_by_scenario_id(self, scenario_id: str) -> List[ConceptOption]:
+        """Return all concept options for a scenario, with mix lines eagerly loaded."""
+        return (
+            self.db.query(ConceptOption)
+            .options(selectinload(ConceptOption.mix_lines))
+            .filter(ConceptOption.scenario_id == scenario_id)
+            .order_by(ConceptOption.id.asc())
+            .all()
+        )
+
     def update(self, option: ConceptOption, data: ConceptOptionUpdate) -> ConceptOption:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
