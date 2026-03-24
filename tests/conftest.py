@@ -37,6 +37,7 @@ import app.modules.receivables.models  # noqa: F401
 import app.modules.construction.models  # noqa: F401
 import app.modules.finance.models  # noqa: F401
 import app.modules.scenario.models  # noqa: F401
+import app.modules.concept_design.models  # noqa: F401
 
 from app.main import app
 
