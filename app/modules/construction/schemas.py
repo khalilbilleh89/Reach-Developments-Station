@@ -879,6 +879,10 @@ class ContractorScorecardResponse(BaseModel):
     cost_score: float
     risk_score: float
     performance_score: float
+    average_delay_days: Optional[float]
+    median_delay_days: Optional[float]
+    max_delay_days: Optional[int]
+    delay_rate: Optional[float]
 
 
 # ── Contractor Trend (PR-CONSTR-045) ─────────────────────────────────────────
