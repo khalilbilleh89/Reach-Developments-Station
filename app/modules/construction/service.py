@@ -22,6 +22,10 @@ if TYPE_CHECKING:
         ContractorScorecardInput,
     )
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
+    from app.modules.construction.portfolio_risk_rollup_engine import (
+        ProjectRiskRollup,
+        ScorecardRollupInput,
+    )
     from app.modules.construction.risk_alert_engine import ScopeRiskData
     from app.modules.construction.schedule_engine import SchedulePhase
 
@@ -1912,7 +1916,7 @@ class ConstructionService:
     def _build_project_risk_rollup(
         self,
         project_id: str,
-    ) -> tuple:
+    ) -> tuple[ProjectRiskRollup, list[ScorecardRollupInput]]:
         """Shared orchestration helper for project risk rollup computation.
 
         Loads all package and milestone data for the project in a fixed number
@@ -2147,5 +2151,5 @@ class ConstructionService:
             top_breach_reasons=summary.top_breach_reasons,
             highest_risk_contractor=summary.highest_risk_contractor,
             priority_actions=summary.priority_actions,
-            summary_generated_at=summary.summary_generated_at.isoformat(),
+            summary_generated_at=summary.summary_generated_at,
         )

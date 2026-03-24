@@ -998,6 +998,6 @@ class ProjectConstructionExecutiveSummaryResponse(BaseModel):
     top_breach_reasons: List[str] = Field(default_factory=list)
     highest_risk_contractor: Optional[str] = None
     priority_actions: List[str] = Field(default_factory=list)
-    summary_generated_at: str = Field(
-        description="UTC ISO-8601 timestamp when this summary was computed."
+    summary_generated_at: datetime = Field(
+        description="UTC timestamp when this summary was computed."
     )

@@ -312,6 +312,49 @@ def test_priority_action_multiple_critical_contractors_ordered() -> None:
     assert "CTR-BBB" in ctr_actions[1]
 
 
+def test_critical_contractor_deduplicated_across_scopes() -> None:
+    """Same contractor critical in multiple scopes produces only one action."""
+    rollup = _rollup(
+        contractors_total=2,  # two scorecard rows for same contractor
+        contractors_critical=2,
+        project_risk_score=66.7,
+    )
+    # Simulate the same contractor appearing in two scopes
+    scorecards = [
+        _sc("CTR-001", watchlist_status="Critical", escalation_score=3),
+        _sc("CTR-001", watchlist_status="Critical", escalation_score=3),
+    ]
+    result = compute_construction_executive_summary(
+        _inp(rollup=rollup, scorecards=scorecards)
+    )
+    ctr_actions = [a for a in result.priority_actions if "CTR-001" in a]
+    assert len(ctr_actions) == 1
+
+
+def test_critical_contractor_dedup_keeps_highest_score() -> None:
+    """When same contractor has different scores, highest-score row determines sort position."""
+    rollup = _rollup(
+        contractors_total=4,
+        contractors_critical=4,
+        project_risk_score=66.7,
+    )
+    # CTR-A appears twice (scores 2 and 3), CTR-B once (score 3)
+    scorecards = [
+        _sc("CTR-A", watchlist_status="Critical", escalation_score=2),
+        _sc("CTR-A", watchlist_status="Critical", escalation_score=3),
+        _sc("CTR-B", watchlist_status="Critical", escalation_score=3),
+    ]
+    result = compute_construction_executive_summary(
+        _inp(rollup=rollup, scorecards=scorecards)
+    )
+    ctr_actions = [a for a in result.priority_actions if "CTR-" in a]
+    # Only two unique contractor IDs
+    assert len(ctr_actions) == 2
+    # CTR-A and CTR-B both have score 3 after dedup → alphabetical: CTR-A first
+    assert "CTR-A" in ctr_actions[0]
+    assert "CTR-B" in ctr_actions[1]
+
+
 def test_no_critical_no_review_action() -> None:
     """Project with no critical contractors generates no review action."""
     rollup = _rollup(contractors_total=2, contractors_on_watch=1)

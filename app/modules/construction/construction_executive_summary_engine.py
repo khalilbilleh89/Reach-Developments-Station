@@ -21,7 +21,8 @@ Priority Actions
 Rule-based guidance strings generated from the rollup data:
 
     - "Review critical contractor {contractor_id} immediately"
-      (generated for every critical contractor; highest-risk contractor first)
+      (generated for every unique critical contractor; ordered by
+      escalation score DESC then contractor_id ASC for determinism)
     - "Escalation density exceeds threshold for this project"
       (generated when (escalated + critical) / total > ESCALATION_DENSITY_THRESHOLD)
     - "Delay-related breaches are the dominant risk pattern"
@@ -39,11 +40,7 @@ from app.modules.construction.portfolio_risk_rollup_engine import (
     ProjectRiskRollup,
     ScorecardRollupInput,
 )
-from app.modules.construction.scope_escalation_engine import (
-    STATUS_CRITICAL,
-    STATUS_ESCALATE,
-    STATUS_WATCH,
-)
+from app.modules.construction.scope_escalation_engine import STATUS_CRITICAL
 
 logger = logging.getLogger(__name__)
 
@@ -219,8 +216,9 @@ def _generate_priority_actions(
 
     Rules (in evaluation order):
 
-    1.  For each critical contractor (ordered by escalation_score DESC then
-        contractor_id ASC) → ``"Review critical contractor {id} immediately"``
+    1.  For each unique critical contractor (deduplicated by ``contractor_id``
+        across scopes; ordered by escalation_score DESC then contractor_id ASC)
+        → ``"Review critical contractor {id} immediately"``
     2.  If (escalated + critical) / total > ESCALATION_DENSITY_THRESHOLD
         → ``"Escalation density exceeds threshold for this project"``
     3.  If the leading top-breach reason contains a delay keyword
@@ -236,18 +234,26 @@ def _generate_priority_actions(
     Returns
     -------
     list[str]
-        Ordered, deduplicated priority action strings.
+        Ordered priority action strings.
     """
     actions: List[str] = []
 
-    # Rule 1: Critical contractors
-    critical_contractors = [
-        sc for sc in contractor_scorecards if sc.watchlist_status == STATUS_CRITICAL
-    ]
-    # Sort deterministically: escalation_score DESC then contractor_id ASC
-    critical_contractors.sort(key=lambda sc: (-sc.escalation_score, sc.contractor_id))
-    for sc in critical_contractors:
-        actions.append(f"Review critical contractor {sc.contractor_id} immediately")
+    # Rule 1: Critical contractors — deduplicate by contractor_id keeping the
+    # highest escalation_score seen across scopes, then sort deterministically.
+    critical_by_contractor: dict[str, int] = {}
+    for sc in contractor_scorecards:
+        if sc.watchlist_status != STATUS_CRITICAL:
+            continue
+        existing = critical_by_contractor.get(sc.contractor_id)
+        if existing is None or sc.escalation_score > existing:
+            critical_by_contractor[sc.contractor_id] = sc.escalation_score
+
+    # Sort: escalation_score DESC then contractor_id ASC
+    sorted_critical = sorted(
+        critical_by_contractor.items(), key=lambda item: (-item[1], item[0])
+    )
+    for contractor_id, _ in sorted_critical:
+        actions.append(f"Review critical contractor {contractor_id} immediately")
 
     # Rule 2: Escalation density
     total = rollup.contractors_total
