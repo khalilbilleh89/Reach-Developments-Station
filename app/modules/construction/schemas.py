@@ -978,3 +978,26 @@ class ProjectConstructionRiskResponse(BaseModel):
     project_risk_score: float
     top_breach_reasons: List[str] = Field(default_factory=list)
     highest_risk_contractor: Optional[str] = None
+
+
+# ── Construction Executive Summary (PR-CONSTR-051) ────────────────────────────
+
+
+class ProjectConstructionExecutiveSummaryResponse(BaseModel):
+    """Single executive-ready construction health snapshot for a project."""
+
+    project_id: str
+    construction_health_status: str = Field(
+        description="Deterministic health tier: Stable / Watch / Escalated / Critical."
+    )
+    project_risk_score: float
+    contractors_total: int
+    contractors_on_watch: int
+    contractors_escalated: int
+    contractors_critical: int
+    top_breach_reasons: List[str] = Field(default_factory=list)
+    highest_risk_contractor: Optional[str] = None
+    priority_actions: List[str] = Field(default_factory=list)
+    summary_generated_at: str = Field(
+        description="UTC ISO-8601 timestamp when this summary was computed."
+    )

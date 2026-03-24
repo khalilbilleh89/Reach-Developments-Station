@@ -6,6 +6,9 @@ and cascade behaviour.
 
 Also validates the Engineering workspace: CRUD, negative-cost rejection,
 scope-existence check, cascade-from-scope delete.
+
+Also validates the Executive Summary API (PR-CONSTR-051):
+- GET /construction/projects/{project_id}/summary
 """
 
 import pytest
@@ -523,3 +526,174 @@ def test_delete_scope_cascades_engineering_items(client: TestClient):
         json={"status": "completed"},
     )
     assert resp.status_code == 404
+
+
+# ── Executive Summary API (PR-CONSTR-051) ────────────────────────────────────
+
+
+def _create_contractor_for_summary(
+    client: TestClient, code: str, name: str
+) -> dict:
+    resp = client.post(
+        "/api/v1/construction/contractors",
+        json={"contractor_code": code, "contractor_name": name},
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def _create_package_for_summary(
+    client: TestClient,
+    scope_id: str,
+    code: str,
+    name: str,
+    pkg_status: str = "awarded",
+) -> dict:
+    resp = client.post(
+        "/api/v1/construction/packages",
+        json={
+            "scope_id": scope_id,
+            "package_code": code,
+            "package_name": name,
+            "status": pkg_status,
+        },
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def _assign_contractor_for_summary(
+    client: TestClient, package_id: str, contractor_id: str
+) -> None:
+    resp = client.post(
+        f"/api/v1/construction/packages/{package_id}/assign-contractor",
+        json={"contractor_id": contractor_id},
+    )
+    assert resp.status_code == 200
+
+
+def _link_package_milestone_for_summary(
+    client: TestClient, package_id: str, milestone_id: str
+) -> None:
+    resp = client.post(
+        f"/api/v1/construction/packages/{package_id}/milestones/{milestone_id}",
+    )
+    assert resp.status_code == 200
+
+
+def _update_milestone_status_for_summary(
+    client: TestClient, milestone_id: str, ms_status: str
+) -> None:
+    resp = client.patch(
+        f"/api/v1/construction/milestones/{milestone_id}",
+        json={"status": ms_status},
+    )
+    assert resp.status_code == 200
+
+
+def test_executive_summary_404_on_unknown_project(client: TestClient) -> None:
+    """Unknown project_id returns 404."""
+    resp = client.get("/api/v1/construction/projects/nonexistent-xyz/summary")
+    assert resp.status_code == 404
+
+
+def test_executive_summary_empty_project_returns_200(client: TestClient) -> None:
+    """Project with no scopes returns 200."""
+    project_id = _create_project(client, "SUM-EMPTY")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    assert resp.status_code == 200
+
+
+def test_executive_summary_empty_project_safe_defaults(client: TestClient) -> None:
+    """Empty project returns zero-safe defaults."""
+    project_id = _create_project(client, "SUM-SAFE")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    data = resp.json()
+    assert data["project_risk_score"] == 0.0
+    assert data["contractors_total"] == 0
+    assert data["contractors_on_watch"] == 0
+    assert data["contractors_escalated"] == 0
+    assert data["contractors_critical"] == 0
+    assert data["top_breach_reasons"] == []
+    assert data["highest_risk_contractor"] is None
+    assert data["priority_actions"] == []
+    assert data["construction_health_status"] == "Stable"
+
+
+def test_executive_summary_response_has_all_required_fields(
+    client: TestClient,
+) -> None:
+    """Response includes all required fields."""
+    project_id = _create_project(client, "SUM-FIELDS")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    for expected_field in (
+        "project_id",
+        "construction_health_status",
+        "project_risk_score",
+        "contractors_total",
+        "contractors_on_watch",
+        "contractors_escalated",
+        "contractors_critical",
+        "top_breach_reasons",
+        "highest_risk_contractor",
+        "priority_actions",
+        "summary_generated_at",
+    ):
+        assert expected_field in data, f"Missing required field: {expected_field}"
+
+
+def test_executive_summary_project_id_matches(client: TestClient) -> None:
+    """Response project_id matches requested project."""
+    project_id = _create_project(client, "SUM-IDMATCH")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    data = resp.json()
+    assert data["project_id"] == project_id
+
+
+def test_executive_summary_priority_actions_is_list(client: TestClient) -> None:
+    """priority_actions is always a list."""
+    project_id = _create_project(client, "SUM-LIST")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    data = resp.json()
+    assert isinstance(data["priority_actions"], list)
+
+
+def test_executive_summary_summary_generated_at_present(
+    client: TestClient,
+) -> None:
+    """summary_generated_at field is a non-empty string."""
+    project_id = _create_project(client, "SUM-TS")
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    data = resp.json()
+    assert data["summary_generated_at"]
+
+
+def test_executive_summary_non_trivial_project_correct_health(
+    client: TestClient,
+) -> None:
+    """Project with a high-risk contractor produces non-Stable health status."""
+    project_id = _create_project(client, "SUM-RISK")
+    scope = _create_scope(client, project_id, "Risk Scope")
+    contractor = _create_contractor_for_summary(client, "CTR-SUM-R1", "Risk Builder")
+    package = _create_package_for_summary(
+        client, scope["id"], "PKG-SUM-R1", "Risk Package"
+    )
+    _assign_contractor_for_summary(client, package["id"], contractor["id"])
+
+    # Create 6 delayed milestones to trigger high-risk escalation
+    for i in range(6):
+        milestone = _create_milestone(
+            client, scope["id"], sequence=i + 1, name=f"Risk MS {i}"
+        )
+        _link_package_milestone_for_summary(client, package["id"], milestone["id"])
+        _update_milestone_status_for_summary(client, milestone["id"], "delayed")
+
+    resp = client.get(f"/api/v1/construction/projects/{project_id}/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["construction_health_status"] != "Stable"
+    assert data["project_risk_score"] > 0.0
+    assert data["contractors_total"] == 1
+    assert data["highest_risk_contractor"] == contractor["id"]
