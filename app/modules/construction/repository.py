@@ -942,3 +942,33 @@ class ConstructionRiskRepository:
             .all()
         )
 
+    def load_scope_contractors_with_packages_and_milestones(
+        self, scope_id: str
+    ) -> List["ConstructionContractor"]:
+        """Return all contractors linked to a scope via packages, with data loaded."""
+        from app.modules.construction.models import (
+            ConstructionContractor,
+            ConstructionProcurementPackage,
+        )
+
+        # Find distinct contractor IDs in this scope
+        contractor_ids = (
+            self.db.query(ConstructionProcurementPackage.contractor_id)
+            .filter(
+                ConstructionProcurementPackage.scope_id == scope_id,
+                ConstructionProcurementPackage.contractor_id.is_not(None),
+            )
+            .distinct()
+            .all()
+        )
+        ids = [row[0] for row in contractor_ids if row[0] is not None]
+        if not ids:
+            return []
+
+        return (
+            self.db.query(ConstructionContractor)
+            .filter(ConstructionContractor.id.in_(ids))
+            .order_by(ConstructionContractor.contractor_name)
+            .all()
+        )
+

@@ -17,6 +17,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
+    from app.modules.construction.contractor_scorecard_engine import (
+        ContractorScorecard,
+        ContractorScorecardInput,
+    )
     from app.modules.construction.models import ConstructionMilestone, ConstructionMilestoneDependency
     from app.modules.construction.risk_alert_engine import ScopeRiskData
     from app.modules.construction.schedule_engine import SchedulePhase
@@ -58,6 +62,9 @@ from app.modules.construction.schemas import (
     ContractorList,
     ContractorPerformanceSummaryResponse,
     ContractorResponse,
+    ContractorScorecardResponse,
+    ContractorTrendPointResponse,
+    ContractorTrendResponse,
     ContractorUpdate,
     CriticalPathResponse,
     EngineeringItemCreate,
@@ -83,6 +90,9 @@ from app.modules.construction.schemas import (
     ProgressUpdateList,
     ProgressUpdateResponse,
     SchedulePhaseRow,
+    ScopeContractorRankingResponse,
+    ScopeContractorRankingRowResponse,
+    ScopeContractorScorecardListResponse,
     ScopeMilestoneCostResponse,
     ScopeProgressResponse,
     ScopeRiskAlertListResponse,
@@ -1516,4 +1526,262 @@ class ConstructionService:
             delay_ratio=summary.delay_ratio,
             overrun_ratio=summary.overrun_ratio,
             alerts=alert_responses,
+        )
+
+    # ── Contractor Scorecard operations (PR-CONSTR-045) ──────────────────────
+
+    def _build_contractor_scorecard_input(
+        self,
+        contractor_id: str,
+        contractor_name: str,
+        scope_id: str | None = None,
+    ) -> "ContractorScorecardInput":
+        """Build ContractorScorecardInput for a single contractor."""
+        from app.modules.construction.contractor_scorecard_engine import (
+            ContractorScorecardInput,
+            MilestoneScorecardData,
+            PackageScorecardData,
+        )
+        from app.modules.construction.risk_alert_engine import (
+            ContractorRiskData,
+            MilestoneRiskData,
+            evaluate_contractor_performance,
+        )
+
+        packages = self.risk_repo.load_contractor_packages_with_milestones(
+            contractor_id
+        )
+
+        # Optionally filter packages to a specific scope
+        if scope_id is not None:
+            packages = [p for p in packages if p.scope_id == scope_id]
+
+        milestone_inputs: list[MilestoneScorecardData] = [
+            MilestoneScorecardData(
+                milestone_id=m.id,
+                status=m.status,
+                planned_cost=m.planned_cost,
+                actual_cost=m.actual_cost,
+                completion_date=m.completion_date,
+            )
+            for pkg in packages
+            for m in pkg.milestones
+        ]
+        package_inputs: list[PackageScorecardData] = [
+            PackageScorecardData(package_id=pkg.id, status=pkg.status)
+            for pkg in packages
+        ]
+
+        # Compute high-risk alert count via risk engine
+        all_risk_milestones = [
+            MilestoneRiskData(
+                milestone_id=m.id,
+                status=m.status,
+                planned_cost=m.planned_cost,
+                actual_cost=m.actual_cost,
+            )
+            for pkg in packages
+            for m in pkg.milestones
+        ]
+        contractor_risk = ContractorRiskData(
+            contractor_id=contractor_id,
+            contractor_name=contractor_name,
+            all_milestones=all_risk_milestones,
+        )
+        perf_summary = evaluate_contractor_performance(contractor_risk)
+        high_alert_count = sum(
+            1 for a in perf_summary.alerts if a.severity == "HIGH"
+        )
+
+        return ContractorScorecardInput(
+            contractor_id=contractor_id,
+            contractor_name=contractor_name,
+            milestones=milestone_inputs,
+            packages=package_inputs,
+            high_risk_alert_count=high_alert_count,
+        )
+
+    @staticmethod
+    def _scorecard_to_response(
+        sc: "ContractorScorecard",
+    ) -> ContractorScorecardResponse:
+        """Convert engine ContractorScorecard to response schema."""
+        return ContractorScorecardResponse(
+            contractor_id=sc.contractor_id,
+            contractor_name=sc.contractor_name,
+            total_milestones=sc.total_milestones,
+            completed_milestones=sc.completed_milestones,
+            delayed_milestones=sc.delayed_milestones,
+            on_time_milestones=sc.on_time_milestones,
+            over_budget_milestones=sc.over_budget_milestones,
+            assessed_cost_milestones=sc.assessed_cost_milestones,
+            delayed_ratio=sc.delayed_ratio,
+            on_time_completion_ratio=sc.on_time_completion_ratio,
+            overrun_ratio=sc.overrun_ratio,
+            avg_cost_variance_percent=sc.avg_cost_variance_percent,
+            active_packages=sc.active_packages,
+            completed_packages=sc.completed_packages,
+            high_risk_alert_count=sc.high_risk_alert_count,
+            schedule_score=sc.schedule_score,
+            cost_score=sc.cost_score,
+            risk_score=sc.risk_score,
+            performance_score=sc.performance_score,
+        )
+
+    def get_contractor_scorecard(
+        self,
+        contractor_id: str,
+        scope_id: str | None = None,
+    ) -> ContractorScorecardResponse:
+        """Return a derived scorecard for a single contractor."""
+        from app.modules.construction.contractor_scorecard_engine import (
+            compute_contractor_scorecard,
+        )
+
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+
+        inp = self._build_contractor_scorecard_input(
+            contractor_id=contractor_id,
+            contractor_name=contractor.contractor_name,
+            scope_id=scope_id,
+        )
+        sc = compute_contractor_scorecard(inp)
+        return self._scorecard_to_response(sc)
+
+    def get_contractor_trend(
+        self,
+        contractor_id: str,
+        scope_id: str | None = None,
+    ) -> ContractorTrendResponse:
+        """Return trend analytics for a single contractor."""
+        from app.modules.construction.contractor_scorecard_engine import (
+            compute_contractor_scorecard,
+            compute_contractor_trend,
+        )
+
+        contractor = self.contractor_repo.get_by_id(contractor_id)
+        if not contractor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Contractor '{contractor_id}' not found.",
+            )
+
+        inp = self._build_contractor_scorecard_input(
+            contractor_id=contractor_id,
+            contractor_name=contractor.contractor_name,
+            scope_id=scope_id,
+        )
+        overall = compute_contractor_scorecard(inp)
+        trend = compute_contractor_trend(inp, overall_scorecard=overall)
+
+        return ContractorTrendResponse(
+            contractor_id=trend.contractor_id,
+            contractor_name=trend.contractor_name,
+            trend_points=[
+                ContractorTrendPointResponse(
+                    period_label=tp.period_label,
+                    total_milestones=tp.total_milestones,
+                    completed_milestones=tp.completed_milestones,
+                    delayed_milestones=tp.delayed_milestones,
+                    over_budget_milestones=tp.over_budget_milestones,
+                    delayed_ratio=tp.delayed_ratio,
+                    overrun_ratio=tp.overrun_ratio,
+                    performance_score=tp.performance_score,
+                    score_delta=tp.score_delta,
+                )
+                for tp in trend.trend_points
+            ],
+            trend_direction=trend.trend_direction,
+            overall_score=trend.overall_score,
+            periods_analysed=trend.periods_analysed,
+        )
+
+    def list_scope_contractor_scorecards(
+        self,
+        scope_id: str,
+    ) -> ScopeContractorScorecardListResponse:
+        """Return scorecards for all contractors active in a scope."""
+        from app.modules.construction.contractor_scorecard_engine import (
+            compute_contractor_scorecard,
+        )
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        contractors = self.risk_repo.load_scope_contractors_with_packages_and_milestones(
+            scope_id
+        )
+        scorecards = []
+        for contractor in contractors:
+            inp = self._build_contractor_scorecard_input(
+                contractor_id=contractor.id,
+                contractor_name=contractor.contractor_name,
+                scope_id=scope_id,
+            )
+            sc = compute_contractor_scorecard(inp)
+            scorecards.append(self._scorecard_to_response(sc))
+
+        return ScopeContractorScorecardListResponse(
+            scope_id=scope_id,
+            total_contractors=len(scorecards),
+            scorecards=scorecards,
+        )
+
+    def get_scope_contractor_ranking(
+        self,
+        scope_id: str,
+    ) -> ScopeContractorRankingResponse:
+        """Return ranked contractor list for a construction scope."""
+        from app.modules.construction.contractor_scorecard_engine import (
+            ContractorScorecardInput,
+            compute_scope_contractor_ranking,
+        )
+
+        scope = self.scope_repo.get_by_id(scope_id)
+        if not scope:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Construction scope '{scope_id}' not found.",
+            )
+
+        contractors = self.risk_repo.load_scope_contractors_with_packages_and_milestones(
+            scope_id
+        )
+        inputs: list[ContractorScorecardInput] = [
+            self._build_contractor_scorecard_input(
+                contractor_id=c.id,
+                contractor_name=c.contractor_name,
+                scope_id=scope_id,
+            )
+            for c in contractors
+        ]
+        ranking = compute_scope_contractor_ranking(inputs)
+
+        return ScopeContractorRankingResponse(
+            scope_id=scope_id,
+            total_contractors=len(ranking),
+            contractors=[
+                ScopeContractorRankingRowResponse(
+                    contractor_rank=row.contractor_rank,
+                    contractor_id=row.contractor_id,
+                    contractor_name=row.contractor_name,
+                    performance_score=row.performance_score,
+                    schedule_score=row.schedule_score,
+                    cost_score=row.cost_score,
+                    risk_score=row.risk_score,
+                    total_milestones=row.total_milestones,
+                    delayed_ratio=row.delayed_ratio,
+                    overrun_ratio=row.overrun_ratio,
+                )
+                for row in ranking
+            ],
         )

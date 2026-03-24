@@ -852,3 +852,92 @@ class ProcurementRiskOverviewResponse(BaseModel):
     total_awarded_value: Decimal
     uncommitted_value: Decimal
     alerts: List[ConstructionRiskAlertResponse]
+
+
+# ── Contractor Scorecard (PR-CONSTR-045) ─────────────────────────────────────
+
+
+class ContractorScorecardResponse(BaseModel):
+    """Derived scorecard for a single contractor."""
+
+    contractor_id: str
+    contractor_name: str
+    total_milestones: int
+    completed_milestones: int
+    delayed_milestones: int
+    on_time_milestones: int
+    over_budget_milestones: int
+    assessed_cost_milestones: int
+    delayed_ratio: Optional[float]
+    on_time_completion_ratio: Optional[float]
+    overrun_ratio: Optional[float]
+    avg_cost_variance_percent: Optional[float]
+    active_packages: int
+    completed_packages: int
+    high_risk_alert_count: int
+    schedule_score: float
+    cost_score: float
+    risk_score: float
+    performance_score: float
+
+
+# ── Contractor Trend (PR-CONSTR-045) ─────────────────────────────────────────
+
+
+class ContractorTrendPointResponse(BaseModel):
+    """Scorecard snapshot for a single calendar month period."""
+
+    period_label: str
+    total_milestones: int
+    completed_milestones: int
+    delayed_milestones: int
+    over_budget_milestones: int
+    delayed_ratio: Optional[float]
+    overrun_ratio: Optional[float]
+    performance_score: float
+    score_delta: Optional[float]
+
+
+class ContractorTrendResponse(BaseModel):
+    """Trend analytics summary for a single contractor."""
+
+    contractor_id: str
+    contractor_name: str
+    trend_points: List[ContractorTrendPointResponse]
+    trend_direction: str
+    overall_score: float
+    periods_analysed: int
+
+
+# ── Scope Contractor Ranking (PR-CONSTR-045) ─────────────────────────────────
+
+
+class ScopeContractorRankingRowResponse(BaseModel):
+    """Ranking row for a contractor within a scope."""
+
+    contractor_rank: int
+    contractor_id: str
+    contractor_name: str
+    performance_score: float
+    schedule_score: float
+    cost_score: float
+    risk_score: float
+    total_milestones: int
+    delayed_ratio: Optional[float]
+    overrun_ratio: Optional[float]
+
+
+class ScopeContractorRankingResponse(BaseModel):
+    """Ranked contractor list for a construction scope."""
+
+    scope_id: str
+    total_contractors: int
+    contractors: List[ScopeContractorRankingRowResponse]
+
+
+class ScopeContractorScorecardListResponse(BaseModel):
+    """All contractor scorecards for a construction scope."""
+
+    scope_id: str
+    total_contractors: int
+    scorecards: List[ContractorScorecardResponse]
