@@ -113,6 +113,8 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
             </label>
             {projectsError ? (
               <div className={styles.modalError}>{projectsError}</div>
+            ) : !loadingProjects && projects.length === 0 ? (
+              <div className={styles.modalError}>No projects found. Please create a project first.</div>
             ) : (
               <select
                 id="scope-project-id"
@@ -188,7 +190,7 @@ export function CreateScopeModal({ onSubmit, onClose }: CreateScopeModalProps) {
             <button
               type="submit"
               className={styles.submitButton}
-              disabled={submitting}
+              disabled={submitting || loadingProjects || !!projectsError || projects.length === 0}
             >
               {submitting ? "Creating…" : "Create Scope"}
             </button>
