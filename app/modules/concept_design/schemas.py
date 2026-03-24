@@ -1,0 +1,111 @@
+"""
+concept_design.schemas
+
+Pydantic request/response schemas for the Concept Design API.
+
+PR-CONCEPT-052
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# ConceptOption schemas
+# ---------------------------------------------------------------------------
+
+class ConceptOptionCreate(BaseModel):
+    project_id: Optional[str] = None
+    scenario_id: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    status: str = Field(default="draft", pattern="^(draft|active|archived)$")
+    description: Optional[str] = None
+    site_area: Optional[float] = Field(default=None, gt=0)
+    gross_floor_area: Optional[float] = Field(default=None, gt=0)
+    building_count: Optional[int] = Field(default=None, ge=1)
+    floor_count: Optional[int] = Field(default=None, ge=1)
+
+
+class ConceptOptionUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    status: Optional[str] = Field(default=None, pattern="^(draft|active|archived)$")
+    description: Optional[str] = None
+    site_area: Optional[float] = Field(default=None, gt=0)
+    gross_floor_area: Optional[float] = Field(default=None, gt=0)
+    building_count: Optional[int] = Field(default=None, ge=1)
+    floor_count: Optional[int] = Field(default=None, ge=1)
+
+
+class ConceptOptionResponse(BaseModel):
+    id: str
+    project_id: Optional[str]
+    scenario_id: Optional[str]
+    name: str
+    status: str
+    description: Optional[str]
+    site_area: Optional[float]
+    gross_floor_area: Optional[float]
+    building_count: Optional[int]
+    floor_count: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConceptOptionListResponse(BaseModel):
+    items: List[ConceptOptionResponse]
+    total: int
+
+
+# ---------------------------------------------------------------------------
+# ConceptUnitMixLine schemas
+# ---------------------------------------------------------------------------
+
+class ConceptUnitMixLineCreate(BaseModel):
+    unit_type: str = Field(..., min_length=1, max_length=100)
+    units_count: int = Field(..., ge=1)
+    avg_internal_area: Optional[float] = Field(default=None, gt=0)
+    avg_sellable_area: Optional[float] = Field(default=None, gt=0)
+    mix_percentage: Optional[float] = Field(default=None, ge=0, le=100)
+
+
+class ConceptUnitMixLineResponse(BaseModel):
+    id: str
+    concept_option_id: str
+    unit_type: str
+    units_count: int
+    avg_internal_area: Optional[float]
+    avg_sellable_area: Optional[float]
+    mix_percentage: Optional[float]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# ConceptOptionSummary — derived metrics from the concept engine
+# ---------------------------------------------------------------------------
+
+class ConceptOptionSummaryResponse(BaseModel):
+    concept_option_id: str
+    name: str
+    status: str
+    project_id: Optional[str]
+    scenario_id: Optional[str]
+    # Input overrides (stored on option)
+    site_area: Optional[float]
+    gross_floor_area: Optional[float]
+    building_count: Optional[int]
+    floor_count: Optional[int]
+    # Derived from mix lines
+    unit_count: int
+    sellable_area: Optional[float]
+    efficiency_ratio: Optional[float]
+    average_unit_area: Optional[float]
+    mix_lines: List[ConceptUnitMixLineResponse]
