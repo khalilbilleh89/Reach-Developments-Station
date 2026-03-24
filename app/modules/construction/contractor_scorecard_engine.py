@@ -258,6 +258,16 @@ class ContractorScorecard:
     cost_overrun_rate:
         over_budget_packages / assessed_packages.  None if no assessed
         packages.
+    reliability_index:
+        Unified reliability score 0–100 derived from schedule discipline,
+        cost discipline, and risk load.  Higher is better.
+    reliability_band:
+        Human-readable band: ``Elite`` / ``Strong`` / ``Watch`` / ``Critical``.
+    reliability_confidence:
+        Statistical confidence: ``Low`` / ``Medium`` / ``High``.
+    ranking_sort_score:
+        Internal-use sort key for scope ranking.  Equals reliability_index.
+        Not exposed in the public API response.
     """
 
     contractor_id: str
@@ -287,6 +297,10 @@ class ContractorScorecard:
     average_cost_variance_pct: Optional[float] = None
     max_cost_overrun_pct: Optional[float] = None
     cost_overrun_rate: Optional[float] = None
+    reliability_index: Optional[float] = None
+    reliability_band: Optional[str] = None
+    reliability_confidence: Optional[str] = None
+    ranking_sort_score: Optional[float] = None
 
 
 @dataclass
@@ -578,6 +592,24 @@ def compute_contractor_scorecard(
         ]
     )
 
+    from app.modules.construction.contractor_reliability_engine import (
+        ContractorReliabilityInput,
+        compute_contractor_reliability,
+    )
+
+    reliability = compute_contractor_reliability(
+        ContractorReliabilityInput(
+            on_time_rate=metrics["on_time_rate"],
+            delay_rate=variance.delay_rate,
+            average_delay_days=variance.average_delay_days,
+            average_cost_variance_pct=cost_metrics.average_cost_variance_pct,
+            cost_overrun_rate=cost_metrics.cost_overrun_rate,
+            risk_signal_count=data.risk_signal_count,
+            assessed_milestones=variance.assessed_milestones,
+            assessed_packages=cost_metrics.assessed_packages,
+        )
+    )
+
     return ContractorScorecard(
         contractor_id=data.contractor_id,
         contractor_name=data.contractor_name,
@@ -608,13 +640,17 @@ def compute_contractor_scorecard(
         average_cost_variance_pct=cost_metrics.average_cost_variance_pct,
         max_cost_overrun_pct=cost_metrics.max_cost_overrun_pct,
         cost_overrun_rate=cost_metrics.cost_overrun_rate,
+        reliability_index=reliability.reliability_index,
+        reliability_band=reliability.reliability_band,
+        reliability_confidence=reliability.reliability_confidence,
+        ranking_sort_score=reliability.ranking_sort_score,
     )
 
 
 def compute_scope_contractor_ranking(
     inputs: List[ContractorScorecardInput],
 ) -> List[ScopeContractorRankingRow]:
-    """Rank all contractors within a scope by performance_score.
+    """Rank all contractors within a scope by reliability_index.
 
     Parameters
     ----------
@@ -624,12 +660,28 @@ def compute_scope_contractor_ranking(
     Returns
     -------
     List[ScopeContractorRankingRow]
-        Rows sorted by performance_score descending.  Ties broken by
-        contractor_id ascending for deterministic output.
+        Rows sorted by ``ranking_sort_score`` descending, then
+        ``reliability_index`` descending, then ``contractor_id`` ascending
+        for deterministic tie-breaking.  Contractors whose ``ranking_sort_score``
+        is ``None`` are sorted last (treated as negative infinity before
+        negation).
     """
     scorecards = [compute_contractor_scorecard(inp) for inp in inputs]
-    # Sort: higher performance_score first, tie-break by contractor_id ascending
-    scorecards.sort(key=lambda s: (-s.performance_score, s.contractor_id))
+    # Primary sort:   ranking_sort_score DESC  (None → sorted last)
+    # Secondary sort: reliability_index DESC   (None → sorted last)
+    # Tertiary sort:  contractor_id ASC        (deterministic tie-breaking)
+    #
+    # Python's sort is stable, so None-valued contractors that share the same
+    # contractor_id ordering remain in their original relative position.
+    # None is mapped to float("-inf") before negation so it sorts as +inf →
+    # last in descending order.
+    scorecards.sort(
+        key=lambda s: (
+            -(s.ranking_sort_score if s.ranking_sort_score is not None else float("-inf")),
+            -(s.reliability_index if s.reliability_index is not None else float("-inf")),
+            s.contractor_id,
+        )
+    )
 
     rows: List[ScopeContractorRankingRow] = []
     for rank, sc in enumerate(scorecards, start=1):
