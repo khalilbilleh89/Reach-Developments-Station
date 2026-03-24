@@ -15,6 +15,7 @@ Error cases:
 """
 
 from fastapi.testclient import TestClient
+import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +433,3 @@ def test_scope_contractor_ranking_repeated_calls_are_deterministic(
     r1 = client.get(url).json()["contractors"]
     r2 = client.get(url).json()["contractors"]
     assert [r["contractor_id"] for r in r1] == [r["contractor_id"] for r in r2]
-
-
-import pytest
