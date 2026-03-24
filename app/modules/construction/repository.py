@@ -978,8 +978,10 @@ class ConstructionRiskRepository:
         """Load all contractors and packages with milestones for a scope.
 
         Returns a 2-tuple of (contractors, packages).  Packages are loaded with
-        milestones eagerly in a single query.  Contractors are loaded in a
-        second query keyed by the contractor IDs found in those packages.
+        milestones eagerly via ``selectinload`` in a small, fixed number of SQL
+        queries (one for packages and one or more SELECT IN queries for the
+        related milestones).  Contractors are loaded in a separate query keyed
+        by the contractor IDs found in those packages.
 
         This method is the single entry point for scope-wide scorecard and
         ranking dataset loading, eliminating N+1 query patterns in the

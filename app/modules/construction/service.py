@@ -1709,9 +1709,10 @@ class ConstructionService:
         """Build scorecard inputs for all contractors in a scope efficiently.
 
         Uses ``load_scope_milestone_dataset`` from the repository to load all
-        packages and milestones in a single query and contractors in a second
-        query.  Groups milestone data by contractor_id in memory to eliminate
-        N+1 DB calls when building scope-wide scorecard or ranking responses.
+        packages and milestones via a fixed, non-N+1 set of queries, and
+        contractors in a separate query.  Groups milestone data by
+        contractor_id in memory to eliminate N+1 DB calls when building
+        scope-wide scorecard or ranking responses.
         """
         from app.modules.construction.contractor_scorecard_engine import (
             ContractorScorecardInput,
@@ -1724,7 +1725,7 @@ class ConstructionService:
             evaluate_contractor_performance,
         )
 
-        # Single query set: packages + milestones + contractors for the scope
+        # Fixed query set: load all scope packages (with milestones) and contractors
         contractors, packages = self.risk_repo.load_scope_milestone_dataset(scope_id)
 
         # Group packages and milestones by contractor_id
@@ -1761,7 +1762,7 @@ class ConstructionService:
                 for pkg in pkgs
             ]
 
-            # Compute ratio alert count in memory from the already-loaded data
+            # Compute risk_signal_count in memory from the already-loaded data
             risk_milestones = [
                 MilestoneRiskData(
                     milestone_id=m.id,
