@@ -994,3 +994,47 @@ class ConstructionRiskRepository:
         contractors = self.load_contractors_by_ids(contractor_ids)
         return contractors, packages
 
+    def load_project_milestone_dataset(
+        self, scope_ids: List[str]
+    ) -> tuple[List["ConstructionContractor"], List[ConstructionProcurementPackage]]:
+        """Load all contractors and packages with milestones for a list of scopes.
+
+        Uses a fixed number of SQL queries regardless of scope count:
+        one query for all packages across all scopes, one or more SELECT IN
+        queries for milestones, and one for all unique contractors.
+
+        This is the batch counterpart of ``load_scope_milestone_dataset`` and
+        eliminates O(#scopes) query amplification when computing project-level
+        rollups.
+
+        Parameters
+        ----------
+        scope_ids:
+            IDs of all scopes to load data for.  Typically all scopes within
+            a single project.
+
+        Returns
+        -------
+        (contractors, packages)
+            contractors — unique ConstructionContractor records across all
+                          scopes.
+            packages    — ConstructionProcurementPackage records with
+                          milestones eagerly loaded, across all scopes.
+        """
+        if not scope_ids:
+            return [], []
+        from app.modules.construction.models import ConstructionProcurementPackage
+
+        packages = (
+            self.db.query(ConstructionProcurementPackage)
+            .options(selectinload(ConstructionProcurementPackage.milestones))
+            .filter(ConstructionProcurementPackage.scope_id.in_(scope_ids))
+            .order_by(ConstructionProcurementPackage.package_code)
+            .all()
+        )
+        contractor_ids = list(
+            {pkg.contractor_id for pkg in packages if pkg.contractor_id is not None}
+        )
+        contractors = self.load_contractors_by_ids(contractor_ids)
+        return contractors, packages
+

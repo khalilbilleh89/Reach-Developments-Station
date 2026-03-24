@@ -122,6 +122,7 @@ from app.modules.construction.schemas import (
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    ProjectConstructionRiskResponse,
     ScopeContractorRankingResponse,
     ScopeContractorScorecardListResponse,
     ScopeMilestoneCostResponse,
@@ -843,3 +844,18 @@ def get_scope_contractor_ranking(
 ) -> ScopeContractorRankingResponse:
     """Return deterministic contractor ranking for a construction scope."""
     return service.get_scope_contractor_ranking(scope_id)
+
+
+# ── Portfolio Risk Rollup (PR-CONSTR-050) ─────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/risk",
+    response_model=ProjectConstructionRiskResponse,
+)
+def get_project_construction_risk(
+    project_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ProjectConstructionRiskResponse:
+    """Return project-level construction risk rollup aggregated from contractor scorecards."""
+    return service.compute_project_construction_risk(project_id)
