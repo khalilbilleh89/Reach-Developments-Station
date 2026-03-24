@@ -226,6 +226,20 @@ class ContractorScorecard:
         Score 0–100 derived from risk_signal_count.
     performance_score:
         Weighted composite score 0–100.
+    average_delay_days:
+        Mean delay in days across delayed milestones (completion_date >
+        target_date).  None if no milestones were delayed or no milestones
+        have both dates set.
+    median_delay_days:
+        Median delay in days across delayed milestones.  None if no delayed
+        milestones.
+    max_delay_days:
+        Maximum single-milestone delay in days.  None if no delayed
+        milestones.
+    delay_rate:
+        delayed_milestones / assessed_milestones where ``assessed`` means
+        the milestone has both completion_date and target_date set.  None
+        if no assessed milestones.
     """
 
     contractor_id: str
@@ -247,6 +261,10 @@ class ContractorScorecard:
     cost_score: float
     risk_score: float
     performance_score: float
+    average_delay_days: Optional[float] = None
+    median_delay_days: Optional[float] = None
+    max_delay_days: Optional[int] = None
+    delay_rate: Optional[float] = None
 
 
 @dataclass
@@ -493,6 +511,11 @@ def compute_contractor_scorecard(
     ContractorScorecard
         Derived KPIs and scores for the contractor.
     """
+    from app.modules.construction.schedule_variance_engine import (
+        MilestoneVarianceInput,
+        compute_schedule_variance,
+    )
+
     milestones = _deduplicate_milestones(data.milestones)
     metrics = _compute_metrics(milestones)
 
@@ -506,6 +529,17 @@ def compute_contractor_scorecard(
     )
     risk_score = _compute_risk_score(data.risk_signal_count)
     performance_score = _compute_performance_score(schedule_score, cost_score, risk_score)
+
+    variance = compute_schedule_variance(
+        [
+            MilestoneVarianceInput(
+                milestone_id=m.milestone_id,
+                completion_date=m.completion_date,
+                target_date=m.target_date,
+            )
+            for m in milestones
+        ]
+    )
 
     return ContractorScorecard(
         contractor_id=data.contractor_id,
@@ -527,6 +561,10 @@ def compute_contractor_scorecard(
         cost_score=round(cost_score, 2),
         risk_score=round(risk_score, 2),
         performance_score=performance_score,
+        average_delay_days=variance.average_delay_days,
+        median_delay_days=variance.median_delay_days,
+        max_delay_days=variance.max_delay_days,
+        delay_rate=variance.delay_rate,
     )
 
 

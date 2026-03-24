@@ -1627,6 +1627,10 @@ class ConstructionService:
             cost_score=sc.cost_score,
             risk_score=sc.risk_score,
             performance_score=sc.performance_score,
+            average_delay_days=sc.average_delay_days,
+            median_delay_days=sc.median_delay_days,
+            max_delay_days=sc.max_delay_days,
+            delay_rate=sc.delay_rate,
         )
 
     def get_contractor_scorecard(
