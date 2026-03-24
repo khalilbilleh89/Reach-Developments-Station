@@ -1640,6 +1640,9 @@ class ConstructionService:
             average_cost_variance_pct=sc.average_cost_variance_pct,
             max_cost_overrun_pct=sc.max_cost_overrun_pct,
             cost_overrun_rate=sc.cost_overrun_rate,
+            reliability_index=sc.reliability_index,
+            reliability_band=sc.reliability_band,
+            reliability_confidence=sc.reliability_confidence,
         )
 
     def get_contractor_scorecard(

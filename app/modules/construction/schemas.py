@@ -887,6 +887,9 @@ class ContractorScorecardResponse(BaseModel):
     average_cost_variance_pct: Optional[float]
     max_cost_overrun_pct: Optional[float]
     cost_overrun_rate: Optional[float]
+    reliability_index: Optional[float] = None
+    reliability_band: Optional[str] = None
+    reliability_confidence: Optional[str] = None
 
 
 # ── Contractor Trend (PR-CONSTR-045) ─────────────────────────────────────────
