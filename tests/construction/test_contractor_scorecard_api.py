@@ -17,6 +17,13 @@ Error cases:
 from fastapi.testclient import TestClient
 import pytest
 
+from app.modules.construction.scope_escalation_engine import (
+    STATUS_CRITICAL,
+    STATUS_ESCALATE,
+    STATUS_NORMAL,
+    STATUS_WATCH,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helper factories
@@ -434,3 +441,125 @@ def test_scope_contractor_ranking_repeated_calls_are_deterministic(
     r1 = client.get(url).json()["contractors"]
     r2 = client.get(url).json()["contractors"]
     assert [r["contractor_id"] for r in r1] == [r["contractor_id"] for r in r2]
+
+
+# ---------------------------------------------------------------------------
+# GET /construction/contractors/{id}/scorecard — watchlist fields (PR-CONSTR-049)
+# ---------------------------------------------------------------------------
+
+
+def test_contractor_scorecard_watchlist_fields_present(client: TestClient) -> None:
+    """Scorecard response includes watchlist_status and breach_reasons fields."""
+    contractor = _create_contractor(client, "CTR-WL1", "Watchlist Builders")
+    resp = client.get(f"/api/v1/construction/contractors/{contractor['id']}/scorecard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "watchlist_status" in data, "Missing field: watchlist_status"
+    assert "breach_reasons" in data, "Missing field: breach_reasons"
+
+
+def test_contractor_scorecard_watchlist_status_is_valid(client: TestClient) -> None:
+    """watchlist_status is one of the four valid tier values."""
+    contractor = _create_contractor(client, "CTR-WL2", "Status Builders")
+    resp = client.get(f"/api/v1/construction/contractors/{contractor['id']}/scorecard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["watchlist_status"] in {
+        STATUS_NORMAL,
+        STATUS_WATCH,
+        STATUS_ESCALATE,
+        STATUS_CRITICAL,
+    }
+
+
+def test_contractor_scorecard_breach_reasons_is_list(client: TestClient) -> None:
+    """breach_reasons is always a list in the scorecard response."""
+    contractor = _create_contractor(client, "CTR-WL3", "Reason Builders")
+    resp = client.get(f"/api/v1/construction/contractors/{contractor['id']}/scorecard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["breach_reasons"], list)
+
+
+def test_contractor_scorecard_normal_has_empty_breach_reasons(client: TestClient) -> None:
+    """A contractor with no risk signals has Normal status and no breach reasons."""
+    contractor = _create_contractor(client, "CTR-WL4", "Clean Builders")
+    resp = client.get(f"/api/v1/construction/contractors/{contractor['id']}/scorecard")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["watchlist_status"] == STATUS_NORMAL
+    assert data["breach_reasons"] == []
+
+
+# ---------------------------------------------------------------------------
+# GET /construction/scopes/{id}/contractor-scorecards — summary counts (PR-CONSTR-049)
+# ---------------------------------------------------------------------------
+
+
+def test_scope_contractor_scorecards_summary_fields_present(
+    client: TestClient,
+) -> None:
+    """Scope scorecard list response includes watchlist summary count fields."""
+    project_id = _create_project(client, "WLS-001")
+    scope = _create_scope(client, project_id)
+
+    resp = client.get(f"/api/v1/construction/scopes/{scope['id']}/contractor-scorecards")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "contractors_on_watch" in data, "Missing field: contractors_on_watch"
+    assert "contractors_escalated" in data, "Missing field: contractors_escalated"
+    assert "contractors_critical" in data, "Missing field: contractors_critical"
+
+
+def test_scope_contractor_scorecards_summary_counts_zero_for_empty_scope(
+    client: TestClient,
+) -> None:
+    """Empty scope has all watchlist summary counts at zero."""
+    project_id = _create_project(client, "WLS-002")
+    scope = _create_scope(client, project_id)
+
+    resp = client.get(f"/api/v1/construction/scopes/{scope['id']}/contractor-scorecards")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["contractors_on_watch"] == 0
+    assert data["contractors_escalated"] == 0
+    assert data["contractors_critical"] == 0
+
+
+def test_scope_contractor_scorecards_summary_counts_normal_contractor(
+    client: TestClient,
+) -> None:
+    """A contractor with no risk signals contributes zero to watchlist counts."""
+    project_id = _create_project(client, "WLS-003")
+    scope = _create_scope(client, project_id)
+    contractor = _create_contractor(client, "CTR-WLS3", "Clean Scope Builder")
+    package = _create_package(client, scope["id"], "PKG-WLS3", "Clean Scope Pkg")
+    _assign_contractor(client, package["id"], contractor["id"])
+
+    resp = client.get(f"/api/v1/construction/scopes/{scope['id']}/contractor-scorecards")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_contractors"] == 1
+    assert data["contractors_on_watch"] == 0
+    assert data["contractors_escalated"] == 0
+    assert data["contractors_critical"] == 0
+
+
+def test_scope_contractor_scorecards_watchlist_status_in_each_scorecard(
+    client: TestClient,
+) -> None:
+    """Each scorecard in the scope list response contains watchlist_status."""
+    project_id = _create_project(client, "WLS-004")
+    scope = _create_scope(client, project_id)
+    contractor = _create_contractor(client, "CTR-WLS4", "Scope WL Builder")
+    package = _create_package(client, scope["id"], "PKG-WLS4", "Scope WL Pkg")
+    _assign_contractor(client, package["id"], contractor["id"])
+
+    resp = client.get(f"/api/v1/construction/scopes/{scope['id']}/contractor-scorecards")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["scorecards"]) == 1
+    sc = data["scorecards"][0]
+    assert "watchlist_status" in sc, "Missing field: watchlist_status in scorecard"
+    assert "breach_reasons" in sc, "Missing field: breach_reasons in scorecard"
+    assert sc["watchlist_status"] in {STATUS_NORMAL, STATUS_WATCH, STATUS_ESCALATE, STATUS_CRITICAL}

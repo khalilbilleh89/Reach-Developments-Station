@@ -26,8 +26,6 @@ Validates:
 
 from __future__ import annotations
 
-import pytest
-
 from app.modules.construction.scope_escalation_engine import (
     CRITICAL_COST_OVERRUN_RATE,
     CRITICAL_DELAY_RATE,
@@ -357,7 +355,10 @@ def test_breach_reasons_include_threshold_values() -> None:
     result = compute_contractor_escalation(
         _inp(delay_rate=0.60)
     )
-    assert any("60%" in r or "0.60" in r or "delay rate" in r for r in result.breach_reasons)
+    assert any(
+        "60%" in r or "0.60" in r or "delay rate" in r
+        for r in result.breach_reasons
+    )
 
 
 def test_normal_has_empty_breach_reasons() -> None:
@@ -398,11 +399,8 @@ def test_escalation_score_normal() -> None:
 
 def test_scorecard_has_watchlist_fields() -> None:
     """compute_contractor_scorecard populates watchlist_status and breach_reasons."""
-    from datetime import date
-
     from app.modules.construction.contractor_scorecard_engine import (
         ContractorScorecardInput,
-        MilestoneScorecardData,
         compute_contractor_scorecard,
     )
 
@@ -415,7 +413,12 @@ def test_scorecard_has_watchlist_fields() -> None:
     )
     sc = compute_contractor_scorecard(inp)
     assert sc.watchlist_status is not None
-    assert sc.watchlist_status in {STATUS_NORMAL, STATUS_WATCH, STATUS_ESCALATE, STATUS_CRITICAL}
+    assert sc.watchlist_status in {
+        STATUS_NORMAL,
+        STATUS_WATCH,
+        STATUS_ESCALATE,
+        STATUS_CRITICAL,
+    }
     assert isinstance(sc.breach_reasons, list)
     assert isinstance(sc.escalation_score, int)
 

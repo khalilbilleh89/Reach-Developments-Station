@@ -1828,6 +1828,11 @@ class ConstructionService:
         from app.modules.construction.contractor_scorecard_engine import (
             compute_contractor_scorecard,
         )
+        from app.modules.construction.scope_escalation_engine import (
+            STATUS_CRITICAL,
+            STATUS_ESCALATE,
+            STATUS_WATCH,
+        )
 
         scope = self.scope_repo.get_by_id(scope_id)
         if not scope:
@@ -1843,13 +1848,13 @@ class ConstructionService:
         ]
 
         contractors_on_watch = sum(
-            1 for sc in scorecards if sc.watchlist_status == "Watch"
+            1 for sc in scorecards if sc.watchlist_status == STATUS_WATCH
         )
         contractors_escalated = sum(
-            1 for sc in scorecards if sc.watchlist_status == "Escalate"
+            1 for sc in scorecards if sc.watchlist_status == STATUS_ESCALATE
         )
         contractors_critical = sum(
-            1 for sc in scorecards if sc.watchlist_status == "Critical"
+            1 for sc in scorecards if sc.watchlist_status == STATUS_CRITICAL
         )
 
         return ScopeContractorScorecardListResponse(

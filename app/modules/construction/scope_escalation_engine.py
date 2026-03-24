@@ -16,9 +16,9 @@ Watchlist Status Priority (highest to lowest)
     Normal    — no breach triggers detected
 
 The status is assigned by evaluating rules in priority order (Critical
-first).  The first matching tier wins.  All matching breach reasons are
-collected across *all* tiers so that callers can display the full evidence
-set even when only the highest-severity label is shown.
+first).  The first matching tier wins.  Breach reasons are collected
+only for the winning tier so that callers receive the evidence
+supporting the assigned status.
 
 Critical triggers (any of)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -273,13 +273,13 @@ def compute_contractor_escalation(
     Returns
     -------
     ContractorEscalationResult
-        Watchlist status, all breach reasons, and escalation score.
+        Watchlist status, breach reasons for the winning tier, and
+        escalation score.
 
         Rules are evaluated in priority order (Critical → Escalate →
         Watch → Normal).  The first tier with at least one triggered
         rule determines ``watchlist_status``.  ``breach_reasons``
-        collects *all* triggered reasons up to and including the winning
-        tier, giving the caller full audit evidence.
+        contains only the reasons associated with that winning tier.
     """
     critical_reasons = _collect_critical_breaches(inp)
     escalate_reasons = _collect_escalate_breaches(inp)
