@@ -399,10 +399,10 @@ class ConceptDesignService:
         self._validate_project_if_present(target_project_id)
 
         # ── Determine phase sequence ──────────────────────────────────
-        # Use the current phase count as the basis for the next sequence so that
-        # we never need to fetch the full list of phases.
-        existing_phase_count = self.phase_repo.count(project_id=target_project_id)
-        next_sequence = existing_phase_count + 1
+        # Use max(sequence)+1 so the result is correct even when phases have
+        # been deleted or resequenced (non-dense sequence history).
+        max_seq = self.phase_repo.get_max_sequence(project_id=target_project_id)
+        next_sequence = (max_seq or 0) + 1
 
         # ── Create structured phase ───────────────────────────────────
         phase_name = (
@@ -421,16 +421,21 @@ class ConceptDesignService:
                 f"unit mix lines: {len(option.mix_lines)}."
             ),
         )
-        phase = self.phase_repo.create(phase_data)
 
-        # ── Persist promotion metadata ────────────────────────────────
+        # ── Atomically persist phase and promotion metadata ───────────
+        # Stage both writes before the single commit so that a failure in
+        # either step leaves no partial state in the database.
         promoted_at = datetime.now(timezone.utc)
-        self.option_repo.update_promotion_fields(
+        phase = self.phase_repo.apply_create(phase_data)
+        self.option_repo.apply_promotion_fields(
             option,
             promoted_project_id=target_project_id,
             promoted_at=promoted_at,
             promotion_notes=payload.promotion_notes,
         )
+        self.option_repo.db.commit()
+        self.option_repo.db.refresh(phase)
+        self.option_repo.db.refresh(option)
 
         _logger.info(
             "ConceptOption promoted id=%s → project=%s phase=%s",

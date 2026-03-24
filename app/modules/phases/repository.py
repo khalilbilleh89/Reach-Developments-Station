@@ -73,6 +73,23 @@ class PhaseRepository:
             query = query.filter(Phase.project_id == project_id)
         return query.count()
 
+    def get_max_sequence(self, project_id: str) -> Optional[int]:
+        """Return the highest sequence value for a project's phases, or None if no phases exist."""
+        from sqlalchemy import func as sa_func
+        result = (
+            self.db.query(sa_func.max(Phase.sequence))
+            .filter(Phase.project_id == project_id)
+            .scalar()
+        )
+        return result
+
+    def apply_create(self, data: PhaseCreate) -> Phase:
+        """Stage a new Phase in the session without committing."""
+        phase = Phase(**data.model_dump())
+        self.db.add(phase)
+        self.db.flush()
+        return phase
+
     def apply_update(self, phase: Phase, data: PhaseUpdate) -> Phase:
         """Apply field changes to a phase object without committing."""
         update_data = data.model_dump(exclude_unset=True)

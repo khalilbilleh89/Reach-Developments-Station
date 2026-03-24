@@ -716,3 +716,33 @@ def test_promote_conflicting_project_ids_returns_422(client: TestClient):
     assert resp.status_code == 422
     body = resp.json()
     assert body.get("code") == "VALIDATION_ERROR"
+
+
+def test_promote_uses_max_sequence_not_count(client: TestClient):
+    """Phase sequence is max+1, not count+1 (safe with non-dense sequences)."""
+    project_id = _create_project(client, "PRJ-PROMO-013")
+
+    # Create 3 phases with sequences 1, 2, 5 (non-dense: 3 and 4 are absent)
+    for seq, name in [(1, "Phase 1"), (2, "Phase 2"), (5, "Phase 5")]:
+        resp = client.post(
+            "/api/v1/phases",
+            json={
+                "project_id": project_id,
+                "name": name,
+                "sequence": seq,
+            },
+        )
+        assert resp.status_code == 201
+
+    option = _create_promotable_option(client, project_id, name="Post-Gap Option")
+
+    promo_resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/promote", json={}
+    )
+    assert promo_resp.status_code == 201
+
+    # Phase should be sequence 6 (max 5 + 1), not sequence 4 (count 3 + 1)
+    phase_id = promo_resp.json()["promoted_phase_id"]
+    phase_resp = client.get(f"/api/v1/phases/{phase_id}")
+    assert phase_resp.status_code == 200
+    assert phase_resp.json()["sequence"] == 6

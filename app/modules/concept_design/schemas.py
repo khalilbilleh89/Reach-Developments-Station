@@ -171,7 +171,8 @@ class ConceptPromotionRequest(BaseModel):
 
     target_project_id is required when the concept option has no project_id
     already set.  If the concept option is already linked to a project,
-    this field is ignored.
+    target_project_id must be omitted or match the option's existing project_id;
+    supplying a conflicting value will be rejected by validation.
 
     phase_name overrides the default generated phase name.
     promotion_notes is stored on the concept option for audit purposes.

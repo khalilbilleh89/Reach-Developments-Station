@@ -132,6 +132,19 @@ class ConceptOptionRepository:
         self.db.refresh(option)
         return option
 
+    def apply_promotion_fields(
+        self,
+        option: ConceptOption,
+        promoted_project_id: str,
+        promoted_at: datetime,
+        promotion_notes: Optional[str],
+    ) -> None:
+        """Stage promotion metadata on the concept option without committing."""
+        option.is_promoted = True
+        option.promoted_project_id = promoted_project_id
+        option.promoted_at = promoted_at
+        option.promotion_notes = promotion_notes
+
 
 class ConceptUnitMixLineRepository:
     def __init__(self, db: Session) -> None:
