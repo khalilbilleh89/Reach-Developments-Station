@@ -123,3 +123,35 @@ class ConceptOptionSummaryResponse(BaseModel):
     efficiency_ratio: Optional[float]
     average_unit_area: Optional[float]
     mix_lines: List[ConceptUnitMixLineResponse]
+
+
+# ---------------------------------------------------------------------------
+# Concept Option Comparison schemas — PR-CONCEPT-053
+# ---------------------------------------------------------------------------
+
+
+class ConceptOptionComparisonRowResponse(BaseModel):
+    concept_option_id: str
+    name: str
+    status: str
+    unit_count: int
+    sellable_area: Optional[float]
+    efficiency_ratio: Optional[float]
+    average_unit_area: Optional[float]
+    building_count: Optional[int]
+    floor_count: Optional[int]
+    sellable_area_delta_vs_best: Optional[float]
+    efficiency_delta_vs_best: Optional[float]
+    unit_count_delta_vs_best: int
+    is_best_sellable_area: bool
+    is_best_efficiency: bool
+    is_best_unit_count: bool
+
+
+class ConceptOptionComparisonResponse(BaseModel):
+    comparison_basis: str
+    option_count: int
+    best_sellable_area_option_id: Optional[str]
+    best_efficiency_option_id: Optional[str]
+    best_unit_count_option_id: Optional[str]
+    rows: List[ConceptOptionComparisonRowResponse]
