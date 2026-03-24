@@ -231,8 +231,9 @@ class ConceptDesignService:
             options = self.option_repo.list_by_project_id(project_id)
             basis = "project"
         else:
+            assert scenario_id is not None
             self._validate_scenario_if_present(scenario_id)
-            options = self.option_repo.list_by_scenario_id(scenario_id)  # type: ignore[arg-type]
+            options = self.option_repo.list_by_scenario_id(scenario_id)
             basis = "scenario"
 
         comparison_inputs = []

@@ -9,12 +9,16 @@ side-by-side comparison with best-option flags and delta metrics.
 
 Comparison Rules
 ----------------
-- best_sellable_area  → max sellable_area  (None treated as -inf)
-- best_efficiency     → max efficiency_ratio (None treated as -inf)
+- best_sellable_area  → max sellable_area  (ignoring options with None)
+- best_efficiency     → max efficiency_ratio (ignoring options with None)
 - best_unit_count     → max unit_count
 
-Tie-breaking: the option appearing earliest in the sorted input list
-(by concept_option_id ascending) wins.  This guarantees determinism.
+If all options have None for a metric, no best option is chosen for that
+metric (the corresponding best_*_option_id is None and all flags are False).
+
+Tie-breaking: when two options share the same metric value the option
+with the lexicographically-smallest concept_option_id wins.  This
+guarantees fully deterministic output across processes and deployments.
 
 Delta values
 ------------
@@ -103,45 +107,41 @@ def _best_by_sellable_area(
     """Return the concept_option_id with the highest sellable_area.
 
     Options with None sellable_area are excluded.  Returns None when all
-    options have None sellable_area.
+    options have None sellable_area.  Ties are broken by the
+    lexicographically-smallest concept_option_id.
     """
     candidates = [o for o in options if o.sellable_area is not None]
     if not candidates:
         return None
-    winner = max(candidates, key=lambda o: (o.sellable_area, -_sort_key(o.concept_option_id)))  # type: ignore[arg-type]
+    winner = sorted(candidates, key=lambda o: (-o.sellable_area, o.concept_option_id))[0]  # type: ignore[operator]
     return winner.concept_option_id
 
 
 def _best_by_efficiency(
     options: List[ConceptOptionComparisonInput],
 ) -> Optional[str]:
-    """Return the concept_option_id with the highest efficiency_ratio."""
+    """Return the concept_option_id with the highest efficiency_ratio.
+
+    Ties are broken by the lexicographically-smallest concept_option_id.
+    """
     candidates = [o for o in options if o.efficiency_ratio is not None]
     if not candidates:
         return None
-    winner = max(candidates, key=lambda o: (o.efficiency_ratio, -_sort_key(o.concept_option_id)))  # type: ignore[arg-type]
+    winner = sorted(candidates, key=lambda o: (-o.efficiency_ratio, o.concept_option_id))[0]  # type: ignore[operator]
     return winner.concept_option_id
 
 
 def _best_by_unit_count(
     options: List[ConceptOptionComparisonInput],
 ) -> Optional[str]:
-    """Return the concept_option_id with the highest unit_count."""
+    """Return the concept_option_id with the highest unit_count.
+
+    Ties are broken by the lexicographically-smallest concept_option_id.
+    """
     if not options:
         return None
-    winner = max(options, key=lambda o: (o.unit_count, -_sort_key(o.concept_option_id)))
+    winner = sorted(options, key=lambda o: (-o.unit_count, o.concept_option_id))[0]
     return winner.concept_option_id
-
-
-def _sort_key(option_id: str) -> int:
-    """Stable numeric sort key for an option id string.
-
-    Treats the string as a sequence of characters and uses the hash so
-    that ties are broken consistently regardless of ID format (UUID vs
-    integer string).  The negative is taken in the callers so that the
-    lexicographically-smallest ID wins in a tie.
-    """
-    return hash(option_id)
 
 
 # ---------------------------------------------------------------------------

@@ -192,11 +192,10 @@ def test_compare_multi_option_deltas(client: TestClient):
     # A: 100 units, sellable = 9100
     _add_mix_line(client, opt_a["id"], "1BR", 60, 75.0)
     _add_mix_line(client, opt_a["id"], "2BR", 40, 115.0)
-    # B: 92 units, sellable = 9600
+    # B: 92 units, sellable = 9460
     _add_mix_line(client, opt_b["id"], "1BR", 50, 80.0)
-    _add_mix_line(client, opt_b["id"], "2BR", 42, 130.0)  # 4000+5460 = 9460 total? let me recalc
-    # Actually: 50*80 + 42*130 = 4000 + 5460 = 9460
-    # C: 84 units, sellable = 8500
+    _add_mix_line(client, opt_b["id"], "2BR", 42, 130.0)  # 50*80 + 42*130 = 4000 + 5460 = 9460
+    # C: 84 units, sellable ~8500
     _add_mix_line(client, opt_c["id"], "1BR", 84, 101.19)  # ~8500
 
     resp = client.get(f"/api/v1/concept-options/compare?project_id={project_id}")

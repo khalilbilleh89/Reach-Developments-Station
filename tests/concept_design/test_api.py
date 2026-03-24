@@ -414,12 +414,11 @@ def test_compare_populated_result_fields(client: TestClient):
     client.post(f"/api/v1/concept-options/{opt_a['id']}/unit-mix",
                 json={"unit_type": "2BR", "units_count": 40, "avg_sellable_area": 115.0})
 
-    # opt_b: 92 units, sellable=9600
+    # opt_b: 92 units, sellable=9460 (50*80 + 42*130 = 4000 + 5460 = 9460)
     client.post(f"/api/v1/concept-options/{opt_b['id']}/unit-mix",
                 json={"unit_type": "1BR", "units_count": 50, "avg_sellable_area": 80.0})
     client.post(f"/api/v1/concept-options/{opt_b['id']}/unit-mix",
                 json={"unit_type": "2BR", "units_count": 42, "avg_sellable_area": 130.0})
-    # opt_b sellable = 50*80 + 42*130 = 4000 + 5460 = 9460
 
     resp = client.get(f"/api/v1/concept-options/compare?project_id={project_id}")
     assert resp.status_code == 200
