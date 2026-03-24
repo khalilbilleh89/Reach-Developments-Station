@@ -65,6 +65,11 @@ Endpoints:
   GET    /api/v1/construction/scopes/{scope_id}/risk-alerts
   GET    /api/v1/construction/scopes/{scope_id}/procurement-risk
   GET    /api/v1/construction/contractors/{contractor_id}/performance
+
+  GET    /api/v1/construction/contractors/{contractor_id}/scorecard
+  GET    /api/v1/construction/contractors/{contractor_id}/trend
+  GET    /api/v1/construction/scopes/{scope_id}/contractor-scorecards
+  GET    /api/v1/construction/scopes/{scope_id}/contractor-ranking
 """
 
 from typing import Annotated, Optional
@@ -94,6 +99,8 @@ from app.modules.construction.schemas import (
     ContractorList,
     ContractorPerformanceSummaryResponse,
     ContractorResponse,
+    ContractorScorecardResponse,
+    ContractorTrendResponse,
     ContractorUpdate,
     CriticalPathResponse,
     EngineeringItemCreate,
@@ -115,6 +122,8 @@ from app.modules.construction.schemas import (
     ProgressUpdateCreate,
     ProgressUpdateList,
     ProgressUpdateResponse,
+    ScopeContractorRankingResponse,
+    ScopeContractorScorecardListResponse,
     ScopeMilestoneCostResponse,
     ScopeProgressResponse,
     ScopeRiskAlertListResponse,
@@ -781,3 +790,56 @@ def get_contractor_performance(
 ) -> ContractorPerformanceSummaryResponse:
     """Return performance summary and risk alerts for a contractor."""
     return service.get_contractor_performance(contractor_id)
+
+
+# ── Scorecard & Trend endpoints (PR-CONSTR-045) ───────────────────────────────
+
+
+@router.get(
+    "/contractors/{contractor_id}/scorecard",
+    response_model=ContractorScorecardResponse,
+)
+def get_contractor_scorecard(
+    contractor_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    scope_id: Optional[str] = Query(default=None),
+) -> ContractorScorecardResponse:
+    """Return derived scorecard KPIs for a contractor."""
+    return service.get_contractor_scorecard(contractor_id, scope_id=scope_id)
+
+
+@router.get(
+    "/contractors/{contractor_id}/trend",
+    response_model=ContractorTrendResponse,
+)
+def get_contractor_trend(
+    contractor_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+    scope_id: Optional[str] = Query(default=None),
+) -> ContractorTrendResponse:
+    """Return period-over-period trend analytics for a contractor."""
+    return service.get_contractor_trend(contractor_id, scope_id=scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/contractor-scorecards",
+    response_model=ScopeContractorScorecardListResponse,
+)
+def list_scope_contractor_scorecards(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeContractorScorecardListResponse:
+    """Return scorecards for all contractors active in a construction scope."""
+    return service.list_scope_contractor_scorecards(scope_id)
+
+
+@router.get(
+    "/scopes/{scope_id}/contractor-ranking",
+    response_model=ScopeContractorRankingResponse,
+)
+def get_scope_contractor_ranking(
+    scope_id: str,
+    service: Annotated[ConstructionService, Depends(get_service)],
+) -> ScopeContractorRankingResponse:
+    """Return deterministic contractor ranking for a construction scope."""
+    return service.get_scope_contractor_ranking(scope_id)
