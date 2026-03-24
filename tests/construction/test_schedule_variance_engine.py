@@ -22,7 +22,6 @@ import pytest
 
 from app.modules.construction.schedule_variance_engine import (
     MilestoneVarianceInput,
-    ScheduleVarianceResult,
     compute_schedule_variance,
 )
 

@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional
 
@@ -137,8 +137,16 @@ def compute_schedule_variance(
     Returns
     -------
     ScheduleVarianceResult
-        Computed variance metrics.  All delay fields are None when there are
-        no assessed milestones or no delayed milestones.
+        Computed variance metrics.
+
+        - If there are no milestones with both dates present (no assessed
+          milestones), all delay-related fields in the result are ``None``.
+        - If there are assessed milestones and at least one is delayed,
+          delay metrics are populated according to the observed delays.
+        - If there are assessed milestones but none are delayed, then
+          ``delayed_milestones`` is ``0``, ``total_delay_days`` is ``0``,
+          ``delay_rate`` is ``0.0``, and the average/median/max delay
+          metrics remain ``None``.
     """
     if not milestones:
         return ScheduleVarianceResult()
