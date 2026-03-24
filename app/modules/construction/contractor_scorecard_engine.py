@@ -15,14 +15,16 @@ completed_milestones
     Milestones with status ``completed``.
 delayed_milestones
     Milestones with status ``delayed``.
+on_time_milestones
+    Completed milestones where completion_date <= target_date (both set).
 over_budget_milestones
     Milestones where actual_cost > planned_cost (both fields set).
 assessed_cost_milestones
     Milestones where both planned_cost and actual_cost are present.
 delayed_ratio
     delayed_milestones / total_milestones.  None if total == 0.
-completion_ratio
-    completed_milestones / total_milestones.  None if total == 0.
+on_time_rate
+    on_time_milestones / completed_milestones.  None if completed == 0.
 overrun_ratio
     over_budget_milestones / assessed_cost_milestones.  None if no costed.
 avg_cost_variance_percent
@@ -32,7 +34,7 @@ active_packages
     Packages in tendering / evaluation / awarded status.
 completed_packages
     Packages with status ``completed``.
-ratio_alert_count
+risk_signal_count
     Caller-supplied count of HIGH-severity contractor ratio alerts
     (delay ratio and overrun ratio alerts) from the risk alert engine.
 
@@ -43,7 +45,7 @@ schedule_score
 cost_score
     Derived from overrun_ratio and avg_cost_variance_percent.
 risk_score
-    Derived from ratio_alert_count (10 points deducted per alert, floor 0).
+    Derived from risk_signal_count (10 points deducted per alert, floor 0).
 performance_score
     Weighted composite: 40 % schedule + 40 % cost + 20 % risk.
 
@@ -114,7 +116,12 @@ class MilestoneScorecardData:
         Actual recorded cost.  None if not recorded.
     completion_date:
         Calendar date when the milestone was completed.  Used for trend
-        period grouping.  None if not completed or not set.
+        period grouping and on-time rate calculation.  None if not completed
+        or not set.
+    target_date:
+        Planned completion date for the milestone.  Used to determine whether
+        a completed milestone was delivered on time
+        (completion_date <= target_date).  None if not set.
     """
 
     milestone_id: str
@@ -122,6 +129,7 @@ class MilestoneScorecardData:
     planned_cost: Optional[Decimal] = None
     actual_cost: Optional[Decimal] = None
     completion_date: Optional[date] = None
+    target_date: Optional[date] = None
 
 
 @dataclass
@@ -155,7 +163,7 @@ class ContractorScorecardInput:
         Duplicates (same milestone_id) are deduplicated by the engine.
     packages:
         All procurement packages assigned to this contractor.
-    ratio_alert_count:
+    risk_signal_count:
         Count of HIGH-severity contractor ratio alerts (delay ratio and
         overrun ratio alerts) from the risk alert engine.
     """
@@ -164,7 +172,7 @@ class ContractorScorecardInput:
     contractor_name: str
     milestones: List[MilestoneScorecardData] = field(default_factory=list)
     packages: List[PackageScorecardData] = field(default_factory=list)
-    ratio_alert_count: int = 0
+    risk_signal_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -194,8 +202,11 @@ class ContractorScorecard:
         Count where both planned_cost and actual_cost are set.
     delayed_ratio:
         delayed / total.  None when total == 0.
-    completion_ratio:
-        completed / total.  None when total == 0.
+    on_time_milestones:
+        Count of completed milestones where completion_date <= target_date
+        (both fields must be set).
+    on_time_rate:
+        on_time_milestones / completed_milestones.  None when completed == 0.
     overrun_ratio:
         over_budget / assessed.  None when assessed == 0.
     avg_cost_variance_percent:
@@ -205,14 +216,14 @@ class ContractorScorecard:
         Packages in tendering / evaluation / awarded status.
     completed_packages:
         Packages with status ``completed``.
-    ratio_alert_count:
+    risk_signal_count:
         Count of HIGH-severity contractor ratio alerts (caller-supplied).
     schedule_score:
         Score 0–100 derived from delay_ratio.
     cost_score:
         Score 0–100 derived from overrun_ratio and avg cost variance.
     risk_score:
-        Score 0–100 derived from ratio_alert_count.
+        Score 0–100 derived from risk_signal_count.
     performance_score:
         Weighted composite score 0–100.
     """
@@ -222,15 +233,16 @@ class ContractorScorecard:
     total_milestones: int
     completed_milestones: int
     delayed_milestones: int
+    on_time_milestones: int
     over_budget_milestones: int
     assessed_cost_milestones: int
     delayed_ratio: Optional[float]
-    completion_ratio: Optional[float]
+    on_time_rate: Optional[float]
     overrun_ratio: Optional[float]
     avg_cost_variance_percent: Optional[float]
     active_packages: int
     completed_packages: int
-    ratio_alert_count: int
+    risk_signal_count: int
     schedule_score: float
     cost_score: float
     risk_score: float
@@ -385,9 +397,9 @@ def _compute_cost_score(
     return base
 
 
-def _compute_risk_score(ratio_alert_count: int) -> float:
+def _compute_risk_score(risk_signal_count: int) -> float:
     """Compute risk score 0–100 from count of HIGH-severity ratio alerts."""
-    return max(0.0, 100.0 - ratio_alert_count * ALERT_PENALTY_POINTS)
+    return max(0.0, 100.0 - risk_signal_count * ALERT_PENALTY_POINTS)
 
 
 def _compute_performance_score(
@@ -412,6 +424,16 @@ def _compute_metrics(
     completed = sum(1 for m in milestones if m.status == _COMPLETED_STATUS)
     delayed = sum(1 for m in milestones if m.status == _DELAYED_STATUS)
 
+    # on_time: completed milestones where completion_date <= target_date
+    on_time = sum(
+        1
+        for m in milestones
+        if m.status == _COMPLETED_STATUS
+        and m.completion_date is not None
+        and m.target_date is not None
+        and m.completion_date <= m.target_date
+    )
+
     costed = [
         m
         for m in milestones
@@ -423,7 +445,7 @@ def _compute_metrics(
     )
 
     delayed_ratio: Optional[float] = delayed / total if total > 0 else None
-    completion_ratio: Optional[float] = completed / total if total > 0 else None
+    on_time_rate: Optional[float] = on_time / completed if completed > 0 else None
     overrun_ratio: Optional[float] = over_budget / assessed if assessed > 0 else None
 
     avg_cv_pct: Optional[float] = None
@@ -440,10 +462,11 @@ def _compute_metrics(
         "total": total,
         "completed": completed,
         "delayed": delayed,
+        "on_time": on_time,
         "assessed": assessed,
         "over_budget": over_budget,
         "delayed_ratio": delayed_ratio,
-        "completion_ratio": completion_ratio,
+        "on_time_rate": on_time_rate,
         "overrun_ratio": overrun_ratio,
         "avg_cost_variance_percent": avg_cv_pct,
     }
@@ -481,7 +504,7 @@ def compute_contractor_scorecard(
         metrics["overrun_ratio"],
         metrics["avg_cost_variance_percent"],
     )
-    risk_score = _compute_risk_score(data.ratio_alert_count)
+    risk_score = _compute_risk_score(data.risk_signal_count)
     performance_score = _compute_performance_score(schedule_score, cost_score, risk_score)
 
     return ContractorScorecard(
@@ -490,15 +513,16 @@ def compute_contractor_scorecard(
         total_milestones=metrics["total"],
         completed_milestones=metrics["completed"],
         delayed_milestones=metrics["delayed"],
+        on_time_milestones=metrics["on_time"],
         over_budget_milestones=metrics["over_budget"],
         assessed_cost_milestones=metrics["assessed"],
         delayed_ratio=metrics["delayed_ratio"],
-        completion_ratio=metrics["completion_ratio"],
+        on_time_rate=metrics["on_time_rate"],
         overrun_ratio=metrics["overrun_ratio"],
         avg_cost_variance_percent=metrics["avg_cost_variance_percent"],
         active_packages=active_pkgs,
         completed_packages=completed_pkgs,
-        ratio_alert_count=data.ratio_alert_count,
+        risk_signal_count=data.risk_signal_count,
         schedule_score=round(schedule_score, 2),
         cost_score=round(cost_score, 2),
         risk_score=round(risk_score, 2),
@@ -594,7 +618,7 @@ def compute_contractor_trend(
             metrics["avg_cost_variance_percent"],
         )
         # Use overall risk score per period (no per-period alert history)
-        risk_score = _compute_risk_score(data.ratio_alert_count)
+        risk_score = _compute_risk_score(data.risk_signal_count)
         period_score = _compute_performance_score(schedule_score, cost_score, risk_score)
 
         delta = round(period_score - prev_score, 2) if prev_score is not None else None

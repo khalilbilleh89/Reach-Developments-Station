@@ -972,3 +972,25 @@ class ConstructionRiskRepository:
             .all()
         )
 
+    def load_scope_milestone_dataset(
+        self, scope_id: str
+    ) -> tuple[List["ConstructionContractor"], List[ConstructionProcurementPackage]]:
+        """Load all contractors and packages with milestones for a scope.
+
+        Returns a 2-tuple of (contractors, packages).  Packages are loaded with
+        milestones eagerly via ``selectinload`` in a small, fixed number of SQL
+        queries (one for packages and one or more SELECT IN queries for the
+        related milestones).  Contractors are loaded in a separate query keyed
+        by the contractor IDs found in those packages.
+
+        This method is the single entry point for scope-wide scorecard and
+        ranking dataset loading, eliminating N+1 query patterns in the
+        analytics layer.
+        """
+        packages = self.load_scope_packages_with_milestones(scope_id)
+        contractor_ids = list(
+            {pkg.contractor_id for pkg in packages if pkg.contractor_id is not None}
+        )
+        contractors = self.load_contractors_by_ids(contractor_ids)
+        return contractors, packages
+
