@@ -192,3 +192,6 @@ class ConceptPromotionResponse(BaseModel):
     promoted_phase_name: str
     promoted_at: datetime
     promotion_notes: Optional[str]
+    buildings_created: int
+    floors_created: int
+    units_created: int

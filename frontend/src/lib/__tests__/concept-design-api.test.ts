@@ -248,6 +248,9 @@ describe("promoteConceptOption", () => {
       promoted_phase_name: "Phase 1",
       promoted_at: "2024-06-01T00:00:00Z",
       promotion_notes: null,
+      buildings_created: 2,
+      floors_created: 16,
+      units_created: 50,
     };
     mockApiFetch.mockResolvedValue(promoResp);
     const result = await api.promoteConceptOption(OPTION_ID, promoReq);
@@ -270,6 +273,9 @@ describe("promoteConceptOption", () => {
       promoted_phase_name: "Phase 2",
       promoted_at: "2024-06-02T00:00:00Z",
       promotion_notes: null,
+      buildings_created: 1,
+      floors_created: 5,
+      units_created: 30,
     });
     await api.promoteConceptOption(OPTION_ID);
     expect(mockApiFetch).toHaveBeenCalledWith(
