@@ -181,6 +181,29 @@ class ConceptDesignService:
         option = self.option_repo.update(option, data)
         return ConceptOptionResponse.model_validate(option)
 
+    def delete_concept_option(self, concept_option_id: str) -> None:
+        """Delete a concept option and its unit mix lines.
+
+        Deletion is forbidden when the concept option has already been promoted
+        (``is_promoted=True``) because it becomes the traceability origin for
+        the project phase, buildings, floors, and units that were created during
+        promotion.  Attempting to delete a promoted option raises
+        :class:`~app.core.errors.ConflictError`.
+        """
+        option = self.option_repo.get_by_id(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+        if option.is_promoted:
+            raise ConflictError(
+                "Cannot delete a promoted concept option. "
+                "Promoted concepts are the origin of project structure and must remain immutable.",
+                details={"concept_option_id": concept_option_id},
+            )
+        _logger.info("Deleting ConceptOption id=%s name=%r", option.id, option.name)
+        self.option_repo.delete(option)
+
     # ------------------------------------------------------------------
     # Unit mix
     # ------------------------------------------------------------------

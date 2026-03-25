@@ -10,18 +10,19 @@ GET    /concept-options
 GET    /concept-options/compare
 GET    /concept-options/{concept_option_id}
 PATCH  /concept-options/{concept_option_id}
+DELETE /concept-options/{concept_option_id}
 POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 POST   /concept-options/{concept_option_id}/promote
 
-PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054
+PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -123,6 +124,21 @@ def update_concept_option(
 ) -> ConceptOptionResponse:
     """Partially update a concept option."""
     return service.update_concept_option(concept_option_id, data)
+
+
+@router.delete("/{concept_option_id}", status_code=204)
+def delete_concept_option(
+    concept_option_id: str,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> Response:
+    """Delete a concept option and its unit mix lines.
+
+    Deletion is forbidden if the concept option has already been promoted
+    (HTTP 409).  Promoted concepts are the immutable origin of project
+    structure and cannot be removed.
+    """
+    service.delete_concept_option(concept_option_id)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------

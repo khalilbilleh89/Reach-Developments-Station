@@ -16,11 +16,12 @@
  *   GET    /concept-options/compare
  *   GET    /concept-options/{id}
  *   PATCH  /concept-options/{id}
+ *   DELETE /concept-options/{id}
  *   POST   /concept-options/{id}/unit-mix
  *   GET    /concept-options/{id}/summary
  *   POST   /concept-options/{id}/promote
  *
- * PR-CONCEPT-055
+ * PR-CONCEPT-055, PR-CONCEPT-057
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -34,6 +35,7 @@ import {
   addConceptUnitMixLine,
   compareConceptOptions,
   promoteConceptOption,
+  deleteConceptOption,
 } from "@/lib/concept-design-api";
 import type {
   ConceptOption,
@@ -887,6 +889,95 @@ function PromoteModal({ conceptOption, onClose, onPromoted }: PromoteModalProps)
 // Summary panel — displays derived metrics from backend engine
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Delete confirmation modal — PR-CONCEPT-057
+// ---------------------------------------------------------------------------
+
+interface DeleteConceptOptionModalProps {
+  option: ConceptOption;
+  onClose: () => void;
+  onDeleted: () => void;
+}
+
+function DeleteConceptOptionModal({
+  option,
+  onClose,
+  onDeleted,
+}: DeleteConceptOptionModalProps) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = useCallback(async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteConceptOption(option.id);
+      onDeleted();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Deletion failed.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [option.id, onDeleted]);
+
+  return (
+    <ModalWrapper
+      title="Delete Concept Option"
+      titleId="delete-modal-title"
+      onClose={onClose}
+    >
+      <p
+        style={{
+          fontSize: "0.875rem",
+          color: "var(--color-text)",
+          marginTop: 0,
+          marginBottom: 20,
+        }}
+      >
+        Are you sure you want to delete{" "}
+        <strong>{option.name}</strong>? This action cannot be undone.
+      </p>
+
+      {error && <ErrorAlert message={error} />}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={deleting}
+          style={{
+            padding: "8px 20px",
+            border: "1px solid var(--color-border)",
+            borderRadius: 6,
+            background: "var(--color-surface)",
+            cursor: deleting ? "not-allowed" : "pointer",
+            fontSize: "0.875rem",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={deleting}
+          style={{
+            padding: "8px 20px",
+            border: "none",
+            borderRadius: 6,
+            background: "#dc2626",
+            color: "#fff",
+            cursor: deleting ? "not-allowed" : "pointer",
+            fontSize: "0.875rem",
+            fontWeight: 500,
+          }}
+        >
+          {deleting ? "Deleting…" : "Delete"}
+        </button>
+      </div>
+    </ModalWrapper>
+  );
+}
+
 interface SummaryPanelProps {
   optionId: string;
   onAddMixLine: () => void;
@@ -1401,9 +1492,10 @@ interface OptionsListProps {
   options: ConceptOption[];
   onSelectOption: (option: ConceptOption) => void;
   onEditOption: (option: ConceptOption) => void;
+  onDeleteOption: (option: ConceptOption) => void;
 }
 
-function OptionsList({ options, onSelectOption, onEditOption }: OptionsListProps) {
+function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption }: OptionsListProps) {
   return (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
@@ -1448,20 +1540,40 @@ function OptionsList({ options, onSelectOption, onEditOption }: OptionsListProps
                 {formatDate(opt.updated_at)}
               </td>
               <td onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={() => onEditOption(opt)}
-                  style={{
-                    padding: "3px 10px",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 4,
-                    background: "var(--color-surface)",
-                    cursor: "pointer",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  Edit
-                </button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => onEditOption(opt)}
+                    style={{
+                      padding: "3px 10px",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 4,
+                      background: "var(--color-surface)",
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteOption(opt)}
+                    disabled={opt.is_promoted}
+                    title={opt.is_promoted ? "Cannot delete a promoted concept option" : "Delete option"}
+                    style={{
+                      padding: "3px 10px",
+                      border: "1px solid #fca5a5",
+                      borderRadius: 4,
+                      background: opt.is_promoted ? "var(--color-surface)" : "#fff",
+                      color: opt.is_promoted ? "var(--color-text-muted)" : "#dc2626",
+                      cursor: opt.is_promoted ? "not-allowed" : "pointer",
+                      fontSize: "0.8rem",
+                      opacity: opt.is_promoted ? 0.5 : 1,
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -1488,6 +1600,7 @@ export default function ConceptDesignPage() {
   const [selectedOption, setSelectedOption] = useState<ConceptOption | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingOption, setEditingOption] = useState<ConceptOption | null>(null);
+  const [deletingOption, setDeletingOption] = useState<ConceptOption | null>(null);
 
   const fetchOptions = useCallback(() => {
     setLoading(true);
@@ -1518,6 +1631,15 @@ export default function ConceptDesignPage() {
   const handleEditOption = useCallback((opt: ConceptOption) => {
     setEditingOption(opt);
   }, []);
+
+  const handleDeleteOption = useCallback((opt: ConceptOption) => {
+    setDeletingOption(opt);
+  }, []);
+
+  const handleDeleted = useCallback(() => {
+    setDeletingOption(null);
+    fetchOptions();
+  }, [fetchOptions]);
 
   const handleSaved = useCallback(() => {
     setShowCreateModal(false);
@@ -1679,6 +1801,7 @@ export default function ConceptDesignPage() {
               options={options}
               onSelectOption={handleSelectOption}
               onEditOption={handleEditOption}
+              onDeleteOption={handleDeleteOption}
             />
           )}
         </>
@@ -1710,6 +1833,14 @@ export default function ConceptDesignPage() {
           existing={editingOption}
           onClose={() => setEditingOption(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {deletingOption && (
+        <DeleteConceptOptionModal
+          option={deletingOption}
+          onClose={() => setDeletingOption(null)}
+          onDeleted={handleDeleted}
         />
       )}
     </PageContainer>

@@ -288,3 +288,28 @@ describe("promoteConceptOption", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// deleteConceptOption — PR-CONCEPT-057
+// ---------------------------------------------------------------------------
+
+describe("deleteConceptOption", () => {
+  it("calls DELETE /concept-options/{id}", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    await api.deleteConceptOption(OPTION_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(OPTION_ID)}`,
+      { method: "DELETE" },
+    );
+  });
+
+  it("URL-encodes the id", async () => {
+    const weirdId = "opt/with spaces";
+    mockApiFetch.mockResolvedValue(undefined);
+    await api.deleteConceptOption(weirdId);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(weirdId)}`,
+      { method: "DELETE" },
+    );
+  });
+});
