@@ -72,6 +72,12 @@ jest.mock("@/lib/feasibility-api", () => ({
   upsertFeasibilityAssumptions: jest.fn(),
   calculateFeasibility: jest.fn(),
   getFeasibilityResults: jest.fn(),
+  assignProjectToRun: jest.fn(),
+}));
+
+// Mock projects-api
+jest.mock("@/lib/projects-api", () => ({
+  listProjects: jest.fn(),
 }));
 
 // Mock PageContainer
@@ -96,7 +102,9 @@ import {
   upsertFeasibilityAssumptions,
   calculateFeasibility,
   getFeasibilityResults,
+  assignProjectToRun,
 } from "@/lib/feasibility-api";
+import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
 import FeasibilityRunDetailView from "@/components/feasibility/FeasibilityRunDetailView";
 
@@ -105,6 +113,8 @@ const mockGetAssumptions = getFeasibilityAssumptions as jest.Mock;
 const mockUpsertAssumptions = upsertFeasibilityAssumptions as jest.Mock;
 const mockCalculate = calculateFeasibility as jest.Mock;
 const mockGetResults = getFeasibilityResults as jest.Mock;
+const mockAssignProject = assignProjectToRun as jest.Mock;
+const mockListProjects = listProjects as jest.Mock;
 
 /** Helper to create a mocked ApiError with a given status code. */
 function mockApiError(message: string, status: number): Error {
@@ -116,6 +126,7 @@ const mock404 = () => mockApiError("Not Found", 404);
 const mockRun = {
   id: "run-1",
   project_id: null,
+  project_name: null,
   scenario_id: null,
   scenario_name: "Base Case Q1",
   scenario_type: "base" as const,
@@ -164,9 +175,25 @@ const mockResult = {
   updated_at: "2025-01-01T00:00:00Z",
 };
 
+/** Reusable mock project for project-linkage tests. */
+const mockProject = {
+  id: "proj-1",
+  name: "Harbour Tower",
+  code: "HT-01",
+  developer_name: null,
+  location: null,
+  start_date: null,
+  target_end_date: null,
+  status: "pipeline",
+  description: null,
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockSearchParams = new URLSearchParams("runId=run-1");
+  mockListProjects.mockResolvedValue({ items: [], total: 0 });
 });
 
 // ---------------------------------------------------------------------------
@@ -177,6 +204,7 @@ test("renders loading state initially", () => {
   mockGetRun.mockReturnValue(new Promise(() => {}));
   mockGetAssumptions.mockReturnValue(new Promise(() => {}));
   mockGetResults.mockReturnValue(new Promise(() => {}));
+  mockListProjects.mockReturnValue(new Promise(() => {}));
 
   render(<FeasibilityRunDetailView />);
   expect(screen.getByText(/loading feasibility run/i)).toBeInTheDocument();
@@ -516,3 +544,111 @@ test("switches runId and clears stale calcError and result", async () => {
     expect(screen.getByText(/no results yet/i)).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Project linkage context (PR-W5.3)
+// ---------------------------------------------------------------------------
+
+test("shows Unlinked state when run has no project", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, project_id: null, project_name: null });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByText(/this run is not linked to a project/i)).toBeInTheDocument();
+  });
+});
+
+test("shows project name when run is linked to a project", async () => {
+  mockGetRun.mockResolvedValue({
+    ...mockRun,
+    project_id: "proj-1",
+    project_name: "Harbour Tower",
+  });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("linked-project-name")).toHaveTextContent("Harbour Tower");
+  });
+});
+
+test("shows Assign Project button when projects are available and run is unlinked", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, project_id: null, project_name: null });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockListProjects.mockResolvedValue({ items: [mockProject], total: 1 });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /assign project/i })).toBeInTheDocument();
+  });
+});
+
+test("calls assignProjectToRun when Assign Project is clicked", async () => {
+  const runWithoutProject = { ...mockRun, project_id: null, project_name: null };
+  const runWithProject = { ...mockRun, project_id: "proj-1", project_name: "Harbour Tower" };
+
+  mockGetRun.mockResolvedValue(runWithoutProject);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockListProjects.mockResolvedValue({ items: [mockProject], total: 1 });
+  mockAssignProject.mockResolvedValue(runWithProject);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByLabelText(/select project to assign/i)).toBeInTheDocument();
+  });
+
+  fireEvent.change(screen.getByLabelText(/select project to assign/i), { target: { value: "proj-1" } });
+  fireEvent.click(screen.getByRole("button", { name: /assign project/i }));
+
+  await waitFor(() => {
+    expect(mockAssignProject).toHaveBeenCalledWith("run-1", "proj-1");
+  });
+});
+
+test("shows Unlink Project button when run is linked to a project", async () => {
+  mockGetRun.mockResolvedValue({
+    ...mockRun,
+    project_id: "proj-1",
+    project_name: "Harbour Tower",
+  });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /unlink project/i })).toBeInTheDocument();
+  });
+});
+
+test("calls assignProjectToRun with null when Unlink Project is clicked", async () => {
+  const runWithProject = { ...mockRun, project_id: "proj-1", project_name: "Harbour Tower" };
+  const runWithoutProject = { ...mockRun, project_id: null, project_name: null };
+
+  mockGetRun.mockResolvedValue(runWithProject);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockAssignProject.mockResolvedValue(runWithoutProject);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /unlink project/i })).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: /unlink project/i }));
+
+  await waitFor(() => {
+    expect(mockAssignProject).toHaveBeenCalledWith("run-1", null);
+  });
+});
+

@@ -28,6 +28,7 @@ class FeasibilityRunCreate(BaseModel):
 
 
 class FeasibilityRunUpdate(BaseModel):
+    project_id: Optional[str] = None
     scenario_name: Optional[str] = Field(None, min_length=1, max_length=255)
     scenario_type: Optional[FeasibilityScenarioType] = None
     notes: Optional[str] = None
@@ -36,6 +37,7 @@ class FeasibilityRunUpdate(BaseModel):
 class FeasibilityRunResponse(BaseModel):
     id: str
     project_id: Optional[str]
+    project_name: Optional[str]
     scenario_id: Optional[str]
     scenario_name: str
     scenario_type: FeasibilityScenarioType

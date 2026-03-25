@@ -17,6 +17,7 @@ export type FeasibilityDecision = "VIABLE" | "MARGINAL" | "NOT_VIABLE";
 export interface FeasibilityRun {
   id: string;
   project_id: string | null;
+  project_name: string | null;
   scenario_id: string | null;
   scenario_name: string;
   scenario_type: FeasibilityScenarioType;
@@ -38,6 +39,7 @@ export interface FeasibilityRunCreate {
 }
 
 export interface FeasibilityRunUpdate {
+  project_id?: string | null;
   scenario_name?: string | null;
   scenario_type?: FeasibilityScenarioType | null;
   notes?: string | null;

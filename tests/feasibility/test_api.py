@@ -667,3 +667,115 @@ def test_calculate_fails_safely_when_assumptions_missing(client: TestClient):
 
     resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Project linkage context (PR-W5.3)
+# ---------------------------------------------------------------------------
+
+def test_run_response_includes_project_name_field(client: TestClient):
+    """Run response must include project_name — None when unlinked."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Name Field Test"})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "project_name" in data
+    assert data["project_name"] is None
+
+
+def test_run_response_project_name_populated_when_linked(client: TestClient):
+    """Run response project_name must reflect the linked project's name."""
+    project_id = _create_project(client, code="PRJ-PNAME")
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Named Project Run"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["project_id"] == project_id
+    assert data["project_name"] == "Feasibility Project"
+
+
+def test_patch_run_assigns_project(client: TestClient):
+    """PATCH /runs/{id} with project_id assigns the project to the run."""
+    project_id = _create_project(client, code="PRJ-PASSIGN")
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Unlinked Run"})
+    assert resp.status_code == 201
+    run_id = resp.json()["id"]
+    assert resp.json()["project_id"] is None
+
+    resp = client.patch(f"/api/v1/feasibility/runs/{run_id}", json={"project_id": project_id})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == project_id
+    assert data["project_name"] == "Feasibility Project"
+
+
+def test_patch_run_unlinks_project(client: TestClient):
+    """PATCH /runs/{id} with project_id=null unlinks the project."""
+    project_id = _create_project(client, code="PRJ-PUNLINK")
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"project_id": project_id, "scenario_name": "Linked Run"},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["id"]
+    assert resp.json()["project_id"] == project_id
+
+    resp = client.patch(f"/api/v1/feasibility/runs/{run_id}", json={"project_id": None})
+    assert resp.status_code == 200
+    assert resp.json()["project_id"] is None
+    assert resp.json()["project_name"] is None
+
+
+def test_patch_run_invalid_project_returns_404(client: TestClient):
+    """PATCH /runs/{id} with non-existent project_id must return 404."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Test Run"})
+    run_id = resp.json()["id"]
+
+    resp = client.patch(f"/api/v1/feasibility/runs/{run_id}", json={"project_id": "no-such-project"})
+    assert resp.status_code == 404
+
+
+def test_patch_run_preserves_other_fields(client: TestClient):
+    """PATCH /runs/{id} with only project_id does not modify other fields."""
+    project_id = _create_project(client, code="PRJ-PPRESERVE")
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Preserve Test", "scenario_type": "upside", "notes": "keep me"},
+    )
+    run_id = resp.json()["id"]
+
+    resp = client.patch(f"/api/v1/feasibility/runs/{run_id}", json={"project_id": project_id})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == project_id
+    assert data["scenario_name"] == "Preserve Test"
+    assert data["scenario_type"] == "upside"
+    assert data["notes"] == "keep me"
+
+
+def test_list_runs_project_name_in_items(client: TestClient):
+    """List response items must include project_name field."""
+    project_id = _create_project(client, code="PRJ-PLIST")
+    client.post("/api/v1/feasibility/runs", json={"project_id": project_id, "scenario_name": "Listed Run"})
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Unlinked Listed Run"})
+
+    resp = client.get("/api/v1/feasibility/runs")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 2
+
+    linked = next(i for i in items if i["project_id"] == project_id)
+    unlinked = next(i for i in items if i["project_id"] is None)
+    assert linked["project_name"] == "Feasibility Project"
+    assert unlinked["project_name"] is None
+
+
+def test_run_detail_response_includes_project_name(client: TestClient):
+    """GET /api/v1/feasibility/runs/{id} response must include project_name."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Detail Check"})
+    run_id = resp.json()["id"]
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 200
+    assert "project_name" in resp.json()
+

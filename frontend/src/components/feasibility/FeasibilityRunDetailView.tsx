@@ -10,7 +10,9 @@ import {
   upsertFeasibilityAssumptions,
   calculateFeasibility,
   getFeasibilityResults,
+  assignProjectToRun,
 } from "@/lib/feasibility-api";
+import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-utils";
 import type {
@@ -23,6 +25,7 @@ import type {
   FeasibilityScenarioType,
   FeasibilityViabilityStatus,
 } from "@/lib/feasibility-types";
+import type { Project } from "@/lib/projects-types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -147,16 +150,22 @@ function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
         </div>
         <div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
-            Project ID
+            Project
           </div>
           <div
             style={{
-              fontFamily: "monospace",
+              fontFamily: run.project_id ? undefined : "inherit",
               fontSize: "0.8rem",
               color: run.project_id ? "var(--color-text)" : "var(--color-text-muted)",
             }}
           >
-            {run.project_id ? run.project_id.substring(0, 12) + "…" : <em>Unlinked</em>}
+            {run.project_name ? (
+              <span style={{ fontWeight: 500 }}>{run.project_name}</span>
+            ) : run.project_id ? (
+              <span style={{ fontFamily: "monospace" }}>{run.project_id.substring(0, 12)}…</span>
+            ) : (
+              <em>Unlinked</em>
+            )}
           </div>
         </div>
         {run.notes && (
@@ -753,6 +762,10 @@ export default function FeasibilityRunDetailView() {
   const [error, setError] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [assigningProject, setAssigningProject] = useState(false);
+  const [projectAssignError, setProjectAssignError] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -764,6 +777,7 @@ export default function FeasibilityRunDetailView() {
     setLoading(true);
     setError(null);
     setCalcError(null);
+    setProjectAssignError(null);
     setRun(null);
     setAssumptions(null);
     setResult(null);
@@ -783,6 +797,7 @@ export default function FeasibilityRunDetailView() {
         setRun(runData);
         setAssumptions(assumptionsData);
         setResult(resultData);
+        setSelectedProjectId(runData.project_id ?? "");
       })
       .catch((err: unknown) => {
         setError(
@@ -791,6 +806,13 @@ export default function FeasibilityRunDetailView() {
       })
       .finally(() => setLoading(false));
   }, [runId]);
+
+  // Load projects list for assignment dropdown
+  useEffect(() => {
+    listProjects({ limit: 200 })
+      .then((resp) => setProjects(resp.items))
+      .catch(() => setProjects([]));
+  }, []);
 
   useEffect(() => {
     load();
@@ -816,6 +838,39 @@ export default function FeasibilityRunDetailView() {
       );
     } finally {
       setCalculating(false);
+    }
+  }, [runId]);
+
+  const handleAssignProject = useCallback(async () => {
+    if (!runId || !selectedProjectId) return;
+    setProjectAssignError(null);
+    setAssigningProject(true);
+    try {
+      const updated = await assignProjectToRun(runId, selectedProjectId);
+      setRun(updated);
+    } catch (err: unknown) {
+      setProjectAssignError(
+        err instanceof Error ? err.message : "Failed to assign project.",
+      );
+    } finally {
+      setAssigningProject(false);
+    }
+  }, [runId, selectedProjectId]);
+
+  const handleUnlinkProject = useCallback(async () => {
+    if (!runId) return;
+    setProjectAssignError(null);
+    setAssigningProject(true);
+    try {
+      const updated = await assignProjectToRun(runId, null);
+      setRun(updated);
+      setSelectedProjectId("");
+    } catch (err: unknown) {
+      setProjectAssignError(
+        err instanceof Error ? err.message : "Failed to unlink project.",
+      );
+    } finally {
+      setAssigningProject(false);
     }
   }, [runId]);
 
@@ -888,6 +943,120 @@ export default function FeasibilityRunDetailView() {
         <>
           {/* Source summary */}
           <FeasibilitySourceSummary run={run} />
+
+          {/* Project assignment panel */}
+          <div
+            style={{
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              padding: "16px 24px",
+              marginBottom: 24,
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 12px",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                color: "var(--color-text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Project Context
+            </h3>
+            {run.project_id ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.875rem" }}>
+                  Linked to:{" "}
+                  <strong data-testid="linked-project-name">
+                    {run.project_name ?? run.project_id.substring(0, 12) + "…"}
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleUnlinkProject}
+                  disabled={assigningProject}
+                  style={{
+                    padding: "4px 14px",
+                    border: "1px solid #fecaca",
+                    borderRadius: 4,
+                    background: "transparent",
+                    color: "#b91c1c",
+                    cursor: assigningProject ? "not-allowed" : "pointer",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {assigningProject ? "Unlinking…" : "Unlink Project"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+                  This run is not linked to a project.
+                </span>
+                {projects.length > 0 && (
+                  <>
+                    <select
+                      aria-label="Select project to assign"
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      style={{
+                        padding: "6px 10px",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: 4,
+                        fontSize: "0.875rem",
+                        background: "var(--color-surface)",
+                      }}
+                    >
+                      <option value="">Select a project…</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAssignProject}
+                      disabled={assigningProject || !selectedProjectId}
+                      style={{
+                        padding: "6px 16px",
+                        border: "none",
+                        borderRadius: 4,
+                        background:
+                          assigningProject || !selectedProjectId
+                            ? "#94a3b8"
+                            : "var(--color-primary, #2563eb)",
+                        color: "#fff",
+                        cursor:
+                          assigningProject || !selectedProjectId
+                            ? "not-allowed"
+                            : "pointer",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {assigningProject ? "Assigning…" : "Assign Project"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {projectAssignError && (
+              <p
+                role="alert"
+                style={{
+                  color: "#b91c1c",
+                  fontSize: "0.875rem",
+                  margin: "8px 0 0",
+                }}
+              >
+                {projectAssignError}
+              </p>
+            )}
+          </div>
 
           {/* Assumptions form */}
           <FeasibilityAssumptionsForm

@@ -77,6 +77,13 @@ export async function updateFeasibilityRun(
   );
 }
 
+export async function assignProjectToRun(
+  runId: string,
+  projectId: string | null,
+): Promise<FeasibilityRun> {
+  return updateFeasibilityRun(runId, { project_id: projectId });
+}
+
 // ---------------------------------------------------------------------------
 // Assumptions endpoints
 // ---------------------------------------------------------------------------
