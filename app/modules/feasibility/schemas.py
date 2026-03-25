@@ -5,7 +5,7 @@ Pydantic request/response schemas for the Feasibility Engine API.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -169,7 +169,7 @@ class FeasibilityLineageResponse(BaseModel):
     invented here.
     """
 
-    record_type: str = "feasibility_run"
+    record_type: Literal["feasibility_run"] = "feasibility_run"
     record_id: str
     source_concept_option_id: Optional[str]
     reverse_seeded_concept_options: List[str]

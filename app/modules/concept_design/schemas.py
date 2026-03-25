@@ -9,7 +9,7 @@ PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059, PR-CONCEPT-060, PR-CONCEPT-065
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -332,7 +332,7 @@ class ConceptLineageResponse(BaseModel):
     invented here.
     """
 
-    record_type: str = "concept_option"
+    record_type: Literal["concept_option"] = "concept_option"
     record_id: str
     source_feasibility_run_id: Optional[str]
     downstream_feasibility_runs: List[str]

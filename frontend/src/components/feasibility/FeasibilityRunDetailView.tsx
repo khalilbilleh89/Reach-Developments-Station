@@ -90,7 +90,7 @@ function decisionLabel(decision: FeasibilityDecision | null): string {
 // ---------------------------------------------------------------------------
 
 interface FeasibilityLineagePanelProps {
-  lineage: FeasibilityLineageResponse | null;
+  lineage: FeasibilityLineageResponse | null | undefined;
 }
 
 function FeasibilityLineagePanel({ lineage }: FeasibilityLineagePanelProps) {
@@ -119,7 +119,24 @@ function FeasibilityLineagePanel({ lineage }: FeasibilityLineagePanelProps) {
     fontSize: "0.8rem",
   };
 
-  if (!lineage) {
+  if (lineage === undefined) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Loading lineage data…
+        </p>
+      </div>
+    );
+  }
+
+  if (lineage === null) {
     return (
       <div style={panelStyle}>
         <h3 style={headingStyle}>Lifecycle Lineage</h3>
@@ -892,7 +909,7 @@ export default function FeasibilityRunDetailView() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [seedingConcept, setSeedingConcept] = useState(false);
   const [seedConceptError, setSeedConceptError] = useState<string | null>(null);
-  const [lineage, setLineage] = useState<FeasibilityLineageResponse | null>(null);
+  const [lineage, setLineage] = useState<FeasibilityLineageResponse | null | undefined>(undefined);
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -908,7 +925,7 @@ export default function FeasibilityRunDetailView() {
     setRun(null);
     setAssumptions(null);
     setResult(null);
-    setLineage(null);
+    setLineage(undefined);
 
     Promise.all([
       getFeasibilityRun(runId),
@@ -920,19 +937,23 @@ export default function FeasibilityRunDetailView() {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;
       }),
-      getFeasibilityRunLineage(runId).catch(() => null),
     ])
-      .then(([runData, assumptionsData, resultData, lineageData]) => {
+      .then(([runData, assumptionsData, resultData]) => {
         setRun(runData);
         setAssumptions(assumptionsData);
         setResult(resultData);
-        setLineage(lineageData);
         setSelectedProjectId(runData.project_id ?? "");
+
+        // Fetch lineage independently so it does not block core page render.
+        getFeasibilityRunLineage(runId)
+          .then((lineageData) => setLineage(lineageData))
+          .catch(() => setLineage(null));
       })
       .catch((err: unknown) => {
         setError(
           err instanceof Error ? err.message : "Failed to load feasibility run.",
         );
+        setLineage(null);
       })
       .finally(() => setLoading(false));
   }, [runId]);

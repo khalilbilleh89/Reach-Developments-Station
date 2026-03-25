@@ -53,6 +53,7 @@ from app.modules.concept_design.schemas import (
     SeedFeasibilityResponse,
 )
 from app.modules.concept_design.validation import run_zoning_validation
+from app.modules.feasibility.repository import FeasibilityRunRepository
 from app.modules.feasibility.service import FeasibilityService
 from app.modules.floors.models import Floor
 from app.modules.land.models import LandParcel
@@ -1248,8 +1249,8 @@ class ConceptDesignService:
                 f"ConceptOption '{concept_option_id}' not found."
             )
 
-        feasibility_service = FeasibilityService(self.option_repo.db)
-        downstream_runs = feasibility_service.run_repo.list_by_source_concept_option_id(
+        run_repo = FeasibilityRunRepository(self.option_repo.db)
+        downstream_runs = run_repo.list_by_source_concept_option_id(
             concept_option_id
         )
 

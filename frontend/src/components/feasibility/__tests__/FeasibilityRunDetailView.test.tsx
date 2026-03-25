@@ -784,6 +784,24 @@ test("renders lifecycle lineage panel when run is loaded", async () => {
   });
 });
 
+test("lineage panel shows loading state before lineage fetch resolves", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  // lineage never resolves during this test — simulates in-flight state
+  mockGetLineage.mockReturnValue(new Promise(() => {}));
+
+  render(<FeasibilityRunDetailView />);
+
+  // Core run data has loaded but lineage is still loading
+  await waitFor(() => {
+    const matches = screen.getAllByText(mockRun.scenario_name);
+    expect(matches.length).toBeGreaterThan(0);
+  });
+
+  expect(screen.getByText(/loading lineage data/i)).toBeInTheDocument();
+});
+
 test("lineage panel shows source concept when seeded from a concept", async () => {
   mockGetRun.mockResolvedValue(mockRun);
   mockGetAssumptions.mockRejectedValue(mock404());
@@ -822,7 +840,7 @@ test("lineage panel shows reverse-seeded concept options list", async () => {
   });
 });
 
-test("lineage panel shows safe empty state when lineage fetch fails", async () => {
+test("lineage panel shows unavailable message when lineage fetch fails", async () => {
   mockGetRun.mockResolvedValue(mockRun);
   mockGetAssumptions.mockRejectedValue(mock404());
   mockGetResults.mockRejectedValue(mock404());
@@ -833,6 +851,24 @@ test("lineage panel shows safe empty state when lineage fetch fails", async () =
   await waitFor(() => {
     expect(screen.getByText(/lineage data unavailable/i)).toBeInTheDocument();
   });
+});
+
+test("core run data renders before lineage fetch completes", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  // lineage never resolves — simulates slow network
+  mockGetLineage.mockReturnValue(new Promise(() => {}));
+
+  render(<FeasibilityRunDetailView />);
+
+  // Core run data (scenario name) is visible even while lineage is pending
+  await waitFor(() => {
+    const matches = screen.getAllByText(mockRun.scenario_name);
+    expect(matches.length).toBeGreaterThan(0);
+  });
+  // Lineage is in loading state, not blocking the main content
+  expect(screen.getByText(/loading lineage data/i)).toBeInTheDocument();
 });
 
 test("lineage panel shows project ID when run is linked to a project", async () => {

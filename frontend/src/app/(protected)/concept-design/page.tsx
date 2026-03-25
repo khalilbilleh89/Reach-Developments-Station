@@ -1494,7 +1494,7 @@ function SummaryPanel({ optionId, onAddMixLine }: SummaryPanelProps) {
 // ---------------------------------------------------------------------------
 
 interface ConceptLineagePanelProps {
-  lineage: ConceptLineageResponse | null;
+  lineage: ConceptLineageResponse | null | undefined;
 }
 
 function ConceptLineagePanel({ lineage }: ConceptLineagePanelProps) {
@@ -1523,7 +1523,24 @@ function ConceptLineagePanel({ lineage }: ConceptLineagePanelProps) {
     fontSize: "0.8rem",
   };
 
-  if (!lineage) {
+  if (lineage === undefined) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Loading lineage data…
+        </p>
+      </div>
+    );
+  }
+
+  if (lineage === null) {
     return (
       <div style={panelStyle}>
         <h3 style={headingStyle}>Lifecycle Lineage</h3>
@@ -1638,7 +1655,7 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
   const [showAddMix, setShowAddMix] = useState(false);
   const [showPromote, setShowPromote] = useState(false);
   const [summaryKey, setSummaryKey] = useState(0);
-  const [lineage, setLineage] = useState<ConceptLineageResponse | null>(null);
+  const [lineage, setLineage] = useState<ConceptLineageResponse | null | undefined>(undefined);
 
   const handleMixAdded = useCallback(() => {
     setShowAddMix(false);
@@ -1650,10 +1667,28 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
   }, [onRefresh]);
 
   useEffect(() => {
+    if (!option?.id) {
+      setLineage(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    // Reset to loading state when the selected option changes.
+    setLineage(undefined);
+
     getConceptOptionLineage(option.id)
-      .then(setLineage)
-      .catch(() => setLineage(null));
-  }, [option.id]);
+      .then((data) => {
+        if (!cancelled) setLineage(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLineage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [option?.id]);
 
   return (
     <div>
