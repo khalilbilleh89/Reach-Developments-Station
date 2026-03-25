@@ -38,6 +38,8 @@ export interface ConceptOption {
   promoted_at: string | null;
   promoted_project_id: string | null;
   promotion_notes: string | null;
+  // Reverse-lineage — PR-CONCEPT-064
+  source_feasibility_run_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -189,4 +191,16 @@ export interface ConceptPromotionResponse {
   buildings_created: number;
   floors_created: number;
   units_created: number;
+}
+
+// ---------------------------------------------------------------------------
+// Seed-Concept-from-Feasibility types — PR-CONCEPT-064
+// ---------------------------------------------------------------------------
+
+export interface SeedConceptFromFeasibilityResponse {
+  concept_option_id: string;
+  source_feasibility_run_id: string;
+  scenario_id: string | null;
+  project_id: string | null;
+  seed_source_type: string;
 }

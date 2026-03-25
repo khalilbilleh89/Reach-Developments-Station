@@ -382,6 +382,23 @@ class FeasibilityService:
     # Seeded creation from concept option — PR-CONCEPT-063
     # ------------------------------------------------------------------
 
+    def get_run_for_reverse_seed(self, run_id: str) -> FeasibilityRunResponse:
+        """Return a feasibility run validated for reverse-seeding into a concept.
+
+        Raises ResourceNotFoundError (404) if the run does not exist.
+
+        This method forms the approved module boundary for the concept design
+        service to read feasibility run data.  The concept service must not
+        access FeasibilityRun DB tables directly.
+        """
+        run = self.run_repo.get_by_id(run_id)
+        if not run:
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
+            )
+        return FeasibilityRunResponse.model_validate(run)
+
     def create_seeded_run(
         self,
         *,

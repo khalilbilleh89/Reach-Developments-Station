@@ -47,6 +47,7 @@ from app.modules.concept_design.schemas import (
     ConceptPromotionResponse,
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
+    SeedConceptFromFeasibilityResponse,
     SeedFeasibilityRequest,
     SeedFeasibilityResponse,
 )
@@ -1162,5 +1163,61 @@ class ConceptDesignService:
             seeded_sellable_area_sqm=sellable_area,
             seeded_unit_count=unit_count,
             assumptions_seeded=assumptions_seeded,
+        )
+
+    # ------------------------------------------------------------------
+    # Reverse-seed concept from feasibility run — PR-CONCEPT-064
+    # ------------------------------------------------------------------
+
+    def create_from_feasibility_run(
+        self, run_id: str
+    ) -> SeedConceptFromFeasibilityResponse:
+        """Create a new concept option seeded from a feasibility run.
+
+        Reverse-seeding rules
+        ---------------------
+        * The feasibility run must exist — 404 if not found.
+        * A new concept option is created in ``draft`` status with a name
+          derived from the run's scenario_name.
+        * The concept option inherits the run's scenario_id and project_id
+          (if set) so that cross-module lifecycle context is preserved.
+        * ``source_feasibility_run_id`` is persisted on the new concept option
+          to record the deterministic lineage chain.
+
+        This method does not calculate concept metrics; it only creates the
+        concept option record.  The caller should navigate to the concept
+        detail page to enrich the option with unit mix lines.
+        """
+        feasibility_service = FeasibilityService(self.option_repo.db)
+        run = feasibility_service.get_run_for_reverse_seed(run_id)
+
+        name = f"Concept — {run.scenario_name}"
+
+        option_create = ConceptOptionCreate(
+            scenario_id=run.scenario_id,
+            project_id=run.project_id,
+            name=name,
+            status="draft",
+        )
+        option = self.option_repo.create(
+            option_create,
+            source_feasibility_run_id=run_id,
+        )
+
+        _logger.info(
+            "Concept option created from feasibility run: run_id=%s "
+            "concept_option_id=%s scenario_id=%s project_id=%s",
+            run_id,
+            option.id,
+            run.scenario_id,
+            run.project_id,
+        )
+
+        return SeedConceptFromFeasibilityResponse(
+            concept_option_id=option.id,
+            source_feasibility_run_id=run_id,
+            scenario_id=run.scenario_id,
+            project_id=run.project_id,
+            seed_source_type="feasibility_run",
         )
 
