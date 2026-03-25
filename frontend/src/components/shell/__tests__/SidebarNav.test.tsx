@@ -52,13 +52,17 @@ describe("SidebarNav", () => {
     render(<SidebarNav />);
     const expectedLabels = [
       "Dashboard",
+      "Land",
+      "Feasibility",
+      "Concept Design",
       "Projects",
+      "Construction",
       "Units & Pricing",
       "Sales",
       "Payment Plans",
       "Collections",
       "Finance",
-      "Registration",
+      "Registry",
       "Commission",
       "Cashflow",
       "Settings",
