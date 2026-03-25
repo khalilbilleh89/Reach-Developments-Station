@@ -3,7 +3,7 @@ concept_design.schemas
 
 Pydantic request/response schemas for the Concept Design API.
 
-PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059, PR-CONCEPT-060
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059, PR-CONCEPT-060, PR-CONCEPT-065
 """
 
 from __future__ import annotations
@@ -312,3 +312,29 @@ class SeedConceptFromFeasibilityResponse(BaseModel):
     project_id: Optional[str]
     seed_source_type: str
 
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle Lineage / Traceability schemas — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+
+class ConceptLineageResponse(BaseModel):
+    """Lifecycle traceability response for a concept option.
+
+    Composes upstream and downstream lineage from canonical lineage fields:
+    - source_feasibility_run_id:  the feasibility run that seeded this concept (if any)
+    - downstream_feasibility_runs: IDs of feasibility runs seeded from this concept
+    - scenario_id:  shared scenario context (if any)
+    - project_id:  project context (if any)
+
+    All IDs are sourced from live DB state — no client-side lineage is
+    invented here.
+    """
+
+    record_type: str = "concept_option"
+    record_id: str
+    source_feasibility_run_id: Optional[str]
+    downstream_feasibility_runs: List[str]
+    scenario_id: Optional[str]
+    project_id: Optional[str]

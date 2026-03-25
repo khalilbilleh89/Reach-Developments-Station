@@ -204,3 +204,16 @@ export interface SeedConceptFromFeasibilityResponse {
   project_id: string | null;
   seed_source_type: string;
 }
+
+// ---------------------------------------------------------------------------
+// Lifecycle Lineage / Traceability types — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+export interface ConceptLineageResponse {
+  record_type: "concept_option";
+  record_id: string;
+  source_feasibility_run_id: string | null;
+  downstream_feasibility_runs: string[];
+  scenario_id: string | null;
+  project_id: string | null;
+}

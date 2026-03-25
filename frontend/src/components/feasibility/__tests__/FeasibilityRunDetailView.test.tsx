@@ -74,6 +74,7 @@ jest.mock("@/lib/feasibility-api", () => ({
   calculateFeasibility: jest.fn(),
   getFeasibilityResults: jest.fn(),
   assignProjectToRun: jest.fn(),
+  getFeasibilityRunLineage: jest.fn(),
 }));
 
 // Mock concept-design-api — reverse-seeding
@@ -109,6 +110,7 @@ import {
   calculateFeasibility,
   getFeasibilityResults,
   assignProjectToRun,
+  getFeasibilityRunLineage,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -123,6 +125,7 @@ const mockGetResults = getFeasibilityResults as jest.Mock;
 const mockAssignProject = assignProjectToRun as jest.Mock;
 const mockListProjects = listProjects as jest.Mock;
 const mockCreateConcept = createConceptFromFeasibility as jest.Mock;
+const mockGetLineage = getFeasibilityRunLineage as jest.Mock;
 
 /** Helper to create a mocked ApiError with a given status code. */
 function mockApiError(message: string, status: number): Error {
@@ -202,6 +205,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSearchParams = new URLSearchParams("runId=run-1");
   mockListProjects.mockResolvedValue({ items: [], total: 0 });
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -748,4 +758,98 @@ test("shows error when concept creation fails", async () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Concept creation failed");
   });
   expect(mockRouterPush).not.toHaveBeenCalled();
+});
+
+
+// ---------------------------------------------------------------------------
+// Lifecycle lineage panel — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+test("renders lifecycle lineage panel when run is loaded", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("feasibility-lineage-panel")).toBeInTheDocument();
+  });
+});
+
+test("lineage panel shows source concept when seeded from a concept", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: "concept-source-abc",
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("lineage-source-concept")).toBeInTheDocument();
+  });
+});
+
+test("lineage panel shows reverse-seeded concept options list", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: ["concept-1", "concept-2"],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("lineage-reverse-seeded-list")).toBeInTheDocument();
+  });
+});
+
+test("lineage panel shows safe empty state when lineage fetch fails", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockRejectedValue(new Error("Lineage unavailable"));
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByText(/lineage data unavailable/i)).toBeInTheDocument();
+  });
+});
+
+test("lineage panel shows project ID when run is linked to a project", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: "project-xyz-123",
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("lineage-project-id")).toBeInTheDocument();
+  });
 });

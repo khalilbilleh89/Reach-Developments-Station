@@ -16,9 +16,10 @@ POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 POST   /concept-options/{concept_option_id}/promote
 POST   /concept-options/{concept_option_id}/seed-feasibility
+GET    /concept-options/{concept_option_id}/lineage
 
 PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057, PR-CONCEPT-058,
-PR-CONCEPT-062, PR-CONCEPT-063
+PR-CONCEPT-062, PR-CONCEPT-063, PR-CONCEPT-065
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.concept_design.schemas import (
+    ConceptLineageResponse,
     ConceptOptionComparisonResponse,
     ConceptOptionCreate,
     ConceptOptionListResponse,
@@ -271,3 +273,30 @@ def seed_feasibility_from_concept_option(
     Seeding is forbidden for archived concept options (HTTP 422).
     """
     return service.seed_feasibility_from_concept_option(concept_option_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Lineage endpoint — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/{concept_option_id}/lineage",
+    response_model=ConceptLineageResponse,
+)
+def get_concept_option_lineage(
+    concept_option_id: str,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> ConceptLineageResponse:
+    """Return lifecycle traceability for a concept option.
+
+    Surfaces:
+    - the feasibility run that seeded this concept (upstream lineage)
+    - all feasibility runs seeded from this concept (downstream lineage)
+    - shared scenario and project context
+
+    Returns a partial lineage (with empty lists / null IDs) for concept
+    options that were created manually without seeding context.
+
+    Returns HTTP 404 when the concept option does not exist.
+    """
+    return service.get_concept_option_lineage(concept_option_id)
