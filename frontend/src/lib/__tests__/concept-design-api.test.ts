@@ -313,3 +313,31 @@ describe("deleteConceptOption", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// duplicateConceptOption — PR-CONCEPT-058
+// ---------------------------------------------------------------------------
+
+describe("duplicateConceptOption", () => {
+  it("calls POST /concept-options/{id}/duplicate", async () => {
+    const copy = { ...mockOption, id: "opt-copy-1", name: "Option A (Copy)" };
+    mockApiFetch.mockResolvedValue(copy);
+    const result = await api.duplicateConceptOption(OPTION_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(OPTION_ID)}/duplicate`,
+      { method: "POST" },
+    );
+    expect(result).toEqual(copy);
+  });
+
+  it("URL-encodes the id", async () => {
+    const weirdId = "opt/with spaces";
+    const copy = { ...mockOption, id: "opt-copy-2", name: "Option A (Copy)" };
+    mockApiFetch.mockResolvedValue(copy);
+    await api.duplicateConceptOption(weirdId);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(weirdId)}/duplicate`,
+      { method: "POST" },
+    );
+  });
+});

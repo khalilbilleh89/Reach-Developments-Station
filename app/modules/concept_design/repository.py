@@ -150,6 +150,56 @@ class ConceptOptionRepository:
         self.db.delete(option)
         self.db.commit()
 
+    def get_names_in_scope(
+        self,
+        project_id: Optional[str],
+        scenario_id: Optional[str],
+    ) -> set[str]:
+        """Return the set of all concept option names within the given scope.
+
+        Used by the duplication service to check name uniqueness without
+        loading full ORM objects or imposing an arbitrary row limit.
+
+        Both project_id and scenario_id are matched exactly — None is treated
+        as IS NULL so that unscoped options do not bleed into project/scenario
+        scopes and vice versa.
+        """
+        query = self.db.query(ConceptOption.name)
+        if project_id is not None:
+            query = query.filter(ConceptOption.project_id == project_id)
+        else:
+            query = query.filter(ConceptOption.project_id.is_(None))
+        if scenario_id is not None:
+            query = query.filter(ConceptOption.scenario_id == scenario_id)
+        else:
+            query = query.filter(ConceptOption.scenario_id.is_(None))
+        return {row[0] for row in query.all()}
+
+    def clone_concept_option(self, source: ConceptOption, new_name: str) -> ConceptOption:
+        """Stage a copy of *source* with *new_name* and flush to obtain an id.
+
+        The caller is responsible for committing after all related clone
+        operations (e.g. unit mix lines) have been staged.
+
+        Promotion metadata (is_promoted, promoted_at, promoted_project_id,
+        promotion_notes) is intentionally NOT copied so the clone starts as a
+        fresh, unpromoted concept option.
+        """
+        clone = ConceptOption(
+            project_id=source.project_id,
+            scenario_id=source.scenario_id,
+            name=new_name,
+            status=source.status,
+            description=source.description,
+            site_area=source.site_area,
+            gross_floor_area=source.gross_floor_area,
+            building_count=source.building_count,
+            floor_count=source.floor_count,
+        )
+        self.db.add(clone)
+        self.db.flush()
+        return clone
+
 
 class ConceptUnitMixLineRepository:
     def __init__(self, db: Session) -> None:
@@ -178,3 +228,23 @@ class ConceptUnitMixLineRepository:
             .order_by(ConceptUnitMixLine.unit_type.asc())
             .all()
         )
+
+    def clone_for_option(
+        self, source_lines: List[ConceptUnitMixLine], new_option_id: str
+    ) -> None:
+        """Stage copies of *source_lines* for *new_option_id*.
+
+        The caller is responsible for committing after all related clone
+        operations have been staged.
+        """
+        for line in source_lines:
+            self.db.add(
+                ConceptUnitMixLine(
+                    concept_option_id=new_option_id,
+                    unit_type=line.unit_type,
+                    units_count=line.units_count,
+                    avg_internal_area=line.avg_internal_area,
+                    avg_sellable_area=line.avg_sellable_area,
+                    mix_percentage=line.mix_percentage,
+                )
+            )

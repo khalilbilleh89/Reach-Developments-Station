@@ -14,11 +14,12 @@
  *   GET    /concept-options/{id}                           → get option
  *   PATCH  /concept-options/{id}                           → update option
  *   DELETE /concept-options/{id}                           → delete option
+ *   POST   /concept-options/{id}/duplicate                 → duplicate option
  *   POST   /concept-options/{id}/unit-mix                  → add mix line
  *   GET    /concept-options/{id}/summary                   → get summary
  *   POST   /concept-options/{id}/promote                   → promote option
  *
- * PR-CONCEPT-055, PR-CONCEPT-057
+ * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058
  */
 
 import { apiFetch } from "./api-client";
@@ -171,5 +172,16 @@ export async function deleteConceptOption(id: string): Promise<void> {
   await apiFetch<void>(
     `/concept-options/${encodeURIComponent(id)}`,
     { method: "DELETE" },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate endpoint — PR-CONCEPT-058
+// ---------------------------------------------------------------------------
+
+export async function duplicateConceptOption(id: string): Promise<ConceptOption> {
+  return apiFetch<ConceptOption>(
+    `/concept-options/${encodeURIComponent(id)}/duplicate`,
+    { method: "POST" },
   );
 }
