@@ -142,8 +142,20 @@ export async function compareConceptOptions(params: {
   const query = new URLSearchParams();
   if (params.project_id) query.set("project_id", params.project_id);
   if (params.scenario_id) query.set("scenario_id", params.scenario_id);
-  if (params.price_per_sqm != null) query.set("price_per_sqm", String(params.price_per_sqm));
-  if (params.price_per_unit != null) query.set("price_per_unit", String(params.price_per_unit));
+  if (
+    params.price_per_sqm != null &&
+    Number.isFinite(params.price_per_sqm) &&
+    params.price_per_sqm > 0
+  ) {
+    query.set("price_per_sqm", String(params.price_per_sqm));
+  }
+  if (
+    params.price_per_unit != null &&
+    Number.isFinite(params.price_per_unit) &&
+    params.price_per_unit > 0
+  ) {
+    query.set("price_per_unit", String(params.price_per_unit));
+  }
   const qs = query.toString();
   return apiFetch<ConceptOptionComparisonResponse>(
     `/concept-options/compare${qs ? `?${qs}` : ""}`,

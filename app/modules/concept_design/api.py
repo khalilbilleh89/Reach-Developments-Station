@@ -97,8 +97,8 @@ def compare_concept_options(
     service: Annotated[ConceptDesignService, Depends(_get_service)],
     project_id: Optional[str] = Query(default=None),
     scenario_id: Optional[str] = Query(default=None),
-    price_per_sqm: Optional[float] = Query(default=None, gt=0, description="Average sale price per m² for GDV estimation"),
-    price_per_unit: Optional[float] = Query(default=None, gt=0, description="Average sale price per unit for GDV estimation (fallback)"),
+    price_per_sqm: Optional[float] = Query(default=None, gt=0, le=1_000_000_000, description="Average sale price per m² for GDV estimation"),
+    price_per_unit: Optional[float] = Query(default=None, gt=0, le=1_000_000_000, description="Average sale price per unit for GDV estimation (fallback)"),
 ) -> ConceptOptionComparisonResponse:
     """Return a structured side-by-side comparison of all concept options.
 
