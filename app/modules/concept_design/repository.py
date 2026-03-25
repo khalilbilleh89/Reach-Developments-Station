@@ -25,7 +25,7 @@ class ConceptOptionRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create(self, data: ConceptOptionCreate) -> ConceptOption:
+    def create(self, data: ConceptOptionCreate, land_id: Optional[str] = None) -> ConceptOption:
         option = ConceptOption(
             project_id=data.project_id,
             scenario_id=data.scenario_id,
@@ -38,6 +38,10 @@ class ConceptOptionRepository:
             floor_count=data.floor_count,
             far_limit=data.far_limit,
             density_limit=data.density_limit,
+            # Land / Scenario integration — PR-CONCEPT-060
+            land_id=land_id,
+            concept_override_far_limit=data.concept_override_far_limit,
+            concept_override_density_limit=data.concept_override_density_limit,
         )
         self.db.add(option)
         self.db.commit()
@@ -199,6 +203,10 @@ class ConceptOptionRepository:
             floor_count=source.floor_count,
             far_limit=source.far_limit,
             density_limit=source.density_limit,
+            # Land / Scenario integration — PR-CONCEPT-060
+            land_id=source.land_id,
+            concept_override_far_limit=source.concept_override_far_limit,
+            concept_override_density_limit=source.concept_override_density_limit,
         )
         self.db.add(clone)
         self.db.flush()

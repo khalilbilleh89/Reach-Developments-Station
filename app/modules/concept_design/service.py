@@ -7,7 +7,7 @@ Coordinates repository access and concept engine computation.
 Raises domain errors (ResourceNotFoundError) that the central error
 handler translates into HTTP responses.
 
-PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-056
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-056, PR-CONCEPT-060
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ from app.modules.concept_design.schemas import (
 )
 from app.modules.concept_design.validation import run_zoning_validation
 from app.modules.floors.models import Floor
+from app.modules.land.models import LandParcel
 from app.modules.phases.repository import PhaseRepository
 from app.modules.phases.schemas import PhaseCreate
 from app.modules.projects.repository import ProjectRepository
@@ -137,6 +138,89 @@ class ConceptDesignService:
                 )
 
     # ------------------------------------------------------------------
+    # Land context resolution — PR-CONCEPT-060
+    # ------------------------------------------------------------------
+
+    def _fetch_land_parcel_for_scenario(
+        self, scenario_id: str
+    ) -> Optional[LandParcel]:
+        """Return the LandParcel associated with *scenario_id*, or None.
+
+        Returns None if the scenario does not exist or has no land_id.
+
+        If the scenario exists and has a land_id but the referenced land
+        parcel cannot be found, this method logs a warning and raises a
+        ValidationError to avoid silently skipping inheritance/validation
+        while the scenario still claims to have land.
+        """
+        scenario = self.scenario_repo.get_by_id(scenario_id)
+        if scenario is None or scenario.land_id is None:
+            return None
+
+        land_parcel = (
+            self.scenario_repo.db.query(LandParcel)
+            .filter(LandParcel.id == scenario.land_id)
+            .first()
+        )
+
+        if land_parcel is None:
+            _logger.warning(
+                "Scenario '%s' references missing LandParcel '%s'. "
+                "Raising ValidationError to prevent silent fallback.",
+                scenario_id,
+                scenario.land_id,
+            )
+            raise ValidationError(
+                f"Scenario '{scenario_id}' references a non-existent land parcel.",
+                details={
+                    "scenario_id": scenario_id,
+                    "land_id": scenario.land_id,
+                },
+            )
+
+        return land_parcel
+
+    def _resolve_effective_far_limit(
+        self,
+        *,
+        land_far: Optional[float],
+        override_far: Optional[float],
+        manual_far: Optional[float],
+    ) -> Optional[float]:
+        """Return the effective FAR limit using priority: override > land > manual.
+
+        Priority order (PR-CONCEPT-060):
+        1. concept_override_far_limit  — explicit user override
+        2. land.permitted_far          — inherited from upstream land parcel
+        3. far_limit                   — manually entered on the concept option
+        """
+        if override_far is not None:
+            return override_far
+        if land_far is not None:
+            return land_far
+        return manual_far
+
+    def _resolve_effective_density_limit(
+        self,
+        *,
+        land_density: Optional[float],
+        override_density: Optional[float],
+        manual_density: Optional[float],
+    ) -> Optional[float]:
+        """Return the effective density limit using priority: override > land > manual.
+
+        Priority order (PR-CONCEPT-060):
+        1. concept_override_density_limit  — explicit user override
+        2. land.density_ratio              — inherited from upstream land parcel
+        3. density_limit                   — manually entered on the concept option
+        """
+        if override_density is not None:
+            return override_density
+        if land_density is not None:
+            return land_density
+        return manual_density
+
+    # ------------------------------------------------------------------
     # Zoning / structural validation — PR-CONCEPT-059
     # ------------------------------------------------------------------
 
@@ -183,19 +267,107 @@ class ConceptDesignService:
             )
 
     # ------------------------------------------------------------------
+    # Effective constraint resolution — PR-CONCEPT-060
+    # ------------------------------------------------------------------
+
+    def _resolve_land_constraints_for_option(
+        self, option_land_id: Optional[str]
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Return (land_far, land_density) for the given land_id.
+
+        Fetches the LandParcel and extracts ``permitted_far`` and
+        ``density_ratio``.  Returns (None, None) if land_id is absent or the
+        parcel cannot be found.
+
+        This helper centralises the repeated query pattern used by
+        ``update_concept_option`` and ``promote_concept_option`` so the lookup
+        logic lives in exactly one place.
+        """
+        if option_land_id is None:
+            return None, None
+        land_parcel = (
+            self.scenario_repo.db.query(LandParcel)
+            .filter(LandParcel.id == option_land_id)
+            .first()
+        )
+        if land_parcel is None:
+            return None, None
+        land_far = (
+            float(land_parcel.permitted_far) if land_parcel.permitted_far is not None else None
+        )
+        land_density = (
+            float(land_parcel.density_ratio) if land_parcel.density_ratio is not None else None
+        )
+        return land_far, land_density
+
+    # ------------------------------------------------------------------
     # ConceptOption CRUD
     # ------------------------------------------------------------------
 
     def create_concept_option(self, data: ConceptOptionCreate) -> ConceptOptionResponse:
         self._validate_project_if_present(data.project_id)
         self._validate_scenario_if_present(data.scenario_id)
-        self._validate_concept_zoning(
-            site_area=data.site_area,
-            gross_floor_area=data.gross_floor_area,
-            far_limit=data.far_limit,
-            density_limit=data.density_limit,
+
+        # ── Land / Scenario context inheritance — PR-CONCEPT-060 ──────
+        land_id: Optional[str] = None
+        inherited_site_area: Optional[float] = None
+        inherited_far: Optional[float] = None
+        inherited_density: Optional[float] = None
+
+        if data.scenario_id is not None:
+            land_parcel = self._fetch_land_parcel_for_scenario(data.scenario_id)
+            if land_parcel is not None:
+                land_id = land_parcel.id
+                if land_parcel.land_area_sqm is not None:
+                    inherited_site_area = float(land_parcel.land_area_sqm)
+                if land_parcel.permitted_far is not None:
+                    inherited_far = float(land_parcel.permitted_far)
+                if land_parcel.density_ratio is not None:
+                    inherited_density = float(land_parcel.density_ratio)
+                _logger.info(
+                    "ConceptOption inheriting land context land_id=%s "
+                    "site_area=%s far=%s density=%s",
+                    land_id,
+                    inherited_site_area,
+                    inherited_far,
+                    inherited_density,
+                )
+
+        # When a scenario with a land parcel is supplied, auto-populate
+        # site_area, far_limit, and density_limit from the parcel if the
+        # caller did not explicitly provide those values.
+        effective_site_area = data.site_area if data.site_area is not None else inherited_site_area
+        effective_far = self._resolve_effective_far_limit(
+            land_far=inherited_far,
+            override_far=data.concept_override_far_limit,
+            manual_far=data.far_limit,
         )
-        option = self.option_repo.create(data)
+        effective_density = self._resolve_effective_density_limit(
+            land_density=inherited_density,
+            override_density=data.concept_override_density_limit,
+            manual_density=data.density_limit,
+        )
+
+        self._validate_concept_zoning(
+            site_area=effective_site_area,
+            gross_floor_area=data.gross_floor_area,
+            far_limit=effective_far,
+            density_limit=effective_density,
+        )
+
+        # Store the resolved values back so the DB row reflects the
+        # inherited/effective values even if the caller omitted them.
+        updates: dict = {}
+        if data.site_area is None and inherited_site_area is not None:
+            updates["site_area"] = inherited_site_area
+        if data.far_limit is None and effective_far is not None:
+            updates["far_limit"] = effective_far
+        if data.density_limit is None and effective_density is not None:
+            updates["density_limit"] = effective_density
+        if updates:
+            data = data.model_copy(update=updates)
+
+        option = self.option_repo.create(data, land_id=land_id)
         _logger.info("ConceptOption created id=%s name=%r", option.id, option.name)
         return ConceptOptionResponse.model_validate(option)
 
@@ -244,6 +416,16 @@ class ConceptDesignService:
         merged_gfa = float(option.gross_floor_area) if option.gross_floor_area is not None else None
         merged_far_limit = float(option.far_limit) if option.far_limit is not None else None
         merged_density_limit = float(option.density_limit) if option.density_limit is not None else None
+        merged_override_far = (
+            float(option.concept_override_far_limit)
+            if option.concept_override_far_limit is not None
+            else None
+        )
+        merged_override_density = (
+            float(option.concept_override_density_limit)
+            if option.concept_override_density_limit is not None
+            else None
+        )
 
         if "site_area" in update_data:
             merged_site_area = update_data["site_area"]
@@ -253,12 +435,32 @@ class ConceptDesignService:
             merged_far_limit = update_data["far_limit"]
         if "density_limit" in update_data:
             merged_density_limit = update_data["density_limit"]
+        if "concept_override_far_limit" in update_data:
+            merged_override_far = update_data["concept_override_far_limit"]
+        if "concept_override_density_limit" in update_data:
+            merged_override_density = update_data["concept_override_density_limit"]
+
+        # Resolve the land-inherited constraints for this option (if any).
+        # land_id is read from the existing option — it is set at creation time
+        # and cannot be changed via an update (scenario context is immutable).
+        land_far, land_density = self._resolve_land_constraints_for_option(option.land_id)
+
+        effective_far = self._resolve_effective_far_limit(
+            land_far=land_far,
+            override_far=merged_override_far,
+            manual_far=merged_far_limit,
+        )
+        effective_density = self._resolve_effective_density_limit(
+            land_density=land_density,
+            override_density=merged_override_density,
+            manual_density=merged_density_limit,
+        )
 
         self._validate_concept_zoning(
             site_area=merged_site_area,
             gross_floor_area=merged_gfa,
-            far_limit=merged_far_limit,
-            density_limit=merged_density_limit,
+            far_limit=effective_far,
+            density_limit=effective_density,
         )
 
         option = self.option_repo.update(option, data)
@@ -414,6 +616,7 @@ class ConceptDesignService:
             status=option.status,
             project_id=option.project_id,
             scenario_id=option.scenario_id,
+            land_id=option.land_id,
             site_area=(
                 float(option.site_area) if option.site_area is not None else None
             ),
@@ -428,6 +631,16 @@ class ConceptDesignService:
             density_limit=(
                 float(option.density_limit)
                 if option.density_limit is not None
+                else None
+            ),
+            concept_override_far_limit=(
+                float(option.concept_override_far_limit)
+                if option.concept_override_far_limit is not None
+                else None
+            ),
+            concept_override_density_limit=(
+                float(option.concept_override_density_limit)
+                if option.concept_override_density_limit is not None
                 else None
             ),
             unit_count=metrics.unit_count,
@@ -625,6 +838,33 @@ class ConceptDesignService:
         ]
         promo_unit_count = compute_unit_count(mix_inputs)
         promo_sellable_area = compute_sellable_area(mix_inputs)
+
+        # Resolve effective constraints (PR-CONCEPT-060 priority order)
+        promo_land_far, promo_land_density = self._resolve_land_constraints_for_option(
+            option.land_id
+        )
+
+        promo_effective_far = self._resolve_effective_far_limit(
+            land_far=promo_land_far,
+            override_far=(
+                float(option.concept_override_far_limit)
+                if option.concept_override_far_limit is not None
+                else None
+            ),
+            manual_far=float(option.far_limit) if option.far_limit is not None else None,
+        )
+        promo_effective_density = self._resolve_effective_density_limit(
+            land_density=promo_land_density,
+            override_density=(
+                float(option.concept_override_density_limit)
+                if option.concept_override_density_limit is not None
+                else None
+            ),
+            manual_density=(
+                float(option.density_limit) if option.density_limit is not None else None
+            ),
+        )
+
         self._validate_concept_zoning(
             site_area=float(option.site_area) if option.site_area is not None else None,
             gross_floor_area=(
@@ -632,12 +872,8 @@ class ConceptDesignService:
                 if option.gross_floor_area is not None
                 else None
             ),
-            far_limit=float(option.far_limit) if option.far_limit is not None else None,
-            density_limit=(
-                float(option.density_limit)
-                if option.density_limit is not None
-                else None
-            ),
+            far_limit=promo_effective_far,
+            density_limit=promo_effective_density,
             sellable_area=promo_sellable_area,
             unit_count=promo_unit_count,
         )
