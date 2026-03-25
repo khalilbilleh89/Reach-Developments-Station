@@ -542,3 +542,128 @@ def test_get_feasibility_result_alias_not_found(client: TestClient):
     """GET /api/v1/feasibility/{run_id} for unknown run must return 404."""
     resp = client.get("/api/v1/feasibility/no-such-run")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Detail page API contract tests (PR-W5.2)
+# ---------------------------------------------------------------------------
+
+def test_run_detail_response_shape(client: TestClient):
+    """GET /api/v1/feasibility/runs/{id} returns all fields required by the detail page."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Detail Shape Test", "scenario_type": "upside"},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["id"]
+
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    required_fields = ["id", "project_id", "scenario_id", "scenario_name", "scenario_type", "notes", "created_at", "updated_at"]
+    for field in required_fields:
+        assert field in data, f"Missing field in run response: {field}"
+
+    assert data["scenario_name"] == "Detail Shape Test"
+    assert data["scenario_type"] == "upside"
+    assert data["project_id"] is None
+    assert data["scenario_id"] is None
+
+
+def test_result_includes_extended_kpi_fields(client: TestClient):
+    """Calculate result must include extended KPI fields consumed by the results panel."""
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Extended KPI Test"},
+    )
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    extended_fields = [
+        "irr",
+        "equity_multiple",
+        "break_even_price",
+        "break_even_units",
+        "viability_status",
+        "risk_level",
+        "decision",
+        "payback_period",
+    ]
+    for field in extended_fields:
+        assert field in data, f"Missing extended field: {field}"
+        assert data[field] is not None, f"Extended field is None: {field}"
+
+
+def test_get_assumptions_returns_404_when_not_set(client: TestClient):
+    """GET /api/v1/feasibility/runs/{id}/assumptions returns 404 before any assumptions are saved.
+
+    The detail page must handle this gracefully (pre-fill form with empty fields).
+    """
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "No Assumptions Yet"},
+    )
+    run_id = resp.json()["id"]
+
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}/assumptions")
+    assert resp.status_code == 404
+
+
+def test_get_results_returns_404_before_calculate(client: TestClient):
+    """GET /api/v1/feasibility/runs/{id}/results returns 404 before calculation.
+
+    The detail page must handle this gracefully (show 'no results' placeholder).
+    """
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Not Calculated"},
+    )
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}/results")
+    assert resp.status_code == 404
+
+
+def test_upsert_assumptions_replaces_existing(client: TestClient):
+    """POST /api/v1/feasibility/runs/{id}/assumptions replaces prior assumptions (upsert).
+
+    The detail page save flow must be idempotent — repeated saves update the same record.
+    """
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Upsert Test"},
+    )
+    run_id = resp.json()["id"]
+
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    updated_payload = {**_VALID_ASSUMPTIONS_PAYLOAD, "sellable_area_sqm": 2000.0}
+    resp2 = client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=updated_payload)
+    assert resp2.status_code == 201
+    assert resp2.json()["sellable_area_sqm"] == pytest.approx(2000.0)
+
+    # Only one assumptions record should exist
+    resp3 = client.get(f"/api/v1/feasibility/runs/{run_id}/assumptions")
+    assert resp3.status_code == 200
+    assert resp3.json()["sellable_area_sqm"] == pytest.approx(2000.0)
+
+
+def test_calculate_fails_safely_when_assumptions_missing(client: TestClient):
+    """POST /api/v1/feasibility/runs/{id}/calculate returns 422 when no assumptions exist.
+
+    The calculate button in the detail page is disabled when assumptions are absent,
+    but the backend must also guard this state independently.
+    """
+    resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Missing Assumptions"},
+    )
+    run_id = resp.json()["id"]
+
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert resp.status_code == 422
