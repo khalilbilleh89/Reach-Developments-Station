@@ -217,10 +217,20 @@ describe("compareConceptOptions", () => {
     );
   });
 
-  it("calls /concept-options/compare without params when neither supplied", async () => {
-    mockApiFetch.mockResolvedValue({ comparison_basis: "none", option_count: 0, rows: [] });
-    await api.compareConceptOptions({});
-    expect(mockApiFetch).toHaveBeenCalledWith("/concept-options/compare");
+  it("throws and does not call apiFetch when neither project_id nor scenario_id is supplied", async () => {
+    await expect(api.compareConceptOptions({})).rejects.toThrow(
+      "compareConceptOptions requires exactly one of project_id or scenario_id.",
+    );
+    expect(mockApiFetch).not.toHaveBeenCalled();
+  });
+
+  it("throws and does not call apiFetch when both project_id and scenario_id are supplied", async () => {
+    await expect(
+      api.compareConceptOptions({ project_id: "proj-1", scenario_id: "scen-1" }),
+    ).rejects.toThrow(
+      "compareConceptOptions accepts only one of project_id or scenario_id, not both.",
+    );
+    expect(mockApiFetch).not.toHaveBeenCalled();
   });
 });
 

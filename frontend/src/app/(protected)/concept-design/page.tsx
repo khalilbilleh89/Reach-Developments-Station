@@ -692,6 +692,15 @@ function PromoteModal({ conceptOption, onClose, onPromoted }: PromoteModalProps)
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+
+      // Client-side guard: target_project_id is required when the option has
+      // no project_id set. Do not send the request with a null value because
+      // the backend will reject it anyway, and the user deserves a clear error.
+      if (!conceptOption.project_id && !targetProjectId.trim()) {
+        setError("Target Project ID is required to promote this option.");
+        return;
+      }
+
       setSubmitting(true);
       setError(null);
 
@@ -1512,12 +1521,18 @@ export default function ConceptDesignPage() {
 
   const handleDetailRefresh = useCallback(() => {
     fetchOptions();
-    // Re-fetch the selected option to reflect promoted status
+    // Update selectedOption from the same batch that fetchOptions will load.
+    // We issue a second targeted fetch only to get the refreshed record — errors
+    // are caught silently because fetchOptions already covers the primary error path.
     if (selectedOption) {
-      listConceptOptions({ limit: 100 }).then((resp) => {
-        const updated = resp.items.find((o) => o.id === selectedOption.id);
-        if (updated) setSelectedOption(updated);
-      });
+      listConceptOptions({ limit: 100 })
+        .then((resp) => {
+          const updated = resp.items.find((o) => o.id === selectedOption.id);
+          if (updated) setSelectedOption(updated);
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to refresh selected concept option", error);
+        });
     }
   }, [fetchOptions, selectedOption]);
 

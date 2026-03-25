@@ -123,6 +123,18 @@ export async function compareConceptOptions(params: {
   project_id?: string;
   scenario_id?: string;
 }): Promise<ConceptOptionComparisonResponse> {
+  const hasProject = Boolean(params.project_id);
+  const hasScenario = Boolean(params.scenario_id);
+  if (!hasProject && !hasScenario) {
+    return Promise.reject(
+      new Error("compareConceptOptions requires exactly one of project_id or scenario_id."),
+    );
+  }
+  if (hasProject && hasScenario) {
+    return Promise.reject(
+      new Error("compareConceptOptions accepts only one of project_id or scenario_id, not both."),
+    );
+  }
   const query = new URLSearchParams();
   if (params.project_id) query.set("project_id", params.project_id);
   if (params.scenario_id) query.set("scenario_id", params.scenario_id);

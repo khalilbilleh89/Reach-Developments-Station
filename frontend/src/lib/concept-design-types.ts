@@ -54,8 +54,8 @@ export interface ConceptOptionCreate {
 }
 
 export interface ConceptOptionUpdate {
-  name?: string | null;
-  status?: ConceptOptionStatus | null;
+  name?: string;
+  status?: ConceptOptionStatus;
   description?: string | null;
   site_area?: number | null;
   gross_floor_area?: number | null;
