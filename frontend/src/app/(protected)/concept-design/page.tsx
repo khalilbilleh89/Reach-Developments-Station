@@ -408,11 +408,12 @@ function ConceptOptionFormModal({
             gross_floor_area: grossFloorArea ? parseFloat(grossFloorArea) : null,
             building_count: buildingCount ? parseInt(buildingCount, 10) : null,
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
-            // far_limit / density_limit: inherited from land when scenario is
-            // linked. Only send manual values when no scenario is selected.
-            far_limit: farLimit && !scenarioId.trim() ? parseFloat(farLimit) : null,
+            // far_limit / density_limit: inherited from land when scenario has a
+            // land parcel (hasLandContext). Only send manual values when there is
+            // no land context (scenario without land, or no scenario at all).
+            far_limit: farLimit && !hasLandContext ? parseFloat(farLimit) : null,
             density_limit:
-              densityLimit && !scenarioId.trim() ? parseFloat(densityLimit) : null,
+              densityLimit && !hasLandContext ? parseFloat(densityLimit) : null,
             concept_override_far_limit:
               showFarOverride && overrideFar ? parseFloat(overrideFar) : null,
             concept_override_density_limit:
@@ -667,8 +668,10 @@ function ConceptOptionFormModal({
             />
           </Field>
 
-          {/* FAR / Density shown only when no scenario context */}
-          {(!scenarioId || isEdit) && (
+          {/* FAR / Density shown when no land context is available for the
+              selected scenario (or in edit mode). For scenarios with land,
+              constraints are inherited — the override section handles deviations. */}
+          {(!scenarioId || !hasLandContext || isEdit) && (
             <>
               <Field label="FAR Limit" id="co-far-limit">
                 <input

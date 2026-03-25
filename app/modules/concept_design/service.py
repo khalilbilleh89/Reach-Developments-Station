@@ -146,19 +146,39 @@ class ConceptDesignService:
     ) -> Optional[LandParcel]:
         """Return the LandParcel associated with *scenario_id*, or None.
 
-        Returns None if the scenario does not exist, has no land_id, or the
-        referenced land parcel cannot be found.  The caller decides whether
-        to treat a missing parcel as an error or simply skip constraint
-        inheritance.
+        Returns None if the scenario does not exist or has no land_id.
+
+        If the scenario exists and has a land_id but the referenced land
+        parcel cannot be found, this method logs a warning and raises a
+        ValidationError to avoid silently skipping inheritance/validation
+        while the scenario still claims to have land.
         """
         scenario = self.scenario_repo.get_by_id(scenario_id)
         if scenario is None or scenario.land_id is None:
             return None
-        return (
+
+        land_parcel = (
             self.scenario_repo.db.query(LandParcel)
             .filter(LandParcel.id == scenario.land_id)
             .first()
         )
+
+        if land_parcel is None:
+            _logger.warning(
+                "Scenario '%s' references missing LandParcel '%s'. "
+                "Raising ValidationError to prevent silent fallback.",
+                scenario_id,
+                scenario.land_id,
+            )
+            raise ValidationError(
+                f"Scenario '{scenario_id}' references a non-existent land parcel.",
+                details={
+                    "scenario_id": scenario_id,
+                    "land_id": scenario.land_id,
+                },
+            )
+
+        return land_parcel
 
     def _resolve_effective_far_limit(
         self,
@@ -335,10 +355,17 @@ class ConceptDesignService:
             density_limit=effective_density,
         )
 
-        # Store the resolved site_area back so the DB row reflects the
-        # inherited value even if the caller omitted it.
+        # Store the resolved values back so the DB row reflects the
+        # inherited/effective values even if the caller omitted them.
+        updates: dict = {}
         if data.site_area is None and inherited_site_area is not None:
-            data = data.model_copy(update={"site_area": inherited_site_area})
+            updates["site_area"] = inherited_site_area
+        if data.far_limit is None and effective_far is not None:
+            updates["far_limit"] = effective_far
+        if data.density_limit is None and effective_density is not None:
+            updates["density_limit"] = effective_density
+        if updates:
+            data = data.model_copy(update=updates)
 
         option = self.option_repo.create(data, land_id=land_id)
         _logger.info("ConceptOption created id=%s name=%r", option.id, option.name)

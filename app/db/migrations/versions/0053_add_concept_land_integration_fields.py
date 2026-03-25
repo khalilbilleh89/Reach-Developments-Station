@@ -15,7 +15,7 @@ concept_options
 
 These columns let the service record which land parcel provided the upstream
 constraints and whether the user explicitly overrode FAR or density limits.
-Validation uses priority: scenario land constraints > overrides > manual inputs.
+Validation uses priority: overrides > scenario land constraints > manual inputs.
 
 No destructive changes. Existing rows remain valid with all three columns NULL.
 

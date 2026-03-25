@@ -1,20 +1,24 @@
 """
 Tests for PR-CONCEPT-060: Land & Scenario Integration for Concept Design.
+PR-CONCEPT-060A: Hardening — persistence, error on missing parcel, and UI gating.
 
 Covers:
   - Concept option inherits land constraints (site_area, far_limit, density_limit)
     from the linked scenario's land parcel
+  - far_limit and density_limit are persisted (not left NULL) when inherited
+  - ValidationError is raised when scenario.land_id references a missing LandParcel
   - Validation uses scenario-inherited FAR, not manually entered FAR
   - concept_override_far_limit takes priority over inherited land FAR
   - concept_override_density_limit takes priority over inherited land density
 
-PR-CONCEPT-060
+PR-CONCEPT-060, PR-CONCEPT-060A
 """
 
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +103,7 @@ class TestConceptInheritsLandConstraints:
         assert option["scenario_id"] == scenario["id"]
 
     def test_inherits_far_limit_from_land_parcel(self, client: TestClient):
-        """far_limit is populated from land.permitted_far."""
+        """far_limit is populated from land.permitted_far when not supplied by caller."""
         parcel = _create_land_parcel(client, permitted_far=2.5, parcel_code="LP-FAR-01")
         scenario = _create_scenario(client, name="FAR Scenario", land_id=parcel["id"])
 
@@ -107,11 +111,11 @@ class TestConceptInheritsLandConstraints:
             client, {"name": "Inherit FAR", "scenario_id": scenario["id"]}
         )
 
-        # far_limit reflects the inherited value stored at creation time
         assert option["land_id"] == parcel["id"]
+        assert option["far_limit"] == pytest.approx(2.5)
 
     def test_inherits_density_limit_from_land_parcel(self, client: TestClient):
-        """density_limit is populated from land.density_ratio."""
+        """density_limit is populated from land.density_ratio when not supplied by caller."""
         parcel = _create_land_parcel(
             client, density_ratio=80.0, parcel_code="LP-DENS-01"
         )
@@ -122,6 +126,7 @@ class TestConceptInheritsLandConstraints:
         )
 
         assert option["land_id"] == parcel["id"]
+        assert option["density_limit"] == pytest.approx(80.0)
 
     def test_no_inheritance_when_scenario_has_no_land(self, client: TestClient):
         """When scenario has no land_id, no land constraints are inherited."""
@@ -173,6 +178,60 @@ class TestConceptInheritsLandConstraints:
 
         assert "land_id" in option
         assert option["land_id"] == parcel["id"]
+
+    def test_all_constraints_persisted_on_create(self, client: TestClient):
+        """site_area, far_limit, and density_limit are all persisted (not NULL)
+        when inherited from a land parcel at creation time."""
+        parcel = _create_land_parcel(
+            client,
+            land_area_sqm=4500.0,
+            permitted_far=3.0,
+            density_ratio=90.0,
+            parcel_code="LP-ALL-01",
+        )
+        scenario = _create_scenario(client, name="All Constraints Scenario", land_id=parcel["id"])
+
+        option = _create_concept_option(
+            client, {"name": "All Constraints", "scenario_id": scenario["id"]}
+        )
+
+        assert option["site_area"] == pytest.approx(4500.0)
+        assert option["far_limit"] == pytest.approx(3.0)
+        assert option["density_limit"] == pytest.approx(90.0)
+        assert option["land_id"] == parcel["id"]
+
+
+# ---------------------------------------------------------------------------
+# test_missing_land_parcel_raises_error
+# ---------------------------------------------------------------------------
+
+
+class TestMissingLandParcelRaisesError:
+    """When scenario.land_id is set but the referenced LandParcel is missing,
+    concept creation must raise a ValidationError (not silently fall back)."""
+
+    def test_create_raises_422_when_land_parcel_missing(
+        self, client: TestClient, db_session: Session
+    ):
+        """Concept creation is rejected when scenario references a non-existent land parcel."""
+        from app.modules.scenario.models import Scenario
+
+        # Create a scenario without land then directly set a bogus land_id
+        scenario_data = _create_scenario(client, name="Broken Land Scenario", land_id=None)
+        scenario_row = db_session.query(Scenario).filter(
+            Scenario.id == scenario_data["id"]
+        ).first()
+        assert scenario_row is not None
+        scenario_row.land_id = "non-existent-land-parcel-id"
+        db_session.commit()
+
+        resp = client.post(
+            "/api/v1/concept-options",
+            json={"name": "Should Fail", "scenario_id": scenario_data["id"]},
+        )
+        assert resp.status_code == 422
+        body = resp.json()
+        assert "land parcel" in body["message"].lower()
 
 
 # ---------------------------------------------------------------------------
