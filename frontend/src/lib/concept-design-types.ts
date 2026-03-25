@@ -156,4 +156,7 @@ export interface ConceptPromotionResponse {
   promoted_phase_name: string;
   promoted_at: string;
   promotion_notes: string | null;
+  buildings_created: number;
+  floors_created: number;
+  units_created: number;
 }

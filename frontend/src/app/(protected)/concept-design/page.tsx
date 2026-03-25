@@ -760,6 +760,12 @@ function PromoteModal({ conceptOption, onClose, onPromoted }: PromoteModalProps)
           </dd>
           <dt style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>Promoted At</dt>
           <dd style={{ margin: 0 }}>{formatDate(result.promoted_at)}</dd>
+          <dt style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>Buildings</dt>
+          <dd style={{ margin: 0 }}>{result.buildings_created}</dd>
+          <dt style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>Floors</dt>
+          <dd style={{ margin: 0 }}>{result.floors_created}</dd>
+          <dt style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>Units Generated</dt>
+          <dd style={{ margin: 0 }}>{result.units_created}</dd>
         </dl>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
           <button

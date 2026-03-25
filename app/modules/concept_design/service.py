@@ -7,7 +7,7 @@ Coordinates repository access and concept engine computation.
 Raises domain errors (ResourceNotFoundError) that the central error
 handler translates into HTTP responses.
 
-PR-CONCEPT-052, PR-CONCEPT-054
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-056
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.modules.buildings.models import Building
 from app.modules.concept_design.comparison_engine import (
     ConceptOptionComparisonInput,
     compute_concept_comparison,
@@ -41,13 +42,58 @@ from app.modules.concept_design.schemas import (
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
 )
+from app.modules.floors.models import Floor
 from app.modules.phases.repository import PhaseRepository
 from app.modules.phases.schemas import PhaseCreate
 from app.modules.projects.repository import ProjectRepository
 from app.modules.scenario.repository import ScenarioRepository
-from app.shared.enums.project import PhaseStatus
+from app.modules.units.models import Unit
+from app.shared.enums.project import BuildingStatus, FloorStatus, PhaseStatus, UnitStatus, UnitType
 
 _logger = get_logger("reach_developments.concept_design")
+
+# ---------------------------------------------------------------------------
+# Unit-type normalisation helper
+# ---------------------------------------------------------------------------
+
+_UNIT_TYPE_ALIASES: dict[str, str] = {
+    "studio": UnitType.STUDIO.value,
+    "1br": UnitType.ONE_BEDROOM.value,
+    "1 bedroom": UnitType.ONE_BEDROOM.value,
+    "one bedroom": UnitType.ONE_BEDROOM.value,
+    "1-bedroom": UnitType.ONE_BEDROOM.value,
+    "2br": UnitType.TWO_BEDROOM.value,
+    "2 bedroom": UnitType.TWO_BEDROOM.value,
+    "two bedroom": UnitType.TWO_BEDROOM.value,
+    "2-bedroom": UnitType.TWO_BEDROOM.value,
+    "3br": UnitType.THREE_BEDROOM.value,
+    "3 bedroom": UnitType.THREE_BEDROOM.value,
+    "three bedroom": UnitType.THREE_BEDROOM.value,
+    "3-bedroom": UnitType.THREE_BEDROOM.value,
+    "4br": UnitType.FOUR_BEDROOM.value,
+    "4 bedroom": UnitType.FOUR_BEDROOM.value,
+    "four bedroom": UnitType.FOUR_BEDROOM.value,
+    "4-bedroom": UnitType.FOUR_BEDROOM.value,
+    "villa": UnitType.VILLA.value,
+    "townhouse": UnitType.TOWNHOUSE.value,
+    "retail": UnitType.RETAIL.value,
+    "office": UnitType.OFFICE.value,
+    "penthouse": UnitType.PENTHOUSE.value,
+}
+
+_VALID_UNIT_TYPES: frozenset[str] = frozenset(m.value for m in UnitType)
+
+
+def _normalise_unit_type(raw: str) -> str:
+    """Map a free-form concept mix unit_type string to a valid UnitType enum value.
+
+    Exact enum values (e.g. 'studio', 'one_bedroom') pass through unchanged.
+    Common shorthand such as '1BR', '2BR', '1 bedroom' are mapped to their
+    canonical enum counterparts.  Unrecognised values fall back to 'studio'.
+    """
+    if raw in _VALID_UNIT_TYPES:
+        return raw
+    return _UNIT_TYPE_ALIASES.get(raw.lower(), UnitType.STUDIO.value)
 
 
 class ConceptDesignService:
@@ -422,11 +468,82 @@ class ConceptDesignService:
             ),
         )
 
-        # ── Atomically persist phase and promotion metadata ───────────
-        # Stage both writes before the single commit so that a failure in
-        # either step leaves no partial state in the database.
+        # ── Atomically persist phase, scaffolding, and promotion metadata ──
+        # Stage all writes before the single commit so that a failure in
+        # any step leaves no partial state in the database.
         promoted_at = datetime.now(timezone.utc)
         phase = self.phase_repo.apply_create(phase_data)
+        self.option_repo.db.flush()  # generate phase.id
+
+        # ── Create buildings ──────────────────────────────────────────
+        building_count: int = option.building_count  # type: ignore[assignment]
+        floor_count: int = option.floor_count  # type: ignore[assignment]
+
+        buildings: list[Building] = []
+        for i in range(building_count):
+            # Use single letters A–Z for the first 26 buildings, then AA, AB, …
+            if i < 26:
+                label = chr(ord("A") + i)
+            else:
+                label = chr(ord("A") + i // 26 - 1) + chr(ord("A") + i % 26)
+            building = Building(
+                phase_id=phase.id,
+                name=f"Building {label}",
+                code=f"BLK-{label}",
+                floors_count=floor_count,
+                status=BuildingStatus.PLANNED.value,
+            )
+            self.option_repo.db.add(building)
+            buildings.append(building)
+        self.option_repo.db.flush()  # generate building ids
+
+        # ── Create floors ─────────────────────────────────────────────
+        # All floors across all buildings, indexed for unit assignment.
+        all_floors: list[Floor] = []
+        for building in buildings:
+            for seq in range(1, floor_count + 1):
+                floor = Floor(
+                    building_id=building.id,
+                    name=f"Floor {seq}",
+                    code=f"FL-{seq:02d}",
+                    sequence_number=seq,
+                    status=FloorStatus.PLANNED.value,
+                )
+                self.option_repo.db.add(floor)
+                all_floors.append(floor)
+        self.option_repo.db.flush()  # generate floor ids
+
+        # ── Create units from mix lines ───────────────────────────────
+        # Units are distributed sequentially across all floors (round-robin).
+        # Per-floor unit counter tracks the next unit number for each floor.
+        floor_unit_counters: dict[str, int] = {f.id: 0 for f in all_floors}
+        floor_cycle_index = 0
+        total_floors = len(all_floors)
+        units_created_count = 0
+
+        for mix_line in option.mix_lines:
+            unit_type = _normalise_unit_type(mix_line.unit_type)
+            if mix_line.avg_internal_area is not None:
+                internal_area = float(mix_line.avg_internal_area)
+            elif mix_line.avg_sellable_area is not None:
+                internal_area = float(mix_line.avg_sellable_area)
+            else:
+                internal_area = 0.0
+            for _ in range(mix_line.units_count):
+                target_floor = all_floors[floor_cycle_index % total_floors]
+                floor_cycle_index += 1
+                floor_unit_counters[target_floor.id] += 1
+                unit_number = str(floor_unit_counters[target_floor.id])
+                unit = Unit(
+                    floor_id=target_floor.id,
+                    unit_number=unit_number,
+                    unit_type=unit_type,
+                    status=UnitStatus.AVAILABLE.value,
+                    internal_area=internal_area if internal_area > 0 else 0.0,
+                )
+                self.option_repo.db.add(unit)
+                units_created_count += 1
+
         self.option_repo.apply_promotion_fields(
             option,
             promoted_project_id=target_project_id,
@@ -438,10 +555,14 @@ class ConceptDesignService:
         self.option_repo.db.refresh(option)
 
         _logger.info(
-            "ConceptOption promoted id=%s → project=%s phase=%s",
+            "ConceptOption promoted id=%s → project=%s phase=%s "
+            "buildings=%d floors=%d units=%d",
             concept_option_id,
             target_project_id,
             phase.id,
+            building_count,
+            len(all_floors),
+            units_created_count,
         )
 
         return ConceptPromotionResponse(
@@ -451,4 +572,7 @@ class ConceptDesignService:
             promoted_phase_name=phase.name,
             promoted_at=promoted_at,
             promotion_notes=payload.promotion_notes,
+            buildings_created=building_count,
+            floors_created=len(all_floors),
+            units_created=units_created_count,
         )

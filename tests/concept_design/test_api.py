@@ -491,6 +491,10 @@ def test_promote_concept_option_success(client: TestClient):
     assert "promoted_phase_id" in data
     assert data["promoted_phase_name"].startswith("Phase 1")
     assert "promoted_at" in data
+    # Scaffolding counts (building_count=2, floor_count=8, units_count=50)
+    assert data["buildings_created"] == 2
+    assert data["floors_created"] == 16  # 2 buildings × 8 floors
+    assert data["units_created"] == 50
 
 
 def test_promote_sets_is_promoted_flag(client: TestClient):
