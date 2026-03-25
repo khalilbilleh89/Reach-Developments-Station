@@ -65,11 +65,14 @@ class FeasibilityRunRepository:
         return self.db.query(FeasibilityRun).count()
 
     def update(self, run: FeasibilityRun, data: FeasibilityRunUpdate) -> FeasibilityRun:
+        # Fields that may be explicitly set to None (unlink / clear).
+        # All other None values are treated as "not provided" and skipped.
+        _NULLABLE_FIELDS = {"project_id", "notes"}
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             if field == "scenario_type" and value is not None:
                 setattr(run, field, value.value if hasattr(value, "value") else value)
-            elif value is None and field not in ("project_id", "notes"):
+            elif value is None and field not in _NULLABLE_FIELDS:
                 # Skip None for non-nullable fields; project_id and notes may be
                 # explicitly cleared (unlink / remove notes).
                 continue

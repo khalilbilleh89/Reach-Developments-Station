@@ -175,6 +175,21 @@ const mockResult = {
   updated_at: "2025-01-01T00:00:00Z",
 };
 
+/** Reusable mock project for project-linkage tests. */
+const mockProject = {
+  id: "proj-1",
+  name: "Harbour Tower",
+  code: "HT-01",
+  developer_name: null,
+  location: null,
+  start_date: null,
+  target_end_date: null,
+  status: "pipeline",
+  description: null,
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockSearchParams = new URLSearchParams("runId=run-1");
@@ -566,10 +581,7 @@ test("shows Assign Project button when projects are available and run is unlinke
   mockGetRun.mockResolvedValue({ ...mockRun, project_id: null, project_name: null });
   mockGetAssumptions.mockRejectedValue(mock404());
   mockGetResults.mockRejectedValue(mock404());
-  mockListProjects.mockResolvedValue({
-    items: [{ id: "proj-1", name: "Harbour Tower", code: "HT-01", developer_name: null, location: null, start_date: null, target_end_date: null, status: "pipeline", description: null, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" }],
-    total: 1,
-  });
+  mockListProjects.mockResolvedValue({ items: [mockProject], total: 1 });
 
   render(<FeasibilityRunDetailView />);
 
@@ -585,10 +597,7 @@ test("calls assignProjectToRun when Assign Project is clicked", async () => {
   mockGetRun.mockResolvedValue(runWithoutProject);
   mockGetAssumptions.mockRejectedValue(mock404());
   mockGetResults.mockRejectedValue(mock404());
-  mockListProjects.mockResolvedValue({
-    items: [{ id: "proj-1", name: "Harbour Tower", code: "HT-01", developer_name: null, location: null, start_date: null, target_end_date: null, status: "pipeline", description: null, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" }],
-    total: 1,
-  });
+  mockListProjects.mockResolvedValue({ items: [mockProject], total: 1 });
   mockAssignProject.mockResolvedValue(runWithProject);
 
   render(<FeasibilityRunDetailView />);
