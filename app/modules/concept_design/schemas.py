@@ -89,6 +89,8 @@ class ConceptOptionResponse(BaseModel):
     promoted_at: Optional[datetime]
     promoted_project_id: Optional[str]
     promotion_notes: Optional[str]
+    # Reverse-lineage — PR-CONCEPT-064
+    source_feasibility_run_id: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -285,4 +287,28 @@ class SeedFeasibilityResponse(BaseModel):
     seeded_sellable_area_sqm: Optional[float]
     seeded_unit_count: int
     assumptions_seeded: bool
+
+
+# ---------------------------------------------------------------------------
+# Seed-Concept-from-Feasibility schemas — PR-CONCEPT-064
+# ---------------------------------------------------------------------------
+
+
+class SeedConceptFromFeasibilityResponse(BaseModel):
+    """Response returned after successfully creating a concept option from a
+    feasibility run.
+
+    Lineage metadata:
+    - concept_option_id: the newly created concept option
+    - source_feasibility_run_id: the feasibility run that seeded it
+    - scenario_id: inherited from the feasibility run (if set)
+    - project_id: inherited from the feasibility run (if linked)
+    - seed_source_type: always 'feasibility_run' for this flow
+    """
+
+    concept_option_id: str
+    source_feasibility_run_id: str
+    scenario_id: Optional[str]
+    project_id: Optional[str]
+    seed_source_type: str
 

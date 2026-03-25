@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import {
   getFeasibilityRun,
@@ -12,6 +12,7 @@ import {
   getFeasibilityResults,
   assignProjectToRun,
 } from "@/lib/feasibility-api";
+import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-utils";
@@ -753,6 +754,7 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
  */
 export default function FeasibilityRunDetailView() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const runId = searchParams.get("runId") ?? "";
 
   const [run, setRun] = useState<FeasibilityRun | null>(null);
@@ -766,6 +768,8 @@ export default function FeasibilityRunDetailView() {
   const [assigningProject, setAssigningProject] = useState(false);
   const [projectAssignError, setProjectAssignError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [seedingConcept, setSeedingConcept] = useState(false);
+  const [seedConceptError, setSeedConceptError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -873,6 +877,24 @@ export default function FeasibilityRunDetailView() {
       setAssigningProject(false);
     }
   }, [runId]);
+
+  const handleCreateConcept = useCallback(async () => {
+    if (!runId) return;
+    setSeedConceptError(null);
+    setSeedingConcept(true);
+    try {
+      const result = await createConceptFromFeasibility(runId);
+      router.push(
+        `/concept-design?concept_option_id=${encodeURIComponent(result.concept_option_id)}`,
+      );
+    } catch (err: unknown) {
+      setSeedConceptError(
+        err instanceof Error ? err.message : "Failed to create concept option.",
+      );
+    } finally {
+      setSeedingConcept(false);
+    }
+  }, [runId, router]);
 
   const title = run ? run.scenario_name : "Feasibility Run";
 
@@ -1132,6 +1154,68 @@ export default function FeasibilityRunDetailView() {
               </p>
             </div>
           )}
+
+          {/* Reverse-seed: Create Concept Option — PR-CONCEPT-064 */}
+          <div
+            style={{
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              padding: "16px 24px",
+              marginTop: 24,
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 12px",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                color: "var(--color-text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Design Iteration
+            </h3>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: "0.875rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Create a new concept option from this feasibility run to continue
+              the design-finance iteration loop.
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                data-testid="create-concept-btn"
+                onClick={handleCreateConcept}
+                disabled={seedingConcept}
+                style={{
+                  padding: "8px 20px",
+                  border: "none",
+                  borderRadius: 4,
+                  background: seedingConcept ? "#94a3b8" : "#16a34a",
+                  color: "#fff",
+                  cursor: seedingConcept ? "not-allowed" : "pointer",
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
+                }}
+              >
+                {seedingConcept ? "Creating…" : "Create Concept Option"}
+              </button>
+              {seedConceptError && (
+                <span
+                  role="alert"
+                  style={{ fontSize: "0.875rem", color: "#b91c1c" }}
+                >
+                  {seedConceptError}
+                </span>
+              )}
+            </div>
+          </div>
         </>
       )}
     </PageContainer>

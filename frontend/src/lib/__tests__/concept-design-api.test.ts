@@ -365,3 +365,39 @@ describe("duplicateConceptOption", () => {
     );
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// createConceptFromFeasibility — PR-CONCEPT-064
+// ---------------------------------------------------------------------------
+
+describe("createConceptFromFeasibility", () => {
+  const RUN_ID = "run-xyz-123";
+  const mockSeedResponse = {
+    concept_option_id: "concept-abc",
+    source_feasibility_run_id: RUN_ID,
+    scenario_id: "scen-123",
+    project_id: null,
+    seed_source_type: "feasibility_run",
+  };
+
+  it("calls POST /feasibility/runs/{runId}/create-concept", async () => {
+    mockApiFetch.mockResolvedValue(mockSeedResponse);
+    const result = await api.createConceptFromFeasibility(RUN_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${encodeURIComponent(RUN_ID)}/create-concept`,
+      { method: "POST" },
+    );
+    expect(result).toEqual(mockSeedResponse);
+  });
+
+  it("URL-encodes the runId", async () => {
+    const weirdId = "run/with spaces";
+    mockApiFetch.mockResolvedValue(mockSeedResponse);
+    await api.createConceptFromFeasibility(weirdId);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${encodeURIComponent(weirdId)}/create-concept`,
+      { method: "POST" },
+    );
+  });
+});

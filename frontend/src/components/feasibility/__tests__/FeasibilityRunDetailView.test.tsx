@@ -19,8 +19,9 @@ import "@testing-library/jest-dom";
 
 // Mock Next.js navigation — useSearchParams provides ?runId=run-1
 let mockSearchParams = new URLSearchParams("runId=run-1");
+const mockRouterPush = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => "/feasibility",
   useSearchParams: () => mockSearchParams,
 }));
@@ -75,6 +76,11 @@ jest.mock("@/lib/feasibility-api", () => ({
   assignProjectToRun: jest.fn(),
 }));
 
+// Mock concept-design-api — reverse-seeding
+jest.mock("@/lib/concept-design-api", () => ({
+  createConceptFromFeasibility: jest.fn(),
+}));
+
 // Mock projects-api
 jest.mock("@/lib/projects-api", () => ({
   listProjects: jest.fn(),
@@ -104,6 +110,7 @@ import {
   getFeasibilityResults,
   assignProjectToRun,
 } from "@/lib/feasibility-api";
+import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
 import FeasibilityRunDetailView from "@/components/feasibility/FeasibilityRunDetailView";
@@ -115,6 +122,7 @@ const mockCalculate = calculateFeasibility as jest.Mock;
 const mockGetResults = getFeasibilityResults as jest.Mock;
 const mockAssignProject = assignProjectToRun as jest.Mock;
 const mockListProjects = listProjects as jest.Mock;
+const mockCreateConcept = createConceptFromFeasibility as jest.Mock;
 
 /** Helper to create a mocked ApiError with a given status code. */
 function mockApiError(message: string, status: number): Error {
@@ -652,3 +660,92 @@ test("calls assignProjectToRun with null when Unlink Project is clicked", async 
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Create Concept Option button — PR-CONCEPT-064
+// ---------------------------------------------------------------------------
+
+test("renders Create Concept Option button when run is loaded", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("create-concept-btn")).toBeInTheDocument();
+  });
+  expect(screen.getByTestId("create-concept-btn")).toHaveTextContent("Create Concept Option");
+});
+
+test("calls createConceptFromFeasibility with runId when button is clicked", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockCreateConcept.mockResolvedValue({
+    concept_option_id: "concept-new-1",
+    source_feasibility_run_id: "run-1",
+    scenario_id: null,
+    project_id: null,
+    seed_source_type: "feasibility_run",
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("create-concept-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("create-concept-btn"));
+
+  await waitFor(() => {
+    expect(mockCreateConcept).toHaveBeenCalledWith("run-1");
+  });
+});
+
+test("navigates to concept-design page after successful concept creation", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockCreateConcept.mockResolvedValue({
+    concept_option_id: "concept-new-1",
+    source_feasibility_run_id: "run-1",
+    scenario_id: null,
+    project_id: null,
+    seed_source_type: "feasibility_run",
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("create-concept-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("create-concept-btn"));
+
+  await waitFor(() => {
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/concept-design?concept_option_id=concept-new-1",
+    );
+  });
+});
+
+test("shows error when concept creation fails", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockCreateConcept.mockRejectedValue(new Error("Concept creation failed"));
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("create-concept-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("create-concept-btn"));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent("Concept creation failed");
+  });
+  expect(mockRouterPush).not.toHaveBeenCalled();
+});
