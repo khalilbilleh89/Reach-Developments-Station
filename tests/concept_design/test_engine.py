@@ -156,3 +156,69 @@ def test_run_concept_engine_no_sellable_area_on_lines():
     assert result.sellable_area is None
     assert result.efficiency_ratio is None
     assert result.average_unit_area is None
+
+
+# ---------------------------------------------------------------------------
+# Additional edge cases — PR-CONCEPT-061 hardening
+# ---------------------------------------------------------------------------
+
+def test_unit_count_with_zero_unit_line():
+    """A mix line with units_count=0 contributes zero to the total."""
+    lines = [
+        MixLineInput(unit_type="1BR", units_count=0, avg_sellable_area=75.0),
+        MixLineInput(unit_type="2BR", units_count=10, avg_sellable_area=110.0),
+    ]
+    assert compute_unit_count(lines) == 10
+
+
+def test_sellable_area_zero_count_line_contributes_zero():
+    """A mix line with units_count=0 contributes 0 to sellable area, but area is still returned."""
+    lines = [
+        MixLineInput(unit_type="1BR", units_count=0, avg_sellable_area=75.0),
+        MixLineInput(unit_type="2BR", units_count=5, avg_sellable_area=100.0),
+    ]
+    # 0*75 + 5*100 = 500
+    assert compute_sellable_area(lines) == pytest.approx(500.0)
+
+
+def test_sellable_area_only_zero_count_lines():
+    """All zero-count lines with area still returns a non-None (zero) sellable area."""
+    lines = [
+        MixLineInput(unit_type="1BR", units_count=0, avg_sellable_area=75.0),
+    ]
+    assert compute_sellable_area(lines) == pytest.approx(0.0)
+
+
+def test_efficiency_ratio_equals_one():
+    """Efficiency ratio of exactly 1.0 is valid (sellable == gfa)."""
+    ratio = compute_efficiency_ratio(sellable_area=10000.0, gross_floor_area=10000.0)
+    assert ratio == pytest.approx(1.0)
+
+
+def test_average_unit_area_fractional():
+    """average_unit_area returns a fractional result without truncation."""
+    avg = compute_average_unit_area(sellable_area=1000.0, unit_count=3)
+    assert avg == pytest.approx(1000.0 / 3)
+
+
+def test_run_concept_engine_mixed_area_and_no_area():
+    """run_concept_engine aggregates correctly when only some lines have avg_sellable_area."""
+    lines = [
+        MixLineInput(unit_type="1BR", units_count=10, avg_sellable_area=80.0),
+        MixLineInput(unit_type="2BR", units_count=5, avg_sellable_area=None),
+    ]
+    result = run_concept_engine(mix_lines=lines, gross_floor_area=2000.0)
+    # unit_count = 15, sellable from first line only = 10*80 = 800
+    assert result.unit_count == 15
+    assert result.sellable_area == pytest.approx(800.0)
+    assert result.efficiency_ratio == pytest.approx(800.0 / 2000.0)
+    assert result.average_unit_area == pytest.approx(800.0 / 15)
+
+
+def test_run_concept_engine_returns_concept_program_metrics():
+    """run_concept_engine returns a ConceptProgramMetrics dataclass instance."""
+    from app.modules.concept_design.engine import ConceptProgramMetrics
+
+    lines = [MixLineInput(unit_type="Studio", units_count=5, avg_sellable_area=45.0)]
+    result = run_concept_engine(mix_lines=lines, gross_floor_area=1000.0)
+    assert isinstance(result, ConceptProgramMetrics)
