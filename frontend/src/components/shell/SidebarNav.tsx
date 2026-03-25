@@ -81,6 +81,7 @@ const ICON_MAP: Record<string, string> = {
   LayoutDashboard: "⊞",
   MapPin: "📍",
   Calculator: "📐",
+  PenTool: "✏️",
   FolderOpen: "📁",
   HardHat: "🪖",
   Tag: "🏷",
