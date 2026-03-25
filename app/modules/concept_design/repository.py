@@ -36,6 +36,8 @@ class ConceptOptionRepository:
             gross_floor_area=data.gross_floor_area,
             building_count=data.building_count,
             floor_count=data.floor_count,
+            far_limit=data.far_limit,
+            density_limit=data.density_limit,
         )
         self.db.add(option)
         self.db.commit()
@@ -195,6 +197,8 @@ class ConceptOptionRepository:
             gross_floor_area=source.gross_floor_area,
             building_count=source.building_count,
             floor_count=source.floor_count,
+            far_limit=source.far_limit,
+            density_limit=source.density_limit,
         )
         self.db.add(clone)
         self.db.flush()

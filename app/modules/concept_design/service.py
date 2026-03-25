@@ -24,7 +24,12 @@ from app.modules.concept_design.comparison_engine import (
     ConceptOptionComparisonInput,
     compute_concept_comparison,
 )
-from app.modules.concept_design.engine import MixLineInput, run_concept_engine
+from app.modules.concept_design.engine import (
+    MixLineInput,
+    compute_sellable_area,
+    compute_unit_count,
+    run_concept_engine,
+)
 from app.modules.concept_design.repository import (
     ConceptOptionRepository,
     ConceptUnitMixLineRepository,
@@ -42,6 +47,7 @@ from app.modules.concept_design.schemas import (
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
 )
+from app.modules.concept_design.validation import run_zoning_validation
 from app.modules.floors.models import Floor
 from app.modules.phases.repository import PhaseRepository
 from app.modules.phases.schemas import PhaseCreate
@@ -131,12 +137,64 @@ class ConceptDesignService:
                 )
 
     # ------------------------------------------------------------------
+    # Zoning / structural validation — PR-CONCEPT-059
+    # ------------------------------------------------------------------
+
+    def _validate_concept_zoning(
+        self,
+        site_area: Optional[float],
+        gross_floor_area: Optional[float],
+        far_limit: Optional[float],
+        density_limit: Optional[float],
+        sellable_area: Optional[float] = None,
+        unit_count: Optional[int] = None,
+    ) -> None:
+        """Run zoning and structural validation rules.
+
+        Raises :class:`~app.core.errors.ValidationError` when one or more
+        rules are violated, with a structured ``violations`` list in the
+        details payload.
+
+        Rules where the required inputs are absent are silently skipped so
+        that concept options without all constraint fields configured are
+        not blocked.
+        """
+        violations = run_zoning_validation(
+            site_area=site_area,
+            gross_floor_area=gross_floor_area,
+            far_limit=far_limit,
+            density_limit=density_limit,
+            sellable_area=sellable_area,
+            unit_count=unit_count,
+        )
+        if violations:
+            raise ValidationError(
+                "Concept option violates zoning or structural constraints.",
+                details={
+                    "violations": [
+                        {
+                            "rule": v.rule,
+                            "message": v.message,
+                            "details": v.details,
+                        }
+                        for v in violations
+                    ]
+                },
+            )
+
+    # ------------------------------------------------------------------
     # ConceptOption CRUD
     # ------------------------------------------------------------------
 
     def create_concept_option(self, data: ConceptOptionCreate) -> ConceptOptionResponse:
         self._validate_project_if_present(data.project_id)
         self._validate_scenario_if_present(data.scenario_id)
+        self._validate_concept_zoning(
+            site_area=data.site_area,
+            gross_floor_area=data.gross_floor_area,
+            far_limit=data.far_limit,
+            density_limit=data.density_limit,
+        )
         option = self.option_repo.create(data)
         _logger.info("ConceptOption created id=%s name=%r", option.id, option.name)
         return ConceptOptionResponse.model_validate(option)
@@ -178,6 +236,31 @@ class ConceptDesignService:
             raise ResourceNotFoundError(
                 f"ConceptOption '{concept_option_id}' not found."
             )
+
+        # Merge incoming values with existing values to validate the
+        # resulting state, not just the patched fields in isolation.
+        update_data = data.model_dump(exclude_unset=True)
+        merged_site_area = float(option.site_area) if option.site_area is not None else None
+        merged_gfa = float(option.gross_floor_area) if option.gross_floor_area is not None else None
+        merged_far_limit = float(option.far_limit) if option.far_limit is not None else None
+        merged_density_limit = float(option.density_limit) if option.density_limit is not None else None
+
+        if "site_area" in update_data:
+            merged_site_area = update_data["site_area"]
+        if "gross_floor_area" in update_data:
+            merged_gfa = update_data["gross_floor_area"]
+        if "far_limit" in update_data:
+            merged_far_limit = update_data["far_limit"]
+        if "density_limit" in update_data:
+            merged_density_limit = update_data["density_limit"]
+
+        self._validate_concept_zoning(
+            site_area=merged_site_area,
+            gross_floor_area=merged_gfa,
+            far_limit=merged_far_limit,
+            density_limit=merged_density_limit,
+        )
+
         option = self.option_repo.update(option, data)
         return ConceptOptionResponse.model_validate(option)
 
@@ -341,6 +424,12 @@ class ConceptDesignService:
             ),
             building_count=option.building_count,
             floor_count=option.floor_count,
+            far_limit=float(option.far_limit) if option.far_limit is not None else None,
+            density_limit=(
+                float(option.density_limit)
+                if option.density_limit is not None
+                else None
+            ),
             unit_count=metrics.unit_count,
             sellable_area=metrics.sellable_area,
             efficiency_ratio=metrics.efficiency_ratio,
@@ -469,6 +558,8 @@ class ConceptDesignService:
         * The concept option must not already be promoted.
         * The concept option must have building_count, floor_count, and at
           least one unit mix line to qualify as structurally complete.
+        * The concept option must pass all applicable zoning and structural
+          validation rules (FAR, efficiency, density) — PR-CONCEPT-059.
         * A target project must be resolvable — either from the concept
           option's own project_id or from payload.target_project_id.
 
@@ -516,6 +607,40 @@ class ConceptDesignService:
                 "Concept option does not have sufficient structural data for promotion.",
                 details={"missing_fields": missing},
             )
+
+        # ── Zoning / structural validation — PR-CONCEPT-059 ──────────
+        # Compute aggregate mix metrics so that efficiency and density
+        # rules can be evaluated against the full unit program.
+        mix_inputs = [
+            MixLineInput(
+                unit_type=line.unit_type,
+                units_count=line.units_count,
+                avg_sellable_area=(
+                    float(line.avg_sellable_area)
+                    if line.avg_sellable_area is not None
+                    else None
+                ),
+            )
+            for line in option.mix_lines
+        ]
+        promo_unit_count = compute_unit_count(mix_inputs)
+        promo_sellable_area = compute_sellable_area(mix_inputs)
+        self._validate_concept_zoning(
+            site_area=float(option.site_area) if option.site_area is not None else None,
+            gross_floor_area=(
+                float(option.gross_floor_area)
+                if option.gross_floor_area is not None
+                else None
+            ),
+            far_limit=float(option.far_limit) if option.far_limit is not None else None,
+            density_limit=(
+                float(option.density_limit)
+                if option.density_limit is not None
+                else None
+            ),
+            sellable_area=promo_sellable_area,
+            unit_count=promo_unit_count,
+        )
 
         # ── Project linkage strategy ──────────────────────────────────
         if (

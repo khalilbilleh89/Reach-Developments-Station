@@ -9,7 +9,7 @@ Entities:
   ConceptUnitMixLine — a normalised unit-type row inside a concept option,
                        representing one band of the residential/commercial mix.
 
-PR-CONCEPT-052, PR-CONCEPT-054
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059
 """
 
 from __future__ import annotations
@@ -57,6 +57,10 @@ class ConceptOption(Base, TimestampMixin):
     gross_floor_area: Mapped[Optional[float]] = mapped_column(Numeric(16, 2), nullable=True)
     building_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     floor_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Zoning constraint inputs — PR-CONCEPT-059
+    far_limit: Mapped[Optional[float]] = mapped_column(Numeric(8, 4), nullable=True)
+    density_limit: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Promotion metadata — PR-CONCEPT-054
     is_promoted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

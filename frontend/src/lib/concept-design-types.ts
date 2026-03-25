@@ -28,6 +28,8 @@ export interface ConceptOption {
   gross_floor_area: number | null;
   building_count: number | null;
   floor_count: number | null;
+  far_limit: number | null;
+  density_limit: number | null;
   is_promoted: boolean;
   promoted_at: string | null;
   promoted_project_id: string | null;
@@ -51,6 +53,8 @@ export interface ConceptOptionCreate {
   gross_floor_area?: number | null;
   building_count?: number | null;
   floor_count?: number | null;
+  far_limit?: number | null;
+  density_limit?: number | null;
 }
 
 export interface ConceptOptionUpdate {
@@ -61,6 +65,8 @@ export interface ConceptOptionUpdate {
   gross_floor_area?: number | null;
   building_count?: number | null;
   floor_count?: number | null;
+  far_limit?: number | null;
+  density_limit?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +107,8 @@ export interface ConceptOptionSummary {
   gross_floor_area: number | null;
   building_count: number | null;
   floor_count: number | null;
+  far_limit: number | null;
+  density_limit: number | null;
   unit_count: number;
   sellable_area: number | null;
   efficiency_ratio: number | null;

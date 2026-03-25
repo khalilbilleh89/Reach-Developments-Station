@@ -281,6 +281,12 @@ function ConceptOptionFormModal({
   const [floorCount, setFloorCount] = useState(
     existing?.floor_count != null ? String(existing.floor_count) : "",
   );
+  const [farLimit, setFarLimit] = useState(
+    existing?.far_limit != null ? String(existing.far_limit) : "",
+  );
+  const [densityLimit, setDensityLimit] = useState(
+    existing?.density_limit != null ? String(existing.density_limit) : "",
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -305,6 +311,8 @@ function ConceptOptionFormModal({
             gross_floor_area: grossFloorArea ? parseFloat(grossFloorArea) : null,
             building_count: buildingCount ? parseInt(buildingCount, 10) : null,
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
+            far_limit: farLimit ? parseFloat(farLimit) : null,
+            density_limit: densityLimit ? parseFloat(densityLimit) : null,
           });
         } else {
           const payload: ConceptOptionCreate = {
@@ -317,6 +325,8 @@ function ConceptOptionFormModal({
             gross_floor_area: grossFloorArea ? parseFloat(grossFloorArea) : null,
             building_count: buildingCount ? parseInt(buildingCount, 10) : null,
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
+            far_limit: farLimit ? parseFloat(farLimit) : null,
+            density_limit: densityLimit ? parseFloat(densityLimit) : null,
           };
           await createConceptOption(payload);
         }
@@ -341,6 +351,8 @@ function ConceptOptionFormModal({
       grossFloorArea,
       buildingCount,
       floorCount,
+      farLimit,
+      densityLimit,
       isEdit,
       existing,
       onSaved,
@@ -458,6 +470,30 @@ function ConceptOptionFormModal({
               value={floorCount}
               onChange={(e) => setFloorCount(e.target.value)}
               style={inputStyle}
+            />
+          </Field>
+          <Field label="FAR Limit" id="co-far-limit">
+            <input
+              id="co-far-limit"
+              type="number"
+              min="0.01"
+              step="any"
+              value={farLimit}
+              onChange={(e) => setFarLimit(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. 2.5"
+            />
+          </Field>
+          <Field label="Density Limit (dph)" id="co-density-limit">
+            <input
+              id="co-density-limit"
+              type="number"
+              min="0.01"
+              step="any"
+              value={densityLimit}
+              onChange={(e) => setDensityLimit(e.target.value)}
+              style={inputStyle}
+              placeholder="dwellings/hectare"
             />
           </Field>
         </div>
