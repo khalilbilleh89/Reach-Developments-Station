@@ -1697,6 +1697,8 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
 // Comparison view
 // ---------------------------------------------------------------------------
 
+const ERROR_COLOR = "#dc2626";
+
 function ComparisonView() {
   const [filterType, setFilterType] = useState<"project_id" | "scenario_id">("project_id");
   const [filterId, setFilterId] = useState("");
@@ -1785,11 +1787,11 @@ function ComparisonView() {
             value={pricePerSqm}
             onChange={(e) => { setPricePerSqm(e.target.value); setPriceError(null); }}
             placeholder="Price / m² (optional)"
-            style={{ ...inputStyle, width: 180, borderColor: priceError ? "#dc2626" : undefined }}
+            style={{ ...inputStyle, width: 180, borderColor: priceError ? ERROR_COLOR : undefined }}
             aria-label="Price per sqm"
           />
           {priceError && (
-            <span style={{ fontSize: "0.75rem", color: "#dc2626" }}>{priceError}</span>
+            <span style={{ fontSize: "0.75rem", color: ERROR_COLOR }}>{priceError}</span>
           )}
         </div>
         <button
