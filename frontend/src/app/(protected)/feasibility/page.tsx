@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
@@ -513,29 +514,45 @@ export default function FeasibilityPage() {
                     {formatDate(run.updated_at)}
                   </td>
                   <td>
-                    <select
-                      value={run.scenario_type}
-                      onChange={(e) =>
-                        handleScenarioTypeChange(
-                          run.id,
-                          e.target.value as FeasibilityScenarioType,
-                        )
-                      }
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 4,
-                        fontSize: "0.8rem",
-                        background: "var(--color-surface)",
-                        cursor: "pointer",
-                      }}
-                      aria-label={`Change scenario type for ${run.scenario_name}`}
-                    >
-                      <option value="base">Base</option>
-                      <option value="upside">Upside</option>
-                      <option value="downside">Downside</option>
-                      <option value="investor">Investor</option>
-                    </select>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select
+                        value={run.scenario_type}
+                        onChange={(e) =>
+                          handleScenarioTypeChange(
+                            run.id,
+                            e.target.value as FeasibilityScenarioType,
+                          )
+                        }
+                        style={{
+                          padding: "4px 8px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          fontSize: "0.8rem",
+                          background: "var(--color-surface)",
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Change scenario type for ${run.scenario_name}`}
+                      >
+                        <option value="base">Base</option>
+                        <option value="upside">Upside</option>
+                        <option value="downside">Downside</option>
+                        <option value="investor">Investor</option>
+                      </select>
+                      <Link
+                        href={`/feasibility/${run.id}`}
+                        style={{
+                          padding: "4px 12px",
+                          border: "1px solid var(--color-primary, #2563eb)",
+                          borderRadius: 4,
+                          fontSize: "0.8rem",
+                          color: "var(--color-primary, #2563eb)",
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Open →
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

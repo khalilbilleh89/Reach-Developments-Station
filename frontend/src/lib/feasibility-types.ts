@@ -14,6 +14,7 @@ export type FeasibilityScenarioType = "base" | "upside" | "downside" | "investor
 export interface FeasibilityRun {
   id: string;
   project_id: string | null;
+  scenario_id: string | null;
   scenario_name: string;
   scenario_type: FeasibilityScenarioType;
   notes: string | null;
@@ -69,6 +70,10 @@ export interface FeasibilityAssumptionsCreate {
   notes?: string | null;
 }
 
+export type FeasibilityViabilityStatus = "viable" | "marginal" | "not_viable";
+export type FeasibilityRiskLevel = "low" | "medium" | "high";
+export type FeasibilityDecision = "proceed" | "review" | "decline";
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -85,6 +90,15 @@ export interface FeasibilityResult {
   developer_profit: number | null;
   profit_margin: number | null;
   irr_estimate: number | null;
+  irr: number | null;
+  equity_multiple: number | null;
+  break_even_price: number | null;
+  break_even_units: number | null;
+  scenario_outputs: Record<string, unknown> | null;
+  viability_status: FeasibilityViabilityStatus | null;
+  risk_level: FeasibilityRiskLevel | null;
+  decision: FeasibilityDecision | null;
+  payback_period: number | null;
   created_at: string;
   updated_at: string;
 }
