@@ -231,3 +231,50 @@ class ConceptPromotionResponse(BaseModel):
     buildings_created: int
     floors_created: int
     units_created: int
+
+
+# ---------------------------------------------------------------------------
+# Seed-Feasibility schemas — PR-CONCEPT-063
+# ---------------------------------------------------------------------------
+
+
+class SeedFeasibilityRequest(BaseModel):
+    """Request payload for seeding a feasibility run from a concept option.
+
+    The concept's computed sellable_area is automatically transferred to the
+    new feasibility run's assumptions.  All financial assumption fields that
+    cannot be derived from the concept option must be provided here.
+
+    scenario_name defaults to a generated label based on the concept option's
+    name if omitted.
+    """
+
+    scenario_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    avg_sale_price_per_sqm: float = Field(..., gt=0)
+    construction_cost_per_sqm: float = Field(..., gt=0)
+    soft_cost_ratio: float = Field(default=0.10, ge=0, le=1)
+    finance_cost_ratio: float = Field(default=0.05, ge=0, le=1)
+    sales_cost_ratio: float = Field(default=0.03, ge=0, le=1)
+    development_period_months: int = Field(..., ge=1)
+    notes: Optional[str] = None
+
+
+class SeedFeasibilityResponse(BaseModel):
+    """Response returned after successfully seeding a feasibility run from a concept option.
+
+    seeded_sellable_area_sqm is the value transferred from the concept engine.
+    It will be None when the concept option has no unit mix lines with sellable
+    area set — in that case the assumptions record is not persisted and the
+    caller must supply sellable_area via the assumptions endpoint before
+    running a calculation.
+    """
+
+    feasibility_run_id: str
+    source_concept_option_id: str
+    seed_source_type: str
+    scenario_name: str
+    scenario_id: Optional[str]
+    seeded_sellable_area_sqm: Optional[float]
+    seeded_unit_count: int
+    assumptions_seeded: bool
+

@@ -28,6 +28,8 @@ class FeasibilityRunRepository:
             scenario_name=data.scenario_name,
             scenario_type=data.scenario_type.value,
             notes=data.notes,
+            source_concept_option_id=data.source_concept_option_id,
+            seed_source_type=data.seed_source_type,
         )
         self.db.add(run)
         self.db.commit()

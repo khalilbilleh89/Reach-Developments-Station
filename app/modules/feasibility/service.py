@@ -376,4 +376,90 @@ class FeasibilityService:
         )
         return self._execute_calculation(run_response.id, inputs)
 
+    # ------------------------------------------------------------------
+    # Seeded creation from concept option — PR-CONCEPT-063
+    # ------------------------------------------------------------------
+
+    def create_seeded_run(
+        self,
+        *,
+        source_concept_option_id: str,
+        scenario_id: Optional[str],
+        scenario_name: str,
+        sellable_area_sqm: Optional[float],
+        avg_sale_price_per_sqm: float,
+        construction_cost_per_sqm: float,
+        soft_cost_ratio: float,
+        finance_cost_ratio: float,
+        sales_cost_ratio: float,
+        development_period_months: int,
+        notes: Optional[str] = None,
+    ) -> FeasibilityRunResponse:
+        """Create a feasibility run seeded from a concept option.
+
+        This method is called by the concept design service through the
+        approved module boundary.  It creates a FeasibilityRun with
+        source_concept_option_id and seed_source_type='concept_option'
+        lineage fields, then persists the seeded assumptions.
+
+        The caller (ConceptDesignService) is responsible for validating the
+        concept option state before invoking this method.
+
+        Parameters
+        ----------
+        source_concept_option_id:
+            ID of the concept option being used as the seed source.
+        scenario_id:
+            Scenario to associate with the run (inherited from concept option).
+        scenario_name:
+            Name for the new feasibility run.
+        sellable_area_sqm:
+            Seeded from the concept engine's computed sellable area.
+            May be None if the concept has no unit mix lines with sellable area.
+        avg_sale_price_per_sqm:
+            Financial assumption provided by the caller.
+        construction_cost_per_sqm:
+            Financial assumption provided by the caller.
+        soft_cost_ratio, finance_cost_ratio, sales_cost_ratio:
+            Cost ratios provided by the caller.
+        development_period_months:
+            Development timeline provided by the caller.
+        notes:
+            Optional free-text notes.
+
+        Returns
+        -------
+        FeasibilityRunResponse
+            The newly created feasibility run with lineage metadata.
+        """
+        self._require_scenario_if_present(scenario_id)
+
+        run_create = FeasibilityRunCreate(
+            scenario_id=scenario_id,
+            scenario_name=scenario_name,
+            notes=notes,
+            source_concept_option_id=source_concept_option_id,
+            seed_source_type="concept_option",
+        )
+        run = self.run_repo.create(run_create)
+
+        if sellable_area_sqm is not None:
+            assumptions_create = FeasibilityAssumptionsCreate(
+                sellable_area_sqm=sellable_area_sqm,
+                avg_sale_price_per_sqm=avg_sale_price_per_sqm,
+                construction_cost_per_sqm=construction_cost_per_sqm,
+                soft_cost_ratio=soft_cost_ratio,
+                finance_cost_ratio=finance_cost_ratio,
+                sales_cost_ratio=sales_cost_ratio,
+                development_period_months=development_period_months,
+                notes=notes,
+            )
+            self.assumptions_repo.upsert(run.id, assumptions_create)
+
+        _logger.info(
+            "Seeded feasibility run created: id=%s source_concept_option_id=%s",
+            run.id,
+            source_concept_option_id,
+        )
+        return FeasibilityRunResponse.model_validate(run)
 

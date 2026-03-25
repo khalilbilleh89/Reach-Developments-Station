@@ -22,6 +22,9 @@ class FeasibilityRunCreate(BaseModel):
     scenario_name: str = Field(..., min_length=1, max_length=255)
     scenario_type: FeasibilityScenarioType = FeasibilityScenarioType.BASE
     notes: Optional[str] = None
+    # Lineage — PR-CONCEPT-063
+    source_concept_option_id: Optional[str] = None
+    seed_source_type: Optional[str] = None
 
 
 class FeasibilityRunUpdate(BaseModel):
@@ -37,6 +40,9 @@ class FeasibilityRunResponse(BaseModel):
     scenario_name: str
     scenario_type: FeasibilityScenarioType
     notes: Optional[str]
+    # Lineage — PR-CONCEPT-063
+    source_concept_option_id: Optional[str]
+    seed_source_type: Optional[str]
     created_at: datetime
     updated_at: datetime
 
