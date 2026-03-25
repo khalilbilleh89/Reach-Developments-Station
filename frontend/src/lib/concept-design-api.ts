@@ -13,11 +13,12 @@
  *   GET    /concept-options/compare                        → compare options
  *   GET    /concept-options/{id}                           → get option
  *   PATCH  /concept-options/{id}                           → update option
+ *   DELETE /concept-options/{id}                           → delete option
  *   POST   /concept-options/{id}/unit-mix                  → add mix line
  *   GET    /concept-options/{id}/summary                   → get summary
  *   POST   /concept-options/{id}/promote                   → promote option
  *
- * PR-CONCEPT-055
+ * PR-CONCEPT-055, PR-CONCEPT-057
  */
 
 import { apiFetch } from "./api-client";
@@ -159,5 +160,16 @@ export async function promoteConceptOption(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data ?? {}),
     },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete endpoint — PR-CONCEPT-057
+// ---------------------------------------------------------------------------
+
+export async function deleteConceptOption(id: string): Promise<void> {
+  await apiFetch<void>(
+    `/concept-options/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
   );
 }

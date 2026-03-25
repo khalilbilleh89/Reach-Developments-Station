@@ -145,6 +145,11 @@ class ConceptOptionRepository:
         option.promoted_at = promoted_at
         option.promotion_notes = promotion_notes
 
+    def delete(self, option: ConceptOption) -> None:
+        """Delete a concept option and its unit mix lines (cascade) and commit."""
+        self.db.delete(option)
+        self.db.commit()
+
 
 class ConceptUnitMixLineRepository:
     def __init__(self, db: Session) -> None:
