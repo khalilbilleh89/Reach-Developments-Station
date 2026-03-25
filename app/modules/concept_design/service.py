@@ -247,6 +247,40 @@ class ConceptDesignService:
             )
 
     # ------------------------------------------------------------------
+    # Effective constraint resolution — PR-CONCEPT-060
+    # ------------------------------------------------------------------
+
+    def _resolve_land_constraints_for_option(
+        self, option_land_id: Optional[str]
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Return (land_far, land_density) for the given land_id.
+
+        Fetches the LandParcel and extracts ``permitted_far`` and
+        ``density_ratio``.  Returns (None, None) if land_id is absent or the
+        parcel cannot be found.
+
+        This helper centralises the repeated query pattern used by
+        ``update_concept_option`` and ``promote_concept_option`` so the lookup
+        logic lives in exactly one place.
+        """
+        if option_land_id is None:
+            return None, None
+        land_parcel = (
+            self.scenario_repo.db.query(LandParcel)
+            .filter(LandParcel.id == option_land_id)
+            .first()
+        )
+        if land_parcel is None:
+            return None, None
+        land_far = (
+            float(land_parcel.permitted_far) if land_parcel.permitted_far is not None else None
+        )
+        land_density = (
+            float(land_parcel.density_ratio) if land_parcel.density_ratio is not None else None
+        )
+        return land_far, land_density
+
+    # ------------------------------------------------------------------
     # ConceptOption CRUD
     # ------------------------------------------------------------------
 
@@ -382,19 +416,7 @@ class ConceptDesignService:
         # Resolve the land-inherited constraints for this option (if any).
         # land_id is read from the existing option — it is set at creation time
         # and cannot be changed via an update (scenario context is immutable).
-        land_far: Optional[float] = None
-        land_density: Optional[float] = None
-        if option.land_id is not None:
-            land_parcel = (
-                self.scenario_repo.db.query(LandParcel)
-                .filter(LandParcel.id == option.land_id)
-                .first()
-            )
-            if land_parcel is not None:
-                if land_parcel.permitted_far is not None:
-                    land_far = float(land_parcel.permitted_far)
-                if land_parcel.density_ratio is not None:
-                    land_density = float(land_parcel.density_ratio)
+        land_far, land_density = self._resolve_land_constraints_for_option(option.land_id)
 
         effective_far = self._resolve_effective_far_limit(
             land_far=land_far,
@@ -791,19 +813,9 @@ class ConceptDesignService:
         promo_sellable_area = compute_sellable_area(mix_inputs)
 
         # Resolve effective constraints (PR-CONCEPT-060 priority order)
-        promo_land_far: Optional[float] = None
-        promo_land_density: Optional[float] = None
-        if option.land_id is not None:
-            promo_land_parcel = (
-                self.scenario_repo.db.query(LandParcel)
-                .filter(LandParcel.id == option.land_id)
-                .first()
-            )
-            if promo_land_parcel is not None:
-                if promo_land_parcel.permitted_far is not None:
-                    promo_land_far = float(promo_land_parcel.permitted_far)
-                if promo_land_parcel.density_ratio is not None:
-                    promo_land_density = float(promo_land_parcel.density_ratio)
+        promo_land_far, promo_land_density = self._resolve_land_constraints_for_option(
+            option.land_id
+        )
 
         promo_effective_far = self._resolve_effective_far_limit(
             land_far=promo_land_far,

@@ -351,9 +351,7 @@ function ConceptOptionFormModal({
       return;
     }
     setLoadingLand(true);
-    apiFetch<LandContext & { id: string; land_area_sqm: number | null; permitted_far: number | null; density_ratio: number | null; zoning_category: string | null; parcel_name: string }>(
-      `/land/parcels/${encodeURIComponent(selected.land_id)}`,
-    )
+    apiFetch<LandContext>(`/land/parcels/${encodeURIComponent(selected.land_id)}`)
       .then((parcel) => {
         setLandContext({
           parcel_name: parcel.parcel_name,
@@ -403,15 +401,15 @@ function ConceptOptionFormModal({
             status,
             project_id: projectId.trim() || null,
             scenario_id: scenarioId.trim() || null,
-            // site_area is inherited from land when scenario is set; only
-            // send it when explicitly entered to avoid overwriting the
-            // inherited value on the server.
+            // When a scenario is set, site_area is auto-inherited from the
+            // land parcel on the server. Send null unless the user explicitly
+            // typed a value, so the server's inheritance logic takes over.
             site_area: siteArea ? parseFloat(siteArea) : null,
             gross_floor_area: grossFloorArea ? parseFloat(grossFloorArea) : null,
             building_count: buildingCount ? parseInt(buildingCount, 10) : null,
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
-            // far_limit / density_limit are also inherited; only send if
-            // manually entered without a scenario.
+            // far_limit / density_limit: inherited from land when scenario is
+            // linked. Only send manual values when no scenario is selected.
             far_limit: farLimit && !scenarioId.trim() ? parseFloat(farLimit) : null,
             density_limit:
               densityLimit && !scenarioId.trim() ? parseFloat(densityLimit) : null,
