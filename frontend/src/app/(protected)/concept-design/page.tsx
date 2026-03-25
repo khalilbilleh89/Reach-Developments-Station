@@ -1085,7 +1085,7 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
           >
             Edit
           </button>
-          {!option.is_promoted && (
+          {!option.is_promoted && option.status !== "archived" && (
             <button
               type="button"
               onClick={() => setShowPromote(true)}
@@ -1479,7 +1479,7 @@ export default function ConceptDesignPage() {
     listConceptOptions({ limit: 100 })
       .then((resp) => {
         setOptions(resp.items);
-        setTotal(resp.items.length);
+        setTotal(resp.total);
         setError(null);
       })
       .catch((err: unknown) => {
