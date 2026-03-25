@@ -65,10 +65,14 @@ class FeasibilityRunRepository:
         return self.db.query(FeasibilityRun).count()
 
     def update(self, run: FeasibilityRun, data: FeasibilityRunUpdate) -> FeasibilityRun:
-        update_data = data.model_dump(exclude_unset=True, exclude_none=True)
+        update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
-            if field == "scenario_type":
+            if field == "scenario_type" and value is not None:
                 setattr(run, field, value.value if hasattr(value, "value") else value)
+            elif value is None and field not in ("project_id", "notes"):
+                # Skip None for non-nullable fields; project_id and notes may be
+                # explicitly cleared (unlink / remove notes).
+                continue
             else:
                 setattr(run, field, value)
         self.db.commit()

@@ -175,6 +175,8 @@ class FeasibilityService:
                 f"Feasibility run '{run_id}' not found.",
                 details={"run_id": run_id},
             )
+        if "project_id" in data.model_fields_set:
+            self._validate_project_if_present(data.project_id)
         updated = self.run_repo.update(run, data)
         return FeasibilityRunResponse.model_validate(updated)
 

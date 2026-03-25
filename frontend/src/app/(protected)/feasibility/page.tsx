@@ -10,11 +10,13 @@ import {
   createFeasibilityRun,
   updateFeasibilityRun,
 } from "@/lib/feasibility-api";
+import { listProjects } from "@/lib/projects-api";
 import type {
   FeasibilityRun,
   FeasibilityRunCreate,
   FeasibilityScenarioType,
 } from "@/lib/feasibility-types";
+import type { Project } from "@/lib/projects-types";
 import styles from "@/styles/demo-shell.module.css";
 
 // ---------------------------------------------------------------------------
@@ -66,13 +68,15 @@ function formatDate(dateStr: string): string {
 interface CreateRunModalProps {
   onClose: () => void;
   onCreated: () => void;
+  projects: Project[];
 }
 
-function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
+function CreateRunModal({ onClose, onCreated, projects }: CreateRunModalProps) {
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioType, setScenarioType] =
     useState<FeasibilityScenarioType>("base");
   const [notes, setNotes] = useState("");
+  const [projectId, setProjectId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +93,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
         scenario_name: scenarioName.trim(),
         scenario_type: scenarioType,
         notes: notes.trim() || null,
+        project_id: projectId || null,
       };
       try {
         await createFeasibilityRun(data);
@@ -103,7 +108,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
         setSubmitting(false);
       }
     },
-    [scenarioName, scenarioType, notes, onCreated],
+    [scenarioName, scenarioType, notes, projectId, onCreated],
   );
 
   return (
@@ -201,7 +206,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               <option value="investor">Investor</option>
             </select>
           </div>
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               htmlFor="create-run-notes"
               style={{
@@ -230,6 +235,42 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               }}
             />
           </div>
+          {projects.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <label
+                htmlFor="create-run-project"
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
+                }}
+              >
+                Link to Project
+              </label>
+              <select
+                id="create-run-project"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 6,
+                  fontSize: "0.875rem",
+                  background: "var(--color-surface)",
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="">None (standalone run)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {error && (
             <p
               role="alert"
@@ -310,6 +351,7 @@ function FeasibilityListView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const fetchRuns = useCallback(() => {
     setLoading(true);
@@ -333,6 +375,12 @@ function FeasibilityListView() {
   useEffect(() => {
     fetchRuns();
   }, [fetchRuns]);
+
+  useEffect(() => {
+    listProjects({ limit: 200 })
+      .then((resp) => setProjects(resp.items))
+      .catch(() => setProjects([]));
+  }, []);
 
   const handleCreated = useCallback(() => {
     setShowCreateModal(false);
@@ -500,7 +548,11 @@ function FeasibilityListView() {
                       color: "var(--color-text-muted)",
                     }}
                   >
-                    {run.project_id ? (
+                    {run.project_name ? (
+                      <span style={{ fontWeight: 500, color: "var(--color-text)" }}>
+                        {run.project_name}
+                      </span>
+                    ) : run.project_id ? (
                       <span style={{ fontFamily: "monospace" }}>
                         {run.project_id.substring(0, 8)}…
                       </span>
@@ -585,6 +637,7 @@ function FeasibilityListView() {
         <CreateRunModal
           onClose={() => setShowCreateModal(false)}
           onCreated={handleCreated}
+          projects={projects}
         />
       )}
     </PageContainer>

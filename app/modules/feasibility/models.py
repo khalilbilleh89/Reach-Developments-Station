@@ -53,6 +53,11 @@ class FeasibilityRun(Base, TimestampMixin):
     seed_source_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="feasibility_runs")
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """Return the linked project name, or None if unlinked."""
+        return self.project.name if self.project else None
     assumptions: Mapped[Optional["FeasibilityAssumptions"]] = relationship(
         "FeasibilityAssumptions",
         back_populates="run",
