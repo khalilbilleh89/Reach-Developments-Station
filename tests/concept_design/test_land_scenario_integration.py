@@ -231,7 +231,9 @@ class TestMissingLandParcelRaisesError:
         )
         assert resp.status_code == 422
         body = resp.json()
+        # The service raises ValidationError with a message that includes "land parcel"
         assert "land parcel" in body["message"].lower()
+        assert body["details"]["land_id"] == "non-existent-land-parcel-id"
 
 
 # ---------------------------------------------------------------------------
