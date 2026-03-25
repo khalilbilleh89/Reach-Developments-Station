@@ -1146,6 +1146,13 @@ class ConceptDesignService:
             sellable_area,
         )
 
+        assumptions_seeded = (
+            sellable_area is not None
+            and payload.avg_sale_price_per_sqm is not None
+            and payload.construction_cost_per_sqm is not None
+            and payload.development_period_months is not None
+        )
+
         return SeedFeasibilityResponse(
             feasibility_run_id=run_response.id,
             source_concept_option_id=concept_option_id,
@@ -1154,6 +1161,6 @@ class ConceptDesignService:
             scenario_id=option.scenario_id,
             seeded_sellable_area_sqm=sellable_area,
             seeded_unit_count=unit_count,
-            assumptions_seeded=sellable_area is not None,
+            assumptions_seeded=assumptions_seeded,
         )
 

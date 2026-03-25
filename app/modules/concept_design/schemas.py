@@ -242,20 +242,28 @@ class SeedFeasibilityRequest(BaseModel):
     """Request payload for seeding a feasibility run from a concept option.
 
     The concept's computed sellable_area is automatically transferred to the
-    new feasibility run's assumptions.  All financial assumption fields that
-    cannot be derived from the concept option must be provided here.
+    new feasibility run's assumptions when available.
+
+    Financial assumption fields are optional.  When all three key fields
+    (avg_sale_price_per_sqm, construction_cost_per_sqm,
+    development_period_months) are provided AND the concept option has a
+    computable sellable_area, the assumptions record is persisted on the new
+    run and ``assumptions_seeded`` is returned as True.  If any of these
+    conditions is missing, the run is still created without assumptions; the
+    caller must supply them later via the
+    POST /feasibility/runs/{id}/assumptions endpoint.
 
     scenario_name defaults to a generated label based on the concept option's
     name if omitted.
     """
 
     scenario_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    avg_sale_price_per_sqm: float = Field(..., gt=0)
-    construction_cost_per_sqm: float = Field(..., gt=0)
+    avg_sale_price_per_sqm: Optional[float] = Field(default=None, gt=0)
+    construction_cost_per_sqm: Optional[float] = Field(default=None, gt=0)
     soft_cost_ratio: float = Field(default=0.10, ge=0, le=1)
     finance_cost_ratio: float = Field(default=0.05, ge=0, le=1)
     sales_cost_ratio: float = Field(default=0.03, ge=0, le=1)
-    development_period_months: int = Field(..., ge=1)
+    development_period_months: Optional[int] = Field(default=None, ge=1)
     notes: Optional[str] = None
 
 

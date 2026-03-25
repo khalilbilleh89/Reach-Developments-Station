@@ -10,9 +10,12 @@ Test cases:
   - scenario_name overridden by request → stored on run
   - sellable_area seeded from mix lines
   - seeded_unit_count matches mix lines
-  - assumptions_seeded=True when mix lines have sellable area
+  - assumptions_seeded=True when mix lines have sellable area and all financial params present
   - concept with no mix lines → run created, assumptions_seeded=False
   - concept with mix lines but no avg_sellable_area → run created, assumptions_seeded=False
+  - sellable area present but financial params omitted → run created, assumptions_seeded=False
+  - sellable area present but partial financial params → run created, assumptions_seeded=False
+  - empty payload accepted → run created without assumptions
   - archived concept → 422
   - not found concept → 404
   - feasibility run carries source_concept_option_id lineage field
@@ -24,19 +27,12 @@ PR-CONCEPT-063
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _create_project(client: TestClient, code: str = "PRJ-SEED01") -> str:
-    resp = client.post(
-        "/api/v1/projects", json={"name": f"Seed Feasibility Project {code}", "code": code}
-    )
-    assert resp.status_code == 201
-    return resp.json()["id"]
-
 
 def _create_option(
     client: TestClient,
@@ -85,7 +81,7 @@ _VALID_SEED_PAYLOAD = {
 }
 
 
-def _seed(client: TestClient, option_id: str, payload: dict | None = None) -> dict:
+def _seed(client: TestClient, option_id: str, payload: dict | None = None) -> Response:
     body = dict(_VALID_SEED_PAYLOAD)
     if payload:
         body.update(payload)
@@ -225,7 +221,6 @@ def test_seed_lineage_fields_on_feasibility_run(client: TestClient):
 
 def test_seed_inherits_scenario_id(client: TestClient):
     """Feasibility run inherits scenario_id from concept option."""
-    # Create a scenario first
     scenario_resp = client.post(
         "/api/v1/scenarios",
         json={"name": "Test Scenario", "description": "For seeding test"},
@@ -241,7 +236,6 @@ def test_seed_inherits_scenario_id(client: TestClient):
     data = seed_resp.json()
     assert data["scenario_id"] == scenario_id
 
-    # Also verify the run record has the scenario_id
     run_resp = client.get(f"/api/v1/feasibility/runs/{data['feasibility_run_id']}")
     assert run_resp.status_code == 200
     assert run_resp.json()["scenario_id"] == scenario_id
@@ -256,6 +250,106 @@ def test_seed_no_scenario_id_when_concept_has_none(client: TestClient):
     assert seed_resp.status_code == 201
     data = seed_resp.json()
     assert data["scenario_id"] is None
+
+
+def test_seed_default_cost_ratios_applied(client: TestClient):
+    """Providing only the three key financial fields is sufficient for full seeding."""
+    option = _create_option(client, name="Default Ratios Option")
+    _add_mix_line(client, option["id"])
+
+    # Provide key financial fields only; soft/finance/sales ratios default
+    minimal = {
+        "avg_sale_price_per_sqm": 4000.0,
+        "construction_cost_per_sqm": 1000.0,
+        "development_period_months": 18,
+    }
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/seed-feasibility", json=minimal
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["assumptions_seeded"] is True
+
+
+def test_seed_creates_distinct_run_each_call(client: TestClient):
+    """Calling seed-feasibility twice creates two distinct feasibility runs."""
+    option = _create_option(client, name="Multi Seed Option")
+    _add_mix_line(client, option["id"])
+
+    resp1 = _seed(client, option["id"])
+    resp2 = _seed(client, option["id"])
+
+    assert resp1.status_code == 201
+    assert resp2.status_code == 201
+    assert resp1.json()["feasibility_run_id"] != resp2.json()["feasibility_run_id"]
+
+
+# ---------------------------------------------------------------------------
+# Optional-vs-required financial param flow tests
+# ---------------------------------------------------------------------------
+
+def test_seed_empty_payload_accepted(client: TestClient):
+    """Empty request body is valid — run is created without assumptions."""
+    option = _create_option(client, name="Empty Payload Option")
+    _add_mix_line(client, option["id"])
+
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/seed-feasibility", json={}
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "feasibility_run_id" in data
+    assert data["assumptions_seeded"] is False
+
+
+def test_seed_with_sellable_area_and_all_financial_params_assumptions_seeded(client: TestClient):
+    """Concept has sellable area + all financial params provided → assumptions_seeded=True."""
+    option = _create_option(client, name="Full Financial Option")
+    _add_mix_line(client, option["id"], units_count=10, avg_sellable_area=60.0)
+
+    resp = _seed(client, option["id"])
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["seeded_sellable_area_sqm"] == pytest.approx(600.0)
+    assert data["assumptions_seeded"] is True
+
+
+def test_seed_with_sellable_area_but_missing_financial_params_assumptions_not_seeded(
+    client: TestClient,
+):
+    """Concept has sellable area but financial params omitted → assumptions_seeded=False."""
+    option = _create_option(client, name="Missing Financials Option")
+    _add_mix_line(client, option["id"], units_count=5, avg_sellable_area=50.0)
+
+    # Only provide scenario_name; no financial params
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/seed-feasibility",
+        json={"scenario_name": "No Financials Run"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["seeded_sellable_area_sqm"] == pytest.approx(250.0)
+    assert data["assumptions_seeded"] is False
+
+
+def test_seed_with_sellable_area_and_partial_financial_params_assumptions_not_seeded(
+    client: TestClient,
+):
+    """Partial financial params (missing development_period_months) → assumptions_seeded=False."""
+    option = _create_option(client, name="Partial Financial Option")
+    _add_mix_line(client, option["id"], units_count=5, avg_sellable_area=50.0)
+
+    partial = {
+        "avg_sale_price_per_sqm": 5000.0,
+        "construction_cost_per_sqm": 1200.0,
+        # development_period_months intentionally omitted
+    }
+    resp = client.post(
+        f"/api/v1/concept-options/{option['id']}/seed-feasibility", json=partial
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["assumptions_seeded"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -274,45 +368,3 @@ def test_seed_not_found_concept(client: TestClient):
     """POST seed-feasibility with non-existent concept_option_id → 404."""
     resp = _seed(client, "non-existent-concept-id")
     assert resp.status_code == 404
-
-
-def test_seed_missing_required_field(client: TestClient):
-    """POST seed-feasibility without required avg_sale_price_per_sqm → 422."""
-    option = _create_option(client, name="Missing Field Option")
-    _add_mix_line(client, option["id"])
-
-    incomplete = {k: v for k, v in _VALID_SEED_PAYLOAD.items() if k != "avg_sale_price_per_sqm"}
-    resp = client.post(
-        f"/api/v1/concept-options/{option['id']}/seed-feasibility", json=incomplete
-    )
-    assert resp.status_code == 422
-
-
-def test_seed_default_cost_ratios_applied(client: TestClient):
-    """Default cost ratios are accepted when not provided by caller."""
-    option = _create_option(client, name="Default Ratios Option")
-    _add_mix_line(client, option["id"])
-
-    # Provide only required fields, let defaults handle the ratios
-    minimal = {
-        "avg_sale_price_per_sqm": 4000.0,
-        "construction_cost_per_sqm": 1000.0,
-        "development_period_months": 18,
-    }
-    resp = client.post(
-        f"/api/v1/concept-options/{option['id']}/seed-feasibility", json=minimal
-    )
-    assert resp.status_code == 201
-
-
-def test_seed_creates_distinct_run_each_call(client: TestClient):
-    """Calling seed-feasibility twice creates two distinct feasibility runs."""
-    option = _create_option(client, name="Multi Seed Option")
-    _add_mix_line(client, option["id"])
-
-    resp1 = _seed(client, option["id"])
-    resp2 = _seed(client, option["id"])
-
-    assert resp1.status_code == 201
-    assert resp2.status_code == 201
-    assert resp1.json()["feasibility_run_id"] != resp2.json()["feasibility_run_id"]

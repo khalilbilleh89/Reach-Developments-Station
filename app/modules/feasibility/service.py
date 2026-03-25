@@ -387,12 +387,12 @@ class FeasibilityService:
         scenario_id: Optional[str],
         scenario_name: str,
         sellable_area_sqm: Optional[float],
-        avg_sale_price_per_sqm: float,
-        construction_cost_per_sqm: float,
-        soft_cost_ratio: float,
-        finance_cost_ratio: float,
-        sales_cost_ratio: float,
-        development_period_months: int,
+        avg_sale_price_per_sqm: Optional[float] = None,
+        construction_cost_per_sqm: Optional[float] = None,
+        soft_cost_ratio: float = 0.10,
+        finance_cost_ratio: float = 0.05,
+        sales_cost_ratio: float = 0.03,
+        development_period_months: Optional[int] = None,
         notes: Optional[str] = None,
     ) -> FeasibilityRunResponse:
         """Create a feasibility run seeded from a concept option.
@@ -400,7 +400,17 @@ class FeasibilityService:
         This method is called by the concept design service through the
         approved module boundary.  It creates a FeasibilityRun with
         source_concept_option_id and seed_source_type='concept_option'
-        lineage fields, then persists the seeded assumptions.
+        lineage fields, then persists the seeded assumptions when all
+        required financial parameters are available.
+
+        Assumptions are only persisted when *both* conditions hold:
+          1. sellable_area_sqm is not None (concept has computable area).
+          2. avg_sale_price_per_sqm, construction_cost_per_sqm, and
+             development_period_months are all supplied.
+
+        When either condition is missing the run is still created, but
+        without an assumptions record.  The caller can supply assumptions
+        later via the existing FeasibilityAssumptions endpoint.
 
         The caller (ConceptDesignService) is responsible for validating the
         concept option state before invoking this method.
@@ -417,13 +427,13 @@ class FeasibilityService:
             Seeded from the concept engine's computed sellable area.
             May be None if the concept has no unit mix lines with sellable area.
         avg_sale_price_per_sqm:
-            Financial assumption provided by the caller.
+            Optional financial assumption.  Required for assumption seeding.
         construction_cost_per_sqm:
-            Financial assumption provided by the caller.
+            Optional financial assumption.  Required for assumption seeding.
         soft_cost_ratio, finance_cost_ratio, sales_cost_ratio:
-            Cost ratios provided by the caller.
+            Cost ratios.  Default to standard platform values when not supplied.
         development_period_months:
-            Development timeline provided by the caller.
+            Optional development timeline.  Required for assumption seeding.
         notes:
             Optional free-text notes.
 
@@ -443,7 +453,20 @@ class FeasibilityService:
         )
         run = self.run_repo.create(run_create)
 
-        if sellable_area_sqm is not None:
+        # This condition is intentionally expressed here (and mirrored in
+        # ConceptDesignService.seed_feasibility_from_concept_option) rather
+        # than extracted into a shared utility.  The two checks operate on
+        # different inputs (local method params vs. request payload fields)
+        # and live in separate modules that must not import each other in the
+        # reverse direction.  Keeping them independent preserves the module
+        # boundary while remaining easy to read in isolation.
+        can_seed_assumptions = (
+            sellable_area_sqm is not None
+            and avg_sale_price_per_sqm is not None
+            and construction_cost_per_sqm is not None
+            and development_period_months is not None
+        )
+        if can_seed_assumptions:
             assumptions_create = FeasibilityAssumptionsCreate(
                 sellable_area_sqm=sellable_area_sqm,
                 avg_sale_price_per_sqm=avg_sale_price_per_sqm,
