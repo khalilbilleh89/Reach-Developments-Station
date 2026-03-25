@@ -3,7 +3,7 @@ concept_design.schemas
 
 Pydantic request/response schemas for the Concept Design API.
 
-PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059, PR-CONCEPT-060
 """
 
 from __future__ import annotations
@@ -31,6 +31,10 @@ class ConceptOptionCreate(BaseModel):
     # Zoning constraint inputs — PR-CONCEPT-059
     far_limit: Optional[float] = Field(default=None, gt=0)
     density_limit: Optional[float] = Field(default=None, gt=0)
+    # Land / Scenario integration overrides — PR-CONCEPT-060
+    # These take priority over the inherited land constraints when set.
+    concept_override_far_limit: Optional[float] = Field(default=None, gt=0)
+    concept_override_density_limit: Optional[float] = Field(default=None, gt=0)
 
 
 class ConceptOptionUpdate(BaseModel):
@@ -44,6 +48,9 @@ class ConceptOptionUpdate(BaseModel):
     # Zoning constraint inputs — PR-CONCEPT-059
     far_limit: Optional[float] = Field(default=None, gt=0)
     density_limit: Optional[float] = Field(default=None, gt=0)
+    # Land / Scenario integration overrides — PR-CONCEPT-060
+    concept_override_far_limit: Optional[float] = Field(default=None, gt=0)
+    concept_override_density_limit: Optional[float] = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def reject_explicit_null_for_non_nullable_fields(self) -> "ConceptOptionUpdate":
@@ -74,6 +81,10 @@ class ConceptOptionResponse(BaseModel):
     # Zoning constraint inputs — PR-CONCEPT-059
     far_limit: Optional[float]
     density_limit: Optional[float]
+    # Land / Scenario integration — PR-CONCEPT-060
+    land_id: Optional[str]
+    concept_override_far_limit: Optional[float]
+    concept_override_density_limit: Optional[float]
     is_promoted: bool
     promoted_at: Optional[datetime]
     promoted_project_id: Optional[str]
@@ -125,6 +136,8 @@ class ConceptOptionSummaryResponse(BaseModel):
     status: str
     project_id: Optional[str]
     scenario_id: Optional[str]
+    # Land / Scenario integration — PR-CONCEPT-060
+    land_id: Optional[str]
     # Input overrides (stored on option)
     site_area: Optional[float]
     gross_floor_area: Optional[float]
@@ -133,6 +146,9 @@ class ConceptOptionSummaryResponse(BaseModel):
     # Zoning constraint inputs — PR-CONCEPT-059
     far_limit: Optional[float]
     density_limit: Optional[float]
+    # Land integration overrides — PR-CONCEPT-060
+    concept_override_far_limit: Optional[float]
+    concept_override_density_limit: Optional[float]
     # Derived from mix lines
     unit_count: int
     sellable_area: Optional[float]

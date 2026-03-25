@@ -9,7 +9,7 @@ Entities:
   ConceptUnitMixLine — a normalised unit-type row inside a concept option,
                        representing one band of the residential/commercial mix.
 
-PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059
+PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-059, PR-CONCEPT-060
 """
 
 from __future__ import annotations
@@ -61,6 +61,17 @@ class ConceptOption(Base, TimestampMixin):
     # Zoning constraint inputs — PR-CONCEPT-059
     far_limit: Mapped[Optional[float]] = mapped_column(Numeric(8, 4), nullable=True)
     density_limit: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+
+    # Land / Scenario integration — PR-CONCEPT-060
+    # land_id records which LandParcel provided the upstream constraints.
+    # override fields let the user deviate from the inherited land constraints.
+    land_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    concept_override_far_limit: Mapped[Optional[float]] = mapped_column(
+        Numeric(8, 4), nullable=True
+    )
+    concept_override_density_limit: Mapped[Optional[float]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
 
     # Promotion metadata — PR-CONCEPT-054
     is_promoted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

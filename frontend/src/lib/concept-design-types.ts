@@ -4,7 +4,7 @@
  * Mirrors the backend Pydantic schemas defined in
  * app/modules/concept_design/schemas.py.
  *
- * PR-CONCEPT-055
+ * PR-CONCEPT-055, PR-CONCEPT-060
  */
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,10 @@ export interface ConceptOption {
   floor_count: number | null;
   far_limit: number | null;
   density_limit: number | null;
+  // Land / Scenario integration — PR-CONCEPT-060
+  land_id: string | null;
+  concept_override_far_limit: number | null;
+  concept_override_density_limit: number | null;
   is_promoted: boolean;
   promoted_at: string | null;
   promoted_project_id: string | null;
@@ -55,6 +59,9 @@ export interface ConceptOptionCreate {
   floor_count?: number | null;
   far_limit?: number | null;
   density_limit?: number | null;
+  // Land / Scenario integration overrides — PR-CONCEPT-060
+  concept_override_far_limit?: number | null;
+  concept_override_density_limit?: number | null;
 }
 
 export interface ConceptOptionUpdate {
@@ -67,6 +74,9 @@ export interface ConceptOptionUpdate {
   floor_count?: number | null;
   far_limit?: number | null;
   density_limit?: number | null;
+  // Land / Scenario integration overrides — PR-CONCEPT-060
+  concept_override_far_limit?: number | null;
+  concept_override_density_limit?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,12 +113,16 @@ export interface ConceptOptionSummary {
   status: ConceptOptionStatus;
   project_id: string | null;
   scenario_id: string | null;
+  // Land / Scenario integration — PR-CONCEPT-060
+  land_id: string | null;
   site_area: number | null;
   gross_floor_area: number | null;
   building_count: number | null;
   floor_count: number | null;
   far_limit: number | null;
   density_limit: number | null;
+  concept_override_far_limit: number | null;
+  concept_override_density_limit: number | null;
   unit_count: number;
   sellable_area: number | null;
   efficiency_ratio: number | null;

@@ -22,7 +22,7 @@
  *   GET    /concept-options/{id}/summary
  *   POST   /concept-options/{id}/promote
  *
- * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058
+ * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058, PR-CONCEPT-060
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -39,6 +39,7 @@ import {
   deleteConceptOption,
   duplicateConceptOption,
 } from "@/lib/concept-design-api";
+import { apiFetch } from "@/lib/api-client";
 import type {
   ConceptOption,
   ConceptOptionCreate,
@@ -49,6 +50,24 @@ import type {
   ConceptPromotionResponse,
 } from "@/lib/concept-design-types";
 import styles from "@/styles/demo-shell.module.css";
+
+// ---------------------------------------------------------------------------
+// Scenario / Land context types — PR-CONCEPT-060
+// ---------------------------------------------------------------------------
+
+interface ScenarioOption {
+  id: string;
+  name: string;
+  land_id: string | null;
+}
+
+interface LandContext {
+  parcel_name: string;
+  land_area_sqm: number | null;
+  permitted_far: number | null;
+  density_ratio: number | null;
+  zoning_category: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -288,8 +307,65 @@ function ConceptOptionFormModal({
     existing?.density_limit != null ? String(existing.density_limit) : "",
   );
 
+  // Land / Scenario integration — PR-CONCEPT-060
+  const [scenarios, setScenarios] = useState<ScenarioOption[]>([]);
+  const [landContext, setLandContext] = useState<LandContext | null>(null);
+  const [loadingLand, setLoadingLand] = useState(false);
+  const [overrideFar, setOverrideFar] = useState(
+    existing?.concept_override_far_limit != null
+      ? String(existing.concept_override_far_limit)
+      : "",
+  );
+  const [overrideDensity, setOverrideDensity] = useState(
+    existing?.concept_override_density_limit != null
+      ? String(existing.concept_override_density_limit)
+      : "",
+  );
+  const [showFarOverride, setShowFarOverride] = useState(
+    existing?.concept_override_far_limit != null,
+  );
+  const [showDensityOverride, setShowDensityOverride] = useState(
+    existing?.concept_override_density_limit != null,
+  );
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load scenarios list for dropdown — PR-CONCEPT-060
+  useEffect(() => {
+    if (isEdit) return;
+    apiFetch<{ items: ScenarioOption[]; total: number }>("/scenarios?limit=100")
+      .then((data) => setScenarios(data.items))
+      .catch(() => setScenarios([]));
+  }, [isEdit]);
+
+  // Fetch land context when a scenario is selected — PR-CONCEPT-060
+  useEffect(() => {
+    if (!scenarioId) {
+      setLandContext(null);
+      return;
+    }
+    const selected = scenarios.find((s) => s.id === scenarioId);
+    if (!selected?.land_id) {
+      setLandContext(null);
+      return;
+    }
+    setLoadingLand(true);
+    apiFetch<LandContext & { id: string; land_area_sqm: number | null; permitted_far: number | null; density_ratio: number | null; zoning_category: string | null; parcel_name: string }>(
+      `/land/parcels/${encodeURIComponent(selected.land_id)}`,
+    )
+      .then((parcel) => {
+        setLandContext({
+          parcel_name: parcel.parcel_name,
+          land_area_sqm: parcel.land_area_sqm,
+          permitted_far: parcel.permitted_far,
+          density_ratio: parcel.density_ratio,
+          zoning_category: parcel.zoning_category,
+        });
+      })
+      .catch(() => setLandContext(null))
+      .finally(() => setLoadingLand(false));
+  }, [scenarioId, scenarios]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -313,6 +389,12 @@ function ConceptOptionFormModal({
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
             far_limit: farLimit ? parseFloat(farLimit) : null,
             density_limit: densityLimit ? parseFloat(densityLimit) : null,
+            concept_override_far_limit:
+              showFarOverride && overrideFar ? parseFloat(overrideFar) : null,
+            concept_override_density_limit:
+              showDensityOverride && overrideDensity
+                ? parseFloat(overrideDensity)
+                : null,
           });
         } else {
           const payload: ConceptOptionCreate = {
@@ -321,12 +403,24 @@ function ConceptOptionFormModal({
             status,
             project_id: projectId.trim() || null,
             scenario_id: scenarioId.trim() || null,
+            // site_area is inherited from land when scenario is set; only
+            // send it when explicitly entered to avoid overwriting the
+            // inherited value on the server.
             site_area: siteArea ? parseFloat(siteArea) : null,
             gross_floor_area: grossFloorArea ? parseFloat(grossFloorArea) : null,
             building_count: buildingCount ? parseInt(buildingCount, 10) : null,
             floor_count: floorCount ? parseInt(floorCount, 10) : null,
-            far_limit: farLimit ? parseFloat(farLimit) : null,
-            density_limit: densityLimit ? parseFloat(densityLimit) : null,
+            // far_limit / density_limit are also inherited; only send if
+            // manually entered without a scenario.
+            far_limit: farLimit && !scenarioId.trim() ? parseFloat(farLimit) : null,
+            density_limit:
+              densityLimit && !scenarioId.trim() ? parseFloat(densityLimit) : null,
+            concept_override_far_limit:
+              showFarOverride && overrideFar ? parseFloat(overrideFar) : null,
+            concept_override_density_limit:
+              showDensityOverride && overrideDensity
+                ? parseFloat(overrideDensity)
+                : null,
           };
           await createConceptOption(payload);
         }
@@ -353,11 +447,17 @@ function ConceptOptionFormModal({
       floorCount,
       farLimit,
       densityLimit,
+      overrideFar,
+      overrideDensity,
+      showFarOverride,
+      showDensityOverride,
       isEdit,
       existing,
       onSaved,
     ],
   );
+
+  const hasLandContext = landContext !== null;
 
   return (
     <ModalWrapper
@@ -414,16 +514,103 @@ function ConceptOptionFormModal({
               />
             </Field>
 
-            <Field label="Scenario ID" id="co-scenario-id">
-              <input
+            {/* Scenario selector — PR-CONCEPT-060 */}
+            <Field label="Scenario" id="co-scenario-id">
+              <select
                 id="co-scenario-id"
-                type="text"
                 value={scenarioId}
                 onChange={(e) => setScenarioId(e.target.value)}
                 style={inputStyle}
-                placeholder="Optional"
-              />
+              >
+                <option value="">— No scenario (manual inputs) —</option>
+                {scenarios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.land_id ? " 🏗 (with land)" : ""}
+                  </option>
+                ))}
+              </select>
             </Field>
+
+            {/* Land context panel — PR-CONCEPT-060 */}
+            {scenarioId && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: "12px 16px",
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: 8,
+                  fontSize: "0.875rem",
+                }}
+              >
+                {loadingLand ? (
+                  <p style={{ margin: 0, color: "#1d4ed8" }}>
+                    Loading land context…
+                  </p>
+                ) : hasLandContext ? (
+                  <>
+                    <p
+                      style={{
+                        margin: "0 0 8px",
+                        fontWeight: 600,
+                        color: "#1d4ed8",
+                      }}
+                    >
+                      🏗 Land Parcel: {landContext.parcel_name}
+                    </p>
+                    <dl
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr",
+                        gap: "4px 12px",
+                        margin: 0,
+                        color: "#1e40af",
+                      }}
+                    >
+                      <dt style={{ fontWeight: 500 }}>Site Area</dt>
+                      <dd style={{ margin: 0 }}>
+                        {landContext.land_area_sqm != null
+                          ? `${landContext.land_area_sqm.toLocaleString()} m²`
+                          : "—"}
+                      </dd>
+                      <dt style={{ fontWeight: 500 }}>FAR Limit</dt>
+                      <dd style={{ margin: 0 }}>
+                        {landContext.permitted_far != null
+                          ? landContext.permitted_far.toString()
+                          : "—"}
+                      </dd>
+                      <dt style={{ fontWeight: 500 }}>Density Limit</dt>
+                      <dd style={{ margin: 0 }}>
+                        {landContext.density_ratio != null
+                          ? `${landContext.density_ratio} dph`
+                          : "—"}
+                      </dd>
+                      <dt style={{ fontWeight: 500 }}>Zoning</dt>
+                      <dd style={{ margin: 0 }}>
+                        {landContext.zoning_category ?? "—"}
+                      </dd>
+                    </dl>
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        fontSize: "0.8rem",
+                        color: "#3b82f6",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      These values are inherited automatically. Use overrides
+                      below to deviate.
+                    </p>
+                  </>
+                ) : (
+                  <p style={{ margin: 0, color: "#6b7280", fontStyle: "italic" }}>
+                    This scenario has no linked land parcel — manual inputs will
+                    be used.
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -436,7 +623,16 @@ function ConceptOptionFormModal({
               step="any"
               value={siteArea}
               onChange={(e) => setSiteArea(e.target.value)}
-              style={inputStyle}
+              style={{
+                ...inputStyle,
+                background:
+                  !isEdit && hasLandContext ? "#f0fdf4" : inputStyle.background,
+              }}
+              placeholder={
+                !isEdit && hasLandContext
+                  ? `Inherited: ${landContext?.land_area_sqm ?? "—"} m²`
+                  : "e.g. 5000"
+              }
             />
           </Field>
           <Field label="Gross Floor Area (m²)" id="co-gfa">
@@ -472,31 +668,130 @@ function ConceptOptionFormModal({
               style={inputStyle}
             />
           </Field>
-          <Field label="FAR Limit" id="co-far-limit">
-            <input
-              id="co-far-limit"
-              type="number"
-              min="0.01"
-              step="any"
-              value={farLimit}
-              onChange={(e) => setFarLimit(e.target.value)}
-              style={inputStyle}
-              placeholder="e.g. 2.5"
-            />
-          </Field>
-          <Field label="Density Limit (dph)" id="co-density-limit">
-            <input
-              id="co-density-limit"
-              type="number"
-              min="0.01"
-              step="any"
-              value={densityLimit}
-              onChange={(e) => setDensityLimit(e.target.value)}
-              style={inputStyle}
-              placeholder="dwellings/hectare"
-            />
-          </Field>
+
+          {/* FAR / Density shown only when no scenario context */}
+          {(!scenarioId || isEdit) && (
+            <>
+              <Field label="FAR Limit" id="co-far-limit">
+                <input
+                  id="co-far-limit"
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={farLimit}
+                  onChange={(e) => setFarLimit(e.target.value)}
+                  style={inputStyle}
+                  placeholder="e.g. 2.5"
+                />
+              </Field>
+              <Field label="Density Limit (dph)" id="co-density-limit">
+                <input
+                  id="co-density-limit"
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={densityLimit}
+                  onChange={(e) => setDensityLimit(e.target.value)}
+                  style={inputStyle}
+                  placeholder="dwellings/hectare"
+                />
+              </Field>
+            </>
+          )}
         </div>
+
+        {/* Override toggles — PR-CONCEPT-060 */}
+        {(hasLandContext || isEdit) && (
+          <div
+            style={{
+              marginTop: 4,
+              marginBottom: 16,
+              padding: "12px 16px",
+              background: "#fefce8",
+              border: "1px solid #fde68a",
+              borderRadius: 8,
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                color: "#92400e",
+              }}
+            >
+              ⚙ Advanced Overrides
+            </p>
+
+            <div style={{ marginBottom: 8 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  color: "#78350f",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showFarOverride}
+                  onChange={(e) => {
+                    setShowFarOverride(e.target.checked);
+                    if (!e.target.checked) setOverrideFar("");
+                  }}
+                />
+                Override FAR Limit
+              </label>
+              {showFarOverride && (
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={overrideFar}
+                  onChange={(e) => setOverrideFar(e.target.value)}
+                  style={{ ...inputStyle, marginTop: 6 }}
+                  placeholder="Override FAR (e.g. 3.0)"
+                />
+              )}
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  color: "#78350f",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showDensityOverride}
+                  onChange={(e) => {
+                    setShowDensityOverride(e.target.checked);
+                    if (!e.target.checked) setOverrideDensity("");
+                  }}
+                />
+                Override Density Limit
+              </label>
+              {showDensityOverride && (
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={overrideDensity}
+                  onChange={(e) => setOverrideDensity(e.target.value)}
+                  style={{ ...inputStyle, marginTop: 6 }}
+                  placeholder="Override density (dph)"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
           <button
@@ -1060,6 +1355,40 @@ function SummaryPanel({ optionId, onAddMixLine }: SummaryPanelProps) {
 
   return (
     <div>
+      {/* Land / Scenario context panel — PR-CONCEPT-060 */}
+      {summary.land_id && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 14px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 8,
+            fontSize: "0.8rem",
+            color: "#1e40af",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>🏗 Land Context: </span>
+          <span>Land ID {summary.land_id.substring(0, 8)}…</span>
+          {summary.site_area != null && (
+            <span> · Site: {formatNum(summary.site_area, 0)} m²</span>
+          )}
+          {summary.concept_override_far_limit != null ? (
+            <span> · FAR: {summary.concept_override_far_limit} (override)</span>
+          ) : summary.far_limit != null ? (
+            <span> · FAR: {summary.far_limit}</span>
+          ) : null}
+          {summary.concept_override_density_limit != null ? (
+            <span>
+              {" "}
+              · Density: {summary.concept_override_density_limit} dph (override)
+            </span>
+          ) : summary.density_limit != null ? (
+            <span> · Density: {summary.density_limit} dph</span>
+          ) : null}
+        </div>
+      )}
+
       {/* Derived KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
@@ -1303,6 +1632,15 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
                   title={option.scenario_id}
                 >
                   Scenario: {option.scenario_id.substring(0, 8)}…
+                </span>
+              )}
+              {option.land_id && (
+                <span
+                  className={`${styles.badge} ${styles.badgeBlue}`}
+                  title={option.land_id}
+                  style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" }}
+                >
+                  🏗 Land: {option.land_id.substring(0, 8)}…
                 </span>
               )}
             </div>
