@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import FeasibilityRunDetailView from "@/components/feasibility/FeasibilityRunDetailView";
 import {
   listFeasibilityRuns,
   createFeasibilityRun,
@@ -286,9 +288,23 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
  * Feasibility page — feasibility run management dashboard.
  *
  * Shows KPI summary and a table of feasibility runs. Supports create
- * and scenario type update operations.
+ * and scenario type update operations. Renders the run detail view
+ * when ?runId= is present in the query string.
  */
 export default function FeasibilityPage() {
+  const searchParams = useSearchParams();
+  const runId = searchParams.get("runId");
+
+  // When a run ID is in the URL, render the detail view.
+  if (runId) {
+    return <FeasibilityRunDetailView />;
+  }
+
+  return <FeasibilityListView />;
+}
+
+function FeasibilityListView() {
+  const router = useRouter();
   const [runs, setRuns] = useState<FeasibilityRun[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -513,29 +529,49 @@ export default function FeasibilityPage() {
                     {formatDate(run.updated_at)}
                   </td>
                   <td>
-                    <select
-                      value={run.scenario_type}
-                      onChange={(e) =>
-                        handleScenarioTypeChange(
-                          run.id,
-                          e.target.value as FeasibilityScenarioType,
-                        )
-                      }
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 4,
-                        fontSize: "0.8rem",
-                        background: "var(--color-surface)",
-                        cursor: "pointer",
-                      }}
-                      aria-label={`Change scenario type for ${run.scenario_name}`}
-                    >
-                      <option value="base">Base</option>
-                      <option value="upside">Upside</option>
-                      <option value="downside">Downside</option>
-                      <option value="investor">Investor</option>
-                    </select>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/feasibility?runId=${run.id}`)}
+                        style={{
+                          padding: "4px 12px",
+                          border: "1px solid var(--color-primary, #2563eb)",
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: "var(--color-primary, #2563eb)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          whiteSpace: "nowrap",
+                        }}
+                        aria-label={`Open ${run.scenario_name}`}
+                      >
+                        Open
+                      </button>
+                      <select
+                        value={run.scenario_type}
+                        onChange={(e) =>
+                          handleScenarioTypeChange(
+                            run.id,
+                            e.target.value as FeasibilityScenarioType,
+                          )
+                        }
+                        style={{
+                          padding: "4px 8px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          fontSize: "0.8rem",
+                          background: "var(--color-surface)",
+                          cursor: "pointer",
+                        }}
+                        aria-label={`Change scenario type for ${run.scenario_name}`}
+                      >
+                        <option value="base">Base</option>
+                        <option value="upside">Upside</option>
+                        <option value="downside">Downside</option>
+                        <option value="investor">Investor</option>
+                      </select>
+                    </div>
                   </td>
                 </tr>
               ))}

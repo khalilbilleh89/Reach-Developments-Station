@@ -1,7 +1,10 @@
-// Feasibility run detail route stub used to satisfy Next.js routing and static export.
-// This route is currently a no-op; run details are not rendered via this page.
+// Feasibility run detail route entry — server component.
 //
-// generateStaticParams satisfies the `output: "export"` requirement.
+// Navigation to a specific run is handled via query param on the parent page:
+//   /feasibility?runId=<runId>
+//
+// This route stub satisfies Next.js `output: "export"` routing requirements.
+// generateStaticParams returns a placeholder so the static export build passes.
 // dynamicParams = false ensures unmatched IDs return 404 from the static build.
 
 export function generateStaticParams() {
