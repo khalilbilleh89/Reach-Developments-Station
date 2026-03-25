@@ -11,11 +11,12 @@ GET    /concept-options/compare
 GET    /concept-options/{concept_option_id}
 PATCH  /concept-options/{concept_option_id}
 DELETE /concept-options/{concept_option_id}
+POST   /concept-options/{concept_option_id}/duplicate
 POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 POST   /concept-options/{concept_option_id}/promote
 
-PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057
+PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057, PR-CONCEPT-058
 """
 
 from __future__ import annotations
@@ -139,6 +140,30 @@ def delete_concept_option(
     """
     service.delete_concept_option(concept_option_id)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Duplication endpoint — PR-CONCEPT-058
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{concept_option_id}/duplicate",
+    response_model=ConceptOptionResponse,
+    status_code=200,
+)
+def duplicate_concept_option(
+    concept_option_id: str,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> ConceptOptionResponse:
+    """Duplicate a concept option and its unit mix lines.
+
+    The duplicate receives a generated name: ``"<original> (Copy)"``,
+    ``"<original> (Copy 2)"``, etc.
+
+    Duplication is forbidden for archived concept options (HTTP 409).
+    Promoted options can be duplicated — the copy starts unpromoted.
+    """
+    return service.duplicate_concept_option(concept_option_id)
 
 
 # ---------------------------------------------------------------------------

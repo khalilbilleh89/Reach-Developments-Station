@@ -17,11 +17,12 @@
  *   GET    /concept-options/{id}
  *   PATCH  /concept-options/{id}
  *   DELETE /concept-options/{id}
+ *   POST   /concept-options/{id}/duplicate
  *   POST   /concept-options/{id}/unit-mix
  *   GET    /concept-options/{id}/summary
  *   POST   /concept-options/{id}/promote
  *
- * PR-CONCEPT-055, PR-CONCEPT-057
+ * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -36,6 +37,7 @@ import {
   compareConceptOptions,
   promoteConceptOption,
   deleteConceptOption,
+  duplicateConceptOption,
 } from "@/lib/concept-design-api";
 import type {
   ConceptOption,
@@ -1493,9 +1495,10 @@ interface OptionsListProps {
   onSelectOption: (option: ConceptOption) => void;
   onEditOption: (option: ConceptOption) => void;
   onDeleteOption: (option: ConceptOption) => void;
+  onDuplicateOption: (option: ConceptOption) => void;
 }
 
-function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption }: OptionsListProps) {
+function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption, onDuplicateOption }: OptionsListProps) {
   return (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
@@ -1557,6 +1560,24 @@ function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption }: 
                   </button>
                   <button
                     type="button"
+                    onClick={() => onDuplicateOption(opt)}
+                    disabled={opt.status === "archived"}
+                    title={opt.status === "archived" ? "Cannot duplicate an archived concept option" : "Duplicate option"}
+                    style={{
+                      padding: "3px 10px",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 4,
+                      background: opt.status === "archived" ? "var(--color-surface)" : "#fff",
+                      color: opt.status === "archived" ? "var(--color-text-muted)" : "var(--color-text)",
+                      cursor: opt.status === "archived" ? "not-allowed" : "pointer",
+                      fontSize: "0.8rem",
+                      opacity: opt.status === "archived" ? 0.5 : 1,
+                    }}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onDeleteOption(opt)}
                     disabled={opt.is_promoted}
                     title={opt.is_promoted ? "Cannot delete a promoted concept option" : "Delete option"}
@@ -1601,6 +1622,8 @@ export default function ConceptDesignPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingOption, setEditingOption] = useState<ConceptOption | null>(null);
   const [deletingOption, setDeletingOption] = useState<ConceptOption | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const fetchOptions = useCallback(() => {
     setLoading(true);
@@ -1635,6 +1658,25 @@ export default function ConceptDesignPage() {
   const handleDeleteOption = useCallback((opt: ConceptOption) => {
     setDeletingOption(opt);
   }, []);
+
+  const handleDuplicateOption = useCallback(
+    (opt: ConceptOption) => {
+      setDuplicateError(null);
+      setDuplicating(true);
+      duplicateConceptOption(opt.id)
+        .then((newOption) => {
+          fetchOptions();
+          setEditingOption(newOption);
+        })
+        .catch((err: unknown) => {
+          setDuplicateError(
+            err instanceof Error ? err.message : "Duplication failed.",
+          );
+        })
+        .finally(() => setDuplicating(false));
+    },
+    [fetchOptions],
+  );
 
   const handleDeleted = useCallback(() => {
     setDeletingOption(null);
@@ -1763,6 +1805,7 @@ export default function ConceptDesignPage() {
           </div>
 
           {error && <ErrorAlert message={error} />}
+          {duplicateError && <ErrorAlert message={duplicateError} />}
 
           {loading && (
             <div
@@ -1802,6 +1845,7 @@ export default function ConceptDesignPage() {
               onSelectOption={handleSelectOption}
               onEditOption={handleEditOption}
               onDeleteOption={handleDeleteOption}
+              onDuplicateOption={handleDuplicateOption}
             />
           )}
         </>

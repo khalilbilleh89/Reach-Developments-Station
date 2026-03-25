@@ -205,8 +205,79 @@ class ConceptDesignService:
         self.option_repo.delete(option)
 
     # ------------------------------------------------------------------
-    # Unit mix
+    # Duplication — PR-CONCEPT-058
     # ------------------------------------------------------------------
+
+    def _generate_duplicate_name(
+        self,
+        source_name: str,
+        project_id: Optional[str],
+        scenario_id: Optional[str],
+    ) -> str:
+        """Return a unique name for a duplicated concept option.
+
+        Naming convention:
+        - First copy:  ``"<name> (Copy)"``
+        - Further copies: ``"<name> (Copy 2)"``, ``"<name> (Copy 3)"``, …
+
+        Uniqueness is checked against all concept options that share the same
+        project_id / scenario_id scope as the source.
+        """
+        existing_names = self.option_repo.get_names_in_scope(
+            project_id=project_id,
+            scenario_id=scenario_id,
+        )
+
+        candidate = f"{source_name} (Copy)"
+        if candidate not in existing_names:
+            return candidate
+
+        counter = 2
+        while True:
+            candidate = f"{source_name} (Copy {counter})"
+            if candidate not in existing_names:
+                return candidate
+            counter += 1
+
+    def duplicate_concept_option(self, concept_option_id: str) -> ConceptOptionResponse:
+        """Duplicate a concept option and its unit mix lines.
+
+        Duplication rules
+        -----------------
+        * The concept option must exist.
+        * Archived concept options cannot be duplicated.
+        * Promoted options *can* be duplicated — the copy starts unpromoted.
+        * The duplicate receives a generated name: ``"<original> (Copy)"``,
+          ``"<original> (Copy 2)"``, etc.
+        * ``is_promoted``, ``promoted_at``, ``promoted_project_id``, and
+          ``promotion_notes`` are NOT copied.
+        """
+        option = self.option_repo.get_by_id_with_mix(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+        if option.status == "archived":
+            raise ConflictError(
+                "Cannot duplicate an archived concept option.",
+                details={"concept_option_id": concept_option_id},
+            )
+
+        new_name = self._generate_duplicate_name(
+            option.name, option.project_id, option.scenario_id
+        )
+        clone = self.option_repo.clone_concept_option(option, new_name)
+        self.mix_repo.clone_for_option(option.mix_lines, clone.id)
+        self.option_repo.db.commit()
+        self.option_repo.db.refresh(clone)
+
+        _logger.info(
+            "ConceptOption duplicated source_id=%s new_id=%s new_name=%r",
+            option.id,
+            clone.id,
+            clone.name,
+        )
+        return ConceptOptionResponse.model_validate(clone)
 
     def add_concept_mix_line(
         self, concept_option_id: str, data: ConceptUnitMixLineCreate
