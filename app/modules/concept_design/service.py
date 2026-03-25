@@ -30,6 +30,7 @@ from app.modules.concept_design.engine import (
     compute_unit_count,
     run_concept_engine,
 )
+from app.modules.concept_design.financial_engine import estimate_concept_financials
 from app.modules.concept_design.repository import (
     ConceptOptionRepository,
     ConceptUnitMixLineRepository,
@@ -661,11 +662,17 @@ class ConceptDesignService:
         self,
         project_id: Optional[str] = None,
         scenario_id: Optional[str] = None,
+        price_per_sqm: Optional[float] = None,
+        price_per_unit: Optional[float] = None,
     ) -> ConceptOptionComparisonResponse:
         """Return a structured comparison of all concept options for a project or scenario.
 
         Exactly one of *project_id* or *scenario_id* must be provided.
         Supplying both or neither raises :class:`~app.core.errors.ValidationError`.
+
+        Optional pricing parameters *price_per_sqm* and *price_per_unit* are
+        used to derive financial GDV metrics (PR-CONCEPT-062).  When omitted
+        all financial metric fields are None.
         """
         if project_id is not None and scenario_id is not None:
             raise ValidationError(
@@ -709,6 +716,12 @@ class ConceptDesignService:
                     else None
                 ),
             )
+            financial = estimate_concept_financials(
+                sellable_area=metrics.sellable_area,
+                unit_count=metrics.unit_count,
+                price_per_sqm=price_per_sqm,
+                price_per_unit=price_per_unit,
+            )
             comparison_inputs.append(
                 ConceptOptionComparisonInput(
                     concept_option_id=option.id,
@@ -720,6 +733,9 @@ class ConceptDesignService:
                     average_unit_area=metrics.average_unit_area,
                     building_count=option.building_count,
                     floor_count=option.floor_count,
+                    estimated_gdv=financial.estimated_gdv,
+                    estimated_revenue_per_sqm=financial.estimated_revenue_per_sqm,
+                    estimated_revenue_per_unit=financial.estimated_revenue_per_unit,
                 )
             )
 
@@ -731,6 +747,7 @@ class ConceptDesignService:
             best_sellable_area_option_id=result.best_sellable_area_option_id,
             best_efficiency_option_id=result.best_efficiency_option_id,
             best_unit_count_option_id=result.best_unit_count_option_id,
+            best_gdv_option_id=result.best_gdv_option_id,
             rows=[
                 ConceptOptionComparisonRowResponse(
                     concept_option_id=row.concept_option_id,
@@ -748,6 +765,11 @@ class ConceptDesignService:
                     is_best_sellable_area=row.is_best_sellable_area,
                     is_best_efficiency=row.is_best_efficiency,
                     is_best_unit_count=row.is_best_unit_count,
+                    estimated_gdv=row.estimated_gdv,
+                    estimated_revenue_per_sqm=row.estimated_revenue_per_sqm,
+                    estimated_revenue_per_unit=row.estimated_revenue_per_unit,
+                    gdv_delta_vs_best=row.gdv_delta_vs_best,
+                    is_best_gdv=row.is_best_gdv,
                 )
                 for row in result.rows
             ],
