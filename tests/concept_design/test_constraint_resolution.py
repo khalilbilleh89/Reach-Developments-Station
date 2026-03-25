@@ -20,10 +20,10 @@ _resolve_effective_far_limit
   - override absent, land present → land wins over manual
   - override absent, land absent, manual present → manual wins
   - all absent → None returned
-  - override=0 is treated as "absent" (falsy None check)   ← intentional
+  - override=0.0 is treated as "present" (any non-None value wins)
 
 _resolve_effective_density_limit
-  - mirrors the FAR priority logic (same four scenarios)
+  - mirrors the FAR priority logic (same four scenarios, including 0.0)
 
 PR-CONCEPT-061
 """
@@ -113,20 +113,19 @@ class TestResolveEffectiveFarLimit:
         )
         assert result is None
 
-    def test_override_zero_is_treated_as_absent(self):
-        """A None check means 0.0 override is treated the same as None.
+    def test_override_zero_wins_over_land_and_manual(self):
+        """override_far=0.0 is non-None, so it wins over land and manual values.
 
-        This is the current documented semantics — if override is set to 0.0,
-        the service falls through to land then manual.
+        The helpers use an ``is not None`` check, meaning any explicit value
+        including 0.0 is treated as a present override.
         """
         svc = _service()
-        # override=0.0 is falsy; None check means land wins
         result = svc._resolve_effective_far_limit(
-            override_far=None,
+            override_far=0.0,
             land_far=2.5,
             manual_far=1.0,
         )
-        assert result == 2.5
+        assert result == 0.0
 
     def test_result_preserves_float_precision(self):
         svc = _service()
