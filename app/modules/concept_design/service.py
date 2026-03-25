@@ -7,16 +7,17 @@ Coordinates repository access and concept engine computation.
 Raises domain errors (ResourceNotFoundError) that the central error
 handler translates into HTTP responses.
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-054
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import ResourceNotFoundError, ValidationError
+from app.core.errors import ConflictError, ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.modules.concept_design.comparison_engine import (
     ConceptOptionComparisonInput,
@@ -35,11 +36,16 @@ from app.modules.concept_design.schemas import (
     ConceptOptionResponse,
     ConceptOptionSummaryResponse,
     ConceptOptionUpdate,
+    ConceptPromotionRequest,
+    ConceptPromotionResponse,
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
 )
+from app.modules.phases.repository import PhaseRepository
+from app.modules.phases.schemas import PhaseCreate
 from app.modules.projects.repository import ProjectRepository
 from app.modules.scenario.repository import ScenarioRepository
+from app.shared.enums.project import PhaseStatus
 
 _logger = get_logger("reach_developments.concept_design")
 
@@ -50,6 +56,7 @@ class ConceptDesignService:
         self.mix_repo = ConceptUnitMixLineRepository(db)
         self.project_repo = ProjectRepository(db)
         self.scenario_repo = ScenarioRepository(db)
+        self.phase_repo = PhaseRepository(db)
 
     # ------------------------------------------------------------------
     # Linked-resource validators
@@ -300,4 +307,148 @@ class ConceptDesignService:
                 )
                 for row in result.rows
             ],
+        )
+
+    # ------------------------------------------------------------------
+    # Promotion — PR-CONCEPT-054
+    # ------------------------------------------------------------------
+
+    def promote_concept_option(
+        self,
+        concept_option_id: str,
+        payload: ConceptPromotionRequest,
+    ) -> ConceptPromotionResponse:
+        """Promote a concept option into a structured downstream project phase.
+
+        Promotion rules
+        ---------------
+        * The concept option must exist.
+        * The concept option must not be archived.
+        * The concept option must not already be promoted.
+        * The concept option must have building_count, floor_count, and at
+          least one unit mix line to qualify as structurally complete.
+        * A target project must be resolvable — either from the concept
+          option's own project_id or from payload.target_project_id.
+
+        Project linkage strategy
+        ------------------------
+        * If the concept option already has a project_id, that project is
+          used as the promotion target.  payload.target_project_id must
+          either be absent or match the concept's project_id; supplying a
+          different value raises ValidationError.
+        * If the concept option has no project_id, payload.target_project_id
+          is required.
+
+        On success, a new Phase is created under the target project, and
+        the concept option is marked as promoted (is_promoted=True,
+        promoted_at, promoted_project_id, promotion_notes are persisted).
+        """
+        option = self.option_repo.get_by_id_with_mix(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+
+        # ── Promotability checks ──────────────────────────────────────
+        if option.status == "archived":
+            raise ValidationError(
+                "Archived concept options cannot be promoted.",
+                details={"status": option.status},
+            )
+
+        if option.is_promoted:
+            raise ConflictError(
+                f"ConceptOption '{concept_option_id}' has already been promoted.",
+                details={"promoted_project_id": option.promoted_project_id},
+            )
+
+        missing: list[str] = []
+        if not option.building_count:
+            missing.append("building_count")
+        if not option.floor_count:
+            missing.append("floor_count")
+        if not option.mix_lines:
+            missing.append("unit mix lines")
+        if missing:
+            raise ValidationError(
+                "Concept option does not have sufficient structural data for promotion.",
+                details={"missing_fields": missing},
+            )
+
+        # ── Project linkage strategy ──────────────────────────────────
+        if (
+            option.project_id is not None
+            and payload.target_project_id is not None
+            and payload.target_project_id != option.project_id
+        ):
+            raise ValidationError(
+                "Conflicting project targets: the concept option is already linked "
+                "to a different project than the supplied 'target_project_id'.",
+                details={
+                    "concept_project_id": option.project_id,
+                    "requested_target_project_id": payload.target_project_id,
+                },
+            )
+        target_project_id: Optional[str] = option.project_id or payload.target_project_id
+        if target_project_id is None:
+            raise ValidationError(
+                "A target project is required for promotion. "
+                "Either link the concept option to a project or supply "
+                "'target_project_id' in the request.",
+            )
+        self._validate_project_if_present(target_project_id)
+
+        # ── Determine phase sequence ──────────────────────────────────
+        # Use max(sequence)+1 so the result is correct even when phases have
+        # been deleted or resequenced (non-dense sequence history).
+        max_seq = self.phase_repo.get_max_sequence(project_id=target_project_id)
+        next_sequence = (max_seq or 0) + 1
+
+        # ── Create structured phase ───────────────────────────────────
+        phase_name = (
+            payload.phase_name
+            if payload.phase_name
+            else f"Phase {next_sequence} — {option.name}"
+        )
+        phase_data = PhaseCreate(
+            project_id=target_project_id,
+            name=phase_name,
+            sequence=next_sequence,
+            status=PhaseStatus.PLANNED,
+            description=(
+                f"Promoted from concept option '{option.name}'. "
+                f"Buildings: {option.building_count}, floors: {option.floor_count}, "
+                f"unit mix lines: {len(option.mix_lines)}."
+            ),
+        )
+
+        # ── Atomically persist phase and promotion metadata ───────────
+        # Stage both writes before the single commit so that a failure in
+        # either step leaves no partial state in the database.
+        promoted_at = datetime.now(timezone.utc)
+        phase = self.phase_repo.apply_create(phase_data)
+        self.option_repo.apply_promotion_fields(
+            option,
+            promoted_project_id=target_project_id,
+            promoted_at=promoted_at,
+            promotion_notes=payload.promotion_notes,
+        )
+        self.option_repo.db.commit()
+        self.option_repo.db.refresh(phase)
+        self.option_repo.db.refresh(option)
+
+        _logger.info(
+            "ConceptOption promoted id=%s → project=%s phase=%s",
+            concept_option_id,
+            target_project_id,
+            phase.id,
+        )
+
+        return ConceptPromotionResponse(
+            concept_option_id=concept_option_id,
+            promoted_project_id=target_project_id,
+            promoted_phase_id=phase.id,
+            promoted_phase_name=phase.name,
+            promoted_at=promoted_at,
+            promotion_notes=payload.promotion_notes,
         )

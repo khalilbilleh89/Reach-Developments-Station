@@ -9,14 +9,15 @@ Entities:
   ConceptUnitMixLine — a normalised unit-type row inside a concept option,
                        representing one band of the residential/commercial mix.
 
-PR-CONCEPT-052
+PR-CONCEPT-052, PR-CONCEPT-054
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -56,6 +57,16 @@ class ConceptOption(Base, TimestampMixin):
     gross_floor_area: Mapped[Optional[float]] = mapped_column(Numeric(16, 2), nullable=True)
     building_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     floor_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Promotion metadata — PR-CONCEPT-054
+    is_promoted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    promoted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    promoted_project_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    promotion_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     mix_lines: Mapped[List["ConceptUnitMixLine"]] = relationship(
         "ConceptUnitMixLine",

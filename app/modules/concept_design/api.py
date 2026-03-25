@@ -12,8 +12,9 @@ GET    /concept-options/{concept_option_id}
 PATCH  /concept-options/{concept_option_id}
 POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
+POST   /concept-options/{concept_option_id}/promote
 
-PR-CONCEPT-052, PR-CONCEPT-053
+PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054
 """
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ from app.modules.concept_design.schemas import (
     ConceptOptionResponse,
     ConceptOptionSummaryResponse,
     ConceptOptionUpdate,
+    ConceptPromotionRequest,
+    ConceptPromotionResponse,
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
 )
@@ -154,3 +157,30 @@ def get_concept_option_summary(
 ) -> ConceptOptionSummaryResponse:
     """Return a concept option with all derived program metrics computed by the engine."""
     return service.get_concept_option_summary(concept_option_id)
+
+
+# ---------------------------------------------------------------------------
+# Promotion endpoint — PR-CONCEPT-054
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{concept_option_id}/promote",
+    response_model=ConceptPromotionResponse,
+    status_code=201,
+)
+def promote_concept_option(
+    concept_option_id: str,
+    data: ConceptPromotionRequest,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> ConceptPromotionResponse:
+    """Promote a concept option into a structured downstream project phase.
+
+    The selected concept option must be in ``active`` or ``draft`` status,
+    must not have already been promoted, and must have ``building_count``,
+    ``floor_count``, and at least one unit-mix line.
+
+    If the concept option is already linked to a project, that project is
+    used as the promotion target.  Otherwise ``target_project_id`` must be
+    supplied in the request body.
+    """
+    return service.promote_concept_option(concept_option_id, data)
