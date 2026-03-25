@@ -124,6 +124,8 @@ export async function getConceptOptionSummary(
 export async function compareConceptOptions(params: {
   project_id?: string;
   scenario_id?: string;
+  price_per_sqm?: number | null;
+  price_per_unit?: number | null;
 }): Promise<ConceptOptionComparisonResponse> {
   const hasProject = Boolean(params.project_id);
   const hasScenario = Boolean(params.scenario_id);
@@ -140,6 +142,8 @@ export async function compareConceptOptions(params: {
   const query = new URLSearchParams();
   if (params.project_id) query.set("project_id", params.project_id);
   if (params.scenario_id) query.set("scenario_id", params.scenario_id);
+  if (params.price_per_sqm != null) query.set("price_per_sqm", String(params.price_per_sqm));
+  if (params.price_per_unit != null) query.set("price_per_unit", String(params.price_per_unit));
   const qs = query.toString();
   return apiFetch<ConceptOptionComparisonResponse>(
     `/concept-options/compare${qs ? `?${qs}` : ""}`,

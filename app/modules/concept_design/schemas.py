@@ -178,6 +178,12 @@ class ConceptOptionComparisonRowResponse(BaseModel):
     is_best_sellable_area: bool
     is_best_efficiency: bool
     is_best_unit_count: bool
+    # Financial metrics — PR-CONCEPT-062
+    estimated_gdv: Optional[float]
+    estimated_revenue_per_sqm: Optional[float]
+    estimated_revenue_per_unit: Optional[float]
+    gdv_delta_vs_best: Optional[float]
+    is_best_gdv: bool
 
 
 class ConceptOptionComparisonResponse(BaseModel):
@@ -186,6 +192,8 @@ class ConceptOptionComparisonResponse(BaseModel):
     best_sellable_area_option_id: Optional[str]
     best_efficiency_option_id: Optional[str]
     best_unit_count_option_id: Optional[str]
+    # Financial best — PR-CONCEPT-062
+    best_gdv_option_id: Optional[str]
     rows: List[ConceptOptionComparisonRowResponse]
 
 

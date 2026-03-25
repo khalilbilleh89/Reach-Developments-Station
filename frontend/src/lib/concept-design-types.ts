@@ -131,7 +131,7 @@ export interface ConceptOptionSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Comparison types — PR-CONCEPT-053
+// Comparison types — PR-CONCEPT-053, PR-CONCEPT-062
 // ---------------------------------------------------------------------------
 
 export interface ConceptOptionComparisonRow {
@@ -150,6 +150,12 @@ export interface ConceptOptionComparisonRow {
   is_best_sellable_area: boolean;
   is_best_efficiency: boolean;
   is_best_unit_count: boolean;
+  // Financial metrics — PR-CONCEPT-062
+  estimated_gdv: number | null;
+  estimated_revenue_per_sqm: number | null;
+  estimated_revenue_per_unit: number | null;
+  gdv_delta_vs_best: number | null;
+  is_best_gdv: boolean;
 }
 
 export interface ConceptOptionComparisonResponse {
@@ -158,6 +164,8 @@ export interface ConceptOptionComparisonResponse {
   best_sellable_area_option_id: string | null;
   best_efficiency_option_id: string | null;
   best_unit_count_option_id: string | null;
+  // Financial best — PR-CONCEPT-062
+  best_gdv_option_id: string | null;
   rows: ConceptOptionComparisonRow[];
 }
 

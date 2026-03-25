@@ -217,6 +217,30 @@ describe("compareConceptOptions", () => {
     );
   });
 
+  it("appends price_per_sqm when provided — PR-CONCEPT-062", async () => {
+    mockApiFetch.mockResolvedValue({ comparison_basis: "project", option_count: 1, rows: [] });
+    await api.compareConceptOptions({ project_id: "proj-1", price_per_sqm: 2500 });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/concept-options/compare?project_id=proj-1&price_per_sqm=2500",
+    );
+  });
+
+  it("appends price_per_unit when provided — PR-CONCEPT-062", async () => {
+    mockApiFetch.mockResolvedValue({ comparison_basis: "scenario", option_count: 1, rows: [] });
+    await api.compareConceptOptions({ scenario_id: "scen-1", price_per_unit: 300000 });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/concept-options/compare?scenario_id=scen-1&price_per_unit=300000",
+    );
+  });
+
+  it("does not append price_per_sqm when null", async () => {
+    mockApiFetch.mockResolvedValue({ comparison_basis: "project", option_count: 0, rows: [] });
+    await api.compareConceptOptions({ project_id: "proj-1", price_per_sqm: null });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/concept-options/compare?project_id=proj-1",
+    );
+  });
+
   it("throws and does not call apiFetch when neither project_id nor scenario_id is supplied", async () => {
     await expect(api.compareConceptOptions({})).rejects.toThrow(
       "compareConceptOptions requires exactly one of project_id or scenario_id.",

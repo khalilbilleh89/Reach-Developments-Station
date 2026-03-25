@@ -16,7 +16,8 @@ POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 POST   /concept-options/{concept_option_id}/promote
 
-PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057, PR-CONCEPT-058
+PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057, PR-CONCEPT-058,
+PR-CONCEPT-062
 """
 
 from __future__ import annotations
@@ -96,15 +97,23 @@ def compare_concept_options(
     service: Annotated[ConceptDesignService, Depends(_get_service)],
     project_id: Optional[str] = Query(default=None),
     scenario_id: Optional[str] = Query(default=None),
+    price_per_sqm: Optional[float] = Query(default=None, gt=0, description="Average sale price per m² for GDV estimation"),
+    price_per_unit: Optional[float] = Query(default=None, gt=0, description="Average sale price per unit for GDV estimation (fallback)"),
 ) -> ConceptOptionComparisonResponse:
     """Return a structured side-by-side comparison of all concept options.
 
     Exactly one of ``project_id`` or ``scenario_id`` must be provided.
     Supplying both or neither returns HTTP 422.
+
+    Optional ``price_per_sqm`` and ``price_per_unit`` enable GDV financial
+    comparison metrics (PR-CONCEPT-062).  When omitted, financial metric
+    fields are null.
     """
     return service.compare_concept_options(
         project_id=project_id,
         scenario_id=scenario_id,
+        price_per_sqm=price_per_sqm,
+        price_per_unit=price_per_unit,
     )
 
 

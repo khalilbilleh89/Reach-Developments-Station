@@ -1696,9 +1696,21 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
 // Comparison view
 // ---------------------------------------------------------------------------
 
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return "—";
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+  return `$${value.toFixed(0)}`;
+}
+
 function ComparisonView() {
   const [filterType, setFilterType] = useState<"project_id" | "scenario_id">("project_id");
   const [filterId, setFilterId] = useState("");
+  const [pricePerSqm, setPricePerSqm] = useState("");
   const [comparison, setComparison] = useState<ConceptOptionComparisonResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1713,10 +1725,11 @@ function ComparisonView() {
       setLoading(true);
       setError(null);
 
+      const parsedPrice = pricePerSqm.trim() ? parseFloat(pricePerSqm.trim()) : null;
       const params =
         filterType === "project_id"
-          ? { project_id: filterId.trim() }
-          : { scenario_id: filterId.trim() };
+          ? { project_id: filterId.trim(), price_per_sqm: parsedPrice }
+          : { scenario_id: filterId.trim(), price_per_sqm: parsedPrice };
 
       compareConceptOptions(params)
         .then((data) => {
@@ -1728,8 +1741,10 @@ function ComparisonView() {
         })
         .finally(() => setLoading(false));
     },
-    [filterType, filterId],
+    [filterType, filterId, pricePerSqm],
   );
+
+  const hasFinancials = comparison?.rows.some((r) => r.estimated_gdv != null) ?? false;
 
   return (
     <div>
@@ -1759,6 +1774,16 @@ function ComparisonView() {
           style={{ ...inputStyle, width: 300 }}
           aria-label="Filter ID"
         />
+        <input
+          type="number"
+          min="0.01"
+          step="any"
+          value={pricePerSqm}
+          onChange={(e) => setPricePerSqm(e.target.value)}
+          placeholder="Price / m² (optional)"
+          style={{ ...inputStyle, width: 180 }}
+          aria-label="Price per sqm"
+        />
         <button
           type="submit"
           disabled={loading}
@@ -1784,6 +1809,9 @@ function ComparisonView() {
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", marginBottom: 12 }}>
             Comparing <strong>{comparison.option_count}</strong> options by{" "}
             <strong>{comparison.comparison_basis}</strong>
+            {hasFinancials && (
+              <span> · GDV estimates included</span>
+            )}
           </p>
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
@@ -1797,59 +1825,88 @@ function ComparisonView() {
                   <th>Avg Unit (m²)</th>
                   <th>Buildings</th>
                   <th>Floors</th>
+                  {hasFinancials && (
+                    <>
+                      <th>Est. GDV</th>
+                      <th>Revenue / m²</th>
+                      <th>Revenue / Unit</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {comparison.rows.map((row) => (
-                  <tr
-                    key={row.concept_option_id}
-                    style={
-                      row.is_best_sellable_area || row.is_best_efficiency || row.is_best_unit_count
-                        ? { background: "#f0fdf4" }
-                        : undefined
-                    }
-                  >
-                    <td>
-                      <div style={{ fontWeight: 500 }}>
-                        {row.name}
-                        {(row.is_best_sellable_area || row.is_best_efficiency || row.is_best_unit_count) && (
-                          <span
-                            className={`${styles.badge} ${styles.badgeGreen}`}
-                            style={{ marginLeft: 8 }}
-                          >
-                            Best
-                          </span>
+                {comparison.rows.map((row) => {
+                  const isBestPhysical =
+                    row.is_best_sellable_area || row.is_best_efficiency || row.is_best_unit_count;
+                  const isBestFinancial = row.is_best_gdv;
+                  const highlight = isBestPhysical || isBestFinancial;
+                  return (
+                    <tr
+                      key={row.concept_option_id}
+                      style={highlight ? { background: "#f0fdf4" } : undefined}
+                    >
+                      <td>
+                        <div style={{ fontWeight: 500 }}>
+                          {row.name}
+                          {isBestPhysical && (
+                            <span
+                              className={`${styles.badge} ${styles.badgeGreen}`}
+                              style={{ marginLeft: 8 }}
+                            >
+                              Best
+                            </span>
+                          )}
+                          {isBestFinancial && !isBestPhysical && (
+                            <span
+                              className={`${styles.badge} ${styles.badgeGreen}`}
+                              style={{ marginLeft: 8 }}
+                            >
+                              Best GDV
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${statusBadgeClass(row.status)}`}>
+                          {statusLabel(row.status)}
+                        </span>
+                      </td>
+                      <td>
+                        {row.unit_count}
+                        {row.is_best_unit_count && (
+                          <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
                         )}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`${styles.badge} ${statusBadgeClass(row.status)}`}>
-                        {statusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td>
-                      {row.unit_count}
-                      {row.is_best_unit_count && (
-                        <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
+                      </td>
+                      <td>
+                        {formatNum(row.sellable_area, 1)}
+                        {row.is_best_sellable_area && (
+                          <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
+                        )}
+                      </td>
+                      <td>
+                        {formatPct(row.efficiency_ratio)}
+                        {row.is_best_efficiency && (
+                          <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
+                        )}
+                      </td>
+                      <td>{formatNum(row.average_unit_area, 1)}</td>
+                      <td>{formatNum(row.building_count)}</td>
+                      <td>{formatNum(row.floor_count)}</td>
+                      {hasFinancials && (
+                        <>
+                          <td style={{ fontWeight: row.is_best_gdv ? 600 : undefined }}>
+                            {formatCurrency(row.estimated_gdv)}
+                            {row.is_best_gdv && (
+                              <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
+                            )}
+                          </td>
+                          <td>{formatCurrency(row.estimated_revenue_per_sqm)}</td>
+                          <td>{formatCurrency(row.estimated_revenue_per_unit)}</td>
+                        </>
                       )}
-                    </td>
-                    <td>
-                      {formatNum(row.sellable_area, 1)}
-                      {row.is_best_sellable_area && (
-                        <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
-                      )}
-                    </td>
-                    <td>
-                      {formatPct(row.efficiency_ratio)}
-                      {row.is_best_efficiency && (
-                        <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
-                      )}
-                    </td>
-                    <td>{formatNum(row.average_unit_area, 1)}</td>
-                    <td>{formatNum(row.building_count)}</td>
-                    <td>{formatNum(row.floor_count)}</td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
