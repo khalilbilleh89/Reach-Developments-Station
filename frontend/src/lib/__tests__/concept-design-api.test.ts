@@ -282,6 +282,22 @@ describe("compareConceptOptions", () => {
     );
   });
 
+  it("does not append price_per_unit when negative — PR-CONCEPT-062A", async () => {
+    mockApiFetch.mockResolvedValue({ comparison_basis: "project", option_count: 0, rows: [] });
+    await api.compareConceptOptions({ project_id: "proj-1", price_per_unit: -500 });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/concept-options/compare?project_id=proj-1",
+    );
+  });
+
+  it("does not append price_per_unit when NaN — PR-CONCEPT-062A", async () => {
+    mockApiFetch.mockResolvedValue({ comparison_basis: "project", option_count: 0, rows: [] });
+    await api.compareConceptOptions({ project_id: "proj-1", price_per_unit: NaN });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/concept-options/compare?project_id=proj-1",
+    );
+  });
+
   it("does not append price_per_unit when Infinity — PR-CONCEPT-062A", async () => {
     mockApiFetch.mockResolvedValue({ comparison_basis: "project", option_count: 0, rows: [] });
     await api.compareConceptOptions({ project_id: "proj-1", price_per_unit: Infinity });
