@@ -21,7 +21,6 @@ Test cases:
 PR-CONCEPT-064
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -94,6 +93,23 @@ def test_concept_name_derived_from_scenario_name(client: TestClient):
     get_resp = client.get(f"/api/v1/concept-options/{concept_id}")
     assert get_resp.status_code == 200
     assert get_resp.json()["name"] == "Concept — Marina Towers Base"
+
+
+def test_concept_name_truncated_when_scenario_name_is_very_long(client: TestClient):
+    """Concept name never exceeds 255 chars even when scenario_name is at the 255-char limit."""
+    # scenario_name max is 255 in FeasibilityRunCreate; prepending "Concept — " (10 chars)
+    # would push the derived name to 265, so truncation must kick in.
+    long_name = "A" * 255
+    run = _create_feasibility_run(client, scenario_name=long_name)
+    resp = _create_concept_from_run(client, run["id"])
+    assert resp.status_code == 201
+
+    concept_id = resp.json()["concept_option_id"]
+    get_resp = client.get(f"/api/v1/concept-options/{concept_id}")
+    assert get_resp.status_code == 200
+    actual_name = get_resp.json()["name"]
+    assert len(actual_name) <= 255
+    assert actual_name.startswith("Concept — ")
 
 
 def test_concept_created_in_draft_status(client: TestClient):

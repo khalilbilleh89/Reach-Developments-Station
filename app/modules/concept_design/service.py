@@ -1191,7 +1191,11 @@ class ConceptDesignService:
         feasibility_service = FeasibilityService(self.option_repo.db)
         run = feasibility_service.get_run_for_reverse_seed(run_id)
 
-        name = f"Concept — {run.scenario_name}"
+        _PREFIX = "Concept — "
+        _MAX_NAME = 255
+        scenario_name = run.scenario_name or "Feasibility"
+        safe_scenario_name = scenario_name[: _MAX_NAME - len(_PREFIX)]
+        name = f"{_PREFIX}{safe_scenario_name}"
 
         option_create = ConceptOptionCreate(
             scenario_id=run.scenario_id,

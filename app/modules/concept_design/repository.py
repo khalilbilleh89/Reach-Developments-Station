@@ -25,7 +25,12 @@ class ConceptOptionRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create(self, data: ConceptOptionCreate, land_id: Optional[str] = None, source_feasibility_run_id: Optional[str] = None) -> ConceptOption:
+    def create(
+        self,
+        data: ConceptOptionCreate,
+        land_id: Optional[str] = None,
+        source_feasibility_run_id: Optional[str] = None,
+    ) -> ConceptOption:
         option = ConceptOption(
             project_id=data.project_id,
             scenario_id=data.scenario_id,

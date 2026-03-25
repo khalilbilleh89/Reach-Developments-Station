@@ -10,8 +10,8 @@ Changes
 -------
 concept_options
   source_feasibility_run_id  VARCHAR(36), nullable — ID of the feasibility run
-                              that seeded this concept option, when
-                              seed_source_type='feasibility_run'
+                              that seeded this concept option as part of the
+                              reverse-seeding workflow from feasibility runs
 
 This column establishes the reverse lineage trail from feasibility runs back
 into concept options, completing the bidirectional design-finance loop:
