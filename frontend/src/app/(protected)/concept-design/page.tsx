@@ -1496,9 +1496,10 @@ interface OptionsListProps {
   onEditOption: (option: ConceptOption) => void;
   onDeleteOption: (option: ConceptOption) => void;
   onDuplicateOption: (option: ConceptOption) => void;
+  duplicating: boolean;
 }
 
-function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption, onDuplicateOption }: OptionsListProps) {
+function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption, onDuplicateOption, duplicating }: OptionsListProps) {
   return (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
@@ -1561,20 +1562,20 @@ function OptionsList({ options, onSelectOption, onEditOption, onDeleteOption, on
                   <button
                     type="button"
                     onClick={() => onDuplicateOption(opt)}
-                    disabled={opt.status === "archived"}
-                    title={opt.status === "archived" ? "Cannot duplicate an archived concept option" : "Duplicate option"}
+                    disabled={opt.status === "archived" || duplicating}
+                    title={opt.status === "archived" ? "Cannot duplicate an archived concept option" : duplicating ? "Duplication in progress…" : "Duplicate option"}
                     style={{
                       padding: "3px 10px",
                       border: "1px solid var(--color-border)",
                       borderRadius: 4,
-                      background: opt.status === "archived" ? "var(--color-surface)" : "#fff",
-                      color: opt.status === "archived" ? "var(--color-text-muted)" : "var(--color-text)",
-                      cursor: opt.status === "archived" ? "not-allowed" : "pointer",
+                      background: (opt.status === "archived" || duplicating) ? "var(--color-surface)" : "#fff",
+                      color: (opt.status === "archived" || duplicating) ? "var(--color-text-muted)" : "var(--color-text)",
+                      cursor: (opt.status === "archived" || duplicating) ? "not-allowed" : "pointer",
                       fontSize: "0.8rem",
-                      opacity: opt.status === "archived" ? 0.5 : 1,
+                      opacity: (opt.status === "archived" || duplicating) ? 0.5 : 1,
                     }}
                   >
-                    Duplicate
+                    {duplicating ? "Duplicating…" : "Duplicate"}
                   </button>
                   <button
                     type="button"
@@ -1846,6 +1847,7 @@ export default function ConceptDesignPage() {
               onEditOption={handleEditOption}
               onDeleteOption={handleDeleteOption}
               onDuplicateOption={handleDuplicateOption}
+              duplicating={duplicating}
             />
           )}
         </>

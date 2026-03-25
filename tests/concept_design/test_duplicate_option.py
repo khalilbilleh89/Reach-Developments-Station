@@ -15,7 +15,7 @@ Test cases:
 PR-CONCEPT-058
 """
 
-import pytest
+from httpx import Response
 from fastapi.testclient import TestClient
 
 
@@ -66,9 +66,8 @@ def _add_mix_line(
     return resp.json()
 
 
-def _duplicate(client: TestClient, option_id: str) -> dict:
-    resp = client.post(f"/api/v1/concept-options/{option_id}/duplicate")
-    return resp
+def _duplicate(client: TestClient, option_id: str) -> Response:
+    return client.post(f"/api/v1/concept-options/{option_id}/duplicate")
 
 
 def _promote_option(client: TestClient, option_id: str, project_id: str) -> dict:

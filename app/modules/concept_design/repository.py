@@ -154,17 +154,25 @@ class ConceptOptionRepository:
         self,
         project_id: Optional[str],
         scenario_id: Optional[str],
-    ) -> set:
+    ) -> set[str]:
         """Return the set of all concept option names within the given scope.
 
         Used by the duplication service to check name uniqueness without
         loading full ORM objects or imposing an arbitrary row limit.
+
+        Both project_id and scenario_id are matched exactly — None is treated
+        as IS NULL so that unscoped options do not bleed into project/scenario
+        scopes and vice versa.
         """
         query = self.db.query(ConceptOption.name)
         if project_id is not None:
             query = query.filter(ConceptOption.project_id == project_id)
+        else:
+            query = query.filter(ConceptOption.project_id.is_(None))
         if scenario_id is not None:
             query = query.filter(ConceptOption.scenario_id == scenario_id)
+        else:
+            query = query.filter(ConceptOption.scenario_id.is_(None))
         return {row[0] for row in query.all()}
 
     def clone_concept_option(self, source: ConceptOption, new_name: str) -> ConceptOption:
