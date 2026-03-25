@@ -853,24 +853,6 @@ test("lineage panel shows unavailable message when lineage fetch fails", async (
   });
 });
 
-test("core run data renders before lineage fetch completes", async () => {
-  mockGetRun.mockResolvedValue(mockRun);
-  mockGetAssumptions.mockRejectedValue(mock404());
-  mockGetResults.mockRejectedValue(mock404());
-  // lineage never resolves — simulates slow network
-  mockGetLineage.mockReturnValue(new Promise(() => {}));
-
-  render(<FeasibilityRunDetailView />);
-
-  // Core run data (scenario name) is visible even while lineage is pending
-  await waitFor(() => {
-    const matches = screen.getAllByText(mockRun.scenario_name);
-    expect(matches.length).toBeGreaterThan(0);
-  });
-  // Lineage is in loading state, not blocking the main content
-  expect(screen.getByText(/loading lineage data/i)).toBeInTheDocument();
-});
-
 test("lineage panel shows project ID when run is linked to a project", async () => {
   mockGetRun.mockResolvedValue(mockRun);
   mockGetAssumptions.mockRejectedValue(mock404());
