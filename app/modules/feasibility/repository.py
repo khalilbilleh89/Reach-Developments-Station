@@ -6,7 +6,7 @@ Data access layer for FeasibilityRun, FeasibilityAssumptions, and FeasibilityRes
 
 from typing import List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.feasibility.models import FeasibilityAssumptions, FeasibilityResult, FeasibilityRun
 from app.modules.feasibility.schemas import (
@@ -33,15 +33,23 @@ class FeasibilityRunRepository:
         )
         self.db.add(run)
         self.db.commit()
-        self.db.refresh(run)
-        return run
+        # Re-fetch with eager project load so project_name is available immediately.
+        return self.get_by_id(run.id)
 
     def get_by_id(self, run_id: str) -> Optional[FeasibilityRun]:
-        return self.db.query(FeasibilityRun).filter(FeasibilityRun.id == run_id).first()
-
-    def list_by_project(self, project_id: str, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
+        """Return a single run with the project relationship eagerly loaded."""
         return (
             self.db.query(FeasibilityRun)
+            .options(joinedload(FeasibilityRun.project))
+            .filter(FeasibilityRun.id == run_id)
+            .first()
+        )
+
+    def list_by_project(self, project_id: str, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
+        """Return runs for a project with the project relationship eagerly loaded."""
+        return (
+            self.db.query(FeasibilityRun)
+            .options(selectinload(FeasibilityRun.project))
             .filter(FeasibilityRun.project_id == project_id)
             .order_by(FeasibilityRun.created_at.asc())
             .offset(skip)
@@ -53,8 +61,10 @@ class FeasibilityRunRepository:
         return self.db.query(FeasibilityRun).filter(FeasibilityRun.project_id == project_id).count()
 
     def list_all(self, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
+        """Return all runs with the project relationship eagerly loaded."""
         return (
             self.db.query(FeasibilityRun)
+            .options(selectinload(FeasibilityRun.project))
             .order_by(FeasibilityRun.created_at.asc())
             .offset(skip)
             .limit(limit)
@@ -79,8 +89,8 @@ class FeasibilityRunRepository:
             else:
                 setattr(run, field, value)
         self.db.commit()
-        self.db.refresh(run)
-        return run
+        # Re-fetch with eager project load so project_name is available immediately.
+        return self.get_by_id(run.id)
 
 
 class FeasibilityAssumptionsRepository:
