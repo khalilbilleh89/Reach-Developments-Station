@@ -201,7 +201,7 @@ class ConceptDesignService:
                 "Promoted concepts are the origin of project structure and must remain immutable.",
                 details={"concept_option_id": concept_option_id},
             )
-        _logger.info("ConceptOption deleted id=%s name=%r", option.id, option.name)
+        _logger.info("Deleting ConceptOption id=%s name=%r", option.id, option.name)
         self.option_repo.delete(option)
 
     # ------------------------------------------------------------------
