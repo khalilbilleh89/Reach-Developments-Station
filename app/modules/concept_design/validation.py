@@ -15,16 +15,11 @@ FAR rule
 
 Efficiency rule
     sellable_area / gross_floor_area ≤ 1.0
-    Skipped when sellable_area or gross_floor_area is absent.
+    Skipped when sellable_area or gross_floor_area is absent or zero.
 
 Density rule
     unit_count ≤ density_limit (dph) × site_area_ha
     Skipped when unit_count, site_area, or density_limit is absent.
-
-Area consistency rule
-    sellable_area ≤ gross_floor_area  (implicit from efficiency ≤ 1.0;
-    also catches cases where efficiency rule inputs are partial)
-    Skipped when either area value is absent.
 
 PR-CONCEPT-059
 """
@@ -135,8 +130,8 @@ def validate_density_rule(
             rule="DENSITY_EXCEEDED",
             message=(
                 f"Unit count ({unit_count:,}) exceeds the configured density "
-                f"limit of {max_units:,.0f} units "
-                f"({density_limit:.0f} dph × {site_area_ha:.4f} ha)."
+                f"limit of {max_units:,.2f} units "
+                f"({density_limit:.2f} dph × {site_area_ha:.4f} ha)."
             ),
             details={
                 "unit_count": unit_count,

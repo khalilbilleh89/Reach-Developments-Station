@@ -12,6 +12,7 @@ PR-CONCEPT-059
 """
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 from app.modules.concept_design.validation import (
@@ -101,7 +102,8 @@ class TestDensityRule:
         assert violation is not None
         assert violation.rule == "DENSITY_EXCEEDED"
         assert "30" in violation.message
-        assert "25" in violation.message
+        assert "25.00" in violation.message
+        assert "50.00 dph" in violation.message
         assert violation.details["unit_count"] == 30
         assert violation.details["max_permitted_units"] == 25.0
 
@@ -202,7 +204,7 @@ def _create_project(client: TestClient, code: str) -> str:
     return resp.json()["id"]
 
 
-def _create_option(client: TestClient, **kwargs) -> dict:
+def _create_option(client: TestClient, **kwargs) -> httpx.Response:
     payload = {"name": "Test Option", "status": "draft"}
     payload.update(kwargs)
     resp = client.post("/api/v1/concept-options", json=payload)
