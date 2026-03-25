@@ -10,6 +10,8 @@
  *  - results panel renders KPIs after calculation
  *  - error state displays on backend failure
  *  - no-runId state shows a safe message
+ *  - numeric validation: Infinity, pasted out-of-range ratios, decimal dev period
+ *  - stale state cleared when runId changes
  */
 import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -401,5 +403,116 @@ test("save assumptions button calls upsertFeasibilityAssumptions", async () => {
         development_period_months: 24,
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Numeric validation — non-finite and out-of-range values
+// ---------------------------------------------------------------------------
+
+test("rejects negative value in sellable area field", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Negative values must be rejected (sellable area must be > 0)
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "-500" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/invalid value for sellable area/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("rejects ratio value greater than 100", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/soft cost ratio/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  // 150 is > 100 — should be rejected
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "150" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/soft cost ratio must be between 0 and 100/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("rejects decimal development period (12.9 is not an integer)", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/development period/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  // 12.9 is not an integer — should be rejected
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "12.9" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/whole number of months/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// State reset on runId change
+// ---------------------------------------------------------------------------
+
+test("switches runId and clears stale calcError and result", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResult);
+  mockCalculate.mockRejectedValue(new Error("Stale calculation error"));
+
+  const { rerender } = render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByText("VIABLE")).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: /calculate/i }));
+  await waitFor(() => expect(screen.getByText(/stale calculation error/i)).toBeInTheDocument());
+
+  mockSearchParams = new URLSearchParams("runId=run-2");
+  const run2 = { ...mockRun, id: "run-2", scenario_name: "Run Two" };
+  mockGetRun.mockResolvedValue(run2);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  rerender(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.queryByText(/stale calculation error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("VIABLE")).not.toBeInTheDocument();
+    expect(screen.getByText(/no results yet/i)).toBeInTheDocument();
   });
 });
