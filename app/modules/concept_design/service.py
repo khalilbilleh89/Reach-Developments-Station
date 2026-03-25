@@ -87,13 +87,15 @@ _VALID_UNIT_TYPES: frozenset[str] = frozenset(m.value for m in UnitType)
 def _normalise_unit_type(raw: str) -> str:
     """Map a free-form concept mix unit_type string to a valid UnitType enum value.
 
-    Exact enum values (e.g. 'studio', 'one_bedroom') pass through unchanged.
-    Common shorthand such as '1BR', '2BR', '1 bedroom' are mapped to their
-    canonical enum counterparts.  Unrecognised values fall back to 'studio'.
+    Input is stripped of leading/trailing whitespace and lower-cased before
+    matching, so values such as 'ONE_BEDROOM', ' 1BR ', or 'Studio' all
+    resolve to the correct canonical form.  Unrecognised values fall back to
+    'studio'.
     """
-    if raw in _VALID_UNIT_TYPES:
-        return raw
-    return _UNIT_TYPE_ALIASES.get(raw.lower(), UnitType.STUDIO.value)
+    normalised = raw.strip().lower()
+    if normalised in _VALID_UNIT_TYPES:
+        return normalised
+    return _UNIT_TYPE_ALIASES.get(normalised, UnitType.STUDIO.value)
 
 
 class ConceptDesignService:
@@ -472,8 +474,9 @@ class ConceptDesignService:
         # Stage all writes before the single commit so that a failure in
         # any step leaves no partial state in the database.
         promoted_at = datetime.now(timezone.utc)
+        # apply_create() flushes the session internally, making phase.id
+        # available to child records without an extra explicit flush here.
         phase = self.phase_repo.apply_create(phase_data)
-        self.option_repo.db.flush()  # generate phase.id
 
         # ── Create buildings ──────────────────────────────────────────
         building_count: int = option.building_count  # type: ignore[assignment]
