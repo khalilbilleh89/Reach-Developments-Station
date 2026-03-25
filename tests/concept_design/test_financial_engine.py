@@ -195,6 +195,63 @@ def test_returns_concept_financial_metrics_dataclass():
 
 
 # ---------------------------------------------------------------------------
+# Non-finite input handling — PR-CONCEPT-062A
+# ---------------------------------------------------------------------------
+
+
+def test_inf_price_per_sqm_treated_as_absent():
+    """inf price_per_sqm must not produce inf GDV."""
+    result = estimate_concept_financials(
+        sellable_area=5000.0,
+        unit_count=50,
+        price_per_sqm=float("inf"),
+    )
+    assert result.estimated_gdv is None
+
+
+def test_nan_price_per_sqm_treated_as_absent():
+    """nan price_per_sqm must not produce nan GDV."""
+    result = estimate_concept_financials(
+        sellable_area=5000.0,
+        unit_count=50,
+        price_per_sqm=float("nan"),
+    )
+    assert result.estimated_gdv is None
+
+
+def test_inf_price_per_unit_treated_as_absent():
+    """inf price_per_unit must not produce inf GDV."""
+    result = estimate_concept_financials(
+        sellable_area=None,
+        unit_count=50,
+        price_per_unit=float("inf"),
+    )
+    assert result.estimated_gdv is None
+
+
+def test_nan_price_per_unit_treated_as_absent():
+    """nan price_per_unit must not produce nan GDV."""
+    result = estimate_concept_financials(
+        sellable_area=None,
+        unit_count=50,
+        price_per_unit=float("nan"),
+    )
+    assert result.estimated_gdv is None
+
+
+def test_non_finite_input_falls_back_to_other_price():
+    """If price_per_sqm is inf but price_per_unit is valid, use fallback path."""
+    result = estimate_concept_financials(
+        sellable_area=5000.0,
+        unit_count=50,
+        price_per_sqm=float("inf"),
+        price_per_unit=300_000.0,
+    )
+    # Primary path rejected (inf); fallback to unit-based
+    assert result.estimated_gdv == pytest.approx(50 * 300_000.0)
+
+
+# ---------------------------------------------------------------------------
 # Comparison engine integration — GDV fields passed through
 # ---------------------------------------------------------------------------
 

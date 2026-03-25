@@ -12,6 +12,7 @@ PR-CONCEPT-052, PR-CONCEPT-054, PR-CONCEPT-056, PR-CONCEPT-060
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -682,6 +683,25 @@ class ConceptDesignService:
         if project_id is None and scenario_id is None:
             raise ValidationError(
                 "Either 'project_id' or 'scenario_id' must be provided.",
+            )
+
+        # Belt-and-suspenders: reject invalid pricing inputs before they can
+        # produce inf/nan in computed outputs and break JSON serialisation.
+        # Use str() in details to avoid serialising non-finite floats into the
+        # error response body (JSON does not allow inf/nan).
+        if price_per_sqm is not None and (
+            not math.isfinite(price_per_sqm) or price_per_sqm <= 0
+        ):
+            raise ValidationError(
+                "'price_per_sqm' must be a finite positive number.",
+                details={"price_per_sqm": str(price_per_sqm)},
+            )
+        if price_per_unit is not None and (
+            not math.isfinite(price_per_unit) or price_per_unit <= 0
+        ):
+            raise ValidationError(
+                "'price_per_unit' must be a finite positive number.",
+                details={"price_per_unit": str(price_per_unit)},
             )
 
         if project_id is not None:

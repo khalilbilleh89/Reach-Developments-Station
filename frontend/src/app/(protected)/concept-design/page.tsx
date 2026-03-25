@@ -40,6 +40,7 @@ import {
   duplicateConceptOption,
 } from "@/lib/concept-design-api";
 import { apiFetch } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-utils";
 import type {
   ConceptOption,
   ConceptOptionCreate,
@@ -1696,21 +1697,13 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
 // Comparison view
 // ---------------------------------------------------------------------------
 
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return "—";
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`;
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
+const ERROR_COLOR = "#dc2626";
 
 function ComparisonView() {
   const [filterType, setFilterType] = useState<"project_id" | "scenario_id">("project_id");
   const [filterId, setFilterId] = useState("");
   const [pricePerSqm, setPricePerSqm] = useState("");
+  const [priceError, setPriceError] = useState<string | null>(null);
   const [comparison, setComparison] = useState<ConceptOptionComparisonResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1722,14 +1715,26 @@ function ComparisonView() {
         setError("Please enter an ID to compare options.");
         return;
       }
+
+      // Validate price input: only pass finite positive numbers; reject 0, negative, NaN, Infinity
+      let validatedPrice: number | null = null;
+      if (pricePerSqm.trim()) {
+        const parsed = parseFloat(pricePerSqm.trim());
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          setPriceError("Enter a valid positive price (e.g. 2500).");
+          return;
+        }
+        validatedPrice = parsed;
+      }
+      setPriceError(null);
+
       setLoading(true);
       setError(null);
 
-      const parsedPrice = pricePerSqm.trim() ? parseFloat(pricePerSqm.trim()) : null;
       const params =
         filterType === "project_id"
-          ? { project_id: filterId.trim(), price_per_sqm: parsedPrice }
-          : { scenario_id: filterId.trim(), price_per_sqm: parsedPrice };
+          ? { project_id: filterId.trim(), price_per_sqm: validatedPrice }
+          : { scenario_id: filterId.trim(), price_per_sqm: validatedPrice };
 
       compareConceptOptions(params)
         .then((data) => {
@@ -1774,16 +1779,21 @@ function ComparisonView() {
           style={{ ...inputStyle, width: 300 }}
           aria-label="Filter ID"
         />
-        <input
-          type="number"
-          min="0.01"
-          step="any"
-          value={pricePerSqm}
-          onChange={(e) => setPricePerSqm(e.target.value)}
-          placeholder="Price / m² (optional)"
-          style={{ ...inputStyle, width: 180 }}
-          aria-label="Price per sqm"
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <input
+            type="number"
+            min="0.01"
+            step="any"
+            value={pricePerSqm}
+            onChange={(e) => { setPricePerSqm(e.target.value); setPriceError(null); }}
+            placeholder="Price / m² (optional)"
+            style={{ ...inputStyle, width: 180, borderColor: priceError ? ERROR_COLOR : undefined }}
+            aria-label="Price per sqm"
+          />
+          {priceError && (
+            <span style={{ fontSize: "0.75rem", color: ERROR_COLOR }}>{priceError}</span>
+          )}
+        </div>
         <button
           type="submit"
           disabled={loading}
@@ -1895,13 +1905,13 @@ function ComparisonView() {
                       {hasFinancials && (
                         <>
                           <td style={{ fontWeight: row.is_best_gdv ? 600 : undefined }}>
-                            {formatCurrency(row.estimated_gdv)}
+                            {row.estimated_gdv != null ? formatCurrency(row.estimated_gdv) : "—"}
                             {row.is_best_gdv && (
                               <span style={{ marginLeft: 4, color: "#15803d" }}>★</span>
                             )}
                           </td>
-                          <td>{formatCurrency(row.estimated_revenue_per_sqm)}</td>
-                          <td>{formatCurrency(row.estimated_revenue_per_unit)}</td>
+                          <td>{row.estimated_revenue_per_sqm != null ? formatCurrency(row.estimated_revenue_per_sqm) : "—"}</td>
+                          <td>{row.estimated_revenue_per_unit != null ? formatCurrency(row.estimated_revenue_per_unit) : "—"}</td>
                         </>
                       )}
                     </tr>

@@ -31,6 +31,7 @@ PR-CONCEPT-062
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -87,6 +88,12 @@ def estimate_concept_financials(
         Derived financial metrics.  All fields are None when the required
         pricing inputs are not available.
     """
+    # Guard: treat non-finite pricing inputs as absent to prevent inf/nan in output
+    if price_per_sqm is not None and not math.isfinite(price_per_sqm):
+        price_per_sqm = None
+    if price_per_unit is not None and not math.isfinite(price_per_unit):
+        price_per_unit = None
+
     estimated_gdv: Optional[float] = None
 
     # Primary path: area-based GDV
@@ -100,6 +107,10 @@ def estimate_concept_financials(
     # Fallback path: unit-based GDV
     elif price_per_unit is not None and price_per_unit > 0 and unit_count > 0:
         estimated_gdv = unit_count * price_per_unit
+
+    # Guard: non-finite computed GDV (e.g. from extreme inputs) is treated as absent
+    if estimated_gdv is not None and not math.isfinite(estimated_gdv):
+        estimated_gdv = None
 
     estimated_revenue_per_sqm: Optional[float] = None
     if estimated_gdv is not None and sellable_area is not None and sellable_area > 0:
