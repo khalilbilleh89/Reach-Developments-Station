@@ -159,11 +159,21 @@ class FeasibilityService:
         return FeasibilityRunResponse.model_validate(run)
 
     def list_feasibility_runs(
-        self, project_id: Optional[str] = None, skip: int = 0, limit: int = 100
+        self,
+        project_id: Optional[str] = None,
+        scenario_id: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> FeasibilityRunList:
-        if project_id:
+        if project_id and scenario_id:
+            runs = self.run_repo.list_by_project_and_scenario(project_id, scenario_id, skip=skip, limit=limit)
+            total = self.run_repo.count_by_project_and_scenario(project_id, scenario_id)
+        elif project_id:
             runs = self.run_repo.list_by_project(project_id, skip=skip, limit=limit)
             total = self.run_repo.count_by_project(project_id)
+        elif scenario_id:
+            runs = self.run_repo.list_by_scenario(scenario_id, skip=skip, limit=limit)
+            total = self.run_repo.count_by_scenario(scenario_id)
         else:
             runs = self.run_repo.list_all(skip=skip, limit=limit)
             total = self.run_repo.count_all()

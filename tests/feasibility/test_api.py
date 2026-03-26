@@ -1112,3 +1112,78 @@ def test_delete_run_succeeds_when_no_concept_options_reference_run(client: TestC
     ).json()["id"]
     resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
     assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# Scenario-based filtering (PR-FEAS-05)
+# ---------------------------------------------------------------------------
+
+def test_list_runs_filtered_by_scenario_id(client: TestClient):
+    """GET /api/v1/feasibility/runs?scenario_id=... should return only runs for that scenario."""
+    scenario_id = _create_scenario(client, name="Filter Scenario")
+    # Create two runs linked to this scenario and one unlinked run.
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Linked Run 1", "scenario_id": scenario_id})
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Linked Run 2", "scenario_id": scenario_id})
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Unlinked Run"})
+
+    resp = client.get(f"/api/v1/feasibility/runs?scenario_id={scenario_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert all(item["scenario_id"] == scenario_id for item in data["items"])
+
+
+def test_list_runs_filtered_by_project_and_scenario(client: TestClient):
+    """GET /api/v1/feasibility/runs?project_id=...&scenario_id=... should return matching runs."""
+    project_id = _create_project(client, code="PRJ-FSCEN")
+    scenario_id = _create_scenario(client, name="Combined Filter Scenario")
+    other_scenario_id = _create_scenario(client, name="Other Scenario")
+
+    # Run that matches both filters.
+    client.post("/api/v1/feasibility/runs", json={
+        "scenario_name": "Both Match",
+        "project_id": project_id,
+        "scenario_id": scenario_id,
+    })
+    # Run with same project but different scenario.
+    client.post("/api/v1/feasibility/runs", json={
+        "scenario_name": "Project Only",
+        "project_id": project_id,
+        "scenario_id": other_scenario_id,
+    })
+    # Run with same scenario but no project.
+    client.post("/api/v1/feasibility/runs", json={
+        "scenario_name": "Scenario Only",
+        "scenario_id": scenario_id,
+    })
+
+    resp = client.get(f"/api/v1/feasibility/runs?project_id={project_id}&scenario_id={scenario_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["scenario_name"] == "Both Match"
+
+
+def test_list_runs_scenario_filter_unmatched_returns_empty(client: TestClient):
+    """GET /api/v1/feasibility/runs?scenario_id=... returns empty list when no runs match."""
+    scenario_id = _create_scenario(client, name="Empty Scenario")
+    # No runs linked to this scenario.
+    resp = client.get(f"/api/v1/feasibility/runs?scenario_id={scenario_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 0
+    assert data["items"] == []
+
+
+def test_list_runs_project_filter_preserved_with_scenario_filter(client: TestClient):
+    """Project-only filtering still works correctly when scenario_id is not provided."""
+    project_id = _create_project(client, code="PRJ-FREGRESS")
+    scenario_id = _create_scenario(client, name="Regression Scenario")
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Project Run", "project_id": project_id})
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "Scenario Run", "scenario_id": scenario_id})
+
+    resp = client.get(f"/api/v1/feasibility/runs?project_id={project_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["project_id"] == project_id

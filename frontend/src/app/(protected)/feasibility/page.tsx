@@ -354,13 +354,19 @@ function FeasibilityListView() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletingRunIds, setDeletingRunIds] = useState<Set<string>>(new Set());
+  const [filterProjectId, setFilterProjectId] = useState<string>("");
+  const [filterScenarioId, setFilterScenarioId] = useState<string>("");
 
   const fetchRuns = useCallback(() => {
     setLoading(true);
-    listFeasibilityRuns({ limit: 100 })
+    listFeasibilityRuns({
+      limit: 100,
+      project_id: filterProjectId || undefined,
+      scenario_id: filterScenarioId || undefined,
+    })
       .then((resp) => {
         setRuns(resp.items);
-        setTotal(resp.items.length);
+        setTotal(resp.total);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -372,7 +378,7 @@ function FeasibilityListView() {
         setRuns([]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterProjectId, filterScenarioId]);
 
   useEffect(() => {
     fetchRuns();
@@ -490,6 +496,102 @@ function FeasibilityListView() {
         >
           + New Run
         </button>
+      </div>
+
+      {/* Filters */}
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-end",
+          marginBottom: "var(--space-4)",
+          flexWrap: "wrap",
+        }}
+      >
+        {projects.length > 0 && (
+          <div>
+            <label
+              htmlFor="filter-project-id"
+              style={{
+                display: "block",
+                marginBottom: 4,
+                fontSize: "0.75rem",
+                fontWeight: 500,
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Filter by Project
+            </label>
+            <select
+              id="filter-project-id"
+              value={filterProjectId}
+              onChange={(e) => setFilterProjectId(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                border: "1px solid var(--color-border)",
+                borderRadius: 6,
+                fontSize: "0.875rem",
+                background: "var(--color-surface)",
+                minWidth: 160,
+              }}
+            >
+              <option value="">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label
+            htmlFor="filter-scenario-id"
+            style={{
+              display: "block",
+              marginBottom: 4,
+              fontSize: "0.75rem",
+              fontWeight: 500,
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Filter by Scenario ID
+          </label>
+          <input
+            id="filter-scenario-id"
+            type="text"
+            value={filterScenarioId}
+            onChange={(e) => setFilterScenarioId(e.target.value)}
+            placeholder="Scenario ID…"
+            style={{
+              padding: "6px 10px",
+              border: "1px solid var(--color-border)",
+              borderRadius: 6,
+              fontSize: "0.875rem",
+              minWidth: 200,
+            }}
+          />
+        </div>
+        {(filterProjectId || filterScenarioId) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilterProjectId("");
+              setFilterScenarioId("");
+            }}
+            style={{
+              padding: "6px 14px",
+              border: "1px solid var(--color-border)",
+              borderRadius: 6,
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Error state */}

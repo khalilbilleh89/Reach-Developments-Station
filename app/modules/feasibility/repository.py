@@ -79,6 +79,48 @@ class FeasibilityRunRepository:
     def count_by_project(self, project_id: str) -> int:
         return self.db.query(FeasibilityRun).filter(FeasibilityRun.project_id == project_id).count()
 
+    def list_by_scenario(self, scenario_id: str, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
+        """Return runs for a scenario with the project relationship eagerly loaded."""
+        return (
+            self.db.query(FeasibilityRun)
+            .options(selectinload(FeasibilityRun.project))
+            .filter(FeasibilityRun.scenario_id == scenario_id)
+            .order_by(FeasibilityRun.created_at.asc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count_by_scenario(self, scenario_id: str) -> int:
+        return self.db.query(FeasibilityRun).filter(FeasibilityRun.scenario_id == scenario_id).count()
+
+    def list_by_project_and_scenario(
+        self, project_id: str, scenario_id: str, skip: int = 0, limit: int = 100
+    ) -> List[FeasibilityRun]:
+        """Return runs matching both project and scenario filters."""
+        return (
+            self.db.query(FeasibilityRun)
+            .options(selectinload(FeasibilityRun.project))
+            .filter(
+                FeasibilityRun.project_id == project_id,
+                FeasibilityRun.scenario_id == scenario_id,
+            )
+            .order_by(FeasibilityRun.created_at.asc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def count_by_project_and_scenario(self, project_id: str, scenario_id: str) -> int:
+        return (
+            self.db.query(FeasibilityRun)
+            .filter(
+                FeasibilityRun.project_id == project_id,
+                FeasibilityRun.scenario_id == scenario_id,
+            )
+            .count()
+        )
+
     def list_all(self, skip: int = 0, limit: int = 100) -> List[FeasibilityRun]:
         """Return all runs with the project relationship eagerly loaded."""
         return (

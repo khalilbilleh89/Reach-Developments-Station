@@ -981,10 +981,10 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
  * All financial outputs are backend-derived. This component never calculates
  * IRR, NPV, margin, or cost totals locally.
  */
-export default function FeasibilityRunDetailView() {
+export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?: string } = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const runId = searchParams.get("runId") ?? "";
+  const runId = runIdProp ?? searchParams.get("runId") ?? "";
 
   const [run, setRun] = useState<FeasibilityRun | null>(null);
   const [assumptions, setAssumptions] = useState<FeasibilityAssumptions | null>(null);
