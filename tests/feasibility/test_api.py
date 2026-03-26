@@ -779,3 +779,112 @@ def test_run_detail_response_includes_project_name(client: TestClient):
     assert resp.status_code == 200
     assert "project_name" in resp.json()
 
+
+# ---------------------------------------------------------------------------
+# PATCH assumptions — PR-FEAS-02
+# ---------------------------------------------------------------------------
+
+def test_patch_assumptions_updates_single_field(client: TestClient):
+    """PATCH /runs/{id}/assumptions updates only the provided field; others unchanged."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Single"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 1500.0},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sellable_area_sqm"] == pytest.approx(1500.0)
+    # Other fields must remain unchanged
+    assert data["avg_sale_price_per_sqm"] == pytest.approx(_VALID_ASSUMPTIONS_PAYLOAD["avg_sale_price_per_sqm"])
+    assert data["construction_cost_per_sqm"] == pytest.approx(_VALID_ASSUMPTIONS_PAYLOAD["construction_cost_per_sqm"])
+    assert data["development_period_months"] == _VALID_ASSUMPTIONS_PAYLOAD["development_period_months"]
+
+
+def test_patch_assumptions_updates_multiple_fields(client: TestClient):
+    """PATCH /runs/{id}/assumptions with several fields updates all supplied fields."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Multi"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 2000.0, "development_period_months": 36},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sellable_area_sqm"] == pytest.approx(2000.0)
+    assert data["development_period_months"] == 36
+    # Other fields unchanged
+    assert data["avg_sale_price_per_sqm"] == pytest.approx(_VALID_ASSUMPTIONS_PAYLOAD["avg_sale_price_per_sqm"])
+
+
+def test_patch_assumptions_returns_404_when_no_assumptions_exist(client: TestClient):
+    """PATCH /runs/{id}/assumptions returns 404 when no assumptions record exists yet."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "No Assumptions"})
+    run_id = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 1000.0},
+    )
+    assert resp.status_code == 404
+
+
+def test_patch_assumptions_returns_404_for_unknown_run(client: TestClient):
+    """PATCH /runs/{id}/assumptions returns 404 when the run does not exist."""
+    resp = client.patch(
+        "/api/v1/feasibility/runs/no-such-run/assumptions",
+        json={"sellable_area_sqm": 1000.0},
+    )
+    assert resp.status_code == 404
+
+
+def test_get_after_patch_reflects_updated_values(client: TestClient):
+    """GET /runs/{id}/assumptions after PATCH reflects the patched values."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Get After Patch"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"avg_sale_price_per_sqm": 3500.0},
+    )
+
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}/assumptions")
+    assert resp.status_code == 200
+    assert resp.json()["avg_sale_price_per_sqm"] == pytest.approx(3500.0)
+
+
+def test_calculate_after_patch_uses_updated_assumptions(client: TestClient):
+    """POST /runs/{id}/calculate after a PATCH uses the patched assumptions."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Calc After Patch"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 2000.0},
+    )
+
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "gdv" in data
+    assert data["gdv"] is not None
+
+
+def test_post_assumptions_still_works_after_patch_endpoint_added(client: TestClient):
+    """POST /runs/{id}/assumptions remains functional — create/replace behaviour unchanged."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Post Regression"})
+    run_id = resp.json()["id"]
+
+    resp = client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    assert resp.status_code == 201
+
+    updated = {**_VALID_ASSUMPTIONS_PAYLOAD, "sellable_area_sqm": 9999.0}
+    resp2 = client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=updated)
+    assert resp2.status_code == 201
+    assert resp2.json()["sellable_area_sqm"] == pytest.approx(9999.0)
+

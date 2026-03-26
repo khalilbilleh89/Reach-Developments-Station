@@ -78,6 +78,17 @@ export interface FeasibilityAssumptionsCreate {
   notes?: string | null;
 }
 
+export interface FeasibilityAssumptionsUpdate {
+  sellable_area_sqm?: number | null;
+  avg_sale_price_per_sqm?: number | null;
+  construction_cost_per_sqm?: number | null;
+  soft_cost_ratio?: number | null;
+  finance_cost_ratio?: number | null;
+  sales_cost_ratio?: number | null;
+  development_period_months?: number | null;
+  notes?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ from app.modules.concept_design.service import ConceptDesignService
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
+    FeasibilityAssumptionsUpdate,
     FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
@@ -121,6 +122,21 @@ def upsert_assumptions(
 ) -> FeasibilityAssumptionsResponse:
     """Create or replace assumptions for a feasibility run."""
     return service.update_assumptions(run_id, data)
+
+
+@router.patch("/runs/{run_id}/assumptions", response_model=FeasibilityAssumptionsResponse)
+def patch_assumptions(
+    run_id: str,
+    data: FeasibilityAssumptionsUpdate,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityAssumptionsResponse:
+    """Partially update assumptions for a feasibility run.
+
+    Only fields present in the request body are updated; omitted fields retain
+    their existing values.  Returns 404 if no assumptions record exists yet —
+    use POST to create the initial assumptions first.
+    """
+    return service.patch_assumptions(run_id, data)
 
 
 @router.get("/runs/{run_id}/assumptions", response_model=FeasibilityAssumptionsResponse)

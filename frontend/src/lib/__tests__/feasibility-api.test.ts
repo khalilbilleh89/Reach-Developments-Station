@@ -1,0 +1,193 @@
+/**
+ * Tests for feasibility-api.ts — typed wrappers around the
+ * /api/v1/feasibility backend endpoints.
+ *
+ * Validates that each client function constructs the correct path, method,
+ * and body before delegating to apiFetch.
+ *
+ * PR-FEAS-02
+ */
+
+import * as api from "../feasibility-api";
+import * as apiClient from "../api-client";
+
+// ---------------------------------------------------------------------------
+// Mock apiFetch
+// ---------------------------------------------------------------------------
+
+jest.mock("../api-client", () => ({
+  apiFetch: jest.fn(),
+  ApiError: class ApiError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
+}));
+
+const mockApiFetch = apiClient.apiFetch as jest.Mock;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const RUN_ID = "run-abc-123";
+
+const mockAssumptions = {
+  id: "asm-1",
+  run_id: RUN_ID,
+  sellable_area_sqm: 1000,
+  avg_sale_price_per_sqm: 3000,
+  construction_cost_per_sqm: 800,
+  soft_cost_ratio: 0.1,
+  finance_cost_ratio: 0.05,
+  sales_cost_ratio: 0.03,
+  development_period_months: 24,
+  notes: null,
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+};
+
+const validCreatePayload = {
+  sellable_area_sqm: 1000,
+  avg_sale_price_per_sqm: 3000,
+  construction_cost_per_sqm: 800,
+  soft_cost_ratio: 0.1,
+  finance_cost_ratio: 0.05,
+  sales_cost_ratio: 0.03,
+  development_period_months: 24,
+  notes: null,
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockApiFetch.mockResolvedValue(mockAssumptions);
+});
+
+// ---------------------------------------------------------------------------
+// upsertFeasibilityAssumptions — POST
+// ---------------------------------------------------------------------------
+
+describe("upsertFeasibilityAssumptions", () => {
+  it("calls the correct path with POST method", async () => {
+    await api.upsertFeasibilityAssumptions(RUN_ID, validCreatePayload);
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${RUN_ID}/assumptions`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("sends the full payload as JSON body", async () => {
+    await api.upsertFeasibilityAssumptions(RUN_ID, validCreatePayload);
+
+    const [, options] = mockApiFetch.mock.calls[0];
+    expect(options.body).toBe(JSON.stringify(validCreatePayload));
+    expect(options.headers).toEqual(
+      expect.objectContaining({ "Content-Type": "application/json" }),
+    );
+  });
+
+  it("encodes run_id in URL path", async () => {
+    await api.upsertFeasibilityAssumptions("run/with/slashes", validCreatePayload);
+
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toContain(encodeURIComponent("run/with/slashes"));
+  });
+
+  it("returns the response from apiFetch", async () => {
+    const result = await api.upsertFeasibilityAssumptions(RUN_ID, validCreatePayload);
+    expect(result).toEqual(mockAssumptions);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// patchFeasibilityAssumptions — PATCH
+// ---------------------------------------------------------------------------
+
+describe("patchFeasibilityAssumptions", () => {
+  it("calls the correct path with PATCH method", async () => {
+    await api.patchFeasibilityAssumptions(RUN_ID, { sellable_area_sqm: 1500 });
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${RUN_ID}/assumptions`,
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("sends partial payload as JSON body", async () => {
+    const partial = { sellable_area_sqm: 1500 };
+    await api.patchFeasibilityAssumptions(RUN_ID, partial);
+
+    const [, options] = mockApiFetch.mock.calls[0];
+    expect(options.body).toBe(JSON.stringify(partial));
+    expect(options.headers).toEqual(
+      expect.objectContaining({ "Content-Type": "application/json" }),
+    );
+  });
+
+  it("encodes run_id in URL path", async () => {
+    await api.patchFeasibilityAssumptions("run/with/slashes", { notes: "updated" });
+
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toContain(encodeURIComponent("run/with/slashes"));
+  });
+
+  it("returns the response from apiFetch", async () => {
+    const updated = { ...mockAssumptions, sellable_area_sqm: 1500 };
+    mockApiFetch.mockResolvedValueOnce(updated);
+
+    const result = await api.patchFeasibilityAssumptions(RUN_ID, { sellable_area_sqm: 1500 });
+    expect(result).toEqual(updated);
+  });
+
+  it("sends only the fields provided (partial payload)", async () => {
+    const partial = { development_period_months: 36 };
+    await api.patchFeasibilityAssumptions(RUN_ID, partial);
+
+    const [, options] = mockApiFetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body).toEqual(partial);
+    expect(Object.keys(body)).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getFeasibilityAssumptions — GET
+// ---------------------------------------------------------------------------
+
+describe("getFeasibilityAssumptions", () => {
+  it("calls the correct path with GET method (no body)", async () => {
+    await api.getFeasibilityAssumptions(RUN_ID);
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${RUN_ID}/assumptions`,
+    );
+  });
+
+  it("returns the assumptions response", async () => {
+    const result = await api.getFeasibilityAssumptions(RUN_ID);
+    expect(result).toEqual(mockAssumptions);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST vs PATCH path distinction
+// ---------------------------------------------------------------------------
+
+describe("POST vs PATCH path distinction", () => {
+  it("upsert uses POST and patch uses PATCH — different HTTP methods for same resource", async () => {
+    await api.upsertFeasibilityAssumptions(RUN_ID, validCreatePayload);
+    const postOptions = mockApiFetch.mock.calls[0][1];
+    expect(postOptions.method).toBe("POST");
+
+    jest.clearAllMocks();
+
+    await api.patchFeasibilityAssumptions(RUN_ID, { sellable_area_sqm: 500 });
+    const patchOptions = mockApiFetch.mock.calls[0][1];
+    expect(patchOptions.method).toBe("PATCH");
+  });
+});

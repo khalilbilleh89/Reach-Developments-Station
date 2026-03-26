@@ -71,6 +71,7 @@ jest.mock("@/lib/feasibility-api", () => ({
   getFeasibilityRun: jest.fn(),
   getFeasibilityAssumptions: jest.fn(),
   upsertFeasibilityAssumptions: jest.fn(),
+  patchFeasibilityAssumptions: jest.fn(),
   calculateFeasibility: jest.fn(),
   getFeasibilityResults: jest.fn(),
   assignProjectToRun: jest.fn(),
@@ -107,6 +108,7 @@ import {
   getFeasibilityRun,
   getFeasibilityAssumptions,
   upsertFeasibilityAssumptions,
+  patchFeasibilityAssumptions,
   calculateFeasibility,
   getFeasibilityResults,
   assignProjectToRun,
@@ -120,6 +122,7 @@ import FeasibilityRunDetailView from "@/components/feasibility/FeasibilityRunDet
 const mockGetRun = getFeasibilityRun as jest.Mock;
 const mockGetAssumptions = getFeasibilityAssumptions as jest.Mock;
 const mockUpsertAssumptions = upsertFeasibilityAssumptions as jest.Mock;
+const mockPatchAssumptions = patchFeasibilityAssumptions as jest.Mock;
 const mockCalculate = calculateFeasibility as jest.Mock;
 const mockGetResults = getFeasibilityResults as jest.Mock;
 const mockAssignProject = assignProjectToRun as jest.Mock;
@@ -944,4 +947,91 @@ test("source summary does not show source concept option ID for manual run", asy
     expect(screen.getByTestId("run-seed-source-type")).toHaveTextContent("Manual");
     expect(screen.queryByTestId("run-source-concept-option-id")).not.toBeInTheDocument();
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST vs PATCH save-path branching — PR-FEAS-02
+// ---------------------------------------------------------------------------
+
+test("uses POST (upsert) when no assumptions exist on first save", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockUpsertAssumptions.mockResolvedValue(mockAssumptions);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(mockUpsertAssumptions).toHaveBeenCalledWith("run-1", expect.any(Object));
+    expect(mockPatchAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("uses PATCH when assumptions already exist on subsequent save", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+  mockPatchAssumptions.mockResolvedValue({ ...mockAssumptions, sellable_area_sqm: 1500 });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Change one field and save
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1500" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(mockPatchAssumptions).toHaveBeenCalledWith("run-1", expect.any(Object));
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("surfaces PATCH error message when patch save fails", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+  mockPatchAssumptions.mockRejectedValue(new Error("Patch save failed"));
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/patch save failed/i);
+  });
+});
+
+test("does not call calculate after a PATCH save — calculation remains explicit", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+  mockPatchAssumptions.mockResolvedValue(mockAssumptions);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(mockPatchAssumptions).toHaveBeenCalled();
+  });
+
+  expect(mockCalculate).not.toHaveBeenCalled();
 });

@@ -12,6 +12,7 @@
  *   GET    /feasibility/runs/{run_id}                     → get run by id
  *   PATCH  /feasibility/runs/{run_id}                     → update run
  *   POST   /feasibility/runs/{run_id}/assumptions         → upsert assumptions
+ *   PATCH  /feasibility/runs/{run_id}/assumptions         → partial update assumptions
  *   GET    /feasibility/runs/{run_id}/assumptions         → get assumptions
  *   POST   /feasibility/runs/{run_id}/calculate           → run calculation
  *   GET    /feasibility/runs/{run_id}/results             → get results
@@ -22,6 +23,7 @@ import { apiFetch } from "./api-client";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
+  FeasibilityAssumptionsUpdate,
   FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRun,
@@ -98,6 +100,20 @@ export async function upsertFeasibilityAssumptions(
     `/feasibility/runs/${encodeURIComponent(runId)}/assumptions`,
     {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function patchFeasibilityAssumptions(
+  runId: string,
+  data: FeasibilityAssumptionsUpdate,
+): Promise<FeasibilityAssumptions> {
+  return apiFetch<FeasibilityAssumptions>(
+    `/feasibility/runs/${encodeURIComponent(runId)}/assumptions`,
+    {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     },

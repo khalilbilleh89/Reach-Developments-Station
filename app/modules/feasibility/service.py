@@ -25,6 +25,7 @@ from app.modules.feasibility.repository import (
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
+    FeasibilityAssumptionsUpdate,
     FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
@@ -211,6 +212,25 @@ class FeasibilityService:
                 details={"run_id": run_id},
             )
         return FeasibilityAssumptionsResponse.model_validate(assumptions)
+
+    def patch_assumptions(
+        self, run_id: str, data: FeasibilityAssumptionsUpdate
+    ) -> FeasibilityAssumptionsResponse:
+        run = self.run_repo.get_by_id(run_id)
+        if not run:
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
+            )
+        assumptions = self.assumptions_repo.get_by_run(run_id)
+        if not assumptions:
+            raise ResourceNotFoundError(
+                f"No assumptions found for feasibility run '{run_id}'. "
+                "Use POST to create assumptions before patching.",
+                details={"run_id": run_id},
+            )
+        updated = self.assumptions_repo.update_partial(assumptions, data)
+        return FeasibilityAssumptionsResponse.model_validate(updated)
 
     # ------------------------------------------------------------------
     # Calculation operations

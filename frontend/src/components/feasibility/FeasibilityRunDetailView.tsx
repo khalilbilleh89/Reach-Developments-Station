@@ -8,6 +8,7 @@ import {
   getFeasibilityRun,
   getFeasibilityAssumptions,
   upsertFeasibilityAssumptions,
+  patchFeasibilityAssumptions,
   calculateFeasibility,
   getFeasibilityResults,
   assignProjectToRun,
@@ -485,7 +486,9 @@ function FeasibilityAssumptionsForm({
 
       setSaving(true);
       try {
-        const saved = await upsertFeasibilityAssumptions(runId, payload);
+        const saved = existing
+          ? await patchFeasibilityAssumptions(runId, payload)
+          : await upsertFeasibilityAssumptions(runId, payload);
         onSaved(saved);
       } catch (err: unknown) {
         setSaveError(
@@ -497,6 +500,7 @@ function FeasibilityAssumptionsForm({
     },
     [
       runId,
+      existing,
       sellableArea,
       avgSalePrice,
       constructionCost,
