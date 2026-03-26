@@ -19,6 +19,10 @@ import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-utils";
+import {
+  validateFeasibilityAssumptions,
+  parseFeasibilityAssumptionsPayload,
+} from "@/lib/validation/feasibility-assumptions";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
@@ -459,57 +463,40 @@ function FeasibilityAssumptionsForm({
       e.preventDefault();
       setSaveError(null);
 
-      // Parse and validate all numeric fields using Number.isFinite() to reject
-      // non-finite inputs (Infinity, NaN, scientific notation overflow) before
-      // they reach the backend and produce confusing validation errors.
+      // Delegate all field-level validation to the centralised helper so that
+      // the same rules are enforced consistently everywhere (and tested in
+      // isolation in feasibility-validation.test.ts).
+      const validation = validateFeasibilityAssumptions({
+        sellableArea,
+        avgSalePrice,
+        constructionCost,
+        softCostRatio,
+        financeCostRatio,
+        salesCostRatio,
+        devPeriod,
+      });
 
-      const sellableAreaVal = Number(sellableArea);
-      const avgSalePriceVal = Number(avgSalePrice);
-      const constructionCostVal = Number(constructionCost);
-      const softCostRawVal = Number(softCostRatio);
-      const financeCostRawVal = Number(financeCostRatio);
-      const salesCostRawVal = Number(salesCostRatio);
-      const devPeriodVal = Number(devPeriod);
+      if (!validation.valid) {
+        // Show the first field error so the UI stays consistent with the
+        // existing single-alert pattern. Backend validation remains the final
+        // authority and will catch anything that slips through.
+        const firstError = Object.values(validation.errors)[0];
+        setSaveError(firstError ?? "One or more assumptions values are invalid.");
+        return;
+      }
 
-      if (!Number.isFinite(sellableAreaVal) || sellableAreaVal <= 0) {
-        setSaveError("Invalid value for sellable area sqm.");
-        return;
-      }
-      if (!Number.isFinite(avgSalePriceVal) || avgSalePriceVal <= 0) {
-        setSaveError("Invalid value for avg sale price per sqm.");
-        return;
-      }
-      if (!Number.isFinite(constructionCostVal) || constructionCostVal <= 0) {
-        setSaveError("Invalid value for construction cost per sqm.");
-        return;
-      }
-      // Ratio fields: percent input must be finite and in [0, 100]; convert to [0, 1] for backend.
-      if (!Number.isFinite(softCostRawVal) || softCostRawVal < 0 || softCostRawVal > 100) {
-        setSaveError("Soft cost ratio must be between 0 and 100.");
-        return;
-      }
-      if (!Number.isFinite(financeCostRawVal) || financeCostRawVal < 0 || financeCostRawVal > 100) {
-        setSaveError("Finance cost ratio must be between 0 and 100.");
-        return;
-      }
-      if (!Number.isFinite(salesCostRawVal) || salesCostRawVal < 0 || salesCostRawVal > 100) {
-        setSaveError("Sales cost ratio must be between 0 and 100.");
-        return;
-      }
-      // Development period: must be a finite positive integer (no decimal truncation).
-      if (!Number.isFinite(devPeriodVal) || !Number.isInteger(devPeriodVal) || devPeriodVal < 1) {
-        setSaveError("Development period must be a whole number of months (≥ 1).");
-        return;
-      }
+      const parsedValues = parseFeasibilityAssumptionsPayload({
+        sellableArea,
+        avgSalePrice,
+        constructionCost,
+        softCostRatio,
+        financeCostRatio,
+        salesCostRatio,
+        devPeriod,
+      });
 
       const fullPayload = {
-        sellable_area_sqm: sellableAreaVal,
-        avg_sale_price_per_sqm: avgSalePriceVal,
-        construction_cost_per_sqm: constructionCostVal,
-        soft_cost_ratio: softCostRawVal / 100,
-        finance_cost_ratio: financeCostRawVal / 100,
-        sales_cost_ratio: salesCostRawVal / 100,
-        development_period_months: devPeriodVal,
+        ...parsedValues,
         notes: notes.trim() || null,
       };
 

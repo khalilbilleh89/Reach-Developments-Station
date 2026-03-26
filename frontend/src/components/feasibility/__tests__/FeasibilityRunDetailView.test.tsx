@@ -540,6 +540,127 @@ test("rejects decimal development period (12.9 is not an integer)", async () => 
   });
 });
 
+test("rejects zero value for avg sale price", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/avg sale price/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "0" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/invalid value for avg sale price/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("rejects zero value for construction cost", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/construction cost/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "0" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/invalid value for construction cost/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("rejects negative finance cost ratio", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/finance cost ratio/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "-5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/finance cost ratio must be between 0 and 100/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("rejects sales cost ratio above 100", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/sales cost ratio/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "200" } });
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "24" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/sales cost ratio must be between 0 and 100/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
+test("save is not called when development period is zero", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() => expect(screen.getByLabelText(/development period/i)).toBeInTheDocument());
+
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(/avg sale price/i), { target: { value: "3000" } });
+  fireEvent.change(screen.getByLabelText(/construction cost/i), { target: { value: "800" } });
+  fireEvent.change(screen.getByLabelText(/soft cost ratio/i), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText(/finance cost ratio/i), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText(/sales cost ratio/i), { target: { value: "3" } });
+  // 0 is not a valid development period (must be ≥ 1)
+  fireEvent.change(screen.getByLabelText(/development period/i), { target: { value: "0" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(/whole number of months/i);
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // State reset on runId change
 // ---------------------------------------------------------------------------
