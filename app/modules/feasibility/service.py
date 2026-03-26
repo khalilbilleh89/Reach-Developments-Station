@@ -182,6 +182,17 @@ class FeasibilityService:
         updated = self.run_repo.update(run, data)
         return FeasibilityRunResponse.model_validate(updated)
 
+    def delete_feasibility_run(self, run_id: str) -> None:
+        """Delete a feasibility run and its owned assumptions and result via cascade."""
+        run = self.run_repo.get_by_id(run_id)
+        if not run:
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
+            )
+        self.run_repo.delete(run)
+        _logger.info("Feasibility run deleted: id=%s", run_id)
+
     # ------------------------------------------------------------------
     # Assumptions operations
     # ------------------------------------------------------------------

@@ -13,6 +13,7 @@ import {
   getFeasibilityResults,
   assignProjectToRun,
   getFeasibilityRunLineage,
+  deleteFeasibilityRun,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -999,6 +1000,7 @@ export default function FeasibilityRunDetailView() {
   const [seedingConcept, setSeedingConcept] = useState(false);
   const [seedConceptError, setSeedConceptError] = useState<string | null>(null);
   const [lineage, setLineage] = useState<FeasibilityLineageResponse | null | undefined>(undefined);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -1141,6 +1143,24 @@ export default function FeasibilityRunDetailView() {
       setSeedingConcept(false);
     }
   }, [runId, router]);
+
+  const handleDeleteRun = useCallback(async () => {
+    if (!runId) return;
+    const scenarioName = run?.scenario_name ?? "this run";
+    if (!window.confirm(`Delete feasibility run "${scenarioName}"? This cannot be undone.`)) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteFeasibilityRun(runId);
+      router.push("/feasibility");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete feasibility run.",
+      );
+      setDeleting(false);
+    }
+  }, [runId, run, router]);
 
   const title = run ? run.scenario_name : "Feasibility Run";
 
@@ -1465,6 +1485,57 @@ export default function FeasibilityRunDetailView() {
 
           {/* Lifecycle Lineage — PR-CONCEPT-065 */}
           <FeasibilityLineagePanel lineage={lineage} />
+
+          {/* Delete run — PR-FEAS-04 */}
+          <div
+            style={{
+              background: "var(--color-surface)",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
+              padding: "16px 24px",
+              marginTop: 24,
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 12px",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                color: "#b91c1c",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Danger Zone
+            </h3>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: "0.875rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Permanently delete this feasibility run and all its assumptions and results. This action cannot be undone.
+            </p>
+            <button
+              type="button"
+              data-testid="delete-run-btn"
+              onClick={handleDeleteRun}
+              disabled={deleting}
+              style={{
+                padding: "8px 20px",
+                border: "none",
+                borderRadius: 4,
+                background: deleting ? "#94a3b8" : "#dc2626",
+                color: "#fff",
+                cursor: deleting ? "not-allowed" : "pointer",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete Run"}
+            </button>
+          </div>
         </>
       )}
     </PageContainer>

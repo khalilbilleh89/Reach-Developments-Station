@@ -998,3 +998,88 @@ def test_status_does_not_regress_from_calculated_on_patch(client: TestClient):
     assert run_resp.json()["status"] == "calculated"
 
 
+# ---------------------------------------------------------------------------
+# Delete run — PR-FEAS-04
+# ---------------------------------------------------------------------------
+
+def test_delete_run_returns_204(client: TestClient):
+    """DELETE /api/v1/feasibility/runs/{id} should return 204 No Content."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Delete Me"},
+    ).json()["id"]
+    resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 204
+    assert resp.content == b""
+
+
+def test_delete_run_missing_returns_404(client: TestClient):
+    """DELETE /api/v1/feasibility/runs/{id} with unknown id should return 404."""
+    resp = client.delete("/api/v1/feasibility/runs/no-such-run")
+    assert resp.status_code == 404
+
+
+def test_delete_run_no_longer_in_list(client: TestClient):
+    """Deleted run must not appear in the list endpoint."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Ephemeral Run"},
+    ).json()["id"]
+    client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    resp = client.get("/api/v1/feasibility/runs")
+    assert resp.status_code == 200
+    ids = [r["id"] for r in resp.json()["items"]]
+    assert run_id not in ids
+
+
+def test_delete_run_get_returns_404(client: TestClient):
+    """GET on a deleted run id should return 404."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Gone Run"},
+    ).json()["id"]
+    client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 404
+
+
+def test_delete_run_cascades_assumptions(client: TestClient):
+    """Deleting a run must also remove its assumptions."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Run With Assumptions"},
+    ).json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    # Verify assumptions exist before deletion
+    assert client.get(f"/api/v1/feasibility/runs/{run_id}/assumptions").status_code == 200
+    client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    # GET on the run should return 404 — assumptions are gone with it
+    assert client.get(f"/api/v1/feasibility/runs/{run_id}").status_code == 404
+
+
+def test_delete_run_cascades_results(client: TestClient):
+    """Deleting a calculated run must also remove its results."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Calculated Run"},
+    ).json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    # Verify results exist before deletion
+    assert client.get(f"/api/v1/feasibility/runs/{run_id}/results").status_code == 200
+    client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    # Run is gone; results are gone with it
+    assert client.get(f"/api/v1/feasibility/runs/{run_id}").status_code == 404
+
+
+def test_delete_calculated_run_returns_204(client: TestClient):
+    """DELETE must succeed for runs in 'calculated' status."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Fully Calculated"},
+    ).json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 204
+

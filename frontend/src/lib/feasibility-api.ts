@@ -17,6 +17,7 @@
  *   POST   /feasibility/runs/{run_id}/calculate           → run calculation
  *   GET    /feasibility/runs/{run_id}/results             → get results
  *   GET    /feasibility/runs/{run_id}/lineage             → get lineage trace
+ *   DELETE /feasibility/runs/{run_id}                     → delete run
  */
 
 import { apiFetch } from "./api-client";
@@ -159,4 +160,14 @@ export async function getFeasibilityRunLineage(
   return apiFetch<FeasibilityLineageResponse>(
     `/feasibility/runs/${encodeURIComponent(runId)}/lineage`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Delete endpoint — PR-FEAS-04
+// ---------------------------------------------------------------------------
+
+export async function deleteFeasibilityRun(runId: string): Promise<void> {
+  await apiFetch<void>(`/feasibility/runs/${encodeURIComponent(runId)}`, {
+    method: "DELETE",
+  });
 }

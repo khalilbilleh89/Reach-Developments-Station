@@ -108,6 +108,11 @@ class FeasibilityRunRepository:
             .all()
         )
 
+    def delete(self, run: FeasibilityRun) -> None:
+        """Delete a feasibility run and cascade to owned assumptions and result."""
+        self.db.delete(run)
+        self.db.commit()
+
     def update(self, run: FeasibilityRun, data: FeasibilityRunUpdate) -> FeasibilityRun:
         # Fields that may be explicitly set to None (unlink / clear).
         # All other None values are treated as "not provided" and skipped.

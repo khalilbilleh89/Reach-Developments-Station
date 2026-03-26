@@ -9,6 +9,7 @@ import {
   listFeasibilityRuns,
   createFeasibilityRun,
   updateFeasibilityRun,
+  deleteFeasibilityRun,
 } from "@/lib/feasibility-api";
 import { listProjects } from "@/lib/projects-api";
 import type {
@@ -403,6 +404,23 @@ function FeasibilityListView() {
     [fetchRuns],
   );
 
+  const handleDeleteRun = useCallback(
+    async (runId: string, scenarioName: string) => {
+      if (!window.confirm(`Delete feasibility run "${scenarioName}"? This cannot be undone.`)) {
+        return;
+      }
+      try {
+        await deleteFeasibilityRun(runId);
+        fetchRuns();
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Failed to delete feasibility run.",
+        );
+      }
+    },
+    [fetchRuns],
+  );
+
   // KPI counts
   const baseCount = runs.filter((r) => r.scenario_type === "base").length;
   const upsideCount = runs.filter((r) => r.scenario_type === "upside").length;
@@ -623,6 +641,24 @@ function FeasibilityListView() {
                         <option value="downside">Downside</option>
                         <option value="investor">Investor</option>
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRun(run.id, run.scenario_name)}
+                        style={{
+                          padding: "4px 12px",
+                          border: "1px solid #fecaca",
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: "#b91c1c",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          whiteSpace: "nowrap",
+                        }}
+                        aria-label={`Delete ${run.scenario_name}`}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

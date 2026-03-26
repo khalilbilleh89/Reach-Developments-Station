@@ -7,7 +7,7 @@ Endpoints under /feasibility/runs.
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -80,6 +80,20 @@ def update_run(
 ) -> FeasibilityRunResponse:
     """Update a feasibility run's metadata."""
     return service.update_feasibility_run(run_id, data)
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_run(
+    run_id: str,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> Response:
+    """Delete a feasibility run and its owned assumptions and result.
+
+    Returns HTTP 204 No Content on success.
+    Returns HTTP 404 if the run does not exist.
+    """
+    service.delete_feasibility_run(run_id)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
