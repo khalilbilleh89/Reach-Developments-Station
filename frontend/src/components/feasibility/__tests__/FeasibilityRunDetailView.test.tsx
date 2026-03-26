@@ -366,7 +366,7 @@ test("renders results panel with KPIs when results exist", async () => {
 
   await waitFor(() => {
     expect(screen.getByText("VIABLE")).toBeInTheDocument();
-    expect(screen.getByText(/Proceed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Proceed/i).length).toBeGreaterThan(0);
   });
 });
 

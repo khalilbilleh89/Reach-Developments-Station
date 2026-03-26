@@ -24,6 +24,7 @@ import {
   parseFeasibilityAssumptionsPayload,
 } from "@/lib/validation/feasibility-assumptions";
 import FeasibilityScenarioOutputsTable from "@/components/feasibility/FeasibilityScenarioOutputsTable";
+import FeasibilityDecisionSummary from "@/components/feasibility/FeasibilityDecisionSummary";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
@@ -1393,6 +1394,9 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
               </span>
             )}
           </div>
+
+          {/* Decision summary — PR-FEAS-08 */}
+          {result && <FeasibilityDecisionSummary result={result} />}
 
           {/* Results panel */}
           {result ? (
