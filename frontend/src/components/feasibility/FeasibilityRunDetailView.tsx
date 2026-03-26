@@ -230,6 +230,13 @@ interface SourceSummaryProps {
   run: FeasibilityRun;
 }
 
+function formatSeedSourceType(
+  seedSourceType: "concept_option" | "manual" | null,
+): string {
+  if (seedSourceType === "concept_option") return "Concept Option";
+  return "Manual";
+}
+
 function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
   return (
     <div
@@ -314,6 +321,37 @@ function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
               Notes
             </div>
             <div style={{ fontSize: "0.875rem" }}>{run.notes}</div>
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+            Seed Source
+          </div>
+          <div
+            data-testid="run-seed-source-type"
+            style={{
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color:
+                run.seed_source_type === "concept_option"
+                  ? "var(--color-accent)"
+                  : "var(--color-text-muted)",
+            }}
+          >
+            {formatSeedSourceType(run.seed_source_type)}
+          </div>
+        </div>
+        {run.source_concept_option_id && (
+          <div>
+            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+              Source Concept Option
+            </div>
+            <div
+              data-testid="run-source-concept-option-id"
+              style={{ fontFamily: "monospace", fontSize: "0.8rem" }}
+            >
+              {run.source_concept_option_id.substring(0, 12)}…
+            </div>
           </div>
         )}
       </div>
