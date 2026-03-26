@@ -57,8 +57,11 @@ function normalizeMetrics(raw: unknown): FeasibilityScenarioMetrics {
  * `FeasibilityScenarioOutputs` object.
  *
  * @param raw - The raw `scenario_outputs` value from FeasibilityResult.
- * @returns Typed outputs with null metrics for any missing/invalid scenarios,
- *          or null when the payload is itself null or non-object.
+ * @returns A typed object containing only recognized scenarios present in the
+ *          payload, where each included scenario has missing or non-numeric
+ *          metric fields coerced to null; returns null when the payload is
+ *          itself null, non-object, an array, or when no recognized scenarios
+ *          are found.
  */
 export function normalizeFeasibilityScenarioOutputs(
   raw: unknown,

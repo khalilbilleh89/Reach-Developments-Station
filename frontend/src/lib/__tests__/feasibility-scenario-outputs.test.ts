@@ -166,7 +166,7 @@ test("NaN metric value becomes null", () => {
 // Null scenario block within payload
 // ---------------------------------------------------------------------------
 
-test("null scenario block within payload is preserved as null", () => {
+test("null scenario block within payload is normalized to a metrics object with all-null fields", () => {
   const result = normalizeFeasibilityScenarioOutputs({
     base: makeMetrics(),
     upside: null,

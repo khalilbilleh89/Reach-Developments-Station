@@ -166,6 +166,7 @@ export default function FeasibilityScenarioOutputsTable({
       <h3 style={headingStyle}>Scenario Analysis</h3>
       <div style={{ overflowX: "auto" }}>
         <table
+          aria-label="Scenario analysis outputs table"
           style={{
             width: "100%",
             borderCollapse: "collapse",
@@ -175,6 +176,7 @@ export default function FeasibilityScenarioOutputsTable({
           <thead>
             <tr>
               <th
+                scope="col"
                 style={{
                   ...thStyle,
                   textAlign: "left",
@@ -186,6 +188,7 @@ export default function FeasibilityScenarioOutputsTable({
               {activeColumns.map((col) => (
                 <th
                   key={col.key}
+                  scope="col"
                   style={thStyle}
                   data-testid={`scenario-col-${col.key}`}
                 >

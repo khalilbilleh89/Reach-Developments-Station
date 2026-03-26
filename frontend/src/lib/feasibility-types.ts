@@ -117,12 +117,17 @@ export interface FeasibilityScenarioMetrics {
  * Typed shape of the `scenario_outputs` field on FeasibilityResult.
  * Keys match the scenario names produced by `run_sensitivity_scenarios`:
  * base, upside, downside, investor.
+ *
+ * A key is present only when that scenario was included in the backend result.
+ * When present, the value is always a FeasibilityScenarioMetrics object (never
+ * null) — missing or non-numeric metric fields within it are coerced to null by
+ * the normalizer.
  */
 export interface FeasibilityScenarioOutputs {
-  base?: FeasibilityScenarioMetrics | null;
-  upside?: FeasibilityScenarioMetrics | null;
-  downside?: FeasibilityScenarioMetrics | null;
-  investor?: FeasibilityScenarioMetrics | null;
+  base?: FeasibilityScenarioMetrics;
+  upside?: FeasibilityScenarioMetrics;
+  downside?: FeasibilityScenarioMetrics;
+  investor?: FeasibilityScenarioMetrics;
 }
 
 export interface FeasibilityResult {
