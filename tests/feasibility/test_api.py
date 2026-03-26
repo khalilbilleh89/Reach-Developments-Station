@@ -948,23 +948,37 @@ def test_status_returned_in_single_run_response(client: TestClient):
     assert "status" in run_resp.json()
 
 
-def test_patch_assumptions_also_advances_status_from_draft(client: TestClient):
-    """PATCH /runs/{id}/assumptions from draft also advances status to assumptions_defined."""
-    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Status"})
+def test_post_assumptions_advances_status_from_draft(client: TestClient):
+    """POST /runs/{id}/assumptions advances status from draft → assumptions_defined."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "POST Status Advance"})
     run_id = resp.json()["id"]
-    # Create assumptions first (required before PATCH)
+    assert resp.json()["status"] == "draft"
+
     client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
 
-    # Reset: create a fresh run and patch its assumptions directly
-    resp2 = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Status 2"})
-    run_id2 = resp2.json()["id"]
-    assert resp2.json()["status"] == "draft"
-    # First create assumptions, then patch
-    client.post(f"/api/v1/feasibility/runs/{run_id2}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
-    client.patch(f"/api/v1/feasibility/runs/{run_id2}/assumptions", json={"sellable_area_sqm": 1500.0})
-
-    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id2}")
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
     assert run_resp.json()["status"] == "assumptions_defined"
+
+
+def test_patch_assumptions_keeps_status_assumptions_defined(client: TestClient):
+    """PATCH /runs/{id}/assumptions does not change status once assumptions are defined."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "PATCH Status Keep"})
+    run_id = resp.json()["id"]
+    assert resp.json()["status"] == "draft"
+
+    # POST advances to assumptions_defined
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    run_after_post = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_after_post.json()["status"] == "assumptions_defined"
+
+    # PATCH must leave status unchanged at assumptions_defined
+    client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 1500.0},
+    )
+
+    run_after_patch = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_after_patch.json()["status"] == "assumptions_defined"
 
 
 def test_status_does_not_regress_from_calculated_on_patch(client: TestClient):

@@ -46,7 +46,7 @@ class FeasibilityRunResponse(BaseModel):
     source_concept_option_id: Optional[str]
     seed_source_type: Optional[str]
     # Lifecycle state — PR-FEAS-03
-    status: str
+    status: Literal["draft", "assumptions_defined", "calculated"]
     created_at: datetime
     updated_at: datetime
 
