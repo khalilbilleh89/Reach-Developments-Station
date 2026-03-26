@@ -79,21 +79,27 @@ export function validateFeasibilityAssumptions(
   if (!Number.isFinite(constructionCostVal) || constructionCostVal <= 0) {
     errors.constructionCost = "Invalid value for construction cost per sqm.";
   }
-  if (
+  if (inputs.softCostRatio.trim() === "") {
+    errors.softCostRatio = "Soft cost ratio is required.";
+  } else if (
     !Number.isFinite(softCostRawVal) ||
     softCostRawVal < 0 ||
     softCostRawVal > 100
   ) {
     errors.softCostRatio = "Soft cost ratio must be between 0 and 100.";
   }
-  if (
+  if (inputs.financeCostRatio.trim() === "") {
+    errors.financeCostRatio = "Finance cost ratio is required.";
+  } else if (
     !Number.isFinite(financeCostRawVal) ||
     financeCostRawVal < 0 ||
     financeCostRawVal > 100
   ) {
     errors.financeCostRatio = "Finance cost ratio must be between 0 and 100.";
   }
-  if (
+  if (inputs.salesCostRatio.trim() === "") {
+    errors.salesCostRatio = "Sales cost ratio is required.";
+  } else if (
     !Number.isFinite(salesCostRawVal) ||
     salesCostRawVal < 0 ||
     salesCostRawVal > 100

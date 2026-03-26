@@ -202,6 +202,44 @@ describe("validateFeasibilityAssumptions — constructionCost", () => {
 // ---------------------------------------------------------------------------
 
 describe("validateFeasibilityAssumptions — ratio fields", () => {
+  test("rejects empty string for softCostRatio", () => {
+    const result = validateFeasibilityAssumptions({
+      ...validInputs,
+      softCostRatio: "",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.softCostRatio).toMatch(/soft cost ratio is required/i);
+  });
+
+  test("rejects whitespace-only string for financeCostRatio", () => {
+    const result = validateFeasibilityAssumptions({
+      ...validInputs,
+      financeCostRatio: "   ",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.financeCostRatio).toMatch(
+      /finance cost ratio is required/i,
+    );
+  });
+
+  test("rejects empty string for salesCostRatio", () => {
+    const result = validateFeasibilityAssumptions({
+      ...validInputs,
+      salesCostRatio: "",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.salesCostRatio).toMatch(/sales cost ratio is required/i);
+  });
+
+  test("accepts '0' as a valid softCostRatio (not blank)", () => {
+    const result = validateFeasibilityAssumptions({
+      ...validInputs,
+      softCostRatio: "0",
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors.softCostRatio).toBeUndefined();
+  });
+
   test("rejects softCostRatio above 100", () => {
     const result = validateFeasibilityAssumptions({
       ...validInputs,
