@@ -22,6 +22,7 @@ from app.modules.feasibility.repository import (
     FeasibilityResultRepository,
     FeasibilityRunRepository,
 )
+from app.modules.concept_design.repository import ConceptOptionRepository
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
@@ -41,7 +42,7 @@ from app.shared.enums.finance import (
     FeasibilityRiskLevel,
     FeasibilityViabilityStatus,
 )
-from app.core.errors import ResourceNotFoundError, ValidationError
+from app.core.errors import ResourceNotFoundError, ValidationError, ConflictError
 from app.core.logging import get_logger
 
 _logger = get_logger("reach_developments.feasibility")
@@ -111,6 +112,7 @@ class FeasibilityService:
         self.result_repo = FeasibilityResultRepository(db)
         self.project_repo = ProjectRepository(db)
         self.scenario_repo = ScenarioRepository(db)
+        self.concept_option_repo = ConceptOptionRepository(db)
 
     # ------------------------------------------------------------------
     # Internal helpers — shared validation guards
@@ -181,6 +183,27 @@ class FeasibilityService:
             self._validate_project_if_present(data.project_id)
         updated = self.run_repo.update(run, data)
         return FeasibilityRunResponse.model_validate(updated)
+
+    def delete_feasibility_run(self, run_id: str) -> None:
+        """Delete a feasibility run and its owned assumptions and result via cascade.
+
+        Raises ConflictError (409) if any concept options were reverse-seeded from
+        this run, to preserve lineage integrity.
+        """
+        run = self.run_repo.get_by_id(run_id)
+        if not run:
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
+            )
+        referencing = self.concept_option_repo.list_by_source_feasibility_run_id(run_id)
+        if referencing:
+            raise ConflictError(
+                "Cannot delete feasibility run because concept options were reverse-seeded from it.",
+                details={"run_id": run_id, "referencing_concept_option_count": len(referencing)},
+            )
+        self.run_repo.delete(run)
+        _logger.info("Feasibility run deleted: id=%s", run_id)
 
     # ------------------------------------------------------------------
     # Assumptions operations

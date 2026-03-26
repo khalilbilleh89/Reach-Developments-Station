@@ -76,6 +76,7 @@ jest.mock("@/lib/feasibility-api", () => ({
   getFeasibilityResults: jest.fn(),
   assignProjectToRun: jest.fn(),
   getFeasibilityRunLineage: jest.fn(),
+  deleteFeasibilityRun: jest.fn(),
 }));
 
 // Mock concept-design-api — reverse-seeding
@@ -113,6 +114,7 @@ import {
   getFeasibilityResults,
   assignProjectToRun,
   getFeasibilityRunLineage,
+  deleteFeasibilityRun,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -129,6 +131,7 @@ const mockAssignProject = assignProjectToRun as jest.Mock;
 const mockListProjects = listProjects as jest.Mock;
 const mockCreateConcept = createConceptFromFeasibility as jest.Mock;
 const mockGetLineage = getFeasibilityRunLineage as jest.Mock;
+const mockDeleteRun = deleteFeasibilityRun as jest.Mock;
 
 /** Helper to create a mocked ApiError with a given status code. */
 function mockApiError(message: string, status: number): Error {
@@ -1177,4 +1180,112 @@ test("lifecycle status updates to 'Calculated' after calculation", async () => {
   await waitFor(() => {
     expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Calculated");
   });
+});
+
+// ---------------------------------------------------------------------------
+// Delete run — PR-FEAS-04
+// ---------------------------------------------------------------------------
+
+test("renders delete run button in detail view", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("delete-run-btn")).toBeInTheDocument();
+  });
+});
+
+test("shows confirmation dialog before deleting", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockDeleteRun.mockResolvedValue(undefined);
+
+  const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("delete-run-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("delete-run-btn"));
+
+  expect(confirmSpy).toHaveBeenCalledWith(
+    expect.stringContaining("Base Case Q1"),
+  );
+  expect(mockDeleteRun).not.toHaveBeenCalled();
+
+  confirmSpy.mockRestore();
+});
+
+test("calls deleteFeasibilityRun and navigates to list on confirmation", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockDeleteRun.mockResolvedValue(undefined);
+
+  jest.spyOn(window, "confirm").mockReturnValue(true);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("delete-run-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("delete-run-btn"));
+
+  await waitFor(() => {
+    expect(mockDeleteRun).toHaveBeenCalledWith("run-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/feasibility");
+  });
+
+  (window.confirm as jest.Mock).mockRestore();
+});
+
+test("surfaces error when delete API call fails", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockDeleteRun.mockRejectedValue(new Error("Delete failed"));
+
+  jest.spyOn(window, "confirm").mockReturnValue(true);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("delete-run-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("delete-run-btn"));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/delete failed/i)).toBeInTheDocument();
+  });
+
+  (window.confirm as jest.Mock).mockRestore();
+});
+
+test("does not navigate when confirmation is cancelled", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  jest.spyOn(window, "confirm").mockReturnValue(false);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("delete-run-btn")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByTestId("delete-run-btn"));
+
+  expect(mockRouterPush).not.toHaveBeenCalled();
+
+  (window.confirm as jest.Mock).mockRestore();
 });

@@ -191,3 +191,41 @@ describe("POST vs PATCH path distinction", () => {
     expect(patchOptions.method).toBe("PATCH");
   });
 });
+
+// ---------------------------------------------------------------------------
+// deleteFeasibilityRun — DELETE — PR-FEAS-04
+// ---------------------------------------------------------------------------
+
+describe("deleteFeasibilityRun", () => {
+  it("calls the correct path with DELETE method", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    await api.deleteFeasibilityRun(RUN_ID);
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${RUN_ID}`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("encodes run_id in URL path", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    await api.deleteFeasibilityRun("run/with/slashes");
+
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toContain(encodeURIComponent("run/with/slashes"));
+  });
+
+  it("does not add Content-Type header (no body)", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    await api.deleteFeasibilityRun(RUN_ID);
+
+    const [, options] = mockApiFetch.mock.calls[0];
+    expect(options.headers).toBeUndefined();
+  });
+
+  it("resolves without a return value on success", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    const result = await api.deleteFeasibilityRun(RUN_ID);
+    expect(result).toBeUndefined();
+  });
+});

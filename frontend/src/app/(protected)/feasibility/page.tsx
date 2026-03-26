@@ -9,6 +9,7 @@ import {
   listFeasibilityRuns,
   createFeasibilityRun,
   updateFeasibilityRun,
+  deleteFeasibilityRun,
 } from "@/lib/feasibility-api";
 import { listProjects } from "@/lib/projects-api";
 import type {
@@ -352,6 +353,7 @@ function FeasibilityListView() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [deletingRunIds, setDeletingRunIds] = useState<Set<string>>(new Set());
 
   const fetchRuns = useCallback(() => {
     setLoading(true);
@@ -401,6 +403,31 @@ function FeasibilityListView() {
       }
     },
     [fetchRuns],
+  );
+
+  const handleDeleteRun = useCallback(
+    async (runId: string, scenarioName: string) => {
+      if (deletingRunIds.has(runId)) return;
+      if (!window.confirm(`Delete feasibility run "${scenarioName}"? This cannot be undone.`)) {
+        return;
+      }
+      setDeletingRunIds((prev) => new Set(prev).add(runId));
+      try {
+        await deleteFeasibilityRun(runId);
+        fetchRuns();
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : "Failed to delete feasibility run.",
+        );
+      } finally {
+        setDeletingRunIds((prev) => {
+          const next = new Set(prev);
+          next.delete(runId);
+          return next;
+        });
+      }
+    },
+    [fetchRuns, deletingRunIds],
   );
 
   // KPI counts
@@ -623,6 +650,25 @@ function FeasibilityListView() {
                         <option value="downside">Downside</option>
                         <option value="investor">Investor</option>
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRun(run.id, run.scenario_name)}
+                        disabled={deletingRunIds.has(run.id)}
+                        style={{
+                          padding: "4px 12px",
+                          border: "1px solid #fecaca",
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: deletingRunIds.has(run.id) ? "#94a3b8" : "#b91c1c",
+                          cursor: deletingRunIds.has(run.id) ? "not-allowed" : "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          whiteSpace: "nowrap",
+                        }}
+                        aria-label={`Delete ${run.scenario_name}`}
+                      >
+                        {deletingRunIds.has(run.id) ? "Deleting…" : "Delete"}
+                      </button>
                     </div>
                   </td>
                 </tr>
