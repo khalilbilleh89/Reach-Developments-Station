@@ -355,7 +355,18 @@ function FeasibilityListView() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletingRunIds, setDeletingRunIds] = useState<Set<string>>(new Set());
   const [filterProjectId, setFilterProjectId] = useState<string>("");
+  // Raw input value — drives the text field immediately.
+  const [filterScenarioIdInput, setFilterScenarioIdInput] = useState<string>("");
+  // Debounced value — used for API calls to avoid a request per keystroke.
   const [filterScenarioId, setFilterScenarioId] = useState<string>("");
+
+  // Debounce scenario ID input: update the effective filter 300ms after typing stops.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilterScenarioId(filterScenarioIdInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filterScenarioIdInput]);
 
   const fetchRuns = useCallback(() => {
     setLoading(true);
@@ -366,7 +377,8 @@ function FeasibilityListView() {
     })
       .then((resp) => {
         setRuns(resp.items);
-        setTotal(resp.total);
+        // Use items.length so the KPI is consistent with what is rendered on screen.
+        setTotal(resp.items.length);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -560,8 +572,8 @@ function FeasibilityListView() {
           <input
             id="filter-scenario-id"
             type="text"
-            value={filterScenarioId}
-            onChange={(e) => setFilterScenarioId(e.target.value)}
+            value={filterScenarioIdInput}
+            onChange={(e) => setFilterScenarioIdInput(e.target.value)}
             placeholder="Scenario ID…"
             style={{
               padding: "6px 10px",
@@ -572,12 +584,12 @@ function FeasibilityListView() {
             }}
           />
         </div>
-        {(filterProjectId || filterScenarioId) && (
+        {(filterProjectId || filterScenarioIdInput) && (
           <button
             type="button"
             onClick={() => {
               setFilterProjectId("");
-              setFilterScenarioId("");
+              setFilterScenarioIdInput("");
             }}
             style={{
               padding: "6px 14px",

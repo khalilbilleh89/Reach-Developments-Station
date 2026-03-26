@@ -968,8 +968,15 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
 /**
  * FeasibilityRunDetailView — full detail page for a single feasibility run.
  *
- * Reads ?runId= from the URL query string so the view is compatible with
- * Next.js static export (output: "export").
+ * Run ID resolution order:
+ *   1. `runId` prop — used when the component is rendered from the path-based
+ *      deep-link route (/feasibility/<runId>) via `[runId]/_page-client.tsx`.
+ *   2. `?runId=` query param — fallback for the list-page detail mode
+ *      (/feasibility?runId=<id>), kept for backward compatibility.
+ *   3. Empty string / "_" — treated as a no-op; renders a safe placeholder.
+ *
+ * Both access paths share the same component and render the same detail UI,
+ * keeping logic in one place with no forked implementations.
  *
  * Workflow:
  *   1. Load run metadata (source summary)
