@@ -886,7 +886,7 @@ test("source summary shows 'Manual' seed type for manual run (null seed fields)"
   render(<FeasibilityRunDetailView />);
 
   await waitFor(() => {
-    expect(screen.getByTestId("run-seed-source-type")).toBeInTheDocument();
+    expect(screen.getByTestId("run-seed-source-type")).toHaveTextContent("Manual");
     expect(screen.queryByTestId("run-source-concept-option-id")).not.toBeInTheDocument();
   });
 });
@@ -922,8 +922,10 @@ test("source summary shows source concept option ID truncated for concept-seeded
 
   await waitFor(() => {
     const el = screen.getByTestId("run-source-concept-option-id");
-    expect(el).toBeInTheDocument();
-    expect(el.textContent).toMatch(/concept-full/);
+    const text = el.textContent ?? "";
+    expect(text).toContain("concept-full");
+    expect(text).not.toContain("concept-full-id-xyz");
+    expect(text).toContain("…");
   });
 });
 

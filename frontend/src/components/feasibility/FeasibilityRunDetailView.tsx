@@ -231,12 +231,10 @@ interface SourceSummaryProps {
 }
 
 function formatSeedSourceType(
-  seedSourceType: "concept_option" | "manual" | null | undefined,
-): React.ReactNode {
+  seedSourceType: "concept_option" | "manual" | null,
+): string {
   if (seedSourceType === "concept_option") return "Concept Option";
-  if (seedSourceType === "manual") return "Manual";
-  // null / undefined = legacy run created before lineage tracking
-  return <em>Manual</em>;
+  return "Manual";
 }
 
 function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
