@@ -17,10 +17,11 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function FeasibilityRunDetailPage({
+export default async function FeasibilityRunDetailPage({
   params,
 }: {
-  params: { runId: string };
+  params: Promise<{ runId: string }>;
 }) {
-  return <FeasibilityRunDeepLinkClient runId={params.runId} />;
+  const { runId } = await params;
+  return <FeasibilityRunDeepLinkClient runId={runId} />;
 }
