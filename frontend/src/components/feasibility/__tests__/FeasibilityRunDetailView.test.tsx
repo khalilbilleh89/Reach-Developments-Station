@@ -1000,6 +1000,55 @@ test("uses PATCH when assumptions already exist on subsequent save", async () =>
   });
 });
 
+test("PATCH sends only the changed field, omitting unchanged fields", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+  mockPatchAssumptions.mockResolvedValue({ ...mockAssumptions, sellable_area_sqm: 1500 });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Change only sellable area
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1500" } });
+
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  await waitFor(() => {
+    expect(mockPatchAssumptions).toHaveBeenCalled();
+    const [, patchBody] = mockPatchAssumptions.mock.calls[0];
+    // Only the changed field should be present
+    expect(patchBody).toEqual({ sellable_area_sqm: 1500 });
+    // Unchanged fields must not be included
+    expect(patchBody).not.toHaveProperty("avg_sale_price_per_sqm");
+    expect(patchBody).not.toHaveProperty("construction_cost_per_sqm");
+    expect(patchBody).not.toHaveProperty("soft_cost_ratio");
+    expect(patchBody).not.toHaveProperty("finance_cost_ratio");
+    expect(patchBody).not.toHaveProperty("sales_cost_ratio");
+    expect(patchBody).not.toHaveProperty("development_period_months");
+  });
+});
+
+test("no PATCH request sent when no fields changed (no-op guard)", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Click save without changing any fields — all form values match existing assumptions
+  fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
+
+  // Allow microtasks to settle
+  await waitFor(() => {
+    expect(mockPatchAssumptions).not.toHaveBeenCalled();
+    expect(mockUpsertAssumptions).not.toHaveBeenCalled();
+  });
+});
+
 test("surfaces PATCH error message when patch save fails", async () => {
   mockGetRun.mockResolvedValue(mockRun);
   mockGetAssumptions.mockResolvedValue(mockAssumptions);
@@ -1009,6 +1058,9 @@ test("surfaces PATCH error message when patch save fails", async () => {
   render(<FeasibilityRunDetailView />);
 
   await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Change a field so PATCH is triggered
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1500" } });
 
   fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
 
@@ -1026,6 +1078,9 @@ test("does not call calculate after a PATCH save — calculation remains explici
   render(<FeasibilityRunDetailView />);
 
   await waitFor(() => expect(screen.getByLabelText(/sellable area/i)).toBeInTheDocument());
+
+  // Change a field so PATCH is triggered
+  fireEvent.change(screen.getByLabelText(/sellable area/i), { target: { value: "1500" } });
 
   fireEvent.click(screen.getByRole("button", { name: /save assumptions/i }));
 
