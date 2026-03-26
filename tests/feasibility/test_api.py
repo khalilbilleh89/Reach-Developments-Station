@@ -6,6 +6,9 @@ Validates HTTP behaviour, request/response contracts, and full workflow.
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.modules.feasibility.models import FeasibilityAssumptions, FeasibilityResult
 
 
 def _create_project(client: TestClient, code: str = "PRJ-FAPI") -> str:
@@ -1043,33 +1046,35 @@ def test_delete_run_get_returns_404(client: TestClient):
     assert resp.status_code == 404
 
 
-def test_delete_run_cascades_assumptions(client: TestClient):
-    """Deleting a run must also remove its assumptions."""
+def test_delete_run_cascades_assumptions(client: TestClient, db_session: Session):
+    """Deleting a run must also remove its FeasibilityAssumptions row from the database."""
     run_id = client.post(
         "/api/v1/feasibility/runs",
         json={"scenario_name": "Run With Assumptions"},
     ).json()["id"]
     client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
-    # Verify assumptions exist before deletion
+    # Verify assumptions row exists before deletion
     assert client.get(f"/api/v1/feasibility/runs/{run_id}/assumptions").status_code == 200
     client.delete(f"/api/v1/feasibility/runs/{run_id}")
-    # GET on the run should return 404 — assumptions are gone with it
-    assert client.get(f"/api/v1/feasibility/runs/{run_id}").status_code == 404
+    # Directly assert the assumptions row is gone from the database
+    row = db_session.query(FeasibilityAssumptions).filter(FeasibilityAssumptions.run_id == run_id).first()
+    assert row is None, "FeasibilityAssumptions row should be deleted when its run is deleted"
 
 
-def test_delete_run_cascades_results(client: TestClient):
-    """Deleting a calculated run must also remove its results."""
+def test_delete_run_cascades_results(client: TestClient, db_session: Session):
+    """Deleting a calculated run must also remove its FeasibilityResult row from the database."""
     run_id = client.post(
         "/api/v1/feasibility/runs",
         json={"scenario_name": "Calculated Run"},
     ).json()["id"]
     client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
     client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
-    # Verify results exist before deletion
+    # Verify results row exists before deletion
     assert client.get(f"/api/v1/feasibility/runs/{run_id}/results").status_code == 200
     client.delete(f"/api/v1/feasibility/runs/{run_id}")
-    # Run is gone; results are gone with it
-    assert client.get(f"/api/v1/feasibility/runs/{run_id}").status_code == 404
+    # Directly assert the result row is gone from the database
+    row = db_session.query(FeasibilityResult).filter(FeasibilityResult.run_id == run_id).first()
+    assert row is None, "FeasibilityResult row should be deleted when its run is deleted"
 
 
 def test_delete_calculated_run_returns_204(client: TestClient):
@@ -1083,3 +1088,27 @@ def test_delete_calculated_run_returns_204(client: TestClient):
     resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
     assert resp.status_code == 204
 
+
+def test_delete_run_blocked_when_concept_options_reference_run(client: TestClient):
+    """DELETE returns 409 when a concept option was reverse-seeded from the run."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Seeded Run"},
+    ).json()["id"]
+    # Reverse-seed a concept option from this run
+    seed_resp = client.post(f"/api/v1/feasibility/runs/{run_id}/create-concept")
+    assert seed_resp.status_code == 201
+    # Now deletion must be blocked
+    resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 409
+    assert "concept options" in resp.json()["message"].lower()
+
+
+def test_delete_run_succeeds_when_no_concept_options_reference_run(client: TestClient):
+    """DELETE returns 204 when no concept options reference the run."""
+    run_id = client.post(
+        "/api/v1/feasibility/runs",
+        json={"scenario_name": "Unlinked Run"},
+    ).json()["id"]
+    resp = client.delete(f"/api/v1/feasibility/runs/{run_id}")
+    assert resp.status_code == 204
