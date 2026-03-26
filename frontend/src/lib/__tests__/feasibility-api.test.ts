@@ -229,3 +229,55 @@ describe("deleteFeasibilityRun", () => {
     expect(result).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// listFeasibilityRuns — scenario_id filtering — PR-FEAS-05
+// ---------------------------------------------------------------------------
+
+describe("listFeasibilityRuns — scenario_id filter", () => {
+  const mockRunList = { items: [], total: 0 };
+
+  beforeEach(() => {
+    mockApiFetch.mockResolvedValue(mockRunList);
+  });
+
+  it("omits scenario_id param when not provided", async () => {
+    await api.listFeasibilityRuns();
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toBe("/feasibility/runs");
+  });
+
+  it("appends scenario_id query param when provided", async () => {
+    await api.listFeasibilityRuns({ scenario_id: "scen-123" });
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toBe("/feasibility/runs?scenario_id=scen-123");
+  });
+
+  it("appends project_id query param when provided", async () => {
+    await api.listFeasibilityRuns({ project_id: "proj-1" });
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toBe("/feasibility/runs?project_id=proj-1");
+  });
+
+  it("appends both project_id and scenario_id when both are provided", async () => {
+    await api.listFeasibilityRuns({ project_id: "proj-1", scenario_id: "scen-123" });
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toContain("project_id=proj-1");
+    expect(path).toContain("scenario_id=scen-123");
+    expect(path).toMatch(/^\/feasibility\/runs\?/);
+  });
+
+  it("omits scenario_id when the value is an empty string", async () => {
+    await api.listFeasibilityRuns({ scenario_id: "" });
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).not.toContain("scenario_id");
+  });
+
+  it("includes skip and limit params alongside scenario_id", async () => {
+    await api.listFeasibilityRuns({ scenario_id: "scen-abc", skip: 10, limit: 50 });
+    const [path] = mockApiFetch.mock.calls[0];
+    expect(path).toContain("scenario_id=scen-abc");
+    expect(path).toContain("skip=10");
+    expect(path).toContain("limit=50");
+  });
+});

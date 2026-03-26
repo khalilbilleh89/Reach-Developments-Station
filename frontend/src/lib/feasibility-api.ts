@@ -39,11 +39,13 @@ import type {
 
 export async function listFeasibilityRuns(params?: {
   project_id?: string;
+  scenario_id?: string;
   skip?: number;
   limit?: number;
 }): Promise<FeasibilityRunList> {
   const query = new URLSearchParams();
   if (params?.project_id) query.set("project_id", params.project_id);
+  if (params?.scenario_id) query.set("scenario_id", params.scenario_id);
   if (params?.skip !== undefined) query.set("skip", String(params.skip));
   if (params?.limit !== undefined) query.set("limit", String(params.limit));
   const qs = query.toString();

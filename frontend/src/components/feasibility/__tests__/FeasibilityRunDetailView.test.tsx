@@ -1289,3 +1289,69 @@ test("does not navigate when confirmation is cancelled", async () => {
 
   (window.confirm as jest.Mock).mockRestore();
 });
+
+// ---------------------------------------------------------------------------
+// Path-based (deep-link) route context tests — PR-FEAS-05
+// ---------------------------------------------------------------------------
+
+describe("FeasibilityRunDetailView — path-based runId prop (deep-link route)", () => {
+  const pathRunId = "run-path-abc";
+
+  beforeEach(() => {
+    // Override search params to return no runId (simulates direct route without query param).
+    mockSearchParams = new URLSearchParams("");
+    mockGetRun.mockResolvedValue({ ...mockRun, id: pathRunId });
+    mockGetAssumptions.mockRejectedValue(mock404());
+    mockGetResults.mockRejectedValue(mock404());
+    mockGetLineage.mockResolvedValue({
+      record_type: "feasibility_run",
+      record_id: pathRunId,
+      source_concept_option_id: null,
+      reverse_seeded_concept_options: [],
+      project_id: null,
+    });
+    mockListProjects.mockResolvedValue({ items: [], total: 0 });
+  });
+
+  afterEach(() => {
+    // Restore default search params for other test suites.
+    mockSearchParams = new URLSearchParams("runId=run-1");
+    jest.clearAllMocks();
+  });
+
+  it("loads the run using the runId prop when no query param is present", async () => {
+    render(<FeasibilityRunDetailView runId={pathRunId} />);
+
+    await waitFor(() => {
+      expect(mockGetRun).toHaveBeenCalledWith(pathRunId);
+    });
+  });
+
+  it("renders the source summary with the correct run data from the path-based runId", async () => {
+    render(<FeasibilityRunDetailView runId={pathRunId} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Base Case Q1").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("falls back to query param runId when no prop is given", async () => {
+    // Restore query param for this specific test.
+    mockSearchParams = new URLSearchParams("runId=run-1");
+    mockGetRun.mockResolvedValue(mockRun);
+
+    render(<FeasibilityRunDetailView />);
+
+    await waitFor(() => {
+      expect(mockGetRun).toHaveBeenCalledWith("run-1");
+    });
+  });
+
+  it("renders safe placeholder when runId prop is the placeholder value '_'", async () => {
+    render(<FeasibilityRunDetailView runId="_" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/no run id provided/i)).toBeInTheDocument();
+    });
+  });
+});

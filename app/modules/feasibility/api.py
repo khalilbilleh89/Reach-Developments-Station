@@ -56,11 +56,12 @@ def create_run(
 def list_runs(
     service: Annotated[FeasibilityService, Depends(get_service)],
     project_id: Optional[str] = Query(default=None),
+    scenario_id: Optional[str] = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> FeasibilityRunList:
-    """List feasibility runs, optionally filtered by project."""
-    return service.list_feasibility_runs(project_id=project_id, skip=skip, limit=limit)
+    """List feasibility runs, optionally filtered by project and/or scenario."""
+    return service.list_feasibility_runs(project_id=project_id, scenario_id=scenario_id, skip=skip, limit=limit)
 
 
 @router.get("/runs/{run_id}", response_model=FeasibilityRunResponse)
