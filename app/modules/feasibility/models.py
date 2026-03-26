@@ -51,6 +51,9 @@ class FeasibilityRun(Base, TimestampMixin):
         String(36), nullable=True, index=True
     )
     seed_source_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Lifecycle state — PR-FEAS-03
+    # Allowed values: 'draft' | 'assumptions_defined' | 'calculated'
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
 
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="feasibility_runs")
 

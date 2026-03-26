@@ -888,3 +888,99 @@ def test_post_assumptions_still_works_after_patch_endpoint_added(client: TestCli
     assert resp2.status_code == 201
     assert resp2.json()["sellable_area_sqm"] == pytest.approx(9999.0)
 
+
+# ---------------------------------------------------------------------------
+# Lifecycle status — PR-FEAS-03
+# ---------------------------------------------------------------------------
+
+def test_run_created_with_draft_status(client: TestClient):
+    """POST /runs creates a run with status 'draft'."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Lifecycle Draft"})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "draft"
+
+
+def test_status_becomes_assumptions_defined_after_save(client: TestClient):
+    """POST /runs/{id}/assumptions advances status to 'assumptions_defined'."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Lifecycle Assumptions"})
+    run_id = resp.json()["id"]
+    assert resp.json()["status"] == "draft"
+
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_resp.status_code == 200
+    assert run_resp.json()["status"] == "assumptions_defined"
+
+
+def test_status_becomes_calculated_after_calculate(client: TestClient):
+    """POST /runs/{id}/calculate advances status to 'calculated'."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Lifecycle Calculated"})
+    run_id = resp.json()["id"]
+
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_resp.status_code == 200
+    assert run_resp.json()["status"] == "calculated"
+
+
+def test_status_returned_in_run_list(client: TestClient):
+    """GET /runs includes status field for every run in the list."""
+    client.post("/api/v1/feasibility/runs", json={"scenario_name": "List Status Run"})
+    resp = client.get("/api/v1/feasibility/runs")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) >= 1
+    for item in items:
+        assert "status" in item
+
+
+def test_status_returned_in_single_run_response(client: TestClient):
+    """GET /runs/{id} includes status in the response."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Single Status"})
+    run_id = resp.json()["id"]
+
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_resp.status_code == 200
+    assert "status" in run_resp.json()
+
+
+def test_patch_assumptions_also_advances_status_from_draft(client: TestClient):
+    """PATCH /runs/{id}/assumptions from draft also advances status to assumptions_defined."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Status"})
+    run_id = resp.json()["id"]
+    # Create assumptions first (required before PATCH)
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+
+    # Reset: create a fresh run and patch its assumptions directly
+    resp2 = client.post("/api/v1/feasibility/runs", json={"scenario_name": "Patch Status 2"})
+    run_id2 = resp2.json()["id"]
+    assert resp2.json()["status"] == "draft"
+    # First create assumptions, then patch
+    client.post(f"/api/v1/feasibility/runs/{run_id2}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.patch(f"/api/v1/feasibility/runs/{run_id2}/assumptions", json={"sellable_area_sqm": 1500.0})
+
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id2}")
+    assert run_resp.json()["status"] == "assumptions_defined"
+
+
+def test_status_does_not_regress_from_calculated_on_patch(client: TestClient):
+    """PATCH assumptions on a calculated run does not regress status back to assumptions_defined."""
+    resp = client.post("/api/v1/feasibility/runs", json={"scenario_name": "No Regress"})
+    run_id = resp.json()["id"]
+    client.post(f"/api/v1/feasibility/runs/{run_id}/assumptions", json=_VALID_ASSUMPTIONS_PAYLOAD)
+    client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+
+    # PATCH assumptions after calculation — status must stay 'calculated'
+    client.patch(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={"sellable_area_sqm": 1500.0},
+    )
+
+    run_resp = client.get(f"/api/v1/feasibility/runs/{run_id}")
+    assert run_resp.json()["status"] == "calculated"
+
+

@@ -30,10 +30,17 @@ class FeasibilityRunRepository:
             notes=data.notes,
             source_concept_option_id=data.source_concept_option_id,
             seed_source_type=data.seed_source_type,
+            status="draft",
         )
         self.db.add(run)
         self.db.commit()
         # Re-fetch with eager project load so project_name is available immediately.
+        return self.get_by_id(run.id)
+
+    def set_status(self, run: FeasibilityRun, status: str) -> FeasibilityRun:
+        """Update the lifecycle status of a run and persist the change."""
+        run.status = status
+        self.db.commit()
         return self.get_by_id(run.id)
 
     def get_by_id(self, run_id: str) -> Optional[FeasibilityRun]:

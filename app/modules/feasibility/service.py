@@ -196,6 +196,10 @@ class FeasibilityService:
                 details={"run_id": run_id},
             )
         assumptions = self.assumptions_repo.upsert(run_id, data)
+        # Advance lifecycle: draft → assumptions_defined (or keep assumptions_defined
+        # if already at that state; do not regress from 'calculated').
+        if run.status == "draft":
+            self.run_repo.set_status(run, "assumptions_defined")
         return FeasibilityAssumptionsResponse.model_validate(assumptions)
 
     def get_assumptions(self, run_id: str) -> FeasibilityAssumptionsResponse:
@@ -230,6 +234,9 @@ class FeasibilityService:
                 details={"run_id": run_id},
             )
         updated = self.assumptions_repo.update_partial(assumptions, data)
+        # Advance lifecycle if still in draft (patch also counts as defining assumptions).
+        if run.status == "draft":
+            self.run_repo.set_status(run, "assumptions_defined")
         return FeasibilityAssumptionsResponse.model_validate(updated)
 
     # ------------------------------------------------------------------
@@ -288,6 +295,10 @@ class FeasibilityService:
             viability.value,
             risk.value,
         )
+        # Advance lifecycle to 'calculated'.
+        run = self.run_repo.get_by_id(run_id)
+        if run is not None:
+            self.run_repo.set_status(run, "calculated")
         return FeasibilityResultResponse.model_validate(result)
 
     def run_feasibility_calculation(self, run_id: str) -> FeasibilityResultResponse:
@@ -518,6 +529,8 @@ class FeasibilityService:
                 notes=notes,
             )
             self.assumptions_repo.upsert(run.id, assumptions_create)
+            # Advance lifecycle: seeded run with full assumptions is ready for calculation.
+            self.run_repo.set_status(run, "assumptions_defined")
 
         _logger.info(
             "Seeded feasibility run created: id=%s source_concept_option_id=%s",

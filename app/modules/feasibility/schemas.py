@@ -45,6 +45,8 @@ class FeasibilityRunResponse(BaseModel):
     # Lineage — PR-CONCEPT-063
     source_concept_option_id: Optional[str]
     seed_source_type: Optional[str]
+    # Lifecycle state — PR-FEAS-03
+    status: str
     created_at: datetime
     updated_at: datetime
 

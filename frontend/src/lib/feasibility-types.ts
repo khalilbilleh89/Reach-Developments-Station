@@ -9,6 +9,8 @@ export type FeasibilityScenarioType = "base" | "upside" | "downside" | "investor
 export type FeasibilityViabilityStatus = "VIABLE" | "MARGINAL" | "NOT_VIABLE";
 export type FeasibilityRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type FeasibilityDecision = "VIABLE" | "MARGINAL" | "NOT_VIABLE";
+// Lifecycle state — PR-FEAS-03
+export type FeasibilityRunStatus = "draft" | "assumptions_defined" | "calculated";
 
 // ---------------------------------------------------------------------------
 // Run types
@@ -25,6 +27,8 @@ export interface FeasibilityRun {
   // Lineage / seed-source metadata — PR-CONCEPT-063 / PR-FEAS-01
   source_concept_option_id: string | null;
   seed_source_type: "concept_option" | "manual" | null;
+  // Lifecycle state — PR-FEAS-03
+  status: FeasibilityRunStatus;
   created_at: string;
   updated_at: string;
 }
