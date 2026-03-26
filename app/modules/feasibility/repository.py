@@ -128,6 +128,17 @@ class FeasibilityAssumptionsRepository:
         self.db.refresh(assumptions)
         return assumptions
 
+    def update_partial(
+        self, existing: FeasibilityAssumptions, data: FeasibilityAssumptionsUpdate
+    ) -> FeasibilityAssumptions:
+        """Apply only the supplied fields to an existing assumptions record."""
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(existing, field, value)
+        self.db.commit()
+        self.db.refresh(existing)
+        return existing
+
     def get_by_run(self, run_id: str) -> Optional[FeasibilityAssumptions]:
         return (
             self.db.query(FeasibilityAssumptions)

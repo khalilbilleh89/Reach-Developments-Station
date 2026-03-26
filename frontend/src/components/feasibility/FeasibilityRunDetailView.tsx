@@ -8,6 +8,7 @@ import {
   getFeasibilityRun,
   getFeasibilityAssumptions,
   upsertFeasibilityAssumptions,
+  patchFeasibilityAssumptions,
   calculateFeasibility,
   getFeasibilityResults,
   assignProjectToRun,
@@ -20,6 +21,7 @@ import { formatCurrency } from "@/lib/format-utils";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
+  FeasibilityAssumptionsUpdate,
   FeasibilityDecision,
   FeasibilityLineageResponse,
   FeasibilityResult,
@@ -468,7 +470,7 @@ function FeasibilityAssumptionsForm({
         return;
       }
 
-      const parsed = {
+      const fullPayload = {
         sellable_area_sqm: sellableAreaVal,
         avg_sale_price_per_sqm: avgSalePriceVal,
         construction_cost_per_sqm: constructionCostVal,
@@ -476,17 +478,34 @@ function FeasibilityAssumptionsForm({
         finance_cost_ratio: financeCostRawVal / 100,
         sales_cost_ratio: salesCostRawVal / 100,
         development_period_months: devPeriodVal,
-      };
-
-      const payload: FeasibilityAssumptionsCreate = {
-        ...parsed,
         notes: notes.trim() || null,
       };
 
       setSaving(true);
       try {
-        const saved = await upsertFeasibilityAssumptions(runId, payload);
-        onSaved(saved);
+        if (existing) {
+          // PATCH: send only fields whose parsed values differ from the persisted record.
+          const patchPayload: FeasibilityAssumptionsUpdate = {};
+          (Object.keys(fullPayload) as (keyof typeof fullPayload)[]).forEach((key) => {
+            if (fullPayload[key] !== existing[key]) {
+              (patchPayload as Record<string, unknown>)[key] = fullPayload[key];
+            }
+          });
+
+          if (Object.keys(patchPayload).length === 0) {
+            // Nothing changed — skip the network request and re-confirm saved state.
+            onSaved(existing);
+            return;
+          }
+
+          const saved = await patchFeasibilityAssumptions(runId, patchPayload);
+          onSaved(saved);
+        } else {
+          // POST: first save — send the full create payload.
+          const createPayload: FeasibilityAssumptionsCreate = fullPayload;
+          const saved = await upsertFeasibilityAssumptions(runId, createPayload);
+          onSaved(saved);
+        }
       } catch (err: unknown) {
         setSaveError(
           err instanceof Error ? err.message : "Failed to save assumptions.",
@@ -497,6 +516,7 @@ function FeasibilityAssumptionsForm({
     },
     [
       runId,
+      existing,
       sellableArea,
       avgSalePrice,
       constructionCost,
