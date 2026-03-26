@@ -17,9 +17,12 @@ import React from "react";
 import type {
   FeasibilityDecision,
   FeasibilityResult,
-  FeasibilityRiskLevel,
-  FeasibilityViabilityStatus,
 } from "@/lib/feasibility-types";
+import {
+  decisionLabel,
+  viabilityLabel,
+  riskLabel,
+} from "@/lib/feasibility-decision-display";
 
 // ---------------------------------------------------------------------------
 // Colour tokens per decision value
@@ -30,7 +33,6 @@ interface DecisionTheme {
   border: string;
   color: string;
   icon: string;
-  label: string;
 }
 
 function decisionTheme(decision: FeasibilityDecision | null): DecisionTheme {
@@ -40,7 +42,6 @@ function decisionTheme(decision: FeasibilityDecision | null): DecisionTheme {
       border: "#86efac",
       color: "#15803d",
       icon: "✔",
-      label: "PROCEED",
     };
   if (decision === "MARGINAL")
     return {
@@ -48,7 +49,6 @@ function decisionTheme(decision: FeasibilityDecision | null): DecisionTheme {
       border: "#fde047",
       color: "#854d0e",
       icon: "⚠",
-      label: "REVIEW",
     };
   if (decision === "NOT_VIABLE")
     return {
@@ -56,29 +56,13 @@ function decisionTheme(decision: FeasibilityDecision | null): DecisionTheme {
       border: "#fca5a5",
       color: "#b91c1c",
       icon: "✖",
-      label: "REJECT",
     };
   return {
     background: "var(--color-surface)",
     border: "var(--color-border)",
     color: "var(--color-text-muted)",
     icon: "—",
-    label: "—",
   };
-}
-
-function viabilityLabel(status: FeasibilityViabilityStatus | null): string {
-  if (status === "VIABLE") return "Viable";
-  if (status === "MARGINAL") return "Marginal";
-  if (status === "NOT_VIABLE") return "Not Viable";
-  return "—";
-}
-
-function riskLabel(risk: FeasibilityRiskLevel | null): string {
-  if (risk === "LOW") return "Low";
-  if (risk === "MEDIUM") return "Moderate";
-  if (risk === "HIGH") return "High";
-  return "—";
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +174,7 @@ export default function FeasibilityDecisionSummary({
           data-testid="decision-value"
           style={{ ...valueStyle, fontSize: "1rem" }}
         >
-          {theme.label}
+          {decisionLabel(decision)}
         </span>
       </div>
       <div style={rowStyle}>
