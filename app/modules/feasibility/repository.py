@@ -43,6 +43,13 @@ class FeasibilityRunRepository:
         self.db.commit()
         return self.get_by_id(run.id)
 
+    def set_status_by_id(self, run_id: str, status: str) -> None:
+        """Update the lifecycle status of a run by ID without re-fetching the run."""
+        self.db.query(FeasibilityRun).filter(FeasibilityRun.id == run_id).update(
+            {"status": status}
+        )
+        self.db.commit()
+
     def get_by_id(self, run_id: str) -> Optional[FeasibilityRun]:
         """Return a single run with the project relationship eagerly loaded."""
         return (

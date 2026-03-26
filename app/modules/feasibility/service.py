@@ -295,10 +295,8 @@ class FeasibilityService:
             viability.value,
             risk.value,
         )
-        # Advance lifecycle to 'calculated'.
-        run = self.run_repo.get_by_id(run_id)
-        if run is not None:
-            self.run_repo.set_status(run, "calculated")
+        # Advance lifecycle to 'calculated' — no re-fetch needed.
+        self.run_repo.set_status_by_id(run_id, "calculated")
         return FeasibilityResultResponse.model_validate(result)
 
     def run_feasibility_calculation(self, run_id: str) -> FeasibilityResultResponse:

@@ -99,11 +99,12 @@ function lifecycleStatusLabel(status: FeasibilityRunStatus): string {
 }
 
 function lifecycleStatusBadgeStyle(status: FeasibilityRunStatus): React.CSSProperties {
+  const base: React.CSSProperties = { padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
   if (status === "calculated")
-    return { background: "#dcfce7", color: "#15803d", padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
+    return { ...base, background: "#dcfce7", color: "#15803d" };
   if (status === "assumptions_defined")
-    return { background: "#dbeafe", color: "#1d4ed8", padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
-  return { background: "#f1f5f9", color: "#475569", padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
+    return { ...base, background: "#dbeafe", color: "#1d4ed8" };
+  return { ...base, background: "#f1f5f9", color: "#475569" };
 }
 
 // ---------------------------------------------------------------------------
@@ -1063,7 +1064,10 @@ export default function FeasibilityRunDetailView() {
       // Reload the run to pick up the updated lifecycle status ('assumptions_defined').
       getFeasibilityRun(runId)
         .then((updatedRun) => setRun(updatedRun))
-        .catch(() => {/* ignore – run data already displayed */});
+        .catch((err: unknown) => {
+          // Non-fatal: status badge may be stale until next full reload.
+          console.warn("Failed to reload run after assumptions save:", err);
+        });
     },
     [runId],
   );
