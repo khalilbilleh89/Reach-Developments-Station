@@ -23,12 +23,13 @@ import {
   validateFeasibilityAssumptions,
   parseFeasibilityAssumptionsPayload,
 } from "@/lib/validation/feasibility-assumptions";
+import { decisionLabel } from "@/lib/feasibility-decision-display";
 import FeasibilityScenarioOutputsTable from "@/components/feasibility/FeasibilityScenarioOutputsTable";
+import FeasibilityDecisionSummary from "@/components/feasibility/FeasibilityDecisionSummary";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
   FeasibilityAssumptionsUpdate,
-  FeasibilityDecision,
   FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRiskLevel,
@@ -85,13 +86,6 @@ function riskBadgeStyle(
   if (risk === "HIGH")
     return { background: "#fee2e2", color: "#b91c1c", padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
   return { background: "#f1f5f9", color: "#475569", padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
-}
-
-function decisionLabel(decision: FeasibilityDecision | null): string {
-  if (decision === "VIABLE") return "Proceed";
-  if (decision === "MARGINAL") return "Review";
-  if (decision === "NOT_VIABLE") return "Do Not Proceed";
-  return "—";
 }
 
 // ---------------------------------------------------------------------------
@@ -1393,6 +1387,9 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
               </span>
             )}
           </div>
+
+          {/* Decision summary — PR-FEAS-08 */}
+          {result && <FeasibilityDecisionSummary result={result} />}
 
           {/* Results panel */}
           {result ? (

@@ -48,9 +48,12 @@ jest.mock("next/link", () => {
 jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
 
 // Mock format-utils
-jest.mock("@/lib/format-utils", () => ({
-  formatCurrency: (v: number) => `AED ${v.toLocaleString()}`,
-}));
+jest.mock("@/lib/format-utils", () => {
+  const currencyFormatter = new Intl.NumberFormat("en-US");
+  return {
+    formatCurrency: (v: number) => `AED ${currencyFormatter.format(v)}`,
+  };
+});
 
 // Mock api-client — expose ApiError for 404 simulation
 jest.mock("@/lib/api-client", () => ({
@@ -366,7 +369,7 @@ test("renders results panel with KPIs when results exist", async () => {
 
   await waitFor(() => {
     expect(screen.getByText("VIABLE")).toBeInTheDocument();
-    expect(screen.getByText(/Proceed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Proceed/i).length).toBeGreaterThan(0);
   });
 });
 
@@ -1682,4 +1685,39 @@ test("existing main results panel still renders alongside scenario table", async
     // Scenario outputs table
     expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
   });
+});
+
+// ---------------------------------------------------------------------------
+// Decision summary integration — PR-FEAS-08
+// ---------------------------------------------------------------------------
+
+test("decision summary is rendered above KPI panel when results are present", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResult);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(
+      screen.getByRole("region", { name: /investment decision summary/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("decision-value")).toHaveTextContent("Proceed");
+  });
+});
+
+test("decision summary is not rendered when no results exist", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByText(/no results yet/i)).toBeInTheDocument();
+  });
+
+  expect(
+    screen.queryByRole("region", { name: /investment decision summary/i }),
+  ).not.toBeInTheDocument();
 });
