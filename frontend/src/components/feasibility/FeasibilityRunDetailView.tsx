@@ -23,6 +23,7 @@ import {
   validateFeasibilityAssumptions,
   parseFeasibilityAssumptionsPayload,
 } from "@/lib/validation/feasibility-assumptions";
+import FeasibilityScenarioOutputsTable from "@/components/feasibility/FeasibilityScenarioOutputsTable";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
@@ -1413,6 +1414,13 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
                 Save assumptions and click Calculate to generate results.
               </p>
             </div>
+          )}
+
+          {/* Scenario outputs sensitivity table — PR-FEAS-07 */}
+          {result && (
+            <FeasibilityScenarioOutputsTable
+              scenarioOutputs={result.scenario_outputs}
+            />
           )}
 
           {/* Reverse-seed: Create Concept Option — PR-CONCEPT-064 */}

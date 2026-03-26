@@ -1476,3 +1476,210 @@ describe("FeasibilityRunDetailView — path-based runId prop (deep-link route)",
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario outputs table — PR-FEAS-07
+// ---------------------------------------------------------------------------
+
+const mockScenarioOutputs = {
+  base: {
+    gdv: 3_000_000,
+    construction_cost: 800_000,
+    soft_cost: 80_000,
+    finance_cost: 50_000,
+    sales_cost: 30_000,
+    total_cost: 960_000,
+    developer_profit: 2_040_000,
+    profit_margin: 0.68,
+    irr_estimate: 0.42,
+  },
+  upside: {
+    gdv: 3_300_000,
+    construction_cost: 760_000,
+    soft_cost: 76_000,
+    finance_cost: 47_500,
+    sales_cost: 28_500,
+    total_cost: 912_000,
+    developer_profit: 2_388_000,
+    profit_margin: 0.724,
+    irr_estimate: 0.48,
+  },
+  downside: {
+    gdv: 2_700_000,
+    construction_cost: 880_000,
+    soft_cost: 88_000,
+    finance_cost: 55_000,
+    sales_cost: 33_000,
+    total_cost: 1_056_000,
+    developer_profit: 1_644_000,
+    profit_margin: 0.609,
+    irr_estimate: 0.35,
+  },
+  investor: {
+    gdv: 3_150_000,
+    construction_cost: 840_000,
+    soft_cost: 84_000,
+    finance_cost: 52_500,
+    sales_cost: 31_500,
+    total_cost: 1_008_000,
+    developer_profit: 2_142_000,
+    profit_margin: 0.68,
+    irr_estimate: 0.44,
+  },
+};
+
+const mockResultWithScenarios = {
+  ...mockResult,
+  scenario_outputs: mockScenarioOutputs,
+};
+
+test("renders scenario analysis table when result has scenario_outputs", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
+  });
+});
+
+test("scenario table shows Base, Upside, Downside column headers", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-col-base")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-col-upside")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-col-downside")).toBeInTheDocument();
+  });
+});
+
+test("scenario table shows Investor column header when investor data is present", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-col-investor")).toBeInTheDocument();
+  });
+});
+
+test("scenario table renders base GDV cell", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-base-gdv")).toBeInTheDocument();
+  });
+});
+
+test("scenario table renders upside developer_profit cell", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-upside-developer_profit")).toBeInTheDocument();
+  });
+});
+
+test("scenario table renders downside profit_margin cell", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-downside-profit_margin")).toBeInTheDocument();
+  });
+});
+
+test("scenario table shows safe empty state when scenario_outputs is null", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue({ ...mockResult, scenario_outputs: null });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
+    expect(screen.getByText(/no scenario analysis data available/i)).toBeInTheDocument();
+  });
+});
+
+test("scenario table is not rendered when result is absent", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByText(/no results yet/i)).toBeInTheDocument();
+  });
+
+  expect(screen.queryByTestId("scenario-outputs-table")).not.toBeInTheDocument();
+});
+
+test("page does not crash when scenario_outputs contains partial scenario data", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue({
+    ...mockResult,
+    scenario_outputs: { base: mockScenarioOutputs.base }, // only base, no upside/downside
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
+  });
+  // Upside column should not appear
+  expect(screen.queryByTestId("scenario-col-upside")).not.toBeInTheDocument();
+  // Base column should appear
+  expect(screen.getByTestId("scenario-col-base")).toBeInTheDocument();
+});
+
+test("page does not crash when scenario_outputs is a malformed value", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue({
+    ...mockResult,
+    scenario_outputs: "not-an-object" as unknown as null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
+    expect(screen.getByText(/no scenario analysis data available/i)).toBeInTheDocument();
+  });
+});
+
+test("existing main results panel still renders alongside scenario table", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResultWithScenarios);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    // Main results panel
+    expect(screen.getByText("VIABLE")).toBeInTheDocument();
+    // Scenario outputs table
+    expect(screen.getByTestId("scenario-outputs-table")).toBeInTheDocument();
+  });
+});
