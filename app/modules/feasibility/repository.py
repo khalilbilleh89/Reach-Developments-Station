@@ -5,6 +5,7 @@ Data access layer for FeasibilityRun, FeasibilityAssumptions, and FeasibilityRes
 """
 
 from typing import List, Optional
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -30,11 +31,29 @@ class FeasibilityRunRepository:
             notes=data.notes,
             source_concept_option_id=data.source_concept_option_id,
             seed_source_type=data.seed_source_type,
+            status="draft",
         )
         self.db.add(run)
         self.db.commit()
         # Re-fetch with eager project load so project_name is available immediately.
         return self.get_by_id(run.id)
+
+    def set_status(self, run: FeasibilityRun, status: str) -> FeasibilityRun:
+        """Update the lifecycle status of a run and persist the change."""
+        run.status = status
+        self.db.commit()
+        return run
+
+    def set_status_by_id(self, run_id: str, status: str) -> None:
+        """Update the lifecycle status of a run by ID without re-fetching the run.
+
+        updated_at is set explicitly because SQLAlchemy bulk updates bypass the
+        ORM onupdate handler defined on TimestampMixin.
+        """
+        self.db.query(FeasibilityRun).filter(FeasibilityRun.id == run_id).update(
+            {"status": status, "updated_at": datetime.now(timezone.utc)}
+        )
+        self.db.commit()
 
     def get_by_id(self, run_id: str) -> Optional[FeasibilityRun]:
         """Return a single run with the project relationship eagerly loaded."""

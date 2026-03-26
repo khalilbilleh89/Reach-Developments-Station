@@ -27,6 +27,7 @@ import type {
   FeasibilityResult,
   FeasibilityRiskLevel,
   FeasibilityRun,
+  FeasibilityRunStatus,
   FeasibilityScenarioType,
   FeasibilityViabilityStatus,
 } from "@/lib/feasibility-types";
@@ -85,6 +86,25 @@ function decisionLabel(decision: FeasibilityDecision | null): string {
   if (decision === "MARGINAL") return "Review";
   if (decision === "NOT_VIABLE") return "Do Not Proceed";
   return "—";
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle status badge — PR-FEAS-03
+// ---------------------------------------------------------------------------
+
+function lifecycleStatusLabel(status: FeasibilityRunStatus): string {
+  if (status === "assumptions_defined") return "Ready for Calculation";
+  if (status === "calculated") return "Calculated";
+  return "Draft";
+}
+
+function lifecycleStatusBadgeStyle(status: FeasibilityRunStatus): React.CSSProperties {
+  const base: React.CSSProperties = { padding: "3px 10px", borderRadius: 12, fontWeight: 600, fontSize: "0.8rem" };
+  if (status === "calculated")
+    return { ...base, background: "#dcfce7", color: "#15803d" };
+  if (status === "assumptions_defined")
+    return { ...base, background: "#dbeafe", color: "#1d4ed8" };
+  return { ...base, background: "#f1f5f9", color: "#475569" };
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +376,17 @@ function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
             </div>
           </div>
         )}
+        <div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+            Lifecycle Status
+          </div>
+          <span
+            data-testid="run-lifecycle-status"
+            style={lifecycleStatusBadgeStyle(run.status)}
+          >
+            {lifecycleStatusLabel(run.status)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -1030,8 +1061,15 @@ export default function FeasibilityRunDetailView() {
   const handleAssumptionsSaved = useCallback(
     (saved: FeasibilityAssumptions) => {
       setAssumptions(saved);
+      // Reload the run to pick up the updated lifecycle status ('assumptions_defined').
+      getFeasibilityRun(runId)
+        .then((updatedRun) => setRun(updatedRun))
+        .catch((err: unknown) => {
+          // Non-fatal: status badge may be stale until next full reload.
+          console.warn("Failed to reload run after assumptions save:", err);
+        });
     },
-    [],
+    [runId],
   );
 
   const handleCalculate = useCallback(async () => {
@@ -1041,6 +1079,9 @@ export default function FeasibilityRunDetailView() {
     try {
       const res = await calculateFeasibility(runId);
       setResult(res);
+      // Reload the run to pick up the updated lifecycle status ('calculated').
+      const updatedRun = await getFeasibilityRun(runId);
+      setRun(updatedRun);
     } catch (err: unknown) {
       setCalcError(
         err instanceof Error ? err.message : "Calculation failed.",

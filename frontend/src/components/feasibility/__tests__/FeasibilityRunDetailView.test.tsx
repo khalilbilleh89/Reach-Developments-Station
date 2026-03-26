@@ -147,6 +147,7 @@ const mockRun = {
   notes: "Test run notes",
   source_concept_option_id: null,
   seed_source_type: null,
+  status: "draft" as const,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
 };
@@ -1089,4 +1090,91 @@ test("does not call calculate after a PATCH save — calculation remains explici
   });
 
   expect(mockCalculate).not.toHaveBeenCalled();
+});
+
+// ---------------------------------------------------------------------------
+// Lifecycle status badge — PR-FEAS-03
+// ---------------------------------------------------------------------------
+
+test("shows 'Draft' lifecycle badge for a run with status 'draft'", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, status: "draft" as const });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Draft");
+  });
+});
+
+test("shows 'Ready for Calculation' lifecycle badge for 'assumptions_defined' status", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, status: "assumptions_defined" as const });
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Ready for Calculation");
+  });
+});
+
+test("shows 'Calculated' lifecycle badge for 'calculated' status", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, status: "calculated" as const });
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResult);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Calculated");
+  });
+});
+
+test("calculate button is disabled when no assumptions exist (draft state)", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, status: "draft" as const });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /calculate/i })).toBeDisabled();
+  });
+});
+
+test("calculate button is enabled when assumptions exist (assumptions_defined state)", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, status: "assumptions_defined" as const });
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /calculate/i })).not.toBeDisabled();
+  });
+});
+
+test("lifecycle status updates to 'Calculated' after calculation", async () => {
+  const calculatedRun = { ...mockRun, status: "calculated" as const };
+  // First call returns 'assumptions_defined', subsequent calls return 'calculated'.
+  mockGetRun
+    .mockResolvedValueOnce({ ...mockRun, status: "assumptions_defined" as const })
+    .mockResolvedValue(calculatedRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResult);
+  mockCalculate.mockResolvedValue(mockResult);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Ready for Calculation");
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: /calculate/i }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-lifecycle-status")).toHaveTextContent("Calculated");
+  });
 });
