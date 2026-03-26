@@ -22,6 +22,9 @@ export interface FeasibilityRun {
   scenario_name: string;
   scenario_type: FeasibilityScenarioType;
   notes: string | null;
+  // Lineage / seed-source metadata — PR-CONCEPT-063 / PR-FEAS-01
+  source_concept_option_id?: string | null;
+  seed_source_type?: "concept_option" | "manual" | null;
   created_at: string;
   updated_at: string;
 }

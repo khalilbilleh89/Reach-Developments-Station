@@ -142,6 +142,8 @@ const mockRun = {
   scenario_name: "Base Case Q1",
   scenario_type: "base" as const,
   notes: "Test run notes",
+  source_concept_option_id: null,
+  seed_source_type: null,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
 };
@@ -869,5 +871,75 @@ test("lineage panel shows project ID when run is linked to a project", async () 
 
   await waitFor(() => {
     expect(screen.getByTestId("lineage-project-id")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seed-source metadata in source summary — PR-FEAS-01
+// ---------------------------------------------------------------------------
+
+test("source summary shows 'Manual' seed type for manual run (null seed fields)", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, source_concept_option_id: null, seed_source_type: null });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-seed-source-type")).toBeInTheDocument();
+    expect(screen.queryByTestId("run-source-concept-option-id")).not.toBeInTheDocument();
+  });
+});
+
+test("source summary shows 'Concept Option' seed type for concept-seeded run", async () => {
+  mockGetRun.mockResolvedValue({
+    ...mockRun,
+    source_concept_option_id: "concept-abc-123",
+    seed_source_type: "concept_option" as const,
+  });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-seed-source-type")).toHaveTextContent("Concept Option");
+    expect(screen.getByTestId("run-source-concept-option-id")).toBeInTheDocument();
+    expect(screen.getByTestId("run-source-concept-option-id")).toHaveTextContent("concept-abc-");
+  });
+});
+
+test("source summary shows source concept option ID truncated for concept-seeded run", async () => {
+  mockGetRun.mockResolvedValue({
+    ...mockRun,
+    source_concept_option_id: "concept-full-id-xyz",
+    seed_source_type: "concept_option" as const,
+  });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    const el = screen.getByTestId("run-source-concept-option-id");
+    expect(el).toBeInTheDocument();
+    expect(el.textContent).toMatch(/concept-full/);
+  });
+});
+
+test("source summary does not show source concept option ID for manual run", async () => {
+  mockGetRun.mockResolvedValue({
+    ...mockRun,
+    source_concept_option_id: null,
+    seed_source_type: "manual" as const,
+  });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("run-seed-source-type")).toHaveTextContent("Manual");
+    expect(screen.queryByTestId("run-source-concept-option-id")).not.toBeInTheDocument();
   });
 });
