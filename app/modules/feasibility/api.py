@@ -17,6 +17,7 @@ from app.modules.concept_design.service import ConceptDesignService
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
+    FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
     FeasibilityRunList,
@@ -189,3 +190,30 @@ def get_feasibility_result_by_run(
     """
     return service.get_feasibility_result(run_id)
 
+
+
+# ---------------------------------------------------------------------------
+# Lineage endpoint — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/runs/{run_id}/lineage",
+    response_model=FeasibilityLineageResponse,
+)
+def get_feasibility_run_lineage(
+    run_id: str,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityLineageResponse:
+    """Return lifecycle traceability for a feasibility run.
+
+    Surfaces:
+    - the concept option that seeded this run (upstream lineage)
+    - all concept options reverse-seeded from this run (downstream lineage)
+    - linked project context
+
+    Returns a partial lineage (with empty lists / null IDs) for runs that
+    were created manually without seeding context.
+
+    Returns HTTP 404 when the feasibility run does not exist.
+    """
+    return service.get_feasibility_run_lineage(run_id)

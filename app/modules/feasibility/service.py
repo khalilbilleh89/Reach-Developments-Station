@@ -25,6 +25,7 @@ from app.modules.feasibility.repository import (
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
+    FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
     FeasibilityRunList,
@@ -505,3 +506,42 @@ class FeasibilityService:
         )
         return FeasibilityRunResponse.model_validate(run)
 
+
+    # ---------------------------------------------------------------------------
+    # Lifecycle Lineage — PR-CONCEPT-065
+    # ---------------------------------------------------------------------------
+
+    def get_feasibility_run_lineage(self, run_id: str) -> FeasibilityLineageResponse:
+        """Return a lifecycle traceability summary for a feasibility run.
+
+        Composes lineage from canonical fields:
+        - upstream: source_concept_option_id (set when run was seeded from a concept)
+        - downstream: all concept options reverse-seeded from this run
+
+        Raises ResourceNotFoundError (HTTP 404) if the run does not exist.
+        """
+        run = self.run_repo.get_by_id(run_id)
+        if run is None:
+            raise ResourceNotFoundError(f"FeasibilityRun '{run_id}' not found.")
+
+        # Import here to avoid circular dependency — concept_design imports
+        # FeasibilityService; FeasibilityService must not import ConceptDesignService
+        # at module level.
+        from app.modules.concept_design.repository import ConceptOptionRepository
+
+        concept_repo = ConceptOptionRepository(self.run_repo.db)
+        reverse_seeded = concept_repo.list_by_source_feasibility_run_id(run_id)
+
+        _logger.info(
+            "Lineage retrieved for feasibility run: run_id=%s "
+            "reverse_seeded_concepts=%d",
+            run_id,
+            len(reverse_seeded),
+        )
+
+        return FeasibilityLineageResponse(
+            record_id=run_id,
+            source_concept_option_id=run.source_concept_option_id,
+            reverse_seeded_concept_options=[c.id for c in reverse_seeded],
+            project_id=run.project_id,
+        )

@@ -11,6 +11,7 @@ import {
   calculateFeasibility,
   getFeasibilityResults,
   assignProjectToRun,
+  getFeasibilityRunLineage,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -20,6 +21,7 @@ import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
   FeasibilityDecision,
+  FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRiskLevel,
   FeasibilityRun,
@@ -81,6 +83,143 @@ function decisionLabel(decision: FeasibilityDecision | null): string {
   if (decision === "MARGINAL") return "Review";
   if (decision === "NOT_VIABLE") return "Do Not Proceed";
   return "—";
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle lineage panel — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+interface FeasibilityLineagePanelProps {
+  lineage: FeasibilityLineageResponse | null | undefined;
+}
+
+function FeasibilityLineagePanel({ lineage }: FeasibilityLineagePanelProps) {
+  const panelStyle: React.CSSProperties = {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: 8,
+    padding: "16px 24px",
+    marginTop: 24,
+  };
+  const headingStyle: React.CSSProperties = {
+    margin: "0 0 12px",
+    fontSize: "0.9rem",
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: "0.75rem",
+    color: "var(--color-text-muted)",
+    marginBottom: 4,
+  };
+  const monoStyle: React.CSSProperties = {
+    fontFamily: "monospace",
+    fontSize: "0.8rem",
+  };
+
+  if (lineage === undefined) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Loading lineage data…
+        </p>
+      </div>
+    );
+  }
+
+  if (lineage === null) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Lineage data unavailable.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={panelStyle} data-testid="feasibility-lineage-panel">
+      <h3 style={headingStyle}>Lifecycle Lineage</h3>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "16px",
+        }}
+      >
+        {/* Upstream */}
+        <div>
+          <div style={labelStyle}>Seeded From Concept Option</div>
+          {lineage.source_concept_option_id ? (
+            <span style={monoStyle} data-testid="lineage-source-concept">
+              {lineage.source_concept_option_id.substring(0, 12)}…
+            </span>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              None — manually created
+            </em>
+          )}
+        </div>
+
+        {/* Downstream */}
+        <div>
+          <div style={labelStyle}>
+            Reverse-Seeded Concept Options ({lineage.reverse_seeded_concept_options.length})
+          </div>
+          {lineage.reverse_seeded_concept_options.length > 0 ? (
+            <ul
+              style={{
+                margin: 0,
+                padding: "0 0 0 16px",
+                fontSize: "0.8rem",
+              }}
+              data-testid="lineage-reverse-seeded-list"
+            >
+              {lineage.reverse_seeded_concept_options.map((id) => (
+                <li key={id} style={monoStyle}>
+                  {id.substring(0, 12)}…
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              None yet
+            </em>
+          )}
+        </div>
+
+        {/* Project context */}
+        <div>
+          <div style={labelStyle}>Project Context</div>
+          {lineage.project_id ? (
+            <span style={monoStyle} data-testid="lineage-project-id">
+              {lineage.project_id.substring(0, 12)}…
+            </span>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              Unlinked
+            </em>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -770,6 +909,7 @@ export default function FeasibilityRunDetailView() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [seedingConcept, setSeedingConcept] = useState(false);
   const [seedConceptError, setSeedConceptError] = useState<string | null>(null);
+  const [lineage, setLineage] = useState<FeasibilityLineageResponse | null | undefined>(undefined);
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -785,6 +925,7 @@ export default function FeasibilityRunDetailView() {
     setRun(null);
     setAssumptions(null);
     setResult(null);
+    setLineage(undefined);
 
     Promise.all([
       getFeasibilityRun(runId),
@@ -802,11 +943,17 @@ export default function FeasibilityRunDetailView() {
         setAssumptions(assumptionsData);
         setResult(resultData);
         setSelectedProjectId(runData.project_id ?? "");
+
+        // Fetch lineage independently so it does not block core page render.
+        getFeasibilityRunLineage(runId)
+          .then((lineageData) => setLineage(lineageData))
+          .catch(() => setLineage(null));
       })
       .catch((err: unknown) => {
         setError(
           err instanceof Error ? err.message : "Failed to load feasibility run.",
         );
+        setLineage(null);
       })
       .finally(() => setLoading(false));
   }, [runId]);
@@ -1216,6 +1363,9 @@ export default function FeasibilityRunDetailView() {
               )}
             </div>
           </div>
+
+          {/* Lifecycle Lineage — PR-CONCEPT-065 */}
+          <FeasibilityLineagePanel lineage={lineage} />
         </>
       )}
     </PageContainer>

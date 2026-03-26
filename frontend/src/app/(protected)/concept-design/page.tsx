@@ -38,9 +38,11 @@ import {
   promoteConceptOption,
   deleteConceptOption,
   duplicateConceptOption,
+  getConceptOptionLineage,
 } from "@/lib/concept-design-api";
 import { apiFetch } from "@/lib/api-client";
 import type {
+  ConceptLineageResponse,
   ConceptOption,
   ConceptOptionCreate,
   ConceptOptionStatus,
@@ -1488,6 +1490,157 @@ function SummaryPanel({ optionId, onAddMixLine }: SummaryPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Concept lineage panel — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+interface ConceptLineagePanelProps {
+  lineage: ConceptLineageResponse | null | undefined;
+}
+
+function ConceptLineagePanel({ lineage }: ConceptLineagePanelProps) {
+  const panelStyle: React.CSSProperties = {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: 8,
+    padding: "16px 24px",
+    marginTop: 24,
+  };
+  const headingStyle: React.CSSProperties = {
+    margin: "0 0 12px",
+    fontSize: "0.9rem",
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: "0.75rem",
+    color: "var(--color-text-muted)",
+    marginBottom: 4,
+  };
+  const monoStyle: React.CSSProperties = {
+    fontFamily: "monospace",
+    fontSize: "0.8rem",
+  };
+
+  if (lineage === undefined) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Loading lineage data…
+        </p>
+      </div>
+    );
+  }
+
+  if (lineage === null) {
+    return (
+      <div style={panelStyle}>
+        <h3 style={headingStyle}>Lifecycle Lineage</h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.875rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Lineage data unavailable.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={panelStyle} data-testid="concept-lineage-panel">
+      <h3 style={headingStyle}>Lifecycle Lineage</h3>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "16px",
+        }}
+      >
+        {/* Upstream */}
+        <div>
+          <div style={labelStyle}>Seeded From Feasibility Run</div>
+          {lineage.source_feasibility_run_id ? (
+            <span style={monoStyle} data-testid="lineage-source-run">
+              {lineage.source_feasibility_run_id.substring(0, 12)}…
+            </span>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              None — manually created
+            </em>
+          )}
+        </div>
+
+        {/* Downstream */}
+        <div>
+          <div style={labelStyle}>
+            Downstream Feasibility Runs ({lineage.downstream_feasibility_runs.length})
+          </div>
+          {lineage.downstream_feasibility_runs.length > 0 ? (
+            <ul
+              style={{
+                margin: 0,
+                padding: "0 0 0 16px",
+                fontSize: "0.8rem",
+              }}
+              data-testid="lineage-downstream-runs-list"
+            >
+              {lineage.downstream_feasibility_runs.map((id) => (
+                <li key={id} style={monoStyle}>
+                  {id.substring(0, 12)}…
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              None yet
+            </em>
+          )}
+        </div>
+
+        {/* Scenario context */}
+        <div>
+          <div style={labelStyle}>Scenario Context</div>
+          {lineage.scenario_id ? (
+            <span style={monoStyle} data-testid="lineage-scenario-id">
+              {lineage.scenario_id.substring(0, 12)}…
+            </span>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              None
+            </em>
+          )}
+        </div>
+
+        {/* Project context */}
+        <div>
+          <div style={labelStyle}>Project Context</div>
+          {lineage.project_id ? (
+            <span style={monoStyle} data-testid="lineage-project-id">
+              {lineage.project_id.substring(0, 12)}…
+            </span>
+          ) : (
+            <em style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              Unlinked
+            </em>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Detail view — selected option
 // ---------------------------------------------------------------------------
 
@@ -1502,6 +1655,7 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
   const [showAddMix, setShowAddMix] = useState(false);
   const [showPromote, setShowPromote] = useState(false);
   const [summaryKey, setSummaryKey] = useState(0);
+  const [lineage, setLineage] = useState<ConceptLineageResponse | null | undefined>(undefined);
 
   const handleMixAdded = useCallback(() => {
     setShowAddMix(false);
@@ -1511,6 +1665,30 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
   const handlePromoted = useCallback(() => {
     onRefresh();
   }, [onRefresh]);
+
+  useEffect(() => {
+    if (!option?.id) {
+      setLineage(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    // Reset to loading state when the selected option changes.
+    setLineage(undefined);
+
+    getConceptOptionLineage(option.id)
+      .then((data) => {
+        if (!cancelled) setLineage(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLineage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [option?.id]);
 
   return (
     <div>
@@ -1688,6 +1866,9 @@ function DetailView({ option, onBack, onEdit, onRefresh }: DetailViewProps) {
           onPromoted={handlePromoted}
         />
       )}
+
+      {/* Lifecycle Lineage — PR-CONCEPT-065 */}
+      <ConceptLineagePanel lineage={lineage} />
     </div>
   );
 }

@@ -74,6 +74,21 @@ class FeasibilityRunRepository:
     def count_all(self) -> int:
         return self.db.query(FeasibilityRun).count()
 
+    def list_by_source_concept_option_id(
+        self, concept_option_id: str
+    ) -> List[FeasibilityRun]:
+        """Return all feasibility runs seeded from a given concept option.
+
+        Used for lifecycle lineage: identifies downstream runs created via
+        the seed-feasibility workflow (PR-CONCEPT-063).
+        """
+        return (
+            self.db.query(FeasibilityRun)
+            .filter(FeasibilityRun.source_concept_option_id == concept_option_id)
+            .order_by(FeasibilityRun.created_at.asc())
+            .all()
+        )
+
     def update(self, run: FeasibilityRun, data: FeasibilityRunUpdate) -> FeasibilityRun:
         # Fields that may be explicitly set to None (unlink / clear).
         # All other None values are treated as "not provided" and skipped.

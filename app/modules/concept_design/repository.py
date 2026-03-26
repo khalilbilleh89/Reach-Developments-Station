@@ -188,6 +188,21 @@ class ConceptOptionRepository:
             query = query.filter(ConceptOption.scenario_id.is_(None))
         return {row[0] for row in query.all()}
 
+    def list_by_source_feasibility_run_id(
+        self, feasibility_run_id: str
+    ) -> List[ConceptOption]:
+        """Return all concept options seeded from a given feasibility run.
+
+        Used for lifecycle lineage: identifies downstream concepts created via
+        the reverse-seeding workflow (PR-CONCEPT-064).
+        """
+        return (
+            self.db.query(ConceptOption)
+            .filter(ConceptOption.source_feasibility_run_id == feasibility_run_id)
+            .order_by(ConceptOption.created_at.asc())
+            .all()
+        )
+
     def clone_concept_option(self, source: ConceptOption, new_name: str) -> ConceptOption:
         """Stage a copy of *source* with *new_name* and flush to obtain an id.
 

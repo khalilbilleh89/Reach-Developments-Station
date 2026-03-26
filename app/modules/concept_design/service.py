@@ -36,6 +36,7 @@ from app.modules.concept_design.repository import (
     ConceptUnitMixLineRepository,
 )
 from app.modules.concept_design.schemas import (
+    ConceptLineageResponse,
     ConceptOptionComparisonResponse,
     ConceptOptionComparisonRowResponse,
     ConceptOptionCreate,
@@ -52,6 +53,7 @@ from app.modules.concept_design.schemas import (
     SeedFeasibilityResponse,
 )
 from app.modules.concept_design.validation import run_zoning_validation
+from app.modules.feasibility.repository import FeasibilityRunRepository
 from app.modules.feasibility.service import FeasibilityService
 from app.modules.floors.models import Floor
 from app.modules.land.models import LandParcel
@@ -1225,3 +1227,44 @@ class ConceptDesignService:
             seed_source_type="feasibility_run",
         )
 
+
+    # ---------------------------------------------------------------------------
+    # Lifecycle Lineage — PR-CONCEPT-065
+    # ---------------------------------------------------------------------------
+
+    def get_concept_option_lineage(
+        self, concept_option_id: str
+    ) -> ConceptLineageResponse:
+        """Return a lifecycle traceability summary for a concept option.
+
+        Composes lineage from canonical fields:
+        - upstream: source_feasibility_run_id (set when concept was reverse-seeded)
+        - downstream: all feasibility runs seeded from this concept option
+
+        Raises ResourceNotFoundError (HTTP 404) if the concept option does not exist.
+        """
+        option = self.option_repo.get_by_id(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+
+        run_repo = FeasibilityRunRepository(self.option_repo.db)
+        downstream_runs = run_repo.list_by_source_concept_option_id(
+            concept_option_id
+        )
+
+        _logger.info(
+            "Lineage retrieved for concept option: concept_option_id=%s "
+            "downstream_runs=%d",
+            concept_option_id,
+            len(downstream_runs),
+        )
+
+        return ConceptLineageResponse(
+            record_id=concept_option_id,
+            source_feasibility_run_id=option.source_feasibility_run_id,
+            downstream_feasibility_runs=[run.id for run in downstream_runs],
+            scenario_id=option.scenario_id,
+            project_id=option.project_id,
+        )

@@ -15,12 +15,14 @@
  *   GET    /feasibility/runs/{run_id}/assumptions         → get assumptions
  *   POST   /feasibility/runs/{run_id}/calculate           → run calculation
  *   GET    /feasibility/runs/{run_id}/results             → get results
+ *   GET    /feasibility/runs/{run_id}/lineage             → get lineage trace
  */
 
 import { apiFetch } from "./api-client";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
+  FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRun,
   FeasibilityRunCreate,
@@ -128,5 +130,17 @@ export async function getFeasibilityResults(
 ): Promise<FeasibilityResult> {
   return apiFetch<FeasibilityResult>(
     `/feasibility/runs/${encodeURIComponent(runId)}/results`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lineage endpoint — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+export async function getFeasibilityRunLineage(
+  runId: string,
+): Promise<FeasibilityLineageResponse> {
+  return apiFetch<FeasibilityLineageResponse>(
+    `/feasibility/runs/${encodeURIComponent(runId)}/lineage`,
   );
 }

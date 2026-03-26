@@ -103,3 +103,15 @@ export interface FeasibilityResult {
   created_at: string;
   updated_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Lifecycle Lineage / Traceability types — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+export interface FeasibilityLineageResponse {
+  record_type: "feasibility_run";
+  record_id: string;
+  source_concept_option_id: string | null;
+  reverse_seeded_concept_options: string[];
+  project_id: string | null;
+}
