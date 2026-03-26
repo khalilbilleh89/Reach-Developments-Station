@@ -97,6 +97,34 @@ export interface FeasibilityAssumptionsUpdate {
 // Result types
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-scenario output metrics returned by the backend scenario runner.
+ * Mirrors the dict produced by `_outputs_to_dict` in scenario_runner.py.
+ */
+export interface FeasibilityScenarioMetrics {
+  gdv: number | null;
+  construction_cost: number | null;
+  soft_cost: number | null;
+  finance_cost: number | null;
+  sales_cost: number | null;
+  total_cost: number | null;
+  developer_profit: number | null;
+  profit_margin: number | null;
+  irr_estimate: number | null;
+}
+
+/**
+ * Typed shape of the `scenario_outputs` field on FeasibilityResult.
+ * Keys match the scenario names produced by `run_sensitivity_scenarios`:
+ * base, upside, downside, investor.
+ */
+export interface FeasibilityScenarioOutputs {
+  base?: FeasibilityScenarioMetrics | null;
+  upside?: FeasibilityScenarioMetrics | null;
+  downside?: FeasibilityScenarioMetrics | null;
+  investor?: FeasibilityScenarioMetrics | null;
+}
+
 export interface FeasibilityResult {
   id: string;
   run_id: string;
@@ -113,7 +141,7 @@ export interface FeasibilityResult {
   equity_multiple: number | null;
   break_even_price: number | null;
   break_even_units: number | null;
-  scenario_outputs: Record<string, unknown> | null;
+  scenario_outputs: FeasibilityScenarioOutputs | null;
   viability_status: FeasibilityViabilityStatus | null;
   risk_level: FeasibilityRiskLevel | null;
   decision: FeasibilityDecision | null;
