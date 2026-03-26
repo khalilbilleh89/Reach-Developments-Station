@@ -18,12 +18,15 @@
  *   POST   /concept-options/{id}/unit-mix                  → add mix line
  *   GET    /concept-options/{id}/summary                   → get summary
  *   POST   /concept-options/{id}/promote                   → promote option
+ *   GET    /concept-options/{id}/lineage                   → get lineage trace
+ *   POST   /feasibility/runs/{id}/create-concept           → reverse-seed concept
  *
- * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058
+ * PR-CONCEPT-055, PR-CONCEPT-057, PR-CONCEPT-058, PR-CONCEPT-064, PR-CONCEPT-065
  */
 
 import { apiFetch } from "./api-client";
 import type {
+  ConceptLineageResponse,
   ConceptOption,
   ConceptOptionComparisonResponse,
   ConceptOptionCreate,
@@ -34,6 +37,7 @@ import type {
   ConceptPromotionResponse,
   ConceptUnitMixLine,
   ConceptUnitMixLineCreate,
+  SeedConceptFromFeasibilityResponse,
 } from "./concept-design-types";
 
 // ---------------------------------------------------------------------------
@@ -187,5 +191,30 @@ export async function duplicateConceptOption(id: string): Promise<ConceptOption>
   return apiFetch<ConceptOption>(
     `/concept-options/${encodeURIComponent(id)}/duplicate`,
     { method: "POST" },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reverse-seed concept from feasibility run — PR-CONCEPT-064
+// ---------------------------------------------------------------------------
+
+export async function createConceptFromFeasibility(
+  runId: string,
+): Promise<SeedConceptFromFeasibilityResponse> {
+  return apiFetch<SeedConceptFromFeasibilityResponse>(
+    `/feasibility/runs/${encodeURIComponent(runId)}/create-concept`,
+    { method: "POST" },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lineage endpoint — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+export async function getConceptOptionLineage(
+  id: string,
+): Promise<ConceptLineageResponse> {
+  return apiFetch<ConceptLineageResponse>(
+    `/concept-options/${encodeURIComponent(id)}/lineage`,
   );
 }

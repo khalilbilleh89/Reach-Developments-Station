@@ -6,6 +6,9 @@
  */
 
 export type FeasibilityScenarioType = "base" | "upside" | "downside" | "investor";
+export type FeasibilityViabilityStatus = "VIABLE" | "MARGINAL" | "NOT_VIABLE";
+export type FeasibilityRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+export type FeasibilityDecision = "VIABLE" | "MARGINAL" | "NOT_VIABLE";
 
 // ---------------------------------------------------------------------------
 // Run types
@@ -14,6 +17,7 @@ export type FeasibilityScenarioType = "base" | "upside" | "downside" | "investor
 export interface FeasibilityRun {
   id: string;
   project_id: string | null;
+  project_name: string | null;
   scenario_id: string | null;
   scenario_name: string;
   scenario_type: FeasibilityScenarioType;
@@ -35,6 +39,7 @@ export interface FeasibilityRunCreate {
 }
 
 export interface FeasibilityRunUpdate {
+  project_id?: string | null;
   scenario_name?: string | null;
   scenario_type?: FeasibilityScenarioType | null;
   notes?: string | null;
@@ -70,10 +75,6 @@ export interface FeasibilityAssumptionsCreate {
   notes?: string | null;
 }
 
-export type FeasibilityViabilityStatus = "viable" | "marginal" | "not_viable";
-export type FeasibilityRiskLevel = "low" | "medium" | "high";
-export type FeasibilityDecision = "proceed" | "review" | "decline";
-
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -101,4 +102,16 @@ export interface FeasibilityResult {
   payback_period: number | null;
   created_at: string;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle Lineage / Traceability types — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+export interface FeasibilityLineageResponse {
+  record_type: "feasibility_run";
+  record_id: string;
+  source_concept_option_id: string | null;
+  reverse_seeded_concept_options: string[];
+  project_id: string | null;
 }

@@ -1,19 +1,22 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import FeasibilityRunDetailView from "@/components/feasibility/FeasibilityRunDetailView";
 import {
   listFeasibilityRuns,
   createFeasibilityRun,
   updateFeasibilityRun,
 } from "@/lib/feasibility-api";
+import { listProjects } from "@/lib/projects-api";
 import type {
   FeasibilityRun,
   FeasibilityRunCreate,
   FeasibilityScenarioType,
 } from "@/lib/feasibility-types";
+import type { Project } from "@/lib/projects-types";
 import styles from "@/styles/demo-shell.module.css";
 
 // ---------------------------------------------------------------------------
@@ -65,13 +68,15 @@ function formatDate(dateStr: string): string {
 interface CreateRunModalProps {
   onClose: () => void;
   onCreated: () => void;
+  projects: Project[];
 }
 
-function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
+function CreateRunModal({ onClose, onCreated, projects }: CreateRunModalProps) {
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioType, setScenarioType] =
     useState<FeasibilityScenarioType>("base");
   const [notes, setNotes] = useState("");
+  const [projectId, setProjectId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +93,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
         scenario_name: scenarioName.trim(),
         scenario_type: scenarioType,
         notes: notes.trim() || null,
+        project_id: projectId || null,
       };
       try {
         await createFeasibilityRun(data);
@@ -102,7 +108,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
         setSubmitting(false);
       }
     },
-    [scenarioName, scenarioType, notes, onCreated],
+    [scenarioName, scenarioType, notes, projectId, onCreated],
   );
 
   return (
@@ -200,7 +206,7 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               <option value="investor">Investor</option>
             </select>
           </div>
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               htmlFor="create-run-notes"
               style={{
@@ -229,6 +235,42 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
               }}
             />
           </div>
+          {projects.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <label
+                htmlFor="create-run-project"
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontSize: "0.875rem",
+                  fontWeight: 500,
+                }}
+              >
+                Link to Project
+              </label>
+              <select
+                id="create-run-project"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 6,
+                  fontSize: "0.875rem",
+                  background: "var(--color-surface)",
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="">None (standalone run)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {error && (
             <p
               role="alert"
@@ -287,14 +329,29 @@ function CreateRunModal({ onClose, onCreated }: CreateRunModalProps) {
  * Feasibility page — feasibility run management dashboard.
  *
  * Shows KPI summary and a table of feasibility runs. Supports create
- * and scenario type update operations.
+ * and scenario type update operations. Renders the run detail view
+ * when ?runId= is present in the query string.
  */
 export default function FeasibilityPage() {
+  const searchParams = useSearchParams();
+  const runId = searchParams.get("runId");
+
+  // When a run ID is in the URL, render the detail view.
+  if (runId) {
+    return <FeasibilityRunDetailView />;
+  }
+
+  return <FeasibilityListView />;
+}
+
+function FeasibilityListView() {
+  const router = useRouter();
   const [runs, setRuns] = useState<FeasibilityRun[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const fetchRuns = useCallback(() => {
     setLoading(true);
@@ -318,6 +375,12 @@ export default function FeasibilityPage() {
   useEffect(() => {
     fetchRuns();
   }, [fetchRuns]);
+
+  useEffect(() => {
+    listProjects({ limit: 200 })
+      .then((resp) => setProjects(resp.items))
+      .catch(() => setProjects([]));
+  }, []);
 
   const handleCreated = useCallback(() => {
     setShowCreateModal(false);
@@ -485,7 +548,11 @@ export default function FeasibilityPage() {
                       color: "var(--color-text-muted)",
                     }}
                   >
-                    {run.project_id ? (
+                    {run.project_name ? (
+                      <span style={{ fontWeight: 500, color: "var(--color-text)" }}>
+                        {run.project_name}
+                      </span>
+                    ) : run.project_id ? (
                       <span style={{ fontFamily: "monospace" }}>
                         {run.project_id.substring(0, 8)}…
                       </span>
@@ -515,6 +582,24 @@ export default function FeasibilityPage() {
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/feasibility?runId=${encodeURIComponent(run.id)}`)}
+                        style={{
+                          padding: "4px 12px",
+                          border: "1px solid var(--color-primary, #2563eb)",
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: "var(--color-primary, #2563eb)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          whiteSpace: "nowrap",
+                        }}
+                        aria-label={`Open ${run.scenario_name}`}
+                      >
+                        Open
+                      </button>
                       <select
                         value={run.scenario_type}
                         onChange={(e) =>
@@ -538,20 +623,6 @@ export default function FeasibilityPage() {
                         <option value="downside">Downside</option>
                         <option value="investor">Investor</option>
                       </select>
-                      <Link
-                        href={`/feasibility/${run.id}`}
-                        style={{
-                          padding: "4px 12px",
-                          border: "1px solid var(--color-primary, #2563eb)",
-                          borderRadius: 4,
-                          fontSize: "0.8rem",
-                          color: "var(--color-primary, #2563eb)",
-                          textDecoration: "none",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Open →
-                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -566,6 +637,7 @@ export default function FeasibilityPage() {
         <CreateRunModal
           onClose={() => setShowCreateModal(false)}
           onCreated={handleCreated}
+          projects={projects}
         />
       )}
     </PageContainer>

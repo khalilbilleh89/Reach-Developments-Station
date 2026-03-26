@@ -15,9 +15,11 @@ POST   /concept-options/{concept_option_id}/duplicate
 POST   /concept-options/{concept_option_id}/unit-mix
 GET    /concept-options/{concept_option_id}/summary
 POST   /concept-options/{concept_option_id}/promote
+POST   /concept-options/{concept_option_id}/seed-feasibility
+GET    /concept-options/{concept_option_id}/lineage
 
 PR-CONCEPT-052, PR-CONCEPT-053, PR-CONCEPT-054, PR-CONCEPT-057, PR-CONCEPT-058,
-PR-CONCEPT-062
+PR-CONCEPT-062, PR-CONCEPT-063, PR-CONCEPT-065
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.concept_design.schemas import (
+    ConceptLineageResponse,
     ConceptOptionComparisonResponse,
     ConceptOptionCreate,
     ConceptOptionListResponse,
@@ -40,6 +43,8 @@ from app.modules.concept_design.schemas import (
     ConceptPromotionResponse,
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
+    SeedFeasibilityRequest,
+    SeedFeasibilityResponse,
 )
 from app.modules.concept_design.service import ConceptDesignService
 
@@ -234,3 +239,64 @@ def promote_concept_option(
     supplied in the request body.
     """
     return service.promote_concept_option(concept_option_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Seed-Feasibility endpoint — PR-CONCEPT-063
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{concept_option_id}/seed-feasibility",
+    response_model=SeedFeasibilityResponse,
+    status_code=201,
+)
+def seed_feasibility_from_concept_option(
+    concept_option_id: str,
+    data: SeedFeasibilityRequest,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> SeedFeasibilityResponse:
+    """Seed a feasibility run from a concept option.
+
+    Creates a new feasibility run whose assumptions are populated with
+    values derived from the concept option's unit mix program.
+
+    The concept's computed ``sellable_area`` (sum of units × avg_sellable_area
+    across all mix lines) is transferred as the ``sellable_area_sqm`` assumption.
+    The caller must supply the remaining financial assumptions
+    (``avg_sale_price_per_sqm``, ``construction_cost_per_sqm``, cost ratios,
+    and ``development_period_months``).
+
+    The new run inherits the concept option's ``scenario_id`` and carries
+    ``source_concept_option_id`` and ``seed_source_type='concept_option'``
+    lineage fields.
+
+    Seeding is forbidden for archived concept options (HTTP 422).
+    """
+    return service.seed_feasibility_from_concept_option(concept_option_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Lineage endpoint — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/{concept_option_id}/lineage",
+    response_model=ConceptLineageResponse,
+)
+def get_concept_option_lineage(
+    concept_option_id: str,
+    service: Annotated[ConceptDesignService, Depends(_get_service)],
+) -> ConceptLineageResponse:
+    """Return lifecycle traceability for a concept option.
+
+    Surfaces:
+    - the feasibility run that seeded this concept (upstream lineage)
+    - all feasibility runs seeded from this concept (downstream lineage)
+    - shared scenario and project context
+
+    Returns a partial lineage (with empty lists / null IDs) for concept
+    options that were created manually without seeding context.
+
+    Returns HTTP 404 when the concept option does not exist.
+    """
+    return service.get_concept_option_lineage(concept_option_id)

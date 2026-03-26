@@ -1,16 +1,11 @@
-/**
- * Feasibility Run Detail page — server component shell.
- *
- * Exports generateStaticParams and dynamicParams for Next.js output: "export"
- * compatibility, then delegates all interactive rendering to the client component.
- *
- * generateStaticParams returns a placeholder so the static build does not error.
- * Client-side navigation within the app resolves the real runId via useParams().
- *
- * PR-W5.2
- */
-
-import { FeasibilityRunDetailClient } from "./_page-client";
+// Feasibility run detail route entry — server component.
+//
+// Navigation to a specific run is handled via query param on the parent page:
+//   /feasibility?runId=<runId>
+//
+// This route stub satisfies Next.js `output: "export"` routing requirements.
+// generateStaticParams returns a placeholder so the static export build passes.
+// dynamicParams = false ensures unmatched IDs return 404 from the static build.
 
 export function generateStaticParams() {
   return [{ runId: "_" }];
@@ -18,6 +13,6 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function FeasibilityRunDetailPage() {
-  return <FeasibilityRunDetailClient />;
+export default function FeasibilityRunDetailPageStub() {
+  return null;
 }

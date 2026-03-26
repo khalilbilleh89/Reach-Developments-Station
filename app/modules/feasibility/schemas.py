@@ -5,7 +5,7 @@ Pydantic request/response schemas for the Feasibility Engine API.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,9 +22,13 @@ class FeasibilityRunCreate(BaseModel):
     scenario_name: str = Field(..., min_length=1, max_length=255)
     scenario_type: FeasibilityScenarioType = FeasibilityScenarioType.BASE
     notes: Optional[str] = None
+    # Lineage — PR-CONCEPT-063
+    source_concept_option_id: Optional[str] = None
+    seed_source_type: Optional[str] = None
 
 
 class FeasibilityRunUpdate(BaseModel):
+    project_id: Optional[str] = None
     scenario_name: Optional[str] = Field(None, min_length=1, max_length=255)
     scenario_type: Optional[FeasibilityScenarioType] = None
     notes: Optional[str] = None
@@ -33,10 +37,14 @@ class FeasibilityRunUpdate(BaseModel):
 class FeasibilityRunResponse(BaseModel):
     id: str
     project_id: Optional[str]
+    project_name: Optional[str]
     scenario_id: Optional[str]
     scenario_name: str
     scenario_type: FeasibilityScenarioType
     notes: Optional[str]
+    # Lineage — PR-CONCEPT-063
+    source_concept_option_id: Optional[str]
+    seed_source_type: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -142,3 +150,27 @@ class FeasibilityRunRequest(BaseModel):
     development_period_months: int = Field(..., ge=1)
     notes: Optional[str] = None
 
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle Lineage / Traceability schemas — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+
+class FeasibilityLineageResponse(BaseModel):
+    """Lifecycle traceability response for a feasibility run.
+
+    Composes upstream and downstream lineage from canonical lineage fields:
+    - source_concept_option_id:        concept option that seeded this run (if any)
+    - reverse_seeded_concept_options:  IDs of concept options seeded from this run
+    - project_id:                      project context (if any)
+
+    All IDs are sourced from live DB state — no client-side lineage is
+    invented here.
+    """
+
+    record_type: Literal["feasibility_run"] = "feasibility_run"
+    record_id: str
+    source_concept_option_id: Optional[str]
+    reverse_seeded_concept_options: List[str]
+    project_id: Optional[str]

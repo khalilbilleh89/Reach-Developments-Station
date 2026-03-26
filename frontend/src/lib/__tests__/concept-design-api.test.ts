@@ -365,3 +365,93 @@ describe("duplicateConceptOption", () => {
     );
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// createConceptFromFeasibility — PR-CONCEPT-064
+// ---------------------------------------------------------------------------
+
+describe("createConceptFromFeasibility", () => {
+  const RUN_ID = "run-xyz-123";
+  const mockSeedResponse = {
+    concept_option_id: "concept-abc",
+    source_feasibility_run_id: RUN_ID,
+    scenario_id: "scen-123",
+    project_id: null,
+    seed_source_type: "feasibility_run",
+  };
+
+  it("calls POST /feasibility/runs/{runId}/create-concept", async () => {
+    mockApiFetch.mockResolvedValue(mockSeedResponse);
+    const result = await api.createConceptFromFeasibility(RUN_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${encodeURIComponent(RUN_ID)}/create-concept`,
+      { method: "POST" },
+    );
+    expect(result).toEqual(mockSeedResponse);
+  });
+
+  it("URL-encodes the runId", async () => {
+    const weirdId = "run/with spaces";
+    mockApiFetch.mockResolvedValue(mockSeedResponse);
+    await api.createConceptFromFeasibility(weirdId);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/feasibility/runs/${encodeURIComponent(weirdId)}/create-concept`,
+      { method: "POST" },
+    );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// getConceptOptionLineage — PR-CONCEPT-065
+// ---------------------------------------------------------------------------
+
+describe("getConceptOptionLineage", () => {
+  const mockLineage = {
+    record_type: "concept_option" as const,
+    record_id: OPTION_ID,
+    source_feasibility_run_id: null,
+    downstream_feasibility_runs: [],
+    scenario_id: null,
+    project_id: null,
+  };
+
+  it("calls GET /concept-options/{id}/lineage", async () => {
+    mockApiFetch.mockResolvedValue(mockLineage);
+    const result = await api.getConceptOptionLineage(OPTION_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(OPTION_ID)}/lineage`,
+    );
+    expect(result).toEqual(mockLineage);
+  });
+
+  it("URL-encodes the id", async () => {
+    const weirdId = "opt/with spaces";
+    mockApiFetch.mockResolvedValue(mockLineage);
+    await api.getConceptOptionLineage(weirdId);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/concept-options/${encodeURIComponent(weirdId)}/lineage`,
+    );
+  });
+
+  it("returns lineage with downstream_feasibility_runs list", async () => {
+    const lineageWithDownstream = {
+      ...mockLineage,
+      downstream_feasibility_runs: ["run-1", "run-2"],
+    };
+    mockApiFetch.mockResolvedValue(lineageWithDownstream);
+    const result = await api.getConceptOptionLineage(OPTION_ID);
+    expect(result.downstream_feasibility_runs).toEqual(["run-1", "run-2"]);
+  });
+
+  it("returns lineage with source_feasibility_run_id when seeded", async () => {
+    const lineageWithSource = {
+      ...mockLineage,
+      source_feasibility_run_id: "run-source-123",
+    };
+    mockApiFetch.mockResolvedValue(lineageWithSource);
+    const result = await api.getConceptOptionLineage(OPTION_ID);
+    expect(result.source_feasibility_run_id).toBe("run-source-123");
+  });
+});

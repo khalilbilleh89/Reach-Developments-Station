@@ -73,6 +73,13 @@ class ConceptOption(Base, TimestampMixin):
         Numeric(10, 2), nullable=True
     )
 
+    # Reverse-lineage — PR-CONCEPT-064
+    # source_feasibility_run_id records which FeasibilityRun seeded this
+    # concept option via the reverse-seeding workflow (feasibility → concept).
+    source_feasibility_run_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+
     # Promotion metadata — PR-CONCEPT-054
     is_promoted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     promoted_at: Mapped[Optional[datetime]] = mapped_column(

@@ -36,6 +36,7 @@ from app.modules.concept_design.repository import (
     ConceptUnitMixLineRepository,
 )
 from app.modules.concept_design.schemas import (
+    ConceptLineageResponse,
     ConceptOptionComparisonResponse,
     ConceptOptionComparisonRowResponse,
     ConceptOptionCreate,
@@ -47,8 +48,13 @@ from app.modules.concept_design.schemas import (
     ConceptPromotionResponse,
     ConceptUnitMixLineCreate,
     ConceptUnitMixLineResponse,
+    SeedConceptFromFeasibilityResponse,
+    SeedFeasibilityRequest,
+    SeedFeasibilityResponse,
 )
 from app.modules.concept_design.validation import run_zoning_validation
+from app.modules.feasibility.repository import FeasibilityRunRepository
+from app.modules.feasibility.service import FeasibilityService
 from app.modules.floors.models import Floor
 from app.modules.land.models import LandParcel
 from app.modules.phases.repository import PhaseRepository
@@ -1055,4 +1061,210 @@ class ConceptDesignService:
             buildings_created=building_count,
             floors_created=len(all_floors),
             units_created=units_created_count,
+        )
+
+    # ------------------------------------------------------------------
+    # Seed-Feasibility — PR-CONCEPT-063
+    # ------------------------------------------------------------------
+
+    def seed_feasibility_from_concept_option(
+        self,
+        concept_option_id: str,
+        payload: SeedFeasibilityRequest,
+    ) -> SeedFeasibilityResponse:
+        """Seed a feasibility run from a concept option.
+
+        Seeding rules
+        -------------
+        * The concept option must exist.
+        * The concept option must not be archived (archived options are
+          excluded from forward-lifecycle actions).
+        * The concept option's computed sellable_area is transferred to the
+          new feasibility run's assumptions.  If no mix lines carry a
+          sellable area the field is seeded as None, and assumptions are
+          not persisted — the caller must supply sellable_area via the
+          dedicated assumptions endpoint before running a calculation.
+
+        The new feasibility run inherits the concept option's scenario_id
+        to preserve cross-module lineage.
+
+        This method does not perform financial calculations; it only creates
+        the run and assumptions records.  Calculation must be triggered
+        separately via POST /feasibility/runs/{id}/calculate.
+        """
+        option = self.option_repo.get_by_id_with_mix(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+
+        if option.status == "archived":
+            raise ValidationError(
+                "Archived concept options cannot seed a feasibility run.",
+                details={"status": option.status},
+            )
+
+        # Compute sellable_area from mix lines via concept engine
+        mix_inputs = [
+            MixLineInput(
+                unit_type=line.unit_type,
+                units_count=line.units_count,
+                avg_sellable_area=(
+                    float(line.avg_sellable_area)
+                    if line.avg_sellable_area is not None
+                    else None
+                ),
+            )
+            for line in option.mix_lines
+        ]
+        unit_count = compute_unit_count(mix_inputs)
+        sellable_area = compute_sellable_area(mix_inputs)
+
+        scenario_name = (
+            payload.scenario_name
+            if payload.scenario_name
+            else f"Feasibility — {option.name}"
+        )
+
+        feasibility_service = FeasibilityService(self.option_repo.db)
+        run_response = feasibility_service.create_seeded_run(
+            source_concept_option_id=concept_option_id,
+            scenario_id=option.scenario_id,
+            scenario_name=scenario_name,
+            sellable_area_sqm=sellable_area,
+            avg_sale_price_per_sqm=payload.avg_sale_price_per_sqm,
+            construction_cost_per_sqm=payload.construction_cost_per_sqm,
+            soft_cost_ratio=payload.soft_cost_ratio,
+            finance_cost_ratio=payload.finance_cost_ratio,
+            sales_cost_ratio=payload.sales_cost_ratio,
+            development_period_months=payload.development_period_months,
+            notes=payload.notes,
+        )
+
+        _logger.info(
+            "Feasibility run seeded from concept option: concept_option_id=%s "
+            "feasibility_run_id=%s sellable_area_sqm=%s",
+            concept_option_id,
+            run_response.id,
+            sellable_area,
+        )
+
+        assumptions_seeded = (
+            sellable_area is not None
+            and payload.avg_sale_price_per_sqm is not None
+            and payload.construction_cost_per_sqm is not None
+            and payload.development_period_months is not None
+        )
+
+        return SeedFeasibilityResponse(
+            feasibility_run_id=run_response.id,
+            source_concept_option_id=concept_option_id,
+            seed_source_type="concept_option",
+            scenario_name=scenario_name,
+            scenario_id=option.scenario_id,
+            seeded_sellable_area_sqm=sellable_area,
+            seeded_unit_count=unit_count,
+            assumptions_seeded=assumptions_seeded,
+        )
+
+    # ------------------------------------------------------------------
+    # Reverse-seed concept from feasibility run — PR-CONCEPT-064
+    # ------------------------------------------------------------------
+
+    def create_from_feasibility_run(
+        self, run_id: str
+    ) -> SeedConceptFromFeasibilityResponse:
+        """Create a new concept option seeded from a feasibility run.
+
+        Reverse-seeding rules
+        ---------------------
+        * The feasibility run must exist — 404 if not found.
+        * A new concept option is created in ``draft`` status with a name
+          derived from the run's scenario_name.
+        * The concept option inherits the run's scenario_id and project_id
+          (if set) so that cross-module lifecycle context is preserved.
+        * ``source_feasibility_run_id`` is persisted on the new concept option
+          to record the deterministic lineage chain.
+
+        This method does not calculate concept metrics; it only creates the
+        concept option record.  The caller should navigate to the concept
+        detail page to enrich the option with unit mix lines.
+        """
+        feasibility_service = FeasibilityService(self.option_repo.db)
+        run = feasibility_service.get_run_for_reverse_seed(run_id)
+
+        _PREFIX = "Concept — "
+        _MAX_NAME = 255
+        scenario_name = run.scenario_name or "Feasibility"
+        safe_scenario_name = scenario_name[: _MAX_NAME - len(_PREFIX)]
+        name = f"{_PREFIX}{safe_scenario_name}"
+
+        option_create = ConceptOptionCreate(
+            scenario_id=run.scenario_id,
+            project_id=run.project_id,
+            name=name,
+            status="draft",
+        )
+        option = self.option_repo.create(
+            option_create,
+            source_feasibility_run_id=run_id,
+        )
+
+        _logger.info(
+            "Concept option created from feasibility run: run_id=%s "
+            "concept_option_id=%s scenario_id=%s project_id=%s",
+            run_id,
+            option.id,
+            run.scenario_id,
+            run.project_id,
+        )
+
+        return SeedConceptFromFeasibilityResponse(
+            concept_option_id=option.id,
+            source_feasibility_run_id=run_id,
+            scenario_id=run.scenario_id,
+            project_id=run.project_id,
+            seed_source_type="feasibility_run",
+        )
+
+
+    # ---------------------------------------------------------------------------
+    # Lifecycle Lineage — PR-CONCEPT-065
+    # ---------------------------------------------------------------------------
+
+    def get_concept_option_lineage(
+        self, concept_option_id: str
+    ) -> ConceptLineageResponse:
+        """Return a lifecycle traceability summary for a concept option.
+
+        Composes lineage from canonical fields:
+        - upstream: source_feasibility_run_id (set when concept was reverse-seeded)
+        - downstream: all feasibility runs seeded from this concept option
+
+        Raises ResourceNotFoundError (HTTP 404) if the concept option does not exist.
+        """
+        option = self.option_repo.get_by_id(concept_option_id)
+        if option is None:
+            raise ResourceNotFoundError(
+                f"ConceptOption '{concept_option_id}' not found."
+            )
+
+        run_repo = FeasibilityRunRepository(self.option_repo.db)
+        downstream_runs = run_repo.list_by_source_concept_option_id(
+            concept_option_id
+        )
+
+        _logger.info(
+            "Lineage retrieved for concept option: concept_option_id=%s "
+            "downstream_runs=%d",
+            concept_option_id,
+            len(downstream_runs),
+        )
+
+        return ConceptLineageResponse(
+            record_id=concept_option_id,
+            source_feasibility_run_id=option.source_feasibility_run_id,
+            downstream_feasibility_runs=[run.id for run in downstream_runs],
+            scenario_id=option.scenario_id,
+            project_id=option.project_id,
         )

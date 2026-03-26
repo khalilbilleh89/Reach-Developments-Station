@@ -26,6 +26,11 @@ class FeasibilityRun(Base, TimestampMixin):
 
     project_id is optional. A run may exist as a standalone pre-project
     scenario and be linked to a project after the acquisition decision is made.
+
+    Lineage fields (PR-CONCEPT-063):
+      source_concept_option_id — the concept option that seeded this run,
+                                  when seed_source_type='concept_option'
+      seed_source_type         — 'concept_option' | 'manual' | None (legacy)
     """
 
     __tablename__ = "feasibility_runs"
@@ -41,8 +46,18 @@ class FeasibilityRun(Base, TimestampMixin):
         String(50), nullable=False, default=FeasibilityScenarioType.BASE.value
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Lineage — PR-CONCEPT-063
+    source_concept_option_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    seed_source_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="feasibility_runs")
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """Return the linked project name, or None if unlinked."""
+        return self.project.name if self.project else None
     assumptions: Mapped[Optional["FeasibilityAssumptions"]] = relationship(
         "FeasibilityAssumptions",
         back_populates="run",

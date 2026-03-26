@@ -12,9 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
+from app.modules.concept_design.schemas import SeedConceptFromFeasibilityResponse
+from app.modules.concept_design.service import ConceptDesignService
 from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
+    FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
     FeasibilityRunList,
@@ -29,6 +32,10 @@ router = APIRouter(prefix="/feasibility", tags=["feasibility"], dependencies=[De
 
 def get_service(db: Session = Depends(get_db)) -> FeasibilityService:
     return FeasibilityService(db)
+
+
+def get_concept_service(db: Session = Depends(get_db)) -> ConceptDesignService:
+    return ConceptDesignService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +79,34 @@ def update_run(
 ) -> FeasibilityRunResponse:
     """Update a feasibility run's metadata."""
     return service.update_feasibility_run(run_id, data)
+
+
+# ---------------------------------------------------------------------------
+# Reverse-seed concept from feasibility run — PR-CONCEPT-064
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/runs/{run_id}/create-concept",
+    response_model=SeedConceptFromFeasibilityResponse,
+    status_code=201,
+)
+def create_concept_from_feasibility_run(
+    run_id: str,
+    concept_service: Annotated[ConceptDesignService, Depends(get_concept_service)],
+) -> SeedConceptFromFeasibilityResponse:
+    """Create a new concept option seeded from a feasibility run.
+
+    Closes the bidirectional design-finance loop:
+      Concept → Feasibility → Concept
+
+    The new concept option is created in ``draft`` status with a name derived
+    from the run's ``scenario_name``.  The concept inherits the run's
+    ``scenario_id`` and ``project_id`` (when set), and records
+    ``source_feasibility_run_id`` for deterministic lineage.
+
+    Returns HTTP 404 when the feasibility run does not exist.
+    """
+    return concept_service.create_from_feasibility_run(run_id)
 
 
 # ---------------------------------------------------------------------------
@@ -155,3 +190,30 @@ def get_feasibility_result_by_run(
     """
     return service.get_feasibility_result(run_id)
 
+
+
+# ---------------------------------------------------------------------------
+# Lineage endpoint — PR-CONCEPT-065
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/runs/{run_id}/lineage",
+    response_model=FeasibilityLineageResponse,
+)
+def get_feasibility_run_lineage(
+    run_id: str,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityLineageResponse:
+    """Return lifecycle traceability for a feasibility run.
+
+    Surfaces:
+    - the concept option that seeded this run (upstream lineage)
+    - all concept options reverse-seeded from this run (downstream lineage)
+    - linked project context
+
+    Returns a partial lineage (with empty lists / null IDs) for runs that
+    were created manually without seeding context.
+
+    Returns HTTP 404 when the feasibility run does not exist.
+    """
+    return service.get_feasibility_run_lineage(run_id)

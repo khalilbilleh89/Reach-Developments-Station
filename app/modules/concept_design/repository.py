@@ -25,7 +25,12 @@ class ConceptOptionRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create(self, data: ConceptOptionCreate, land_id: Optional[str] = None) -> ConceptOption:
+    def create(
+        self,
+        data: ConceptOptionCreate,
+        land_id: Optional[str] = None,
+        source_feasibility_run_id: Optional[str] = None,
+    ) -> ConceptOption:
         option = ConceptOption(
             project_id=data.project_id,
             scenario_id=data.scenario_id,
@@ -42,6 +47,8 @@ class ConceptOptionRepository:
             land_id=land_id,
             concept_override_far_limit=data.concept_override_far_limit,
             concept_override_density_limit=data.concept_override_density_limit,
+            # Reverse-lineage — PR-CONCEPT-064
+            source_feasibility_run_id=source_feasibility_run_id,
         )
         self.db.add(option)
         self.db.commit()
@@ -180,6 +187,21 @@ class ConceptOptionRepository:
         else:
             query = query.filter(ConceptOption.scenario_id.is_(None))
         return {row[0] for row in query.all()}
+
+    def list_by_source_feasibility_run_id(
+        self, feasibility_run_id: str
+    ) -> List[ConceptOption]:
+        """Return all concept options seeded from a given feasibility run.
+
+        Used for lifecycle lineage: identifies downstream concepts created via
+        the reverse-seeding workflow (PR-CONCEPT-064).
+        """
+        return (
+            self.db.query(ConceptOption)
+            .filter(ConceptOption.source_feasibility_run_id == feasibility_run_id)
+            .order_by(ConceptOption.created_at.asc())
+            .all()
+        )
 
     def clone_concept_option(self, source: ConceptOption, new_name: str) -> ConceptOption:
         """Stage a copy of *source* with *new_name* and flush to obtain an id.
