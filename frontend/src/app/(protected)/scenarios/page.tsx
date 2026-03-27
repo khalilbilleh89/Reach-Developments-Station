@@ -20,13 +20,16 @@
  *   POST   /scenarios/compare
  *
  * PR-V6-02 — Scenario Workspace Frontend & Lifecycle Control
+ * PR-V6-03 — Lifecycle Linking: land_id query-param filter, land/feasibility navigation
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
   listScenarios,
+  getScenario,
   createScenario,
   duplicateScenario,
   approveScenario,
@@ -199,9 +202,10 @@ const inputStyle: React.CSSProperties = {
 interface CreateScenarioModalProps {
   onClose: () => void;
   onCreated: () => void;
+  initialLandId?: string | null;
 }
 
-function CreateScenarioModal({ onClose, onCreated }: CreateScenarioModalProps) {
+function CreateScenarioModal({ onClose, onCreated, initialLandId }: CreateScenarioModalProps) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [notes, setNotes] = useState("");
@@ -221,6 +225,7 @@ function CreateScenarioModal({ onClose, onCreated }: CreateScenarioModalProps) {
         name: name.trim(),
         code: code.trim() || null,
         notes: notes.trim() || null,
+        land_id: initialLandId ?? null,
       };
       try {
         await createScenario(data);
@@ -231,11 +236,30 @@ function CreateScenarioModal({ onClose, onCreated }: CreateScenarioModalProps) {
         setSubmitting(false);
       }
     },
-    [name, code, notes, onCreated],
+    [name, code, notes, onCreated, initialLandId],
   );
 
   return (
     <ModalShell title="New Scenario" dialogId="create-scenario-dialog-title" onClose={onClose}>
+      {initialLandId && (
+        <p
+          style={{
+            margin: "0 0 16px",
+            fontSize: "0.8rem",
+            color: "var(--color-text-muted)",
+            background: "var(--color-surface-muted, #f9fafb)",
+            padding: "8px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--color-border)",
+          }}
+          data-testid="create-scenario-land-context"
+        >
+          Linked to land parcel:{" "}
+          <span style={{ fontFamily: "monospace" }}>
+            {initialLandId.length > 12 ? initialLandId.substring(0, 12) + "…" : initialLandId}
+          </span>
+        </p>
+      )}
       <form onSubmit={handleSubmit}>
         <Field id="create-scenario-name" label="Name" required>
           <input
@@ -506,6 +530,14 @@ function CompareView({ items, onClose }: CompareViewProps) {
 type ViewMode = "list" | "detail";
 
 export default function ScenariosPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // land_id, scenario_id, and new=1 can be passed as query params from sibling pages
+  const landIdParam = searchParams.get("land_id") ?? null;
+  const scenarioIdParam = searchParams.get("scenario_id") ?? null;
+  const openNewParam = searchParams.get("new") === "1";
+
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -515,8 +547,10 @@ export default function ScenariosPage() {
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<ScenarioStatus | "">("");
+  // landFilter is set from the query param on mount and can be cleared by the user
+  const [landFilter, setLandFilter] = useState<string | null>(landIdParam);
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(openNewParam);
   const [duplicateTarget, setDuplicateTarget] = useState<Scenario | null>(null);
   const [compareItems, setCompareItems] = useState<ScenarioCompareItem[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -534,6 +568,7 @@ export default function ScenariosPage() {
     try {
       const result = await listScenarios({
         status: statusFilter || undefined,
+        land_id: landFilter ?? undefined,
         limit: 200,
       });
       setScenarios(result.items);
@@ -547,11 +582,42 @@ export default function ScenariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, landFilter]);
 
   useEffect(() => {
     loadScenarios();
   }, [loadScenarios]);
+
+  // ---- scenario_id query-param: auto-open the linked scenario on mount -----
+
+  // Use a ref (not state) so the guard doesn't cause an extra render cycle and
+  // cannot cause a race where multiple effects fire before the flag is set.
+  const scenarioIdHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (!scenarioIdParam || scenarioIdHandledRef.current || loading) return;
+    // Try finding the scenario in the already-loaded list first
+    const found = scenarios.find((s) => s.id === scenarioIdParam);
+    if (found) {
+      scenarioIdHandledRef.current = true;
+      setSelectedScenario(found);
+      setViewMode("detail");
+      setLifecycleError(null);
+      return;
+    }
+    // Not in the list (e.g. different status filter active) — fetch directly.
+    // Mark handled before the async call to prevent concurrent duplicate fetches.
+    scenarioIdHandledRef.current = true;
+    getScenario(scenarioIdParam)
+      .then((fetched) => {
+        setSelectedScenario(fetched);
+        setViewMode("detail");
+        setLifecycleError(null);
+      })
+      .catch(() => {
+        // Scenario not found or access error — fall through to list view safely
+      });
+  }, [scenarioIdParam, loading, scenarios]);
 
   // ---- Derived KPIs -------------------------------------------------------
 
@@ -654,6 +720,65 @@ export default function ScenariosPage() {
         <MetricCard label="Approved" value={String(approvedCount)} trend="positive" />
         <MetricCard label="Archived" value={String(archivedCount)} trend="neutral" />
       </div>
+
+      {/* Land filter indicator */}
+      {landFilter && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 12,
+            padding: "8px 14px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 6,
+            fontSize: "0.875rem",
+          }}
+          data-testid="land-filter-banner"
+        >
+          <span>
+            Showing scenarios linked to land parcel:{" "}
+            <span style={{ fontFamily: "monospace" }}>
+              {landFilter.length > 12 ? landFilter.substring(0, 12) + "…" : landFilter}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setLandFilter(null);
+              router.push("/scenarios");
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--color-primary, #2563eb)",
+              fontSize: "0.8rem",
+              textDecoration: "underline",
+              padding: 0,
+            }}
+            aria-label="Clear land filter"
+          >
+            Clear filter
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/land`)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--color-primary, #2563eb)",
+              fontSize: "0.8rem",
+              textDecoration: "underline",
+              padding: 0,
+            }}
+          >
+            ← Back to Land
+          </button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div
@@ -939,7 +1064,7 @@ export default function ScenariosPage() {
         )}
 
         {/* Lifecycle actions */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
           {selectedScenario.status === "draft" && (
             <button
               type="button"
@@ -979,6 +1104,97 @@ export default function ScenariosPage() {
             Duplicate
           </button>
         </div>
+
+        {/* Lifecycle cross-links */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            padding: "16px 20px",
+            background: "var(--color-surface-muted, #f9fafb)",
+            borderRadius: 8,
+            border: "1px solid var(--color-border)",
+          }}
+          data-testid="scenario-lifecycle-links"
+        >
+          {/* Land origin — show navigation when land_id is present */}
+          {selectedScenario.land_id ? (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/land?parcel_id=${encodeURIComponent(selectedScenario.land_id!)}`,
+                )
+              }
+              style={{
+                padding: "6px 14px",
+                border: "1px solid var(--color-border)",
+                borderRadius: 6,
+                background: "var(--color-surface)",
+                color: "var(--color-text)",
+                cursor: "pointer",
+                fontSize: "0.875rem",
+              }}
+              aria-label="Open linked land parcel"
+              data-testid="scenario-open-land-btn"
+            >
+              ← Open Land
+            </button>
+          ) : (
+            <span
+              style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", alignSelf: "center" }}
+              data-testid="scenario-no-land-link"
+            >
+              No linked land parcel
+            </span>
+          )}
+
+          {/* Feasibility — view existing runs or start a new run */}
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/feasibility?scenario_id=${encodeURIComponent(selectedScenario.id)}`,
+              )
+            }
+            style={{
+              padding: "6px 14px",
+              border: "1px solid var(--color-border)",
+              borderRadius: 6,
+              background: "var(--color-surface)",
+              color: "var(--color-text)",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+            }}
+            aria-label="View feasibility runs for this scenario"
+            data-testid="scenario-view-feasibility-btn"
+          >
+            View Feasibility Runs →
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/feasibility?scenario_id=${encodeURIComponent(selectedScenario.id)}&new=1`,
+              )
+            }
+            style={{
+              padding: "6px 14px",
+              border: "1px solid var(--color-primary, #2563eb)",
+              borderRadius: 6,
+              background: "var(--color-surface)",
+              color: "var(--color-primary, #2563eb)",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+            }}
+            aria-label="Run new feasibility for this scenario"
+            data-testid="scenario-run-feasibility-btn"
+          >
+            + Run Feasibility →
+          </button>
+        </div>
       </>
     );
   };
@@ -993,6 +1209,7 @@ export default function ScenariosPage() {
         <CreateScenarioModal
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
+          initialLandId={landFilter}
         />
       )}
       {duplicateTarget && (

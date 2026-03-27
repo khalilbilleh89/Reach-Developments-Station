@@ -13,10 +13,12 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // Mock Next.js navigation
+let mockSearchParamsStr = "";
+const mockRouterPush = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => "/scenarios",
-  useSearchParams: () => new URLSearchParams(""),
+  useSearchParams: () => new URLSearchParams(mockSearchParamsStr),
 }));
 
 jest.mock("next/link", () => {
@@ -88,6 +90,7 @@ jest.mock("@/components/shell/PageContainer", () => ({
 // Mock scenario-api
 jest.mock("@/lib/scenario-api", () => ({
   listScenarios: jest.fn(),
+  getScenario: jest.fn(),
   createScenario: jest.fn(),
   duplicateScenario: jest.fn(),
   approveScenario: jest.fn(),
@@ -97,6 +100,7 @@ jest.mock("@/lib/scenario-api", () => ({
 
 import {
   listScenarios,
+  getScenario,
   createScenario,
   duplicateScenario,
   approveScenario,
@@ -106,6 +110,7 @@ import {
 import ScenariosPage from "@/app/(protected)/scenarios/page";
 
 const mockListScenarios = listScenarios as jest.Mock;
+const mockGetScenario = getScenario as jest.Mock;
 const mockCreateScenario = createScenario as jest.Mock;
 const mockDuplicateScenario = duplicateScenario as jest.Mock;
 const mockApproveScenario = approveScenario as jest.Mock;
@@ -149,6 +154,7 @@ const mockScenarioList = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSearchParamsStr = "";
   mockListScenarios.mockResolvedValue(mockScenarioList);
 });
 
@@ -644,5 +650,238 @@ describe("ScenariosPage — comparison", () => {
     await waitFor(() => {
       expect(screen.getByText("Compare failed")).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR-V6-03 — Lifecycle linking tests
+// ---------------------------------------------------------------------------
+
+describe("ScenariosPage — land_id query param filter", () => {
+  it("shows land filter banner when land_id param is present", async () => {
+    mockSearchParamsStr = "land_id=land-abc-123";
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(screen.getByTestId("land-filter-banner")).toBeInTheDocument();
+    expect(screen.getByText(/land-abc-123/)).toBeInTheDocument();
+  });
+
+  it("does not show land filter banner when no land_id param", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(screen.queryByTestId("land-filter-banner")).not.toBeInTheDocument();
+  });
+
+  it("calls listScenarios with land_id filter when param is present", async () => {
+    mockSearchParamsStr = "land_id=land-abc-123";
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(mockListScenarios).toHaveBeenCalledWith(
+        expect.objectContaining({ land_id: "land-abc-123" }),
+      ),
+    );
+  });
+
+  it("shows create scenario modal pre-opened when new=1 param is present", async () => {
+    mockSearchParamsStr = "new=1";
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shows land context in create modal when both land_id and new=1 are present", async () => {
+    mockSearchParamsStr = "land_id=land-abc-123&new=1";
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(screen.getByTestId("create-scenario-land-context")).toBeInTheDocument();
+  });
+
+  it("includes land_id in createScenario call when modal opened from land context", async () => {
+    mockSearchParamsStr = "land_id=land-xyz-999&new=1";
+    const newScenario = { ...mockScenario1, id: "sc-new", land_id: "land-xyz-999" };
+    mockCreateScenario.mockResolvedValueOnce(newScenario);
+    mockListScenarios.mockResolvedValue({ items: [newScenario], total: 1 });
+
+    render(<ScenariosPage />);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Name \*/), {
+      target: { value: "Linked Scenario" },
+    });
+    fireEvent.click(screen.getByText("Create Scenario"));
+
+    await waitFor(() =>
+      expect(mockCreateScenario).toHaveBeenCalledWith(
+        expect.objectContaining({ land_id: "land-xyz-999" }),
+      ),
+    );
+  });
+});
+
+describe("ScenariosPage — detail view lifecycle cross-links", () => {
+  it("shows lifecycle cross-links panel in detail view", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-lifecycle-links")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows 'View Feasibility Runs' button in detail view", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("scenario-view-feasibility-btn"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("shows '+ Run Feasibility' button in detail view", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("scenario-run-feasibility-btn"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("navigates to feasibility filtered by scenario_id when View Feasibility Runs clicked", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-view-feasibility-btn")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("scenario-view-feasibility-btn"));
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      expect.stringContaining("/feasibility"),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      expect.stringContaining("sc-1"),
+    );
+  });
+
+  it("shows 'Open Land' button when scenario has a land_id", async () => {
+    const scenarioWithLand = { ...mockScenario1, land_id: "land-abc-001" };
+    mockListScenarios.mockResolvedValueOnce({
+      items: [scenarioWithLand],
+      total: 1,
+    });
+
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-open-land-btn")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows 'No linked land parcel' when scenario has no land_id", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-no-land-link")).toBeInTheDocument(),
+    );
+  });
+
+  it("navigates to /land with parcel_id when Open Land button clicked", async () => {
+    const scenarioWithLand = { ...mockScenario1, land_id: "land-abc-001" };
+    mockListScenarios.mockResolvedValueOnce({
+      items: [scenarioWithLand],
+      total: 1,
+    });
+
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByText("View")[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-open-land-btn")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("scenario-open-land-btn"));
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/land?parcel_id=land-abc-001",
+    );
+  });
+});
+
+describe("ScenariosPage — scenario_id query param auto-opens detail", () => {
+  it("auto-opens detail view when scenario_id param matches a loaded scenario", async () => {
+    mockSearchParamsStr = "scenario_id=sc-1";
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-lifecycle-links")).toBeInTheDocument(),
+    );
+    // Detail view is open
+    expect(screen.getByTestId("scenario-lifecycle-links")).toBeInTheDocument();
+  });
+
+  it("fetches scenario directly when scenario_id is not in the loaded list", async () => {
+    const remoteScenario = {
+      ...mockScenario1,
+      id: "sc-remote",
+      name: "Remote Scenario",
+    };
+    mockSearchParamsStr = "scenario_id=sc-remote";
+    mockGetScenario.mockResolvedValue(remoteScenario);
+
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(mockGetScenario).toHaveBeenCalledWith("sc-remote"),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Remote Scenario")).toBeInTheDocument(),
+    );
+  });
+
+  it("stays on list view when scenario_id fetch fails", async () => {
+    mockSearchParamsStr = "scenario_id=sc-not-found";
+    mockGetScenario.mockRejectedValue(new Error("Not found"));
+
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    await waitFor(() => expect(mockGetScenario).toHaveBeenCalledWith("sc-not-found"));
+
+    // Should stay on list view — no crash, no detail panel
+    expect(
+      screen.queryByTestId("scenario-lifecycle-links"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Marina Tower — Base Case"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not call getScenario when no scenario_id param", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(mockGetScenario).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
@@ -234,6 +235,14 @@ function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
  * and delete operations. Computed metrics remain display-only.
  */
 export default function LandPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // parcel_id can be passed from the Scenarios page "← Open Land" CTA
+  const parcelIdParam = searchParams.get("parcel_id") ?? null;
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  const scrolledToParcelRef = useRef(false);
+
   const [parcels, setParcels] = useState<LandParcel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -241,6 +250,8 @@ export default function LandPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingParcel, setEditingParcel] = useState<LandParcel | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // highlighted parcel row (from parcel_id query param)
+  const [highlightedParcelId, setHighlightedParcelId] = useState<string | null>(parcelIdParam);
 
   const fetchParcels = useCallback(() => {
     setLoading(true);
@@ -262,6 +273,19 @@ export default function LandPage() {
   useEffect(() => {
     fetchParcels();
   }, [fetchParcels]);
+
+  // Scroll highlighted row into view once after parcels load.
+  // The guard ref prevents re-scrolling on subsequent parcels updates.
+  useEffect(() => {
+    if (
+      highlightedParcelId &&
+      !scrolledToParcelRef.current &&
+      highlightRowRef.current
+    ) {
+      scrolledToParcelRef.current = true;
+      highlightRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedParcelId, parcels]);
 
   const handleCreated = useCallback(() => {
     setShowCreateModal(false);
@@ -452,8 +476,23 @@ export default function LandPage() {
               </tr>
             </thead>
             <tbody>
-              {parcels.map((parcel) => (
-                <tr key={parcel.id}>
+              {parcels.map((parcel) => {
+                const isHighlighted = highlightedParcelId === parcel.id;
+                return (
+                <tr
+                  key={parcel.id}
+                  ref={isHighlighted ? highlightRowRef : null}
+                  data-testid={isHighlighted ? "highlighted-parcel-row" : undefined}
+                  style={
+                    isHighlighted
+                      ? {
+                          outline: "2px solid var(--color-primary, #2563eb)",
+                          outlineOffset: "-2px",
+                          background: "#eff6ff",
+                        }
+                      : undefined
+                  }
+                >
                   <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
                   <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
                     {parcel.parcel_code}
@@ -544,6 +583,47 @@ export default function LandPage() {
                       >
                         Edit
                       </button>
+                      {/* Scenario linking actions */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/scenarios?land_id=${encodeURIComponent(parcel.id)}`,
+                          )
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                          color: "var(--color-text)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`View scenarios for ${parcel.parcel_name}`}
+                      >
+                        Scenarios
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/scenarios?land_id=${encodeURIComponent(parcel.id)}&new=1`,
+                          )
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid var(--color-primary, #2563eb)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                          color: "var(--color-primary, #2563eb)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`Create scenario for ${parcel.parcel_name}`}
+                      >
+                        + Scenario
+                      </button>
                       {/* Delete button */}
                       <button
                         type="button"
@@ -566,7 +646,8 @@ export default function LandPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

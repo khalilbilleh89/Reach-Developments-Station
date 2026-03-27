@@ -389,6 +389,41 @@ function FeasibilitySourceSummary({ run }: SourceSummaryProps) {
           </span>
         </div>
       </div>
+      {/* Lifecycle upstream navigation — PR-V6-03 */}
+      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Link
+          href="/scenarios"
+          style={{
+            padding: "5px 14px",
+            border: "1px solid var(--color-border)",
+            borderRadius: 6,
+            background: "var(--color-surface)",
+            color: "var(--color-text)",
+            fontSize: "0.8rem",
+            textDecoration: "none",
+          }}
+          data-testid="feasibility-back-to-scenarios-link"
+        >
+          ← Back to Scenarios
+        </Link>
+        {run.scenario_id && (
+          <Link
+            href={`/scenarios?scenario_id=${encodeURIComponent(run.scenario_id)}`}
+            style={{
+              padding: "5px 14px",
+              border: "1px solid var(--color-primary, #2563eb)",
+              borderRadius: 6,
+              background: "var(--color-surface)",
+              color: "var(--color-primary, #2563eb)",
+              fontSize: "0.8rem",
+              textDecoration: "none",
+            }}
+            data-testid="feasibility-open-scenario-link"
+          >
+            Open Scenario →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

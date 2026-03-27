@@ -1784,3 +1784,80 @@ test("decision summary is not rendered when no results exist", async () => {
     screen.queryByRole("region", { name: /investment decision summary/i }),
   ).not.toBeInTheDocument();
 });
+
+// ---------------------------------------------------------------------------
+// PR-V6-03 — Lifecycle scenario navigation tests
+// ---------------------------------------------------------------------------
+
+test("shows Back to Scenarios link in run source summary", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() =>
+    expect(screen.getAllByText("Base Case Q1").length).toBeGreaterThan(0),
+  );
+
+  expect(
+    screen.getByTestId("feasibility-back-to-scenarios-link"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByTestId("feasibility-back-to-scenarios-link"),
+  ).toHaveAttribute("href", "/scenarios");
+});
+
+test("shows Open Scenario link when run has a scenario_id", async () => {
+  const runWithScenario = { ...mockRun, scenario_id: "sc-abc-123" };
+  mockGetRun.mockResolvedValue(runWithScenario);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() =>
+    expect(screen.getAllByText("Base Case Q1").length).toBeGreaterThan(0),
+  );
+
+  const openLink = screen.getByTestId("feasibility-open-scenario-link");
+  expect(openLink).toBeInTheDocument();
+  expect(openLink).toHaveAttribute(
+    "href",
+    expect.stringContaining("sc-abc-123"),
+  );
+});
+
+test("does not show Open Scenario link when run has no scenario_id", async () => {
+  mockGetRun.mockResolvedValue({ ...mockRun, scenario_id: null });
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockRejectedValue(mock404());
+  mockGetLineage.mockResolvedValue({
+    record_type: "feasibility_run",
+    record_id: "run-1",
+    source_concept_option_id: null,
+    reverse_seeded_concept_options: [],
+    project_id: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+  await waitFor(() =>
+    expect(screen.getAllByText("Base Case Q1").length).toBeGreaterThan(0),
+  );
+
+  expect(
+    screen.queryByTestId("feasibility-open-scenario-link"),
+  ).not.toBeInTheDocument();
+});
