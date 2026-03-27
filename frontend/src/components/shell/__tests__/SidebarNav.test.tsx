@@ -66,6 +66,7 @@ describe("SidebarNav", () => {
       "Registry",
       "Commission",
       "Cashflow",
+      "Portfolio",
       "Settings",
     ];
     for (const label of expectedLabels) {

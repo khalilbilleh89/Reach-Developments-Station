@@ -127,6 +127,14 @@ export const NAV_ITEMS: NavItem[] = [
     requiresAuth: true,
     futureRoleTags: ["finance_manager", "admin"],
   },
+  {
+    label: "Portfolio",
+    href: "/portfolio",
+    icon: "Briefcase",
+    section: "main",
+    requiresAuth: true,
+    futureRoleTags: ["admin", "finance_manager"],
+  },
   // --- Settings section ----------------------------------------------
   {
     label: "Settings",
