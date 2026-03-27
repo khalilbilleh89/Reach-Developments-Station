@@ -235,21 +235,24 @@ def test_feedback_very_low_sell_through_is_at_risk(client: TestClient):
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
     )
+    assert phase_resp.status_code == 201, phase_resp.text
     phase_id = phase_resp.json()["id"]
     building_resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
     )
+    assert building_resp.status_code == 201, building_resp.text
     building_id = building_resp.json()["id"]
     floor_resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
     )
+    assert floor_resp.status_code == 201, floor_resp.text
     floor_id = floor_resp.json()["id"]
 
     # Create 5 units, sell none
     for i in range(1, 6):
-        client.post(
+        unit_resp = client.post(
             "/api/v1/units",
             json={
                 "floor_id": floor_id,
@@ -258,6 +261,7 @@ def test_feedback_very_low_sell_through_is_at_risk(client: TestClient):
                 "internal_area": 80.0,
             },
         )
+        assert unit_resp.status_code == 201, unit_resp.text
 
     resp = client.get(f"/api/v1/projects/{project_id}/feasibility-feedback")
     assert resp.status_code == 200
@@ -281,16 +285,19 @@ def test_feedback_low_sell_through_needs_attention(client: TestClient, db_sessio
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
     )
+    assert phase_resp.status_code == 201, phase_resp.text
     phase_id = phase_resp.json()["id"]
     building_resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
     )
+    assert building_resp.status_code == 201, building_resp.text
     building_id = building_resp.json()["id"]
     floor_resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
     )
+    assert floor_resp.status_code == 201, floor_resp.text
     floor_id = floor_resp.json()["id"]
 
     # Create 4 units
@@ -305,6 +312,7 @@ def test_feedback_low_sell_through_needs_attention(client: TestClient, db_sessio
                 "internal_area": 80.0,
             },
         )
+        assert u.status_code == 201, u.text
         unit_ids.append(u.json()["id"])
 
     # Set 1 unit to "under_contract" directly to represent a sold unit
@@ -335,16 +343,19 @@ def test_feedback_good_sell_through_on_track(client: TestClient, db_session):
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
     )
+    assert phase_resp.status_code == 201, phase_resp.text
     phase_id = phase_resp.json()["id"]
     building_resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
     )
+    assert building_resp.status_code == 201, building_resp.text
     building_id = building_resp.json()["id"]
     floor_resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
     )
+    assert floor_resp.status_code == 201, floor_resp.text
     floor_id = floor_resp.json()["id"]
 
     # Create 2 units
@@ -359,6 +370,7 @@ def test_feedback_good_sell_through_on_track(client: TestClient, db_session):
                 "internal_area": 80.0,
             },
         )
+        assert u.status_code == 201, u.text
         unit_ids.append(u.json()["id"])
 
     # Set both units to "under_contract" to represent fully sold project
@@ -388,16 +400,19 @@ def test_feedback_overdue_receivables_is_at_risk(client: TestClient):
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
     )
+    assert phase_resp.status_code == 201, phase_resp.text
     phase_id = phase_resp.json()["id"]
     building_resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
     )
+    assert building_resp.status_code == 201, building_resp.text
     building_id = building_resp.json()["id"]
     floor_resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
     )
+    assert floor_resp.status_code == 201, floor_resp.text
     floor_id = floor_resp.json()["id"]
 
     unit_resp = client.post(
@@ -409,6 +424,7 @@ def test_feedback_overdue_receivables_is_at_risk(client: TestClient):
             "internal_area": 80.0,
         },
     )
+    assert unit_resp.status_code == 201, unit_resp.text
     unit_id = unit_resp.json()["id"]
     buyer_id = _create_buyer(client, "buyer@overdue.com")
     contract_id = _create_contract(client, unit_id, buyer_id, "CNT-OVD-001", 600_000.0)

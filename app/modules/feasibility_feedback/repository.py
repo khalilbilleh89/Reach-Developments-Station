@@ -11,7 +11,7 @@ Cross-module joins follow the canonical hierarchy:
   Unit → Floor → Building → Phase → Project
 """
 
-from typing import Optional
+from typing import Dict, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -44,7 +44,7 @@ class FeasibilityFeedbackRepository:
     # Unit-level helpers
     # ------------------------------------------------------------------
 
-    def count_units_by_status_for_project(self, project_id: str) -> dict:
+    def count_units_by_status_for_project(self, project_id: str) -> Dict[str, int]:
         """Return unit status counts scoped to a single project.
 
         Returns a dict mapping status string → count.
