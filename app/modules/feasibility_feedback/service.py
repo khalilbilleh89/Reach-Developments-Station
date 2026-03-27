@@ -19,6 +19,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.errors import ResourceNotFoundError
+from app.modules.feasibility.models import FeasibilityRun
 from app.modules.feasibility_feedback.repository import FeasibilityFeedbackRepository
 from app.modules.feasibility_feedback.schemas import (
     ProjectAbsorptionFeedback,
@@ -205,7 +206,7 @@ class FeasibilityFeedbackService:
             "with no overdue receivables."
         )
 
-    def _derive_lineage_note(self, lineage_run) -> str:
+    def _derive_lineage_note(self, lineage_run: Optional[FeasibilityRun]) -> str:
         """Return a note indicating whether a feasibility lineage exists."""
         if lineage_run is None:
             return "No feasibility run found for this project."
