@@ -54,6 +54,7 @@ describe("SidebarNav", () => {
       "Dashboard",
       "Land",
       "Feasibility",
+      "Scenarios",
       "Concept Design",
       "Projects",
       "Construction",
