@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import {
   listPricingPolicies,
   listCommissionPolicies,
   listProjectTemplates,
+  makeDefaultPricingPolicy,
+  makeDefaultCommissionPolicy,
 } from "@/lib/settings-api";
 import type {
   PricingPolicy,
@@ -38,10 +40,10 @@ export default function Page() {
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [makingDefault, setMakingDefault] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const loadSettings = useCallback((signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     Promise.all([
@@ -50,25 +52,61 @@ export default function Page() {
       listProjectTemplates({ limit: SETTINGS_PAGE_SIZE }),
     ])
       .then(([pricing, commission, templates]) => {
-        if (cancelled) return;
+        if (signal?.aborted) return;
         setPricingPolicies(pricing.items);
         setCommissionPolicies(commission.items);
         setProjectTemplates(templates.items);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (signal?.aborted) return;
         setError(
           err instanceof Error ? err.message : "Failed to load settings",
         );
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!signal?.aborted) setLoading(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadSettings(controller.signal);
+    return () => controller.abort();
+  }, [loadSettings]);
+
+  const handleMakeDefaultPricing = useCallback(
+    (id: string) => {
+      setMakingDefault(id);
+      setActionError(null);
+      makeDefaultPricingPolicy(id)
+        .then(() => loadSettings())
+        .catch((err: unknown) => {
+          setActionError(
+            err instanceof Error ? err.message : "Failed to set default pricing policy",
+          );
+        })
+        .finally(() => setMakingDefault(null));
+    },
+    [loadSettings],
+  );
+
+  const handleMakeDefaultCommission = useCallback(
+    (id: string) => {
+      setMakingDefault(id);
+      setActionError(null);
+      makeDefaultCommissionPolicy(id)
+        .then(() => loadSettings())
+        .catch((err: unknown) => {
+          setActionError(
+            err instanceof Error
+              ? err.message
+              : "Failed to set default commission policy",
+          );
+        })
+        .finally(() => setMakingDefault(null));
+    },
+    [loadSettings],
+  );
 
   // ─── Organisation-level demo cards ────────────────────────────────────────
   // INTENTIONAL DEMO DATA — these categories are not yet backed by backend
@@ -154,6 +192,13 @@ export default function Page() {
         </p>
       )}
 
+      {/* Action error banner */}
+      {actionError && (
+        <p role="alert" className={styles.errorBanner}>
+          {actionError}
+        </p>
+      )}
+
       {/* ── Pricing Policies ─────────────────────────────────────────────── */}
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Pricing Policies</h2>
@@ -179,6 +224,7 @@ export default function Page() {
                 <th scope="col">Storage Mode</th>
                 <th scope="col">Default</th>
                 <th scope="col">Active</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -205,6 +251,18 @@ export default function Page() {
                     >
                       {policy.is_active ? "Active" : "Inactive"}
                     </span>
+                  </td>
+                  <td>
+                    {!policy.is_default && (
+                      <button
+                        className={styles.actionButton}
+                        disabled={makingDefault === policy.id}
+                        onClick={() => handleMakeDefaultPricing(policy.id)}
+                        aria-label={`Make ${policy.name} the default pricing policy`}
+                      >
+                        {makingDefault === policy.id ? "Setting…" : "Make Default"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -235,6 +293,7 @@ export default function Page() {
                 <th scope="col">Calculation Mode</th>
                 <th scope="col">Default</th>
                 <th scope="col">Active</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -258,6 +317,18 @@ export default function Page() {
                     >
                       {policy.is_active ? "Active" : "Inactive"}
                     </span>
+                  </td>
+                  <td>
+                    {!policy.is_default && (
+                      <button
+                        className={styles.actionButton}
+                        disabled={makingDefault === policy.id}
+                        onClick={() => handleMakeDefaultCommission(policy.id)}
+                        aria-label={`Make ${policy.name} the default commission policy`}
+                      >
+                        {makingDefault === policy.id ? "Setting…" : "Make Default"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -199,9 +199,59 @@ def test_pricing_policy_default_via_update(client: TestClient):
     assert refreshed["is_default"] is False
 
 
-# ===========================================================================
-# CommissionPolicy CRUD
-# ===========================================================================
+def test_make_default_pricing_policy_endpoint(client: TestClient):
+    """POST /{id}/make-default sets the policy as default and clears existing default."""
+    first = _create_pricing_policy(client, "PP Make Default First", is_default=True)
+    second = _create_pricing_policy(client, "PP Make Default Second")
+
+    resp = client.post(
+        f"/api/v1/settings/pricing-policies/{second['id']}/make-default"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_default"] is True
+    assert resp.json()["id"] == second["id"]
+
+    refreshed = client.get(f"/api/v1/settings/pricing-policies/{first['id']}").json()
+    assert refreshed["is_default"] is False
+
+
+def test_make_default_pricing_policy_endpoint_already_default(client: TestClient):
+    """POST /{id}/make-default on an already-default policy is idempotent."""
+    policy = _create_pricing_policy(client, "PP Already Default", is_default=True)
+    resp = client.post(
+        f"/api/v1/settings/pricing-policies/{policy['id']}/make-default"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_default"] is True
+
+
+def test_make_default_pricing_policy_not_found_returns_404(client: TestClient):
+    resp = client.post("/api/v1/settings/pricing-policies/nonexistent/make-default")
+    assert resp.status_code == 404
+
+
+def test_cannot_deactivate_default_pricing_policy(client: TestClient):
+    """Attempting to set is_active=False on the default pricing policy returns 422."""
+    policy = _create_pricing_policy(client, "PP Default Guard", is_default=True)
+    resp = client.patch(
+        f"/api/v1/settings/pricing-policies/{policy['id']}",
+        json={"is_active": False},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_can_deactivate_non_default_pricing_policy(client: TestClient):
+    """A non-default policy can be deactivated without restriction."""
+    policy = _create_pricing_policy(client, "PP Non-Default", is_active=True)
+    resp = client.patch(
+        f"/api/v1/settings/pricing-policies/{policy['id']}",
+        json={"is_active": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_active"] is False
+
+
+
 
 
 def test_create_commission_policy_returns_201(client: TestClient):
@@ -310,9 +360,63 @@ def test_commission_policy_single_default_invariant(client: TestClient):
     assert refreshed["is_default"] is False
 
 
-# ===========================================================================
-# ProjectTemplate CRUD
-# ===========================================================================
+def test_make_default_commission_policy_endpoint(client: TestClient):
+    """POST /{id}/make-default sets the policy as default and clears existing default."""
+    first = _create_commission_policy(client, "CP Make Default First", is_default=True)
+    second = _create_commission_policy(client, "CP Make Default Second")
+
+    resp = client.post(
+        f"/api/v1/settings/commission-policies/{second['id']}/make-default"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_default"] is True
+    assert resp.json()["id"] == second["id"]
+
+    refreshed = client.get(
+        f"/api/v1/settings/commission-policies/{first['id']}"
+    ).json()
+    assert refreshed["is_default"] is False
+
+
+def test_make_default_commission_policy_endpoint_already_default(client: TestClient):
+    """POST /{id}/make-default on an already-default policy is idempotent."""
+    policy = _create_commission_policy(client, "CP Already Default", is_default=True)
+    resp = client.post(
+        f"/api/v1/settings/commission-policies/{policy['id']}/make-default"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_default"] is True
+
+
+def test_make_default_commission_policy_not_found_returns_404(client: TestClient):
+    resp = client.post(
+        "/api/v1/settings/commission-policies/nonexistent/make-default"
+    )
+    assert resp.status_code == 404
+
+
+def test_cannot_deactivate_default_commission_policy(client: TestClient):
+    """Attempting to set is_active=False on the default commission policy returns 422."""
+    policy = _create_commission_policy(client, "CP Default Guard", is_default=True)
+    resp = client.patch(
+        f"/api/v1/settings/commission-policies/{policy['id']}",
+        json={"is_active": False},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_can_deactivate_non_default_commission_policy(client: TestClient):
+    """A non-default policy can be deactivated without restriction."""
+    policy = _create_commission_policy(client, "CP Non-Default", is_active=True)
+    resp = client.patch(
+        f"/api/v1/settings/commission-policies/{policy['id']}",
+        json={"is_active": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_active"] is False
+
+
+
 
 
 def test_create_project_template_returns_201(client: TestClient):

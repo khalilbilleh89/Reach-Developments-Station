@@ -104,6 +104,15 @@ class SettingsService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"A pricing policy named '{data.name}' already exists.",
                 )
+        # Guard: cannot deactivate the current default policy
+        if data.is_active is False and policy.is_default:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Cannot deactivate the default pricing policy. "
+                    "Assign a different default first."
+                ),
+            )
         # Enforce single-default invariant
         if data.is_default is True and not policy.is_default:
             self.pricing_repo.clear_default()
@@ -116,6 +125,20 @@ class SettingsService:
                 detail=f"A pricing policy named '{data.name}' already exists.",
             )
         return PricingPolicyResponse.model_validate(updated)
+
+    def make_default_pricing_policy(self, policy_id: str) -> PricingPolicyResponse:
+        policy = self.pricing_repo.get_by_id(policy_id)
+        if not policy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pricing policy '{policy_id}' not found.",
+            )
+        if not policy.is_default:
+            self.pricing_repo.clear_default()
+            policy.is_default = True
+            self.db.commit()
+            self.db.refresh(policy)
+        return PricingPolicyResponse.model_validate(policy)
 
     def delete_pricing_policy(self, policy_id: str) -> None:
         policy = self.pricing_repo.get_by_id(policy_id)
@@ -185,6 +208,15 @@ class SettingsService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"A commission policy named '{data.name}' already exists.",
                 )
+        # Guard: cannot deactivate the current default policy
+        if data.is_active is False and policy.is_default:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Cannot deactivate the default commission policy. "
+                    "Assign a different default first."
+                ),
+            )
         if data.is_default is True and not policy.is_default:
             self.commission_repo.clear_default()
         try:
@@ -196,6 +228,22 @@ class SettingsService:
                 detail=f"A commission policy named '{data.name}' already exists.",
             )
         return CommissionPolicyResponse.model_validate(updated)
+
+    def make_default_commission_policy(
+        self, policy_id: str
+    ) -> CommissionPolicyResponse:
+        policy = self.commission_repo.get_by_id(policy_id)
+        if not policy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Commission policy '{policy_id}' not found.",
+            )
+        if not policy.is_default:
+            self.commission_repo.clear_default()
+            policy.is_default = True
+            self.db.commit()
+            self.db.refresh(policy)
+        return CommissionPolicyResponse.model_validate(policy)
 
     def delete_commission_policy(self, policy_id: str) -> None:
         policy = self.commission_repo.get_by_id(policy_id)

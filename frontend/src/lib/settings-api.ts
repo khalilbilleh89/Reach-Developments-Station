@@ -96,6 +96,13 @@ export async function updatePricingPolicy(
   );
 }
 
+export async function makeDefaultPricingPolicy(id: string): Promise<PricingPolicy> {
+  return apiFetch<PricingPolicy>(
+    `/settings/pricing-policies/${encodeURIComponent(id)}/make-default`,
+    { method: "POST" },
+  );
+}
+
 export async function deletePricingPolicy(id: string): Promise<void> {
   return apiFetch<void>(
     `/settings/pricing-policies/${encodeURIComponent(id)}`,
@@ -152,6 +159,15 @@ export async function updateCommissionPolicy(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     },
+  );
+}
+
+export async function makeDefaultCommissionPolicy(
+  id: string,
+): Promise<CommissionPolicy> {
+  return apiFetch<CommissionPolicy>(
+    `/settings/commission-policies/${encodeURIComponent(id)}/make-default`,
+    { method: "POST" },
   );
 }
 

@@ -108,6 +108,17 @@ def update_pricing_policy(
     return service.update_pricing_policy(policy_id, data)
 
 
+@router.post(
+    "/pricing-policies/{policy_id}/make-default",
+    response_model=PricingPolicyResponse,
+)
+def make_default_pricing_policy(
+    policy_id: str,
+    service: ServiceDep,
+) -> PricingPolicyResponse:
+    return service.make_default_pricing_policy(policy_id)
+
+
 @router.delete(
     "/pricing-policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT
 )
@@ -167,6 +178,17 @@ def update_commission_policy(
     service: ServiceDep,
 ) -> CommissionPolicyResponse:
     return service.update_commission_policy(policy_id, data)
+
+
+@router.post(
+    "/commission-policies/{policy_id}/make-default",
+    response_model=CommissionPolicyResponse,
+)
+def make_default_commission_policy(
+    policy_id: str,
+    service: ServiceDep,
+) -> CommissionPolicyResponse:
+    return service.make_default_commission_policy(policy_id)
 
 
 @router.delete(
