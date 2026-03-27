@@ -23,7 +23,7 @@
  * PR-V6-03 — Lifecycle Linking: land_id query-param filter, land/feasibility navigation
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -590,21 +590,24 @@ export default function ScenariosPage() {
 
   // ---- scenario_id query-param: auto-open the linked scenario on mount -----
 
-  const [scenarioIdParamHandled, setScenarioIdParamHandled] = useState(false);
+  // Use a ref (not state) so the guard doesn't cause an extra render cycle and
+  // cannot cause a race where multiple effects fire before the flag is set.
+  const scenarioIdHandledRef = useRef(false);
 
   useEffect(() => {
-    if (!scenarioIdParam || scenarioIdParamHandled || loading) return;
+    if (!scenarioIdParam || scenarioIdHandledRef.current || loading) return;
     // Try finding the scenario in the already-loaded list first
     const found = scenarios.find((s) => s.id === scenarioIdParam);
     if (found) {
+      scenarioIdHandledRef.current = true;
       setSelectedScenario(found);
       setViewMode("detail");
       setLifecycleError(null);
-      setScenarioIdParamHandled(true);
       return;
     }
-    // Not in the list (e.g. a different status filter is active) — fetch directly
-    setScenarioIdParamHandled(true);
+    // Not in the list (e.g. different status filter active) — fetch directly.
+    // Mark handled before the async call to prevent concurrent duplicate fetches.
+    scenarioIdHandledRef.current = true;
     getScenario(scenarioIdParam)
       .then((fetched) => {
         setSelectedScenario(fetched);
@@ -614,7 +617,7 @@ export default function ScenariosPage() {
       .catch(() => {
         // Scenario not found or access error — fall through to list view safely
       });
-  }, [scenarioIdParam, scenarioIdParamHandled, loading, scenarios]);
+  }, [scenarioIdParam, loading, scenarios]);
 
   // ---- Derived KPIs -------------------------------------------------------
 

@@ -241,6 +241,7 @@ export default function LandPage() {
   // parcel_id can be passed from the Scenarios page "← Open Land" CTA
   const parcelIdParam = searchParams.get("parcel_id") ?? null;
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  const scrolledToParcelRef = useRef(false);
 
   const [parcels, setParcels] = useState<LandParcel[]>([]);
   const [total, setTotal] = useState(0);
@@ -273,9 +274,15 @@ export default function LandPage() {
     fetchParcels();
   }, [fetchParcels]);
 
-  // Scroll highlighted row into view after parcels load
+  // Scroll highlighted row into view once after parcels load.
+  // The guard ref prevents re-scrolling on subsequent parcels updates.
   useEffect(() => {
-    if (highlightedParcelId && highlightRowRef.current) {
+    if (
+      highlightedParcelId &&
+      !scrolledToParcelRef.current &&
+      highlightRowRef.current
+    ) {
+      scrolledToParcelRef.current = true;
       highlightRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [highlightedParcelId, parcels]);
