@@ -93,6 +93,7 @@ const ICON_MAP: Record<string, string> = {
   FileText: "📄",
   Percent: "%",
   TrendingUp: "📈",
+  Briefcase: "💼",
   Settings: "⚙",
 };
 
