@@ -592,6 +592,7 @@ def test_result_includes_extended_kpi_fields(client: TestClient):
         "equity_multiple",
         "break_even_price",
         "break_even_units",
+        "profit_per_sqm",
         "viability_status",
         "risk_level",
         "decision",

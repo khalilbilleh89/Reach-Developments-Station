@@ -189,6 +189,7 @@ const mockResult = {
   equity_multiple: 4.125,
   break_even_price: 960,
   break_even_units: 320,
+  profit_per_sqm: 2040,
   scenario_outputs: null,
   viability_status: "VIABLE" as const,
   risk_level: "LOW" as const,
@@ -423,6 +424,26 @@ test("shows calculation error inline when calculate fails", async () => {
 
   await waitFor(() => {
     expect(screen.getByText(/calculation failed: missing field/i)).toBeInTheDocument();
+  });
+});
+
+test("renders unit economics panel with price/sqm, cost/sqm, and profit/sqm after calculation", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockResolvedValue(mockAssumptions);
+  mockGetResults.mockResolvedValue(mockResult);
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    const panel = screen.getByTestId("unit-economics-panel");
+    expect(panel).toBeInTheDocument();
+    // Panel heading
+    expect(panel).toHaveTextContent(/unit economics/i);
+    // Labels
+    expect(panel).toHaveTextContent(/Sale Price \/ sqm/i);
+    expect(panel).toHaveTextContent(/Construction Cost \/ sqm/i);
+    expect(panel).toHaveTextContent(/Profit \/ sqm/i);
+    expect(panel).toHaveTextContent(/Break-even Price \/ sqm/i);
   });
 });
 

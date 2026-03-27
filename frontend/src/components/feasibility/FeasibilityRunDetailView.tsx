@@ -944,6 +944,95 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Unit Economics panel
+// ---------------------------------------------------------------------------
+
+interface UnitEconomicsPanelProps {
+  result: FeasibilityResult;
+  assumptions: FeasibilityAssumptions | null;
+}
+
+function UnitEconomicsPanel({ result, assumptions }: UnitEconomicsPanelProps) {
+  const kpiRow = (label: string, value: string) => (
+    <div
+      key={label}
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "10px 0",
+        borderBottom: "1px solid var(--color-border)",
+      }}
+    >
+      <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+        {label}
+      </span>
+      <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text)" }}>
+        {value}
+      </span>
+    </div>
+  );
+
+  return (
+    <div
+      data-testid="unit-economics-panel"
+      style={{
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        borderRadius: 8,
+        padding: "20px 24px",
+        marginBottom: 24,
+      }}
+    >
+      <h3
+        style={{
+          margin: "0 0 16px",
+          fontSize: "0.9rem",
+          fontWeight: 600,
+          color: "var(--color-text-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+        }}
+      >
+        Unit Economics
+      </h3>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+          gap: "0 32px",
+        }}
+      >
+        <div>
+          {kpiRow(
+            "Sale Price / sqm",
+            assumptions?.avg_sale_price_per_sqm != null
+              ? formatCurrency(assumptions.avg_sale_price_per_sqm)
+              : "—",
+          )}
+          {kpiRow(
+            "Construction Cost / sqm",
+            assumptions?.construction_cost_per_sqm != null
+              ? formatCurrency(assumptions.construction_cost_per_sqm)
+              : "—",
+          )}
+        </div>
+        <div>
+          {kpiRow(
+            "Profit / sqm",
+            result.profit_per_sqm != null ? formatCurrency(result.profit_per_sqm) : "—",
+          )}
+          {kpiRow(
+            "Break-even Price / sqm",
+            result.break_even_price != null ? formatCurrency(result.break_even_price) : "—",
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main detail view
 // ---------------------------------------------------------------------------
 
@@ -1411,6 +1500,11 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
                 Save assumptions and click Calculate to generate results.
               </p>
             </div>
+          )}
+
+          {/* Unit Economics panel — PR-V6-01 */}
+          {result && (
+            <UnitEconomicsPanel result={result} assumptions={assumptions} />
           )}
 
           {/* Scenario outputs sensitivity table — PR-FEAS-07 */}

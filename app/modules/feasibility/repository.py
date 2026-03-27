@@ -238,6 +238,7 @@ class FeasibilityResultRepository:
         risk_level: Optional[str] = None,
         decision: Optional[str] = None,
         payback_period: Optional[float] = None,
+        profit_per_sqm: Optional[float] = None,
     ) -> FeasibilityResult:
         """Create or replace the result for a run (one result per run)."""
         existing = self.get_by_run(run_id)
@@ -260,6 +261,7 @@ class FeasibilityResultRepository:
             existing.risk_level = risk_level
             existing.decision = decision
             existing.payback_period = payback_period
+            existing.profit_per_sqm = profit_per_sqm
             self.db.commit()
             self.db.refresh(existing)
             return existing
@@ -283,6 +285,7 @@ class FeasibilityResultRepository:
             risk_level=risk_level,
             decision=decision,
             payback_period=payback_period,
+            profit_per_sqm=profit_per_sqm,
         )
         self.db.add(result)
         self.db.commit()

@@ -121,6 +121,7 @@ class FeasibilityResultResponse(BaseModel):
     equity_multiple: Optional[float]
     break_even_price: Optional[float]
     break_even_units: Optional[float]
+    profit_per_sqm: Optional[float]
     scenario_outputs: Optional[dict]
     viability_status: Optional[FeasibilityViabilityStatus]
     risk_level: Optional[FeasibilityRiskLevel]

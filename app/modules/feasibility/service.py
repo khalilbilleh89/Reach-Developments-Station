@@ -13,6 +13,7 @@ from app.modules.feasibility.engines.feasibility_engine import FeasibilityInputs
 from app.core.calculation_engine.registry import (
     calculate_break_even_price_per_sqm,
     calculate_break_even_sellable_sqm,
+    calculate_profit_per_sqm,
     calculate_equity_multiple,
     calculate_irr,
 )
@@ -294,6 +295,9 @@ class FeasibilityService:
         break_even_units = calculate_break_even_sellable_sqm(
             outputs.total_cost, inputs.avg_sale_price_per_sqm
         )
+        profit_per_sqm = calculate_profit_per_sqm(
+            outputs.developer_profit, inputs.sellable_area_sqm
+        )
         scenario_outputs = run_sensitivity_scenarios(inputs)
 
         viability = _evaluate_viability(outputs.profit_margin)
@@ -321,6 +325,7 @@ class FeasibilityService:
             risk_level=risk.value,
             decision=decision.value,
             payback_period=payback,
+            profit_per_sqm=profit_per_sqm,
         )
         _logger.info(
             "Feasibility calculation complete: run_id=%s viability=%s risk=%s",
