@@ -8,6 +8,7 @@ Endpoints — PricingPolicy
   GET    /api/v1/settings/pricing-policies
   GET    /api/v1/settings/pricing-policies/{policy_id}
   PATCH  /api/v1/settings/pricing-policies/{policy_id}
+  POST   /api/v1/settings/pricing-policies/{policy_id}/make-default
   DELETE /api/v1/settings/pricing-policies/{policy_id}
 
 Endpoints — CommissionPolicy
@@ -15,6 +16,7 @@ Endpoints — CommissionPolicy
   GET    /api/v1/settings/commission-policies
   GET    /api/v1/settings/commission-policies/{policy_id}
   PATCH  /api/v1/settings/commission-policies/{policy_id}
+  POST   /api/v1/settings/commission-policies/{policy_id}/make-default
   DELETE /api/v1/settings/commission-policies/{policy_id}
 
 Endpoints — ProjectTemplate
@@ -108,6 +110,17 @@ def update_pricing_policy(
     return service.update_pricing_policy(policy_id, data)
 
 
+@router.post(
+    "/pricing-policies/{policy_id}/make-default",
+    response_model=PricingPolicyResponse,
+)
+def make_default_pricing_policy(
+    policy_id: str,
+    service: ServiceDep,
+) -> PricingPolicyResponse:
+    return service.make_default_pricing_policy(policy_id)
+
+
 @router.delete(
     "/pricing-policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT
 )
@@ -167,6 +180,17 @@ def update_commission_policy(
     service: ServiceDep,
 ) -> CommissionPolicyResponse:
     return service.update_commission_policy(policy_id, data)
+
+
+@router.post(
+    "/commission-policies/{policy_id}/make-default",
+    response_model=CommissionPolicyResponse,
+)
+def make_default_commission_policy(
+    policy_id: str,
+    service: ServiceDep,
+) -> CommissionPolicyResponse:
+    return service.make_default_commission_policy(policy_id)
 
 
 @router.delete(

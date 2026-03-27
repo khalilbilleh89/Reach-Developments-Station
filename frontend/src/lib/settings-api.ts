@@ -13,6 +13,7 @@
  *   GET    /settings/pricing-policies               → list pricing policies
  *   GET    /settings/pricing-policies/{id}          → get pricing policy by id
  *   PATCH  /settings/pricing-policies/{id}          → update pricing policy
+ *   POST   /settings/pricing-policies/{id}/make-default → promote to default (422 if inactive)
  *   DELETE /settings/pricing-policies/{id}          → delete pricing policy
  *
  * CommissionPolicy:
@@ -20,6 +21,7 @@
  *   GET    /settings/commission-policies            → list commission policies
  *   GET    /settings/commission-policies/{id}       → get commission policy by id
  *   PATCH  /settings/commission-policies/{id}       → update commission policy
+ *   POST   /settings/commission-policies/{id}/make-default → promote to default (422 if inactive)
  *   DELETE /settings/commission-policies/{id}       → delete commission policy
  *
  * ProjectTemplate:
@@ -96,6 +98,13 @@ export async function updatePricingPolicy(
   );
 }
 
+export async function makeDefaultPricingPolicy(id: string): Promise<PricingPolicy> {
+  return apiFetch<PricingPolicy>(
+    `/settings/pricing-policies/${encodeURIComponent(id)}/make-default`,
+    { method: "POST" },
+  );
+}
+
 export async function deletePricingPolicy(id: string): Promise<void> {
   return apiFetch<void>(
     `/settings/pricing-policies/${encodeURIComponent(id)}`,
@@ -152,6 +161,15 @@ export async function updateCommissionPolicy(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     },
+  );
+}
+
+export async function makeDefaultCommissionPolicy(
+  id: string,
+): Promise<CommissionPolicy> {
+  return apiFetch<CommissionPolicy>(
+    `/settings/commission-policies/${encodeURIComponent(id)}/make-default`,
+    { method: "POST" },
   );
 }
 
