@@ -3,6 +3,26 @@
  */
 
 /**
+ * Format a number as a precise AED currency string (no K/M compacting).
+ *
+ * Unlike `formatCurrency`, this formatter never rounds values to K or M
+ * abbreviations. Use for per-sqm unit economics and other unit-level amounts
+ * where compacting would distort the financial meaning.
+ *
+ *   3_000   → "AED 3,000"
+ *   800     → "AED 800"
+ *   2_040   → "AED 2,040"
+ *  -1_500   → "AED -1,500"
+ */
+export function formatCurrencyPrecise(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  const formatted = Math.abs(value).toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  });
+  return `AED ${sign}${formatted}`;
+}
+
+/**
  * Format a number as a compact AED currency string.
  *
  * Compacting is applied symmetrically for positive and negative values so

@@ -280,6 +280,20 @@ def calculate_break_even_sellable_sqm(
     return total_cost / avg_sale_price_per_sqm
 
 
+def calculate_profit_per_sqm(
+    developer_profit: float,
+    sellable_area_sqm: float,
+) -> float:
+    """Developer profit per sellable square metre.
+
+    Returns 0.0 when sellable_area_sqm is zero or negative (non-positive
+    input guard — avoids division by zero and invalid area inputs).
+    """
+    if sellable_area_sqm <= 0.0:
+        return 0.0
+    return developer_profit / sellable_area_sqm
+
+
 # ---------------------------------------------------------------------------
 # Composite runner
 # ---------------------------------------------------------------------------

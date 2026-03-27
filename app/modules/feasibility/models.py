@@ -118,6 +118,7 @@ class FeasibilityResult(Base, TimestampMixin):
     equity_multiple: Mapped[Optional[float]] = mapped_column(Numeric(10, 4), nullable=True)
     break_even_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     break_even_units: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    profit_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     scenario_outputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     viability_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

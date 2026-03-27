@@ -26,6 +26,7 @@ import {
 import { decisionLabel } from "@/lib/feasibility-decision-display";
 import FeasibilityScenarioOutputsTable from "@/components/feasibility/FeasibilityScenarioOutputsTable";
 import FeasibilityDecisionSummary from "@/components/feasibility/FeasibilityDecisionSummary";
+import FeasibilityUnitEconomicsPanel from "@/components/feasibility/FeasibilityUnitEconomicsPanel";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
@@ -1411,6 +1412,11 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
                 Save assumptions and click Calculate to generate results.
               </p>
             </div>
+          )}
+
+          {/* Unit Economics panel — PR-V6-01 */}
+          {result && (
+            <FeasibilityUnitEconomicsPanel result={result} assumptions={assumptions} />
           )}
 
           {/* Scenario outputs sensitivity table — PR-FEAS-07 */}

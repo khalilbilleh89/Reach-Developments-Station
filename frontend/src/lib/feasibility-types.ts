@@ -146,6 +146,7 @@ export interface FeasibilityResult {
   equity_multiple: number | null;
   break_even_price: number | null;
   break_even_units: number | null;
+  profit_per_sqm: number | null;
   scenario_outputs: FeasibilityScenarioOutputs | null;
   viability_status: FeasibilityViabilityStatus | null;
   risk_level: FeasibilityRiskLevel | null;

@@ -31,6 +31,7 @@ from app.core.calculation_engine.returns import (
     calculate_equity_multiple,
     calculate_irr,
     calculate_npv,
+    calculate_profit_per_sqm,
     run_return_calculations,
 )
 from app.core.calculation_engine.types import (
@@ -123,6 +124,7 @@ __all__ = [
     "calculate_equity_multiple",
     "calculate_break_even_price_per_sqm",
     "calculate_break_even_sellable_sqm",
+    "calculate_profit_per_sqm",
     "build_development_cashflows",
     "calculate_buildable_area",
     "calculate_sellable_area",
