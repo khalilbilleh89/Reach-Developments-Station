@@ -58,11 +58,20 @@ class PortfolioService:
     # ------------------------------------------------------------------
 
     def get_dashboard(self) -> PortfolioDashboardResponse:
-        """Assemble and return the full portfolio dashboard response."""
-        summary = self._build_summary()
+        """Assemble and return the full portfolio dashboard response.
+
+        Portfolio-wide aggregates that feed multiple sections are computed once
+        and passed into the section builders to avoid redundant DB round-trips.
+        """
+        # Pre-compute shared portfolio-wide aggregates used by multiple sections
+        total_projects = self.repo.count_projects()
+        collected_cash = self.repo.sum_collected_cash()
+        outstanding_balance = self.repo.sum_outstanding_balance()
+
+        summary = self._build_summary(total_projects, collected_cash, outstanding_balance)
         projects = self._build_project_cards()
-        pipeline = self._build_pipeline_summary()
-        collections = self._build_collections_summary()
+        pipeline = self._build_pipeline_summary(total_projects)
+        collections = self._build_collections_summary(collected_cash, outstanding_balance)
         risk_flags = self._derive_risk_flags(projects, collections)
 
         return PortfolioDashboardResponse(
@@ -77,10 +86,15 @@ class PortfolioService:
     # Section builders
     # ------------------------------------------------------------------
 
-    def _build_summary(self) -> PortfolioSummary:
+    def _build_summary(
+        self,
+        total_projects: int,
+        collected_cash: float,
+        outstanding_balance: float,
+    ) -> PortfolioSummary:
         unit_counts = self.repo.count_units_by_status()
         return PortfolioSummary(
-            total_projects=self.repo.count_projects(),
+            total_projects=total_projects,
             active_projects=self.repo.count_active_projects(),
             total_units=sum(unit_counts.values()),
             available_units=unit_counts.get("available", 0),
@@ -88,30 +102,40 @@ class PortfolioService:
             under_contract_units=unit_counts.get("under_contract", 0),
             registered_units=unit_counts.get("registered", 0),
             contracted_revenue=self.repo.sum_contracted_revenue(),
-            collected_cash=self.repo.sum_collected_cash(),
-            outstanding_balance=self.repo.sum_outstanding_balance(),
+            collected_cash=collected_cash,
+            outstanding_balance=outstanding_balance,
         )
 
     def _build_project_cards(self) -> List[PortfolioProjectCard]:
+        """Build per-project cards using bulk grouped queries to avoid N+1 queries."""
         projects = self.repo.list_projects()
-        cards: List[PortfolioProjectCard] = []
+        if not projects:
+            return []
 
+        # Fetch all per-project aggregates in bulk (one query each, grouped by project)
+        unit_counts_map = self.repo.get_unit_status_counts_by_project()
+        revenue_map = self.repo.get_contracted_revenue_by_project()
+        collected_map = self.repo.get_collected_cash_by_project()
+        balance_map = self.repo.get_outstanding_balance_by_project()
+        overdue_map = self.repo.get_overdue_receivable_counts_by_project()
+
+        cards: List[PortfolioProjectCard] = []
         for project in projects:
-            unit_counts = self.repo.count_units_by_status_for_project(project.id)
+            unit_counts = unit_counts_map.get(project.id, {})
             total_units = sum(unit_counts.values())
             available = unit_counts.get("available", 0)
             reserved = unit_counts.get("reserved", 0)
             under_contract = unit_counts.get("under_contract", 0)
             registered = unit_counts.get("registered", 0)
-            contracted_revenue = self.repo.sum_contracted_revenue_for_project(project.id)
-            collected_cash = self.repo.sum_collected_cash_for_project(project.id)
-            outstanding_balance = self.repo.sum_outstanding_balance_for_project(project.id)
+            contracted_revenue = revenue_map.get(project.id, 0.0)
+            collected_cash = collected_map.get(project.id, 0.0)
+            outstanding_balance = balance_map.get(project.id, 0.0)
 
             sold_units = under_contract + registered
             sell_through_pct = _safe_pct(sold_units, total_units)
             sell_through_ratio = sold_units / total_units if total_units > 0 else None
 
-            overdue_count = self.repo.count_overdue_receivables_for_project(project.id)
+            overdue_count = overdue_map.get(project.id, 0)
             health_badge = self._derive_health_badge(sell_through_ratio, overdue_count)
 
             cards.append(
@@ -135,8 +159,7 @@ class PortfolioService:
 
         return cards
 
-    def _build_pipeline_summary(self) -> PortfolioPipelineSummary:
-        total_projects = self.repo.count_projects()
+    def _build_pipeline_summary(self, total_projects: int) -> PortfolioPipelineSummary:
         run_counts_by_project = self.repo.get_all_project_feasibility_run_counts()
         # Count projects that have zero feasibility runs
         projects_with_runs = len(run_counts_by_project)
@@ -150,13 +173,15 @@ class PortfolioService:
             projects_with_no_feasibility=projects_with_no_feasibility,
         )
 
-    def _build_collections_summary(self) -> PortfolioCollectionsSummary:
+    def _build_collections_summary(
+        self,
+        collected_cash: float,
+        outstanding_balance: float,
+    ) -> PortfolioCollectionsSummary:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
         overdue_balance = self.repo.sum_overdue_balance()
-        collected = self.repo.sum_collected_cash()
-        outstanding = self.repo.sum_outstanding_balance()
-        collection_rate_pct = _safe_pct(collected, collected + outstanding)
+        collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
 
         return PortfolioCollectionsSummary(
             total_receivables=total_receivables,

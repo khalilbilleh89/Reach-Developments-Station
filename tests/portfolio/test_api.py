@@ -14,7 +14,6 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 
 # ---------------------------------------------------------------------------
@@ -30,19 +29,28 @@ def _create_project(client: TestClient, code: str = "PRJ-PORT", name: str = "Por
 def _create_unit(client: TestClient, proj_code: str = "PRJ-PORT") -> tuple[str, str]:
     """Create full hierarchy and return (project_id, unit_id)."""
     project_id = _create_project(client, proj_code, f"Project {proj_code}")
-    phase_id = client.post(
+    phase_resp = client.post(
         "/api/v1/phases",
         json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
-    ).json()["id"]
-    building_id = client.post(
+    )
+    assert phase_resp.status_code == 201, phase_resp.text
+    phase_id = phase_resp.json()["id"]
+
+    building_resp = client.post(
         f"/api/v1/phases/{phase_id}/buildings",
         json={"name": "Block A", "code": "BLK-A"},
-    ).json()["id"]
-    floor_id = client.post(
+    )
+    assert building_resp.status_code == 201, building_resp.text
+    building_id = building_resp.json()["id"]
+
+    floor_resp = client.post(
         f"/api/v1/buildings/{building_id}/floors",
         json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
-    ).json()["id"]
-    unit_id = client.post(
+    )
+    assert floor_resp.status_code == 201, floor_resp.text
+    floor_id = floor_resp.json()["id"]
+
+    unit_resp = client.post(
         "/api/v1/units",
         json={
             "floor_id": floor_id,
@@ -50,7 +58,9 @@ def _create_unit(client: TestClient, proj_code: str = "PRJ-PORT") -> tuple[str, 
             "unit_type": "studio",
             "internal_area": 100.0,
         },
-    ).json()["id"]
+    )
+    assert unit_resp.status_code == 201, unit_resp.text
+    unit_id = unit_resp.json()["id"]
     return project_id, unit_id
 
 
@@ -127,7 +137,9 @@ def test_dashboard_empty_portfolio_schema(client: TestClient):
     # Pipeline section
     pipeline = data["pipeline"]
     assert pipeline["total_scenarios"] == 0
+    assert pipeline["approved_scenarios"] == 0
     assert pipeline["total_feasibility_runs"] == 0
+    assert pipeline["calculated_feasibility_runs"] == 0
     assert pipeline["projects_with_no_feasibility"] == 0
 
     # Collections section
@@ -312,24 +324,35 @@ def test_dashboard_no_risk_flags_on_empty_portfolio(client: TestClient):
     assert resp.json()["risk_flags"] == []
 
 
-def test_dashboard_risk_flag_schema(client: TestClient, db_session: Session):
-    """Risk flags should include all required fields when present."""
-    # Seed an overdue receivable directly via ORM to trigger the flag
-    from app.modules.receivables.models import Receivable
+def test_dashboard_risk_flag_schema(client: TestClient):
+    """Risk flags should include all required fields when present.
 
-    rec = Receivable(
-        contract_id="fake-contract",
-        installment_id="fake-install",
-        receivable_number=1,
-        due_date=date(2025, 1, 1),
-        amount_due=50000.0,
-        amount_paid=0.0,
-        balance_due=50000.0,
-        status="overdue",
-        currency="AED",
+    Creates a proper relational receivable via the full API stack (project →
+    unit → buyer → contract → payment plan with past due date → generate
+    receivables).  With a past start_date the receivable is immediately
+    derived as overdue, triggering the overdue_receivables risk flag.
+    """
+    project_id, unit_id = _create_unit(client, "PRJ-RISK")
+    buyer_id = _create_buyer(client, "risk-buyer@example.com")
+    contract_id = _create_contract(client, unit_id, buyer_id, "CNT-RISK-001", price=100000.0)
+
+    # Create a payment plan with a start date well in the past so the
+    # installment due_date is overdue when receivables are generated.
+    plan_resp = client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "Overdue Test Plan",
+            "number_of_installments": 1,
+            "start_date": "2024-01-01",
+        },
     )
-    db_session.add(rec)
-    db_session.commit()
+    assert plan_resp.status_code == 201, plan_resp.text
+
+    # Generate receivables — the single installment due 2024-01-01 will be overdue.
+    gen_resp = client.post(f"/api/v1/contracts/{contract_id}/receivables/generate")
+    assert gen_resp.status_code == 201, gen_resp.text
+    assert gen_resp.json()["generated"] >= 1
 
     resp = client.get("/api/v1/portfolio/dashboard")
     assert resp.status_code == 200

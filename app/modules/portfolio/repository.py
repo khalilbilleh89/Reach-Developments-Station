@@ -10,7 +10,7 @@ Cross-module joins are performed inline here because the portfolio layer is
 an aggregation-only consumer and does not own any domain records.
 """
 
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -238,3 +238,80 @@ class PortfolioRepository:
             .all()
         )
         return {project_id: count for project_id, count in rows}
+
+    # ------------------------------------------------------------------
+    # Bulk grouped per-project aggregations (avoids N+1 in _build_project_cards)
+    # ------------------------------------------------------------------
+
+    def get_unit_status_counts_by_project(self) -> Dict[str, Dict[str, int]]:
+        """Return project_id → {status → unit_count} for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, Unit.status, func.count(Unit.id))
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .group_by(Phase.project_id, Unit.status)
+            .all()
+        )
+        result: Dict[str, Dict[str, int]] = {}
+        for project_id, status, count in rows:
+            result.setdefault(project_id, {})[status] = count
+        return result
+
+    def get_contracted_revenue_by_project(self) -> Dict[str, float]:
+        """Return project_id → contracted revenue for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, func.sum(SalesContract.contract_price))
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {pid: float(total) for pid, total in rows if total is not None}
+
+    def get_collected_cash_by_project(self) -> Dict[str, float]:
+        """Return project_id → amount_paid sum for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, func.sum(Receivable.amount_paid))
+            .join(SalesContract, Receivable.contract_id == SalesContract.id)
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {pid: float(total) for pid, total in rows if total is not None}
+
+    def get_outstanding_balance_by_project(self) -> Dict[str, float]:
+        """Return project_id → balance_due sum (non-paid/cancelled) for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, func.sum(Receivable.balance_due))
+            .join(SalesContract, Receivable.contract_id == SalesContract.id)
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Receivable.status.notin_(["paid", "cancelled"]))
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {pid: float(total) for pid, total in rows if total is not None}
+
+    def get_overdue_receivable_counts_by_project(self) -> Dict[str, int]:
+        """Return project_id → overdue receivable count for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, func.count(Receivable.id))
+            .join(SalesContract, Receivable.contract_id == SalesContract.id)
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Receivable.status == "overdue")
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {pid: count for pid, count in rows}
