@@ -27,6 +27,7 @@ import type {
   ScenarioCreate,
   ScenarioDuplicateRequest,
   ScenarioList,
+  ScenarioStatus,
   ScenarioUpdate,
   ScenarioVersion,
   ScenarioVersionList,
@@ -40,7 +41,7 @@ export async function listScenarios(params?: {
   source_type?: string;
   project_id?: string;
   land_id?: string;
-  status?: string;
+  status?: ScenarioStatus;
   skip?: number;
   limit?: number;
 }): Promise<ScenarioList> {

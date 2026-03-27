@@ -85,7 +85,7 @@ export interface ScenarioCompareRequest {
 export interface ScenarioCompareItem {
   scenario_id: string;
   scenario_name: string;
-  status: string;
+  status: ScenarioStatus;
   latest_version_number: number | null;
   assumptions_json: Record<string, unknown> | null;
   comparison_metrics_json: Record<string, unknown> | null;

@@ -245,6 +245,8 @@ function CreateScenarioModal({ onClose, onCreated }: CreateScenarioModalProps) {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Marina Tower — Base Case"
             style={inputStyle}
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
           />
         </Field>
         <Field id="create-scenario-code" label="Code">
@@ -352,6 +354,8 @@ function DuplicateScenarioModal({ scenario, onClose, onDuplicated }: DuplicateSc
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={inputStyle}
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
           />
         </Field>
         <Field id="duplicate-scenario-code" label="New Code">
@@ -437,13 +441,17 @@ function CompareView({ items, onClose }: CompareViewProps) {
           <tbody>
             <tr>
               <td style={{ fontWeight: 500 }}>Status</td>
-              {items.map((item) => (
-                <td key={item.scenario_id}>
-                  <span className={statusBadgeClass(item.status as ScenarioStatus) || styles.badgeGray}>
-                    {formatStatus(item.status as ScenarioStatus)}
-                  </span>
-                </td>
-              ))}
+              {items.map((item) => {
+                const badgeClass = statusBadgeClass(item.status);
+                const label = formatStatus(item.status);
+                return (
+                  <td key={item.scenario_id}>
+                    <span className={badgeClass || styles.badgeGray}>
+                      {label}
+                    </span>
+                  </td>
+                );
+              })}
             </tr>
             <tr>
               <td style={{ fontWeight: 500 }}>Latest Version</td>
@@ -506,7 +514,7 @@ export default function ScenariosPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
 
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<ScenarioStatus | "">("");
 
   const [showCreate, setShowCreate] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<Scenario | null>(null);
@@ -530,6 +538,10 @@ export default function ScenariosPage() {
       });
       setScenarios(result.items);
       setTotal(result.total);
+      // Clear stale selections whenever the visible dataset changes so that
+      // IDs removed by a filter change can no longer trigger Compare.
+      setSelectedIds(new Set());
+      setCompareItems(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load scenarios.");
     } finally {
@@ -661,7 +673,7 @@ export default function ScenariosPage() {
           <select
             id="status-filter"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value as ScenarioStatus | "")}
             style={{ ...inputStyle, width: "auto" }}
           >
             <option value="">All</option>
@@ -736,7 +748,21 @@ export default function ScenariosPage() {
             <thead>
               <tr>
                 <th scope="col" style={{ width: 36 }}>
-                  <span className="sr-only">Select</span>
+                  <span
+                    style={{
+                      position: "absolute",
+                      width: 1,
+                      height: 1,
+                      padding: 0,
+                      margin: -1,
+                      overflow: "hidden",
+                      clip: "rect(0, 0, 0, 0)",
+                      whiteSpace: "nowrap",
+                      border: 0,
+                    }}
+                  >
+                    Select
+                  </span>
                 </th>
                 <th scope="col">Name</th>
                 <th scope="col">Code</th>

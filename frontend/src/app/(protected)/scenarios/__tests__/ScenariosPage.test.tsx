@@ -244,6 +244,50 @@ describe("ScenariosPage — list view", () => {
       ),
     );
   });
+
+  it("clears selection and compare button when filter changes", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() => expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument());
+
+    // Select two rows
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
+    expect(screen.getByText(/Compare \(2\)/)).toBeInTheDocument();
+
+    // Change filter — loadScenarios re-runs, which clears selectedIds
+    const select = screen.getByLabelText("Status:");
+    fireEvent.change(select, { target: { value: "draft" } });
+
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Compare \(/)).not.toBeInTheDocument();
+  });
+
+  it("clears selection after create refreshes the list", async () => {
+    const newScenario = { ...mockScenario1, id: "sc-new", name: "New Test Scenario" };
+    mockCreateScenario.mockResolvedValueOnce(newScenario);
+    mockListScenarios.mockResolvedValue({
+      items: [mockScenario1, mockScenario2, newScenario],
+      total: 3,
+    });
+
+    render(<ScenariosPage />);
+    await waitFor(() => expect(screen.getByText("Marina Tower — Base Case")).toBeInTheDocument());
+
+    // Select rows before creating
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
+    expect(screen.getByText(/Compare \(2\)/)).toBeInTheDocument();
+
+    // Create a scenario (triggers refresh which clears selection)
+    fireEvent.click(screen.getByText("+ New Scenario"));
+    fireEvent.change(screen.getByLabelText(/Name \*/), { target: { value: "New Test Scenario" } });
+    fireEvent.click(screen.getByText("Create Scenario"));
+
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Compare \(/)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
