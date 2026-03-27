@@ -715,10 +715,10 @@ export default function ScenariosPage() {
     <>
       {/* KPI strip */}
       <div className={styles.kpiGrid}>
-        <MetricCard label="Total Scenarios" value={String(total)} trend="neutral" />
-        <MetricCard label="Draft" value={String(draftCount)} trend="neutral" />
-        <MetricCard label="Approved" value={String(approvedCount)} trend="positive" />
-        <MetricCard label="Archived" value={String(archivedCount)} trend="neutral" />
+        <MetricCard title="Total Scenarios" value={String(total)} />
+        <MetricCard title="Draft" value={String(draftCount)} />
+        <MetricCard title="Approved" value={String(approvedCount)} />
+        <MetricCard title="Archived" value={String(archivedCount)} />
       </div>
 
       {/* Land filter indicator */}
