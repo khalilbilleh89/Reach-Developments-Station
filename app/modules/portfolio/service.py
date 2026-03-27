@@ -144,7 +144,7 @@ class PortfolioService:
 
         return PortfolioPipelineSummary(
             total_scenarios=self.repo.count_scenarios(),
-            active_scenarios=self.repo.count_active_scenarios(),
+            approved_scenarios=self.repo.count_active_scenarios(),
             total_feasibility_runs=self.repo.count_feasibility_runs(),
             calculated_feasibility_runs=self.repo.count_calculated_feasibility_runs(),
             projects_with_no_feasibility=projects_with_no_feasibility,

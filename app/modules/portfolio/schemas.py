@@ -76,7 +76,7 @@ class PortfolioPipelineSummary(BaseModel):
     """Scenario and feasibility pipeline signals."""
 
     total_scenarios: int = Field(..., description="Total scenarios in the system")
-    active_scenarios: int = Field(..., description="Scenarios with status 'approved'")
+    approved_scenarios: int = Field(..., description="Scenarios with status 'approved'")
     total_feasibility_runs: int = Field(..., description="Total feasibility runs")
     calculated_feasibility_runs: int = Field(
         ..., description="Feasibility runs with status 'calculated'"
