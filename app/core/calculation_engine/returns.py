@@ -286,7 +286,8 @@ def calculate_profit_per_sqm(
 ) -> float:
     """Developer profit per sellable square metre.
 
-    Returns 0.0 when sellable_area_sqm is zero to avoid division by zero.
+    Returns 0.0 when sellable_area_sqm is zero or negative (non-positive
+    input guard — avoids division by zero and invalid area inputs).
     """
     if sellable_area_sqm <= 0.0:
         return 0.0

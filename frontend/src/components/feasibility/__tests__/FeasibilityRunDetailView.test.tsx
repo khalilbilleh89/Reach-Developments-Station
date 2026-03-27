@@ -52,6 +52,10 @@ jest.mock("@/lib/format-utils", () => {
   const currencyFormatter = new Intl.NumberFormat("en-US");
   return {
     formatCurrency: (v: number) => `AED ${currencyFormatter.format(v)}`,
+    formatCurrencyPrecise: (v: number) => {
+      const sign = v < 0 ? "-" : "";
+      return `AED ${sign}${currencyFormatter.format(Math.abs(v))}`;
+    },
   };
 });
 
@@ -439,11 +443,49 @@ test("renders unit economics panel with price/sqm, cost/sqm, and profit/sqm afte
     expect(panel).toBeInTheDocument();
     // Panel heading
     expect(panel).toHaveTextContent(/unit economics/i);
-    // Labels
+    // Labels (consistent casing)
     expect(panel).toHaveTextContent(/Sale Price \/ sqm/i);
     expect(panel).toHaveTextContent(/Construction Cost \/ sqm/i);
     expect(panel).toHaveTextContent(/Profit \/ sqm/i);
-    expect(panel).toHaveTextContent(/Break-even Price \/ sqm/i);
+    expect(panel).toHaveTextContent(/Break-Even Price \/ sqm/i);
+    // Values — mockAssumptions: avg_sale_price_per_sqm=3000, construction_cost_per_sqm=800
+    // mockResult: profit_per_sqm=2040, break_even_price=960
+    expect(panel).toHaveTextContent(/3,000/);
+    expect(panel).toHaveTextContent(/800/);
+    expect(panel).toHaveTextContent(/2,040/);
+    expect(panel).toHaveTextContent(/960/);
+    // No fallback dash when values are present
+    expect(panel).not.toHaveTextContent("—");
+  });
+});
+
+test("renders '—' fallbacks in unit economics panel when values are missing", async () => {
+  mockGetRun.mockResolvedValue(mockRun);
+  mockGetAssumptions.mockRejectedValue(mock404());
+  mockGetResults.mockResolvedValue({
+    ...mockResult,
+    profit_per_sqm: null,
+    break_even_price: null,
+  });
+
+  render(<FeasibilityRunDetailView />);
+
+  await waitFor(() => {
+    const panel = screen.getByTestId("unit-economics-panel");
+    expect(panel).toBeInTheDocument();
+    // All four rows show fallback when assumptions are absent and result fields are null
+    expect(panel).toHaveTextContent(/Sale Price \/ sqm/i);
+    expect(panel).toHaveTextContent(/Construction Cost \/ sqm/i);
+    expect(panel).toHaveTextContent(/Profit \/ sqm/i);
+    expect(panel).toHaveTextContent(/Break-Even Price \/ sqm/i);
+    // All KPI values should be "—" since assumptions are unavailable and result fields are null
+    const valueSpans = panel.querySelectorAll(
+      "div > span:last-child",
+    );
+    const dashValues = Array.from(valueSpans).filter(
+      (el) => el.textContent?.trim() === "—",
+    );
+    expect(dashValues.length).toBeGreaterThanOrEqual(4);
   });
 });
 

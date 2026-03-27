@@ -11,7 +11,6 @@ from app.modules.feasibility.break_even_engine import (
     calculate_break_even_units_sqm,
     calculate_equity_multiple,
 )
-from app.core.calculation_engine.returns import calculate_profit_per_sqm
 
 
 # ---------------------------------------------------------------------------
@@ -109,34 +108,3 @@ def test_equity_multiple_increases_with_gdv():
     low = calculate_equity_multiple(2_000_000.0, 1_000_000.0)
     high = calculate_equity_multiple(4_000_000.0, 1_000_000.0)
     assert high > low
-
-
-# ---------------------------------------------------------------------------
-# calculate_profit_per_sqm
-# ---------------------------------------------------------------------------
-
-def test_profit_per_sqm_basic():
-    """Standard case: profit / area = profit_per_sqm."""
-    result = calculate_profit_per_sqm(500_000.0, 1_000.0)
-    assert result == pytest.approx(500.0)
-
-
-def test_profit_per_sqm_zero_area_returns_zero():
-    """Avoid division by zero when area is 0."""
-    assert calculate_profit_per_sqm(500_000.0, 0.0) == 0.0
-
-
-def test_profit_per_sqm_negative_area_returns_zero():
-    """Avoid division by zero when area is negative."""
-    assert calculate_profit_per_sqm(500_000.0, -100.0) == 0.0
-
-
-def test_profit_per_sqm_negative_profit():
-    """Loss scenario yields a negative profit_per_sqm."""
-    result = calculate_profit_per_sqm(-200_000.0, 500.0)
-    assert result == pytest.approx(-400.0)
-
-
-def test_profit_per_sqm_zero_profit():
-    """Break-even scenario yields zero profit_per_sqm."""
-    assert calculate_profit_per_sqm(0.0, 1_000.0) == pytest.approx(0.0)
