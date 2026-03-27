@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
@@ -234,6 +235,7 @@ function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
  * and delete operations. Computed metrics remain display-only.
  */
 export default function LandPage() {
+  const router = useRouter();
   const [parcels, setParcels] = useState<LandParcel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -543,6 +545,47 @@ export default function LandPage() {
                         aria-label={`Edit ${parcel.parcel_name}`}
                       >
                         Edit
+                      </button>
+                      {/* Scenario linking actions */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/scenarios?land_id=${encodeURIComponent(parcel.id)}`,
+                          )
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                          color: "var(--color-text)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`View scenarios for ${parcel.parcel_name}`}
+                      >
+                        Scenarios
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/scenarios?land_id=${encodeURIComponent(parcel.id)}&new=1`,
+                          )
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          border: "1px solid var(--color-primary, #2563eb)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                          color: "var(--color-primary, #2563eb)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                        aria-label={`Create scenario for ${parcel.parcel_name}`}
+                      >
+                        + Scenario
                       </button>
                       {/* Delete button */}
                       <button
