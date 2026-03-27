@@ -1,23 +1,24 @@
-// The Buildings → Floors → Units structure UI is currently rendered
-// inside the main Projects page through the ProjectDetailView tabbed
-// interface. Those tabs are controlled by React component state rather
-// than URL query parameters.
-//
-// This route exists only to satisfy Next.js static export requirements
-// (`output: "export"`) for the dynamic segment `/projects/[id]/structure`.
-//
-// It also acts as a placeholder for potential future nested routing
-// where the structure view could be separated into its own page.
-//
-// generateStaticParams ensures the static build knows which routes exist.
-// dynamicParams = false ensures unknown IDs return a static 404.
+import { ProjectStructureClient } from "./ProjectStructureClient";
 
+/**
+ * Project structure viewer route — server component entry.
+ *
+ * Renders the full canonical hierarchy for a project:
+ *   Project → Phase → Building → Floor → Unit
+ *
+ * All interactive rendering is delegated to ProjectStructureClient (client
+ * component), keeping server/client module boundaries correct in App Router.
+ *
+ * generateStaticParams and dynamicParams satisfy the Next.js `output: "export"`
+ * requirement, consistent with all other dynamic route entries.
+ */
 export function generateStaticParams() {
   return [{ id: "_" }];
 }
 
 export const dynamicParams = false;
 
-export default function ProjectStructurePageStub() {
-  return null;
+export default function ProjectStructurePage() {
+  return <ProjectStructureClient />;
 }
+
