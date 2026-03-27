@@ -47,6 +47,7 @@ from app.modules.construction.api import router as construction_router
 from app.modules.settings.api import router as settings_router
 from app.modules.scenario.api import router as scenario_router
 from app.modules.concept_design.api import router as concept_design_router
+from app.modules.portfolio.api import router as portfolio_router
 
 # Path to the static export produced by `next build` with `output: "export"`.
 # Next.js writes self-contained HTML files and assets to this directory.
@@ -135,6 +136,7 @@ app.include_router(construction_router, prefix=_API_PREFIX)
 app.include_router(settings_router, prefix=_API_PREFIX)
 app.include_router(scenario_router, prefix=_API_PREFIX)
 app.include_router(concept_design_router, prefix=_API_PREFIX)
+app.include_router(portfolio_router, prefix=_API_PREFIX)
 
 # Mount Next.js compiled static chunks (/_next/static/*) when the build exists.
 # These are the JS/CSS assets referenced by the pre-rendered HTML pages.
