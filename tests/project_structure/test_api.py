@@ -305,7 +305,7 @@ def test_structure_floor_with_no_units(client: TestClient) -> None:
     resp = client.get(f"/api/v1/projects/{project_id}/structure")
     assert resp.status_code == 200
 
-    floor = data = resp.json()
+    data = resp.json()
     floor = data["phases"][0]["buildings"][0]["floors"][0]
     assert floor["id"] == floor_id
     assert floor["units"] == []
