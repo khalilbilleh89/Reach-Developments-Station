@@ -52,15 +52,17 @@ export default function PortfolioPage() {
       {loading ? (
         <div className={styles.loadingState}>Loading portfolio dashboard…</div>
       ) : error ? (
-        <div className={styles.errorState}>{error}</div>
-      ) : data === null ? (
+        <div className={styles.errorState} role="alert" aria-live="polite">
+          {error}
+        </div>
+      ) : data?.summary.total_projects === 0 && data.projects.length === 0 ? (
         <div className={styles.emptyState}>
           <p className={styles.emptyStateTitle}>No portfolio data available.</p>
           <p className={styles.emptyStateBody}>
             Add projects and source data to populate the portfolio dashboard.
           </p>
         </div>
-      ) : (
+      ) : data ? (
         <div className={styles.sectionGrid}>
           <PortfolioSummaryStrip summary={data.summary} />
           <PortfolioProjectCards projects={data.projects} />
@@ -68,7 +70,7 @@ export default function PortfolioPage() {
           <PortfolioPipelinePanel pipeline={data.pipeline} />
           <PortfolioRiskFlagsPanel riskFlags={data.risk_flags} />
         </div>
-      )}
+      ) : null}
     </PageContainer>
   );
 }

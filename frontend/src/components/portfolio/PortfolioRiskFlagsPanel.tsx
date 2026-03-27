@@ -9,19 +9,19 @@
  */
 
 import React from "react";
-import type { PortfolioRiskFlag } from "@/lib/portfolio-types";
+import type { PortfolioRiskFlag, PortfolioRiskSeverity } from "@/lib/portfolio-types";
 import styles from "@/styles/portfolio.module.css";
 
 interface PortfolioRiskFlagsPanelProps {
   riskFlags: PortfolioRiskFlag[];
 }
 
-function severityClass(severity: string): string {
+function severityClass(severity: PortfolioRiskSeverity): string {
   if (severity === "critical") return styles.severityCritical;
   return styles.severityWarning;
 }
 
-function severityLabel(severity: string): string {
+function severityLabel(severity: PortfolioRiskSeverity): string {
   if (severity === "critical") return "Critical";
   return "Warning";
 }
@@ -37,9 +37,9 @@ export function PortfolioRiskFlagsPanel({
         <p className={styles.panelEmpty}>No risk flags detected.</p>
       ) : (
         <ul className={styles.riskFlagList} aria-label="Portfolio risk flags">
-          {riskFlags.map((flag, index) => (
+          {riskFlags.map((flag) => (
             <li
-              key={`${flag.flag_type}-${flag.affected_project_id ?? "portfolio"}-${index}`}
+              key={`${flag.flag_type}-${flag.affected_project_id ?? "portfolio"}-${flag.description}`}
               className={styles.riskFlagItem}
             >
               <span

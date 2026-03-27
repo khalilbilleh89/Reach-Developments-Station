@@ -7,7 +7,7 @@
  */
 
 import React from "react";
-import type { PortfolioProjectCard } from "@/lib/portfolio-types";
+import type { PortfolioProjectCard, PortfolioHealthBadge } from "@/lib/portfolio-types";
 import { formatCurrency } from "@/lib/format-utils";
 import styles from "@/styles/portfolio.module.css";
 
@@ -15,7 +15,7 @@ interface PortfolioProjectCardsProps {
   projects: PortfolioProjectCard[];
 }
 
-function healthBadgeClass(badge: string | null): string {
+function healthBadgeClass(badge: PortfolioHealthBadge | null): string {
   switch (badge) {
     case "on_track":
       return styles.badgeOnTrack;
@@ -28,7 +28,7 @@ function healthBadgeClass(badge: string | null): string {
   }
 }
 
-function healthBadgeLabel(badge: string | null): string {
+function healthBadgeLabel(badge: PortfolioHealthBadge | null): string {
   switch (badge) {
     case "on_track":
       return "On Track";
@@ -38,6 +38,19 @@ function healthBadgeLabel(badge: string | null): string {
       return "At Risk";
     default:
       return "—";
+  }
+}
+
+function healthBadgeAriaLabel(badge: PortfolioHealthBadge | null): string {
+  switch (badge) {
+    case "on_track":
+      return "Health: On Track";
+    case "needs_attention":
+      return "Health: Needs Attention";
+    case "at_risk":
+      return "Health: At Risk";
+    default:
+      return "Health: Unknown";
   }
 }
 
@@ -64,7 +77,7 @@ export function PortfolioProjectCards({ projects }: PortfolioProjectCardsProps) 
               </div>
               <span
                 className={`${styles.healthBadge} ${healthBadgeClass(project.health_badge)}`}
-                aria-label={`Health: ${healthBadgeLabel(project.health_badge)}`}
+                aria-label={healthBadgeAriaLabel(project.health_badge)}
               >
                 {healthBadgeLabel(project.health_badge)}
               </span>

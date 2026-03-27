@@ -161,6 +161,15 @@ describe("PortfolioPage", () => {
     );
   });
 
+  it("error state has role=alert for accessibility", async () => {
+    mockGetPortfolioDashboard.mockRejectedValue(new Error("Network error"));
+    render(<PortfolioPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Network error");
+  });
+
   it("renders summary strip on success", async () => {
     mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
     render(<PortfolioPage />);
@@ -201,6 +210,17 @@ describe("PortfolioPage", () => {
     await waitFor(() =>
       expect(screen.getByText("On Track")).toBeInTheDocument(),
     );
+  });
+
+  it("renders null health badge with accessible label Health: Unknown", async () => {
+    mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
+    render(<PortfolioPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Marina Tower")).toBeInTheDocument(),
+    );
+    // Palm Villa has null health_badge — aria-label should be "Health: Unknown"
+    const unknownBadge = screen.getByLabelText("Health: Unknown");
+    expect(unknownBadge).toBeInTheDocument();
   });
 
   it("renders null sell_through_pct safely as dash", async () => {
@@ -300,7 +320,7 @@ describe("PortfolioPage", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders correctly with all zero values (empty portfolio state)", async () => {
+  it("renders page-level empty state when total_projects and projects are zero", async () => {
     mockGetPortfolioDashboard.mockResolvedValue({
       summary: {
         total_projects: 0,
@@ -332,9 +352,24 @@ describe("PortfolioPage", () => {
     });
     render(<PortfolioPage />);
     await waitFor(() =>
+      expect(screen.getByText("No portfolio data available.")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText("Add projects and source data to populate the portfolio dashboard."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders dashboard sections when total_projects > 0", async () => {
+    mockGetPortfolioDashboard.mockResolvedValue({
+      ...mockDashboard,
+      projects: [],
+      summary: { ...mockSummary, total_projects: 2 },
+    });
+    render(<PortfolioPage />);
+    await waitFor(() =>
       expect(screen.getByText("Total Projects")).toBeInTheDocument(),
     );
-    expect(screen.getByText("No projects found in portfolio.")).toBeInTheDocument();
-    expect(screen.getByText("No risk flags detected.")).toBeInTheDocument();
+    // With total_projects > 0 the full dashboard renders, not the empty state
+    expect(screen.queryByText("No portfolio data available.")).not.toBeInTheDocument();
   });
 });

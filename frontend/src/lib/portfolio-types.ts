@@ -11,6 +11,20 @@
  * display models only.
  */
 
+// ---------- String union types for fixed backend enum values -------------
+
+/** Health indicator derived from project sell-through and collections data. */
+export type PortfolioHealthBadge = "on_track" | "needs_attention" | "at_risk";
+
+/** Risk flag severity level. */
+export type PortfolioRiskSeverity = "warning" | "critical";
+
+/** Machine-readable risk flag category. */
+export type PortfolioRiskFlagType =
+  | "overdue_receivables"
+  | "low_sell_through"
+  | "low_collections";
+
 // ---------- Top-level KPI summary ----------------------------------------
 
 export interface PortfolioSummary {
@@ -43,8 +57,8 @@ export interface PortfolioProjectCard {
   outstanding_balance: number;
   /** Percentage of units sold; null when total_units is zero */
   sell_through_pct: number | null;
-  /** 'on_track' | 'needs_attention' | 'at_risk' | null */
-  health_badge: string | null;
+  /** Backend-derived health indicator; null when insufficient data */
+  health_badge: PortfolioHealthBadge | null;
 }
 
 // ---------- Scenario / feasibility pipeline signals ----------------------
@@ -70,8 +84,8 @@ export interface PortfolioCollectionsSummary {
 // ---------- Individual risk / alert signal --------------------------------
 
 export interface PortfolioRiskFlag {
-  flag_type: string;
-  severity: string;
+  flag_type: PortfolioRiskFlagType;
+  severity: PortfolioRiskSeverity;
   description: string;
   affected_project_id: string | null;
   affected_project_name: string | null;
