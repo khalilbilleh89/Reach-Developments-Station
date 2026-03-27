@@ -8,6 +8,7 @@ Endpoints — PricingPolicy
   GET    /api/v1/settings/pricing-policies
   GET    /api/v1/settings/pricing-policies/{policy_id}
   PATCH  /api/v1/settings/pricing-policies/{policy_id}
+  POST   /api/v1/settings/pricing-policies/{policy_id}/make-default
   DELETE /api/v1/settings/pricing-policies/{policy_id}
 
 Endpoints — CommissionPolicy
@@ -15,6 +16,7 @@ Endpoints — CommissionPolicy
   GET    /api/v1/settings/commission-policies
   GET    /api/v1/settings/commission-policies/{policy_id}
   PATCH  /api/v1/settings/commission-policies/{policy_id}
+  POST   /api/v1/settings/commission-policies/{policy_id}/make-default
   DELETE /api/v1/settings/commission-policies/{policy_id}
 
 Endpoints — ProjectTemplate

@@ -16,6 +16,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.settings.models import CommissionPolicy, PricingPolicy
 from app.modules.settings.repository import (
     CommissionPolicyRepository,
     PricingPolicyRepository,
@@ -133,8 +134,20 @@ class SettingsService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Pricing policy '{policy_id}' not found.",
             )
+        if not policy.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Cannot promote an inactive pricing policy to default. "
+                    "Activate the policy first."
+                ),
+            )
         if not policy.is_default:
-            self.pricing_repo.clear_default()
+            # Clear + set in a single transaction to prevent concurrent promotions
+            # from leaving multiple is_default=True rows.
+            self.db.query(PricingPolicy).filter(
+                PricingPolicy.is_default.is_(True)
+            ).update({"is_default": False}, synchronize_session=False)
             policy.is_default = True
             self.db.commit()
             self.db.refresh(policy)
@@ -238,8 +251,20 @@ class SettingsService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Commission policy '{policy_id}' not found.",
             )
+        if not policy.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Cannot promote an inactive commission policy to default. "
+                    "Activate the policy first."
+                ),
+            )
         if not policy.is_default:
-            self.commission_repo.clear_default()
+            # Clear + set in a single transaction to prevent concurrent promotions
+            # from leaving multiple is_default=True rows.
+            self.db.query(CommissionPolicy).filter(
+                CommissionPolicy.is_default.is_(True)
+            ).update({"is_default": False}, synchronize_session=False)
             policy.is_default = True
             self.db.commit()
             self.db.refresh(policy)

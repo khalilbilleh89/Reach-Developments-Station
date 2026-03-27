@@ -230,6 +230,15 @@ def test_make_default_pricing_policy_not_found_returns_404(client: TestClient):
     assert resp.status_code == 404
 
 
+def test_make_default_inactive_pricing_policy_returns_422(client: TestClient):
+    """Promoting an inactive pricing policy to default must be rejected with 422."""
+    policy = _create_pricing_policy(client, "PP Inactive Target", is_active=False)
+    resp = client.post(
+        f"/api/v1/settings/pricing-policies/{policy['id']}/make-default"
+    )
+    assert resp.status_code == 422, resp.text
+
+
 def test_cannot_deactivate_default_pricing_policy(client: TestClient):
     """Attempting to set is_active=False on the default pricing policy returns 422."""
     policy = _create_pricing_policy(client, "PP Default Guard", is_default=True)
@@ -393,6 +402,15 @@ def test_make_default_commission_policy_not_found_returns_404(client: TestClient
         "/api/v1/settings/commission-policies/nonexistent/make-default"
     )
     assert resp.status_code == 404
+
+
+def test_make_default_inactive_commission_policy_returns_422(client: TestClient):
+    """Promoting an inactive commission policy to default must be rejected with 422."""
+    policy = _create_commission_policy(client, "CP Inactive Target", is_active=False)
+    resp = client.post(
+        f"/api/v1/settings/commission-policies/{policy['id']}/make-default"
+    )
+    assert resp.status_code == 422, resp.text
 
 
 def test_cannot_deactivate_default_commission_policy(client: TestClient):

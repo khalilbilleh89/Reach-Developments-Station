@@ -13,6 +13,7 @@
  *   GET    /settings/pricing-policies               → list pricing policies
  *   GET    /settings/pricing-policies/{id}          → get pricing policy by id
  *   PATCH  /settings/pricing-policies/{id}          → update pricing policy
+ *   POST   /settings/pricing-policies/{id}/make-default → promote to default (422 if inactive)
  *   DELETE /settings/pricing-policies/{id}          → delete pricing policy
  *
  * CommissionPolicy:
@@ -20,6 +21,7 @@
  *   GET    /settings/commission-policies            → list commission policies
  *   GET    /settings/commission-policies/{id}       → get commission policy by id
  *   PATCH  /settings/commission-policies/{id}       → update commission policy
+ *   POST   /settings/commission-policies/{id}/make-default → promote to default (422 if inactive)
  *   DELETE /settings/commission-policies/{id}       → delete commission policy
  *
  * ProjectTemplate:

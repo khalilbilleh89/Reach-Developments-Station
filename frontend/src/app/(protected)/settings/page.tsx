@@ -41,7 +41,7 @@ export default function Page() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [makingDefault, setMakingDefault] = useState<string | null>(null);
+  const [makingDefault, setMakingDefault] = useState<Set<string>>(() => new Set());
 
   const loadSettings = useCallback((signal?: AbortSignal) => {
     setLoading(true);
@@ -76,7 +76,7 @@ export default function Page() {
 
   const handleMakeDefaultPricing = useCallback(
     (id: string) => {
-      setMakingDefault(id);
+      setMakingDefault((prev) => new Set(prev).add(id));
       setActionError(null);
       makeDefaultPricingPolicy(id)
         .then(() => loadSettings())
@@ -85,14 +85,20 @@ export default function Page() {
             err instanceof Error ? err.message : "Failed to set default pricing policy",
           );
         })
-        .finally(() => setMakingDefault(null));
+        .finally(() => {
+          setMakingDefault((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        });
     },
     [loadSettings],
   );
 
   const handleMakeDefaultCommission = useCallback(
     (id: string) => {
-      setMakingDefault(id);
+      setMakingDefault((prev) => new Set(prev).add(id));
       setActionError(null);
       makeDefaultCommissionPolicy(id)
         .then(() => loadSettings())
@@ -103,7 +109,13 @@ export default function Page() {
               : "Failed to set default commission policy",
           );
         })
-        .finally(() => setMakingDefault(null));
+        .finally(() => {
+          setMakingDefault((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        });
     },
     [loadSettings],
   );
@@ -256,11 +268,11 @@ export default function Page() {
                     {!policy.is_default && (
                       <button
                         className={styles.actionButton}
-                        disabled={makingDefault === policy.id}
+                        disabled={makingDefault.has(policy.id)}
                         onClick={() => handleMakeDefaultPricing(policy.id)}
                         aria-label={`Make ${policy.name} the default pricing policy`}
                       >
-                        {makingDefault === policy.id ? "Setting…" : "Make Default"}
+                        {makingDefault.has(policy.id) ? "Setting…" : "Make Default"}
                       </button>
                     )}
                   </td>
@@ -322,11 +334,11 @@ export default function Page() {
                     {!policy.is_default && (
                       <button
                         className={styles.actionButton}
-                        disabled={makingDefault === policy.id}
+                        disabled={makingDefault.has(policy.id)}
                         onClick={() => handleMakeDefaultCommission(policy.id)}
                         aria-label={`Make ${policy.name} the default commission policy`}
                       >
-                        {makingDefault === policy.id ? "Setting…" : "Make Default"}
+                        {makingDefault.has(policy.id) ? "Setting…" : "Make Default"}
                       </button>
                     )}
                   </td>
