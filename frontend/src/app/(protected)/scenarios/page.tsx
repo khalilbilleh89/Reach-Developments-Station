@@ -255,7 +255,7 @@ function CreateScenarioModal({ onClose, onCreated, initialLandId }: CreateScenar
         >
           Linked to land parcel:{" "}
           <span style={{ fontFamily: "monospace" }}>
-            {initialLandId.substring(0, 12)}…
+            {initialLandId.length > 12 ? initialLandId.substring(0, 12) + "…" : initialLandId}
           </span>
         </p>
       )}
@@ -707,7 +707,7 @@ export default function ScenariosPage() {
           <span>
             Showing scenarios linked to land parcel:{" "}
             <span style={{ fontFamily: "monospace" }}>
-              {landFilter.substring(0, 12)}…
+              {landFilter.length > 12 ? landFilter.substring(0, 12) + "…" : landFilter}
             </span>
           </span>
           <button
