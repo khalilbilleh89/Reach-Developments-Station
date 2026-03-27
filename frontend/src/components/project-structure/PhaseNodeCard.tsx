@@ -12,17 +12,22 @@ interface PhaseNodeCardProps {
 export function PhaseNodeCard({ phase }: PhaseNodeCardProps) {
   const [expanded, setExpanded] = useState(true);
 
+  const toggleExpanded = () => setExpanded((prev) => !prev);
+
   return (
     <div className={styles.phaseCard}>
       <div
         className={styles.phaseHeader}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         role="button"
         aria-expanded={expanded}
         aria-label={`Phase: ${phase.name}`}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setExpanded((prev) => !prev);
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleExpanded();
+          }
         }}
       >
         <span className={styles.phaseToggle}>{expanded ? "▾" : "▸"}</span>

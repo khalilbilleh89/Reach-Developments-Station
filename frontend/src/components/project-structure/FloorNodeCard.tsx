@@ -12,17 +12,22 @@ interface FloorNodeCardProps {
 export function FloorNodeCard({ floor }: FloorNodeCardProps) {
   const [expanded, setExpanded] = useState(false);
 
+  const toggleExpanded = () => setExpanded((prev) => !prev);
+
   return (
     <div className={styles.floorCard}>
       <div
         className={styles.floorHeader}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         role="button"
         aria-expanded={expanded}
         aria-label={`Floor: ${floor.name}`}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setExpanded((prev) => !prev);
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleExpanded();
+          }
         }}
       >
         <span className={styles.floorToggle}>{expanded ? "▾" : "▸"}</span>

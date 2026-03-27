@@ -18,16 +18,11 @@ from app.modules.buildings.models import Building
 from app.modules.floors.models import Floor
 from app.modules.phases.models import Phase
 from app.modules.projects.models import Project
-from app.modules.units.models import Unit
 
 
 class ProjectStructureRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
-
-    def get_project_by_id(self, project_id: str) -> Optional[Project]:
-        """Return the Project record without hierarchy loading."""
-        return self.db.query(Project).filter(Project.id == project_id).first()
 
     def get_project_with_full_hierarchy(self, project_id: str) -> Optional[Project]:
         """Return a Project with phases → buildings → floors → units eagerly loaded.

@@ -12,17 +12,22 @@ interface BuildingNodeCardProps {
 export function BuildingNodeCard({ building }: BuildingNodeCardProps) {
   const [expanded, setExpanded] = useState(false);
 
+  const toggleExpanded = () => setExpanded((prev) => !prev);
+
   return (
     <div className={styles.buildingCard}>
       <div
         className={styles.buildingHeader}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         role="button"
         aria-expanded={expanded}
         aria-label={`Building: ${building.name}`}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setExpanded((prev) => !prev);
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleExpanded();
+          }
         }}
       >
         <span className={styles.buildingToggle}>{expanded ? "▾" : "▸"}</span>

@@ -9,6 +9,9 @@ These contracts expose the canonical hierarchy:
 Each node includes id, name/code, status, child collections and summary counts
 so that the frontend can render the full structure without additional requests.
 
+Status and type fields use shared enums from app.shared.enums.project so that
+the OpenAPI docs and response validation are consistent with the rest of the API.
+
 Forbidden: ORM objects must not be returned directly; all values must come
 through these typed contracts.
 """
@@ -16,6 +19,16 @@ through these typed contracts.
 from typing import List, Optional
 
 from pydantic import BaseModel
+
+from app.shared.enums.project import (
+    BuildingStatus,
+    FloorStatus,
+    PhaseStatus,
+    PhaseType,
+    ProjectStatus,
+    UnitStatus,
+    UnitType,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +41,8 @@ class ProjectStructureUnitNode(BaseModel):
 
     id: str
     unit_number: str
-    unit_type: str
-    status: str
+    unit_type: UnitType
+    status: UnitStatus
 
     model_config = {"from_attributes": True}
 
@@ -47,7 +60,7 @@ class ProjectStructureFloorNode(BaseModel):
     code: str
     sequence_number: int
     level_number: Optional[int]
-    status: str
+    status: FloorStatus
     unit_count: int
     units: List[ProjectStructureUnitNode]
 
@@ -65,7 +78,7 @@ class ProjectStructureBuildingNode(BaseModel):
     id: str
     name: str
     code: str
-    status: str
+    status: BuildingStatus
     floor_count: int
     unit_count: int
     floors: List[ProjectStructureFloorNode]
@@ -85,8 +98,8 @@ class ProjectStructurePhaseNode(BaseModel):
     name: str
     code: Optional[str]
     sequence: int
-    phase_type: Optional[str]
-    status: str
+    phase_type: Optional[PhaseType]
+    status: PhaseStatus
     building_count: int
     floor_count: int
     unit_count: int
@@ -106,7 +119,7 @@ class ProjectStructureResponse(BaseModel):
     project_id: str
     project_name: str
     project_code: str
-    project_status: str
+    project_status: ProjectStatus
     phase_count: int
     building_count: int
     floor_count: int
