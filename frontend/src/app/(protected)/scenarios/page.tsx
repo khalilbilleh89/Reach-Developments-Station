@@ -29,6 +29,7 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
   listScenarios,
+  getScenario,
   createScenario,
   duplicateScenario,
   approveScenario,
@@ -532,8 +533,9 @@ export default function ScenariosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // land_id and new=1 can be passed as query params from the Land page
+  // land_id, scenario_id, and new=1 can be passed as query params from sibling pages
   const landIdParam = searchParams.get("land_id") ?? null;
+  const scenarioIdParam = searchParams.get("scenario_id") ?? null;
   const openNewParam = searchParams.get("new") === "1";
 
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -585,6 +587,34 @@ export default function ScenariosPage() {
   useEffect(() => {
     loadScenarios();
   }, [loadScenarios]);
+
+  // ---- scenario_id query-param: auto-open the linked scenario on mount -----
+
+  const [scenarioIdParamHandled, setScenarioIdParamHandled] = useState(false);
+
+  useEffect(() => {
+    if (!scenarioIdParam || scenarioIdParamHandled || loading) return;
+    // Try finding the scenario in the already-loaded list first
+    const found = scenarios.find((s) => s.id === scenarioIdParam);
+    if (found) {
+      setSelectedScenario(found);
+      setViewMode("detail");
+      setLifecycleError(null);
+      setScenarioIdParamHandled(true);
+      return;
+    }
+    // Not in the list (e.g. a different status filter is active) — fetch directly
+    setScenarioIdParamHandled(true);
+    getScenario(scenarioIdParam)
+      .then((fetched) => {
+        setSelectedScenario(fetched);
+        setViewMode("detail");
+        setLifecycleError(null);
+      })
+      .catch(() => {
+        // Scenario not found or access error — fall through to list view safely
+      });
+  }, [scenarioIdParam, scenarioIdParamHandled, loading, scenarios]);
 
   // ---- Derived KPIs -------------------------------------------------------
 
@@ -1091,7 +1121,7 @@ export default function ScenariosPage() {
               type="button"
               onClick={() =>
                 router.push(
-                  `/land`,
+                  `/land?parcel_id=${encodeURIComponent(selectedScenario.land_id!)}`,
                 )
               }
               style={{
@@ -1103,7 +1133,7 @@ export default function ScenariosPage() {
                 cursor: "pointer",
                 fontSize: "0.875rem",
               }}
-              aria-label="Open land parcel"
+              aria-label="Open linked land parcel"
               data-testid="scenario-open-land-btn"
             >
               ← Open Land

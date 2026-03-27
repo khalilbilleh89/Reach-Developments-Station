@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import {
@@ -236,6 +236,12 @@ function EditParcelModal({ parcel, onClose, onSaved }: EditParcelModalProps) {
  */
 export default function LandPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // parcel_id can be passed from the Scenarios page "← Open Land" CTA
+  const parcelIdParam = searchParams.get("parcel_id") ?? null;
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+
   const [parcels, setParcels] = useState<LandParcel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -243,6 +249,8 @@ export default function LandPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingParcel, setEditingParcel] = useState<LandParcel | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // highlighted parcel row (from parcel_id query param)
+  const [highlightedParcelId, setHighlightedParcelId] = useState<string | null>(parcelIdParam);
 
   const fetchParcels = useCallback(() => {
     setLoading(true);
@@ -264,6 +272,13 @@ export default function LandPage() {
   useEffect(() => {
     fetchParcels();
   }, [fetchParcels]);
+
+  // Scroll highlighted row into view after parcels load
+  useEffect(() => {
+    if (highlightedParcelId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedParcelId, parcels]);
 
   const handleCreated = useCallback(() => {
     setShowCreateModal(false);
@@ -454,8 +469,23 @@ export default function LandPage() {
               </tr>
             </thead>
             <tbody>
-              {parcels.map((parcel) => (
-                <tr key={parcel.id}>
+              {parcels.map((parcel) => {
+                const isHighlighted = highlightedParcelId === parcel.id;
+                return (
+                <tr
+                  key={parcel.id}
+                  ref={isHighlighted ? highlightRowRef : null}
+                  data-testid={isHighlighted ? "highlighted-parcel-row" : undefined}
+                  style={
+                    isHighlighted
+                      ? {
+                          outline: "2px solid var(--color-primary, #2563eb)",
+                          outlineOffset: "-2px",
+                          background: "#eff6ff",
+                        }
+                      : undefined
+                  }
+                >
                   <td style={{ fontWeight: 500 }}>{parcel.parcel_name}</td>
                   <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
                     {parcel.parcel_code}
@@ -609,7 +639,8 @@ export default function LandPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

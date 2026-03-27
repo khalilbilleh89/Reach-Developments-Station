@@ -90,6 +90,7 @@ jest.mock("@/components/shell/PageContainer", () => ({
 // Mock scenario-api
 jest.mock("@/lib/scenario-api", () => ({
   listScenarios: jest.fn(),
+  getScenario: jest.fn(),
   createScenario: jest.fn(),
   duplicateScenario: jest.fn(),
   approveScenario: jest.fn(),
@@ -99,6 +100,7 @@ jest.mock("@/lib/scenario-api", () => ({
 
 import {
   listScenarios,
+  getScenario,
   createScenario,
   duplicateScenario,
   approveScenario,
@@ -108,6 +110,7 @@ import {
 import ScenariosPage from "@/app/(protected)/scenarios/page";
 
 const mockListScenarios = listScenarios as jest.Mock;
+const mockGetScenario = getScenario as jest.Mock;
 const mockCreateScenario = createScenario as jest.Mock;
 const mockDuplicateScenario = duplicateScenario as jest.Mock;
 const mockApproveScenario = approveScenario as jest.Mock;
@@ -806,7 +809,7 @@ describe("ScenariosPage — detail view lifecycle cross-links", () => {
     );
   });
 
-  it("navigates to /land when Open Land button clicked", async () => {
+  it("navigates to /land with parcel_id when Open Land button clicked", async () => {
     const scenarioWithLand = { ...mockScenario1, land_id: "land-abc-001" };
     mockListScenarios.mockResolvedValueOnce({
       items: [scenarioWithLand],
@@ -824,6 +827,61 @@ describe("ScenariosPage — detail view lifecycle cross-links", () => {
     );
 
     fireEvent.click(screen.getByTestId("scenario-open-land-btn"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/land");
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/land?parcel_id=land-abc-001",
+    );
+  });
+});
+
+describe("ScenariosPage — scenario_id query param auto-opens detail", () => {
+  it("auto-opens detail view when scenario_id param matches a loaded scenario", async () => {
+    mockSearchParamsStr = "scenario_id=sc-1";
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-lifecycle-links")).toBeInTheDocument(),
+    );
+    // Detail view is open
+    expect(screen.getByTestId("scenario-lifecycle-links")).toBeInTheDocument();
+  });
+
+  it("fetches scenario directly when scenario_id is not in the loaded list", async () => {
+    const remoteScenario = {
+      ...mockScenario1,
+      id: "sc-remote",
+      name: "Remote Scenario",
+    };
+    mockSearchParamsStr = "scenario_id=sc-remote";
+    mockGetScenario.mockResolvedValue(remoteScenario);
+
+    render(<ScenariosPage />);
+    await waitFor(() =>
+      expect(mockGetScenario).toHaveBeenCalledWith("sc-remote"),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Remote Scenario")).toBeInTheDocument(),
+    );
+  });
+
+  it("stays on list view when scenario_id fetch fails", async () => {
+    mockSearchParamsStr = "scenario_id=sc-not-found";
+    mockGetScenario.mockRejectedValue(new Error("Not found"));
+
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    await waitFor(() => expect(mockGetScenario).toHaveBeenCalledWith("sc-not-found"));
+
+    // Should stay on list view — no crash, no detail panel
+    expect(
+      screen.queryByTestId("scenario-lifecycle-links"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Marina Tower — Base Case"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not call getScenario when no scenario_id param", async () => {
+    render(<ScenariosPage />);
+    await waitFor(() => expect(mockListScenarios).toHaveBeenCalled());
+    expect(mockGetScenario).not.toHaveBeenCalled();
   });
 });
