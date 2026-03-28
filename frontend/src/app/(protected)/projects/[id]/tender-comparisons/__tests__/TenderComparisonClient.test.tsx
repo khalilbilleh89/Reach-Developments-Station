@@ -10,6 +10,13 @@
  *  - rapid selection switching: only the latest selection's detail wins
  *  - stale response from a superseded request does not overwrite current state
  *  - aborted/superseded error does not surface as user-facing error banner
+ *  - PR-V6-13: approve-baseline button shown for non-approved set
+ *  - PR-V6-13: approve-baseline button absent for already-approved set
+ *  - PR-V6-13: confirmation modal opens on approve button click
+ *  - PR-V6-13: modal cancel closes without calling API
+ *  - PR-V6-13: confirming approval calls approveTenderBaseline
+ *  - PR-V6-13: approved baseline badge shown in detail header
+ *  - PR-V6-13: baseline metadata strip shown when approved
  */
 import React from "react";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
@@ -33,6 +40,7 @@ jest.mock("@/lib/tender-comparison-api", () => ({
   createComparisonLine: jest.fn(),
   updateComparisonLine: jest.fn(),
   deleteComparisonLine: jest.fn(),
+  approveTenderBaseline: jest.fn(),
 }));
 
 import { useParams } from "next/navigation";
@@ -40,6 +48,7 @@ import {
   listProjectTenderComparisons,
   getTenderComparison,
   getTenderComparisonSummary,
+  approveTenderBaseline,
 } from "@/lib/tender-comparison-api";
 import { TenderComparisonClient } from "@/app/(protected)/projects/[id]/tender-comparisons/TenderComparisonClient";
 
@@ -47,12 +56,17 @@ const mockUseParams = useParams as jest.Mock;
 const mockList = listProjectTenderComparisons as jest.Mock;
 const mockGetSet = getTenderComparison as jest.Mock;
 const mockGetSummary = getTenderComparisonSummary as jest.Mock;
+const mockApprove = approveTenderBaseline as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const makeSetItem = (id: string, title: string) => ({
+const makeSetItem = (
+  id: string,
+  title: string,
+  overrides: Record<string, unknown> = {},
+) => ({
   id,
   project_id: "proj-1",
   title,
@@ -61,12 +75,20 @@ const makeSetItem = (id: string, title: string) => ({
   comparison_label: "Tender",
   notes: null,
   is_active: true,
+  is_approved_baseline: false,
+  approved_at: null,
+  approved_by_user_id: null,
   created_at: "2026-03-01T00:00:00Z",
   updated_at: "2026-03-01T00:00:00Z",
+  ...overrides,
 });
 
-const makeFullSet = (id: string, title: string) => ({
-  ...makeSetItem(id, title),
+const makeFullSet = (
+  id: string,
+  title: string,
+  overrides: Record<string, unknown> = {},
+) => ({
+  ...makeSetItem(id, title, overrides),
   lines: [],
 });
 
@@ -289,4 +311,155 @@ describe("TenderComparisonClient", () => {
     // superseded request
     expect(screen.queryByTestId("detail-error-state")).not.toBeInTheDocument();
   });
+
+  // ── Baseline governance (PR-V6-13) ──────────────────────────────────────────
+
+  it("shows Approve as Baseline button for non-approved set", async () => {
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison")],
+    });
+    mockGetSet.mockResolvedValue(
+      makeFullSet("set-1", "Q1 Comparison", { is_approved_baseline: false }),
+    );
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() =>
+      expect(screen.getByTestId("approve-baseline-button")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not show Approve as Baseline button when set is already approved", async () => {
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison", { is_approved_baseline: true })],
+    });
+    mockGetSet.mockResolvedValue(
+      makeFullSet("set-1", "Q1 Comparison", {
+        is_approved_baseline: true,
+        approved_at: "2026-03-01T00:00:00Z",
+        approved_by_user_id: "user-1",
+      }),
+    );
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() =>
+      expect(screen.getByTestId("detail-baseline-badge")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("approve-baseline-button")).not.toBeInTheDocument();
+  });
+
+  it("opens confirmation modal when Approve as Baseline is clicked", async () => {
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison")],
+    });
+    mockGetSet.mockResolvedValue(makeFullSet("set-1", "Q1 Comparison"));
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() =>
+      expect(screen.getByTestId("approve-baseline-button")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("approve-baseline-button"));
+    expect(screen.getByTestId("baseline-approval-modal")).toBeInTheDocument();
+  });
+
+  it("closes confirmation modal on cancel without calling API", async () => {
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison")],
+    });
+    mockGetSet.mockResolvedValue(makeFullSet("set-1", "Q1 Comparison"));
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() =>
+      expect(screen.getByTestId("approve-baseline-button")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("approve-baseline-button"));
+    expect(screen.getByTestId("baseline-approval-modal")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByTestId("baseline-approval-modal")).not.toBeInTheDocument();
+    expect(mockApprove).not.toHaveBeenCalled();
+  });
+
+  it("calls approveTenderBaseline and refreshes on confirm", async () => {
+    const approvedSet = makeFullSet("set-1", "Q1 Comparison", {
+      is_approved_baseline: true,
+      approved_at: "2026-03-28T00:00:00Z",
+      approved_by_user_id: "test-user",
+    });
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison")],
+    });
+    mockGetSet.mockResolvedValue(makeFullSet("set-1", "Q1 Comparison"));
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+    mockApprove.mockResolvedValue(approvedSet);
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() =>
+      expect(screen.getByTestId("approve-baseline-button")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("approve-baseline-button"));
+    fireEvent.click(screen.getByTestId("confirm-approve-baseline"));
+
+    await waitFor(() => {
+      expect(mockApprove).toHaveBeenCalledWith("set-1");
+    });
+  });
+
+  it("shows Approved Baseline badge and metadata strip for approved set", async () => {
+    mockList.mockResolvedValue({
+      total: 1,
+      items: [makeSetItem("set-1", "Q1 Comparison", { is_approved_baseline: true })],
+    });
+    mockGetSet.mockResolvedValue(
+      makeFullSet("set-1", "Q1 Comparison", {
+        is_approved_baseline: true,
+        approved_at: "2026-03-28T10:00:00Z",
+        approved_by_user_id: "user-42",
+      }),
+    );
+    mockGetSummary.mockResolvedValue(makeSummary("set-1"));
+
+    render(<TenderComparisonClient />);
+    await waitFor(() =>
+      expect(screen.getByText("Q1 Comparison")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByLabelText("Open comparison set: Q1 Comparison"));
+    await waitFor(() => {
+      expect(screen.getByTestId("detail-baseline-badge")).toBeInTheDocument();
+      expect(screen.getByTestId("baseline-meta-strip")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/user-42/)).toBeInTheDocument();
+  });
 });
+import React from "react";

@@ -1,8 +1,9 @@
 /**
  * TenderComparisonSetList — list of comparison sets for a project.
  *
- * Renders a list of comparison set cards showing stage, labels, and active
- * status.  Calls onSelect when a card is clicked.
+ * Renders a list of comparison set cards showing stage, labels, active
+ * status, and approved-baseline badge (PR-V6-13).
+ * Calls onSelect when a card is clicked.
  */
 
 "use client";
@@ -46,13 +47,23 @@ export function TenderComparisonSetList({
           >
             <div className={styles.setListItemHeader}>
               <span className={styles.setListItemTitle}>{set.title}</span>
-              <span
-                className={
-                  set.is_active ? styles.badgeActive : styles.badgeArchived
-                }
-              >
-                {set.is_active ? "Active" : "Archived"}
-              </span>
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {set.is_approved_baseline && (
+                  <span
+                    className={styles.badgeApprovedBaseline}
+                    data-testid={`baseline-badge-${set.id}`}
+                  >
+                    Approved Baseline
+                  </span>
+                )}
+                <span
+                  className={
+                    set.is_active ? styles.badgeActive : styles.badgeArchived
+                  }
+                >
+                  {set.is_active ? "Active" : "Archived"}
+                </span>
+              </div>
             </div>
             <div className={styles.setListItemMeta}>
               {COMPARISON_STAGE_LABELS[set.comparison_stage] ??

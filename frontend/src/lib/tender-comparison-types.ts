@@ -146,6 +146,10 @@ export interface ConstructionCostComparisonSetListItem {
   comparison_label: string;
   notes: string | null;
   is_active: boolean;
+  /** PR-V6-13: baseline governance */
+  is_approved_baseline: boolean;
+  approved_at: string | null;
+  approved_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -160,6 +164,10 @@ export interface ConstructionCostComparisonSet {
   comparison_label: string;
   notes: string | null;
   is_active: boolean;
+  /** PR-V6-13: baseline governance */
+  is_approved_baseline: boolean;
+  approved_at: string | null;
+  approved_by_user_id: string | null;
   lines: ConstructionCostComparisonLine[];
   created_at: string;
   updated_at: string;
@@ -184,4 +192,11 @@ export interface ConstructionCostComparisonSummary {
   total_variance: string;
   /** Backend Decimal serialised as string, or null when baseline is zero. */
   total_variance_pct: string | null;
+}
+
+/** Mirrors ActiveTenderBaselineResponse (PR-V6-13) */
+export interface ActiveTenderBaseline {
+  project_id: string;
+  has_approved_baseline: boolean;
+  baseline: ConstructionCostComparisonSetListItem | null;
 }

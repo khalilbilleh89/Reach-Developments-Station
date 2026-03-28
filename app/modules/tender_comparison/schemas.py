@@ -12,6 +12,12 @@ ConstructionCostComparisonLineUpdate    — partial update of a line.
 ConstructionCostComparisonLineResponse  — full line response.
 ConstructionCostComparisonSetResponse   — full set response including lines.
 ConstructionCostComparisonSummaryResponse — set-level variance summary totals.
+
+PR-V6-13 additions:
+ConstructionCostComparisonSetResponse and ConstructionCostComparisonSetListItem
+  now include is_approved_baseline / approved_at / approved_by_user_id.
+ActiveTenderBaselineResponse — lightweight response for the project active-baseline
+  query endpoint.
 """
 
 from datetime import datetime
@@ -99,6 +105,9 @@ class ConstructionCostComparisonSetResponse(BaseModel):
     comparison_label: str
     notes: Optional[str]
     is_active: bool
+    is_approved_baseline: bool
+    approved_at: Optional[datetime]
+    approved_by_user_id: Optional[str]
     lines: List[ConstructionCostComparisonLineResponse]
     created_at: datetime
     updated_at: datetime
@@ -117,6 +126,9 @@ class ConstructionCostComparisonSetListItem(BaseModel):
     comparison_label: str
     notes: Optional[str]
     is_active: bool
+    is_approved_baseline: bool
+    approved_at: Optional[datetime]
+    approved_by_user_id: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -142,3 +154,15 @@ class ConstructionCostComparisonSummaryResponse(BaseModel):
     total_comparison: Decimal
     total_variance: Decimal
     total_variance_pct: Optional[Decimal]
+
+
+class ActiveTenderBaselineResponse(BaseModel):
+    """Response for the project active-baseline query endpoint.
+
+    Returns the currently approved baseline set for a project, or null fields
+    when no baseline has been approved.
+    """
+
+    project_id: str
+    has_approved_baseline: bool
+    baseline: Optional[ConstructionCostComparisonSetListItem]

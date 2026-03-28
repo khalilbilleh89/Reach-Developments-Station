@@ -12,12 +12,19 @@ a set, capturing baseline amount, comparison amount, and pre-computed variance
 fields.  Lines are orphan-safe via CASCADE delete on the parent set.
 
 Source construction cost records are NEVER mutated by this domain.
+
+Baseline governance fields (added PR-V6-13):
+  is_approved_baseline — True when this set is the official project baseline.
+  approved_at          — Timestamp when baseline was last approved (UTC).
+  approved_by_user_id  — ID of the user who approved the baseline.
+  At most one set per project may have is_approved_baseline = True.
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -33,6 +40,11 @@ class ConstructionCostComparisonSet(Base, TimestampMixin):
     supported to allow tracking multiple comparison points over time.
 
     Lines are CASCADE-deleted when the set is deleted.
+
+    Baseline governance (PR-V6-13):
+      At most one set per project may be the approved baseline at any time.
+      Approving a set automatically deactivates the prior baseline for the
+      same project.
     """
 
     __tablename__ = "construction_cost_comparison_sets"
@@ -59,6 +71,17 @@ class ConstructionCostComparisonSet(Base, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, index=True
+    )
+
+    # ── Baseline governance fields ────────────────────────────────────────────
+    is_approved_baseline: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
     )
 
     lines: Mapped[List["ConstructionCostComparisonLine"]] = relationship(
