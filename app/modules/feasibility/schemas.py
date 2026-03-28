@@ -5,7 +5,8 @@ Pydantic request/response schemas for the Feasibility Engine API.
 """
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from decimal import Decimal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -177,3 +178,49 @@ class FeasibilityLineageResponse(BaseModel):
     source_concept_option_id: Optional[str]
     reverse_seeded_concept_options: List[str]
     project_id: Optional[str]
+
+
+# ---------------------------------------------------------------------------
+# Construction cost context — PR-V6-10
+# ---------------------------------------------------------------------------
+
+
+class FeasibilityConstructionCostContextResponse(BaseModel):
+    """Read-only construction cost context for a feasibility run.
+
+    Surfaces recorded construction cost totals alongside the feasibility-side
+    assumed construction cost so reviewers can compare both without any
+    auto-recalculation of feasibility results.
+
+    Fields are null-safe — partial data (e.g. run has no project, or project
+    has no cost records) is reflected via nulls and an explanatory ``note``.
+    The ``note`` is always populated with a human-readable summary of the
+    comparison state.
+
+    Forbidden:
+    - This schema must not be used to write back to feasibility or construction
+      records.
+    - Variance fields are transparent arithmetic only; they are not financial
+      formula outputs.
+    """
+
+    feasibility_run_id: str
+    project_id: Optional[str]
+
+    # Recorded side — sourced from construction cost records (active only)
+    has_cost_records: bool
+    active_record_count: int
+    recorded_construction_cost_total: Optional[Decimal]
+    by_category: Optional[Dict[str, Decimal]]
+    by_stage: Optional[Dict[str, Decimal]]
+
+    # Feasibility-side assumption — construction_cost_per_sqm × sellable_area_sqm
+    # Null when assumptions have not been defined yet.
+    assumed_construction_cost: Optional[float]
+
+    # Variance (recorded − assumed) — populated only when both sides exist
+    variance_amount: Optional[Decimal]
+    variance_pct: Optional[float]
+
+    # Human-readable summary of comparison state
+    note: str

@@ -18,6 +18,7 @@ from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
     FeasibilityAssumptionsUpdate,
+    FeasibilityConstructionCostContextResponse,
     FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
@@ -248,3 +249,32 @@ def get_feasibility_run_lineage(
     Returns HTTP 404 when the feasibility run does not exist.
     """
     return service.get_feasibility_run_lineage(run_id)
+
+
+# ---------------------------------------------------------------------------
+# Construction cost context — PR-V6-10
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/runs/{run_id}/construction-cost-context",
+    response_model=FeasibilityConstructionCostContextResponse,
+)
+def get_construction_cost_context(
+    run_id: str,
+    service: Annotated[FeasibilityService, Depends(get_service)],
+) -> FeasibilityConstructionCostContextResponse:
+    """Return a read-only construction cost context for a feasibility run.
+
+    Surfaces recorded project construction cost totals alongside the
+    feasibility-side assumed construction cost so reviewers can compare
+    both without any auto-recalculation.
+
+    The response is always null-safe:
+    - run has no project → note explains; cost fields are null
+    - project has no cost records → note explains; recorded fields are null
+    - no assumptions defined → note explains; assumed_construction_cost is null
+    - both sides present → variance_amount and variance_pct are populated
+
+    Returns HTTP 404 when the feasibility run does not exist.
+    """
+    return service.get_construction_cost_context(run_id)

@@ -14,6 +14,7 @@ import {
   assignProjectToRun,
   getFeasibilityRunLineage,
   deleteFeasibilityRun,
+  getFeasibilityRunConstructionCostContext,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -27,10 +28,12 @@ import { decisionLabel } from "@/lib/feasibility-decision-display";
 import FeasibilityScenarioOutputsTable from "@/components/feasibility/FeasibilityScenarioOutputsTable";
 import FeasibilityDecisionSummary from "@/components/feasibility/FeasibilityDecisionSummary";
 import FeasibilityUnitEconomicsPanel from "@/components/feasibility/FeasibilityUnitEconomicsPanel";
+import ConstructionCostContextPanel from "@/components/feasibility/ConstructionCostContextPanel";
 import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
   FeasibilityAssumptionsUpdate,
+  FeasibilityConstructionCostContext,
   FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRiskLevel,
@@ -1026,6 +1029,8 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
   const [seedConceptError, setSeedConceptError] = useState<string | null>(null);
   const [lineage, setLineage] = useState<FeasibilityLineageResponse | null | undefined>(undefined);
   const [deleting, setDeleting] = useState(false);
+  const [costContext, setCostContext] = useState<FeasibilityConstructionCostContext | null | undefined>(undefined);
+  const [costContextError, setCostContextError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!runId || runId === "_") {
@@ -1042,6 +1047,8 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
     setAssumptions(null);
     setResult(null);
     setLineage(undefined);
+    setCostContext(undefined);
+    setCostContextError(null);
 
     Promise.all([
       getFeasibilityRun(runId),
@@ -1064,12 +1071,21 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
         getFeasibilityRunLineage(runId)
           .then((lineageData) => setLineage(lineageData))
           .catch(() => setLineage(null));
+
+        // Fetch construction cost context independently — read-only, non-blocking.
+        getFeasibilityRunConstructionCostContext(runId)
+          .then((ctx) => setCostContext(ctx))
+          .catch(() => {
+            setCostContext(null);
+            setCostContextError("Construction cost context could not be loaded.");
+          });
       })
       .catch((err: unknown) => {
         setError(
           err instanceof Error ? err.message : "Failed to load feasibility run.",
         );
         setLineage(null);
+        setCostContext(null);
       })
       .finally(() => setLoading(false));
   }, [runId]);
@@ -1453,6 +1469,13 @@ export default function FeasibilityRunDetailView({ runId: runIdProp }: { runId?:
           {result && (
             <FeasibilityUnitEconomicsPanel result={result} assumptions={assumptions} />
           )}
+
+          {/* Construction Cost Context panel — PR-V6-10 */}
+          <ConstructionCostContextPanel
+            context={costContext}
+            loading={costContext === undefined}
+            error={costContextError}
+          />
 
           {/* Scenario outputs sensitivity table — PR-FEAS-07 */}
           {result && (
