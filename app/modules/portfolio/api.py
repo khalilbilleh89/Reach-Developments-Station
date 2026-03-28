@@ -7,6 +7,7 @@ Endpoints:
   GET /api/v1/portfolio/dashboard                — read-only portfolio dashboard
   GET /api/v1/portfolio/cost-variance            — read-only portfolio cost variance roll-up
   GET /api/v1/portfolio/construction-scorecards  — construction health scorecards (PR-V6-14)
+  GET /api/v1/portfolio/absorption               — portfolio absorption aggregation (PR-V7-01)
 
 The endpoints assemble coherent payloads from existing source-of-truth
 module data.  No source records are mutated.
@@ -24,6 +25,7 @@ from app.modules.construction_costs.analytics_schemas import (
 )
 from app.modules.construction_costs.analytics_service import ConstructionAnalyticsService
 from app.modules.portfolio.schemas import (
+    PortfolioAbsorptionResponse,
     PortfolioCostVarianceResponse,
     PortfolioDashboardResponse,
 )
@@ -95,3 +97,21 @@ def get_construction_scorecards(
     Source records are never mutated.
     """
     return service.build_portfolio_construction_scorecards()
+
+
+@router.get("/absorption", response_model=PortfolioAbsorptionResponse)
+def get_portfolio_absorption(service: ServiceDep) -> PortfolioAbsorptionResponse:
+    """Return portfolio-wide absorption aggregation (PR-V7-01).
+
+    Computes per-project absorption rates from actual sales data, compares them
+    against planned feasibility assumptions, and aggregates results into a
+    portfolio view.  Includes:
+      - Portfolio-wide absorption summary KPIs
+      - Per-project absorption cards ordered by sell-through
+      - Fastest and slowest selling projects
+      - Projects performing below absorption plan threshold
+
+    All values are computed live from source records on every request.
+    Source records are never mutated.
+    """
+    return service.get_portfolio_absorption()

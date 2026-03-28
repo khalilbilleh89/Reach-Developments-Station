@@ -267,6 +267,89 @@ class PortfolioCostVarianceResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Portfolio Absorption schemas (PR-V7-01)
+# ---------------------------------------------------------------------------
+
+
+class PortfolioAbsorptionProjectCard(BaseModel):
+    """Per-project absorption snapshot for portfolio comparison."""
+
+    project_id: str
+    project_name: str
+    project_code: str
+    total_units: int
+    sold_units: int
+    sell_through_pct: Optional[float] = Field(
+        None,
+        description="Sold units / total units * 100; null when no units exist",
+    )
+    absorption_rate_per_month: Optional[float] = Field(
+        None,
+        description="Actual absorption rate (units/month); null when < 2 sales",
+    )
+    planned_absorption_rate_per_month: Optional[float] = Field(
+        None,
+        description="Planned rate from feasibility assumptions; null when unavailable",
+    )
+    absorption_vs_plan_pct: Optional[float] = Field(
+        None,
+        description="Actual / planned * 100; null when either rate is unavailable",
+    )
+    contracted_revenue: float
+    absorption_status: Optional[str] = Field(
+        None,
+        description=(
+            "Derived badge: 'ahead_of_plan' | 'on_plan' | 'behind_plan' | 'no_data'; "
+            "null when no units exist"
+        ),
+    )
+
+
+class PortfolioAbsorptionSummary(BaseModel):
+    """Portfolio-wide absorption aggregates."""
+
+    total_projects: int
+    projects_with_absorption_data: int = Field(
+        ...,
+        description="Projects that have at least 2 contracts (rate calculable)",
+    )
+    portfolio_avg_sell_through_pct: Optional[float] = Field(
+        None,
+        description="Average sell-through across all projects with units",
+    )
+    portfolio_avg_absorption_rate: Optional[float] = Field(
+        None,
+        description="Average absorption rate across projects where it can be calculated",
+    )
+    projects_ahead_of_plan: int
+    projects_on_plan: int
+    projects_behind_plan: int
+    projects_no_absorption_data: int
+
+
+class PortfolioAbsorptionResponse(BaseModel):
+    """Portfolio absorption aggregation response (PR-V7-01)."""
+
+    summary: PortfolioAbsorptionSummary
+    projects: List[PortfolioAbsorptionProjectCard] = Field(
+        ...,
+        description="Per-project absorption cards ordered by sell-through descending",
+    )
+    fastest_projects: List[PortfolioAbsorptionProjectCard] = Field(
+        ...,
+        description="Top 5 projects by absorption rate",
+    )
+    slowest_projects: List[PortfolioAbsorptionProjectCard] = Field(
+        ...,
+        description="Bottom 5 projects by absorption rate (excluding no-data projects)",
+    )
+    below_plan_projects: List[PortfolioAbsorptionProjectCard] = Field(
+        ...,
+        description="Projects with absorption_vs_plan_pct < 80% (below plan threshold)",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Portfolio Construction Scorecards schemas (PR-V6-14)
 # Re-export the canonical schemas from construction_costs.analytics_schemas
 # so that the portfolio API surface has a single import path.
@@ -290,6 +373,9 @@ __all__ = [
     "PortfolioCostVarianceProjectCard",
     "PortfolioCostVarianceFlag",
     "PortfolioCostVarianceResponse",
+    "PortfolioAbsorptionProjectCard",
+    "PortfolioAbsorptionSummary",
+    "PortfolioAbsorptionResponse",
     "ConstructionPortfolioScorecardItem",
     "ConstructionPortfolioScorecardSummary",
     "ConstructionPortfolioScorecardsResponse",

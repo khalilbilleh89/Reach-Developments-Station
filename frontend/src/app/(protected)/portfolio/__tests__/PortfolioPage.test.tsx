@@ -49,14 +49,21 @@ jest.mock("@/lib/construction-scorecard-api", () => ({
   getConstructionPortfolioScorecards: jest.fn(),
 }));
 
+// Mock portfolio absorption API (PR-V7-01)
+jest.mock("@/lib/portfolio-absorption-api", () => ({
+  getPortfolioAbsorption: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
+import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
 const mockGetPortfolioCostVariance = getPortfolioCostVariance as jest.Mock;
 const mockGetConstructionPortfolioScorecards = getConstructionPortfolioScorecards as jest.Mock;
+const mockGetPortfolioAbsorption = getPortfolioAbsorption as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -176,6 +183,23 @@ const mockConstructionEmpty = {
   missing_baseline_projects: [],
 };
 
+const mockAbsorptionEmpty = {
+  summary: {
+    total_projects: 0,
+    projects_with_absorption_data: 0,
+    portfolio_avg_sell_through_pct: null,
+    portfolio_avg_absorption_rate: null,
+    projects_ahead_of_plan: 0,
+    projects_on_plan: 0,
+    projects_behind_plan: 0,
+    projects_no_absorption_data: 0,
+  },
+  projects: [],
+  fastest_projects: [],
+  slowest_projects: [],
+  below_plan_projects: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -185,12 +209,15 @@ describe("PortfolioPage", () => {
     mockGetPortfolioCostVariance.mockResolvedValue(mockVarianceEmpty);
     // Default construction scorecard mock returns empty state
     mockGetConstructionPortfolioScorecards.mockResolvedValue(mockConstructionEmpty);
+    // Default absorption mock returns empty state (PR-V7-01)
+    mockGetPortfolioAbsorption.mockResolvedValue(mockAbsorptionEmpty);
   });
 
   it("renders the page title", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
     mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
     mockGetConstructionPortfolioScorecards.mockReturnValue(new Promise(() => {}));
+    mockGetPortfolioAbsorption.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText("Portfolio")).toBeInTheDocument();
   });
@@ -199,6 +226,7 @@ describe("PortfolioPage", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
     mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
     mockGetConstructionPortfolioScorecards.mockReturnValue(new Promise(() => {}));
+    mockGetPortfolioAbsorption.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText(/Loading portfolio dashboard/i)).toBeInTheDocument();
   });

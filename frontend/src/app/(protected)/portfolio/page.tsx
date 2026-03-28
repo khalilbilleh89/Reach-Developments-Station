@@ -9,21 +9,26 @@ import { PortfolioCollectionsPanel } from "@/components/portfolio/PortfolioColle
 import { PortfolioRiskFlagsPanel } from "@/components/portfolio/PortfolioRiskFlagsPanel";
 import { PortfolioCostVariancePanel } from "@/components/portfolio/PortfolioCostVariancePanel";
 import { PortfolioConstructionScorecardsPanel } from "@/components/portfolio/PortfolioConstructionScorecardsPanel";
+import { PortfolioAbsorptionPanel } from "@/components/portfolio/PortfolioAbsorptionPanel";
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
+import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import type { PortfolioDashboardResponse } from "@/lib/portfolio-types";
 import type { PortfolioCostVarianceResponse } from "@/lib/portfolio-variance-types";
 import type { ConstructionPortfolioScorecardsResponse } from "@/lib/construction-scorecard-types";
+import type { PortfolioAbsorptionResponse } from "@/lib/portfolio-absorption-types";
 import styles from "@/styles/portfolio.module.css";
 
 /**
  * Portfolio Dashboard page — executive portfolio intelligence view.
  *
- * Fetches the read-only portfolio dashboard, cost variance roll-up, and
- * construction health scorecards on load and renders:
+ * Fetches the read-only portfolio dashboard, cost variance roll-up,
+ * construction health scorecards, and absorption intelligence on load
+ * and renders:
  *   - KPI summary strip (top-line portfolio metrics)
  *   - Project snapshot cards (per-project health and inventory)
+ *   - Portfolio absorption intelligence (PR-V7-01)
  *   - Construction health scorecards (baseline-vs-actual, PR-V6-14)
  *   - Cost variance panel (portfolio construction cost variance roll-up)
  *   - Collections panel (overdue balance and collection rate)
@@ -39,6 +44,8 @@ export default function PortfolioPage() {
     useState<PortfolioCostVarianceResponse | null>(null);
   const [constructionData, setConstructionData] =
     useState<ConstructionPortfolioScorecardsResponse | null>(null);
+  const [absorptionData, setAbsorptionData] =
+    useState<PortfolioAbsorptionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,11 +56,13 @@ export default function PortfolioPage() {
       getPortfolioDashboard(),
       getPortfolioCostVariance(),
       getConstructionPortfolioScorecards(),
+      getPortfolioAbsorption(),
     ])
-      .then(([dashboardResponse, varianceResponse, constructionResponse]) => {
+      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse]) => {
         setData(dashboardResponse);
         setVarianceData(varianceResponse);
         setConstructionData(constructionResponse);
+        setAbsorptionData(absorptionResponse);
       })
       .catch((err: unknown) => {
         setError(
@@ -85,6 +94,9 @@ export default function PortfolioPage() {
         <div className={styles.sectionGrid}>
           <PortfolioSummaryStrip summary={data.summary} />
           <PortfolioProjectCards projects={data.projects} />
+          {absorptionData && (
+            <PortfolioAbsorptionPanel data={absorptionData} />
+          )}
           {constructionData && (
             <PortfolioConstructionScorecardsPanel data={constructionData} />
           )}

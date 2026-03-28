@@ -487,3 +487,132 @@ class PortfolioService:
                 )
 
         return flags
+
+    # ------------------------------------------------------------------
+    # Portfolio Absorption (PR-V7-01)
+    # ------------------------------------------------------------------
+
+    def get_portfolio_absorption(self) -> "PortfolioAbsorptionResponse":
+        """Assemble and return the portfolio absorption aggregation.
+
+        Computes per-project absorption rates by delegating to the
+        FeasibilityFeedbackService for each project and rolls up into
+        portfolio-wide summary metrics.
+
+        All values are read-only and non-destructive.
+        """
+        from app.modules.feasibility_feedback.service import FeasibilityFeedbackService
+        from app.modules.portfolio.schemas import (
+            PortfolioAbsorptionProjectCard,
+            PortfolioAbsorptionResponse,
+            PortfolioAbsorptionSummary,
+        )
+
+        feedback_svc = FeasibilityFeedbackService(self.repo.db)
+        projects = self.repo.list_projects()
+
+        cards: list[PortfolioAbsorptionProjectCard] = []
+        for project in projects:
+            try:
+                metrics = feedback_svc.get_absorption_metrics(project.id)
+            except Exception:
+                continue
+
+            # Derive absorption_status badge
+            absorption_status: str | None
+            if metrics.total_units == 0:
+                absorption_status = None
+            elif metrics.absorption_vs_plan_pct is None:
+                absorption_status = "no_data"
+            elif metrics.absorption_vs_plan_pct >= 100.0:
+                absorption_status = "ahead_of_plan"
+            elif metrics.absorption_vs_plan_pct >= 80.0:
+                absorption_status = "on_plan"
+            else:
+                absorption_status = "behind_plan"
+
+            cards.append(
+                PortfolioAbsorptionProjectCard(
+                    project_id=project.id,
+                    project_name=project.name,
+                    project_code=project.code,
+                    total_units=metrics.total_units,
+                    sold_units=metrics.sold_units,
+                    sell_through_pct=_safe_pct(metrics.sold_units, metrics.total_units),
+                    absorption_rate_per_month=metrics.absorption_rate_per_month,
+                    planned_absorption_rate_per_month=metrics.planned_absorption_rate_per_month,
+                    absorption_vs_plan_pct=metrics.absorption_vs_plan_pct,
+                    contracted_revenue=metrics.contracted_revenue,
+                    absorption_status=absorption_status,
+                )
+            )
+
+        # Sort by sell-through descending (None last)
+        cards.sort(
+            key=lambda c: (c.sell_through_pct is None, -(c.sell_through_pct or 0.0))
+        )
+
+        # Build summary
+        total_projects = len(cards)
+        projects_with_data = sum(
+            1 for c in cards if c.absorption_rate_per_month is not None
+        )
+        projects_with_units = [c for c in cards if c.total_units > 0]
+        avg_sell_through = (
+            round(
+                sum(c.sell_through_pct for c in projects_with_units if c.sell_through_pct is not None)
+                / max(len(projects_with_units), 1),
+                2,
+            )
+            if projects_with_units
+            else None
+        )
+        rate_cards = [c for c in cards if c.absorption_rate_per_month is not None]
+        avg_absorption_rate = (
+            round(
+                sum(c.absorption_rate_per_month for c in rate_cards)  # type: ignore[arg-type]
+                / len(rate_cards),
+                4,
+            )
+            if rate_cards
+            else None
+        )
+        ahead_count = sum(1 for c in cards if c.absorption_status == "ahead_of_plan")
+        on_count = sum(1 for c in cards if c.absorption_status == "on_plan")
+        behind_count = sum(1 for c in cards if c.absorption_status == "behind_plan")
+        no_data_count = sum(
+            1 for c in cards if c.absorption_status == "no_data" or c.absorption_status is None
+        )
+
+        summary = PortfolioAbsorptionSummary(
+            total_projects=total_projects,
+            projects_with_absorption_data=projects_with_data,
+            portfolio_avg_sell_through_pct=avg_sell_through,
+            portfolio_avg_absorption_rate=avg_absorption_rate,
+            projects_ahead_of_plan=ahead_count,
+            projects_on_plan=on_count,
+            projects_behind_plan=behind_count,
+            projects_no_absorption_data=no_data_count,
+        )
+
+        # Top/bottom 5 by absorption rate
+        sorted_by_rate = sorted(
+            [c for c in cards if c.absorption_rate_per_month is not None],
+            key=lambda c: c.absorption_rate_per_month or 0.0,
+            reverse=True,
+        )
+        fastest = sorted_by_rate[:5]
+        if len(sorted_by_rate) > 5:
+            slowest = sorted_by_rate[-5:][::-1]
+        else:
+            slowest = sorted_by_rate[::-1]
+
+        below_plan = [c for c in cards if c.absorption_status == "behind_plan"]
+
+        return PortfolioAbsorptionResponse(
+            summary=summary,
+            projects=cards,
+            fastest_projects=fastest,
+            slowest_projects=slowest,
+            below_plan_projects=below_plan,
+        )
