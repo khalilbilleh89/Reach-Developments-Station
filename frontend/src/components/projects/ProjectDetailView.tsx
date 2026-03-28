@@ -14,6 +14,7 @@ import { listUnitsByFloor, createUnit, updateUnit, deleteUnit } from "@/lib/unit
 import { createReservation, listProjectReservations } from "@/lib/units-api";
 import { ProjectPhasesTable } from "@/components/projects/ProjectPhasesTable";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
+import { ProjectLifecycleSummaryPanel } from "@/components/projects/ProjectLifecycleSummaryPanel";
 import { ProjectAttributeConfig } from "@/components/projects/ProjectAttributeConfig";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
 import { FloorsTable } from "@/components/floors/FloorsTable";
@@ -477,7 +478,12 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
       </div>
 
       {/* Overview tab */}
-      {activeTab === "overview" && <ProjectOverview project={project} />}
+      {activeTab === "overview" && (
+        <>
+          <ProjectLifecycleSummaryPanel projectId={project.id} />
+          <ProjectOverview project={project} />
+        </>
+      )}
 
       {/* Phases tab */}
       {activeTab === "phases" && (

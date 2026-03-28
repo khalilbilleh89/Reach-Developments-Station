@@ -91,6 +91,52 @@ class ProjectSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Project Lifecycle Summary
+# ---------------------------------------------------------------------------
+
+class ProjectLifecycleSummaryResponse(BaseModel):
+    """Cross-module lifecycle readiness summary for a project.
+
+    All flags are derived from real module records — no assumptions are made.
+    The current_stage and recommended_next_step fields are deterministic
+    derivations based on the presence and status of linked module records.
+
+    Lifecycle stages (in progression order):
+      land_defined                — project record exists
+      scenario_defined            — at least one scenario linked
+      feasibility_ready           — at least one feasibility run linked
+      feasibility_calculated      — at least one feasibility run with status='calculated'
+      structure_ready             — project hierarchy has phases (structure defined)
+      construction_baseline_pending — construction records exist but no approved baseline
+      construction_monitored      — approved tender baseline exists
+      portfolio_visible           — project is active/completed and visible in portfolio
+    """
+
+    project_id: str
+    # Presence flags — derived from real records
+    has_scenarios: bool
+    has_active_scenario: bool
+    has_feasibility_runs: bool
+    has_calculated_feasibility: bool
+    has_phases: bool
+    has_construction_records: bool
+    has_approved_tender_baseline: bool
+    # Composite readiness flag — True when project is fully governed and has
+    # active cost records (approved baseline AND construction_records present).
+    has_portfolio_visibility: bool
+    # Counts for context
+    scenario_count: int
+    feasibility_run_count: int
+    construction_record_count: int
+    # Derived lifecycle state
+    current_stage: str
+    recommended_next_step: str
+    next_step_route: Optional[str]
+    blocked_reason: Optional[str]
+    last_updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
 # Project Attribute Options
 # ---------------------------------------------------------------------------
 

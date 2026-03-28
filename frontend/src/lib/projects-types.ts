@@ -56,6 +56,47 @@ export interface ProjectSummary {
   latest_target_completion: string | null;
 }
 
+/**
+ * Cross-module lifecycle readiness summary for a project.
+ *
+ * Mirrors backend ProjectLifecycleSummaryResponse.
+ * All stage values are derived from real module records by the backend.
+ */
+export type ProjectLifecycleStage =
+  | "land_defined"
+  | "scenario_defined"
+  | "feasibility_ready"
+  | "feasibility_calculated"
+  | "structure_ready"
+  | "construction_baseline_pending"
+  | "construction_monitored"
+  | "portfolio_visible";
+
+export interface ProjectLifecycleSummary {
+  project_id: string;
+  // Presence flags
+  has_scenarios: boolean;
+  has_active_scenario: boolean;
+  has_feasibility_runs: boolean;
+  has_calculated_feasibility: boolean;
+  has_phases: boolean;
+  has_construction_records: boolean;
+  has_approved_tender_baseline: boolean;
+  /** True when project is fully governed (approved baseline) and has active
+   *  construction cost records — eligible for portfolio roll-up. */
+  has_portfolio_visibility: boolean;
+  // Counts
+  scenario_count: number;
+  feasibility_run_count: number;
+  construction_record_count: number;
+  // Derived lifecycle state
+  current_stage: ProjectLifecycleStage;
+  recommended_next_step: string;
+  next_step_route: string | null;
+  blocked_reason: string | null;
+  last_updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Project Attribute Definitions & Options
 // ---------------------------------------------------------------------------
