@@ -255,8 +255,13 @@ def test_archived_records_excluded_from_total(client: TestClient) -> None:
     active_record = _create_cost_record(client, project_id, amount=500_000.0, title="Active")
     archived_record = _create_cost_record(client, project_id, amount=200_000.0, title="Archived")
 
-    # Archive the second record
-    client.post(f"/api/v1/construction-cost-records/{archived_record['id']}/archive")
+    # Archive the second record — verify the archive succeeded before testing exclusion.
+    archive_resp = client.post(
+        f"/api/v1/construction-cost-records/{archived_record['id']}/archive"
+    )
+    assert archive_resp.status_code == 200
+    archived_data = archive_resp.json()
+    assert archived_data["is_active"] is False
 
     resp = client.get(_ENDPOINT.format(run_id=run_id))
     assert resp.status_code == 200

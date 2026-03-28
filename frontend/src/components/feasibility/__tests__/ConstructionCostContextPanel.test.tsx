@@ -21,7 +21,7 @@ import "@testing-library/jest-dom";
 
 // Mock format-utils
 jest.mock("@/lib/format-utils", () => ({
-  formatCurrency: (v: number) => `AED ${v.toLocaleString("en-US")}`,
+  formatCurrencyPrecise: (v: number) => `AED ${v.toLocaleString("en-US")}`,
 }));
 
 import ConstructionCostContextPanel from "@/components/feasibility/ConstructionCostContextPanel";

@@ -676,16 +676,19 @@ class FeasibilityService:
         has_cost_records = active_count > 0
 
         # --- Fetch feasibility-side assumed construction cost ---
+        # Compute assumed_construction_cost in Decimal to avoid float multiplication
+        # artifacts (e.g. 800.0 * 1000.0 is exact, but irrational ratios are not).
+        # Convert to float only at the response boundary.
         assumptions = self.assumptions_repo.get_by_run(run_id)
-        assumed_construction_cost: Optional[float] = None
+        assumed_decimal: Optional[Decimal] = None
         if (
             assumptions is not None
             and assumptions.construction_cost_per_sqm is not None
             and assumptions.sellable_area_sqm is not None
         ):
-            assumed_construction_cost = (
-                float(assumptions.construction_cost_per_sqm)
-                * float(assumptions.sellable_area_sqm)
+            assumed_decimal = (
+                Decimal(str(assumptions.construction_cost_per_sqm))
+                * Decimal(str(assumptions.sellable_area_sqm))
             )
 
         # --- Determine note and variance ---
@@ -693,18 +696,19 @@ class FeasibilityService:
         variance_pct: Optional[float] = None
         note: str
 
-        if not has_cost_records and assumed_construction_cost is None:
+        if not has_cost_records and assumed_decimal is None:
             note = "No construction cost records and no feasibility assumptions defined yet."
         elif not has_cost_records:
             note = "No construction cost records for this project yet."
-        elif assumed_construction_cost is None:
+        elif assumed_decimal is None:
             note = (
                 "Construction cost records exist but the feasibility-side cost basis "
                 "is unavailable (assumptions not yet defined)."
             )
         else:
-            # Both sides available — compute transparent variance
-            assumed_decimal = Decimal(str(assumed_construction_cost))
+            # Both sides available — compute transparent variance entirely in Decimal.
+            # No float round-trip: assumed_decimal comes directly from Numeric DB columns
+            # via Decimal(str(...)), so variance_amount is clean.
             variance_amount = grand_total - assumed_decimal
             if assumed_decimal != Decimal("0"):
                 variance_pct = float(variance_amount / assumed_decimal)
@@ -723,7 +727,7 @@ class FeasibilityService:
             project_id,
             active_count,
             has_cost_records,
-            assumed_construction_cost,
+            assumed_decimal,
         )
 
         return FeasibilityConstructionCostContextResponse(
@@ -734,7 +738,7 @@ class FeasibilityService:
             recorded_construction_cost_total=grand_total if has_cost_records else None,
             by_category=by_category if has_cost_records else None,
             by_stage=by_stage if has_cost_records else None,
-            assumed_construction_cost=assumed_construction_cost,
+            assumed_construction_cost=float(assumed_decimal) if assumed_decimal is not None else None,
             variance_amount=variance_amount,
             variance_pct=variance_pct,
             note=note,

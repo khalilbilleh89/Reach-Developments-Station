@@ -19,7 +19,7 @@
  */
 
 import React from "react";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatCurrencyPrecise } from "@/lib/format-utils";
 import type { FeasibilityConstructionCostContext } from "@/lib/feasibility-types";
 
 // ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ function parseDecimalStr(value: string | null | undefined): number | null {
 function formatDecimalStr(value: string | null | undefined): string {
   const n = parseDecimalStr(value);
   if (n === null) return "—";
-  return formatCurrency(n);
+  return formatCurrencyPrecise(n);
 }
 
 function formatVariancePct(value: number | null | undefined): string {
@@ -277,7 +277,7 @@ export default function ConstructionCostContextPanel({
           label="Assumed Construction Cost (cost/sqm × area)"
           value={
             hasAssumed
-              ? formatCurrency(context.assumed_construction_cost!)
+              ? formatCurrencyPrecise(context.assumed_construction_cost!)
               : "Assumptions not yet defined"
           }
           testId="assumed-construction-cost"
