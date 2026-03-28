@@ -24,8 +24,10 @@ interface ConstructionCostRecordTableProps {
   archivingId: string | null;
 }
 
-function fmt(amount: number): string {
-  return amount.toLocaleString("en-US", {
+function fmt(amount: string | number): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num)) return String(amount);
+  return num.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

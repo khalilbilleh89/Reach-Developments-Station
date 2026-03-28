@@ -129,7 +129,8 @@ export interface ConstructionCostRecord {
   cost_category: CostCategory;
   cost_source: CostSource;
   cost_stage: CostStage;
-  amount: number;
+  /** Backend Decimal serialised as string. Use parseFloat() before arithmetic. */
+  amount: string;
   currency: string;
   effective_date: string | null;
   reference_number: string | null;

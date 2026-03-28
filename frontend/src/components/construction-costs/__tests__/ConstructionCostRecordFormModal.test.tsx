@@ -17,7 +17,7 @@ const makeRecord = (
   cost_category: "hard_cost",
   cost_source: "estimate",
   cost_stage: "construction",
-  amount: 500000,
+  amount: "500000.00",
   currency: "AED",
   effective_date: "2026-06-01",
   reference_number: "REF-001",
@@ -153,7 +153,7 @@ describe("ConstructionCostRecordFormModal — edit mode", () => {
   it("pre-populates amount with record amount", () => {
     render(
       <ConstructionCostRecordFormModal
-        record={makeRecord({ amount: 750000 })}
+        record={makeRecord({ amount: "750000.00" })}
         onSubmit={jest.fn()}
         onClose={jest.fn()}
       />,

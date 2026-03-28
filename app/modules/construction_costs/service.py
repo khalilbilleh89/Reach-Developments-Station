@@ -8,8 +8,7 @@ simple per-project summary aggregates (grouped totals by category/stage).
 No feasibility formulas or downstream finance writes are performed here.
 """
 
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -21,6 +20,7 @@ from app.modules.construction_costs.schemas import (
     ConstructionCostRecordList,
     ConstructionCostRecordResponse,
     ConstructionCostRecordUpdate,
+    ConstructionCostSummaryResponse,
 )
 from app.modules.projects.models import Project
 from app.shared.enums.construction_costs import CostCategory, CostStage
@@ -111,32 +111,21 @@ class ConstructionCostService:
 
     # ── summary aggregates ────────────────────────────────────────────────────
 
-    def get_project_summary(self, project_id: str) -> Dict[str, Any]:
-        """Return simple grouped totals by category and by stage.
+    def get_project_summary(self, project_id: str) -> ConstructionCostSummaryResponse:
+        """Return DB-aggregated totals by category and by stage (active records only).
 
-        These are transparent aggregations of active record amounts only;
-        they are not financial formula outputs.
+        Aggregation is performed in the database via GROUP BY / SUM — no
+        Python-side record fetching or arbitrary row limits are involved.
+        These are transparent sums; they are not financial formula outputs.
         """
         self._require_project(project_id)
-        records = self.repo.list_by_project(project_id, is_active=True, limit=10_000)
-
-        by_category: Dict[str, Decimal] = {}
-        by_stage: Dict[str, Decimal] = {}
-        grand_total = Decimal("0.00")
-
-        for r in records:
-            by_category[r.cost_category] = (
-                by_category.get(r.cost_category, Decimal("0.00")) + r.amount
-            )
-            by_stage[r.cost_stage] = (
-                by_stage.get(r.cost_stage, Decimal("0.00")) + r.amount
-            )
-            grand_total += r.amount
-
-        return {
-            "project_id": project_id,
-            "active_record_count": len(records),
-            "grand_total": str(grand_total),
-            "by_category": {k: str(v) for k, v in by_category.items()},
-            "by_stage": {k: str(v) for k, v in by_stage.items()},
-        }
+        active_count, grand_total, by_category, by_stage = (
+            self.repo.get_aggregate_summary(project_id)
+        )
+        return ConstructionCostSummaryResponse(
+            project_id=project_id,
+            active_record_count=active_count,
+            grand_total=grand_total,
+            by_category=by_category,
+            by_stage=by_stage,
+        )

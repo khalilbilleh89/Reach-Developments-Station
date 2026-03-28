@@ -15,7 +15,7 @@ POST   /api/v1/construction-cost-records/{record_id}/archive
 All routes require authentication.
 """
 
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ from app.modules.construction_costs.schemas import (
     ConstructionCostRecordList,
     ConstructionCostRecordResponse,
     ConstructionCostRecordUpdate,
+    ConstructionCostSummaryResponse,
 )
 from app.modules.construction_costs.service import ConstructionCostService
 from app.shared.enums.construction_costs import CostCategory, CostStage
@@ -89,12 +90,12 @@ def create_construction_cost_record(
 
 @router.get(
     "/projects/{project_id}/construction-cost-records/summary",
-    response_model=Dict[str, Any],
+    response_model=ConstructionCostSummaryResponse,
 )
 def get_construction_cost_summary(
     project_id: str,
     service: ServiceDep,
-) -> Dict[str, Any]:
+) -> ConstructionCostSummaryResponse:
     return service.get_project_summary(project_id)
 
 

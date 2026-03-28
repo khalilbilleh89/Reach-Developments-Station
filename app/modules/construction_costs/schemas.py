@@ -5,15 +5,16 @@ Pydantic request/response schemas for the Construction Cost Records domain.
 
 Schema families
 ---------------
-ConstructionCostRecordCreate   — fields required to create a new record.
-ConstructionCostRecordUpdate   — partial update (all fields optional).
-ConstructionCostRecordResponse — full response shape returned by the API.
-ConstructionCostRecordList     — paginated list response.
+ConstructionCostRecordCreate        — fields required to create a new record.
+ConstructionCostRecordUpdate        — partial update (all fields optional).
+ConstructionCostRecordResponse      — full response shape returned by the API.
+ConstructionCostRecordList          — paginated list response.
+ConstructionCostSummaryResponse     — typed summary aggregate response.
 """
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -68,3 +69,18 @@ class ConstructionCostRecordResponse(BaseModel):
 class ConstructionCostRecordList(BaseModel):
     total: int
     items: List[ConstructionCostRecordResponse]
+
+
+class ConstructionCostSummaryResponse(BaseModel):
+    """Typed summary aggregate response for a project's construction cost records.
+
+    All monetary totals are Decimal values serialised as strings by FastAPI,
+    consistent with the rest of the platform's Decimal field convention.
+    """
+
+    project_id: str
+    active_record_count: int
+    grand_total: Decimal
+    by_category: Dict[str, Decimal]
+    by_stage: Dict[str, Decimal]
+

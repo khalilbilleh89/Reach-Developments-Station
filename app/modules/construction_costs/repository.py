@@ -7,8 +7,10 @@ All business-rule enforcement lives in the service layer.
 This layer only issues safe, project-scoped queries.
 """
 
-from typing import List, Optional
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.modules.construction_costs.models import ConstructionCostRecord
@@ -82,6 +84,65 @@ class ConstructionCostRecordRepository:
         if cost_stage is not None:
             q = q.filter(ConstructionCostRecord.cost_stage == cost_stage.value)
         return q.count()
+
+    def get_aggregate_summary(
+        self, project_id: str
+    ) -> Tuple[int, Decimal, Dict[str, Decimal], Dict[str, Decimal]]:
+        """Compute grand total, per-category totals, and per-stage totals via DB
+        aggregation (active records only).
+
+        Returns a tuple of:
+          (active_record_count, grand_total, by_category, by_stage)
+
+        All aggregation is performed in the database — no Python-side record
+        loading is involved.
+        """
+        base_filter = [
+            ConstructionCostRecord.project_id == project_id,
+            ConstructionCostRecord.is_active.is_(True),
+        ]
+
+        # Grand total + count in one query
+        count_total = (
+            self.db.query(
+                func.count(ConstructionCostRecord.id),
+                func.coalesce(func.sum(ConstructionCostRecord.amount), 0),
+            )
+            .filter(*base_filter)
+            .one()
+        )
+        active_count: int = count_total[0]
+        grand_total = Decimal(str(count_total[1]))
+
+        # Per-category totals
+        category_rows = (
+            self.db.query(
+                ConstructionCostRecord.cost_category,
+                func.sum(ConstructionCostRecord.amount),
+            )
+            .filter(*base_filter)
+            .group_by(ConstructionCostRecord.cost_category)
+            .all()
+        )
+        by_category: Dict[str, Decimal] = {
+            cat: Decimal(str(total)) for cat, total in category_rows
+        }
+
+        # Per-stage totals
+        stage_rows = (
+            self.db.query(
+                ConstructionCostRecord.cost_stage,
+                func.sum(ConstructionCostRecord.amount),
+            )
+            .filter(*base_filter)
+            .group_by(ConstructionCostRecord.cost_stage)
+            .all()
+        )
+        by_stage: Dict[str, Decimal] = {
+            stage: Decimal(str(total)) for stage, total in stage_rows
+        }
+
+        return active_count, grand_total, by_category, by_stage
 
     def update(
         self,

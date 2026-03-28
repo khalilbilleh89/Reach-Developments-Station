@@ -17,7 +17,7 @@ const makeRecord = (
   cost_category: "hard_cost",
   cost_source: "estimate",
   cost_stage: "construction",
-  amount: 500000,
+  amount: "500000.00",
   currency: "AED",
   effective_date: null,
   reference_number: null,
@@ -93,7 +93,7 @@ describe("ConstructionCostRecordTable", () => {
   it("renders formatted amount", () => {
     render(
       <ConstructionCostRecordTable
-        records={[makeRecord({ amount: 1_234_567.89 })]}
+        records={[makeRecord({ amount: "1234567.89" })]}
         onEdit={jest.fn()}
         onArchive={jest.fn()}
         archivingId={null}
