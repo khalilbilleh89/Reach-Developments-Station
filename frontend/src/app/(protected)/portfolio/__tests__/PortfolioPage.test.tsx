@@ -64,12 +64,18 @@ jest.mock("@/lib/phasing-optimization-api", () => ({
   getPortfolioPhasingInsights: jest.fn(),
 }));
 
+// Mock strategy generator API (PR-V7-05)
+jest.mock("@/lib/strategy-api", () => ({
+  getPortfolioStrategyInsights: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
 import { getPortfolioPhasingInsights } from "@/lib/phasing-optimization-api";
+import { getPortfolioStrategyInsights } from "@/lib/strategy-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
@@ -78,6 +84,7 @@ const mockGetConstructionPortfolioScorecards = getConstructionPortfolioScorecard
 const mockGetPortfolioAbsorption = getPortfolioAbsorption as jest.Mock;
 const mockGetPortfolioPricingInsights = getPortfolioPricingInsights as jest.Mock;
 const mockGetPortfolioPhasingInsights = getPortfolioPhasingInsights as jest.Mock;
+const mockGetPortfolioStrategyInsights = getPortfolioStrategyInsights as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -241,6 +248,18 @@ const mockPhasingInsightsEmpty = {
   top_release_risks: [],
 };
 
+const mockStrategyInsightsEmpty = {
+  summary: {
+    total_projects: 0,
+    projects_with_baseline: 0,
+    projects_high_risk: 0,
+    projects_low_risk: 0,
+  },
+  projects: [],
+  top_strategies: [],
+  intervention_required: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -256,6 +275,8 @@ describe("PortfolioPage", () => {
     mockGetPortfolioPricingInsights.mockResolvedValue(mockPricingInsightsEmpty);
     // Default phasing insights mock returns empty state (PR-V7-03)
     mockGetPortfolioPhasingInsights.mockResolvedValue(mockPhasingInsightsEmpty);
+    // Default strategy insights mock returns empty state (PR-V7-05)
+    mockGetPortfolioStrategyInsights.mockResolvedValue(mockStrategyInsightsEmpty);
   });
 
   it("renders the page title", () => {
