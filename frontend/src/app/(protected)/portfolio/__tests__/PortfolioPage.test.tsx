@@ -59,11 +59,17 @@ jest.mock("@/lib/pricing-optimization-api", () => ({
   getPortfolioPricingInsights: jest.fn(),
 }));
 
+// Mock phasing optimization API (PR-V7-03)
+jest.mock("@/lib/phasing-optimization-api", () => ({
+  getPortfolioPhasingInsights: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
+import { getPortfolioPhasingInsights } from "@/lib/phasing-optimization-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
@@ -71,6 +77,7 @@ const mockGetPortfolioCostVariance = getPortfolioCostVariance as jest.Mock;
 const mockGetConstructionPortfolioScorecards = getConstructionPortfolioScorecards as jest.Mock;
 const mockGetPortfolioAbsorption = getPortfolioAbsorption as jest.Mock;
 const mockGetPortfolioPricingInsights = getPortfolioPricingInsights as jest.Mock;
+const mockGetPortfolioPhasingInsights = getPortfolioPhasingInsights as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -221,6 +228,19 @@ const mockPricingInsightsEmpty = {
   pricing_risk_zones: [],
 };
 
+const mockPhasingInsightsEmpty = {
+  summary: {
+    total_projects: 0,
+    projects_prepare_next_phase_count: 0,
+    projects_hold_inventory_count: 0,
+    projects_delay_release_count: 0,
+    projects_insufficient_data_count: 0,
+  },
+  projects: [],
+  top_phase_opportunities: [],
+  top_release_risks: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -234,6 +254,8 @@ describe("PortfolioPage", () => {
     mockGetPortfolioAbsorption.mockResolvedValue(mockAbsorptionEmpty);
     // Default pricing insights mock returns empty state (PR-V7-02)
     mockGetPortfolioPricingInsights.mockResolvedValue(mockPricingInsightsEmpty);
+    // Default phasing insights mock returns empty state (PR-V7-03)
+    mockGetPortfolioPhasingInsights.mockResolvedValue(mockPhasingInsightsEmpty);
   });
 
   it("renders the page title", () => {

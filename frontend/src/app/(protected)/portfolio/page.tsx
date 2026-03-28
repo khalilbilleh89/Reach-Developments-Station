@@ -11,16 +11,19 @@ import { PortfolioCostVariancePanel } from "@/components/portfolio/PortfolioCost
 import { PortfolioConstructionScorecardsPanel } from "@/components/portfolio/PortfolioConstructionScorecardsPanel";
 import { PortfolioAbsorptionPanel } from "@/components/portfolio/PortfolioAbsorptionPanel";
 import { PortfolioPricingInsightsPanel } from "@/components/portfolio/PortfolioPricingInsightsPanel";
+import { PortfolioPhasingInsightsPanel } from "@/components/portfolio/PortfolioPhasingInsightsPanel";
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
+import { getPortfolioPhasingInsights } from "@/lib/phasing-optimization-api";
 import type { PortfolioDashboardResponse } from "@/lib/portfolio-types";
 import type { PortfolioCostVarianceResponse } from "@/lib/portfolio-variance-types";
 import type { ConstructionPortfolioScorecardsResponse } from "@/lib/construction-scorecard-types";
 import type { PortfolioAbsorptionResponse } from "@/lib/portfolio-absorption-types";
 import type { PortfolioPricingInsightsResponse } from "@/lib/pricing-optimization-types";
+import type { PortfolioPhasingInsightsResponse } from "@/lib/phasing-optimization-types";
 import styles from "@/styles/portfolio.module.css";
 
 /**
@@ -51,6 +54,8 @@ export default function PortfolioPage() {
     useState<PortfolioAbsorptionResponse | null>(null);
   const [pricingData, setPricingData] =
     useState<PortfolioPricingInsightsResponse | null>(null);
+  const [phasingData, setPhasingData] =
+    useState<PortfolioPhasingInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,13 +68,15 @@ export default function PortfolioPage() {
       getConstructionPortfolioScorecards(),
       getPortfolioAbsorption(),
       getPortfolioPricingInsights(),
+      getPortfolioPhasingInsights(),
     ])
-      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse, pricingResponse]) => {
+      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse, pricingResponse, phasingResponse]) => {
         setData(dashboardResponse);
         setVarianceData(varianceResponse);
         setConstructionData(constructionResponse);
         setAbsorptionData(absorptionResponse);
         setPricingData(pricingResponse);
+        setPhasingData(phasingResponse);
       })
       .catch((err: unknown) => {
         setError(
@@ -106,6 +113,9 @@ export default function PortfolioPage() {
           )}
           {pricingData && (
             <PortfolioPricingInsightsPanel data={pricingData} />
+          )}
+          {phasingData && (
+            <PortfolioPhasingInsightsPanel data={phasingData} />
           )}
           {constructionData && (
             <PortfolioConstructionScorecardsPanel data={constructionData} />
