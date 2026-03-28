@@ -462,4 +462,3 @@ describe("TenderComparisonClient", () => {
     expect(screen.getByText(/user-42/)).toBeInTheDocument();
   });
 });
-import React from "react";
