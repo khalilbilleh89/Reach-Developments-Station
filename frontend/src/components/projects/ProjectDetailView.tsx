@@ -17,6 +17,7 @@ import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { ProjectLifecycleSummaryPanel } from "@/components/projects/ProjectLifecycleSummaryPanel";
 import { ProjectAttributeConfig } from "@/components/projects/ProjectAttributeConfig";
 import { ProjectAbsorptionPanel } from "@/components/feasibility/ProjectAbsorptionPanel";
+import { ProjectPricingRecommendationsPanel } from "@/components/feasibility/ProjectPricingRecommendationsPanel";
 import { BuildingsTable } from "@/components/buildings/BuildingsTable";
 import { FloorsTable } from "@/components/floors/FloorsTable";
 import { UnitsInventoryTable } from "@/components/units/UnitsInventoryTable";
@@ -483,6 +484,7 @@ export function ProjectDetailView({ project, onBack }: ProjectDetailViewProps) {
         <>
           <ProjectLifecycleSummaryPanel projectId={project.id} />
           <ProjectAbsorptionPanel projectId={project.id} />
+          <ProjectPricingRecommendationsPanel projectId={project.id} />
           <ProjectOverview project={project} />
         </>
       )}
