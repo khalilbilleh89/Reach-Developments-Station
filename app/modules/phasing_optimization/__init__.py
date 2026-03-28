@@ -4,10 +4,9 @@ phasing_optimization
 Phasing Optimization Engine (PR-V7-03).
 
 Provides deterministic, backend-owned phasing recommendations by converting:
-  - sales absorption signals
+  - sales absorption and sell-through signals
   - inventory availability by phase
-  - pricing optimization demand signals
-  - project readiness (approved baseline, construction records)
+  - project readiness (approved baseline state)
   - phase context (current active phase, next phase)
 
 into:

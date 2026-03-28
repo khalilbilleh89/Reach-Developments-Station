@@ -151,12 +151,11 @@ class PhasingOptimizationRepository:
     def has_approved_baseline(self, project_id: str) -> bool:
         """Return True when the project has at least one approved tender baseline."""
         return (
-            self.db.query(ConstructionCostComparisonSet)
+            self.db.query(ConstructionCostComparisonSet.id)
             .filter(ConstructionCostComparisonSet.project_id == project_id)
             .filter(ConstructionCostComparisonSet.is_approved_baseline.is_(True))
-            .limit(1)
-            .count()
-            > 0
+            .first()
+            is not None
         )
 
     # ------------------------------------------------------------------

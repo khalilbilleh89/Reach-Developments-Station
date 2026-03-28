@@ -237,11 +237,21 @@ def _generate_recommendations(
     # ----------------------------------------------------------------
     if not has_next_phase:
         next_rec = "not_applicable"
-    elif demand_status == "high_demand" and avail <= _CRITICALLY_LOW_AVAIL:
-        # Strong demand + nearly sold out in current phase + project structurally ready
+    elif demand_status == "high_demand" and avail <= _CRITICALLY_LOW_AVAIL and has_approved_baseline:
+        # Strong demand + critically low current-phase availability + approved baseline
+        # indicate the project is ready for next-phase preparation.
         next_rec = "prepare_next_phase"
         urgency = "high"
         reason += " Strong indicators for next phase preparation."
+    elif demand_status == "high_demand" and avail <= _CRITICALLY_LOW_AVAIL:
+        # Demand is strong and current-phase inventory is low, but readiness is incomplete;
+        # do not recommend opening the next phase yet.
+        next_rec = "do_not_open_next_phase"
+        reason += (
+            " Demand is strong and current-phase inventory is low, but the approved "
+            "tender baseline is not yet in place. Complete project readiness before "
+            "preparing the next phase."
+        )
     elif demand_status == "high_demand":
         next_rec = "do_not_open_next_phase"
     elif demand_status == "balanced":

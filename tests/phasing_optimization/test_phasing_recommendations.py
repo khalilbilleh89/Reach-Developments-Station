@@ -162,7 +162,7 @@ def _create_calculated_feasibility_run(
     assert run_resp.status_code == 201, run_resp.text
     run_id = run_resp.json()["id"]
 
-    client.post(
+    assumptions_resp = client.post(
         f"/api/v1/feasibility/runs/{run_id}/assumptions",
         json={
             "sellable_area_sqm": 1000.0,
@@ -174,10 +174,31 @@ def _create_calculated_feasibility_run(
             "development_period_months": development_period_months,
         },
     )
+    assert assumptions_resp.status_code in (200, 201), assumptions_resp.text
 
     calc_resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
     assert calc_resp.status_code in (200, 201), calc_resp.text
     return run_id
+
+
+def _create_approved_baseline(client: TestClient, project_id: str) -> str:
+    """Create a tender comparison set and approve it as the project baseline.
+
+    Returns the comparison set ID.
+    """
+    set_resp = client.post(
+        f"/api/v1/projects/{project_id}/tender-comparisons",
+        json={
+            "title": "Approved Baseline",
+            "comparison_stage": "baseline_vs_tender",
+        },
+    )
+    assert set_resp.status_code == 201, set_resp.text
+    set_id = set_resp.json()["id"]
+
+    approve_resp = client.post(f"/api/v1/tender-comparisons/{set_id}/approve-baseline")
+    assert approve_resp.status_code == 200, approve_resp.text
+    return set_id
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +439,7 @@ def test_low_demand_moderate_avail_returns_hold_current_inventory(client: TestCl
 
 
 def test_prepare_next_phase_when_high_demand_and_low_inventory(client: TestClient):
-    """High demand + ≤20% phase availability → prepare_next_phase."""
+    """High demand + ≤20% phase availability + approved baseline → prepare_next_phase."""
     proj_id = _create_project(client, "PRJ-PH7", "Prepare Next Phase")
     # Phase 1: 10 units, sell 9 (≤20% avail)
     _phase1_id, unit_ids = _create_units_in_phase(
@@ -428,6 +449,8 @@ def test_prepare_next_phase_when_high_demand_and_low_inventory(client: TestClien
     _phase2_id, _unit_ids2 = _create_units_in_phase(
         client, proj_id, num_units=10, phase_name="Phase 2", phase_sequence=2, building_code="BLK-PH7B"
     )
+    # Approved baseline: required to unlock prepare_next_phase
+    _create_approved_baseline(client, proj_id)
 
     buyer_id = _create_buyer(client, "buyer-ph7@ph.com")
     for i, uid in enumerate(unit_ids[:9]):
@@ -444,6 +467,50 @@ def test_prepare_next_phase_when_high_demand_and_low_inventory(client: TestClien
     assert data["has_next_phase"] is True
     assert data["next_phase_id"] is not None
     assert data["release_urgency"] == "high"
+
+
+# ---------------------------------------------------------------------------
+# Next phase: high demand + critically low inventory WITHOUT approved baseline
+# → do_not_open_next_phase (readiness gate)
+# ---------------------------------------------------------------------------
+
+
+def test_high_demand_low_inventory_without_baseline_does_not_prepare_next_phase(
+    client: TestClient,
+):
+    """High demand + ≤20% availability + NO approved baseline → do_not_open_next_phase.
+
+    The readiness gate prevents prepare_next_phase from being emitted when the
+    project does not yet have an approved tender baseline.
+    """
+    proj_id = _create_project(client, "PRJ-PH7B", "High Demand No Baseline")
+    # Phase 1: 10 units, sell 9 (high demand, ≤20% availability)
+    _phase1_id, unit_ids = _create_units_in_phase(
+        client, proj_id, num_units=10, phase_name="Phase 1", phase_sequence=1, building_code="BLK-PH7C"
+    )
+    # Phase 2 exists but no approved baseline
+    _phase2_id, _unit_ids2 = _create_units_in_phase(
+        client, proj_id, num_units=10, phase_name="Phase 2", phase_sequence=2, building_code="BLK-PH7D"
+    )
+    # No _create_approved_baseline call — readiness gate must block prepare_next_phase
+
+    buyer_id = _create_buyer(client, "buyer-ph7b@ph.com")
+    for i, uid in enumerate(unit_ids[:9]):
+        _set_unit_under_contract(client, uid)
+        _create_contract(
+            client, uid, buyer_id, f"CNT-PH7B-{i:03d}",
+            contract_date=str(date.today() - timedelta(days=60 - i))
+        )
+
+    resp = client.get(f"/api/v1/projects/{proj_id}/phasing-recommendations")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Without baseline, must NOT emit prepare_next_phase
+    assert data["next_phase_recommendation"] == "do_not_open_next_phase"
+    assert data["has_next_phase"] is True
+    assert data["release_urgency"] == "high"
+    # Reason must explain the readiness block
+    assert "baseline" in data["reason"].lower()
 
 
 # ---------------------------------------------------------------------------
