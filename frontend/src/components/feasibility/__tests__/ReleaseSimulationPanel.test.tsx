@@ -8,14 +8,11 @@
  *  - single simulation: error state renders
  *  - single simulation: result renders with IRR, delta, NPV, risk score, GDV
  *  - risk score badge renders correctly for low / medium / high
- *  - IRR delta color indicator renders
  *  - cashflow delay label renders correctly
  *  - no-baseline notice renders when has_feasibility_baseline is false
  *  - comparison mode: run button renders
  *  - comparison mode: multiple results render
  *  - comparison mode: error state renders
- *  - simulation is read-only (no mutation controls)
- *  - scenario inputs passed correctly to API client
  */
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -142,8 +139,9 @@ test("switches back to single mode from comparison mode", () => {
 // ---------------------------------------------------------------------------
 
 test("shows loading state while simulation is running", async () => {
+  let resolvePromise: (value: unknown) => void = () => undefined;
   mockSimulate.mockImplementation(
-    () => new Promise((resolve) => setTimeout(resolve, 500)),
+    () => new Promise((resolve) => { resolvePromise = resolve; }),
   );
 
   render(<ReleaseSimulationPanel projectId="proj-1" />);
@@ -151,6 +149,9 @@ test("shows loading state while simulation is running", async () => {
 
   expect(screen.getByTestId("run-simulation-btn")).toHaveTextContent("Running…");
   expect(screen.getByTestId("run-simulation-btn")).toBeDisabled();
+
+  // Resolve to avoid act() warning for pending state updates.
+  await act(async () => { resolvePromise(undefined); });
 });
 
 // ---------------------------------------------------------------------------
@@ -346,8 +347,9 @@ test("renders comparison error state", async () => {
 });
 
 test("comparison run button shows loading state", async () => {
+  let resolvePromise: (value: unknown) => void = () => undefined;
   mockSimulateMulti.mockImplementation(
-    () => new Promise((resolve) => setTimeout(resolve, 500)),
+    () => new Promise((resolve) => { resolvePromise = resolve; }),
   );
 
   render(<ReleaseSimulationPanel projectId="proj-1" />);
@@ -355,4 +357,7 @@ test("comparison run button shows loading state", async () => {
   fireEvent.click(screen.getByTestId("run-comparison-btn"));
 
   expect(screen.getByTestId("run-comparison-btn")).toHaveTextContent("Running…");
+
+  // Resolve to avoid act() warning for pending state updates.
+  await act(async () => { resolvePromise(undefined); });
 });

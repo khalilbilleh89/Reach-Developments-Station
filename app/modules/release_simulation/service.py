@@ -133,56 +133,53 @@ class ReleaseSimulationRepository:
 
     def get_feasibility_baseline(
         self, project_id: str
-    ) -> Tuple[Optional[float], Optional[float], Optional[int]]:
-        """Return (gdv, total_cost, dev_period_months) from the latest calculated run.
+    ) -> Tuple[bool, Optional[float], Optional[float], Optional[int], Optional[float]]:
+        """Return (has_run, gdv, total_cost, dev_period_months, irr) from the latest calculated run.
 
-        Returns (None, None, None) when no calculated run exists.
+        Fetches the latest calculated FeasibilityRun once, then loads result and
+        assumptions by that specific run_id to guarantee all values originate from
+        the same run.
+
+        Returns (False, None, None, None, None) when no calculated run exists.
         """
-        from app.modules.feasibility.models import FeasibilityAssumptions, FeasibilityResult, FeasibilityRun
+        from app.modules.feasibility.models import (
+            FeasibilityAssumptions,
+            FeasibilityResult,
+            FeasibilityRun,
+        )
+        latest_run = (
+            self.db.query(FeasibilityRun)
+            .filter(FeasibilityRun.project_id == project_id)
+            .filter(FeasibilityRun.status == "calculated")
+            .order_by(FeasibilityRun.created_at.desc())
+            .first()
+        )
+        if latest_run is None:
+            return False, None, None, None, None
+
+        run_id = latest_run.id
+
         feas_result = (
             self.db.query(FeasibilityResult)
-            .join(FeasibilityRun, FeasibilityResult.run_id == FeasibilityRun.id)
-            .filter(FeasibilityRun.project_id == project_id)
-            .filter(FeasibilityRun.status == "calculated")
-            .order_by(FeasibilityRun.created_at.desc())
+            .filter(FeasibilityResult.run_id == run_id)
             .first()
         )
-        if feas_result is None:
-            return None, None, None
-
-        gdv = float(feas_result.gdv) if feas_result.gdv is not None else None
-        total_cost = float(feas_result.total_cost) if feas_result.total_cost is not None else None
-
         feas_assumptions = (
             self.db.query(FeasibilityAssumptions)
-            .join(FeasibilityRun, FeasibilityAssumptions.run_id == FeasibilityRun.id)
-            .filter(FeasibilityRun.project_id == project_id)
-            .filter(FeasibilityRun.status == "calculated")
-            .order_by(FeasibilityRun.created_at.desc())
+            .filter(FeasibilityAssumptions.run_id == run_id)
             .first()
         )
+
+        gdv = float(feas_result.gdv) if feas_result is not None and feas_result.gdv is not None else None
+        total_cost = float(feas_result.total_cost) if feas_result is not None and feas_result.total_cost is not None else None
+        irr = float(feas_result.irr) if feas_result is not None and feas_result.irr is not None else None
         dev_period = (
             int(feas_assumptions.development_period_months)
             if feas_assumptions is not None and feas_assumptions.development_period_months is not None
             else None
         )
 
-        return gdv, total_cost, dev_period
-
-    def get_baseline_irr(self, project_id: str) -> Optional[float]:
-        """Return IRR from the latest calculated feasibility result, or None."""
-        from app.modules.feasibility.models import FeasibilityResult, FeasibilityRun
-        feas_result = (
-            self.db.query(FeasibilityResult)
-            .join(FeasibilityRun, FeasibilityResult.run_id == FeasibilityRun.id)
-            .filter(FeasibilityRun.project_id == project_id)
-            .filter(FeasibilityRun.status == "calculated")
-            .order_by(FeasibilityRun.created_at.desc())
-            .first()
-        )
-        if feas_result is None:
-            return None
-        return float(feas_result.irr) if feas_result.irr is not None else None
+        return True, gdv, total_cost, dev_period, irr
 
 
 class ReleaseSimulationService:
@@ -207,11 +204,9 @@ class ReleaseSimulationService:
         if project is None:
             raise ResourceNotFoundError(f"Project '{project_id}' not found.")
 
-        baseline_gdv, baseline_total_cost, baseline_dev_period = (
+        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr = (
             self.repo.get_feasibility_baseline(project_id)
         )
-        baseline_irr = self.repo.get_baseline_irr(project_id)
-        has_baseline = baseline_gdv is not None
 
         result = self._run_scenario(
             scenario=request.scenario,
@@ -240,11 +235,9 @@ class ReleaseSimulationService:
         if project is None:
             raise ResourceNotFoundError(f"Project '{project_id}' not found.")
 
-        baseline_gdv, baseline_total_cost, baseline_dev_period = (
+        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr = (
             self.repo.get_feasibility_baseline(project_id)
         )
-        baseline_irr = self.repo.get_baseline_irr(project_id)
-        has_baseline = baseline_gdv is not None
 
         results: List[SimulationResult] = [
             self._run_scenario(
@@ -302,10 +295,14 @@ class ReleaseSimulationService:
         )
 
         # 3. Recalculate IRR using the existing IRR engine (no duplication).
-        simulated_irr = calculate_irr(
-            total_cost=total_cost,
-            gdv=simulated_gdv,
-            development_period_months=simulated_dev_period,
+        # Round once here so that irr_delta = irr − baseline_irr is exact per the contract.
+        irr = round(
+            calculate_irr(
+                total_cost=total_cost,
+                gdv=simulated_gdv,
+                development_period_months=simulated_dev_period,
+            ),
+            6,
         )
 
         # 4. Calculate NPV using platform discount rate.
@@ -316,10 +313,10 @@ class ReleaseSimulationService:
         )
         simulated_npv = _calculate_npv(cashflows, _NPV_DISCOUNT_RATE_MONTHLY)
 
-        # 5. Derive IRR delta and risk score.
+        # 5. Derive IRR delta and risk score (delta is computed from the same rounded irr).
         irr_delta: Optional[float] = None
         if baseline_irr is not None:
-            irr_delta = round(simulated_irr - baseline_irr, 6)
+            irr_delta = round(irr - baseline_irr, 6)
 
         risk_score = _derive_risk_score(irr_delta)
         cashflow_delay = simulated_dev_period - dev_period
@@ -331,7 +328,7 @@ class ReleaseSimulationService:
             release_strategy=scenario.release_strategy,
             simulated_gdv=round(simulated_gdv, 2),
             simulated_dev_period_months=simulated_dev_period,
-            irr=round(simulated_irr, 6),
+            irr=irr,
             irr_delta=irr_delta,
             npv=round(simulated_npv, 2),
             cashflow_delay_months=cashflow_delay,

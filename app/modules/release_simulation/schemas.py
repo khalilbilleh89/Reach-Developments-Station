@@ -88,7 +88,7 @@ class SimulationResult(BaseModel):
     phase_delay_months: int = Field(
         ..., description="Phase delay applied in this scenario (months)."
     )
-    release_strategy: str = Field(
+    release_strategy: Literal["hold", "accelerate", "maintain"] = Field(
         ..., description="Release strategy applied in this scenario."
     )
 
@@ -133,7 +133,7 @@ class SimulationResult(BaseModel):
             "Positive = delayed; negative = accelerated."
         ),
     )
-    risk_score: str = Field(
+    risk_score: Literal["low", "medium", "high"] = Field(
         ...,
         description=(
             "Risk classification based on irr_delta: "

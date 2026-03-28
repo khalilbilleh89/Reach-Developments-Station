@@ -28,7 +28,7 @@
  * PR-V7-04 — Release Strategy Simulation Engine
  */
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   simulateReleaseStrategies,
   simulateReleaseStrategy,
@@ -314,7 +314,7 @@ function SimulationResultCard({ result, isTop }: SimulationResultCardProps) {
         flex: 1,
         minWidth: 200,
       }}
-      data-testid={`simulation-result-card${result.label ? `-${result.label.replace(/\s+/g, "-").toLowerCase()}` : ""}`}
+      data-testid={`simulation-result-card${result.label ? `-${result.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}` : ""}`}
     >
       {/* Header */}
       <div
@@ -441,6 +441,13 @@ export function ReleaseSimulationPanel({ projectId }: ReleaseSimulationPanelProp
   const [compareError, setCompareError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any in-flight request when the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
   // ----- Run single simulation -----
   const runSimulation = useCallback(async () => {
@@ -684,7 +691,11 @@ export function ReleaseSimulationPanel({ projectId }: ReleaseSimulationPanelProp
               data-testid="comparison-results"
             >
               {compareResults.map((result, idx) => (
-                <SimulationResultCard key={idx} result={result} isTop={idx === 0} />
+                <SimulationResultCard
+                  key={`${result.price_adjustment_pct}|${result.phase_delay_months}|${result.release_strategy}|${result.label ?? idx}`}
+                  result={result}
+                  isTop={idx === 0}
+                />
               ))}
             </div>
           )}
