@@ -74,7 +74,7 @@ _NEG_MED_CHANGE_PCT = -5.0
 _NEG_LOW_CHANGE_PCT = -3.0
 
 # Months per day constant (average Gregorian year / 12)
-_DAYS_PER_MONTH = 30.4375
+_AVG_DAYS_PER_MONTH = 30.4375
 
 
 def _safe_pct(numerator: float, denominator: float) -> Optional[float]:
@@ -279,7 +279,7 @@ class PricingOptimizationService:
             first_date, last_date, contract_count = contract_bounds
             days_elapsed = (last_date - first_date).days
             if days_elapsed > 0:
-                months_elapsed = days_elapsed / _DAYS_PER_MONTH
+                months_elapsed = days_elapsed / _AVG_DAYS_PER_MONTH
                 absorption_rate_per_month = round(contract_count / months_elapsed, 4)
 
         # Planned rate from feasibility
