@@ -19,6 +19,9 @@ const makeSet = (
   comparison_label: "Tender",
   notes: null,
   is_active: true,
+  is_approved_baseline: false,
+  approved_at: null,
+  approved_by_user_id: null,
   created_at: "2026-03-01T00:00:00Z",
   updated_at: "2026-03-01T00:00:00Z",
   ...overrides,
@@ -137,5 +140,42 @@ describe("TenderComparisonSetList", () => {
     );
     expect(screen.getByText("Set One")).toBeInTheDocument();
     expect(screen.getByText("Set Two")).toBeInTheDocument();
+  });
+
+  // ── Baseline governance badge (PR-V6-13) ────────────────────────────────────
+
+  it("does not show Approved Baseline badge when is_approved_baseline is false", () => {
+    render(
+      <TenderComparisonSetList
+        sets={[makeSet({ is_approved_baseline: false })]}
+        selectedId={null}
+        onSelect={jest.fn()}
+      />,
+    );
+    expect(screen.queryByText("Approved Baseline")).not.toBeInTheDocument();
+  });
+
+  it("shows Approved Baseline badge when is_approved_baseline is true", () => {
+    render(
+      <TenderComparisonSetList
+        sets={[makeSet({ id: "set-bg", is_approved_baseline: true, approved_at: "2026-03-01T00:00:00Z", approved_by_user_id: "user-1" })]}
+        selectedId={null}
+        onSelect={jest.fn()}
+      />,
+    );
+    expect(screen.getByText("Approved Baseline")).toBeInTheDocument();
+    expect(screen.getByTestId("baseline-badge-set-bg")).toBeInTheDocument();
+  });
+
+  it("shows both Approved Baseline badge and Active badge simultaneously", () => {
+    render(
+      <TenderComparisonSetList
+        sets={[makeSet({ is_approved_baseline: true, approved_at: "2026-03-01T00:00:00Z", approved_by_user_id: "u1" })]}
+        selectedId={null}
+        onSelect={jest.fn()}
+      />,
+    );
+    expect(screen.getByText("Approved Baseline")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
   });
 });

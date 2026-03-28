@@ -8,6 +8,7 @@ This layer only issues safe, project-scoped queries.
 Source construction cost records are never mutated here.
 """
 
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
@@ -180,3 +181,50 @@ class TenderComparisonRepository:
             Decimal(str(row[2])),
             Decimal(str(row[3])),
         )
+
+    # ── Baseline governance ───────────────────────────────────────────────────
+
+    def get_active_baseline_for_project(
+        self, project_id: str
+    ) -> Optional[ConstructionCostComparisonSet]:
+        """Return the currently approved baseline set for a project, or None.
+
+        Ordered by approved_at DESC so that if data integrity ever produces more
+        than one approved baseline (e.g., from a concurrent race), the most
+        recently approved record is returned deterministically.
+        """
+        return (
+            self.db.query(ConstructionCostComparisonSet)
+            .filter(
+                ConstructionCostComparisonSet.project_id == project_id,
+                ConstructionCostComparisonSet.is_approved_baseline.is_(True),
+            )
+            .order_by(ConstructionCostComparisonSet.approved_at.desc())
+            .first()
+        )
+
+    def deactivate_baseline(
+        self, comparison_set: ConstructionCostComparisonSet
+    ) -> None:
+        """Clear baseline approval state on a set (does NOT commit)."""
+        comparison_set.is_approved_baseline = False
+        comparison_set.approved_at = None
+        comparison_set.approved_by_user_id = None
+
+    def approve_baseline(
+        self,
+        comparison_set: ConstructionCostComparisonSet,
+        approved_at: datetime,
+        approved_by_user_id: str,
+    ) -> ConstructionCostComparisonSet:
+        """Mark a set as the approved baseline and commit.
+
+        The caller is responsible for deactivating any prior active baseline
+        within the same transaction before calling this method.
+        """
+        comparison_set.is_approved_baseline = True
+        comparison_set.approved_at = approved_at
+        comparison_set.approved_by_user_id = approved_by_user_id
+        self.db.commit()
+        self.db.refresh(comparison_set)
+        return comparison_set

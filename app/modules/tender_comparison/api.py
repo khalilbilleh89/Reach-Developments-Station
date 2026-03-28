@@ -7,9 +7,11 @@ Endpoints
 ---------
 GET    /api/v1/projects/{project_id}/tender-comparisons
 POST   /api/v1/projects/{project_id}/tender-comparisons
+GET    /api/v1/projects/{project_id}/tender-comparisons/active-baseline
 GET    /api/v1/tender-comparisons/{set_id}
 PATCH  /api/v1/tender-comparisons/{set_id}
 GET    /api/v1/tender-comparisons/{set_id}/summary
+POST   /api/v1/tender-comparisons/{set_id}/approve-baseline
 POST   /api/v1/tender-comparisons/{set_id}/lines
 PATCH  /api/v1/tender-comparisons/lines/{line_id}
 DELETE /api/v1/tender-comparisons/lines/{line_id}
@@ -20,12 +22,13 @@ No write-back to feasibility, finance, or construction cost records.
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.tender_comparison.schemas import (
+    ActiveTenderBaselineResponse,
     ConstructionCostComparisonLineCreate,
     ConstructionCostComparisonLineResponse,
     ConstructionCostComparisonLineUpdate,
@@ -43,6 +46,7 @@ router = APIRouter(
 )
 
 DbDep = Annotated[Session, Depends(get_db)]
+UserPayloadDep = Annotated[dict, Depends(get_current_user_payload)]
 
 
 def _service(db: DbDep) -> TenderComparisonService:
@@ -84,6 +88,22 @@ def create_tender_comparison(
     return service.create_set(project_id, data)
 
 
+@router.get(
+    "/projects/{project_id}/tender-comparisons/active-baseline",
+    response_model=ActiveTenderBaselineResponse,
+)
+def get_project_active_baseline(
+    project_id: str,
+    service: ServiceDep,
+) -> ActiveTenderBaselineResponse:
+    """Return the currently approved tender baseline for a project.
+
+    Returns has_approved_baseline=False and baseline=null when no baseline
+    has been approved yet.
+    """
+    return service.get_project_active_baseline(project_id)
+
+
 # ---------------------------------------------------------------------------
 # Set-level endpoints
 # ---------------------------------------------------------------------------
@@ -121,6 +141,35 @@ def get_tender_comparison_summary(
     service: ServiceDep,
 ) -> ConstructionCostComparisonSummaryResponse:
     return service.get_set_summary(set_id)
+
+
+@router.post(
+    "/tender-comparisons/{set_id}/approve-baseline",
+    response_model=ConstructionCostComparisonSetResponse,
+)
+def approve_tender_baseline(
+    set_id: str,
+    service: ServiceDep,
+    payload: UserPayloadDep,
+) -> ConstructionCostComparisonSetResponse:
+    """Approve a comparison set as the official project baseline.
+
+    Atomically deactivates any existing approved baseline for the same project
+    and marks this comparison set as the new approved baseline.
+
+    The action is recorded with the authenticated user's ID and a UTC
+    timestamp.
+
+    Approving an already-active baseline is idempotent: the approval metadata
+    is refreshed and the updated record is returned.
+    """
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user identity (sub) is missing from token.",
+        )
+    return service.approve_tender_baseline(set_id, user_id)
 
 
 # ---------------------------------------------------------------------------

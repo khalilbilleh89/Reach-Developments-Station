@@ -10,11 +10,13 @@
  * Project-scoped:
  *   GET  /projects/{projectId}/tender-comparisons         → list sets
  *   POST /projects/{projectId}/tender-comparisons         → create set
+ *   GET  /projects/{projectId}/tender-comparisons/active-baseline → active baseline
  *
  * Set-level:
- *   GET   /tender-comparisons/{setId}          → get set (with lines)
- *   PATCH /tender-comparisons/{setId}          → update set
- *   GET   /tender-comparisons/{setId}/summary  → get set summary
+ *   GET   /tender-comparisons/{setId}                  → get set (with lines)
+ *   PATCH /tender-comparisons/{setId}                  → update set
+ *   GET   /tender-comparisons/{setId}/summary          → get set summary
+ *   POST  /tender-comparisons/{setId}/approve-baseline → approve as baseline
  *
  * Line-level:
  *   POST   /tender-comparisons/{setId}/lines        → create line
@@ -24,6 +26,7 @@
 
 import { apiFetch } from "./api-client";
 import type {
+  ActiveTenderBaseline,
   ConstructionCostComparisonLine,
   ConstructionCostComparisonLineCreate,
   ConstructionCostComparisonLineUpdate,
@@ -69,6 +72,14 @@ export async function createTenderComparison(
   );
 }
 
+export async function getProjectActiveBaseline(
+  projectId: string,
+): Promise<ActiveTenderBaseline> {
+  return apiFetch<ActiveTenderBaseline>(
+    `/projects/${projectId}/tender-comparisons/active-baseline`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Set-level endpoints
 // ---------------------------------------------------------------------------
@@ -94,6 +105,15 @@ export async function getTenderComparisonSummary(
 ): Promise<ConstructionCostComparisonSummary> {
   return apiFetch<ConstructionCostComparisonSummary>(
     `/tender-comparisons/${setId}/summary`,
+  );
+}
+
+export async function approveTenderBaseline(
+  setId: string,
+): Promise<ConstructionCostComparisonSet> {
+  return apiFetch<ConstructionCostComparisonSet>(
+    `/tender-comparisons/${setId}/approve-baseline`,
+    { method: "POST" },
   );
 }
 

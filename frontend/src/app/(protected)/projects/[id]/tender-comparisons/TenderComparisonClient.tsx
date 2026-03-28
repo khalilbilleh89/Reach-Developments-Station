@@ -8,6 +8,7 @@ import { TenderComparisonSummaryStrip } from "@/components/tender-comparisons/Te
 import { TenderComparisonLineTable } from "@/components/tender-comparisons/TenderComparisonLineTable";
 import { TenderComparisonFormModal } from "@/components/tender-comparisons/TenderComparisonFormModal";
 import { TenderComparisonLineFormModal } from "@/components/tender-comparisons/TenderComparisonLineFormModal";
+import { BaselineApprovalConfirmModal } from "@/components/tender-comparisons/BaselineApprovalConfirmModal";
 import {
   listProjectTenderComparisons,
   createTenderComparison,
@@ -17,6 +18,7 @@ import {
   createComparisonLine,
   updateComparisonLine,
   deleteComparisonLine,
+  approveTenderBaseline,
 } from "@/lib/tender-comparison-api";
 import type {
   ConstructionCostComparisonSet,
@@ -35,7 +37,7 @@ import styles from "@/styles/construction.module.css";
  *
  * Client component for the project tender comparisons page.
  * Handles data fetching, CRUD flows, loading / error / empty states,
- * and form modal lifecycle.
+ * form modal lifecycle, and approved-baseline governance (PR-V6-13).
  *
  * Data sources:
  *   GET  /api/v1/projects/{id}/tender-comparisons
@@ -43,6 +45,7 @@ import styles from "@/styles/construction.module.css";
  *   GET  /api/v1/tender-comparisons/{setId}
  *   PATCH /api/v1/tender-comparisons/{setId}
  *   GET  /api/v1/tender-comparisons/{setId}/summary
+ *   POST /api/v1/tender-comparisons/{setId}/approve-baseline
  *   POST /api/v1/tender-comparisons/{setId}/lines
  *   PATCH /api/v1/tender-comparisons/lines/{lineId}
  *   DELETE /api/v1/tender-comparisons/lines/{lineId}
@@ -79,6 +82,13 @@ export function TenderComparisonClient() {
   const [editingLine, setEditingLine] =
     useState<ConstructionCostComparisonLine | null>(null);
   const [deletingLineId, setDeletingLineId] = useState<string | null>(null);
+
+  // ── Baseline approval modal (PR-V6-13) ────────────────────────────────────
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approvingSetId, setApprovingSetId] = useState<string | null>(null);
+  const [approvingSetTitle, setApprovingSetTitle] = useState("");
+  const [approveSubmitting, setApproveSubmitting] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   // ── Detail request race-condition guards ──────────────────────────────────
   // `latestDetailRequestId` tracks the most recently requested setId so that
@@ -279,6 +289,41 @@ export function TenderComparisonClient() {
     }
   };
 
+  // ── Baseline approval (PR-V6-13) ──────────────────────────────────────────
+  const handleOpenApproveModal = () => {
+    if (!selectedSet) return;
+    setApproveError(null);
+    setApprovingSetId(selectedSet.id);
+    setApprovingSetTitle(selectedSet.title);
+    setShowApproveModal(true);
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!approvingSetId) return;
+    setApproveSubmitting(true);
+    setApproveError(null);
+    try {
+      await approveTenderBaseline(approvingSetId);
+      setShowApproveModal(false);
+      setApprovingSetId(null);
+      // Refresh both the list (badge updates) and the detail panel.
+      loadList();
+      loadDetail(approvingSetId);
+    } catch (err: unknown) {
+      setApproveError(
+        err instanceof Error ? err.message : "Failed to approve baseline.",
+      );
+    } finally {
+      setApproveSubmitting(false);
+    }
+  };
+
+  // Determine whether there is already an approved baseline for this project
+  // so the confirmation modal can show the replacement warning.
+  const hasExistingBaseline = sets.some(
+    (s) => s.is_approved_baseline && s.id !== approvingSetId,
+  );
+
   return (
     <PageContainer
       title="Tender Comparisons"
@@ -370,29 +415,73 @@ export function TenderComparisonClient() {
 
             {selectedId !== null && !loadingDetail && !detailError && selectedSet && (
               <>
-                {/* Set header with edit action */}
+                {/* Set header with edit action and baseline approval */}
                 <div className={styles.sectionHeader}>
                   <div>
-                    <h2 className={styles.sectionTitle}>
-                      {selectedSet.title}
-                    </h2>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                      <h2 className={styles.sectionTitle}>
+                        {selectedSet.title}
+                      </h2>
+                      {selectedSet.is_approved_baseline && (
+                        <span
+                          className={styles.badgeApprovedBaseline}
+                          data-testid="detail-baseline-badge"
+                        >
+                          Approved Baseline
+                        </span>
+                      )}
+                    </div>
                     <div className={styles.sectionNote}>
                       {selectedSet.baseline_label} →{" "}
                       {selectedSet.comparison_label}
                     </div>
                   </div>
-                  <button
-                    className={styles.actionButton}
-                    onClick={() => {
-                      const listItem = sets.find(
-                        (s) => s.id === selectedSet.id,
-                      );
-                      if (listItem) handleOpenEditSet(listItem);
-                    }}
-                  >
-                    Edit Set
-                  </button>
+                  <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                    {!selectedSet.is_approved_baseline && (
+                      <button
+                        className={styles.approveButton}
+                        onClick={handleOpenApproveModal}
+                        data-testid="approve-baseline-button"
+                      >
+                        ✓ Approve as Baseline
+                      </button>
+                    )}
+                    <button
+                      className={styles.actionButton}
+                      onClick={() => {
+                        const listItem = sets.find(
+                          (s) => s.id === selectedSet.id,
+                        );
+                        if (listItem) handleOpenEditSet(listItem);
+                      }}
+                    >
+                      Edit Set
+                    </button>
+                  </div>
                 </div>
+
+                {/* Approved baseline metadata strip */}
+                {selectedSet.is_approved_baseline && (
+                  <div
+                    className={styles.baselineMetaStrip}
+                    data-testid="baseline-meta-strip"
+                  >
+                    <span>
+                      <span className={styles.baselineMetaLabel}>
+                        Approved on:
+                      </span>
+                      {selectedSet.approved_at
+                        ? new Date(selectedSet.approved_at).toLocaleString()
+                        : "—"}
+                    </span>
+                    <span>
+                      <span className={styles.baselineMetaLabel}>
+                        Approved by:
+                      </span>
+                      {selectedSet.approved_by_user_id ?? "—"}
+                    </span>
+                  </div>
+                )}
 
                 {/* Summary strip */}
                 {summary && <TenderComparisonSummaryStrip summary={summary} />}
@@ -442,6 +531,22 @@ export function TenderComparisonClient() {
           onClose={() => {
             setShowLineModal(false);
             setEditingLine(null);
+          }}
+        />
+      )}
+
+      {/* Baseline approval confirmation modal */}
+      {showApproveModal && approvingSetId && (
+        <BaselineApprovalConfirmModal
+          comparisonTitle={approvingSetTitle}
+          hasExistingBaseline={hasExistingBaseline}
+          isSubmitting={approveSubmitting}
+          error={approveError}
+          onConfirm={handleConfirmApprove}
+          onClose={() => {
+            setShowApproveModal(false);
+            setApprovingSetId(null);
+            setApproveError(null);
           }}
         />
       )}

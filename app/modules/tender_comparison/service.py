@@ -8,8 +8,15 @@ assembles summaries, and preserves read/write separation.
 
 Source construction cost records and feasibility/finance records are never
 mutated by this service.
+
+PR-V6-13 additions:
+  approve_tender_baseline  — approves a comparison set as the official project
+    baseline, atomically deactivating any prior active baseline for the project.
+  get_project_active_baseline — returns the currently approved baseline set for
+    a project (or a no-baseline response).
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -22,6 +29,7 @@ from app.modules.tender_comparison.models import (
 )
 from app.modules.tender_comparison.repository import TenderComparisonRepository
 from app.modules.tender_comparison.schemas import (
+    ActiveTenderBaselineResponse,
     ConstructionCostComparisonLineCreate,
     ConstructionCostComparisonLineResponse,
     ConstructionCostComparisonLineUpdate,
@@ -196,3 +204,54 @@ class TenderComparisonService:
     def delete_line(self, line_id: str) -> None:
         line = self._require_line(line_id)
         self.repo.delete_line(line)
+
+    # ── Baseline governance ───────────────────────────────────────────────────
+
+    def approve_tender_baseline(
+        self,
+        set_id: str,
+        user_id: str,
+    ) -> ConstructionCostComparisonSetResponse:
+        """Approve a comparison set as the official project baseline.
+
+        Rules enforced:
+          - The comparison set must exist.
+          - If the set is already the active baseline, the operation is
+            idempotent: metadata is refreshed and the same record is returned.
+          - Any prior approved baseline for the same project is deactivated
+            atomically before approving the new one.
+        """
+        comparison_set = self._require_set(set_id)
+        project_id = comparison_set.project_id
+
+        # Deactivate the prior active baseline if it is a different set.
+        prior = self.repo.get_active_baseline_for_project(project_id)
+        if prior is not None and prior.id != set_id:
+            self.repo.deactivate_baseline(prior)
+
+        now = datetime.now(tz=timezone.utc)
+        updated = self.repo.approve_baseline(comparison_set, now, user_id)
+        return ConstructionCostComparisonSetResponse.model_validate(updated)
+
+    def get_project_active_baseline(
+        self, project_id: str
+    ) -> ActiveTenderBaselineResponse:
+        """Return the currently approved baseline set for a project.
+
+        Returns a response indicating whether a baseline exists.  When no
+        baseline has been approved, has_approved_baseline is False and
+        baseline is None.
+        """
+        self._require_project(project_id)
+        active = self.repo.get_active_baseline_for_project(project_id)
+        if active is None:
+            return ActiveTenderBaselineResponse(
+                project_id=project_id,
+                has_approved_baseline=False,
+                baseline=None,
+            )
+        return ActiveTenderBaselineResponse(
+            project_id=project_id,
+            has_approved_baseline=True,
+            baseline=ConstructionCostComparisonSetListItem.model_validate(active),
+        )

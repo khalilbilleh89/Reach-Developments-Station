@@ -1139,3 +1139,61 @@
 .varianceNegative {
   color: #16a34a;
 }
+
+/* ── Tender Comparison — Baseline Governance (PR-V6-13) ───────────────── */
+
+.badgeApprovedBaseline {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.baselineMetaStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--card-padding);
+  background: #fefce8;
+  border: 1px solid #fde047;
+  border-radius: var(--card-radius);
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-xs);
+  color: #854d0e;
+}
+
+.baselineMetaLabel {
+  font-weight: var(--font-weight-semibold);
+  margin-right: var(--space-1);
+}
+
+.approveButton {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--card-radius);
+  border: 1px solid #ca8a04;
+  background: #fef08a;
+  color: #78350f;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.approveButton:hover {
+  background: #fde047;
+}
+
+.approveButton:focus-visible {
+  outline: 2px solid #ca8a04;
+  outline-offset: 2px;
+}
+
+.approveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
