@@ -28,6 +28,7 @@ from app.modules.feasibility.schemas import (
     FeasibilityAssumptionsCreate,
     FeasibilityAssumptionsResponse,
     FeasibilityAssumptionsUpdate,
+    FeasibilityConstructionCostContextResponse,
     FeasibilityLineageResponse,
     FeasibilityResultResponse,
     FeasibilityRunCreate,
@@ -38,6 +39,7 @@ from app.modules.feasibility.schemas import (
 )
 from app.modules.projects.repository import ProjectRepository
 from app.modules.scenario.repository import ScenarioRepository
+from app.modules.construction_costs.repository import ConstructionCostRecordRepository
 from app.shared.enums.finance import (
     FeasibilityDecision,
     FeasibilityRiskLevel,
@@ -114,6 +116,7 @@ class FeasibilityService:
         self.project_repo = ProjectRepository(db)
         self.scenario_repo = ScenarioRepository(db)
         self.concept_option_repo = ConceptOptionRepository(db)
+        self.construction_cost_repo = ConstructionCostRecordRepository(db)
 
     # ------------------------------------------------------------------
     # Internal helpers — shared validation guards
@@ -613,4 +616,130 @@ class FeasibilityService:
             source_concept_option_id=run.source_concept_option_id,
             reverse_seeded_concept_options=[c.id for c in reverse_seeded],
             project_id=run.project_id,
+        )
+
+    # ---------------------------------------------------------------------------
+    # Construction cost context — PR-V6-10
+    # ---------------------------------------------------------------------------
+
+    def get_construction_cost_context(
+        self, run_id: str
+    ) -> FeasibilityConstructionCostContextResponse:
+        """Return a read-only construction cost context for a feasibility run.
+
+        Compares recorded project construction cost totals against the
+        feasibility-side assumed construction cost.  Variance fields are only
+        populated when *both* sides are available.  All fields are null-safe;
+        the ``note`` field always explains the comparison state.
+
+        Raises ResourceNotFoundError (HTTP 404) if the feasibility run does not
+        exist.  Missing project linkage, missing cost records, or missing
+        assumptions are handled with explicit notes — they are not errors.
+
+        This method is read-only.  It does not mutate feasibility or
+        construction records.
+        """
+        from decimal import Decimal
+
+        run = self.run_repo.get_by_id(run_id)
+        if run is None:
+            raise ResourceNotFoundError(
+                f"Feasibility run '{run_id}' not found.",
+                details={"run_id": run_id},
+            )
+
+        project_id: Optional[str] = run.project_id
+
+        # --- No linked project ---
+        if project_id is None:
+            _logger.info(
+                "Construction cost context: run_id=%s has no linked project", run_id
+            )
+            return FeasibilityConstructionCostContextResponse(
+                feasibility_run_id=run_id,
+                project_id=None,
+                has_cost_records=False,
+                active_record_count=0,
+                recorded_construction_cost_total=None,
+                by_category=None,
+                by_stage=None,
+                assumed_construction_cost=None,
+                variance_amount=None,
+                variance_pct=None,
+                note="No project linked to this feasibility run. Assign a project to enable construction cost context.",
+            )
+
+        # --- Fetch recorded construction cost summary ---
+        active_count, grand_total, by_category, by_stage = (
+            self.construction_cost_repo.get_aggregate_summary(project_id)
+        )
+        has_cost_records = active_count > 0
+
+        # --- Fetch feasibility-side assumed construction cost ---
+        # Compute assumed_construction_cost in Decimal to avoid float multiplication
+        # artifacts (e.g. 800.0 * 1000.0 is exact, but irrational ratios are not).
+        # Convert to float only at the response boundary.
+        assumptions = self.assumptions_repo.get_by_run(run_id)
+        assumed_decimal: Optional[Decimal] = None
+        if (
+            assumptions is not None
+            and assumptions.construction_cost_per_sqm is not None
+            and assumptions.sellable_area_sqm is not None
+        ):
+            assumed_decimal = (
+                Decimal(str(assumptions.construction_cost_per_sqm))
+                * Decimal(str(assumptions.sellable_area_sqm))
+            )
+
+        # --- Determine note and variance ---
+        variance_amount: Optional[Decimal] = None
+        variance_pct: Optional[float] = None
+        note: str
+
+        if not has_cost_records and assumed_decimal is None:
+            note = "No construction cost records and no feasibility assumptions defined yet."
+        elif not has_cost_records:
+            note = "No construction cost records for this project yet."
+        elif assumed_decimal is None:
+            note = (
+                "Construction cost records exist but the feasibility-side cost basis "
+                "is unavailable (assumptions not yet defined)."
+            )
+        else:
+            # Both sides available — compute transparent variance entirely in Decimal.
+            # No float round-trip: assumed_decimal comes directly from Numeric DB columns
+            # via Decimal(str(...)), so variance_amount is clean.
+            variance_amount = grand_total - assumed_decimal
+            if assumed_decimal != Decimal("0"):
+                variance_pct = float(variance_amount / assumed_decimal)
+            else:
+                variance_pct = None
+            note = (
+                "Variance shown: recorded construction cost total vs. "
+                "feasibility-side assumed construction cost "
+                "(construction_cost_per_sqm × sellable_area_sqm)."
+            )
+
+        _logger.info(
+            "Construction cost context retrieved: run_id=%s project_id=%s "
+            "active_record_count=%d has_cost_records=%s assumed_cost=%s",
+            run_id,
+            project_id,
+            active_count,
+            has_cost_records,
+            assumed_decimal,
+        )
+
+        return FeasibilityConstructionCostContextResponse(
+            feasibility_run_id=run_id,
+            project_id=project_id,
+            has_cost_records=has_cost_records,
+            active_record_count=active_count,
+            recorded_construction_cost_total=grand_total if has_cost_records else None,
+            by_category=by_category if has_cost_records else None,
+            by_stage=by_stage if has_cost_records else None,
+            assumed_construction_cost=float(assumed_decimal) if assumed_decimal is not None else None,
+            variance_amount=variance_amount,
+            variance_pct=variance_pct,
+            note=note,
         )

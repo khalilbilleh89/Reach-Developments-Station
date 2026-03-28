@@ -84,6 +84,7 @@ jest.mock("@/lib/feasibility-api", () => ({
   assignProjectToRun: jest.fn(),
   getFeasibilityRunLineage: jest.fn(),
   deleteFeasibilityRun: jest.fn(),
+  getFeasibilityRunConstructionCostContext: jest.fn(),
 }));
 
 // Mock concept-design-api — reverse-seeding
@@ -122,6 +123,7 @@ import {
   assignProjectToRun,
   getFeasibilityRunLineage,
   deleteFeasibilityRun,
+  getFeasibilityRunConstructionCostContext,
 } from "@/lib/feasibility-api";
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
@@ -139,6 +141,7 @@ const mockListProjects = listProjects as jest.Mock;
 const mockCreateConcept = createConceptFromFeasibility as jest.Mock;
 const mockGetLineage = getFeasibilityRunLineage as jest.Mock;
 const mockDeleteRun = deleteFeasibilityRun as jest.Mock;
+const mockGetCostContext = getFeasibilityRunConstructionCostContext as jest.Mock;
 
 /** Helper to create a mocked ApiError with a given status code. */
 function mockApiError(message: string, status: number): Error {
@@ -228,6 +231,19 @@ beforeEach(() => {
     source_concept_option_id: null,
     reverse_seeded_concept_options: [],
     project_id: null,
+  });
+  mockGetCostContext.mockResolvedValue({
+    feasibility_run_id: "run-1",
+    project_id: null,
+    has_cost_records: false,
+    active_record_count: 0,
+    recorded_construction_cost_total: null,
+    by_category: null,
+    by_stage: null,
+    assumed_construction_cost: null,
+    variance_amount: null,
+    variance_pct: null,
+    note: "No project linked to this feasibility run.",
   });
 });
 

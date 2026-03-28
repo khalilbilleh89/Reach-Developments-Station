@@ -167,3 +167,37 @@ export interface FeasibilityLineageResponse {
   reverse_seeded_concept_options: string[];
   project_id: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Construction cost context — PR-V6-10
+// ---------------------------------------------------------------------------
+
+/**
+ * Read-only construction cost context for a feasibility run.
+ *
+ * Mirrors the backend FeasibilityConstructionCostContextResponse schema.
+ * Decimal fields are serialised as strings by FastAPI.
+ *
+ * Fields are null-safe — partial data is reflected via nulls and the ``note``
+ * field which is always present and explains the comparison state.
+ */
+export interface FeasibilityConstructionCostContext {
+  feasibility_run_id: string;
+  project_id: string | null;
+  has_cost_records: boolean;
+  active_record_count: number;
+  /** Decimal → string from backend */
+  recorded_construction_cost_total: string | null;
+  /** Decimal values per category, serialised as strings */
+  by_category: Record<string, string> | null;
+  /** Decimal values per stage, serialised as strings */
+  by_stage: Record<string, string> | null;
+  /** construction_cost_per_sqm × sellable_area_sqm from feasibility assumptions */
+  assumed_construction_cost: number | null;
+  /** Decimal → string: recorded − assumed */
+  variance_amount: string | null;
+  /** (recorded − assumed) / assumed, null when assumed is zero or unavailable */
+  variance_pct: number | null;
+  /** Human-readable explanation of the comparison state */
+  note: string;
+}

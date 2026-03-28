@@ -17,6 +17,7 @@
  *   POST   /feasibility/runs/{run_id}/calculate           → run calculation
  *   GET    /feasibility/runs/{run_id}/results             → get results
  *   GET    /feasibility/runs/{run_id}/lineage             → get lineage trace
+ *   GET    /feasibility/runs/{run_id}/construction-cost-context → get construction cost context
  *   DELETE /feasibility/runs/{run_id}                     → delete run
  */
 
@@ -25,6 +26,7 @@ import type {
   FeasibilityAssumptions,
   FeasibilityAssumptionsCreate,
   FeasibilityAssumptionsUpdate,
+  FeasibilityConstructionCostContext,
   FeasibilityLineageResponse,
   FeasibilityResult,
   FeasibilityRun,
@@ -172,4 +174,26 @@ export async function deleteFeasibilityRun(runId: string): Promise<void> {
   await apiFetch<void>(`/feasibility/runs/${encodeURIComponent(runId)}`, {
     method: "DELETE",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Construction cost context — PR-V6-10
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the read-only construction cost context for a feasibility run.
+ *
+ * Returns recorded project construction cost totals alongside the
+ * feasibility-side assumed construction cost.  The response is always
+ * null-safe; the ``note`` field explains the comparison state when data
+ * is partially or fully unavailable.
+ *
+ * Returns HTTP 404 when the feasibility run does not exist.
+ */
+export async function getFeasibilityRunConstructionCostContext(
+  runId: string,
+): Promise<FeasibilityConstructionCostContext> {
+  return apiFetch<FeasibilityConstructionCostContext>(
+    `/feasibility/runs/${encodeURIComponent(runId)}/construction-cost-context`,
+  );
 }
