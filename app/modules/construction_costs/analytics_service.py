@@ -36,7 +36,7 @@ overall_health_status
 
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -54,6 +54,7 @@ from app.modules.tender_comparison.models import (
     ConstructionCostComparisonLine,
     ConstructionCostComparisonSet,
 )
+from app.shared.enums.construction_costs import CostCategory
 
 # ---------------------------------------------------------------------------
 # Classification thresholds
@@ -209,7 +210,7 @@ class ConstructionAnalyticsService:
             .filter(
                 ConstructionCostRecord.project_id == project_id,
                 ConstructionCostRecord.is_active.is_(True),
-                ConstructionCostRecord.cost_category == "contingency",
+                ConstructionCostRecord.cost_category == CostCategory.CONTINGENCY.value,
             )
             .scalar()
         )
@@ -326,40 +327,208 @@ class ConstructionAnalyticsService:
     def build_portfolio_construction_scorecards(
         self,
     ) -> ConstructionPortfolioScorecardsResponse:
-        """Build construction scorecards for all projects and aggregate.
+        """Build construction scorecards for all projects using batched queries.
+
+        Replaces the previous per-project N+1 query pattern with a set of
+        aggregated queries grouped by project_id / set_id, then assembles
+        scorecards in memory.
+
+        Query plan (6 queries regardless of project count):
+          1. All projects
+          2. All approved baseline sets (filter: is_approved_baseline=True)
+          3. Baseline comparison totals per approved set_id
+          4. Active forecast totals per project_id
+          5. Active contingency totals per project_id
+          6. Latest active record updated_at per project_id
 
         Projects are ordered in the response by severity (critical → warning →
-        incomplete → healthy) then by cost_variance_pct descending.
+        incomplete → healthy) then by cost_variance_pct descending.  Projects
+        with no cost_variance_pct (None) sort last within each severity bucket.
         """
+        # ── Query 1: All projects ─────────────────────────────────────────────
         projects = self.db.query(Project).order_by(Project.name).all()
 
+        if not projects:
+            empty_summary = ConstructionPortfolioScorecardSummary(
+                total_projects_scored=0,
+                healthy_count=0,
+                warning_count=0,
+                critical_count=0,
+                incomplete_count=0,
+                projects_missing_baseline=0,
+            )
+            return ConstructionPortfolioScorecardsResponse(
+                summary=empty_summary,
+                projects=[],
+                top_risk_projects=[],
+                missing_baseline_projects=[],
+            )
+
+        project_ids = [p.id for p in projects]
+
+        # ── Query 2: Approved baseline sets per project ───────────────────────
+        # Order by approved_at DESC so that if a race ever produces more than
+        # one approved baseline per project, the most-recent wins.
+        baseline_set_rows = (
+            self.db.query(ConstructionCostComparisonSet)
+            .filter(
+                ConstructionCostComparisonSet.project_id.in_(project_ids),
+                ConstructionCostComparisonSet.is_approved_baseline.is_(True),
+            )
+            .order_by(ConstructionCostComparisonSet.approved_at.desc())
+            .all()
+        )
+        # Keep only the most-recent baseline per project
+        approved_baselines: Dict[str, ConstructionCostComparisonSet] = {}
+        for bs in baseline_set_rows:
+            if bs.project_id not in approved_baselines:
+                approved_baselines[bs.project_id] = bs
+
+        baseline_set_ids = [bs.id for bs in approved_baselines.values()]
+
+        # ── Query 3: Baseline totals (comparison_amount) per set_id ──────────
+        baseline_totals: Dict[str, Decimal] = {}
+        if baseline_set_ids:
+            bt_rows = (
+                self.db.query(
+                    ConstructionCostComparisonLine.comparison_set_id,
+                    func.coalesce(
+                        func.sum(ConstructionCostComparisonLine.comparison_amount), 0
+                    ),
+                )
+                .filter(
+                    ConstructionCostComparisonLine.comparison_set_id.in_(baseline_set_ids)
+                )
+                .group_by(ConstructionCostComparisonLine.comparison_set_id)
+                .all()
+            )
+            baseline_totals = {row[0]: Decimal(str(row[1])) for row in bt_rows}
+
+        # ── Query 4: Active forecast totals per project ───────────────────────
+        ft_rows = (
+            self.db.query(
+                ConstructionCostRecord.project_id,
+                func.coalesce(func.sum(ConstructionCostRecord.amount), 0),
+            )
+            .filter(
+                ConstructionCostRecord.project_id.in_(project_ids),
+                ConstructionCostRecord.is_active.is_(True),
+            )
+            .group_by(ConstructionCostRecord.project_id)
+            .all()
+        )
+        forecast_totals: Dict[str, Decimal] = {
+            row[0]: Decimal(str(row[1])) for row in ft_rows
+        }
+
+        # ── Query 5: Active contingency totals per project ────────────────────
+        ct_rows = (
+            self.db.query(
+                ConstructionCostRecord.project_id,
+                func.coalesce(func.sum(ConstructionCostRecord.amount), 0),
+            )
+            .filter(
+                ConstructionCostRecord.project_id.in_(project_ids),
+                ConstructionCostRecord.is_active.is_(True),
+                ConstructionCostRecord.cost_category == CostCategory.CONTINGENCY.value,
+            )
+            .group_by(ConstructionCostRecord.project_id)
+            .all()
+        )
+        contingency_totals: Dict[str, Decimal] = {
+            row[0]: Decimal(str(row[1])) for row in ct_rows
+        }
+
+        # ── Query 6: Latest active record timestamp per project ───────────────
+        ts_rows = (
+            self.db.query(
+                ConstructionCostRecord.project_id,
+                func.max(ConstructionCostRecord.updated_at),
+            )
+            .filter(
+                ConstructionCostRecord.project_id.in_(project_ids),
+                ConstructionCostRecord.is_active.is_(True),
+            )
+            .group_by(ConstructionCostRecord.project_id)
+            .all()
+        )
+        latest_ts: Dict[str, Optional[datetime]] = {
+            row[0]: row[1] for row in ts_rows
+        }
+
+        # ── Assemble scorecards in memory ─────────────────────────────────────
         items: List[ConstructionPortfolioScorecardItem] = []
         for project in projects:
-            sc = self._build_scorecard(project)
+            baseline_set = approved_baselines.get(project.id)
+            has_baseline = baseline_set is not None
+
+            approved_baseline_amount: Optional[Decimal] = None
+            approved_at: Optional[datetime] = None
+            if has_baseline and baseline_set is not None:
+                approved_baseline_amount = baseline_totals.get(
+                    baseline_set.id, Decimal("0")
+                )
+                approved_at = baseline_set.approved_at
+
+            current_forecast_amount = forecast_totals.get(project.id, Decimal("0"))
+            contingency_amount = contingency_totals.get(project.id, Decimal("0"))
+
+            # Cost variance
+            cost_variance_amount: Optional[Decimal] = None
+            cost_variance_pct: Optional[Decimal] = None
+            if has_baseline and approved_baseline_amount is not None:
+                cost_variance_amount = current_forecast_amount - approved_baseline_amount
+                if approved_baseline_amount != Decimal("0"):
+                    cost_variance_pct = (
+                        cost_variance_amount / approved_baseline_amount
+                    ) * Decimal("100")
+
+            # Contingency pressure
+            contingency_pressure_pct: Optional[Decimal] = None
+            if (
+                has_baseline
+                and approved_baseline_amount is not None
+                and approved_baseline_amount != Decimal("0")
+            ):
+                contingency_pressure_pct = (
+                    contingency_amount / approved_baseline_amount
+                ) * Decimal("100")
+
+            # Status classification (reuse module-level helpers)
+            cost_status = _classify_cost_status(cost_variance_pct, has_baseline)
+            contingency_status = _classify_contingency_status(
+                contingency_pressure_pct, has_baseline
+            )
+            overall_health_status = _overall_health(
+                cost_status, contingency_status, has_baseline
+            )
+
             items.append(
                 ConstructionPortfolioScorecardItem(
-                    project_id=sc.project_id,
-                    project_name=sc.project_name,
-                    has_approved_baseline=sc.has_approved_baseline,
-                    approved_baseline_amount=sc.approved_baseline_amount,
-                    current_forecast_amount=sc.current_forecast_amount,
-                    cost_variance_amount=sc.cost_variance_amount,
-                    cost_variance_pct=sc.cost_variance_pct,
-                    contingency_amount=sc.contingency_amount,
-                    contingency_pressure_pct=sc.contingency_pressure_pct,
-                    overall_health_status=sc.overall_health_status,
+                    project_id=project.id,
+                    project_name=project.name,
+                    has_approved_baseline=has_baseline,
+                    approved_baseline_amount=approved_baseline_amount,
+                    current_forecast_amount=current_forecast_amount,
+                    cost_variance_amount=cost_variance_amount,
+                    cost_variance_pct=cost_variance_pct,
+                    contingency_amount=contingency_amount,
+                    contingency_pressure_pct=contingency_pressure_pct,
+                    overall_health_status=overall_health_status,
                 )
             )
 
-        # Sort: severity first, then by variance_pct descending
+        # ── Sort: severity first, None-pct last within each bucket, then desc ─
         items.sort(
             key=lambda x: (
                 _SEVERITY_ORDER.get(x.overall_health_status, 99),
-                -(float(x.cost_variance_pct) if x.cost_variance_pct is not None else 0),
+                # Projects with no cost_variance_pct sort after those with a value
+                x.cost_variance_pct is None,
+                -(x.cost_variance_pct if x.cost_variance_pct is not None else Decimal("0")),
             )
         )
 
-        # Aggregated summary counts
+        # ── Aggregate summary counts ──────────────────────────────────────────
         healthy_count = sum(1 for i in items if i.overall_health_status == "healthy")
         warning_count = sum(1 for i in items if i.overall_health_status == "warning")
         critical_count = sum(1 for i in items if i.overall_health_status == "critical")

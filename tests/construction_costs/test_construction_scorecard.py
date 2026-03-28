@@ -6,7 +6,7 @@ Validates:
   - cost variance amount is computed correctly
   - cost variance percent is computed correctly
   - contingency pressure is computed correctly
-  - schedule status classification works for healthy / warning / critical paths
+  - cost/contingency status classification: healthy / warning / critical paths
   - overall health status is derived deterministically
   - missing data paths do not crash scorecard generation
   - project scorecard endpoint returns expected payload
@@ -21,10 +21,6 @@ Validates:
 
 import pytest
 from fastapi.testclient import TestClient
-
-from app.core.dependencies import get_db
-from app.modules.auth.security import get_current_user_payload
-from app.main import app
 
 
 # ---------------------------------------------------------------------------

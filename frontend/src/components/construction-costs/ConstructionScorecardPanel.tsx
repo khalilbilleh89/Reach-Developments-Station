@@ -115,7 +115,7 @@ export function ConstructionScorecardPanel({
     setError(null);
 
     const controller = new AbortController();
-    getProjectConstructionScorecard(projectId)
+    getProjectConstructionScorecard(projectId, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         setScorecard(data);
@@ -201,9 +201,9 @@ export function ConstructionScorecardPanel({
                 label="Variance %"
                 value={fmtPct(scorecard.cost_variance_pct)}
                 className={
-                  scorecard.cost_variance_amount !== null && parseFloat(scorecard.cost_variance_amount) > 0
+                  scorecard.cost_variance_pct !== null && parseFloat(scorecard.cost_variance_pct) > 0
                     ? portfolioStyles.varianceOverrun
-                    : scorecard.cost_variance_amount !== null && parseFloat(scorecard.cost_variance_amount) < 0
+                    : scorecard.cost_variance_pct !== null && parseFloat(scorecard.cost_variance_pct) < 0
                       ? portfolioStyles.varianceSaving
                       : portfolioStyles.varianceNeutral
                 }

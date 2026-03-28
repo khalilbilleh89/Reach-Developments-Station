@@ -25,12 +25,17 @@ import type {
  *
  * Returns an incomplete-state scorecard when no approved baseline exists.
  * Throws ApiError on HTTP errors (including 404 for unknown projects).
+ *
+ * @param signal Optional AbortSignal to cancel the in-flight request on
+ *   component unmount or stale-request suppression.
  */
 export async function getProjectConstructionScorecard(
   projectId: string,
+  signal?: AbortSignal,
 ): Promise<ConstructionProjectScorecard> {
   return apiFetch<ConstructionProjectScorecard>(
     `/projects/${projectId}/construction-scorecard`,
+    { signal },
   );
 }
 

@@ -5,7 +5,6 @@
  *   - Health status counts (healthy / warning / critical / incomplete)
  *   - Top-risk projects requiring executive attention
  *   - Projects missing an approved baseline
- *   - Full ordered project list
  *
  * All status values are sourced from the backend — no re-scoring here.
  * Renders a safe empty state when no projects exist.
