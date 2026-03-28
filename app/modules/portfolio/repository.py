@@ -10,7 +10,8 @@ Cross-module joins are performed inline here because the portfolio layer is
 an aggregation-only consumer and does not own any domain records.
 """
 
-from typing import Dict, List
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -24,6 +25,10 @@ from app.modules.scenario.models import Scenario
 from app.modules.units.models import Unit
 from app.modules.buildings.models import Building
 from app.modules.floors.models import Floor
+from app.modules.tender_comparison.models import (
+    ConstructionCostComparisonLine,
+    ConstructionCostComparisonSet,
+)
 
 
 class PortfolioRepository:
@@ -315,3 +320,125 @@ class PortfolioRepository:
             .all()
         )
         return {pid: count for pid, count in rows}
+
+    # ------------------------------------------------------------------
+    # Portfolio cost variance roll-up helpers (PR-V6-12)
+    # ------------------------------------------------------------------
+
+    def list_projects_with_active_comparison_sets(self) -> List[Project]:
+        """Return projects that have at least one active comparison set, ordered by name."""
+        from sqlalchemy import select
+
+        subq = (
+            select(ConstructionCostComparisonSet.project_id)
+            .where(ConstructionCostComparisonSet.is_active.is_(True))
+            .distinct()
+        )
+        return (
+            self.db.query(Project)
+            .filter(Project.id.in_(subq))
+            .order_by(Project.name)
+            .all()
+        )
+
+    def get_portfolio_variance_totals(
+        self,
+    ) -> Tuple[Decimal, Decimal, Decimal]:
+        """Aggregate baseline, comparison, and variance totals across all active sets.
+
+        Returns (total_baseline, total_comparison, total_variance) as Decimals.
+        """
+        row = (
+            self.db.query(
+                func.coalesce(func.sum(ConstructionCostComparisonLine.baseline_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.comparison_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.variance_amount), 0),
+            )
+            .join(
+                ConstructionCostComparisonSet,
+                ConstructionCostComparisonLine.comparison_set_id == ConstructionCostComparisonSet.id,
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .one()
+        )
+        return (
+            Decimal(str(row[0])),
+            Decimal(str(row[1])),
+            Decimal(str(row[2])),
+        )
+
+    def get_variance_totals_by_project(
+        self,
+    ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
+        """Return project_id → (baseline_total, comparison_total, variance_total)
+        aggregated across all active comparison lines in one query.
+        """
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.project_id,
+                func.coalesce(func.sum(ConstructionCostComparisonLine.baseline_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.comparison_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.variance_amount), 0),
+            )
+            .join(
+                ConstructionCostComparisonSet,
+                ConstructionCostComparisonLine.comparison_set_id == ConstructionCostComparisonSet.id,
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.project_id)
+            .all()
+        )
+        return {
+            project_id: (
+                Decimal(str(baseline)),
+                Decimal(str(comparison)),
+                Decimal(str(variance)),
+            )
+            for project_id, baseline, comparison, variance in rows
+        }
+
+    def get_active_set_count_by_project(self) -> Dict[str, int]:
+        """Return project_id → count of active comparison sets in one query."""
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.project_id,
+                func.count(ConstructionCostComparisonSet.id),
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.project_id)
+            .all()
+        )
+        return {project_id: count for project_id, count in rows}
+
+    def get_latest_comparison_stage_by_project(self) -> Dict[str, Optional[str]]:
+        """Return project_id → comparison_stage of the most recently created active set.
+
+        Uses a SQL-level subquery that selects the max(created_at) per project
+        so only one row per project is fetched (no Python-side deduplication).
+        """
+        from sqlalchemy import select
+
+        # Subquery: max created_at per project for active sets
+        latest_ts_subq = (
+            select(
+                ConstructionCostComparisonSet.project_id,
+                func.max(ConstructionCostComparisonSet.created_at).label("max_ts"),
+            )
+            .where(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.project_id)
+            .subquery()
+        )
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.project_id,
+                ConstructionCostComparisonSet.comparison_stage,
+            )
+            .join(
+                latest_ts_subq,
+                (ConstructionCostComparisonSet.project_id == latest_ts_subq.c.project_id)
+                & (ConstructionCostComparisonSet.created_at == latest_ts_subq.c.max_ts),
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .all()
+        )
+        return {project_id: stage for project_id, stage in rows}

@@ -34,15 +34,22 @@ jest.mock("next/link", () => {
 jest.mock("@/styles/portfolio.module.css", () => ({}));
 jest.mock("@/components/shell/PageContainer.module.css", () => ({}));
 
-// Mock portfolio API
+// Mock portfolio dashboard API
 jest.mock("@/lib/portfolio-api", () => ({
   getPortfolioDashboard: jest.fn(),
 }));
 
+// Mock portfolio variance API
+jest.mock("@/lib/portfolio-variance-api", () => ({
+  getPortfolioCostVariance: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
+import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
+const mockGetPortfolioCostVariance = getPortfolioCostVariance as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -134,21 +141,39 @@ const mockDashboard = {
   risk_flags: mockRiskFlags,
 };
 
+const mockVarianceEmpty = {
+  summary: {
+    projects_with_comparison_sets: 0,
+    total_baseline_amount: 0,
+    total_comparison_amount: 0,
+    total_variance_amount: 0,
+    total_variance_pct: null,
+  },
+  projects: [],
+  top_overruns: [],
+  top_savings: [],
+  flags: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default variance mock returns empty state
+    mockGetPortfolioCostVariance.mockResolvedValue(mockVarianceEmpty);
   });
 
   it("renders the page title", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
+    mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText("Portfolio")).toBeInTheDocument();
   });
 
   it("shows loading state while fetching dashboard", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
+    mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText(/Loading portfolio dashboard/i)).toBeInTheDocument();
   });
@@ -372,4 +397,63 @@ describe("PortfolioPage", () => {
     // With total_projects > 0 the full dashboard renders, not the empty state
     expect(screen.queryByText("No portfolio data available.")).not.toBeInTheDocument();
   });
+
+  // ---- Cost variance panel integration ----------------------------------
+
+  it("renders cost variance panel when variance data loads", async () => {
+    mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
+    mockGetPortfolioCostVariance.mockResolvedValue({
+      ...mockVarianceEmpty,
+      summary: {
+        projects_with_comparison_sets: 1,
+        total_baseline_amount: 1_000_000,
+        total_comparison_amount: 1_100_000,
+        total_variance_amount: 100_000,
+        total_variance_pct: 10.0,
+      },
+      top_overruns: [
+        {
+          project_id: "proj-1",
+          project_name: "Marina Tower",
+          comparison_set_count: 1,
+          latest_comparison_stage: "baseline_vs_tender",
+          baseline_total: 1_000_000,
+          comparison_total: 1_100_000,
+          variance_amount: 100_000,
+          variance_pct: 10.0,
+          variance_status: "overrun",
+        },
+      ],
+    });
+    render(<PortfolioPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Cost Variance")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Projects with Sets")).toBeInTheDocument();
+    expect(screen.getByText("Top Overruns")).toBeInTheDocument();
+  });
+
+  it("renders cost variance empty state when no comparison sets exist", async () => {
+    mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
+    mockGetPortfolioCostVariance.mockResolvedValue(mockVarianceEmpty);
+    render(<PortfolioPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Cost Variance")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/No active tender comparison sets found/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows page-level error when either API call fails", async () => {
+    mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
+    mockGetPortfolioCostVariance.mockRejectedValue(new Error("Variance API error"));
+    render(<PortfolioPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toBeInTheDocument(),
+    );
+    // The whole page shows an error (Promise.all fails together)
+    expect(screen.queryByText("Total Projects")).not.toBeInTheDocument();
+  });
 });
+
