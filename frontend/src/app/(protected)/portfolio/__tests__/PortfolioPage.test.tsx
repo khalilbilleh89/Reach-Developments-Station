@@ -54,16 +54,23 @@ jest.mock("@/lib/portfolio-absorption-api", () => ({
   getPortfolioAbsorption: jest.fn(),
 }));
 
+// Mock pricing optimization API (PR-V7-02)
+jest.mock("@/lib/pricing-optimization-api", () => ({
+  getPortfolioPricingInsights: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
+import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
 const mockGetPortfolioCostVariance = getPortfolioCostVariance as jest.Mock;
 const mockGetConstructionPortfolioScorecards = getConstructionPortfolioScorecards as jest.Mock;
 const mockGetPortfolioAbsorption = getPortfolioAbsorption as jest.Mock;
+const mockGetPortfolioPricingInsights = getPortfolioPricingInsights as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -200,6 +207,20 @@ const mockAbsorptionEmpty = {
   below_plan_projects: [],
 };
 
+const mockPricingInsightsEmpty = {
+  summary: {
+    total_projects: 0,
+    projects_with_pricing_data: 0,
+    avg_recommended_adjustment_pct: null,
+    projects_underpriced: 0,
+    projects_overpriced: 0,
+    projects_balanced: 0,
+  },
+  projects: [],
+  top_opportunities: [],
+  pricing_risk_zones: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -211,6 +232,8 @@ describe("PortfolioPage", () => {
     mockGetConstructionPortfolioScorecards.mockResolvedValue(mockConstructionEmpty);
     // Default absorption mock returns empty state (PR-V7-01)
     mockGetPortfolioAbsorption.mockResolvedValue(mockAbsorptionEmpty);
+    // Default pricing insights mock returns empty state (PR-V7-02)
+    mockGetPortfolioPricingInsights.mockResolvedValue(mockPricingInsightsEmpty);
   });
 
   it("renders the page title", () => {

@@ -10,14 +10,17 @@ import { PortfolioRiskFlagsPanel } from "@/components/portfolio/PortfolioRiskFla
 import { PortfolioCostVariancePanel } from "@/components/portfolio/PortfolioCostVariancePanel";
 import { PortfolioConstructionScorecardsPanel } from "@/components/portfolio/PortfolioConstructionScorecardsPanel";
 import { PortfolioAbsorptionPanel } from "@/components/portfolio/PortfolioAbsorptionPanel";
+import { PortfolioPricingInsightsPanel } from "@/components/portfolio/PortfolioPricingInsightsPanel";
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
+import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
 import type { PortfolioDashboardResponse } from "@/lib/portfolio-types";
 import type { PortfolioCostVarianceResponse } from "@/lib/portfolio-variance-types";
 import type { ConstructionPortfolioScorecardsResponse } from "@/lib/construction-scorecard-types";
 import type { PortfolioAbsorptionResponse } from "@/lib/portfolio-absorption-types";
+import type { PortfolioPricingInsightsResponse } from "@/lib/pricing-optimization-types";
 import styles from "@/styles/portfolio.module.css";
 
 /**
@@ -46,6 +49,8 @@ export default function PortfolioPage() {
     useState<ConstructionPortfolioScorecardsResponse | null>(null);
   const [absorptionData, setAbsorptionData] =
     useState<PortfolioAbsorptionResponse | null>(null);
+  const [pricingData, setPricingData] =
+    useState<PortfolioPricingInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,12 +62,14 @@ export default function PortfolioPage() {
       getPortfolioCostVariance(),
       getConstructionPortfolioScorecards(),
       getPortfolioAbsorption(),
+      getPortfolioPricingInsights(),
     ])
-      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse]) => {
+      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse, pricingResponse]) => {
         setData(dashboardResponse);
         setVarianceData(varianceResponse);
         setConstructionData(constructionResponse);
         setAbsorptionData(absorptionResponse);
+        setPricingData(pricingResponse);
       })
       .catch((err: unknown) => {
         setError(
@@ -96,6 +103,9 @@ export default function PortfolioPage() {
           <PortfolioProjectCards projects={data.projects} />
           {absorptionData && (
             <PortfolioAbsorptionPanel data={absorptionData} />
+          )}
+          {pricingData && (
+            <PortfolioPricingInsightsPanel data={pricingData} />
           )}
           {constructionData && (
             <PortfolioConstructionScorecardsPanel data={constructionData} />
