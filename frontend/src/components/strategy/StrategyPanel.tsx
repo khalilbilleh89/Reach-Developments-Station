@@ -19,7 +19,7 @@
  * PR-V7-05 — Automated Strategy Generator (Decision Synthesis Layer)
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getRecommendedStrategy } from "@/lib/strategy-api";
 import type {
   RecommendedStrategyResponse,
@@ -246,11 +246,9 @@ export function StrategyPanel({ projectId }: StrategyPanelProps) {
   const [response, setResponse] = useState<RecommendedStrategyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    abortRef.current = controller;
     setLoading(true);
     setError(null);
 

@@ -9,15 +9,18 @@ Orchestration logic
      price_adjustment_pct : [-5, 0, 5, 8]
      phase_delay_months   : [0, 3, 6]
      release_strategy     : ['hold', 'maintain', 'accelerate']
-   Up to _MAX_SCENARIOS (20) are passed to the simulation engine.
+   All 36 combinations are generated; up to _MAX_SCENARIOS (20) are submitted
+   to the simulation engine, selected via round-robin by price bucket so every
+   configured price-adjustment value is represented before any bucket receives
+   a second scenario.
 
 2. Delegate simulation to the existing ReleaseSimulationService
    (simulate_strategies) — no duplicate IRR / NPV logic.
 
 3. Rank results using a deterministic three-key sort:
-     Primary   : irr         — descending (higher = better)
-     Secondary : risk_score  — ascending ('low' < 'medium' < 'high')
-     Tertiary  : delay       — ascending (less delay = better)
+     Primary   : irr                    — descending (higher = better)
+     Secondary : risk_score             — ascending ('low' < 'medium' < 'high')
+     Tertiary  : cashflow_delay_months  — ascending (less effective delay = better)
 
 4. Return:
      best_strategy           — top-ranked SimulationResult
@@ -36,7 +39,7 @@ Architecture constraints
 from __future__ import annotations
 
 import itertools
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -61,15 +64,22 @@ _logger = get_logger("reach_developments.strategy_generator")
 # Candidate scenario dimensions (per spec)
 # ---------------------------------------------------------------------------
 
+_ReleaseStrategyLiteral = Literal["hold", "maintain", "accelerate"]
+
 _PRICE_ADJUSTMENTS: List[float] = [-5.0, 0.0, 5.0, 8.0]
 _PHASE_DELAYS: List[int] = [0, 3, 6]
-_RELEASE_STRATEGIES: List[str] = ["hold", "maintain", "accelerate"]
+_RELEASE_STRATEGIES: Tuple[_ReleaseStrategyLiteral, ...] = ("hold", "maintain", "accelerate")
 
 # Maximum scenarios sent to the simulation engine in a single call.
 _MAX_SCENARIOS = 20
 
+# Maximum number of projects evaluated per portfolio insights request.
+# Prevents request timeout on large portfolios; excess projects are skipped
+# and the skip count is logged.
+_PORTFOLIO_PROJECT_LIMIT = 50
+
 # Ranking weight for risk_score (lower = better outcome).
-_RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
+_RISK_ORDER: Dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
 # Top N strategies included in project-level and portfolio responses.
 _TOP_N = 3
@@ -78,32 +88,53 @@ _TOP_N = 3
 def _generate_candidate_scenarios() -> List[SimulationScenarioInput]:
     """Return up to _MAX_SCENARIOS candidate simulation scenarios.
 
-    Iterates the cartesian product of price adjustments × phase delays ×
-    release strategies in a deterministic order and stops at _MAX_SCENARIOS.
+    Generates the full cartesian product of all parameter dimensions (36
+    combinations), then selects up to _MAX_SCENARIOS via round-robin across
+    price-adjustment buckets.  This guarantees every configured price bucket
+    is represented before any bucket receives a second scenario, so the +8%
+    price-adjustment scenarios are never starved by the cap.
     """
-    scenarios: List[SimulationScenarioInput] = []
-    for price_adj, delay, strategy in itertools.product(
-        _PRICE_ADJUSTMENTS, _PHASE_DELAYS, _RELEASE_STRATEGIES
+    # Group all combinations by price bucket.
+    buckets: Dict[float, List[SimulationScenarioInput]] = {p: [] for p in _PRICE_ADJUSTMENTS}
+    for delay, strategy, price_adj in itertools.product(
+        _PHASE_DELAYS, _RELEASE_STRATEGIES, _PRICE_ADJUSTMENTS
     ):
-        if len(scenarios) >= _MAX_SCENARIOS:
-            break
-        scenarios.append(
+        buckets[price_adj].append(
             SimulationScenarioInput(
                 price_adjustment_pct=price_adj,
                 phase_delay_months=delay,
-                release_strategy=strategy,  # type: ignore[arg-type]
+                release_strategy=strategy,
                 label=f"{price_adj:+.0f}% / {delay}mo / {strategy}",
             )
         )
-    return scenarios
+
+    # Round-robin selection across price buckets until cap is reached.
+    selected: List[SimulationScenarioInput] = []
+    bucket_iters = {p: iter(v) for p, v in buckets.items()}
+    exhausted: set[float] = set()
+
+    while len(selected) < _MAX_SCENARIOS:
+        made_progress = False
+        for price in _PRICE_ADJUSTMENTS:
+            if price in exhausted or len(selected) >= _MAX_SCENARIOS:
+                continue
+            try:
+                selected.append(next(bucket_iters[price]))
+                made_progress = True
+            except StopIteration:
+                exhausted.add(price)
+        if not made_progress:
+            break
+
+    return selected
 
 
 def _rank_results(results: List[SimulationResult]) -> List[SimulationResult]:
     """Sort simulation results by the three-key ranking rule.
 
-    Primary   : IRR descending   (higher IRR = better)
-    Secondary : risk_score ascending ('low' < 'medium' < 'high')
-    Tertiary  : cashflow_delay_months ascending (less delay = better)
+    Primary   : IRR descending                  (higher IRR = better)
+    Secondary : risk_score ascending            ('low' < 'medium' < 'high')
+    Tertiary  : cashflow_delay_months ascending (less effective delay = better)
     """
     return sorted(
         results,
@@ -189,18 +220,30 @@ class StrategyGeneratorService:
     ) -> PortfolioStrategyInsightsResponse:
         """Generate strategy recommendations for all projects and aggregate.
 
+        Evaluates at most _PORTFOLIO_PROJECT_LIMIT projects per call to
+        prevent request timeouts on large portfolios.  Any skipped projects
+        are logged.
+
         All source records are read-only — nothing is mutated.
         """
         from app.modules.projects.models import Project
 
-        projects = self._db.query(Project).all()
+        all_projects = self._db.query(Project).all()
+        projects = all_projects[:_PORTFOLIO_PROJECT_LIMIT]
+        skipped = len(all_projects) - len(projects)
+        if skipped > 0:
+            _logger.warning(
+                "strategy_generator: portfolio — %d project(s) skipped (cap=%d)",
+                skipped,
+                _PORTFOLIO_PROJECT_LIMIT,
+            )
 
         cards: List[PortfolioStrategyProjectCard] = []
         for project in projects:
             try:
                 rec = self.generate_recommended_strategy(project.id)
             except Exception:
-                _logger.warning(
+                _logger.exception(
                     "strategy_generator: portfolio — failed for project=%s", project.id
                 )
                 cards.append(
@@ -252,3 +295,4 @@ class StrategyGeneratorService:
             top_strategies=top_strategies,
             intervention_required=intervention_required,
         )
+

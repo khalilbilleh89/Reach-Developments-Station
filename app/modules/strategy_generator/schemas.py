@@ -41,13 +41,16 @@ class RecommendedStrategyResponse(BaseModel):
         None,
         description=(
             "The highest-ranked strategy after applying primary (IRR), "
-            "secondary (risk_score), and tertiary (delay) ranking rules. "
+            "secondary (risk_score), and tertiary (cashflow_delay_months) ranking rules. "
             "Null when no scenarios could be generated."
         ),
     )
     top_strategies: List[SimulationResult] = Field(
         default_factory=list,
-        description="Top 3 ranked strategies (ranked by IRR desc, risk asc, delay asc).",
+        description=(
+            "Top 3 ranked strategies (ranked by IRR desc, risk_score asc, "
+            "cashflow_delay_months asc)."
+        ),
     )
     reason: str = Field(
         ...,
@@ -66,7 +69,12 @@ class PortfolioStrategyProjectCard(BaseModel):
     project_name: str
     has_feasibility_baseline: bool
     best_irr: Optional[float] = Field(
-        None, description="Best IRR from top-ranked strategy; null when no baseline."
+        None,
+        description=(
+            "Best IRR from the top-ranked strategy. Null only when no scenarios could be "
+            "generated. When has_feasibility_baseline is false, this value is indicative "
+            "only and derived from default-assumption simulations."
+        ),
     )
     best_risk_score: Optional[str] = Field(
         None,

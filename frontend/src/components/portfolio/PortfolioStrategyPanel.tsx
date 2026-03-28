@@ -40,7 +40,7 @@ function fmtPriceAdj(pct: number | null): string {
   if (pct == null) return "—";
   if (pct > 0) return `+${pct.toFixed(1)}%`;
   if (pct < 0) return `${pct.toFixed(1)}%`;
-  return "Hold";
+  return "0.0%";
 }
 
 function fmtDelay(months: number | null): string {
