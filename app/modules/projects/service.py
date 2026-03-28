@@ -121,8 +121,6 @@ class ProjectService:
         Derives lifecycle stage and recommended next step from real module records.
         This is a read-only, non-destructive operation.
         """
-        from datetime import datetime, timezone
-
         project = self._require_project(project_id)
         flags = self.repo.get_lifecycle_flags(project_id)
 
@@ -134,6 +132,11 @@ class ProjectService:
         has_construction_records = flags["construction_record_count"] > 0
         has_approved_tender_baseline = flags["has_approved_tender_baseline"]
 
+        # A project reaches portfolio_visible when it has both governance
+        # (approved baseline) and active cost records — i.e. it is fully
+        # monitorable and eligible for portfolio roll-up.
+        has_portfolio_visibility = has_approved_tender_baseline and has_construction_records
+
         # Derive current stage and next step deterministically
         current_stage, recommended_next_step, next_step_route, blocked_reason = (
             _derive_lifecycle_stage(
@@ -144,6 +147,7 @@ class ProjectService:
                 has_phases=has_phases,
                 has_construction_records=has_construction_records,
                 has_approved_tender_baseline=has_approved_tender_baseline,
+                has_portfolio_visibility=has_portfolio_visibility,
             )
         )
 
@@ -156,6 +160,7 @@ class ProjectService:
             has_phases=has_phases,
             has_construction_records=has_construction_records,
             has_approved_tender_baseline=has_approved_tender_baseline,
+            has_portfolio_visibility=has_portfolio_visibility,
             scenario_count=flags["scenario_count"],
             feasibility_run_count=flags["feasibility_run_count"],
             construction_record_count=flags["construction_record_count"],
@@ -375,6 +380,7 @@ def _derive_lifecycle_stage(
     has_phases: bool,
     has_construction_records: bool,
     has_approved_tender_baseline: bool,
+    has_portfolio_visibility: bool,
 ) -> tuple[str, str, str | None, str | None]:
     """Derive lifecycle stage and recommended next step from module presence flags.
 
@@ -388,11 +394,23 @@ def _derive_lifecycle_stage(
       portfolio_visible
 
     Rules are deterministic and based only on flag arguments.
+
+    portfolio_visible requires both has_approved_tender_baseline AND
+    has_construction_records — meaning the project is fully governed and
+    has active cost data eligible for portfolio roll-up.
     """
+    if has_portfolio_visibility:
+        return (
+            "portfolio_visible",
+            "View this project in portfolio monitoring.",
+            "/portfolio",
+            None,
+        )
+
     if has_approved_tender_baseline:
         return (
             "construction_monitored",
-            "View construction scorecard to monitor project health.",
+            "Load construction cost records to enable portfolio-level monitoring.",
             f"/projects/{project_id}/construction-costs",
             None,
         )

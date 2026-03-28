@@ -121,6 +121,9 @@ class ProjectLifecycleSummaryResponse(BaseModel):
     has_phases: bool
     has_construction_records: bool
     has_approved_tender_baseline: bool
+    # Composite readiness flag — True when project is fully governed and has
+    # active cost records (approved baseline AND construction_records present).
+    has_portfolio_visibility: bool
     # Counts for context
     scenario_count: int
     feasibility_run_count: int

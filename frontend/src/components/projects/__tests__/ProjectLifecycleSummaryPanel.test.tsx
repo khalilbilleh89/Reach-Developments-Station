@@ -72,6 +72,7 @@ const makeLandDefinedSummary = (): ProjectLifecycleSummary => ({
   has_phases: false,
   has_construction_records: false,
   has_approved_tender_baseline: false,
+  has_portfolio_visibility: false,
   scenario_count: 0,
   feasibility_run_count: 0,
   construction_record_count: 0,
@@ -91,6 +92,7 @@ const makeConstructionBaselinePendingSummary = (): ProjectLifecycleSummary => ({
   has_phases: true,
   has_construction_records: true,
   has_approved_tender_baseline: false,
+  has_portfolio_visibility: false,
   scenario_count: 2,
   feasibility_run_count: 3,
   construction_record_count: 5,
@@ -108,16 +110,37 @@ const makeConstructionMonitoredSummary = (): ProjectLifecycleSummary => ({
   has_feasibility_runs: true,
   has_calculated_feasibility: true,
   has_phases: true,
-  has_construction_records: true,
+  has_construction_records: false,
   has_approved_tender_baseline: true,
+  has_portfolio_visibility: false,
   scenario_count: 1,
   feasibility_run_count: 2,
-  construction_record_count: 8,
+  construction_record_count: 0,
   current_stage: "construction_monitored",
-  recommended_next_step: "View construction scorecard to monitor project health.",
+  recommended_next_step: "Load construction cost records to enable portfolio-level monitoring.",
   next_step_route: "/projects/proj-3/construction-costs",
   blocked_reason: null,
   last_updated_at: "2024-03-10T09:00:00Z",
+});
+
+const makePortfolioVisibleSummary = (): ProjectLifecycleSummary => ({
+  project_id: "proj-4",
+  has_scenarios: true,
+  has_active_scenario: true,
+  has_feasibility_runs: true,
+  has_calculated_feasibility: true,
+  has_phases: true,
+  has_construction_records: true,
+  has_approved_tender_baseline: true,
+  has_portfolio_visibility: true,
+  scenario_count: 1,
+  feasibility_run_count: 2,
+  construction_record_count: 10,
+  current_stage: "portfolio_visible",
+  recommended_next_step: "View this project in portfolio monitoring.",
+  next_step_route: "/portfolio",
+  blocked_reason: null,
+  last_updated_at: "2024-04-01T12:00:00Z",
 });
 
 // ---------------------------------------------------------------------------
@@ -230,6 +253,35 @@ describe("ProjectLifecycleSummaryPanel", () => {
       expect(bar).toHaveAttribute("aria-valuenow", "13");
       expect(bar).toHaveAttribute("aria-valuemin", "0");
       expect(bar).toHaveAttribute("aria-valuemax", "100");
+    });
+  });
+
+  it("renders portfolio_visible stage with 100% progress", async () => {
+    mockGet.mockResolvedValue(makePortfolioVisibleSummary());
+    render(<ProjectLifecycleSummaryPanel projectId="proj-4" />);
+    await waitFor(() => {
+      // "Portfolio Visible" appears in both the stage header and the flag row
+      const matches = screen.getAllByText("Portfolio Visible");
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getByText(/100/)).toBeInTheDocument();
+  });
+
+  it("renders portfolio_visible next step CTA pointing to /portfolio", async () => {
+    mockGet.mockResolvedValue(makePortfolioVisibleSummary());
+    render(<ProjectLifecycleSummaryPanel projectId="proj-4" />);
+    await waitFor(() => {
+      const link = screen.getByRole("link", { name: /continue/i });
+      expect(link).toHaveAttribute("href", "/portfolio");
+    });
+  });
+
+  it("renders portfolio_visible progress bar at 100%", async () => {
+    mockGet.mockResolvedValue(makePortfolioVisibleSummary());
+    render(<ProjectLifecycleSummaryPanel projectId="proj-4" />);
+    await waitFor(() => {
+      const bar = screen.getByRole("progressbar");
+      expect(bar).toHaveAttribute("aria-valuenow", "100");
     });
   });
 });

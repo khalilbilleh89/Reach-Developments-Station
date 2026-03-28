@@ -210,6 +210,10 @@ export function ProjectLifecycleSummaryPanel({
           label="Approved Baseline"
           present={summary.has_approved_tender_baseline}
         />
+        <FlagRow
+          label="Portfolio Visible"
+          present={summary.has_portfolio_visibility}
+        />
       </div>
 
       {/* Blocked reason */}

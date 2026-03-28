@@ -220,10 +220,12 @@ def test_lifecycle_summary_construction_baseline_pending_stage(client: TestClien
 
 
 def test_lifecycle_summary_construction_monitored_stage(client: TestClient):
-    """A project with an approved baseline is in construction_monitored stage."""
+    """A project with an approved baseline but no construction records is construction_monitored."""
     project_id = _create_project(client, code="LC-MON")
     _create_phase(client, project_id)
-    _create_construction_record(client, project_id)
+    # Approve a baseline WITHOUT adding individual construction cost records.
+    # This is the governance-in-place state: the baseline comparison set is approved
+    # but no ongoing cost records have been loaded yet.
     set_id = _create_comparison_set(client, project_id)
     _approve_baseline(client, set_id)
 
@@ -233,7 +235,29 @@ def test_lifecycle_summary_construction_monitored_stage(client: TestClient):
     data = resp.json()
     assert data["current_stage"] == "construction_monitored"
     assert data["has_approved_tender_baseline"] is True
+    assert data["has_construction_records"] is False
+    assert data["has_portfolio_visibility"] is False
     assert data["next_step_route"] == f"/projects/{project_id}/construction-costs"
+    assert data["blocked_reason"] is None
+
+
+def test_lifecycle_summary_portfolio_visible_stage(client: TestClient):
+    """A project with an approved baseline AND construction records is portfolio_visible."""
+    project_id = _create_project(client, code="LC-PORT")
+    _create_phase(client, project_id)
+    _create_construction_record(client, project_id)
+    set_id = _create_comparison_set(client, project_id)
+    _approve_baseline(client, set_id)
+
+    resp = client.get(f"/api/v1/projects/{project_id}/lifecycle-summary")
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert data["current_stage"] == "portfolio_visible"
+    assert data["has_approved_tender_baseline"] is True
+    assert data["has_construction_records"] is True
+    assert data["has_portfolio_visibility"] is True
+    assert data["next_step_route"] == "/portfolio"
     assert data["blocked_reason"] is None
 
 
@@ -265,6 +289,7 @@ def test_lifecycle_summary_flags_present_in_response(client: TestClient):
         "has_phases",
         "has_construction_records",
         "has_approved_tender_baseline",
+        "has_portfolio_visibility",
         "scenario_count",
         "feasibility_run_count",
         "construction_record_count",

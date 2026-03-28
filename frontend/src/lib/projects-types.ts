@@ -82,6 +82,9 @@ export interface ProjectLifecycleSummary {
   has_phases: boolean;
   has_construction_records: boolean;
   has_approved_tender_baseline: boolean;
+  /** True when project is fully governed (approved baseline) and has active
+   *  construction cost records — eligible for portfolio roll-up. */
+  has_portfolio_visibility: boolean;
   // Counts
   scenario_count: number;
   feasibility_run_count: number;
