@@ -10,7 +10,8 @@
  * and feasibility data.
  *
  * Design principles:
- *  - All metric values are sourced from the backend; no recomputation here.
+ *  - Primary metric values are sourced from the backend; only simple derived
+ *    display values (e.g. percentages, colors) are computed client-side.
  *  - Renders a safe null state when data is unavailable.
  *  - Trend indicators are purely visual — no additional calculations.
  *
@@ -280,7 +281,7 @@ export function ProjectAbsorptionPanel({
           style={{
             fontSize: "0.875rem",
             fontWeight: 600,
-            color: absorptionVsPlanColor(data.absorption_vs_plan_pct),
+            color: "var(--color-text)",
           }}
           data-testid="sell-through-pct"
         >

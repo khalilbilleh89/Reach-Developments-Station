@@ -43,6 +43,8 @@ function statusLabel(status: AbsorptionStatus): string {
   if (status === "ahead_of_plan") return "Ahead";
   if (status === "on_plan") return "On Plan";
   if (status === "behind_plan") return "Behind";
+  if (status === "no_data") return "No Data";
+  if (status === null) return "No Units";
   return "No Data";
 }
 

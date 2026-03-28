@@ -174,7 +174,8 @@ class ProjectAbsorptionMetricsResponse(BaseModel):
     avg_selling_time_days: Optional[float] = Field(
         None,
         description=(
-            "Average days between first and last contract date divided by sold units; "
+            "Average days elapsed per contract between first and last non-cancelled "
+            "contract date (days_elapsed / contract_count); "
             "null when fewer than 2 contracts exist"
         ),
     )
