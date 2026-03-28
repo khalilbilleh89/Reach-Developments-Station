@@ -44,12 +44,19 @@ jest.mock("@/lib/portfolio-variance-api", () => ({
   getPortfolioCostVariance: jest.fn(),
 }));
 
+// Mock construction scorecard API
+jest.mock("@/lib/construction-scorecard-api", () => ({
+  getConstructionPortfolioScorecards: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
+import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
 const mockGetPortfolioCostVariance = getPortfolioCostVariance as jest.Mock;
+const mockGetConstructionPortfolioScorecards = getConstructionPortfolioScorecards as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -155,6 +162,20 @@ const mockVarianceEmpty = {
   flags: [],
 };
 
+const mockConstructionEmpty = {
+  summary: {
+    total_projects_scored: 0,
+    healthy_count: 0,
+    warning_count: 0,
+    critical_count: 0,
+    incomplete_count: 0,
+    projects_missing_baseline: 0,
+  },
+  projects: [],
+  top_risk_projects: [],
+  missing_baseline_projects: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -162,11 +183,14 @@ describe("PortfolioPage", () => {
     jest.clearAllMocks();
     // Default variance mock returns empty state
     mockGetPortfolioCostVariance.mockResolvedValue(mockVarianceEmpty);
+    // Default construction scorecard mock returns empty state
+    mockGetConstructionPortfolioScorecards.mockResolvedValue(mockConstructionEmpty);
   });
 
   it("renders the page title", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
     mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
+    mockGetConstructionPortfolioScorecards.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText("Portfolio")).toBeInTheDocument();
   });
@@ -174,6 +198,7 @@ describe("PortfolioPage", () => {
   it("shows loading state while fetching dashboard", () => {
     mockGetPortfolioDashboard.mockReturnValue(new Promise(() => {}));
     mockGetPortfolioCostVariance.mockReturnValue(new Promise(() => {}));
+    mockGetConstructionPortfolioScorecards.mockReturnValue(new Promise(() => {}));
     render(<PortfolioPage />);
     expect(screen.getByText(/Loading portfolio dashboard/i)).toBeInTheDocument();
   });
