@@ -427,3 +427,190 @@ def test_cost_variance_response_contract(client: TestClient) -> None:
     assert "total_comparison_amount" in summary
     assert "total_variance_amount" in summary
     assert "total_variance_pct" in summary
+
+# ---------------------------------------------------------------------------
+# Flag coverage — missing_comparison_data, major_overrun, major_saving
+# ---------------------------------------------------------------------------
+
+
+def test_flag_missing_comparison_data_project_with_no_sets(client: TestClient) -> None:
+    """Projects with no active comparison sets produce a missing_comparison_data flag."""
+    project_id = _create_project(client, "PVF01", "No Sets Project")
+    # Do NOT create any comparison sets for this project
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    flag_types = [f["flag_type"] for f in data["flags"]]
+    assert "missing_comparison_data" in flag_types
+
+    missing_flags = [f for f in data["flags"] if f["flag_type"] == "missing_comparison_data"]
+    project_ids_in_flags = [f["affected_project_id"] for f in missing_flags]
+    assert project_id in project_ids_in_flags
+
+
+def test_flag_missing_comparison_data_only_inactive_sets(client: TestClient) -> None:
+    """Projects with only inactive comparison sets also produce missing_comparison_data."""
+    project_id = _create_project(client, "PVF02", "Only Inactive Sets")
+    inactive_set = _create_set(client, project_id, title="Inactive", is_active=False)
+    _create_line(
+        client, inactive_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=1_200_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    flag_types = [f["flag_type"] for f in data["flags"]]
+    assert "missing_comparison_data" in flag_types
+
+    missing_flags = [f for f in data["flags"] if f["flag_type"] == "missing_comparison_data"]
+    project_ids_in_flags = [f["affected_project_id"] for f in missing_flags]
+    assert project_id in project_ids_in_flags
+
+
+def test_flag_major_overrun_above_threshold(client: TestClient) -> None:
+    """Project with variance_pct > 10% produces a major_overrun flag."""
+    project_id = _create_project(client, "PVF03", "Major Overrun Project")
+    comparison_set = _create_set(client, project_id)
+    # +150,000 on 1,000,000 baseline = +15% → above 10% threshold
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=1_150_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    major_overrun_flags = [f for f in data["flags"] if f["flag_type"] == "major_overrun"]
+    affected_ids = [f["affected_project_id"] for f in major_overrun_flags]
+    assert project_id in affected_ids
+
+
+def test_flag_major_saving_below_threshold(client: TestClient) -> None:
+    """Project with variance_pct < -10% produces a major_saving flag."""
+    project_id = _create_project(client, "PVF04", "Major Saving Project")
+    comparison_set = _create_set(client, project_id)
+    # -150,000 on 1,000,000 baseline = -15% → below -10% threshold
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=850_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    major_saving_flags = [f for f in data["flags"] if f["flag_type"] == "major_saving"]
+    affected_ids = [f["affected_project_id"] for f in major_saving_flags]
+    assert project_id in affected_ids
+
+
+def test_flag_no_major_overrun_at_exact_threshold(client: TestClient) -> None:
+    """Project with variance_pct exactly 10% does NOT produce a major_overrun flag (strict >)."""
+    project_id = _create_project(client, "PVF05", "Exactly 10% Overrun")
+    comparison_set = _create_set(client, project_id)
+    # +100,000 on 1,000,000 baseline = exactly 10.00%
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=1_100_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    major_overrun_flags = [f for f in data["flags"] if f["flag_type"] == "major_overrun"]
+    affected_ids = [f["affected_project_id"] for f in major_overrun_flags]
+    # Exactly at threshold must NOT trigger flag (threshold is strictly >)
+    assert project_id not in affected_ids
+
+
+def test_flag_no_major_saving_at_exact_threshold(client: TestClient) -> None:
+    """Project with variance_pct exactly -10% does NOT produce a major_saving flag (strict <)."""
+    project_id = _create_project(client, "PVF06", "Exactly -10% Saving")
+    comparison_set = _create_set(client, project_id)
+    # -100,000 on 1,000,000 baseline = exactly -10.00%
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=900_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    major_saving_flags = [f for f in data["flags"] if f["flag_type"] == "major_saving"]
+    affected_ids = [f["affected_project_id"] for f in major_saving_flags]
+    # Exactly at threshold must NOT trigger flag (threshold is strictly <)
+    assert project_id not in affected_ids
+
+
+def test_flag_no_overrun_or_saving_below_threshold(client: TestClient) -> None:
+    """Project with 5% overrun produces neither major_overrun nor major_saving flag."""
+    project_id = _create_project(client, "PVF07", "Small Overrun")
+    comparison_set = _create_set(client, project_id)
+    # +50,000 on 1,000,000 baseline = 5% — below 10% threshold
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=1_000_000.0, comparison_amount=1_050_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    overrun_ids = [f["affected_project_id"] for f in data["flags"] if f["flag_type"] == "major_overrun"]
+    saving_ids = [f["affected_project_id"] for f in data["flags"] if f["flag_type"] == "major_saving"]
+    assert project_id not in overrun_ids
+    assert project_id not in saving_ids
+
+
+def test_flag_zero_baseline_does_not_produce_overrun_or_saving_flags(
+    client: TestClient,
+) -> None:
+    """Project with zero baseline (variance_pct = None) produces no overrun/saving flag."""
+    project_id = _create_project(client, "PVF08", "Zero Baseline Project")
+    comparison_set = _create_set(client, project_id)
+    # Baseline 0 → variance_pct is None → no threshold comparison possible
+    _create_line(
+        client, comparison_set["id"],
+        baseline_amount=0.0, comparison_amount=500_000.0,
+    )
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    overrun_ids = [f["affected_project_id"] for f in data["flags"] if f["flag_type"] == "major_overrun"]
+    saving_ids = [f["affected_project_id"] for f in data["flags"] if f["flag_type"] == "major_saving"]
+    assert project_id not in overrun_ids
+    assert project_id not in saving_ids
+
+
+# ---------------------------------------------------------------------------
+# Latest comparison stage — correctness of SQL-level aggregation
+# ---------------------------------------------------------------------------
+
+
+def test_latest_comparison_stage_reflects_newest_set(client: TestClient) -> None:
+    """latest_comparison_stage returns the stage of the most recently created active set."""
+    project_id = _create_project(client, "PVS01", "Stage Test Project")
+
+    # Create an earlier set with one stage
+    _create_set(client, project_id, title="Old Set", comparison_stage="baseline_vs_tender")
+    # Create a newer set with a different stage
+    _create_set(client, project_id, title="New Set", comparison_stage="tender_vs_award")
+
+    resp = client.get("/api/v1/portfolio/cost-variance")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    cards = data["projects"]
+    card = next((c for c in cards if c["project_id"] == project_id), None)
+    assert card is not None
+    # Most recent active set has stage tender_vs_award
+    assert card["latest_comparison_stage"] == "tender_vs_award"

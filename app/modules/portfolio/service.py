@@ -20,7 +20,7 @@ Cost variance status rules (PR-V6-12):
 """
 
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -314,21 +314,27 @@ class PortfolioService:
         mutated.
         """
         # Bulk-load per-project aggregates in as few queries as possible
+        all_projects = self.repo.list_projects()
         projects_with_sets = self.repo.list_projects_with_active_comparison_sets()
         variance_by_project = self.repo.get_variance_totals_by_project()
         set_count_by_project = self.repo.get_active_set_count_by_project()
         stage_by_project = self.repo.get_latest_comparison_stage_by_project()
 
-        # Build per-project variance cards
+        # Build per-project variance cards — keep variance_pct as Decimal for
+        # threshold comparisons; convert to float only at response boundary.
         project_cards: List[PortfolioCostVarianceProjectCard] = []
+        project_variance_pcts: Dict[str, Optional[Decimal]] = {}
         for project in projects_with_sets:
             pid = project.id
             baseline, comparison, variance = variance_by_project.get(
                 pid, (Decimal("0"), Decimal("0"), Decimal("0"))
             )
-            variance_pct: Optional[float] = None
+            variance_pct_decimal: Optional[Decimal] = None
             if baseline != Decimal("0"):
-                variance_pct = round(float((variance / baseline) * 100), _VARIANCE_PCT_PRECISION)
+                variance_pct_decimal = round(
+                    (variance / baseline) * Decimal("100"), _VARIANCE_PCT_PRECISION
+                )
+            project_variance_pcts[pid] = variance_pct_decimal
 
             variance_status = self._derive_variance_status(variance)
 
@@ -341,7 +347,12 @@ class PortfolioService:
                     baseline_total=float(baseline),
                     comparison_total=float(comparison),
                     variance_amount=float(variance),
-                    variance_pct=variance_pct,
+                    # float conversion only at response boundary
+                    variance_pct=(
+                        float(variance_pct_decimal)
+                        if variance_pct_decimal is not None
+                        else None
+                    ),
                     variance_status=variance_status,
                 )
             )
@@ -355,8 +366,11 @@ class PortfolioService:
         )
         total_variance_pct: Optional[float] = None
         if total_baseline != Decimal("0"):
-            total_variance_pct = round(
-                float((total_variance / total_baseline) * 100), _VARIANCE_PCT_PRECISION
+            total_variance_pct = float(
+                round(
+                    (total_variance / total_baseline) * Decimal("100"),
+                    _VARIANCE_PCT_PRECISION,
+                )
             )
 
         summary = PortfolioCostVarianceSummary(
@@ -377,8 +391,11 @@ class PortfolioService:
             key=lambda c: c.variance_amount,
         )[:_TOP_N_VARIANCE]
 
-        # Derive portfolio-level cost variance flags
-        flags = self._derive_cost_variance_flags(project_cards, projects_with_sets)
+        # Derive portfolio-level cost variance flags — pass pre-fetched project
+        # list and Decimal pcts to avoid extra DB round-trip and float round-trip.
+        flags = self._derive_cost_variance_flags(
+            project_cards, all_projects, project_variance_pcts
+        )
 
         return PortfolioCostVarianceResponse(
             summary=summary,
@@ -407,39 +424,41 @@ class PortfolioService:
         self,
         project_cards: List[PortfolioCostVarianceProjectCard],
         all_projects: list,
+        project_variance_pcts: "Dict[str, Optional[Decimal]]",
     ) -> List[PortfolioCostVarianceFlag]:
         """Derive cost variance flags for the portfolio.
 
         Rules:
           1. Projects with no active comparison sets → 'missing_comparison_data'
-          2. Per-project variance_pct > threshold → 'major_overrun'
-          3. Per-project variance_pct < negative threshold → 'major_saving'
+          2. Per-project variance_pct (Decimal) > threshold → 'major_overrun'
+          3. Per-project variance_pct (Decimal) < negative threshold → 'major_saving'
+
+        Threshold comparisons use Decimal arithmetic throughout; the
+        float-formatted description uses the card's pre-rounded float value
+        (already at the response boundary).
         """
         flags: List[PortfolioCostVarianceFlag] = []
 
         # Rule 1 — missing comparison data (projects with no active sets)
         projects_with_data_ids = {c.project_id for c in project_cards}
-        all_projects_list = self.repo.list_projects()
-        missing_projects = [
-            p for p in all_projects_list if p.id not in projects_with_data_ids
-        ]
-        for project in missing_projects:
-            flags.append(
-                PortfolioCostVarianceFlag(
-                    flag_type="missing_comparison_data",
-                    description=(
-                        f"Project '{project.name}' has no active tender comparison sets."
-                    ),
-                    affected_project_id=project.id,
-                    affected_project_name=project.name,
+        for project in all_projects:
+            if project.id not in projects_with_data_ids:
+                flags.append(
+                    PortfolioCostVarianceFlag(
+                        flag_type="missing_comparison_data",
+                        description=(
+                            f"Project '{project.name}' has no active tender comparison sets."
+                        ),
+                        affected_project_id=project.id,
+                        affected_project_name=project.name,
+                    )
                 )
-            )
 
         # Rule 2 & 3 — major overrun / major saving per project
         for card in project_cards:
-            if card.variance_pct is None:
+            variance_pct_decimal = project_variance_pcts.get(card.project_id)
+            if variance_pct_decimal is None:
                 continue
-            variance_pct_decimal = Decimal(str(card.variance_pct))
             if variance_pct_decimal > _MAJOR_OVERRUN_PCT_THRESHOLD:
                 flags.append(
                     PortfolioCostVarianceFlag(

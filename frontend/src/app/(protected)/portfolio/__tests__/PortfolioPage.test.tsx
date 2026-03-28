@@ -445,7 +445,7 @@ describe("PortfolioPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("cost variance panel is not rendered when variance API fails but dashboard succeeds", async () => {
+  it("shows page-level error when either API call fails", async () => {
     mockGetPortfolioDashboard.mockResolvedValue(mockDashboard);
     mockGetPortfolioCostVariance.mockRejectedValue(new Error("Variance API error"));
     render(<PortfolioPage />);

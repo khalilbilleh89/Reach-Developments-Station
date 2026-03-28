@@ -7,7 +7,7 @@ Endpoints:
   GET /api/v1/portfolio/dashboard     — read-only portfolio dashboard
   GET /api/v1/portfolio/cost-variance — read-only portfolio cost variance roll-up
 
-The endpoints assemble coherent payload from existing source-of-truth
+The endpoints assemble coherent payloads from existing source-of-truth
 module data.  No source records are mutated.
 """
 

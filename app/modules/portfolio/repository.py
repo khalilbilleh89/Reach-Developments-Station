@@ -411,19 +411,34 @@ class PortfolioRepository:
         return {project_id: count for project_id, count in rows}
 
     def get_latest_comparison_stage_by_project(self) -> Dict[str, Optional[str]]:
-        """Return project_id → comparison_stage of the most recently created active set."""
+        """Return project_id → comparison_stage of the most recently created active set.
+
+        Uses a SQL-level subquery that selects the max(created_at) per project
+        so only one row per project is fetched (no Python-side deduplication).
+        """
+        from sqlalchemy import select
+
+        # Subquery: max created_at per project for active sets
+        latest_ts_subq = (
+            select(
+                ConstructionCostComparisonSet.project_id,
+                func.max(ConstructionCostComparisonSet.created_at).label("max_ts"),
+            )
+            .where(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.project_id)
+            .subquery()
+        )
         rows = (
             self.db.query(
                 ConstructionCostComparisonSet.project_id,
                 ConstructionCostComparisonSet.comparison_stage,
             )
+            .join(
+                latest_ts_subq,
+                (ConstructionCostComparisonSet.project_id == latest_ts_subq.c.project_id)
+                & (ConstructionCostComparisonSet.created_at == latest_ts_subq.c.max_ts),
+            )
             .filter(ConstructionCostComparisonSet.is_active.is_(True))
-            .order_by(ConstructionCostComparisonSet.created_at.desc())
             .all()
         )
-        # Keep only the first (most recent) entry per project
-        seen: Dict[str, Optional[str]] = {}
-        for project_id, stage in rows:
-            if project_id not in seen:
-                seen[project_id] = stage
-        return seen
+        return {project_id: stage for project_id, stage in rows}
