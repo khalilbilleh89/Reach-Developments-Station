@@ -491,3 +491,323 @@ def test_portfolio_pricing_insights_underpriced_classification(client: TestClien
     assert card is not None
     # High demand / high sell-through → should be underpriced or no_data (no formal pricing)
     assert card["pricing_status"] in ("underpriced", "no_data")
+
+
+# ---------------------------------------------------------------------------
+# Absorption-vs-plan primary decision branch
+# ---------------------------------------------------------------------------
+
+
+def _create_calculated_feasibility_run(
+    client: TestClient,
+    project_id: str,
+    development_period_months: int,
+    run_code: str,
+) -> str:
+    """Create a calculated feasibility run with assumptions and return the run_id."""
+    run_resp = client.post(
+        "/api/v1/feasibility/runs",
+        json={
+            "project_id": project_id,
+            "scenario_name": run_code,
+            "scenario_type": "base",
+        },
+    )
+    assert run_resp.status_code == 201, run_resp.text
+    run_id = run_resp.json()["id"]
+
+    client.post(
+        f"/api/v1/feasibility/runs/{run_id}/assumptions",
+        json={
+            "sellable_area_sqm": 1000.0,
+            "avg_sale_price_per_sqm": 3000.0,
+            "construction_cost_per_sqm": 800.0,
+            "soft_cost_ratio": 0.10,
+            "finance_cost_ratio": 0.05,
+            "sales_cost_ratio": 0.02,
+            "development_period_months": development_period_months,
+        },
+    )
+    calc_resp = client.post(f"/api/v1/feasibility/runs/{run_id}/calculate")
+    assert calc_resp.status_code in (200, 201), calc_resp.text
+    return run_id
+
+
+def test_pricing_recommendation_uses_absorption_vs_plan_when_feasibility_inputs_exist(
+    client: TestClient,
+):
+    """Primary decision branch: absorption-vs-plan path is used when feasibility
+    assumptions and dated contracts exist.
+
+    Seeds:
+      - calculated feasibility run with development_period_months=10
+      - 10 studio units (planned rate = 10/10 = 1.0 unit/month)
+      - Units 0-2 set to under_contract via PATCH (sold_units = 3 > 0, avoids no_data)
+      - 3 draft contracts on units 3-5 spread across 60 days
+        → actual rate ≈ 3 / (60/30.44) ≈ 1.52 units/month
+        → absorption_vs_plan_pct ≈ 152% → high_demand
+
+    Asserts that the plan-aware demand classification branch is active
+    (demand_context mentions "of plan") and demand_status is high_demand.
+    """
+    proj_id = _create_project(client, "PRJ-POFEAS", "Absorption vs Plan Project")
+
+    # Calculated feasibility run: 10 units / 10 months → planned 1.0 unit/month
+    _create_calculated_feasibility_run(
+        client, proj_id, development_period_months=10, run_code="Base Case FEAS"
+    )
+
+    # Create 10 studio units
+    unit_ids = _create_units_in_hierarchy(client, proj_id, 10, "studio", "BLK-FEAS")
+
+    # Units 0-2: set to under_contract via PATCH so sold_units > 0 (avoids no_data)
+    for uid in unit_ids[:3]:
+        _set_unit_under_contract(client, uid)
+
+    # Units 3-5: create contracts with spread dates (drives absorption-rate calculation)
+    # These units remain in "available" status; draft contracts count for date bounds
+    buyer = _create_buyer(client, "buyer_feas@po.com")
+    first_date = str(date.today() - timedelta(days=60))
+    mid_date = str(date.today() - timedelta(days=30))
+    last_date = str(date.today())
+    _create_contract(client, unit_ids[3], buyer, "CNT-FEAS-001", 600_000.0, first_date)
+    _create_contract(client, unit_ids[4], buyer, "CNT-FEAS-002", 600_000.0, mid_date)
+    _create_contract(client, unit_ids[5], buyer, "CNT-FEAS-003", 600_000.0, last_date)
+
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # demand_context must reference absorption vs plan (not the sell-through fallback)
+    assert data["demand_context"] is not None
+    assert "of plan" in data["demand_context"], (
+        f"Expected plan-aware demand context, got: {data['demand_context']}"
+    )
+
+    # Actual ≈ 1.52 units/month vs planned 1.0 units/month → > 100% → high_demand
+    rec = next(r for r in data["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "high_demand"
+    assert rec["change_pct"] is not None
+    assert rec["change_pct"] > 0
+
+
+def test_pricing_recommendation_absorption_vs_plan_below_threshold_gives_low_demand(
+    client: TestClient,
+):
+    """Plan-aware path: when actual absorption < 80% of plan → low_demand.
+
+    Seeds:
+      - feasibility run with development_period_months=6 → planned = 10/6 ≈ 1.67/month
+      - Units 0-1 set to under_contract via PATCH (sold_units = 2 > 0, avoids no_data)
+      - 2 contracts on units 2-3 spread across 90 days
+        → actual ≈ 2 / (90/30.44) ≈ 0.68/month
+        → absorption_vs_plan_pct ≈ 40% → low_demand
+    """
+    proj_id = _create_project(client, "PRJ-POFLD", "Low Demand Plan Project")
+
+    # planned = 10 units / 6 months ≈ 1.667 units/month
+    _create_calculated_feasibility_run(
+        client, proj_id, development_period_months=6, run_code="Base Case LOW"
+    )
+
+    unit_ids = _create_units_in_hierarchy(client, proj_id, 10, "studio", "BLK-FLD")
+
+    # Units 0-1: set to under_contract so sold_units > 0
+    for uid in unit_ids[:2]:
+        _set_unit_under_contract(client, uid)
+
+    # Units 2-3: contracts with 90-day spread → actual ≈ 0.68/month → < 80% plan → low_demand
+    buyer = _create_buyer(client, "buyer_fld@po.com")
+    first_date = str(date.today() - timedelta(days=90))
+    last_date = str(date.today())
+    _create_contract(client, unit_ids[2], buyer, "CNT-FLD-001", 700_000.0, first_date)
+    _create_contract(client, unit_ids[3], buyer, "CNT-FLD-002", 700_000.0, last_date)
+
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Plan-aware context must be referenced
+    assert data["demand_context"] is not None
+    assert "of plan" in data["demand_context"]
+
+    rec = next(r for r in data["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "low_demand"
+    assert rec["change_pct"] is not None
+    assert rec["change_pct"] < 0
+
+
+# ---------------------------------------------------------------------------
+# Demand classification boundary tests
+# ---------------------------------------------------------------------------
+
+
+def _make_project_with_sell_through(
+    client: TestClient,
+    code: str,
+    name: str,
+    total_units: int,
+    sold_units: int,
+    unit_type: str = "studio",
+    block_code: str = "BLK-BT",
+) -> str:
+    """Create a project with exactly sold_units set to under_contract and return project_id."""
+    proj_id = _create_project(client, code, name)
+    unit_ids = _create_units_in_hierarchy(client, proj_id, total_units, unit_type, block_code)
+    for uid in unit_ids[:sold_units]:
+        _set_unit_under_contract(client, uid)
+    return proj_id
+
+
+def test_boundary_40pct_sellthrough_classifies_as_balanced(client: TestClient):
+    """Exactly 40% sell-through must classify as balanced (>= threshold, not low_demand)."""
+    # 10 units, 4 sold = 40.0% sell-through → must be balanced
+    proj_id = _make_project_with_sell_through(
+        client, "PRJ-BT40", "Boundary 40pct", 10, 4, "studio", "BLK-BT40"
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "balanced", (
+        f"40% sell-through should be balanced, got: {rec['demand_status']}"
+    )
+    assert rec["change_pct"] == 0.0
+
+
+def test_boundary_just_below_40pct_sellthrough_classifies_as_low_demand(client: TestClient):
+    """Just below 40% sell-through (3/10 = 30%) must classify as low_demand."""
+    proj_id = _make_project_with_sell_through(
+        client, "PRJ-BT30", "Boundary 30pct", 10, 3, "studio", "BLK-BT30"
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "low_demand"
+    assert rec["change_pct"] < 0
+
+
+def test_boundary_60pct_sellthrough_classifies_as_balanced(client: TestClient):
+    """Exactly 60% sell-through must classify as balanced (not high_demand)."""
+    # 10 units, 6 sold = 60.0% → 60 is not > 60 → balanced
+    proj_id = _make_project_with_sell_through(
+        client, "PRJ-BT60", "Boundary 60pct", 10, 6, "studio", "BLK-BT60"
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "balanced", (
+        f"60% sell-through should be balanced (not high_demand), got: {rec['demand_status']}"
+    )
+    assert rec["change_pct"] == 0.0
+
+
+def test_boundary_above_60pct_sellthrough_classifies_as_high_demand(client: TestClient):
+    """Above 60% sell-through (7/10 = 70%) must classify as high_demand."""
+    proj_id = _make_project_with_sell_through(
+        client, "PRJ-BT70", "Boundary 70pct", 10, 7, "studio", "BLK-BT70"
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "high_demand"
+    assert rec["change_pct"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Recommendation availability boundary tests
+# ---------------------------------------------------------------------------
+
+
+def _make_high_demand_project_with_availability(
+    client: TestClient,
+    code: str,
+    total_units: int,
+    sold_units: int,
+) -> str:
+    """Create a high-demand project (>60% sell-through) with specific availability."""
+    return _make_project_with_sell_through(
+        client,
+        code,
+        f"Avail Test {code}",
+        total_units,
+        sold_units,
+        "studio",
+        f"BLK-{code}",
+    )
+
+
+def test_high_demand_at_20pct_availability_gives_8pct_increase(client: TestClient):
+    """High demand + availability_pct ≤ 20% → change_pct must be +8%."""
+    # 10 units, 8 sold (80% sell-through → high_demand), 2 available (20%)
+    proj_id = _make_high_demand_project_with_availability(
+        client, "AVAIL20", total_units=10, sold_units=8
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "high_demand"
+    assert rec["availability_pct"] == pytest.approx(20.0, abs=0.1)
+    assert rec["change_pct"] == pytest.approx(8.0)
+    assert rec["confidence"] == "high"
+
+
+def test_high_demand_at_40pct_availability_gives_5pct_increase(client: TestClient):
+    """High demand + availability_pct ≤ 40% (but > 20%) → change_pct must be +5%."""
+    # 10 units, 7 sold (70% sell-through → high_demand), 3 available (30% availability)
+    # 30% availability is ≤ 40% but > 20% → +5%
+    proj_id = _make_high_demand_project_with_availability(
+        client, "AVAIL40", total_units=10, sold_units=7
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "high_demand"
+    assert rec["availability_pct"] == pytest.approx(30.0, abs=0.1)
+    assert rec["change_pct"] == pytest.approx(5.0)
+    assert rec["confidence"] == "high"
+
+
+def test_low_demand_at_70pct_availability_gives_8pct_decrease(client: TestClient):
+    """Low demand + availability_pct ≥ 70% → change_pct must be −8%."""
+    # 10 units, 3 sold (30% → low_demand), 7 available (70%)
+    proj_id = _make_project_with_sell_through(
+        client, "PRJ-LD70", "Low Demand 70pct Avail", 10, 3, "studio", "BLK-LD70"
+    )
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "low_demand"
+    assert rec["availability_pct"] == pytest.approx(70.0, abs=0.1)
+    assert rec["change_pct"] == pytest.approx(-8.0)
+    assert rec["confidence"] == "high"
+
+
+def test_low_demand_at_50pct_availability_gives_5pct_decrease(client: TestClient):
+    """Low demand + availability_pct ≥ 50% (but < 70%) → change_pct must be −5%."""
+    # 10 units, 3 sold (30% sell-through → low_demand), 5 available (50%)
+    # but wait: 10 total - 3 sold = 7 available. Need to set reserved/other states.
+    # Easier: 6 units, 3 sold (50% sell-through → but that's balanced)...
+    # Use: 10 units, 2 sold (20% → low_demand), 5 available = impossible unless 3 reserved.
+    # Simplest: directly use 4 units total, 1 sold (25% → low_demand), 2 available, 1 reserved
+    # Actually: use 4 units, 1 sold = 1 under_contract (25% → low_demand), 3 available = 75%... no.
+    # Let's be explicit: 8 units, 2 sold (25% → low_demand), 4 available (50%) + 2 reserved
+    # We set 2 to under_contract, 2 to reserved, 4 remain available
+    proj_id = _create_project(client, "PRJ-LD50", "Low Demand 50pct Avail")
+    unit_ids = _create_units_in_hierarchy(client, proj_id, 8, "studio", "BLK-LD50")
+    # 2 units under_contract (sold)
+    for uid in unit_ids[:2]:
+        _set_unit_under_contract(client, uid)
+    # 2 units reserved (not sold)
+    for uid in unit_ids[2:4]:
+        r = client.patch(f"/api/v1/units/{uid}", json={"status": "reserved"})
+        assert r.status_code == 200, r.text
+    # 4 units remain available
+
+    resp = client.get(f"/api/v1/projects/{proj_id}/pricing-recommendations")
+    assert resp.status_code == 200
+    rec = next(r for r in resp.json()["recommendations"] if r["unit_type"] == "studio")
+    assert rec["demand_status"] == "low_demand"
+    # availability = 4/8 = 50%
+    assert rec["availability_pct"] == pytest.approx(50.0, abs=0.1)
+    assert rec["change_pct"] == pytest.approx(-5.0)
+    assert rec["confidence"] == "medium"

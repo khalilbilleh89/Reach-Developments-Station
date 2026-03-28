@@ -18,12 +18,12 @@ import "@testing-library/jest-dom";
 // Mock CSS modules
 jest.mock("@/styles/portfolio.module.css", () => ({
   summaryStrip: "summaryStrip",
-  summaryCard: "summaryCard",
-  summaryValue: "summaryValue",
-  summaryLabel: "summaryLabel",
+  kpiCard: "kpiCard",
+  kpiValue: "kpiValue",
+  kpiLabel: "kpiLabel",
   varianceProjectCard: "varianceProjectCard",
   varianceCardHeader: "varianceCardHeader",
-  varianceProjectList: "varianceProjectList",
+  varianceCardGrid: "varianceCardGrid",
   projectName: "projectName",
   projectStats: "projectStats",
   healthBadge: "healthBadge",

@@ -108,11 +108,11 @@ function PricingSummaryStrip({
   return (
     <div className={styles.summaryStrip}>
       {kpis.map((kpi) => (
-        <div key={kpi.label} className={styles.summaryCard} data-testid={kpi.testId}>
-          <span className={styles.summaryValue} style={{ color: kpi.color }}>
+        <div key={kpi.label} className={styles.kpiCard} data-testid={kpi.testId}>
+          <span className={styles.kpiValue} style={{ color: kpi.color }}>
             {kpi.value}
           </span>
-          <span className={styles.summaryLabel}>{kpi.label}</span>
+          <span className={styles.kpiLabel}>{kpi.label}</span>
         </div>
       ))}
     </div>
@@ -193,7 +193,7 @@ function ProjectCardList({
           {emptyNote}
         </p>
       ) : (
-        <div className={styles.varianceProjectList}>
+        <div className={styles.varianceCardGrid}>
           {cards.map((card) => (
             <PricingProjectCard key={card.project_id} card={card} />
           ))}

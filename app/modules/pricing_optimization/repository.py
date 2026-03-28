@@ -249,8 +249,6 @@ class PricingOptimizationRepository:
 
         Uses a subquery to find the latest calculated run per project.
         """
-        from sqlalchemy import select
-
         # Subquery: latest created_at per project for calculated runs
         latest_run_subq = (
             self.db.query(

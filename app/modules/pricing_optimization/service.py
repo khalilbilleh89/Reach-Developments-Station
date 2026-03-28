@@ -17,7 +17,7 @@ Demand classification thresholds:
                  OR sell_through_pct in [40, 60] when no plan
   low_demand   : absorption_vs_plan_pct < 80
                  OR sell_through_pct < 40 when no plan
-  no_data      : < 2 contracts (insufficient velocity data)
+  no_data      : unit_type_sold_units == 0 (no usable sales signal for demand classification)
 
 Recommendation thresholds (change_pct applied to current_avg_price):
   high_demand + availability_pct ≤ 20 %  → +8 %  (confidence: high)
@@ -56,7 +56,7 @@ _HIGH_DEMAND_PLAN_THRESHOLD = 100.0   # absorption_vs_plan_pct ≥ 100 → high
 _BALANCED_PLAN_THRESHOLD = 80.0       # absorption_vs_plan_pct ≥ 80 → balanced
 
 _HIGH_DEMAND_SELLTHROUGH_THRESHOLD = 60.0  # sell_through_pct > 60 → high (no plan)
-_BALANCED_SELLTHROUGH_THRESHOLD = 40.0    # sell_through_pct > 40 → balanced (no plan)
+_BALANCED_SELLTHROUGH_THRESHOLD = 40.0    # sell_through_pct >= 40 → balanced (no plan)
 
 # ---------------------------------------------------------------------------
 # Recommendation thresholds
@@ -204,7 +204,9 @@ class PricingOptimizationService:
         # Portfolio summary
         total_projects = len(project_cards)
         projects_with_pricing_data = sum(
-            1 for c in project_cards if c.pricing_status != "no_data"
+            1
+            for project in projects
+            if project.id in avg_prices_map and avg_prices_map[project.id]
         )
         underpriced = sum(1 for c in project_cards if c.pricing_status == "underpriced")
         overpriced = sum(1 for c in project_cards if c.pricing_status == "overpriced")
@@ -373,7 +375,7 @@ class PricingOptimizationService:
             return "no_data"
         if st > _HIGH_DEMAND_SELLTHROUGH_THRESHOLD:
             return "high_demand"
-        if st > _BALANCED_SELLTHROUGH_THRESHOLD:
+        if st >= _BALANCED_SELLTHROUGH_THRESHOLD:
             return "balanced"
         return "low_demand"
 
