@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { TenderComparisonSetList } from "@/components/tender-comparisons/TenderComparisonSetList";
@@ -80,6 +80,17 @@ export function TenderComparisonClient() {
     useState<ConstructionCostComparisonLine | null>(null);
   const [deletingLineId, setDeletingLineId] = useState<string | null>(null);
 
+  // ── Detail request race-condition guards ──────────────────────────────────
+  // `latestDetailRequestId` tracks the most recently requested setId so that
+  // stale Promise callbacks from superseded selections are silently discarded.
+  //
+  // `detailAbortController` holds an AbortController for the current in-flight
+  // detail request so it can be cancelled (network-level) when the user switches
+  // to a different set or the component unmounts, preventing unnecessary
+  // traffic and potential memory leaks.
+  const latestDetailRequestId = useRef<string | null>(null);
+  const detailAbortController = useRef<AbortController | null>(null);
+
   // ── Load set list ──────────────────────────────────────────────────────────
   const loadList = useCallback(
     (signal?: AbortSignal) => {
@@ -116,19 +127,45 @@ export function TenderComparisonClient() {
     return () => controller.abort();
   }, [loadList]);
 
+  // On unmount, abort any in-flight detail request and clear the request
+  // tracker so pending callbacks are silently dropped.
+  useEffect(() => {
+    return () => {
+      latestDetailRequestId.current = null;
+      detailAbortController.current?.abort();
+    };
+  }, []);
+
   // ── Load selected set detail + summary ────────────────────────────────────
   const loadDetail = useCallback(
-    (setId: string, signal?: AbortSignal) => {
+    (setId: string) => {
+      // Abort the previous in-flight detail request to cancel unnecessary
+      // network traffic before starting the new one.
+      detailAbortController.current?.abort();
+      const controller = new AbortController();
+      detailAbortController.current = controller;
+
+      // Record this as the latest requested setId so that responses from
+      // earlier (now-superseded) requests are discarded when they settle.
+      latestDetailRequestId.current = setId;
+
       setLoadingDetail(true);
       setDetailError(null);
       Promise.all([getTenderComparison(setId), getTenderComparisonSummary(setId)])
         .then(([detail, sum]) => {
-          if (signal?.aborted) return;
+          // Guard 1: network-level abort check.
+          if (controller.signal.aborted) return;
+          // Guard 2: only commit state if this is still the latest selection.
+          // A slower earlier response must not overwrite a newer selection.
+          if (latestDetailRequestId.current !== setId) return;
           setSelectedSet(detail);
           setSummary(sum);
         })
         .catch((err: unknown) => {
-          if (signal?.aborted) return;
+          // Discard errors from aborted or superseded requests to avoid
+          // surfacing spurious error banners.
+          if (controller.signal.aborted) return;
+          if (latestDetailRequestId.current !== setId) return;
           setDetailError(
             err instanceof Error
               ? err.message
@@ -136,7 +173,12 @@ export function TenderComparisonClient() {
           );
         })
         .finally(() => {
-          if (!signal?.aborted) setLoadingDetail(false);
+          if (
+            !controller.signal.aborted &&
+            latestDetailRequestId.current === setId
+          ) {
+            setLoadingDetail(false);
+          }
         });
     },
     [],

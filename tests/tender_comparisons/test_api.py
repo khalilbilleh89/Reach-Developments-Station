@@ -581,3 +581,87 @@ def test_create_set_requires_auth(unauth_client: TestClient) -> None:
 def test_get_set_requires_auth(unauth_client: TestClient) -> None:
     resp = unauth_client.get("/api/v1/tender-comparisons/any-id")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Source-record immutability
+# ---------------------------------------------------------------------------
+
+
+def test_source_construction_cost_records_unchanged_after_comparison_crud(
+    client: TestClient,
+) -> None:
+    """Tender comparison CRUD must not mutate source construction cost records.
+
+    Steps:
+      1. Create a project and a construction cost record.
+      2. Snapshot the record's fields.
+      3. Create a comparison set and several lines for the same project.
+      4. Update and delete lines; update the set.
+      5. Re-fetch the original construction cost record and assert it is
+         byte-for-byte identical to the snapshot.
+    """
+    project_id = _create_project(client, "TC-IMM")
+
+    # 1 + 2. Create source record and snapshot it.
+    cost_resp = client.post(
+        f"/api/v1/projects/{project_id}/construction-cost-records",
+        json={
+            "title": "Foundation Works",
+            "cost_category": "hard_cost",
+            "cost_source": "estimate",
+            "cost_stage": "construction",
+            "amount": 750_000.00,
+            "currency": "AED",
+        },
+    )
+    assert cost_resp.status_code == 201, cost_resp.text
+    source_record = cost_resp.json()
+    source_record_id = source_record["id"]
+
+    # 3. Create a comparison set + two lines.
+    comparison_set = _create_set(client, project_id, title="Immutability Test Set")
+    line1 = _create_line(
+        client,
+        comparison_set["id"],
+        cost_category="hard_cost",
+        baseline_amount=750_000,
+        comparison_amount=800_000,
+        variance_reason="unit_rate_change",
+    )
+    line2 = _create_line(
+        client,
+        comparison_set["id"],
+        cost_category="soft_cost",
+        baseline_amount=100_000,
+        comparison_amount=95_000,
+        variance_reason="ve_saving",
+    )
+
+    # 4. Mutate the comparison domain (update line, delete line, update set).
+    client.patch(
+        f"/api/v1/tender-comparisons/lines/{line1['id']}",
+        json={"comparison_amount": 810_000},
+    )
+    client.delete(f"/api/v1/tender-comparisons/lines/{line2['id']}")
+    client.patch(
+        f"/api/v1/tender-comparisons/{comparison_set['id']}",
+        json={"title": "Updated Set Title"},
+    )
+
+    # 5. Re-fetch the source construction cost record and assert it is unchanged.
+    refetch_resp = client.get(
+        f"/api/v1/construction-cost-records/{source_record_id}"
+    )
+    assert refetch_resp.status_code == 200, refetch_resp.text
+    refetched = refetch_resp.json()
+
+    assert refetched["id"] == source_record["id"]
+    assert refetched["project_id"] == source_record["project_id"]
+    assert refetched["title"] == source_record["title"]
+    assert refetched["cost_category"] == source_record["cost_category"]
+    assert refetched["cost_source"] == source_record["cost_source"]
+    assert refetched["cost_stage"] == source_record["cost_stage"]
+    assert float(refetched["amount"]) == pytest.approx(float(source_record["amount"]))
+    assert refetched["currency"] == source_record["currency"]
+    assert refetched["is_active"] == source_record["is_active"]
