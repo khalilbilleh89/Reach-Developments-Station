@@ -288,3 +288,82 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
+
+/* --- Cost variance roll-up styles (PR-V6-12) ------------------------------ */
+
+/* Variance amount text colours */
+.varianceOverrun {
+  color: #9b2c2c; /* red — positive variance = overrun */
+}
+
+.varianceSaving {
+  color: #276749; /* green — negative variance = saving */
+}
+
+.varianceNeutral {
+  color: var(--color-text-muted);
+}
+
+/* Variance status badges */
+.badgeOverrun {
+  background: #fff5f5;
+  color: #9b2c2c;
+  border-color: #fed7d7;
+}
+
+.badgeSaving {
+  background: #f0fff4;
+  color: #276749;
+  border-color: #c6f6d5;
+}
+
+.badgeNeutral {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+/* Variance project card */
+.varianceProjectCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.varianceCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.varianceCardStage {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+/* Variance section within panel */
+.varianceSection {
+  margin-top: var(--space-6);
+}
+
+.varianceSectionTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-3);
+}
+
+.varianceCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}

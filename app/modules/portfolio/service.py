@@ -12,8 +12,14 @@ Health badge rules are intentionally simple and transparent:
   - 'on_track'        : sell-through >= 50 % and no overdue receivables
 
 Risk flag thresholds are documented inline.
+
+Cost variance status rules (PR-V6-12):
+  - 'overrun'  : variance_amount > 0
+  - 'saving'   : variance_amount < 0
+  - 'neutral'  : variance_amount == 0
 """
 
+from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -21,6 +27,10 @@ from sqlalchemy.orm import Session
 from app.modules.portfolio.repository import PortfolioRepository
 from app.modules.portfolio.schemas import (
     PortfolioCollectionsSummary,
+    PortfolioCostVarianceFlag,
+    PortfolioCostVarianceProjectCard,
+    PortfolioCostVarianceResponse,
+    PortfolioCostVarianceSummary,
     PortfolioDashboardResponse,
     PortfolioPipelineSummary,
     PortfolioProjectCard,
@@ -38,6 +48,14 @@ _NEEDS_ATTENTION_SELL_THROUGH_THRESHOLD = 0.50  # below 50 % → needs_attention
 # Risk flag thresholds
 _LOW_SELL_THROUGH_FLAG_THRESHOLD = 0.30   # portfolio-project sell-through below 30 %
 _LOW_COLLECTIONS_RATE_THRESHOLD = 0.30    # collection rate below 30 %
+
+# Cost variance flag thresholds (PR-V6-12)
+# major overrun: variance_pct > 10 % of baseline
+_MAJOR_OVERRUN_PCT_THRESHOLD = Decimal("10.00")
+# major saving: variance_pct < -10 % of baseline
+_MAJOR_SAVING_PCT_THRESHOLD = Decimal("-10.00")
+# Top-N list size for overruns/savings
+_TOP_N_VARIANCE = 5
 
 
 def _safe_pct(numerator: float, denominator: float) -> Optional[float]:
@@ -279,5 +297,172 @@ class PortfolioService:
                     affected_project_name=None,
                 )
             )
+
+        return flags
+
+    # ------------------------------------------------------------------
+    # Portfolio cost variance roll-up (PR-V6-12)
+    # ------------------------------------------------------------------
+
+    def get_cost_variance(self) -> PortfolioCostVarianceResponse:
+        """Assemble and return the portfolio cost variance roll-up response.
+
+        Aggregates tender comparison data from all active comparison sets
+        across projects.  All values are live-read — no source records are
+        mutated.
+        """
+        # Bulk-load per-project aggregates in as few queries as possible
+        projects_with_sets = self.repo.list_projects_with_active_comparison_sets()
+        variance_by_project = self.repo.get_variance_totals_by_project()
+        set_count_by_project = self.repo.get_active_set_count_by_project()
+        stage_by_project = self.repo.get_latest_comparison_stage_by_project()
+
+        # Build per-project variance cards
+        project_cards: List[PortfolioCostVarianceProjectCard] = []
+        for project in projects_with_sets:
+            pid = project.id
+            baseline, comparison, variance = variance_by_project.get(
+                pid, (Decimal("0"), Decimal("0"), Decimal("0"))
+            )
+            variance_pct: Optional[float] = None
+            if baseline != Decimal("0"):
+                variance_pct = round(float((variance / baseline) * 100), 4)
+
+            variance_status = self._derive_variance_status(variance)
+
+            project_cards.append(
+                PortfolioCostVarianceProjectCard(
+                    project_id=pid,
+                    project_name=project.name,
+                    comparison_set_count=set_count_by_project.get(pid, 0),
+                    latest_comparison_stage=stage_by_project.get(pid),
+                    baseline_total=float(baseline),
+                    comparison_total=float(comparison),
+                    variance_amount=float(variance),
+                    variance_pct=variance_pct,
+                    variance_status=variance_status,
+                )
+            )
+
+        # Sort all cards by variance_amount descending (largest overrun first)
+        project_cards.sort(key=lambda c: c.variance_amount, reverse=True)
+
+        # Build portfolio-wide summary
+        total_baseline, total_comparison, total_variance = (
+            self.repo.get_portfolio_variance_totals()
+        )
+        total_variance_pct: Optional[float] = None
+        if total_baseline != Decimal("0"):
+            total_variance_pct = round(
+                float((total_variance / total_baseline) * 100), 4
+            )
+
+        summary = PortfolioCostVarianceSummary(
+            projects_with_comparison_sets=len(projects_with_sets),
+            total_baseline_amount=float(total_baseline),
+            total_comparison_amount=float(total_comparison),
+            total_variance_amount=float(total_variance),
+            total_variance_pct=total_variance_pct,
+        )
+
+        # Top-N overruns: positive variance, largest first (already sorted desc)
+        top_overruns = [c for c in project_cards if c.variance_amount > 0][
+            :_TOP_N_VARIANCE
+        ]
+        # Top-N savings: negative variance, largest saving first (most negative)
+        top_savings = sorted(
+            [c for c in project_cards if c.variance_amount < 0],
+            key=lambda c: c.variance_amount,
+        )[:_TOP_N_VARIANCE]
+
+        # Derive portfolio-level cost variance flags
+        flags = self._derive_cost_variance_flags(project_cards, projects_with_sets)
+
+        return PortfolioCostVarianceResponse(
+            summary=summary,
+            projects=project_cards,
+            top_overruns=top_overruns,
+            top_savings=top_savings,
+            flags=flags,
+        )
+
+    @staticmethod
+    def _derive_variance_status(variance_amount: Decimal) -> str:
+        """Return transparent status label based on variance sign.
+
+        Rules:
+          positive → 'overrun'
+          negative → 'saving'
+          zero     → 'neutral'
+        """
+        if variance_amount > Decimal("0"):
+            return "overrun"
+        if variance_amount < Decimal("0"):
+            return "saving"
+        return "neutral"
+
+    def _derive_cost_variance_flags(
+        self,
+        project_cards: List[PortfolioCostVarianceProjectCard],
+        all_projects: list,
+    ) -> List[PortfolioCostVarianceFlag]:
+        """Derive cost variance flags for the portfolio.
+
+        Rules:
+          1. Projects with no active comparison sets → 'missing_comparison_data'
+          2. Per-project variance_pct > threshold → 'major_overrun'
+          3. Per-project variance_pct < negative threshold → 'major_saving'
+        """
+        flags: List[PortfolioCostVarianceFlag] = []
+
+        # Rule 1 — missing comparison data (projects with no active sets)
+        projects_with_data_ids = {c.project_id for c in project_cards}
+        all_projects_list = self.repo.list_projects()
+        missing_projects = [
+            p for p in all_projects_list if p.id not in projects_with_data_ids
+        ]
+        for project in missing_projects:
+            flags.append(
+                PortfolioCostVarianceFlag(
+                    flag_type="missing_comparison_data",
+                    description=(
+                        f"Project '{project.name}' has no active tender comparison sets."
+                    ),
+                    affected_project_id=project.id,
+                    affected_project_name=project.name,
+                )
+            )
+
+        # Rule 2 & 3 — major overrun / major saving per project
+        for card in project_cards:
+            if card.variance_pct is None:
+                continue
+            variance_pct_decimal = Decimal(str(card.variance_pct))
+            if variance_pct_decimal > _MAJOR_OVERRUN_PCT_THRESHOLD:
+                flags.append(
+                    PortfolioCostVarianceFlag(
+                        flag_type="major_overrun",
+                        description=(
+                            f"Project '{card.project_name}' has a cost overrun of "
+                            f"{card.variance_pct:.2f}% above baseline "
+                            f"(threshold: {_MAJOR_OVERRUN_PCT_THRESHOLD}%)."
+                        ),
+                        affected_project_id=card.project_id,
+                        affected_project_name=card.project_name,
+                    )
+                )
+            elif variance_pct_decimal < _MAJOR_SAVING_PCT_THRESHOLD:
+                flags.append(
+                    PortfolioCostVarianceFlag(
+                        flag_type="major_saving",
+                        description=(
+                            f"Project '{card.project_name}' has a cost saving of "
+                            f"{abs(card.variance_pct):.2f}% below baseline "
+                            f"(threshold: {abs(_MAJOR_SAVING_PCT_THRESHOLD)}%)."
+                        ),
+                        affected_project_id=card.project_id,
+                        affected_project_name=card.project_name,
+                    )
+                )
 
         return flags

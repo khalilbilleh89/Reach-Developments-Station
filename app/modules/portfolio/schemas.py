@@ -7,12 +7,17 @@ All schemas are read-only response models — no request/create schemas exist
 because the portfolio layer is a read-only aggregation surface.
 
 Schema hierarchy:
-  PortfolioSummary           — top-line portfolio KPIs
-  PortfolioProjectCard       — per-project snapshot card
-  PortfolioPipelineSummary   — scenario / feasibility pipeline signals
-  PortfolioCollectionsSummary — collections health overview
-  PortfolioRiskFlag          — individual risk / alert item
-  PortfolioDashboardResponse — top-level envelope returned by the dashboard endpoint
+  PortfolioSummary              — top-line portfolio KPIs
+  PortfolioProjectCard          — per-project snapshot card
+  PortfolioPipelineSummary      — scenario / feasibility pipeline signals
+  PortfolioCollectionsSummary   — collections health overview
+  PortfolioRiskFlag             — individual risk / alert item
+  PortfolioDashboardResponse    — top-level envelope returned by the dashboard endpoint
+
+  PortfolioCostVarianceSummary        — portfolio-wide cost variance totals
+  PortfolioCostVarianceProjectCard    — per-project cost variance snapshot
+  PortfolioCostVarianceFlag           — portfolio-level cost variance signals
+  PortfolioCostVarianceResponse       — top-level cost variance envelope
 """
 
 from typing import List, Optional
@@ -142,4 +147,120 @@ class PortfolioDashboardResponse(BaseModel):
     collections: PortfolioCollectionsSummary
     risk_flags: List[PortfolioRiskFlag] = Field(
         default_factory=list, description="Portfolio-level risk/alert signals"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Cost Variance Roll-Up schemas (PR-V6-12)
+# ---------------------------------------------------------------------------
+
+
+class PortfolioCostVarianceSummary(BaseModel):
+    """Portfolio-wide cost variance totals derived from active tender comparison sets."""
+
+    projects_with_comparison_sets: int = Field(
+        ..., description="Number of projects that have at least one active comparison set"
+    )
+    total_baseline_amount: float = Field(
+        ..., description="Sum of all baseline amounts across active comparison lines (AED)"
+    )
+    total_comparison_amount: float = Field(
+        ..., description="Sum of all comparison amounts across active comparison lines (AED)"
+    )
+    total_variance_amount: float = Field(
+        ...,
+        description=(
+            "Total variance amount (comparison - baseline) across active comparison lines (AED). "
+            "Positive → net overrun; negative → net saving."
+        ),
+    )
+    total_variance_pct: Optional[float] = Field(
+        None,
+        description=(
+            "Total variance as a percentage of total baseline; "
+            "null when total baseline is zero."
+        ),
+    )
+
+
+class PortfolioCostVarianceProjectCard(BaseModel):
+    """Per-project cost variance snapshot derived from active tender comparison sets."""
+
+    project_id: str
+    project_name: str
+    comparison_set_count: int = Field(
+        ..., description="Number of active comparison sets for this project"
+    )
+    latest_comparison_stage: Optional[str] = Field(
+        None, description="Stage of the most recently created active comparison set"
+    )
+    baseline_total: float = Field(
+        ..., description="Sum of baseline amounts across all active comparison lines (AED)"
+    )
+    comparison_total: float = Field(
+        ..., description="Sum of comparison amounts across all active comparison lines (AED)"
+    )
+    variance_amount: float = Field(
+        ...,
+        description=(
+            "Net variance (comparison - baseline) across all active comparison lines (AED). "
+            "Positive → overrun; negative → saving."
+        ),
+    )
+    variance_pct: Optional[float] = Field(
+        None,
+        description="Variance as percentage of baseline; null when baseline is zero",
+    )
+    variance_status: str = Field(
+        ...,
+        description=(
+            "Transparent status derived from variance_amount: "
+            "'overrun' (positive) | 'saving' (negative) | 'neutral' (zero)"
+        ),
+    )
+
+
+class PortfolioCostVarianceFlag(BaseModel):
+    """A cost-variance-specific signal derived from portfolio comparison data."""
+
+    flag_type: str = Field(
+        ...,
+        description=(
+            "Machine-readable flag type: "
+            "'major_overrun' | 'major_saving' | 'missing_comparison_data'"
+        ),
+    )
+    description: str = Field(..., description="Human-readable description of the signal")
+    affected_project_id: Optional[str] = Field(
+        None, description="Project ID if project-scoped"
+    )
+    affected_project_name: Optional[str] = Field(
+        None, description="Project name if project-scoped"
+    )
+
+
+class PortfolioCostVarianceResponse(BaseModel):
+    """Top-level cost variance roll-up response envelope.
+
+    Aggregates tender comparison data across projects into a portfolio-level
+    cost variance view.  All values are live-read from governed comparison
+    records on every request.  No source records are mutated.
+    """
+
+    summary: PortfolioCostVarianceSummary
+    projects: List[PortfolioCostVarianceProjectCard] = Field(
+        default_factory=list,
+        description="Per-project cost variance cards, ordered by variance_amount descending",
+    )
+    top_overruns: List[PortfolioCostVarianceProjectCard] = Field(
+        default_factory=list,
+        description="Projects with the largest positive variance (overruns)",
+    )
+    top_savings: List[PortfolioCostVarianceProjectCard] = Field(
+        default_factory=list,
+        description="Projects with the largest negative variance (savings)",
+    )
+    flags: List[PortfolioCostVarianceFlag] = Field(
+        default_factory=list,
+        description="Portfolio-level cost variance signals",
     )
