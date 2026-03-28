@@ -14,10 +14,15 @@ Validates:
   - active-baseline endpoint: 404 for unknown project
   - auth requirement on approve-baseline and active-baseline
   - list and get responses include baseline governance fields
+  - approve-baseline returns 401 when JWT token has no sub (audit integrity)
 """
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.core.dependencies import get_db
+from app.modules.auth.security import get_current_user_payload
+from app.main import app
 
 
 def _create_project(client: TestClient, code: str, name: str = "Test Project") -> str:
@@ -317,3 +322,55 @@ def test_superseded_baseline_metadata_cleared(client: TestClient) -> None:
     assert data["is_approved_baseline"] is False
     assert data["approved_at"] is None
     assert data["approved_by_user_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Audit integrity: missing JWT sub must be rejected
+# ---------------------------------------------------------------------------
+
+
+def test_approve_baseline_returns_401_when_sub_missing(db_session) -> None:
+    """approve-baseline must return 401 when the JWT token has no sub.
+
+    A token without sub would store an empty/null approved_by_user_id,
+    breaking audit traceability.  The endpoint must reject the request
+    before writing to the database.
+    """
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    def override_no_sub_payload():
+        # Simulates a malformed JWT with roles but no sub
+        return {"roles": ["admin"]}
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user_payload] = override_no_sub_payload
+    try:
+        with TestClient(app) as c:
+            # First create a project and set with a valid client so we have a real set_id
+            def override_valid_payload():
+                return {"sub": "setup-user", "roles": ["admin"]}
+
+            app.dependency_overrides[get_current_user_payload] = override_valid_payload
+            with TestClient(app) as setup_client:
+                project_id = setup_client.post(
+                    "/api/v1/projects",
+                    json={"name": "Audit Test", "code": "BGSUB"},
+                ).json()["id"]
+                comparison_set = setup_client.post(
+                    f"/api/v1/projects/{project_id}/tender-comparisons",
+                    json={"title": "Audit Set", "comparison_stage": "baseline_vs_tender"},
+                ).json()
+
+            # Now attempt approval with the no-sub payload
+            app.dependency_overrides[get_current_user_payload] = override_no_sub_payload
+            with TestClient(app) as no_sub_client:
+                resp = no_sub_client.post(
+                    f"/api/v1/tender-comparisons/{comparison_set['id']}/approve-baseline"
+                )
+            assert resp.status_code == 401, resp.text
+    finally:
+        app.dependency_overrides.clear()

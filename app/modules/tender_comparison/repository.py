@@ -187,13 +187,19 @@ class TenderComparisonRepository:
     def get_active_baseline_for_project(
         self, project_id: str
     ) -> Optional[ConstructionCostComparisonSet]:
-        """Return the currently approved baseline set for a project, or None."""
+        """Return the currently approved baseline set for a project, or None.
+
+        Ordered by approved_at DESC so that if data integrity ever produces more
+        than one approved baseline (e.g., from a concurrent race), the most
+        recently approved record is returned deterministically.
+        """
         return (
             self.db.query(ConstructionCostComparisonSet)
             .filter(
                 ConstructionCostComparisonSet.project_id == project_id,
                 ConstructionCostComparisonSet.is_approved_baseline.is_(True),
             )
+            .order_by(ConstructionCostComparisonSet.approved_at.desc())
             .first()
         )
 
