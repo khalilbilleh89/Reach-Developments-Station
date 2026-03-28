@@ -8,19 +8,23 @@ import { PortfolioPipelinePanel } from "@/components/portfolio/PortfolioPipeline
 import { PortfolioCollectionsPanel } from "@/components/portfolio/PortfolioCollectionsPanel";
 import { PortfolioRiskFlagsPanel } from "@/components/portfolio/PortfolioRiskFlagsPanel";
 import { PortfolioCostVariancePanel } from "@/components/portfolio/PortfolioCostVariancePanel";
+import { PortfolioConstructionScorecardsPanel } from "@/components/portfolio/PortfolioConstructionScorecardsPanel";
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
+import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
 import type { PortfolioDashboardResponse } from "@/lib/portfolio-types";
 import type { PortfolioCostVarianceResponse } from "@/lib/portfolio-variance-types";
+import type { ConstructionPortfolioScorecardsResponse } from "@/lib/construction-scorecard-types";
 import styles from "@/styles/portfolio.module.css";
 
 /**
  * Portfolio Dashboard page — executive portfolio intelligence view.
  *
- * Fetches the read-only portfolio dashboard and cost variance roll-up on
- * load and renders:
+ * Fetches the read-only portfolio dashboard, cost variance roll-up, and
+ * construction health scorecards on load and renders:
  *   - KPI summary strip (top-line portfolio metrics)
  *   - Project snapshot cards (per-project health and inventory)
+ *   - Construction health scorecards (baseline-vs-actual, PR-V6-14)
  *   - Cost variance panel (portfolio construction cost variance roll-up)
  *   - Collections panel (overdue balance and collection rate)
  *   - Pipeline panel (scenarios and feasibility activity)
@@ -33,16 +37,23 @@ export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioDashboardResponse | null>(null);
   const [varianceData, setVarianceData] =
     useState<PortfolioCostVarianceResponse | null>(null);
+  const [constructionData, setConstructionData] =
+    useState<ConstructionPortfolioScorecardsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([getPortfolioDashboard(), getPortfolioCostVariance()])
-      .then(([dashboardResponse, varianceResponse]) => {
+    Promise.all([
+      getPortfolioDashboard(),
+      getPortfolioCostVariance(),
+      getConstructionPortfolioScorecards(),
+    ])
+      .then(([dashboardResponse, varianceResponse, constructionResponse]) => {
         setData(dashboardResponse);
         setVarianceData(varianceResponse);
+        setConstructionData(constructionResponse);
       })
       .catch((err: unknown) => {
         setError(
@@ -74,6 +85,9 @@ export default function PortfolioPage() {
         <div className={styles.sectionGrid}>
           <PortfolioSummaryStrip summary={data.summary} />
           <PortfolioProjectCards projects={data.projects} />
+          {constructionData && (
+            <PortfolioConstructionScorecardsPanel data={constructionData} />
+          )}
           {varianceData && (
             <PortfolioCostVariancePanel data={varianceData} />
           )}

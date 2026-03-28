@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/shell/PageContainer";
 import { ConstructionCostSummaryStrip } from "@/components/construction-costs/ConstructionCostSummaryStrip";
 import { ConstructionCostRecordTable } from "@/components/construction-costs/ConstructionCostRecordTable";
 import { ConstructionCostRecordFormModal } from "@/components/construction-costs/ConstructionCostRecordFormModal";
+import { ConstructionScorecardPanel } from "@/components/construction-costs/ConstructionScorecardPanel";
 import {
   listProjectConstructionCostRecords,
   createConstructionCostRecord,
@@ -35,6 +36,7 @@ import styles from "@/styles/construction.module.css";
  * Data sources:
  *   GET  /api/v1/projects/{id}/construction-cost-records
  *   GET  /api/v1/projects/{id}/construction-cost-records/summary
+ *   GET  /api/v1/projects/{id}/construction-scorecard
  *   POST /api/v1/projects/{id}/construction-cost-records
  *   PATCH /api/v1/construction-cost-records/{recordId}
  *   POST  /api/v1/construction-cost-records/{recordId}/archive
@@ -55,6 +57,9 @@ export function ConstructionCostsClient() {
   const [editingRecord, setEditingRecord] =
     useState<ConstructionCostRecord | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  // scorecardKey is bumped after mutations to force the scorecard to refresh
+  const [scorecardKey, setScorecardKey] = useState(0);
 
   const load = useCallback(
     (signal?: AbortSignal) => {
@@ -130,6 +135,7 @@ export function ConstructionCostsClient() {
     setShowModal(false);
     setEditingRecord(null);
     load();
+    setScorecardKey((k) => k + 1);
   };
 
   const handleArchive = async (record: ConstructionCostRecord) => {
@@ -138,6 +144,7 @@ export function ConstructionCostsClient() {
     try {
       await archiveConstructionCostRecord(record.id);
       load();
+      setScorecardKey((k) => k + 1);
     } catch (err: unknown) {
       setActionError(
         err instanceof Error ? err.message : "Failed to archive record.",
@@ -156,6 +163,14 @@ export function ConstructionCostsClient() {
           : "Manage project-level construction cost records"
       }
     >
+      {/* Construction Health Scorecard */}
+      {projectId && projectId !== "_" && (
+        <ConstructionScorecardPanel
+          key={scorecardKey}
+          projectId={projectId}
+        />
+      )}
+
       {/* Action bar */}
       {!loading && !error && (
         <div className={styles.actionBar}>

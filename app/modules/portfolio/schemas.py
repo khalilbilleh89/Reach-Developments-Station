@@ -264,3 +264,34 @@ class PortfolioCostVarianceResponse(BaseModel):
         default_factory=list,
         description="Portfolio-level cost variance signals",
     )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Construction Scorecards schemas (PR-V6-14)
+# Re-export the canonical schemas from construction_costs.analytics_schemas
+# so that the portfolio API surface has a single import path.
+# ---------------------------------------------------------------------------
+
+from app.modules.construction_costs.analytics_schemas import (  # noqa: E402
+    ConstructionPortfolioScorecardItem,
+    ConstructionPortfolioScorecardSummary,
+    ConstructionPortfolioScorecardsResponse,
+    ConstructionProjectScorecardResponse,
+)
+
+__all__ = [
+    "PortfolioSummary",
+    "PortfolioProjectCard",
+    "PortfolioPipelineSummary",
+    "PortfolioCollectionsSummary",
+    "PortfolioRiskFlag",
+    "PortfolioDashboardResponse",
+    "PortfolioCostVarianceSummary",
+    "PortfolioCostVarianceProjectCard",
+    "PortfolioCostVarianceFlag",
+    "PortfolioCostVarianceResponse",
+    "ConstructionPortfolioScorecardItem",
+    "ConstructionPortfolioScorecardSummary",
+    "ConstructionPortfolioScorecardsResponse",
+    "ConstructionProjectScorecardResponse",
+]
