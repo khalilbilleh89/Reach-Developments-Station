@@ -21,6 +21,7 @@ from app.modules.projects.schemas import (
     AttributeOptionUpdate,
     ProjectCreate,
     ProjectHierarchy,
+    ProjectLifecycleSummaryResponse,
     ProjectList,
     ProjectResponse,
     ProjectSummary,
@@ -98,6 +99,20 @@ def get_project_summary(
 ) -> ProjectSummary:
     """Return aggregated KPI summary (phase counts, timeline) for a project."""
     return service.get_project_summary(project_id)
+
+
+@router.get("/{project_id}/lifecycle-summary", response_model=ProjectLifecycleSummaryResponse)
+def get_project_lifecycle_summary(
+    project_id: str,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> ProjectLifecycleSummaryResponse:
+    """Return cross-module lifecycle readiness summary for a project.
+
+    Derives lifecycle stage, readiness flags, and recommended next step from
+    real module records across scenarios, feasibility, structure, construction
+    costs, and tender baseline governance.  This endpoint is read-only.
+    """
+    return service.get_project_lifecycle_summary(project_id)
 
 
 @router.get("/{project_id}/hierarchy", response_model=ProjectHierarchy)
