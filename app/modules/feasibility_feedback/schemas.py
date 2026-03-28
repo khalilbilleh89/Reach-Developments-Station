@@ -10,6 +10,7 @@ Schema hierarchy:
   ProjectAbsorptionFeedback           — unit absorption / sell-through summary
   ProjectCollectionFeedback           — cash collection and overdue receivables summary
   ProjectFeasibilityFeedbackResponse  — top-level envelope returned by the endpoint
+  ProjectAbsorptionMetricsResponse    — detailed absorption metrics with planned vs actual
 """
 
 from typing import Optional
@@ -124,4 +125,114 @@ class ProjectFeasibilityFeedbackResponse(BaseModel):
             "Threshold values used for feedback badge derivation, "
             "surfaced for transparency"
         ),
+    )
+
+
+class ProjectAbsorptionMetricsResponse(BaseModel):
+    """Detailed absorption metrics comparing actual vs planned performance.
+
+    Absorption rate and planning metrics are derived from live sales records
+    and feasibility assumptions.  All values are read-only and non-destructive.
+    """
+
+    project_id: str
+    project_name: str
+    project_code: str
+
+    # --- Inventory counts ---
+    total_units: int = Field(..., description="Total inventory units for this project")
+    sold_units: int = Field(
+        ...,
+        description="Units with status 'under_contract' or 'registered' (committed sales)",
+    )
+    reserved_units: int = Field(..., description="Units with status 'reserved'")
+    available_units: int = Field(..., description="Units with status 'available'")
+
+    # --- Absorption velocity ---
+    absorption_rate_per_month: Optional[float] = Field(
+        None,
+        description=(
+            "Actual absorption rate in units per month, derived from first to last "
+            "contract date; null when fewer than 2 contracts exist"
+        ),
+    )
+    planned_absorption_rate_per_month: Optional[float] = Field(
+        None,
+        description=(
+            "Planned absorption rate in units per month derived from feasibility "
+            "assumptions (total_units / development_period_months); null when no "
+            "feasibility run exists for this project"
+        ),
+    )
+    absorption_vs_plan_pct: Optional[float] = Field(
+        None,
+        description=(
+            "Actual absorption rate as a percentage of planned rate; null when "
+            "either rate is unavailable.  100% = on plan, >100% = ahead, <100% = behind"
+        ),
+    )
+    avg_selling_time_days: Optional[float] = Field(
+        None,
+        description=(
+            "Average days elapsed per contract between first and last non-cancelled "
+            "contract date (days_elapsed / contract_count); "
+            "null when fewer than 2 contracts exist"
+        ),
+    )
+
+    # --- Revenue ---
+    contracted_revenue: float = Field(
+        ...,
+        description="Sum of contract_price for all non-cancelled sales contracts (AED)",
+    )
+    projected_revenue: Optional[float] = Field(
+        None,
+        description=(
+            "Planned GDV from the latest feasibility result; null when no calculated "
+            "feasibility run exists for this project"
+        ),
+    )
+    revenue_realized_pct: Optional[float] = Field(
+        None,
+        description=(
+            "contracted_revenue / projected_revenue expressed as a percentage; "
+            "null when projected_revenue is unavailable or zero"
+        ),
+    )
+
+    # --- IRR comparison ---
+    planned_irr: Optional[float] = Field(
+        None,
+        description=(
+            "IRR from the latest calculated feasibility result; "
+            "null when no calculated run exists"
+        ),
+    )
+    actual_irr_estimate: Optional[float] = Field(
+        None,
+        description=(
+            "IRR recalculated using actual contracted revenue in place of planned GDV "
+            "and the original total_cost and development_period_months; "
+            "null when insufficient feasibility data is available"
+        ),
+    )
+    irr_delta: Optional[float] = Field(
+        None,
+        description=(
+            "actual_irr_estimate − planned_irr; positive = outperforming plan, "
+            "negative = underperforming; null when either value is unavailable"
+        ),
+    )
+
+    # --- Cashflow timing ---
+    cashflow_delay_months: Optional[float] = Field(
+        None,
+        description=(
+            "Estimated revenue timing delay in months based on absorption pace vs plan; "
+            "positive = delayed, negative = accelerated, null when plan data unavailable"
+        ),
+    )
+    revenue_timing_note: str = Field(
+        ...,
+        description="Human-readable explanation of revenue timing vs plan",
     )

@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.modules.portfolio.repository import PortfolioRepository
 from app.modules.portfolio.schemas import (
     PortfolioCollectionsSummary,
@@ -37,6 +38,8 @@ from app.modules.portfolio.schemas import (
     PortfolioRiskFlag,
     PortfolioSummary,
 )
+
+_logger = get_logger("reach_developments.portfolio")
 
 
 # ---------------------------------------------------------------------------
@@ -487,3 +490,219 @@ class PortfolioService:
                 )
 
         return flags
+
+    # ------------------------------------------------------------------
+    # Portfolio Absorption (PR-V7-01)
+    # ------------------------------------------------------------------
+
+    def get_portfolio_absorption(self) -> "PortfolioAbsorptionResponse":
+        """Assemble and return the portfolio absorption aggregation.
+
+        Uses batched repository queries (one query per data dimension) to avoid
+        the N+1 pattern of calling get_absorption_metrics() per project.  Cards
+        are built in memory from the batched results.
+
+        Projects that are in the portfolio are always represented — if any
+        unexpected data issue prevents card computation the project is logged
+        and included as a ``no_data`` placeholder card.
+
+        All values are read-only and non-destructive.
+        """
+        from app.modules.portfolio.schemas import (
+            PortfolioAbsorptionProjectCard,
+            PortfolioAbsorptionResponse,
+            PortfolioAbsorptionSummary,
+        )
+
+        projects = self.repo.list_projects()
+
+        # --- Batch all data dimensions in a fixed number of queries ---
+        unit_counts_map = self.repo.get_unit_status_counts_by_project()
+        revenue_map = self.repo.get_contracted_revenue_by_project()
+        contract_counts_map = self.repo.get_contract_counts_by_project()
+        date_bounds_map = self.repo.get_contract_date_bounds_by_project()
+        feasibility_map = self.repo.get_latest_feasibility_inputs_by_project()
+
+        cards: list[PortfolioAbsorptionProjectCard] = []
+        for project in projects:
+            try:
+                card = self._build_absorption_card(
+                    project=project,
+                    unit_counts=unit_counts_map.get(project.id, {}),
+                    contracted_revenue=revenue_map.get(project.id, 0.0),
+                    contract_count=contract_counts_map.get(project.id, 0),
+                    date_bounds=date_bounds_map.get(project.id),
+                    feasibility_inputs=feasibility_map.get(project.id),
+                )
+            except Exception as exc:  # pragma: no cover — unexpected path
+                _logger.warning(
+                    "Absorption card computation failed for project %s (%s): %s",
+                    project.id,
+                    project.name,
+                    exc,
+                    exc_info=True,
+                )
+                card = PortfolioAbsorptionProjectCard(
+                    project_id=project.id,
+                    project_name=project.name,
+                    project_code=project.code,
+                    total_units=0,
+                    sold_units=0,
+                    sell_through_pct=None,
+                    absorption_rate_per_month=None,
+                    planned_absorption_rate_per_month=None,
+                    absorption_vs_plan_pct=None,
+                    contracted_revenue=0.0,
+                    absorption_status="no_data",
+                )
+            cards.append(card)
+
+        # Sort by sell-through descending (None last)
+        cards.sort(
+            key=lambda c: (c.sell_through_pct is None, -(c.sell_through_pct or 0.0))
+        )
+
+        # Build summary
+        total_projects = len(cards)
+        projects_with_data = sum(
+            1 for c in cards if c.absorption_rate_per_month is not None
+        )
+        projects_with_units = [c for c in cards if c.total_units > 0]
+        avg_sell_through = (
+            round(
+                sum(c.sell_through_pct for c in projects_with_units if c.sell_through_pct is not None)
+                / max(len(projects_with_units), 1),
+                2,
+            )
+            if projects_with_units
+            else None
+        )
+        rate_cards = [c for c in cards if c.absorption_rate_per_month is not None]
+        avg_absorption_rate = (
+            round(
+                sum(c.absorption_rate_per_month for c in rate_cards)  # type: ignore[arg-type]
+                / len(rate_cards),
+                4,
+            )
+            if rate_cards
+            else None
+        )
+        ahead_count = sum(1 for c in cards if c.absorption_status == "ahead_of_plan")
+        on_count = sum(1 for c in cards if c.absorption_status == "on_plan")
+        behind_count = sum(1 for c in cards if c.absorption_status == "behind_plan")
+        no_data_count = sum(
+            1 for c in cards if c.absorption_status == "no_data" or c.absorption_status is None
+        )
+
+        summary = PortfolioAbsorptionSummary(
+            total_projects=total_projects,
+            projects_with_absorption_data=projects_with_data,
+            portfolio_avg_sell_through_pct=avg_sell_through,
+            portfolio_avg_absorption_rate=avg_absorption_rate,
+            projects_ahead_of_plan=ahead_count,
+            projects_on_plan=on_count,
+            projects_behind_plan=behind_count,
+            projects_no_absorption_data=no_data_count,
+        )
+
+        # Top/bottom 5 by absorption rate
+        sorted_by_rate = sorted(
+            [c for c in cards if c.absorption_rate_per_month is not None],
+            key=lambda c: c.absorption_rate_per_month or 0.0,
+            reverse=True,
+        )
+        fastest = sorted_by_rate[:5]
+        if len(sorted_by_rate) > 5:
+            slowest = sorted_by_rate[-5:][::-1]
+        else:
+            slowest = sorted_by_rate[::-1]
+
+        below_plan = [c for c in cards if c.absorption_status == "behind_plan"]
+
+        return PortfolioAbsorptionResponse(
+            summary=summary,
+            projects=cards,
+            fastest_projects=fastest,
+            slowest_projects=slowest,
+            below_plan_projects=below_plan,
+        )
+
+    @staticmethod
+    def _build_absorption_card(
+        project: "Project",
+        unit_counts: dict,
+        contracted_revenue: float,
+        contract_count: int,
+        date_bounds: "Optional[tuple]",
+        feasibility_inputs: "Optional[tuple]",
+    ) -> "PortfolioAbsorptionProjectCard":
+        """Assemble a single PortfolioAbsorptionProjectCard from pre-fetched data.
+
+        All arguments are pre-fetched by bulk repository queries so this method
+        performs no DB access.
+        """
+        from app.modules.portfolio.schemas import PortfolioAbsorptionProjectCard
+
+        # Unit inventory
+        total_units = sum(unit_counts.values())
+        sold_units = unit_counts.get("under_contract", 0) + unit_counts.get("registered", 0)
+
+        # Absorption velocity
+        absorption_rate_per_month: Optional[float] = None
+        if date_bounds is not None and contract_count >= 2:
+            first_date, last_date = date_bounds
+            days_elapsed = (last_date - first_date).days
+            if days_elapsed > 0:
+                months_elapsed = days_elapsed / 30.4375
+                absorption_rate_per_month = round(contract_count / months_elapsed, 4)
+
+        # Planned absorption from feasibility
+        planned_absorption_rate_per_month: Optional[float] = None
+        if feasibility_inputs is not None:
+            feas_result, feas_assumptions = feasibility_inputs
+            if (
+                feas_assumptions is not None
+                and feas_assumptions.development_period_months is not None
+                and total_units > 0
+            ):
+                dev_period = int(feas_assumptions.development_period_months)
+                if dev_period > 0:
+                    planned_absorption_rate_per_month = total_units / dev_period
+
+        # Absorption vs plan
+        absorption_vs_plan_pct: Optional[float] = None
+        if (
+            absorption_rate_per_month is not None
+            and planned_absorption_rate_per_month is not None
+            and planned_absorption_rate_per_month > 0
+        ):
+            absorption_vs_plan_pct = round(
+                (absorption_rate_per_month / planned_absorption_rate_per_month) * 100, 2
+            )
+
+        # Absorption status badge
+        absorption_status: Optional[str]
+        if total_units == 0:
+            absorption_status = None
+        elif absorption_vs_plan_pct is None:
+            absorption_status = "no_data"
+        elif absorption_vs_plan_pct >= 100.0:
+            absorption_status = "ahead_of_plan"
+        elif absorption_vs_plan_pct >= 80.0:
+            absorption_status = "on_plan"
+        else:
+            absorption_status = "behind_plan"
+
+        return PortfolioAbsorptionProjectCard(
+            project_id=project.id,
+            project_name=project.name,
+            project_code=project.code,
+            total_units=total_units,
+            sold_units=sold_units,
+            sell_through_pct=_safe_pct(sold_units, total_units),
+            absorption_rate_per_month=absorption_rate_per_month,
+            planned_absorption_rate_per_month=planned_absorption_rate_per_month,
+            absorption_vs_plan_pct=absorption_vs_plan_pct,
+            contracted_revenue=contracted_revenue,
+            absorption_status=absorption_status,
+        )

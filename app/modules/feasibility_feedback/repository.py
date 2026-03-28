@@ -155,3 +155,81 @@ class FeasibilityFeedbackRepository:
             .order_by(FeasibilityRun.created_at.desc())
             .first()
         )
+
+    # ------------------------------------------------------------------
+    # Absorption metrics helpers
+    # ------------------------------------------------------------------
+
+    def get_first_contract_date_for_project(self, project_id: str):
+        """Return the earliest non-cancelled contract_date for this project, or None."""
+        from sqlalchemy import func as _func
+        result = (
+            self.db.query(_func.min(SalesContract.contract_date))
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Phase.project_id == project_id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .scalar()
+        )
+        return result
+
+    def get_latest_contract_date_for_project(self, project_id: str):
+        """Return the most recent non-cancelled contract_date for this project, or None."""
+        from sqlalchemy import func as _func
+        result = (
+            self.db.query(_func.max(SalesContract.contract_date))
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Phase.project_id == project_id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .scalar()
+        )
+        return result
+
+    def get_latest_feasibility_result_for_project(self, project_id: str):
+        """Return the FeasibilityResult for the most recent calculated run, or None."""
+        from app.modules.feasibility.models import FeasibilityResult
+        return (
+            self.db.query(FeasibilityResult)
+            .join(FeasibilityRun, FeasibilityResult.run_id == FeasibilityRun.id)
+            .filter(FeasibilityRun.project_id == project_id)
+            .filter(FeasibilityRun.status == "calculated")
+            .order_by(FeasibilityRun.created_at.desc())
+            .first()
+        )
+
+    def get_latest_feasibility_assumptions_for_project(self, project_id: str):
+        """Return the FeasibilityAssumptions for the most recent calculated run, or None."""
+        from app.modules.feasibility.models import FeasibilityAssumptions
+        return (
+            self.db.query(FeasibilityAssumptions)
+            .join(FeasibilityRun, FeasibilityAssumptions.run_id == FeasibilityRun.id)
+            .filter(FeasibilityRun.project_id == project_id)
+            .filter(FeasibilityRun.status == "calculated")
+            .order_by(FeasibilityRun.created_at.desc())
+            .first()
+        )
+
+    def list_all_projects(self):
+        """Return all projects for portfolio-level absorption aggregation."""
+        from app.modules.projects.models import Project
+        return self.db.query(Project).order_by(Project.name).all()
+
+    def count_non_cancelled_contracts_for_project(self, project_id: str) -> int:
+        """Count non-cancelled sales contracts for a single project."""
+        from sqlalchemy import func as _func
+        result = (
+            self.db.query(_func.count(SalesContract.id))
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(Phase.project_id == project_id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .scalar()
+        )
+        return result or 0

@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.modules.feasibility.models import FeasibilityRun
+from app.modules.feasibility.models import FeasibilityAssumptions, FeasibilityResult, FeasibilityRun
 from app.modules.phases.models import Phase
 from app.modules.projects.models import Project
 from app.modules.receivables.models import Receivable
@@ -442,3 +442,94 @@ class PortfolioRepository:
             .all()
         )
         return {project_id: stage for project_id, stage in rows}
+
+    # ------------------------------------------------------------------
+    # Bulk absorption aggregations (avoids N+1 in get_portfolio_absorption)
+    # ------------------------------------------------------------------
+
+    def get_contract_counts_by_project(self) -> Dict[str, int]:
+        """Return project_id → non-cancelled contract count for all projects in one query."""
+        rows = (
+            self.db.query(Phase.project_id, func.count(SalesContract.id))
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {pid: count for pid, count in rows}
+
+    def get_contract_date_bounds_by_project(self) -> Dict[str, tuple]:
+        """Return project_id → (min_date, max_date) for non-cancelled contracts in one query.
+
+        Returns a dict mapping project_id → (first_date, last_date).
+        Projects with no non-cancelled contracts are excluded.
+        """
+        from sqlalchemy import Date
+        rows = (
+            self.db.query(
+                Phase.project_id,
+                func.min(SalesContract.contract_date),
+                func.max(SalesContract.contract_date),
+            )
+            .join(Unit, SalesContract.unit_id == Unit.id)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .join(Building, Floor.building_id == Building.id)
+            .join(Phase, Building.phase_id == Phase.id)
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .group_by(Phase.project_id)
+            .all()
+        )
+        return {
+            pid: (first_date, last_date)
+            for pid, first_date, last_date in rows
+            if first_date is not None and last_date is not None
+        }
+
+    def get_latest_feasibility_inputs_by_project(
+        self,
+    ) -> Dict[str, tuple]:
+        """Return project_id → (FeasibilityResult, FeasibilityAssumptions) for the
+        most recent calculated run per project, in one round-trip.
+
+        Uses a subquery to find the latest calculated run per project, then
+        eager-loads result and assumptions in the same query.
+
+        Returns only projects that have at least one calculated feasibility run.
+        """
+        from sqlalchemy import desc
+        from sqlalchemy.orm import aliased
+
+        # Subquery: latest created_at per project for calculated runs
+        latest_run_subq = (
+            self.db.query(
+                FeasibilityRun.project_id,
+                func.max(FeasibilityRun.created_at).label("max_created_at"),
+            )
+            .filter(FeasibilityRun.project_id.isnot(None))
+            .filter(FeasibilityRun.status == "calculated")
+            .group_by(FeasibilityRun.project_id)
+            .subquery()
+        )
+
+        # Join back to the actual run to get the run IDs
+        rows = (
+            self.db.query(FeasibilityRun, FeasibilityResult, FeasibilityAssumptions)
+            .join(
+                latest_run_subq,
+                (FeasibilityRun.project_id == latest_run_subq.c.project_id)
+                & (FeasibilityRun.created_at == latest_run_subq.c.max_created_at),
+            )
+            .outerjoin(FeasibilityResult, FeasibilityResult.run_id == FeasibilityRun.id)
+            .outerjoin(FeasibilityAssumptions, FeasibilityAssumptions.run_id == FeasibilityRun.id)
+            .filter(FeasibilityRun.status == "calculated")
+            .all()
+        )
+
+        result: Dict[str, tuple] = {}
+        for run, feas_result, feas_assumptions in rows:
+            if run.project_id:
+                result[run.project_id] = (feas_result, feas_assumptions)
+        return result

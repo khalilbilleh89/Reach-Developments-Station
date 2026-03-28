@@ -6,8 +6,10 @@ Sales Absorption → Feasibility Feedback API router.
 Endpoints:
   GET /api/v1/projects/{project_id}/feasibility-feedback
     — Read-only project-level feedback endpoint.
+  GET /api/v1/projects/{project_id}/absorption-metrics
+    — Detailed planned vs actual absorption metrics endpoint.
 
-The endpoint composes live source data into a transparent feedback signal
+The endpoints compose live source data into transparent feedback signals
 indicating whether actual commercial performance is validating or undermining
 project underwriting assumptions.
 
@@ -21,7 +23,10 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
-from app.modules.feasibility_feedback.schemas import ProjectFeasibilityFeedbackResponse
+from app.modules.feasibility_feedback.schemas import (
+    ProjectAbsorptionMetricsResponse,
+    ProjectFeasibilityFeedbackResponse,
+)
 from app.modules.feasibility_feedback.service import FeasibilityFeedbackService
 
 router = APIRouter(
@@ -59,3 +64,24 @@ def get_project_feasibility_feedback(
     Returns 404 if the project does not exist.
     """
     return service.get_project_feedback(project_id)
+
+@router.get(
+    "/{project_id}/absorption-metrics",
+    response_model=ProjectAbsorptionMetricsResponse,
+)
+def get_project_absorption_metrics(
+    project_id: str,
+    service: ServiceDep,
+) -> ProjectAbsorptionMetricsResponse:
+    """Return detailed absorption metrics for a single project.
+
+    Compares actual sales velocity (absorption rate, revenue realized) against
+    planned feasibility assumptions.  Recalculates IRR using actual contracted
+    revenue so developers can see the impact of absorption pace on returns.
+
+    The response is derived entirely from live source data and is read-only.
+    No feasibility formulas are altered and no source records are mutated.
+
+    Returns 404 if the project does not exist.
+    """
+    return service.get_absorption_metrics(project_id)
