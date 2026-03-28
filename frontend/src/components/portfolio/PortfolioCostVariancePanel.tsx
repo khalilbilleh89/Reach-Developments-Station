@@ -221,9 +221,9 @@ export function PortfolioCostVariancePanel({
             className={styles.riskFlagList}
             aria-label="Cost variance flags"
           >
-            {flags.map((flag, idx) => (
+            {flags.map((flag) => (
               <li
-                key={`${flag.flag_type}-${flag.affected_project_id ?? "portfolio"}-${idx}`}
+                key={`${flag.flag_type}-${flag.affected_project_id ?? "portfolio"}-${flag.description}`}
                 className={styles.riskFlagItem}
               >
                 <span

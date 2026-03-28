@@ -56,6 +56,8 @@ _MAJOR_OVERRUN_PCT_THRESHOLD = Decimal("10.00")
 _MAJOR_SAVING_PCT_THRESHOLD = Decimal("-10.00")
 # Top-N list size for overruns/savings
 _TOP_N_VARIANCE = 5
+# Decimal places for variance percentage rounding
+_VARIANCE_PCT_PRECISION = 4
 
 
 def _safe_pct(numerator: float, denominator: float) -> Optional[float]:
@@ -326,7 +328,7 @@ class PortfolioService:
             )
             variance_pct: Optional[float] = None
             if baseline != Decimal("0"):
-                variance_pct = round(float((variance / baseline) * 100), 4)
+                variance_pct = round(float((variance / baseline) * 100), _VARIANCE_PCT_PRECISION)
 
             variance_status = self._derive_variance_status(variance)
 
@@ -354,7 +356,7 @@ class PortfolioService:
         total_variance_pct: Optional[float] = None
         if total_baseline != Decimal("0"):
             total_variance_pct = round(
-                float((total_variance / total_baseline) * 100), 4
+                float((total_variance / total_baseline) * 100), _VARIANCE_PCT_PRECISION
             )
 
         summary = PortfolioCostVarianceSummary(
