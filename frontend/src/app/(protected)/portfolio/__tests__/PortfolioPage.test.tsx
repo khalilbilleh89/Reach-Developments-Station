@@ -69,6 +69,11 @@ jest.mock("@/lib/strategy-api", () => ({
   getPortfolioStrategyInsights: jest.fn(),
 }));
 
+// Mock portfolio auto-strategy API (PR-V7-06)
+jest.mock("@/lib/portfolio-auto-strategy-api", () => ({
+  getPortfolioAutoStrategy: jest.fn(),
+}));
+
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
@@ -76,6 +81,7 @@ import { getPortfolioAbsorption } from "@/lib/portfolio-absorption-api";
 import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
 import { getPortfolioPhasingInsights } from "@/lib/phasing-optimization-api";
 import { getPortfolioStrategyInsights } from "@/lib/strategy-api";
+import { getPortfolioAutoStrategy } from "@/lib/portfolio-auto-strategy-api";
 import PortfolioPage from "@/app/(protected)/portfolio/page";
 
 const mockGetPortfolioDashboard = getPortfolioDashboard as jest.Mock;
@@ -85,6 +91,7 @@ const mockGetPortfolioAbsorption = getPortfolioAbsorption as jest.Mock;
 const mockGetPortfolioPricingInsights = getPortfolioPricingInsights as jest.Mock;
 const mockGetPortfolioPhasingInsights = getPortfolioPhasingInsights as jest.Mock;
 const mockGetPortfolioStrategyInsights = getPortfolioStrategyInsights as jest.Mock;
+const mockGetPortfolioAutoStrategy = getPortfolioAutoStrategy as jest.Mock;
 
 // ---------- Mock data ---------------------------------------------------
 
@@ -260,6 +267,21 @@ const mockStrategyInsightsEmpty = {
   intervention_required: [],
 };
 
+const mockAutoStrategyEmpty = {
+  summary: {
+    total_projects: 0,
+    analyzed_projects: 0,
+    projects_with_baseline: 0,
+    urgent_intervention_count: 0,
+    monitor_only_count: 0,
+    no_data_count: 0,
+  },
+  top_actions: [],
+  top_risk_projects: [],
+  top_upside_projects: [],
+  project_cards: [],
+};
+
 // ---------- Tests -------------------------------------------------------
 
 describe("PortfolioPage", () => {
@@ -277,6 +299,8 @@ describe("PortfolioPage", () => {
     mockGetPortfolioPhasingInsights.mockResolvedValue(mockPhasingInsightsEmpty);
     // Default strategy insights mock returns empty state (PR-V7-05)
     mockGetPortfolioStrategyInsights.mockResolvedValue(mockStrategyInsightsEmpty);
+    // Default auto-strategy mock returns empty state (PR-V7-06)
+    mockGetPortfolioAutoStrategy.mockResolvedValue(mockAutoStrategyEmpty);
   });
 
   it("renders the page title", () => {

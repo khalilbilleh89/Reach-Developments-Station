@@ -65,6 +65,7 @@ from app.modules.strategy_generator.api import (
     projects_router as strategy_generator_projects_router,
     portfolio_router as strategy_generator_portfolio_router,
 )
+from app.modules.portfolio_auto_strategy.api import router as portfolio_auto_strategy_router
 
 # Path to the static export produced by `next build` with `output: "export"`.
 # Next.js writes self-contained HTML files and assets to this directory.
@@ -165,6 +166,7 @@ app.include_router(phasing_optimization_portfolio_router, prefix=_API_PREFIX)
 app.include_router(release_simulation_router, prefix=_API_PREFIX)
 app.include_router(strategy_generator_projects_router, prefix=_API_PREFIX)
 app.include_router(strategy_generator_portfolio_router, prefix=_API_PREFIX)
+app.include_router(portfolio_auto_strategy_router, prefix=_API_PREFIX)
 
 # Mount Next.js compiled static chunks (/_next/static/*) when the build exists.
 # These are the JS/CSS assets referenced by the pre-rendered HTML pages.
