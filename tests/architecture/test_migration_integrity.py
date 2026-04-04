@@ -61,6 +61,8 @@ import app.modules.sales_exceptions.models  # noqa: F401
 import app.modules.scenario.models  # noqa: F401
 import app.modules.settings.models  # noqa: F401
 import app.modules.units.models  # noqa: F401
+import app.modules.strategy_approval.models  # noqa: F401
+import app.modules.strategy_execution_trigger.models  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Helpers

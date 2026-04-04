@@ -1,7 +1,7 @@
 """add strategy approvals table
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0061b
+Revises: 0061
 Create Date: 2026-04-04
 
 PR-V7-08 — Strategy Review & Approval Workflow
@@ -48,8 +48,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0061"
-down_revision: Union[str, None] = "0060"
+revision: str = "0061b"
+down_revision: Union[str, None] = "0061"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
