@@ -509,7 +509,7 @@ without currency annotation.
 ### Project Base Currency Enforcement Rule
 
 Financial summary endpoints scoped to a single project
-(e.g. `GET /projects/{id}/finance`) must:
+(e.g. `GET /api/v1/finance/projects/{project_id}/summary`) must:
 
 1. Read the project's `base_currency` field.
 2. Include `currency` in the response payload so callers know the

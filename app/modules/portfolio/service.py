@@ -70,6 +70,19 @@ def _safe_pct(numerator: float, denominator: float) -> Optional[float]:
     return round((numerator / denominator) * 100, 2)
 
 
+def _format_currency_totals(totals: Dict[str, float]) -> str:
+    """Format a currency-keyed totals dict for human-readable display.
+
+    Example: {"AED": 100000.0, "USD": 5000.0} → "AED 100,000.00; USD 5,000.00"
+    Returns "0.00" when the dict is empty.
+    """
+    if not totals:
+        return "0.00"
+    return "; ".join(
+        f"{currency} {amount:,.2f}" for currency, amount in sorted(totals.items())
+    )
+
+
 class PortfolioService:
     """Service that assembles portfolio dashboard data from source domain records."""
 
@@ -86,15 +99,12 @@ class PortfolioService:
         Portfolio-wide aggregates that feed multiple sections are computed once
         and passed into the section builders to avoid redundant DB round-trips.
         """
-        # Pre-compute shared portfolio-wide aggregates used by multiple sections
         total_projects = self.repo.count_projects()
-        collected_cash = self.repo.sum_collected_cash()
-        outstanding_balance = self.repo.sum_outstanding_balance()
 
-        summary = self._build_summary(total_projects, collected_cash, outstanding_balance)
+        summary = self._build_summary(total_projects)
         projects = self._build_project_cards()
         pipeline = self._build_pipeline_summary(total_projects)
-        collections = self._build_collections_summary(collected_cash, outstanding_balance)
+        collections = self._build_collections_summary()
         risk_flags = self._derive_risk_flags(projects, collections)
 
         return PortfolioDashboardResponse(
@@ -109,12 +119,7 @@ class PortfolioService:
     # Section builders
     # ------------------------------------------------------------------
 
-    def _build_summary(
-        self,
-        total_projects: int,
-        collected_cash: float,
-        outstanding_balance: float,
-    ) -> PortfolioSummary:
+    def _build_summary(self, total_projects: int) -> PortfolioSummary:
         unit_counts = self.repo.count_units_by_status()
         return PortfolioSummary(
             total_projects=total_projects,
@@ -124,9 +129,9 @@ class PortfolioService:
             reserved_units=unit_counts.get("reserved", 0),
             under_contract_units=unit_counts.get("under_contract", 0),
             registered_units=unit_counts.get("registered", 0),
-            contracted_revenue=self.repo.sum_contracted_revenue(),
-            collected_cash=collected_cash,
-            outstanding_balance=outstanding_balance,
+            contracted_revenue=self.repo.contracted_revenue_by_currency(),
+            collected_cash=self.repo.collected_cash_by_currency(),
+            outstanding_balance=self.repo.outstanding_balance_by_currency(),
         )
 
     def _build_project_cards(self) -> List[PortfolioProjectCard]:
@@ -167,6 +172,7 @@ class PortfolioService:
                     project_name=project.name,
                     project_code=project.code,
                     status=project.status,
+                    currency=project.base_currency,
                     total_units=total_units,
                     available_units=available,
                     reserved_units=reserved,
@@ -196,15 +202,17 @@ class PortfolioService:
             projects_with_no_feasibility=projects_with_no_feasibility,
         )
 
-    def _build_collections_summary(
-        self,
-        collected_cash: float,
-        outstanding_balance: float,
-    ) -> PortfolioCollectionsSummary:
+    def _build_collections_summary(self) -> PortfolioCollectionsSummary:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
-        overdue_balance = self.repo.sum_overdue_balance()
-        collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
+        overdue_balance = self.repo.overdue_balance_by_currency()
+        # Collection rate is a dimensionless portfolio-wide ratio; computed from scalar
+        # sums so it remains a single percentage regardless of currency composition.
+        collected_cash_total = self.repo.sum_collected_cash()
+        outstanding_balance_total = self.repo.sum_outstanding_balance()
+        collection_rate_pct = _safe_pct(
+            collected_cash_total, collected_cash_total + outstanding_balance_total
+        )
 
         return PortfolioCollectionsSummary(
             total_receivables=total_receivables,
@@ -260,7 +268,8 @@ class PortfolioService:
                     severity=severity,
                     description=(
                         f"{collections.overdue_receivables} overdue receivable(s) with "
-                        f"total outstanding balance of {collections.overdue_balance:,.2f}."
+                        f"total outstanding balance of "
+                        f"{_format_currency_totals(collections.overdue_balance)}."
                     ),
                     affected_project_id=None,
                     affected_project_name=None,
@@ -345,6 +354,7 @@ class PortfolioService:
                 PortfolioCostVarianceProjectCard(
                     project_id=pid,
                     project_name=project.name,
+                    currency=project.base_currency,
                     comparison_set_count=set_count_by_project.get(pid, 0),
                     latest_comparison_stage=stage_by_project.get(pid),
                     baseline_total=float(baseline),
@@ -363,24 +373,27 @@ class PortfolioService:
         # Sort all cards by variance_amount descending (largest overrun first)
         project_cards.sort(key=lambda c: c.variance_amount, reverse=True)
 
-        # Build portfolio-wide summary
-        total_baseline, total_comparison, total_variance = (
-            self.repo.get_portfolio_variance_totals()
-        )
-        total_variance_pct: Optional[float] = None
-        if total_baseline != Decimal("0"):
-            total_variance_pct = float(
-                round(
-                    (total_variance / total_baseline) * Decimal("100"),
-                    _VARIANCE_PCT_PRECISION,
-                )
+        # Build portfolio-wide summary grouped by currency (aggregation guard rule)
+        totals_by_currency = self.repo.get_portfolio_variance_totals_by_currency()
+        total_baseline_amount: Dict[str, float] = {}
+        total_comparison_amount: Dict[str, float] = {}
+        total_variance_amount: Dict[str, float] = {}
+        total_variance_pct: Dict[str, Optional[float]] = {}
+        for currency, (b, c, v) in totals_by_currency.items():
+            total_baseline_amount[currency] = float(b)
+            total_comparison_amount[currency] = float(c)
+            total_variance_amount[currency] = float(v)
+            total_variance_pct[currency] = (
+                float(round((v / b) * Decimal("100"), _VARIANCE_PCT_PRECISION))
+                if b != Decimal("0")
+                else None
             )
 
         summary = PortfolioCostVarianceSummary(
             projects_with_comparison_sets=len(projects_with_sets),
-            total_baseline_amount=float(total_baseline),
-            total_comparison_amount=float(total_comparison),
-            total_variance_amount=float(total_variance),
+            total_baseline_amount=total_baseline_amount,
+            total_comparison_amount=total_comparison_amount,
+            total_variance_amount=total_variance_amount,
             total_variance_pct=total_variance_pct,
         )
 

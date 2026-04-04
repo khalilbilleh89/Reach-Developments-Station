@@ -92,13 +92,13 @@ def test_cost_variance_empty_state(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    # Summary is all zeros
+    # Summary is all zeros (empty dicts for currency-keyed totals)
     summary = data["summary"]
     assert summary["projects_with_comparison_sets"] == 0
-    assert summary["total_baseline_amount"] == 0.0
-    assert summary["total_comparison_amount"] == 0.0
-    assert summary["total_variance_amount"] == 0.0
-    assert summary["total_variance_pct"] is None
+    assert summary["total_baseline_amount"] == {}
+    assert summary["total_comparison_amount"] == {}
+    assert summary["total_variance_amount"] == {}
+    assert summary["total_variance_pct"] == {}
 
     # Lists are empty
     assert data["projects"] == []
@@ -126,11 +126,11 @@ def test_cost_variance_summary_totals(client: TestClient) -> None:
 
     summary = data["summary"]
     assert summary["projects_with_comparison_sets"] == 1
-    assert summary["total_baseline_amount"] == 1_000_000.0
-    assert summary["total_comparison_amount"] == 1_100_000.0
-    assert summary["total_variance_amount"] == 100_000.0
+    assert summary["total_baseline_amount"] == {"AED": pytest.approx(1_000_000.0, rel=1e-3)}
+    assert summary["total_comparison_amount"] == {"AED": pytest.approx(1_100_000.0, rel=1e-3)}
+    assert summary["total_variance_amount"] == {"AED": pytest.approx(100_000.0, rel=1e-3)}
     # variance_pct = (100000 / 1000000) * 100 = 10.0
-    assert summary["total_variance_pct"] == pytest.approx(10.0, rel=1e-3)
+    assert summary["total_variance_pct"] == {"AED": pytest.approx(10.0, rel=1e-3)}
 
 
 def test_cost_variance_summary_saving(client: TestClient) -> None:
@@ -147,9 +147,9 @@ def test_cost_variance_summary_saving(client: TestClient) -> None:
     data = resp.json()
 
     summary = data["summary"]
-    assert summary["total_variance_amount"] == pytest.approx(-200_000.0, rel=1e-3)
+    assert summary["total_variance_amount"] == {"AED": pytest.approx(-200_000.0, rel=1e-3)}
     # variance_pct = (-200000 / 2000000) * 100 = -10.0
-    assert summary["total_variance_pct"] == pytest.approx(-10.0, rel=1e-3)
+    assert summary["total_variance_pct"] == {"AED": pytest.approx(-10.0, rel=1e-3)}
 
 
 def test_cost_variance_summary_zero_baseline(client: TestClient) -> None:
@@ -165,7 +165,7 @@ def test_cost_variance_summary_zero_baseline(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    assert data["summary"]["total_variance_pct"] is None
+    assert data["summary"]["total_variance_pct"] == {"AED": None}
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +198,9 @@ def test_cost_variance_excludes_inactive_sets(client: TestClient) -> None:
     data = resp.json()
 
     # Only active set should contribute
-    assert data["summary"]["total_baseline_amount"] == pytest.approx(500_000.0, rel=1e-3)
-    assert data["summary"]["total_comparison_amount"] == pytest.approx(550_000.0, rel=1e-3)
-    assert data["summary"]["total_variance_amount"] == pytest.approx(50_000.0, rel=1e-3)
+    assert data["summary"]["total_baseline_amount"] == {"AED": pytest.approx(500_000.0, rel=1e-3)}
+    assert data["summary"]["total_comparison_amount"] == {"AED": pytest.approx(550_000.0, rel=1e-3)}
+    assert data["summary"]["total_variance_amount"] == {"AED": pytest.approx(50_000.0, rel=1e-3)}
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +227,7 @@ def test_cost_variance_project_card(client: TestClient) -> None:
     assert card is not None
 
     assert card["project_name"] == "Overrun Project"
+    assert card["currency"] == "AED"
     assert card["comparison_set_count"] == 1
     assert card["latest_comparison_stage"] == "baseline_vs_tender"
     assert card["baseline_total"] == pytest.approx(1_500_000.0, rel=1e-3)

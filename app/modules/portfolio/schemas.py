@@ -20,7 +20,7 @@ Schema hierarchy:
   PortfolioCostVarianceResponse       — top-level cost variance envelope
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -35,14 +35,20 @@ class PortfolioSummary(BaseModel):
     reserved_units: int = Field(..., description="Units with status 'reserved'")
     under_contract_units: int = Field(..., description="Units with status 'under_contract'")
     registered_units: int = Field(..., description="Units with status 'registered'")
-    contracted_revenue: float = Field(
-        ..., description="Sum of contract_price for all non-cancelled sales contracts"
+    contracted_revenue: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of contract_price for all non-cancelled sales contracts, "
+            "grouped by currency code (e.g. {\"AED\": 1200000.0, \"USD\": 500000.0})"
+        ),
     )
-    collected_cash: float = Field(
-        ..., description="Sum of amount_paid across all receivables"
+    collected_cash: Dict[str, float] = Field(
+        ...,
+        description="Sum of amount_paid across all receivables, grouped by currency code",
     )
-    outstanding_balance: float = Field(
-        ..., description="Sum of balance_due across all open receivables"
+    outstanding_balance: Dict[str, float] = Field(
+        ...,
+        description="Sum of balance_due across all open receivables, grouped by currency code",
     )
 
 
@@ -53,19 +59,21 @@ class PortfolioProjectCard(BaseModel):
     project_name: str
     project_code: str
     status: str
+    currency: str = Field(..., description="Project base currency (denomination of all monetary fields)")
     total_units: int
     available_units: int
     reserved_units: int
     under_contract_units: int
     registered_units: int
     contracted_revenue: float = Field(
-        ..., description="Contracted revenue for this project"
+        ...,
+        description="Contracted revenue for this project (denominated in currency)",
     )
     collected_cash: float = Field(
-        ..., description="Cash collected for this project"
+        ..., description="Cash collected for this project (denominated in currency)"
     )
     outstanding_balance: float = Field(
-        ..., description="Outstanding receivable balance for this project"
+        ..., description="Outstanding receivable balance for this project (denominated in currency)"
     )
     sell_through_pct: Optional[float] = Field(
         None,
@@ -98,14 +106,18 @@ class PortfolioCollectionsSummary(BaseModel):
     overdue_receivables: int = Field(
         ..., description="Receivables with status 'overdue'"
     )
-    overdue_balance: float = Field(
+    overdue_balance: Dict[str, float] = Field(
         ...,
-        description="Sum of balance_due for overdue receivables"
+        description=(
+            "Sum of balance_due for overdue receivables, grouped by currency code "
+            "(e.g. {\"AED\": 50000.0})"
+        ),
     )
     collection_rate_pct: Optional[float] = Field(
         None,
         description=(
-            "amount_paid / (amount_paid + balance_due) expressed as a percentage; "
+            "Portfolio-wide collection rate: amount_paid / (amount_paid + balance_due) "
+            "expressed as a percentage; approximate across currencies; "
             "null when no receivables exist"
         ),
     )
@@ -162,24 +174,33 @@ class PortfolioCostVarianceSummary(BaseModel):
     projects_with_comparison_sets: int = Field(
         ..., description="Number of projects that have at least one active comparison set"
     )
-    total_baseline_amount: float = Field(
-        ..., description="Sum of all baseline amounts across active comparison lines"
-    )
-    total_comparison_amount: float = Field(
-        ..., description="Sum of all comparison amounts across active comparison lines"
-    )
-    total_variance_amount: float = Field(
+    total_baseline_amount: Dict[str, float] = Field(
         ...,
         description=(
-            "Total variance amount (comparison - baseline) across active comparison lines. "
+            "Sum of all baseline amounts across active comparison lines, "
+            "grouped by currency code (e.g. {\"AED\": 1000000.0})"
+        ),
+    )
+    total_comparison_amount: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of all comparison amounts across active comparison lines, "
+            "grouped by currency code"
+        ),
+    )
+    total_variance_amount: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Total variance amount (comparison - baseline) across active comparison lines, "
+            "grouped by currency code. "
             "Positive → net overrun; negative → net saving."
         ),
     )
-    total_variance_pct: Optional[float] = Field(
-        None,
+    total_variance_pct: Dict[str, Optional[float]] = Field(
+        default_factory=dict,
         description=(
-            "Total variance as a percentage of total baseline; "
-            "null when total baseline is zero."
+            "Total variance as a percentage of total baseline, grouped by currency code; "
+            "per-currency value is null when that currency's baseline is zero."
         ),
     )
 
@@ -189,6 +210,9 @@ class PortfolioCostVarianceProjectCard(BaseModel):
 
     project_id: str
     project_name: str
+    currency: str = Field(
+        ..., description="Project base currency (denomination of all monetary fields)"
+    )
     comparison_set_count: int = Field(
         ..., description="Number of active comparison sets for this project"
     )
@@ -196,16 +220,18 @@ class PortfolioCostVarianceProjectCard(BaseModel):
         None, description="Stage of the most recently created active comparison set"
     )
     baseline_total: float = Field(
-        ..., description="Sum of baseline amounts across all active comparison lines"
+        ...,
+        description="Sum of baseline amounts across all active comparison lines (denominated in currency)",
     )
     comparison_total: float = Field(
-        ..., description="Sum of comparison amounts across all active comparison lines"
+        ...,
+        description="Sum of comparison amounts across all active comparison lines (denominated in currency)",
     )
     variance_amount: float = Field(
         ...,
         description=(
-            "Net variance (comparison - baseline) across all active comparison lines. "
-            "Positive → overrun; negative → saving."
+            "Net variance (comparison - baseline) across all active comparison lines "
+            "(denominated in currency). Positive → overrun; negative → saving."
         ),
     )
     variance_pct: Optional[float] = Field(
