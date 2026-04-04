@@ -22,6 +22,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.payment_plans.models import PaymentPlanTemplate, PaymentSchedule
 from app.modules.payment_plans.repository import (
     PaymentPlanTemplateRepository,
@@ -213,6 +214,10 @@ class PaymentPlanService:
 
         self._validate_schedule_total(lines, contract_price)
 
+        contract_currency = (
+            getattr(contract, "currency", DEFAULT_CURRENCY) or DEFAULT_CURRENCY
+        )
+
         return [
             {
                 "contract_id": contract.id,
@@ -220,6 +225,7 @@ class PaymentPlanService:
                 "installment_number": line.installment_number,
                 "due_date": line.due_date,
                 "due_amount": line.due_amount,
+                "currency": contract_currency,
                 "status": PaymentScheduleStatus.PENDING.value,
                 "notes": line.notes,
             }

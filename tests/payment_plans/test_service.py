@@ -57,6 +57,7 @@ def _make_contract(
     db: Session,
     project_code: str = "PRJ-PP-SVC",
     contract_price: float = 500_000.0,
+    currency: str = "AED",
 ) -> str:
     from app.modules.sales.models import Buyer, SalesContract
 
@@ -72,6 +73,7 @@ def _make_contract(
         contract_number=f"CNT-{project_code}-001",
         contract_date=date(2026, 1, 1),
         contract_price=contract_price,
+        currency=currency,
     )
     db.add(contract)
     db.commit()
@@ -529,3 +531,85 @@ def test_regenerate_schedule_mismatched_contract_id_rejected(db_session: Session
     with pytest.raises(HTTPException) as exc:
         svc.regenerate_schedule_for_contract(contract_id, req)
     assert exc.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# PR-CURRENCY-002A: non-default currency propagation tests
+# ---------------------------------------------------------------------------
+
+
+def test_schedule_rows_inherit_jod_contract_currency(db_session: Session):
+    """Generated schedule rows must be denominated in JOD when the contract is JOD."""
+    svc = PaymentPlanService(db_session)
+    contract_id = _make_contract(db_session, "PRJ-JOD-PP", currency="JOD")
+    template = svc.create_template(
+        PaymentPlanTemplateCreate(
+            name="JOD Plan",
+            plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
+            down_payment_percent=10.0,
+            number_of_installments=6,
+            installment_frequency=InstallmentFrequency.MONTHLY,
+        )
+    )
+    schedule = svc.generate_schedule_for_contract(
+        PaymentPlanGenerateRequest(contract_id=contract_id, template_id=template.id)
+    )
+    for row in schedule.items:
+        assert row.currency == "JOD", f"Expected JOD, got {row.currency!r}"
+
+
+def test_schedule_rows_inherit_usd_contract_currency(db_session: Session):
+    """Generated schedule rows must be denominated in USD when the contract is USD."""
+    svc = PaymentPlanService(db_session)
+    contract_id = _make_contract(db_session, "PRJ-USD-PP", currency="USD")
+    template = svc.create_template(
+        PaymentPlanTemplateCreate(
+            name="USD Plan",
+            plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
+            down_payment_percent=10.0,
+            number_of_installments=6,
+            installment_frequency=InstallmentFrequency.MONTHLY,
+        )
+    )
+    schedule = svc.generate_schedule_for_contract(
+        PaymentPlanGenerateRequest(contract_id=contract_id, template_id=template.id)
+    )
+    for row in schedule.items:
+        assert row.currency == "USD", f"Expected USD, got {row.currency!r}"
+
+
+def test_schedule_rows_default_to_aed_when_contract_currency_not_set(db_session: Session):
+    """Schedule rows fall back to AED when the contract has no explicit currency."""
+    from app.modules.sales.models import Buyer, SalesContract
+
+    unit_id = _make_unit(db_session, "PRJ-NOCC-PP")
+    buyer = Buyer(full_name="No-CC Buyer", email="nocc@pp.com", phone="+1")
+    db_session.add(buyer)
+    db_session.flush()
+    # Deliberately omit currency to verify fallback behaviour
+    contract = SalesContract(
+        unit_id=unit_id,
+        buyer_id=buyer.id,
+        contract_number="CNT-NOCC-001",
+        contract_date=date(2026, 1, 1),
+        contract_price=300_000.0,
+    )
+    db_session.add(contract)
+    db_session.commit()
+    db_session.refresh(contract)
+
+    svc = PaymentPlanService(db_session)
+    template = svc.create_template(
+        PaymentPlanTemplateCreate(
+            name="No-CC Plan",
+            plan_type=PaymentPlanType.STANDARD_INSTALLMENTS,
+            down_payment_percent=10.0,
+            number_of_installments=6,
+            installment_frequency=InstallmentFrequency.MONTHLY,
+        )
+    )
+    schedule = svc.generate_schedule_for_contract(
+        PaymentPlanGenerateRequest(contract_id=contract.id, template_id=template.id)
+    )
+    for row in schedule.items:
+        assert row.currency == "AED", f"Expected AED fallback, got {row.currency!r}"

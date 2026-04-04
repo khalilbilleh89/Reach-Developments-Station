@@ -92,6 +92,7 @@ def _create_active_contract(
     db: Session,
     project_code: str = "PRJ-CPS",
     email: str = "buyer@cps.com",
+    currency: str = "AED",
 ) -> str:
     """Create a full sales workflow and activate the contract. Returns contract_id."""
     unit_id = _make_unit(db, project_code)
@@ -116,6 +117,7 @@ def _create_active_contract(
             contract_number=f"CNT-{project_code}",
             contract_date=_CONTRACT_DATE,
             contract_price=_CONTRACT_PRICE,
+            currency=currency,
         )
     )
     svc.activate_contract(contract.id)
@@ -797,3 +799,43 @@ def test_db_unique_constraint_prevents_duplicate_installments(db_session: Sessio
     with pytest.raises(IntegrityError):
         db_session.flush()
     db_session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# PR-CURRENCY-002A: non-default currency propagation tests
+# ---------------------------------------------------------------------------
+
+
+def test_schedule_inherits_jod_contract_currency(db_session: Session):
+    """A JOD contract must generate JOD-denominated schedule rows."""
+    contract_id = _create_active_contract(
+        db_session, "PRJ-JOD", "jod@cps.com", currency="JOD"
+    )
+    svc = ContractPaymentService(db_session)
+    items = svc.list_schedule(contract_id).items
+    assert len(items) == 4
+    for item in items:
+        assert item.currency == "JOD", f"Expected JOD, got {item.currency!r}"
+
+
+def test_schedule_inherits_usd_contract_currency(db_session: Session):
+    """A USD contract must generate USD-denominated schedule rows."""
+    contract_id = _create_active_contract(
+        db_session, "PRJ-USD", "usd@cps.com", currency="USD"
+    )
+    svc = ContractPaymentService(db_session)
+    items = svc.list_schedule(contract_id).items
+    assert len(items) == 4
+    for item in items:
+        assert item.currency == "USD", f"Expected USD, got {item.currency!r}"
+
+
+def test_schedule_currency_defaults_to_aed_when_not_specified(db_session: Session):
+    """Contracts without explicit currency must produce AED schedule rows."""
+    contract_id = _create_active_contract(
+        db_session, "PRJ-DEFT", "deft@cps.com"
+    )
+    svc = ContractPaymentService(db_session)
+    items = svc.list_schedule(contract_id).items
+    for item in items:
+        assert item.currency == "AED"
