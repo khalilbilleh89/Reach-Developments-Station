@@ -100,11 +100,18 @@ class PortfolioService:
         and passed into the section builders to avoid redundant DB round-trips.
         """
         total_projects = self.repo.count_projects()
+        # Pre-fetch currency-grouped totals shared by the summary and collections sections
+        collected_cash_by_ccy = self.repo.collected_cash_by_currency()
+        outstanding_balance_by_ccy = self.repo.outstanding_balance_by_currency()
 
-        summary = self._build_summary(total_projects)
+        summary = self._build_summary(
+            total_projects, collected_cash_by_ccy, outstanding_balance_by_ccy
+        )
         projects = self._build_project_cards()
         pipeline = self._build_pipeline_summary(total_projects)
-        collections = self._build_collections_summary()
+        collections = self._build_collections_summary(
+            collected_cash_by_ccy, outstanding_balance_by_ccy
+        )
         risk_flags = self._derive_risk_flags(projects, collections)
 
         return PortfolioDashboardResponse(
@@ -119,7 +126,12 @@ class PortfolioService:
     # Section builders
     # ------------------------------------------------------------------
 
-    def _build_summary(self, total_projects: int) -> PortfolioSummary:
+    def _build_summary(
+        self,
+        total_projects: int,
+        collected_cash_by_ccy: Dict[str, float],
+        outstanding_balance_by_ccy: Dict[str, float],
+    ) -> PortfolioSummary:
         unit_counts = self.repo.count_units_by_status()
         return PortfolioSummary(
             total_projects=total_projects,
@@ -130,8 +142,8 @@ class PortfolioService:
             under_contract_units=unit_counts.get("under_contract", 0),
             registered_units=unit_counts.get("registered", 0),
             contracted_revenue=self.repo.contracted_revenue_by_currency(),
-            collected_cash=self.repo.collected_cash_by_currency(),
-            outstanding_balance=self.repo.outstanding_balance_by_currency(),
+            collected_cash=collected_cash_by_ccy,
+            outstanding_balance=outstanding_balance_by_ccy,
         )
 
     def _build_project_cards(self) -> List[PortfolioProjectCard]:
@@ -202,14 +214,18 @@ class PortfolioService:
             projects_with_no_feasibility=projects_with_no_feasibility,
         )
 
-    def _build_collections_summary(self) -> PortfolioCollectionsSummary:
+    def _build_collections_summary(
+        self,
+        collected_cash_by_ccy: Dict[str, float],
+        outstanding_balance_by_ccy: Dict[str, float],
+    ) -> PortfolioCollectionsSummary:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
         overdue_balance = self.repo.overdue_balance_by_currency()
-        # Collection rate is a dimensionless portfolio-wide ratio; computed from scalar
-        # sums so it remains a single percentage regardless of currency composition.
-        collected_cash_total = self.repo.sum_collected_cash()
-        outstanding_balance_total = self.repo.sum_outstanding_balance()
+        # Collection rate is a dimensionless portfolio-wide ratio computed from the
+        # pre-fetched currency-keyed totals, avoiding extra scalar sum queries.
+        collected_cash_total = sum(collected_cash_by_ccy.values())
+        outstanding_balance_total = sum(outstanding_balance_by_ccy.values())
         collection_rate_pct = _safe_pct(
             collected_cash_total, collected_cash_total + outstanding_balance_total
         )
