@@ -61,6 +61,8 @@ import app.modules.sales_exceptions.models  # noqa: F401
 import app.modules.scenario.models  # noqa: F401
 import app.modules.settings.models  # noqa: F401
 import app.modules.units.models  # noqa: F401
+import app.modules.strategy_approval.models  # noqa: F401
+import app.modules.strategy_execution_trigger.models  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -165,6 +167,46 @@ class TestMigrationChainStructure:
         assert head == str(max_num).zfill(4) or head_int == max_num, (
             f"Head revision is {head!r} but highest-numbered migration file is "
             f"{max_num:04d}. Ensure the head revision matches the latest migration."
+        )
+
+    def test_critical_revision_parents(self):
+        """
+        Regression guard for the V7-09 migration-chain fix.
+
+        The chain around the currency / approval / execution-trigger migrations
+        was previously broken by a duplicate ``revision = "0061"`` declaration.
+        This test pins the known-good parent relationships so that the same
+        breakage cannot silently creep back in.
+
+        Expected chain segment:
+          0061 (currency)  → down_revision = "0060"
+          0061b (approvals) → down_revision = "0061"
+          0062 (partial index) → down_revision = "0061b"
+          0063 (execution triggers) → down_revision = "0062"
+        """
+        script = _script_dir()
+        rev_map = {rev.revision: rev for rev in script.walk_revisions()}
+
+        expected_parents = {
+            "0061": "0060",
+            "0061b": "0061",
+            "0062": "0061b",
+            "0063": "0062",
+        }
+        errors = []
+        for rev_id, expected_parent in expected_parents.items():
+            if rev_id not in rev_map:
+                errors.append(f"Revision {rev_id!r} not found in migration chain")
+                continue
+            actual_parent = rev_map[rev_id].down_revision
+            if actual_parent != expected_parent:
+                errors.append(
+                    f"Revision {rev_id!r}: expected down_revision={expected_parent!r}, "
+                    f"got {actual_parent!r}"
+                )
+        assert not errors, (
+            "Critical revision parent mismatch — the migration chain has drifted:\n"
+            + "\n".join(f"  {e}" for e in errors)
         )
 
 
@@ -787,3 +829,141 @@ class TestSchemaMatchesModels:
             "``batch_alter_table``:\n"
             + "\n".join(f"  - {f}" for f in unguarded)
         )
+
+
+# ---------------------------------------------------------------------------
+# 8. Migration idempotency
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationIdempotency:
+    """
+    Verify that migration ``0061`` (currency source-of-truth) is idempotent:
+    upgrade must succeed even when the columns it would normally add already
+    exist in the database (e.g. schema drift, drifted DB, or a prior
+    interrupted run).
+
+    This prevents the class of failure where:
+      - A DB was partially migrated via another path.
+      - The column already exists.
+      - Alembic tries to add it again and hits a duplicate-column error.
+    """
+
+    def test_upgrade_tolerates_preexisting_base_currency_column(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Scenario: projects.base_currency already exists in the DB before
+        migration 0061 runs.
+
+        Steps:
+          1. Upgrade to revision 0060 (the revision immediately before 0061).
+          2. Manually add the ``base_currency`` column to ``projects`` (simulating
+             schema drift or a prior partial migration).
+          3. Upgrade to ``head``.
+
+        Expected: upgrade completes without error.
+        """
+        from alembic import command as alembic_command
+
+        db_file = str(tmp_path / "idempotent_base_currency.db")
+        db_url = f"sqlite:///{db_file}"
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        cfg = _alembic_cfg(db_url)
+
+        # Step 1: upgrade to 0060.
+        try:
+            alembic_command.upgrade(cfg, "0060")
+        except NotImplementedError as exc:
+            pytest.xfail(
+                f"SQLite limitation prevented partial migration run to 0060: {exc}"
+            )
+
+        # Step 2: manually add the base_currency column that 0061 would add.
+        engine = create_engine(db_url)
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE projects ADD COLUMN base_currency VARCHAR(10) "
+                    "NOT NULL DEFAULT 'AED'"
+                )
+            )
+            conn.commit()
+        engine.dispose()
+
+        # Step 3: upgrade to head — must tolerate the pre-existing column.
+        try:
+            alembic_command.upgrade(cfg, "head")
+        except NotImplementedError as exc:
+            if "SQLite" in str(exc):
+                pytest.xfail(
+                    f"SQLite limitation in migration chain after 0061: {exc}"
+                )
+            raise
+        except Exception as exc:
+            pytest.fail(
+                f"upgrade to head raised an error even though projects.base_currency "
+                f"already existed — migration 0061 must be idempotent.\n"
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    def test_upgrade_tolerates_preexisting_currency_columns(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Scenario: several 'currency' columns added by migration 0061 already
+        exist in the database (e.g. applied via another migration branch).
+
+        Steps:
+          1. Upgrade to revision 0060.
+          2. Manually add ``currency`` to ``sales_contracts`` and
+             ``payment_schedules`` (representative subset).
+          3. Upgrade to ``head``.
+
+        Expected: upgrade completes without error.
+        """
+        from alembic import command as alembic_command
+
+        db_file = str(tmp_path / "idempotent_currency_cols.db")
+        db_url = f"sqlite:///{db_file}"
+        monkeypatch.setenv("DATABASE_URL", db_url)
+
+        cfg = _alembic_cfg(db_url)
+
+        try:
+            alembic_command.upgrade(cfg, "0060")
+        except NotImplementedError as exc:
+            pytest.xfail(
+                f"SQLite limitation prevented partial migration run to 0060: {exc}"
+            )
+
+        engine = create_engine(db_url)
+        with engine.connect() as conn:
+            for tbl in ("sales_contracts", "payment_schedules"):
+                # Table name is a literal from a controlled tuple — not
+                # user-supplied.  SQLite does not support bind parameters in
+                # ALTER TABLE, so we construct the DDL from the trusted constant.
+                conn.execute(
+                    text(
+                        "ALTER TABLE " + tbl + " ADD COLUMN currency VARCHAR(10) "
+                        "NOT NULL DEFAULT 'AED'"
+                    )
+                )
+            conn.commit()
+        engine.dispose()
+
+        try:
+            alembic_command.upgrade(cfg, "head")
+        except NotImplementedError as exc:
+            if "SQLite" in str(exc):
+                pytest.xfail(
+                    f"SQLite limitation in migration chain after 0061: {exc}"
+                )
+            raise
+        except Exception as exc:
+            pytest.fail(
+                f"upgrade to head raised an error even though currency columns "
+                f"already existed — migration 0061 must be idempotent.\n"
+                f"{type(exc).__name__}: {exc}"
+            )
