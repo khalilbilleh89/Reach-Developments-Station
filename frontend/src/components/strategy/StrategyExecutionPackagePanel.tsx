@@ -340,8 +340,8 @@ export function StrategyExecutionPackagePanel({
           <h4 style={{ fontSize: "0.875rem", fontWeight: 600, margin: "0 0 8px", color: "var(--color-text)" }}>
             Cautions
           </h4>
-          {pkg.cautions.map((caution, i) => (
-            <CautionCard key={i} caution={caution} />
+          {pkg.cautions.map((caution) => (
+            <CautionCard key={`${caution.severity}-${caution.caution_title}`} caution={caution} />
           ))}
         </div>
       )}

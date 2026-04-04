@@ -62,6 +62,7 @@ from app.modules.portfolio_auto_strategy.service import (
     _compute_urgency_score,
 )
 from app.modules.release_simulation.schemas import SimulationResult
+from app.modules.release_simulation.service import ReleaseSimulationRepository
 from app.modules.strategy_execution_package.repository import StrategyExecutionPackageRepository
 from app.modules.strategy_execution_package.schemas import (
     ExecutionReadiness,
@@ -81,6 +82,10 @@ _logger = get_logger("reach_developments.strategy_execution_package")
 
 # Top-N items for portfolio sub-lists.
 _TOP_N = 5
+
+# Maximum number of projects processed in one portfolio endpoint call.
+# Mirrors the cap used in StrategyGeneratorService._PORTFOLIO_PROJECT_LIMIT.
+_PORTFOLIO_PROJECT_LIMIT = 50
 
 # Execution readiness → sort order (lower = higher priority in portfolio view).
 _READINESS_ORDER: Dict[str, int] = {
@@ -549,6 +554,15 @@ class StrategyExecutionPackageService:
         self._db = db
         self._repo = StrategyExecutionPackageRepository(db)
         self._strategy_service = StrategyGeneratorService(db)
+        self._simulation_repo = ReleaseSimulationRepository(db)
+
+    def _has_feasibility_baseline(self, project_id: str) -> bool:
+        """Return True when the project has at least one calculated feasibility run.
+
+        Delegates to ReleaseSimulationRepository to avoid duplicating the query.
+        """
+        has_run, *_ = self._simulation_repo.get_feasibility_baseline(project_id)
+        return has_run
 
     def get_project_execution_package(
         self, project_id: str
@@ -571,11 +585,13 @@ class StrategyExecutionPackageService:
                 "strategy_execution_package: strategy generation failed for project=%s",
                 project_id,
             )
-            # Return an insufficient_data package so the caller always gets a valid response.
+            # Compute baseline independently so the fallback response reflects the
+            # true baseline state even when strategy generation fails for other reasons.
+            has_baseline = self._has_feasibility_baseline(project_id)
             rec = RecommendedStrategyResponse(
                 project_id=project_id,
                 project_name=project.name,
-                has_feasibility_baseline=False,
+                has_feasibility_baseline=has_baseline,
                 best_strategy=None,
                 top_strategies=[],
                 reason="Strategy generation failed — check project configuration.",
@@ -598,18 +614,27 @@ class StrategyExecutionPackageService:
 
         Steps:
           1. Load all projects (single bulk query).
-          2. Generate strategy + execution package for each project.
-          3. Convert each project package into a compact portfolio card.
-          4. Rank cards by three-key rule.
-          5. Assemble summary KPIs and top-N sub-lists.
-          6. Return PortfolioExecutionPackageResponse.
+          2. Cap to _PORTFOLIO_PROJECT_LIMIT to prevent request timeouts.
+          3. Generate strategy + execution package for each project.
+          4. Convert each project package into a compact portfolio card.
+          5. Rank cards by three-key rule.
+          6. Assemble summary KPIs and top-N sub-lists.
+          7. Return PortfolioExecutionPackageResponse.
 
         Per-project failures are caught and logged; those projects receive an
         insufficient_data card rather than failing the whole response.
 
         All source records are read-only — nothing is mutated.
         """
-        projects = self._repo.list_projects()
+        all_projects = self._repo.list_projects()
+        projects = all_projects[:_PORTFOLIO_PROJECT_LIMIT]
+        skipped = len(all_projects) - len(projects)
+        if skipped > 0:
+            _logger.warning(
+                "strategy_execution_package: portfolio — %d project(s) skipped (cap=%d)",
+                skipped,
+                _PORTFOLIO_PROJECT_LIMIT,
+            )
 
         cards: List[PortfolioPackagedInterventionCard] = []
 

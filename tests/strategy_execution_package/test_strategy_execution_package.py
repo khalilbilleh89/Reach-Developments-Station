@@ -166,7 +166,7 @@ def test_readiness_ready_when_medium_risk_with_baseline() -> None:
     assert result == "ready_for_review"
 
 
-def test_readiness_caution_takes_priority_over_blocked() -> None:
+def test_readiness_blocked_takes_priority_over_caution() -> None:
     # High risk + no baseline → blocked (baseline check comes first in hierarchy)
     best = _make_sim_result(risk_score="high")
     result = _determine_execution_readiness(best, has_feasibility_baseline=False)
@@ -756,3 +756,21 @@ def test_portfolio_execution_packages_read_only(client: TestClient) -> None:
     # Project still accessible and unchanged.
     proj_resp = client.get(f"/api/v1/projects/{project_id}")
     assert proj_resp.status_code == 200
+
+
+def test_portfolio_execution_packages_respects_project_cap(client: TestClient) -> None:
+    """Portfolio endpoint must not return more than _PORTFOLIO_PROJECT_LIMIT packages."""
+    from app.modules.strategy_execution_package.service import _PORTFOLIO_PROJECT_LIMIT
+
+    resp = client.get("/api/v1/portfolio/execution-packages")
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert len(data["packages"]) <= _PORTFOLIO_PROJECT_LIMIT
+
+
+def test_portfolio_execution_packages_cap_value_is_50(client: TestClient) -> None:
+    """Portfolio cap constant must equal 50 to align with strategy generator."""
+    from app.modules.strategy_execution_package.service import _PORTFOLIO_PROJECT_LIMIT
+
+    assert _PORTFOLIO_PROJECT_LIMIT == 50

@@ -346,7 +346,8 @@ class PortfolioExecutionPackageResponse(BaseModel):
     packages: List[PortfolioPackagedInterventionCard] = Field(
         default_factory=list,
         description=(
-            "All project execution package cards ordered by readiness priority desc, "
-            "urgency_score desc, project_name asc."
+            "All project execution package cards ordered by execution_readiness "
+            "(ready_for_review first, insufficient_data last), urgency_score desc, "
+            "project_name asc."
         ),
     )

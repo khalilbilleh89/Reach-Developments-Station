@@ -59,11 +59,6 @@ function readinessBadgeClass(readiness: ExecutionReadiness): string {
   }
 }
 
-function fmtIrr(irr: number | null): string {
-  if (irr == null) return "—";
-  return `${(irr * 100).toFixed(2)}%`;
-}
-
 // ---------------------------------------------------------------------------
 // Summary strip
 // ---------------------------------------------------------------------------
