@@ -147,4 +147,5 @@ def run_unit_pricing(inputs: PricingInputs) -> PricingOutputs:
         pre_escalation_price=pre_escalation_price,
         escalated_price=escalated_price,
         final_unit_price=final_unit_price,
+        currency=inputs.currency,
     )

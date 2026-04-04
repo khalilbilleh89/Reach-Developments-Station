@@ -46,6 +46,16 @@ class ProjectFinanceSummaryResponse(BaseModel):
     # Pricing metrics
     average_unit_price: float = Field(..., ge=0)
 
+    # Currency denomination of all monetary totals in this summary
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this summary "
+            "(total_contract_value, total_collected, total_receivable, average_unit_price). "
+            "Sourced from the project base_currency."
+        ),
+    )
+
 
 # ---------------------------------------------------------------------------
 # Revenue recognition schemas

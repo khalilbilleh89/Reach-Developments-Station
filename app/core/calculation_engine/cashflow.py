@@ -156,4 +156,5 @@ def run_cashflow_analysis(inputs: CashflowInputs) -> CashflowOutputs:
         total_outflow=total_outflow,
         peak_deficit=peak_deficit,
         months_to_breakeven=months_to_breakeven,
+        currency=inputs.currency,
     )

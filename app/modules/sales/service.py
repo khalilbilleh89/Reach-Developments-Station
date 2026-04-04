@@ -13,6 +13,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY
+
 from app.modules.sales.contract_rules import (
     assert_contract_has_reservation,
     assert_reservation_is_converted,
@@ -87,7 +89,7 @@ def _build_installment_items(contract: "SalesContract") -> list["ContractPayment
                 installment_number=i + 1,
                 due_date=due,
                 amount=amount,
-                currency="AED",
+                currency=getattr(contract, "currency", None) or DEFAULT_CURRENCY,
                 status=ContractPaymentStatus.PENDING.value,
             )
         )

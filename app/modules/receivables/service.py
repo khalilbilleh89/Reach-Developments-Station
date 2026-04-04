@@ -82,6 +82,8 @@ class ReceivableService:
         Raises 409 if receivables already exist for this contract (including
         concurrency-safe detection via the DB unique constraint on
         installment_id).
+        Raises 422 if any installment currency does not match the contract
+        currency — mixed-currency receivable generation is not allowed.
         """
         contract = self._require_contract(contract_id)
 
@@ -98,6 +100,27 @@ class ReceivableService:
                 detail=(
                     f"Contract {contract_id!r} has no payment installments. "
                     "Create a payment plan before generating receivables."
+                ),
+            )
+
+        # Currency-mismatch enforcement: every installment must share the
+        # contract currency.  Mixed-denomination receivable generation is
+        # blocked to prevent silent financial corruption.
+        contract_currency = getattr(contract, "currency", None) or DEFAULT_CURRENCY
+        mismatched = [
+            inst.installment_number
+            for inst in installments
+            if (getattr(inst, "currency", None) or DEFAULT_CURRENCY) != contract_currency
+        ]
+        if mismatched:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Currency mismatch in contract {contract_id!r}: "
+                    f"installment(s) {mismatched} do not match the contract "
+                    f"currency '{contract_currency}'. "
+                    "All installments must share the contract currency before "
+                    "receivables can be generated."
                 ),
             )
 
@@ -128,7 +151,10 @@ class ReceivableService:
                 amount_due=amount_due,
                 amount_paid=0.0,
                 balance_due=amount_due,
-                currency=getattr(inst, "currency", DEFAULT_CURRENCY) or DEFAULT_CURRENCY,
+                # Use contract_currency (already validated above to match all
+                # installments) so receivables are deterministically denominated
+                # in the governing contract currency, not the installment field.
+                currency=contract_currency,
                 status=status,
             )
             new_receivables.append(r)

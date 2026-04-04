@@ -239,8 +239,11 @@ class FeasibilityResultRepository:
         decision: Optional[str] = None,
         payback_period: Optional[float] = None,
         profit_per_sqm: Optional[float] = None,
+        currency: Optional[str] = None,
     ) -> FeasibilityResult:
         """Create or replace the result for a run (one result per run)."""
+        from app.core.constants.currency import DEFAULT_CURRENCY
+        effective_currency = currency or DEFAULT_CURRENCY
         existing = self.get_by_run(run_id)
         if existing:
             existing.gdv = gdv
@@ -250,6 +253,7 @@ class FeasibilityResultRepository:
             existing.sales_cost = sales_cost
             existing.total_cost = total_cost
             existing.developer_profit = developer_profit
+            existing.currency = effective_currency
             existing.profit_margin = profit_margin
             existing.irr_estimate = irr_estimate
             existing.irr = irr
@@ -274,6 +278,7 @@ class FeasibilityResultRepository:
             sales_cost=sales_cost,
             total_cost=total_cost,
             developer_profit=developer_profit,
+            currency=effective_currency,
             profit_margin=profit_margin,
             irr_estimate=irr_estimate,
             irr=irr,

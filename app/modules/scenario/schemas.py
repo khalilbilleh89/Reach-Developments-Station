@@ -162,6 +162,12 @@ class FinancialScenarioAssumptionsSchema(BaseModel):
     )
     label: str = Field(default="Base Case", min_length=1, max_length=255)
     notes: Optional[str] = None
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 currency code for all monetary inputs (e.g. 'AED', 'USD').",
+    )
 
 
 class FinancialScenarioRunCreate(BaseModel):

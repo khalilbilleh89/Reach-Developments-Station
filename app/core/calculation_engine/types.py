@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
+from app.core.constants.currency import DEFAULT_CURRENCY
+
 
 # ---------------------------------------------------------------------------
 # Area contracts
@@ -60,6 +62,7 @@ class PricingInputs:
     custom_adjustment: float = 0.0
     escalation_rate: float = 0.0  # decimal fraction, e.g. 0.05 for 5 %
     discount_amount: float = 0.0  # absolute currency amount
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inputs/outputs
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,7 @@ class PricingOutputs:
     pre_escalation_price: float
     escalated_price: float
     final_unit_price: float  # escalated price minus discount
+    currency: str = DEFAULT_CURRENCY  # denomination — inherited from PricingInputs
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +93,7 @@ class ReturnInputs:
     sellable_area_sqm: float  # used for break-even price per sqm
     avg_sale_price_per_sqm: float  # used for break-even sellable sqm calculation
     development_period_months: int  # used for IRR cashflow model
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inputs/outputs
 
 
 @dataclass(frozen=True)
@@ -105,6 +110,7 @@ class ReturnOutputs:
     payback_period_months: float  # months to recover total_cost from equal monthly revenue
     break_even_price_per_sqm: float  # total_cost / sellable_area_sqm
     break_even_sellable_sqm: float  # total_cost / avg_sale_price_per_sqm
+    currency: str = DEFAULT_CURRENCY  # denomination — inherited from ReturnInputs
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +124,7 @@ class CashflowInputs:
 
     monthly_inflows: List[float] = field(default_factory=list)
     monthly_outflows: List[float] = field(default_factory=list)
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inflow/outflow values
 
 
 @dataclass(frozen=True)
@@ -130,6 +137,7 @@ class CashflowOutputs:
     total_outflow: float
     peak_deficit: float  # most negative cumulative value; 0.0 when always positive
     months_to_breakeven: int  # first month where cumulative >= 0; -1 if never
+    currency: str = DEFAULT_CURRENCY  # denomination — inherited from CashflowInputs
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +157,7 @@ class LandInputs:
     total_development_cost: float  # excluding land acquisition
     developer_margin_target: float  # decimal fraction, e.g. 0.20 for 20 %
     transaction_cost: float = 0.0  # stamp duty, legal, agent fees, etc.
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inputs/outputs
 
 
 @dataclass(frozen=True)
@@ -168,3 +177,4 @@ class LandOutputs:
     residual_land_value: float  # gdv - total_development_cost - target_profit
     max_supported_acquisition_price: float  # same as residual_land_value
     margin_impact: float  # residual_land_value / gdv
+    currency: str = DEFAULT_CURRENCY  # denomination — inherited from LandInputs
