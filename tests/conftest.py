@@ -40,6 +40,7 @@ import app.modules.scenario.models  # noqa: F401
 import app.modules.concept_design.models  # noqa: F401
 import app.modules.construction_costs.models  # noqa: F401
 import app.modules.tender_comparison.models  # noqa: F401
+import app.modules.strategy_approval.models  # noqa: F401
 
 from app.main import app
 
