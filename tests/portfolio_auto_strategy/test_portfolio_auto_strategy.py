@@ -98,6 +98,7 @@ def _create_feasibility_run(
 
 
 def test_urgency_score_no_data_returns_zero() -> None:
+    # None risk + baseline present + no other signals → 0
     score = _compute_urgency_score(
         best_risk_score=None,
         has_feasibility_baseline=True,
@@ -105,6 +106,28 @@ def test_urgency_score_no_data_returns_zero() -> None:
         best_phase_delay_months=0,
     )
     assert score == 0
+
+
+def test_urgency_score_unknown_risk_no_baseline_accumulates() -> None:
+    # None risk contributes 0, but no-baseline bonus still applies
+    score = _compute_urgency_score(
+        best_risk_score=None,
+        has_feasibility_baseline=False,
+        best_price_adjustment_pct=0.0,
+        best_phase_delay_months=0,
+    )
+    assert score == 15  # 0 (no risk) + 15 (no baseline)
+
+
+def test_urgency_score_unknown_risk_all_bonuses() -> None:
+    # None risk + no baseline + negative price + large delay all accumulate
+    score = _compute_urgency_score(
+        best_risk_score=None,
+        has_feasibility_baseline=False,
+        best_price_adjustment_pct=-5.0,
+        best_phase_delay_months=6,
+    )
+    assert score == 30  # 0 + 15 + 10 + 5
 
 
 def test_urgency_score_high_risk_with_baseline() -> None:
@@ -351,6 +374,41 @@ def test_rank_cards_deterministic_repeated_call() -> None:
     ranked_1 = _rank_cards(cards)
     ranked_2 = _rank_cards(cards)
     assert [c.project_id for c in ranked_1] == [c.project_id for c in ranked_2]
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — top_risk_projects distinct from top_actions
+# ---------------------------------------------------------------------------
+
+
+def test_top_risk_projects_prioritizes_high_risk_over_stable_urgent() -> None:
+    """top_risk_projects must sort by risk severity first, not intervention_priority.
+
+    A stable project with 'high' risk should appear above an urgent_intervention
+    project with 'low' risk in the top_risk_projects view.
+    """
+    from app.modules.portfolio_auto_strategy.service import _RISK_SEVERITY
+
+    # Verify the severity weights exist and are ordered correctly.
+    assert _RISK_SEVERITY["high"] > _RISK_SEVERITY["medium"] > _RISK_SEVERITY["low"]
+
+    stable_high_risk = _make_card("a", "Alpha Stable", "stable", "high", 10)
+    urgent_low_risk = _make_card("b", "Beta Urgent", "urgent_intervention", "low", 80)
+
+    # In _rank_cards (top_actions order), urgent low-risk comes first
+    ranked = _rank_cards([stable_high_risk, urgent_low_risk])
+    assert ranked[0].project_id == "b"  # top_actions: urgent first
+
+    # In top_risk ordering (by risk severity), high-risk stable comes first
+    top_risk = sorted(
+        [stable_high_risk, urgent_low_risk],
+        key=lambda c: (
+            -_RISK_SEVERITY.get((c.risk_score or "").lower(), 0),
+            -c.urgency_score,
+            c.project_name,
+        ),
+    )
+    assert top_risk[0].project_id == "a"  # top_risk_projects: high risk first
 
 
 # ---------------------------------------------------------------------------

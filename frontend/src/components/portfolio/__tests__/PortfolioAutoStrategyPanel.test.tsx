@@ -34,6 +34,7 @@ jest.mock("@/styles/portfolio.module.css", () => ({
   badgeOverrun: "badgeOverrun",
   badgeSaving: "badgeSaving",
   badgeNeutral: "badgeNeutral",
+  badgeNeedsAttention: "badgeNeedsAttention",
 }));
 
 import { PortfolioAutoStrategyPanel } from "@/components/portfolio/PortfolioAutoStrategyPanel";
@@ -98,6 +99,20 @@ const makeNoDataCard = () => ({
   intervention_type: "insufficient_data" as const,
   urgency_score: 0,
   reason: "Insufficient data for City Walk.",
+});
+
+const makeRecommendedCard = () => ({
+  project_id: "proj-4",
+  project_name: "Downtown Hub",
+  has_feasibility_baseline: true,
+  recommended_strategy: "maintain" as const,
+  best_irr: 0.18,
+  irr_delta: null,
+  risk_score: "medium" as const,
+  intervention_priority: "recommended_intervention" as const,
+  intervention_type: "phasing_intervention" as const,
+  urgency_score: 45,
+  reason: "Recommended intervention for Downtown Hub.",
 });
 
 const makeFullResponse = (): PortfolioAutoStrategyResponse => ({
@@ -211,6 +226,22 @@ test("renders no-data priority badge", () => {
   render(<PortfolioAutoStrategyPanel data={makeFullResponse()} />);
   const badges = screen.getAllByTestId("priority-badge-proj-3");
   expect(badges[0]).toHaveTextContent("No Data");
+});
+
+test("recommended_intervention badge uses badgeNeedsAttention class (not neutral)", () => {
+  const data: PortfolioAutoStrategyResponse = {
+    ...makeFullResponse(),
+    project_cards: [makeRecommendedCard()],
+    top_actions: [],
+    top_risk_projects: [makeRecommendedCard()],
+    top_upside_projects: [],
+  };
+  render(<PortfolioAutoStrategyPanel data={data} />);
+  const badges = screen.getAllByTestId("priority-badge-proj-4");
+  expect(badges[0]).toHaveTextContent("Recommended");
+  // Must use the caution/needs-attention class, not the neutral fallback
+  expect(badges[0]).toHaveClass("badgeNeedsAttention");
+  expect(badges[0]).not.toHaveClass("badgeNeutral");
 });
 
 // ---------------------------------------------------------------------------

@@ -61,7 +61,7 @@ function priorityBadgeClass(priority: InterventionPriority): string {
     case "urgent_intervention":
       return styles.badgeOverrun;
     case "recommended_intervention":
-      return styles.badgeWarning ?? styles.badgeNeutral;
+      return styles.badgeNeedsAttention;
     case "monitor_closely":
       return styles.badgeNeutral;
     case "stable":

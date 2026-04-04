@@ -25,14 +25,18 @@ Architecture constraints
   mutated.
 - Deterministic — same inputs always produce the same ranked output.
 - No caching — recalculated on every API call.
+- All projects are evaluated before ranking so that urgency-based ordering
+  is never biased by source-list position (e.g., alphabetical order).
 
 Urgency score formula (0–100, capped)
 --------------------------------------
-  risk component : high=60, medium=30, low=10   (0 if no data)
+  risk component : high=60, medium=30, low=10   (0 if no data / unknown)
   no baseline    : +15  (less visibility → more urgency)
   negative price : +10  (market correction required)
   large delay    : +5   (phase timing issue, delay > 3 months)
   cap at 100.
+
+  Missing risk contributes 0 but does NOT short-circuit the other components.
 
 Intervention priority thresholds
 ---------------------------------
@@ -49,6 +53,13 @@ Intervention type classification
   pricing_intervention: |price_adj| >= 5%
   phasing_intervention: delay > 0
   monitor_only        : neither signal present
+
+Top-N list definitions
+-----------------------
+  top_actions        : highest overall intervention urgency (4-key ranked order)
+  top_risk_projects  : highest risk severity (high > medium > low > null),
+                       tie-broken by urgency_score desc then project_name asc
+  top_upside_projects: highest best_irr desc, tie-broken by project_name asc
 """
 
 from __future__ import annotations
@@ -72,9 +83,6 @@ from app.modules.strategy_generator.service import StrategyGeneratorService
 
 _logger = get_logger("reach_developments.portfolio_auto_strategy")
 
-# Maximum number of projects evaluated per portfolio analysis request.
-_PORTFOLIO_PROJECT_LIMIT = 50
-
 # Top-N items included in action/risk/upside lists.
 _TOP_N = 5
 
@@ -93,6 +101,9 @@ _PRIORITY_ORDER: Dict[str, int] = {
 # Risk score → sort order (lower = higher urgency).
 _RISK_ORDER: Dict[str, int] = {"high": 0, "medium": 1, "low": 2}
 
+# Risk score → severity weight for top_risk_projects sort (higher = more severe).
+_RISK_SEVERITY: Dict[str, int] = {"high": 3, "medium": 2, "low": 1}
+
 
 # ---------------------------------------------------------------------------
 # Pure scoring functions (no I/O dependencies — easy to unit-test)
@@ -108,15 +119,17 @@ def _compute_urgency_score(
     """Return a deterministic urgency score in [0, 100].
 
     Formula (capped at 100):
-      risk component : high=60, medium=30, low=10  (0 if no data)
+      risk component : high=60, medium=30, low=10  (0 if no data / unknown)
       no baseline    : +15
       negative price : +10  (corrective price reduction required)
       large delay    : +5   (delay > 3 months)
-    """
-    if best_risk_score is None:
-        return 0
 
-    score = _RISK_URGENCY.get(best_risk_score, 0)
+    Missing risk (None) contributes 0 to the risk component but does NOT
+    prevent the other urgency signals (no baseline, price, delay) from being
+    applied.  This avoids under-scoring projects that have clear urgency
+    signals but whose risk label is temporarily unavailable.
+    """
+    score = _RISK_URGENCY.get(best_risk_score or "", 0)
 
     if not has_feasibility_baseline:
         score += 15
@@ -303,18 +316,10 @@ class PortfolioAutoStrategyService:
         Per-project failures are caught and logged; those projects receive an
         insufficient_data card rather than failing the whole response.
 
-        Evaluates at most _PORTFOLIO_PROJECT_LIMIT projects to avoid request
-        timeouts on large portfolios; excess projects are logged.
+        All available projects are evaluated before ranking so intervention
+        priority is based on scored urgency rather than source-list ordering.
         """
-        all_projects = self._repo.list_projects()
-        projects = all_projects[:_PORTFOLIO_PROJECT_LIMIT]
-        skipped = len(all_projects) - len(projects)
-        if skipped > 0:
-            _logger.warning(
-                "portfolio_auto_strategy: %d project(s) skipped (cap=%d)",
-                skipped,
-                _PORTFOLIO_PROJECT_LIMIT,
-            )
+        projects = self._repo.list_projects()
 
         intervention_cards: List[PortfolioInterventionProjectCard] = []
 
@@ -347,9 +352,7 @@ class PortfolioAutoStrategyService:
                 )
                 continue
 
-            # Build an PortfolioStrategyProjectCard proxy from the recommendation.
-            from app.modules.strategy_generator.schemas import PortfolioStrategyProjectCard
-
+            # Build a PortfolioStrategyProjectCard proxy from the recommendation.
             best = rec.best_strategy
             strategy_card = PortfolioStrategyProjectCard(
                 project_id=project.id,
@@ -393,7 +396,7 @@ class PortfolioAutoStrategyService:
         )
 
         # --- Top-N lists --------------------------------------------------
-        # top_actions: highest urgency_score projects (ranked list already sorted)
+        # top_actions: best intervention ordering (primary ranked list)
         top_actions = [
             PortfolioTopActionItem(
                 project_id=c.project_id,
@@ -406,8 +409,17 @@ class PortfolioAutoStrategyService:
             for c in ranked_cards[:_TOP_N]
         ]
 
-        # top_risk_projects: highest urgency_score (risk-weighted, ranked order)
-        top_risk_projects = ranked_cards[:_TOP_N]
+        # top_risk_projects: genuinely risk-focused — sorted by risk severity
+        # desc (high=3 > medium=2 > low=1 > null=0), then urgency_score desc,
+        # then project_name asc.  This produces a distinct view from top_actions.
+        top_risk_projects = sorted(
+            ranked_cards,
+            key=lambda c: (
+                -_RISK_SEVERITY.get((c.risk_score or "").lower(), 0),
+                -c.urgency_score,
+                c.project_name,
+            ),
+        )[:_TOP_N]
 
         # top_upside_projects: highest best_irr (excluding null-IRR cards)
         cards_with_irr = [c for c in ranked_cards if c.best_irr is not None]
