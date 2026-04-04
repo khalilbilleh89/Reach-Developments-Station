@@ -14,6 +14,7 @@ import { PortfolioPricingInsightsPanel } from "@/components/portfolio/PortfolioP
 import { PortfolioPhasingInsightsPanel } from "@/components/portfolio/PortfolioPhasingInsightsPanel";
 import { PortfolioStrategyPanel } from "@/components/portfolio/PortfolioStrategyPanel";
 import { PortfolioAutoStrategyPanel } from "@/components/portfolio/PortfolioAutoStrategyPanel";
+import { PortfolioExecutionPackagesPanel } from "@/components/portfolio/PortfolioExecutionPackagesPanel";
 import { getPortfolioDashboard } from "@/lib/portfolio-api";
 import { getPortfolioCostVariance } from "@/lib/portfolio-variance-api";
 import { getConstructionPortfolioScorecards } from "@/lib/construction-scorecard-api";
@@ -22,6 +23,7 @@ import { getPortfolioPricingInsights } from "@/lib/pricing-optimization-api";
 import { getPortfolioPhasingInsights } from "@/lib/phasing-optimization-api";
 import { getPortfolioStrategyInsights } from "@/lib/strategy-api";
 import { getPortfolioAutoStrategy } from "@/lib/portfolio-auto-strategy-api";
+import { getPortfolioExecutionPackages } from "@/lib/strategy-execution-package-api";
 import type { PortfolioDashboardResponse } from "@/lib/portfolio-types";
 import type { PortfolioCostVarianceResponse } from "@/lib/portfolio-variance-types";
 import type { ConstructionPortfolioScorecardsResponse } from "@/lib/construction-scorecard-types";
@@ -30,6 +32,7 @@ import type { PortfolioPricingInsightsResponse } from "@/lib/pricing-optimizatio
 import type { PortfolioPhasingInsightsResponse } from "@/lib/phasing-optimization-types";
 import type { PortfolioStrategyInsightsResponse } from "@/lib/strategy-types";
 import type { PortfolioAutoStrategyResponse } from "@/lib/portfolio-auto-strategy-types";
+import type { PortfolioExecutionPackageResponse } from "@/lib/strategy-execution-package-types";
 import styles from "@/styles/portfolio.module.css";
 
 /**
@@ -66,6 +69,8 @@ export default function PortfolioPage() {
     useState<PortfolioStrategyInsightsResponse | null>(null);
   const [autoStrategyData, setAutoStrategyData] =
     useState<PortfolioAutoStrategyResponse | null>(null);
+  const [executionPackagesData, setExecutionPackagesData] =
+    useState<PortfolioExecutionPackageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,8 +86,9 @@ export default function PortfolioPage() {
       getPortfolioPhasingInsights(),
       getPortfolioStrategyInsights(),
       getPortfolioAutoStrategy(),
+      getPortfolioExecutionPackages(),
     ])
-      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse, pricingResponse, phasingResponse, strategyResponse, autoStrategyResponse]) => {
+      .then(([dashboardResponse, varianceResponse, constructionResponse, absorptionResponse, pricingResponse, phasingResponse, strategyResponse, autoStrategyResponse, executionPackagesResponse]) => {
         setData(dashboardResponse);
         setVarianceData(varianceResponse);
         setConstructionData(constructionResponse);
@@ -91,6 +97,7 @@ export default function PortfolioPage() {
         setPhasingData(phasingResponse);
         setStrategyData(strategyResponse);
         setAutoStrategyData(autoStrategyResponse);
+        setExecutionPackagesData(executionPackagesResponse);
       })
       .catch((err: unknown) => {
         setError(
@@ -136,6 +143,9 @@ export default function PortfolioPage() {
           )}
           {autoStrategyData && (
             <PortfolioAutoStrategyPanel data={autoStrategyData} />
+          )}
+          {executionPackagesData && (
+            <PortfolioExecutionPackagesPanel data={executionPackagesData} />
           )}
           {constructionData && (
             <PortfolioConstructionScorecardsPanel data={constructionData} />
