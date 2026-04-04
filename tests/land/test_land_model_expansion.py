@@ -58,16 +58,22 @@ def test_expanded_fields_present_in_response(client: TestClient):
     assert "source_notes" in data
 
     # All default to None
-    new_fields = [
+    new_fields_nullable = [
         "plot_number", "cadastral_id", "title_reference", "location_link",
         "municipality", "submarket", "buildable_area_sqm", "sellable_area_sqm",
         "coverage_ratio", "density_ratio", "front_setback_m", "side_setback_m",
         "rear_setback_m", "access_notes", "utilities_notes", "acquisition_price",
-        "transaction_cost", "currency", "asking_price_per_sqm", "supported_price_per_sqm",
+        "transaction_cost", "asking_price_per_sqm", "supported_price_per_sqm",
         "assumption_notes", "source_notes",
     ]
-    for field in new_fields:
+    for field in new_fields_nullable:
         assert data[field] is None, f"Expected {field} to be None by default, got {data[field]}"
+
+    # currency is non-nullable and defaults to the canonical platform default
+    from app.core.constants.currency import DEFAULT_CURRENCY
+    assert data["currency"] == DEFAULT_CURRENCY, (
+        f"Expected currency to default to {DEFAULT_CURRENCY!r}, got {data['currency']!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

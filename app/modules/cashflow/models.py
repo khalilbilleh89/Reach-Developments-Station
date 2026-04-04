@@ -21,6 +21,7 @@ from typing import Optional
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.cashflow import (
     CashflowForecastBasis,
@@ -105,6 +106,7 @@ class CashflowForecastPeriod(Base, TimestampMixin):
     expected_inflows: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
     actual_inflows: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
     expected_outflows: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     net_cashflow: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
     closing_balance: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
     receivables_due: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)

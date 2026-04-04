@@ -25,6 +25,7 @@ from typing import Optional
 from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 
 
@@ -53,7 +54,7 @@ class UnitReservation(Base, TimestampMixin):
     # Pricing at the time of reservation
     reservation_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     reservation_fee: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
 
     # Lifecycle
     status: Mapped[str] = mapped_column(

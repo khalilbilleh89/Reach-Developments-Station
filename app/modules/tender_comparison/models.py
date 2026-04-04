@@ -27,6 +27,7 @@ from typing import List, Optional
 from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.construction_costs import CostCategory
 from app.shared.enums.tender_comparison import ComparisonStage, VarianceReason
@@ -72,6 +73,7 @@ class ConstructionCostComparisonSet(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, index=True
     )
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
 
     # ── Baseline governance fields ────────────────────────────────────────────
     is_approved_baseline: Mapped[bool] = mapped_column(

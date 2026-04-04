@@ -10,6 +10,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY, SUPPORTED_CURRENCIES
 from app.shared.enums.project import ProjectStatus
 
 # ---------------------------------------------------------------------------
@@ -27,6 +28,16 @@ class ProjectCreate(BaseModel):
     target_end_date: Optional[date] = None
     status: ProjectStatus = ProjectStatus.PIPELINE
     description: Optional[str] = None
+    base_currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        min_length=3,
+        max_length=3,
+        description=(
+            f"ISO 4217 currency code for this project. "
+            f"Supported: {', '.join(SUPPORTED_CURRENCIES)}. "
+            f"Defaults to '{DEFAULT_CURRENCY}'."
+        ),
+    )
 
     @model_validator(mode="after")
     def target_end_not_before_start(self) -> "ProjectCreate":
@@ -43,6 +54,12 @@ class ProjectUpdate(BaseModel):
     target_end_date: Optional[date] = None
     status: Optional[ProjectStatus] = None
     description: Optional[str] = None
+    base_currency: Optional[str] = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 currency code. When supplied, updates the project base currency.",
+    )
 
     @model_validator(mode="after")
     def target_end_not_before_start(self) -> "ProjectUpdate":
@@ -61,6 +78,7 @@ class ProjectResponse(BaseModel):
     target_end_date: Optional[date]
     status: ProjectStatus
     description: Optional[str]
+    base_currency: str
     created_at: datetime
     updated_at: datetime
 

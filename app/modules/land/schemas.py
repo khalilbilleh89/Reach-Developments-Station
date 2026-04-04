@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.project import LandParcelStatus, LandScenarioType
 
 
@@ -53,7 +54,7 @@ class LandParcelCreate(BaseModel):
     # Acquisition economics
     acquisition_price: Optional[float] = Field(None, ge=0)
     transaction_cost: Optional[float] = Field(None, ge=0)
-    currency: Optional[str] = Field(None, max_length=10)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     asking_price_per_sqm: Optional[float] = Field(None, ge=0)
     supported_price_per_sqm: Optional[float] = Field(None, ge=0)
     # Governance / provenance
@@ -97,7 +98,7 @@ class LandParcelUpdate(BaseModel):
     # Acquisition economics
     acquisition_price: Optional[float] = Field(None, ge=0)
     transaction_cost: Optional[float] = Field(None, ge=0)
-    currency: Optional[str] = Field(None, max_length=10)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
     asking_price_per_sqm: Optional[float] = Field(None, ge=0)
     supported_price_per_sqm: Optional[float] = Field(None, ge=0)
     # Governance / provenance
@@ -144,7 +145,7 @@ class LandParcelResponse(BaseModel):
     # Acquisition economics
     acquisition_price: Optional[float]
     transaction_cost: Optional[float]
-    currency: Optional[str]
+    currency: str
     asking_price_per_sqm: Optional[float]
     supported_price_per_sqm: Optional[float]
     # Governance / provenance
@@ -216,6 +217,7 @@ class LandValuationCreate(BaseModel):
     scenario_type: LandScenarioType = LandScenarioType.BASE
     assumed_sale_price_per_sqm: Optional[float] = Field(None, gt=0)
     assumed_cost_per_sqm: Optional[float] = Field(None, gt=0)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     valuation_notes: Optional[str] = None
 
 
@@ -224,6 +226,7 @@ class LandValuationUpdate(BaseModel):
     scenario_type: Optional[LandScenarioType] = None
     assumed_sale_price_per_sqm: Optional[float] = Field(None, gt=0)
     assumed_cost_per_sqm: Optional[float] = Field(None, gt=0)
+    currency: Optional[str] = Field(None, min_length=3, max_length=3)
     valuation_notes: Optional[str] = None
 
 
@@ -236,6 +239,7 @@ class LandValuationResponse(BaseModel):
     assumed_cost_per_sqm: Optional[float]
     expected_gdv: Optional[float]
     expected_cost: Optional[float]
+    currency: str
     residual_land_value: Optional[float]
     land_value_per_sqm: Optional[float]
     max_land_bid: Optional[float]

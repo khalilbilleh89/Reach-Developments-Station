@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
 
@@ -98,6 +99,7 @@ class SalesContract(Base, TimestampMixin):
     contract_number: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     contract_date: Mapped[date] = mapped_column(Date, nullable=False)
     contract_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -143,7 +145,7 @@ class ContractPaymentSchedule(Base, TimestampMixin):
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="AED"
+        String(10), nullable=False, default=DEFAULT_CURRENCY
     )
     status: Mapped[str] = mapped_column(
         String(20),

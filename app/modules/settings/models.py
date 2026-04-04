@@ -27,6 +27,7 @@ from typing import Optional
 from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.settings import CommissionCalculationMode, PricingPriceMode
 
@@ -43,7 +44,7 @@ class PricingPolicy(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     base_markup_percent: Mapped[Decimal] = mapped_column(
         Numeric(8, 4), nullable=False, default=Decimal("0.0000")
     )
@@ -108,6 +109,6 @@ class ProjectTemplate(Base, TimestampMixin):
         index=True,
     )
     default_currency: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="AED"
+        String(10), nullable=False, default=DEFAULT_CURRENCY
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

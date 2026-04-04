@@ -10,6 +10,7 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.finance import FeasibilityDecision, FeasibilityRiskLevel, FeasibilityScenarioType, FeasibilityViabilityStatus
 
 
@@ -71,6 +72,7 @@ class FeasibilityAssumptionsCreate(BaseModel):
     finance_cost_ratio: float = Field(..., ge=0, le=1)
     sales_cost_ratio: float = Field(..., ge=0, le=1)
     development_period_months: int = Field(..., ge=1)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     notes: Optional[str] = None
 
 
@@ -82,6 +84,7 @@ class FeasibilityAssumptionsUpdate(BaseModel):
     finance_cost_ratio: Optional[float] = Field(None, ge=0, le=1)
     sales_cost_ratio: Optional[float] = Field(None, ge=0, le=1)
     development_period_months: Optional[int] = Field(None, ge=1)
+    currency: Optional[str] = Field(None, min_length=3, max_length=3)
     notes: Optional[str] = None
 
 
@@ -95,6 +98,7 @@ class FeasibilityAssumptionsResponse(BaseModel):
     finance_cost_ratio: Optional[float]
     sales_cost_ratio: Optional[float]
     development_period_months: Optional[int]
+    currency: str
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -116,6 +120,7 @@ class FeasibilityResultResponse(BaseModel):
     sales_cost: Optional[float]
     total_cost: Optional[float]
     developer_profit: Optional[float]
+    currency: str
     profit_margin: Optional[float]
     irr_estimate: Optional[float]
     irr: Optional[float]

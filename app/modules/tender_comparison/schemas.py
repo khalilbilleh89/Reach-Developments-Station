@@ -26,6 +26,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.construction_costs import CostCategory
 from app.shared.enums.tender_comparison import ComparisonStage, VarianceReason
 
@@ -85,6 +86,7 @@ class ConstructionCostComparisonSetCreate(BaseModel):
     comparison_label: str = Field(default="Tender", min_length=1, max_length=255)
     notes: Optional[str] = None
     is_active: bool = True
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
 
 
 class ConstructionCostComparisonSetUpdate(BaseModel):
@@ -94,6 +96,7 @@ class ConstructionCostComparisonSetUpdate(BaseModel):
     comparison_label: Optional[str] = Field(default=None, min_length=1, max_length=255)
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
 
 
 class ConstructionCostComparisonSetResponse(BaseModel):
@@ -105,6 +108,7 @@ class ConstructionCostComparisonSetResponse(BaseModel):
     comparison_label: str
     notes: Optional[str]
     is_active: bool
+    currency: str
     is_approved_baseline: bool
     approved_at: Optional[datetime]
     approved_by_user_id: Optional[str]
@@ -126,6 +130,7 @@ class ConstructionCostComparisonSetListItem(BaseModel):
     comparison_label: str
     notes: Optional[str]
     is_active: bool
+    currency: str
     is_approved_baseline: bool
     approved_at: Optional[datetime]
     approved_by_user_id: Optional[str]

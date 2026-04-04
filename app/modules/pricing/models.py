@@ -14,6 +14,7 @@ from typing import Optional
 from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ class UnitPricing(Base, TimestampMixin):
     )
     final_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="AED"
+        String(10), nullable=False, default=DEFAULT_CURRENCY
     )
     pricing_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="draft"
@@ -131,7 +132,7 @@ class PricingHistory(Base, TimestampMixin):
     manual_adjustment: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     final_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     pricing_status: Mapped[str] = mapped_column(String(20), nullable=False)
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     override_requested_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     override_approved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

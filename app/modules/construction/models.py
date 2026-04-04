@@ -44,6 +44,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.construction import (
     ConstructionStatus,
@@ -305,7 +306,7 @@ class ConstructionCostItem(Base, TimestampMixin):
         Numeric(18, 2), nullable=False, default=Decimal("0.00")
     )
 
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     cost_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

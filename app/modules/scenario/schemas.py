@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE
 
 
@@ -210,6 +211,7 @@ class FinancialScenarioRunResponse(BaseModel):
     roi: Optional[float]
     developer_margin: Optional[float]
     gross_profit: Optional[float]
+    currency: str
     created_at: datetime
     updated_at: datetime
 

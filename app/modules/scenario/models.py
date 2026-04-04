@@ -19,6 +19,7 @@ from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, Text, UniqueC
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Float
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE, DEFAULT_SCENARIO_STATUS
 from app.db.base import Base, TimestampMixin
 
@@ -136,5 +137,7 @@ class FinancialScenarioRun(Base, TimestampMixin):
     roi: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     developer_margin: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gross_profit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Currency denomination for monetary outputs (npv, gross_profit)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
 
     scenario: Mapped["Scenario"] = relationship("Scenario", back_populates="financial_runs")

@@ -15,6 +15,7 @@ from typing import Optional
 from sqlalchemy import DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.sales_exceptions import ApprovalStatus, ExceptionType
 
@@ -53,6 +54,7 @@ class SalesException(Base, TimestampMixin):
     requested_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     discount_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     discount_percentage: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
 
     incentive_value: Mapped[Optional[float]] = mapped_column(
         Numeric(14, 2), nullable=True

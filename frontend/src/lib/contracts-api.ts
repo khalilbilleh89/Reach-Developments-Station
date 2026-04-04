@@ -36,6 +36,8 @@ export interface SalesContract {
   contract_number: string;
   contract_date: string;
   contract_price: number;
+  /** ISO 4217 currency code for contract_price. */
+  currency: string;
   status: ContractStatus;
   notes: string | null;
   created_at: string;
@@ -49,12 +51,15 @@ export interface SalesContractCreate {
   contract_number: string;
   contract_date: string;
   contract_price: number;
+  /** ISO 4217 currency code. Defaults to "AED" when not supplied. */
+  currency?: string;
   notes?: string | null;
 }
 
 export interface SalesContractUpdate {
   contract_date?: string | null;
   contract_price?: number | null;
+  currency?: string | null;
   notes?: string | null;
 }
 

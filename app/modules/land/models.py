@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.project import LandParcelStatus, LandScenarioType
 
@@ -92,7 +93,7 @@ class LandParcel(Base, TimestampMixin):
     # ---------------------------------------------------------------------------
     acquisition_price: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     transaction_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
-    currency: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     asking_price_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
     supported_price_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
 
@@ -158,6 +159,7 @@ class LandValuation(Base, TimestampMixin):
 
     expected_gdv: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     expected_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
 
     residual_land_value: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     land_value_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)

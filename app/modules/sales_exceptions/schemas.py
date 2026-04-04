@@ -9,6 +9,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.sales_exceptions import ApprovalStatus, ExceptionType
 
 
@@ -23,6 +24,7 @@ class SalesExceptionCreate(BaseModel):
     exception_type: ExceptionType
     base_price: float = Field(..., gt=0)
     requested_price: float = Field(..., gt=0)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     incentive_value: Optional[float] = Field(default=None, ge=0)
     incentive_description: Optional[str] = Field(default=None, max_length=500)
     requested_by: Optional[str] = Field(default=None, max_length=200)
@@ -68,6 +70,7 @@ class SalesExceptionResponse(BaseModel):
     requested_price: float
     discount_amount: float
     discount_percentage: float
+    currency: str
     incentive_value: Optional[float]
     incentive_description: Optional[str]
     approval_status: ApprovalStatus

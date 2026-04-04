@@ -39,6 +39,7 @@ from app.modules.receivables.schemas import (
 )
 from app.modules.payment_plans.models import PaymentSchedule
 from app.modules.sales.models import SalesContract
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.finance import ReceivableStatus
 
 _VALID_STATUSES = frozenset(s.value for s in ReceivableStatus)
@@ -127,7 +128,7 @@ class ReceivableService:
                 amount_due=amount_due,
                 amount_paid=0.0,
                 balance_due=amount_due,
-                currency="AED",
+                currency=getattr(inst, "currency", DEFAULT_CURRENCY) or DEFAULT_CURRENCY,
                 status=status,
             )
             new_receivables.append(r)
