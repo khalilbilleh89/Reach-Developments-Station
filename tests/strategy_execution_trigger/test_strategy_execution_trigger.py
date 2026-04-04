@@ -225,20 +225,21 @@ class TestCreateExecutionTrigger:
 
     def test_401_when_jwt_sub_missing(self, client: TestClient) -> None:
         project_id = _setup_approved_project(client, code="SET-013")
+        previous_override = app.dependency_overrides.get(get_current_user_payload)
         # Override the auth to return a payload without 'sub'
         app.dependency_overrides[get_current_user_payload] = lambda: {
             "roles": ["admin"]
         }
-        resp = client.post(
-            f"/api/v1/projects/{project_id}/strategy-execution-trigger"
-        )
-        # Restore original override
-        from app.core.dependencies import get_db
-
-        app.dependency_overrides[get_current_user_payload] = (
-            lambda: {"sub": "test-user", "roles": ["admin"]}
-        )
-        assert resp.status_code == 401
+        try:
+            resp = client.post(
+                f"/api/v1/projects/{project_id}/strategy-execution-trigger"
+            )
+            assert resp.status_code == 401
+        finally:
+            if previous_override is None:
+                app.dependency_overrides.pop(get_current_user_payload, None)
+            else:
+                app.dependency_overrides[get_current_user_payload] = previous_override
 
     def test_auth_required(self, unauth_client: TestClient) -> None:
         resp = unauth_client.post(
@@ -667,6 +668,81 @@ class TestPortfolioExecutionTriggers:
         active = resp.json()["active_triggers"]
         assert len(active) == 1
         assert active[0]["project_name"] == "Trigger Project 010"
+
+    def test_awaiting_excludes_pending_approval_project(
+        self, client: TestClient
+    ) -> None:
+        """A project whose latest approval is 'pending' must NOT appear awaiting."""
+        # Create project with only a pending (unapproved) approval
+        project_id = _create_project(client, code="PET-011")
+        _create_approval(client, project_id)  # stays pending
+        resp = client.get("/api/v1/portfolio/execution-triggers")
+        awaiting_ids = [
+            p["project_id"] for p in resp.json()["awaiting_trigger_projects"]
+        ]
+        assert project_id not in awaiting_ids
+
+    def test_awaiting_excludes_rejected_approval_project(
+        self, client: TestClient
+    ) -> None:
+        """A project whose latest approval is 'rejected' must NOT appear awaiting."""
+        project_id = _create_project(client, code="PET-012")
+        approval = _create_approval(client, project_id)
+        client.post(
+            f"/api/v1/approvals/{approval['id']}/reject",
+            json={"rejection_reason": "Not ready"},
+        )
+        resp = client.get("/api/v1/portfolio/execution-triggers")
+        awaiting_ids = [
+            p["project_id"] for p in resp.json()["awaiting_trigger_projects"]
+        ]
+        assert project_id not in awaiting_ids
+
+    def test_awaiting_excludes_project_with_completed_trigger_for_same_approval(
+        self, client: TestClient
+    ) -> None:
+        """A project with a completed trigger for its approved approval must NOT
+        appear awaiting — the approval has already been actioned."""
+        project_id = _setup_approved_project(client, code="PET-013")
+        trigger = _create_trigger(client, project_id)
+        client.post(f"/api/v1/execution-triggers/{trigger['id']}/start")
+        client.post(f"/api/v1/execution-triggers/{trigger['id']}/complete")
+        resp = client.get("/api/v1/portfolio/execution-triggers")
+        awaiting_ids = [
+            p["project_id"] for p in resp.json()["awaiting_trigger_projects"]
+        ]
+        assert project_id not in awaiting_ids
+
+    def test_awaiting_excludes_project_with_cancelled_trigger_for_same_approval(
+        self, client: TestClient
+    ) -> None:
+        """A project with a cancelled trigger for its approved approval must NOT
+        appear awaiting — re-triggering requires a new approval first."""
+        project_id = _setup_approved_project(client, code="PET-014")
+        trigger = _create_trigger(client, project_id)
+        client.post(
+            f"/api/v1/execution-triggers/{trigger['id']}/cancel",
+            json={"cancellation_reason": "Cancelled by test"},
+        )
+        resp = client.get("/api/v1/portfolio/execution-triggers")
+        awaiting_ids = [
+            p["project_id"] for p in resp.json()["awaiting_trigger_projects"]
+        ]
+        assert project_id not in awaiting_ids
+
+    def test_awaiting_count_not_distorted_by_display_cap(
+        self, client: TestClient
+    ) -> None:
+        """awaiting_trigger_count must equal the full count, not the capped display
+        list length (even when fewer projects are listed)."""
+        project_id = _setup_approved_project(client, code="PET-015")
+        resp = client.get("/api/v1/portfolio/execution-triggers")
+        data = resp.json()
+        # awaiting_trigger_count must be >= number of projects displayed
+        assert data["awaiting_trigger_count"] >= len(
+            data["awaiting_trigger_projects"]
+        )
+        assert data["awaiting_trigger_count"] >= 1
 
     def test_auth_required(self, unauth_client: TestClient) -> None:
         resp = unauth_client.get("/api/v1/portfolio/execution-triggers")

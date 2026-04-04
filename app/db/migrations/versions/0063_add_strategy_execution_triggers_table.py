@@ -30,6 +30,8 @@ strategy_execution_triggers
   Indexes:
     ix_strategy_execution_triggers_project_id
     ix_strategy_execution_triggers_approval_id
+    uq_strategy_execution_triggers_one_active_per_project
+      UNIQUE on (project_id) WHERE status IN ('triggered', 'in_progress')
 
   Constraints:
     fk_strategy_execution_triggers_project_id   → projects.id ON DELETE CASCADE
@@ -39,9 +41,15 @@ strategy_execution_triggers
                     triggered → cancelled (terminal)
                     in_progress → cancelled (terminal)
 
-  At most one active (triggered or in_progress) trigger per project is
-  enforced by the service layer.  The application translates ConflictError
-  into HTTP 409.
+  The partial unique index enforces the single-active-trigger invariant at the
+  database level, preventing concurrent POST requests from both passing the
+  application-layer check and inserting two active rows.  The service layer
+  performs an optimistic check first (for a clean 409 response), and the
+  repository translates any IntegrityError that slips through into ConflictError.
+
+  On SQLite (used in tests) the postgresql_where clause is ignored, so the
+  behaviour on SQLite is a plain index on project_id and the service-layer
+  guard alone prevents duplicates.
 
 No destructive changes.  Existing tables are unmodified.
 
@@ -119,9 +127,25 @@ def upgrade() -> None:
         "strategy_execution_triggers",
         ["approval_id"],
     )
+    # Partial unique index: enforces the single-active-trigger invariant at
+    # the database level.  Prevents concurrent POST requests from both passing
+    # the application-layer check and both inserting an active row.
+    # On SQLite (used in tests) the postgresql_where clause is ignored, so the
+    # service-layer guard alone prevents duplicates in the test environment.
+    op.create_index(
+        "uq_strategy_execution_triggers_one_active_per_project",
+        "strategy_execution_triggers",
+        ["project_id"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('triggered', 'in_progress')"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "uq_strategy_execution_triggers_one_active_per_project",
+        table_name="strategy_execution_triggers",
+    )
     op.drop_index(
         "ix_strategy_execution_triggers_approval_id",
         table_name="strategy_execution_triggers",

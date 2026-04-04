@@ -243,8 +243,10 @@ class StrategyExecutionTriggerService:
         completed_count = self._repo.count_triggers_by_status("completed")
         cancelled_count = self._repo.count_triggers_by_status("cancelled")
 
-        # Active triggers and their project names.
-        active_triggers = self._repo.list_active_triggers()[:_PORTFOLIO_PROJECT_LIMIT]
+        # Active triggers and their project names — cap is pushed into SQL.
+        active_triggers = self._repo.list_active_triggers(
+            limit=_PORTFOLIO_PROJECT_LIMIT
+        )
         active_project_ids = [t.project_id for t in active_triggers]
         active_projects_map = {
             p.id: p.name
@@ -262,10 +264,13 @@ class StrategyExecutionTriggerService:
                 )
             )
 
-        # Projects with approved strategies but no active trigger.
-        approved_pids = set(self._repo.get_approved_project_ids())
-        active_pids_set = set(active_project_ids)
-        awaiting_pids = list(approved_pids - active_pids_set)[:_PORTFOLIO_PROJECT_LIMIT]
+        # Projects whose latest approval is 'approved' and that have no trigger
+        # linked to that approval yet.  Count is computed from the full result
+        # set; the display list is capped separately so the count is not
+        # distorted by the UI cap.
+        all_awaiting = self._repo.list_projects_awaiting_trigger()
+        awaiting_trigger_count = len(all_awaiting)
+        awaiting_pids = [pid for pid, _ in all_awaiting[:_PORTFOLIO_PROJECT_LIMIT]]
         awaiting_projects_data = self._repo.list_projects_by_ids(awaiting_pids)
         awaiting_projects_map = {p.id: p.name for p in awaiting_projects_data}
 
@@ -282,7 +287,7 @@ class StrategyExecutionTriggerService:
             in_progress_count=in_progress_count,
             completed_count=completed_count,
             cancelled_count=cancelled_count,
-            awaiting_trigger_count=len(awaiting_entries),
+            awaiting_trigger_count=awaiting_trigger_count,
             active_triggers=active_entries,
             awaiting_trigger_projects=awaiting_entries,
         )

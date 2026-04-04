@@ -8,10 +8,13 @@ forbidden — this repository only touches strategy_execution_triggers,
 strategy_approvals (read-only), and projects (read-only).
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.errors import ConflictError
 from app.modules.projects.models import Project
 from app.modules.strategy_approval.models import StrategyApproval
 from app.modules.strategy_execution_trigger.models import StrategyExecutionTrigger
@@ -66,11 +69,24 @@ class StrategyExecutionTriggerRepository:
     def create(
         self, trigger: StrategyExecutionTrigger
     ) -> StrategyExecutionTrigger:
-        """Persist a new trigger record and return it with generated fields."""
-        self._db.add(trigger)
-        self._db.commit()
-        self._db.refresh(trigger)
-        return trigger
+        """Persist a new trigger record and return it with generated fields.
+
+        Translates any IntegrityError (e.g. from the partial unique index on
+        active triggers per project) into ConflictError so concurrent races
+        are surfaced as a clean HTTP 409 rather than an unhandled 500.
+        """
+        try:
+            self._db.add(trigger)
+            self._db.commit()
+            self._db.refresh(trigger)
+            return trigger
+        except IntegrityError:
+            self._db.rollback()
+            raise ConflictError(
+                f"An active execution trigger already exists for project "
+                f"'{trigger.project_id}'. Resolve the existing trigger before "
+                "creating a new one."
+            )
 
     def save(
         self, trigger: StrategyExecutionTrigger
@@ -117,14 +133,22 @@ class StrategyExecutionTriggerRepository:
             .first()
         )
 
-    def list_active_triggers(self) -> List[StrategyExecutionTrigger]:
-        """Return all active (triggered or in_progress) triggers across all projects."""
-        return (
+    def list_active_triggers(
+        self, limit: Optional[int] = None
+    ) -> List[StrategyExecutionTrigger]:
+        """Return active (triggered or in_progress) triggers across all projects.
+
+        When *limit* is provided the database applies the cap directly so only
+        the required rows are fetched.
+        """
+        query = (
             self._db.query(StrategyExecutionTrigger)
             .filter(StrategyExecutionTrigger.status.in_(_ACTIVE_STATUSES))
             .order_by(StrategyExecutionTrigger.triggered_at.desc())
-            .all()
         )
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def count_triggers_by_status(self, status: str) -> int:
         """Return the count of triggers with the given status."""
@@ -134,12 +158,64 @@ class StrategyExecutionTriggerRepository:
             .count()
         )
 
-    def get_approved_project_ids(self) -> List[str]:
-        """Return distinct project IDs that have at least one approved strategy approval."""
-        rows = (
-            self._db.query(StrategyApproval.project_id)
+    def list_projects_awaiting_trigger(self) -> List[Tuple[str, str]]:
+        """Return (project_id, approval_id) pairs where:
+          - The project's latest strategy approval has status 'approved', and
+          - No execution trigger is linked to that approval.
+
+        This is the canonical "awaiting trigger" query.  It correctly excludes:
+          - Projects whose latest approval is pending or rejected.
+          - Projects whose latest approved approval already has a trigger (of any
+            status, including completed or cancelled).
+
+        Returns the full uncapped list so callers can compute an accurate count
+        before slicing for display.
+        """
+        # Step 1 — Subquery: latest created_at timestamp per project.
+        latest_ts_subq = (
+            self._db.query(
+                StrategyApproval.project_id,
+                func.max(StrategyApproval.created_at).label("max_created_at"),
+            )
+            .group_by(StrategyApproval.project_id)
+            .subquery()
+        )
+
+        # Step 2 — Join back to get the actual approval rows for those latest
+        # timestamps and filter for status = 'approved'.
+        latest_approved_rows = (
+            self._db.query(StrategyApproval.id, StrategyApproval.project_id)
+            .join(
+                latest_ts_subq,
+                (StrategyApproval.project_id == latest_ts_subq.c.project_id)
+                & (
+                    StrategyApproval.created_at
+                    == latest_ts_subq.c.max_created_at
+                ),
+            )
             .filter(StrategyApproval.status == "approved")
+            .all()
+        )
+
+        if not latest_approved_rows:
+            return []
+
+        # Step 3 — Find which of those approval IDs already have any trigger.
+        approval_ids = [row[0] for row in latest_approved_rows]
+        triggered_rows = (
+            self._db.query(StrategyExecutionTrigger.approval_id)
+            .filter(
+                StrategyExecutionTrigger.approval_id.in_(approval_ids),
+                StrategyExecutionTrigger.approval_id.isnot(None),
+            )
             .distinct()
             .all()
         )
-        return [row[0] for row in rows]
+        triggered_ids = {row[0] for row in triggered_rows}
+
+        # Step 4 — Return pairs not yet triggered.
+        return [
+            (project_id, approval_id)
+            for approval_id, project_id in latest_approved_rows
+            if approval_id not in triggered_ids
+        ]
