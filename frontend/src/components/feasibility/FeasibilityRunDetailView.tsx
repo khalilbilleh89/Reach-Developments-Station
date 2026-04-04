@@ -19,7 +19,8 @@ import {
 import { createConceptFromFeasibility } from "@/lib/concept-design-api";
 import { listProjects } from "@/lib/projects-api";
 import { ApiError } from "@/lib/api-client";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import {
   validateFeasibilityAssumptions,
   parseFeasibilityAssumptionsPayload,
@@ -483,6 +484,8 @@ function FeasibilityAssumptionsForm({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const formCurrency = existing?.currency ?? DEFAULT_CURRENCY;
+
   const allFilled =
     sellableArea.trim() !== "" &&
     avgSalePrice.trim() !== "" &&
@@ -648,7 +651,7 @@ function FeasibilityAssumptionsForm({
           </div>
           <div>
             <label htmlFor="fa-avg-sale-price" style={labelStyle}>
-              Avg Sale Price / sqm (AED) *
+              Avg Sale Price / sqm ({formCurrency}) *
             </label>
             <input
               id="fa-avg-sale-price"
@@ -663,7 +666,7 @@ function FeasibilityAssumptionsForm({
           </div>
           <div>
             <label htmlFor="fa-construction-cost" style={labelStyle}>
-              Construction Cost / sqm (AED) *
+              Construction Cost / sqm ({formCurrency}) *
             </label>
             <input
               id="fa-construction-cost"
@@ -792,6 +795,8 @@ interface ResultsPanelProps {
 }
 
 function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
+  const resultCurrency = result.currency ?? DEFAULT_CURRENCY;
+
   const kpiRow = (
     label: string,
     value: string,
@@ -914,8 +919,8 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
           >
             Revenue
           </div>
-          {kpiRow("GDV", result.gdv != null ? formatCurrency(result.gdv) : "—", true)}
-          {kpiRow("Developer Profit", result.developer_profit != null ? formatCurrency(result.developer_profit) : "—", true)}
+          {kpiRow("GDV", result.gdv != null ? formatAmount(result.gdv, resultCurrency) : "—", true)}
+          {kpiRow("Developer Profit", result.developer_profit != null ? formatAmount(result.developer_profit, resultCurrency) : "—", true)}
           {kpiRow("Profit Margin", formatPercent(result.profit_margin), true)}
         </div>
         <div>
@@ -933,11 +938,11 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
           >
             Costs
           </div>
-          {kpiRow("Total Cost", result.total_cost != null ? formatCurrency(result.total_cost) : "—")}
-          {kpiRow("Construction", result.construction_cost != null ? formatCurrency(result.construction_cost) : "—")}
-          {kpiRow("Soft Cost", result.soft_cost != null ? formatCurrency(result.soft_cost) : "—")}
-          {kpiRow("Finance Cost", result.finance_cost != null ? formatCurrency(result.finance_cost) : "—")}
-          {kpiRow("Sales Cost", result.sales_cost != null ? formatCurrency(result.sales_cost) : "—")}
+          {kpiRow("Total Cost", result.total_cost != null ? formatAmount(result.total_cost, resultCurrency) : "—")}
+          {kpiRow("Construction", result.construction_cost != null ? formatAmount(result.construction_cost, resultCurrency) : "—")}
+          {kpiRow("Soft Cost", result.soft_cost != null ? formatAmount(result.soft_cost, resultCurrency) : "—")}
+          {kpiRow("Finance Cost", result.finance_cost != null ? formatAmount(result.finance_cost, resultCurrency) : "—")}
+          {kpiRow("Sales Cost", result.sales_cost != null ? formatAmount(result.sales_cost, resultCurrency) : "—")}
         </div>
         <div>
           <div
@@ -974,7 +979,7 @@ function FeasibilityResultsPanel({ result }: ResultsPanelProps) {
           >
             Break-Even
           </div>
-          {kpiRow("Break-Even Price / sqm", result.break_even_price != null ? formatCurrency(result.break_even_price) : "—")}
+          {kpiRow("Break-Even Price / sqm", result.break_even_price != null ? formatAmount(result.break_even_price, resultCurrency) : "—")}
           {kpiRow("Break-Even Sellable sqm", result.break_even_units != null ? formatNumber(result.break_even_units, 0) + " sqm" : "—")}
         </div>
       </div>

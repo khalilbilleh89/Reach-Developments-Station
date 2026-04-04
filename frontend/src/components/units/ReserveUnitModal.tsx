@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { ReservationCreate, UnitListItem } from "@/lib/units-types";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import styles from "@/styles/projects.module.css";
 
 interface ReserveUnitModalProps {
@@ -25,7 +26,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
   const [customerEmail, setCustomerEmail] = useState("");
   const [reservationPrice, setReservationPrice] = useState("");
   const [reservationFee, setReservationFee] = useState("");
-  const [currency, setCurrency] = useState("AED");
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [expiresAt, setExpiresAt] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -38,7 +39,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
     setCustomerEmail("");
     setReservationPrice("");
     setReservationFee("");
-    setCurrency("AED");
+    setCurrency(DEFAULT_CURRENCY);
     setExpiresAt("");
     setNotes("");
     setError(null);
@@ -77,7 +78,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
       customer_email: customerEmail.trim() || null,
       reservation_price: priceVal,
       reservation_fee: feeVal,
-      currency: currency.trim() || "AED",
+      currency: currency.trim() || DEFAULT_CURRENCY,
       expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
       notes: notes.trim() || null,
     };
@@ -212,7 +213,7 @@ export function ReserveUnitModal({ unit, onSubmit, onClose }: ReserveUnitModalPr
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                 maxLength={10}
-                placeholder="AED"
+                placeholder="e.g. AED, USD, JOD"
               />
             </div>
 

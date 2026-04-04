@@ -41,6 +41,8 @@ interface BackendFinanceSummary {
   total_receivable: number;
   collection_ratio: number;
   average_unit_price: number;
+  /** ISO 4217 currency code for all monetary fields. Sourced from project base_currency. */
+  currency?: string;
 }
 
 /** Raw backend: /cashflow/projects/{id}/cashflow-summary */
@@ -132,6 +134,7 @@ export async function getProjectFinanceSummary(
       units_sold: raw.units_sold,
       total_units: raw.total_units,
       average_unit_price: raw.average_unit_price,
+      currency: raw.currency,
     },
     collections: {
       total_collected: raw.total_collected,

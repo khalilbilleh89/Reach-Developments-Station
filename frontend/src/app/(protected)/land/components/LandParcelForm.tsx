@@ -16,6 +16,7 @@
 
 import React, { useCallback, useState } from "react";
 import type { LandParcel, LandParcelCreate, LandParcelUpdate, LandStatus } from "@/lib/land-types";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 
 // ---------------------------------------------------------------------------
 // Section card helper
@@ -193,7 +194,7 @@ function parcelToFormState(parcel: LandParcel | null): FormState {
     utilities_notes: s(parcel?.utilities_notes),
     acquisition_price: n(parcel?.acquisition_price),
     transaction_cost: n(parcel?.transaction_cost),
-    currency: parcel ? s(parcel.currency) : "AED",
+    currency: parcel ? s(parcel.currency) : DEFAULT_CURRENCY,
     asking_price_per_sqm: n(parcel?.asking_price_per_sqm),
     supported_price_per_sqm: n(parcel?.supported_price_per_sqm),
     assumption_notes: s(parcel?.assumption_notes),
@@ -756,7 +757,7 @@ export function LandParcelForm({ parcel, onSave, onCancel }: LandParcelFormProps
               style={inputStyle}
               value={form.currency}
               onChange={(e) => set("currency", e.target.value)}
-              placeholder="e.g. AED"
+              placeholder="e.g. AED, USD, JOD"
               maxLength={10}
             />
           </Field>

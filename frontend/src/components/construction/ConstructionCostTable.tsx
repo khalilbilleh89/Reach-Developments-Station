@@ -23,6 +23,7 @@ import type {
   ConstructionCostSummary,
 } from "@/lib/construction-types";
 import { ConstructionCostSummaryCard } from "./ConstructionCostSummaryCard";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import styles from "@/styles/construction.module.css";
 
 const COST_CATEGORIES: CostCategory[] = [
@@ -72,7 +73,7 @@ const EMPTY_FORM: AddCostItemFormState = {
   budget_amount: "",
   committed_amount: "",
   actual_amount: "",
-  currency: "AED",
+  currency: DEFAULT_CURRENCY,
   cost_date: "",
   notes: "",
 };
@@ -164,7 +165,7 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
       budget_amount: budget,
       committed_amount: committed,
       actual_amount: actual,
-      currency: form.currency.trim() || "AED",
+      currency: form.currency.trim() || DEFAULT_CURRENCY,
       cost_date: form.cost_date || null,
       notes: form.notes.trim() || null,
     };
@@ -189,7 +190,7 @@ export function ConstructionCostTable({ scopeId }: ConstructionCostTableProps) {
       {!summaryLoading && summary && (
         <ConstructionCostSummaryCard
           summary={summary}
-          currency={items[0]?.currency ?? "AED"}
+          currency={items[0]?.currency ?? DEFAULT_CURRENCY}
         />
       )}
 

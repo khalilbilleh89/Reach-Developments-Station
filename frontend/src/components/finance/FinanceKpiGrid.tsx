@@ -1,6 +1,7 @@
 import React from "react";
 import type { FinanceKpis } from "@/lib/finance-dashboard-types";
-import { formatCurrency } from "@/lib/format-utils";
+import { formatAmount } from "@/lib/format-utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import styles from "@/styles/finance-dashboard.module.css";
 
@@ -33,6 +34,7 @@ export function FinanceKpiGrid({ kpis, loading, error }: FinanceKpiGridProps) {
   }
 
   const collectionPct = `${(kpis.collection_ratio * 100).toFixed(1)}%`;
+  const currency = kpis.currency ?? DEFAULT_CURRENCY;
 
   return (
     <div className={styles.sectionCard}>
@@ -40,19 +42,19 @@ export function FinanceKpiGrid({ kpis, loading, error }: FinanceKpiGridProps) {
       <div className={styles.metricsRow}>
         <MetricCard
           title="Total Contract Value"
-          value={formatCurrency(kpis.total_contract_value)}
+          value={formatAmount(kpis.total_contract_value, currency)}
           subtitle="Contracted revenue"
           icon="💰"
         />
         <MetricCard
           title="Total Collected"
-          value={formatCurrency(kpis.total_collected)}
+          value={formatAmount(kpis.total_collected, currency)}
           subtitle={`Collection ratio: ${collectionPct}`}
           icon="✅"
         />
         <MetricCard
           title="Total Receivable"
-          value={formatCurrency(kpis.total_receivable)}
+          value={formatAmount(kpis.total_receivable, currency)}
           subtitle="Outstanding balance"
           icon="📋"
         />
@@ -70,7 +72,7 @@ export function FinanceKpiGrid({ kpis, loading, error }: FinanceKpiGridProps) {
         />
         <MetricCard
           title="Avg Unit Price"
-          value={formatCurrency(kpis.average_unit_price)}
+          value={formatAmount(kpis.average_unit_price, currency)}
           subtitle="Average contracted price"
           icon="🏷"
         />

@@ -17,6 +17,12 @@ export interface FinanceKpis {
   units_sold: number;
   total_units: number;
   average_unit_price: number;
+  /**
+   * ISO 4217 currency code for all monetary KPI values in this summary.
+   * Sourced from the project base_currency.  Optional for backward
+   * compatibility; callers should fall back to DEFAULT_CURRENCY when absent.
+   */
+  currency?: string;
 }
 
 // ---------- Collections health -------------------------------------------

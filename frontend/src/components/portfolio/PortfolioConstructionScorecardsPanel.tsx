@@ -80,19 +80,19 @@ function ScorecardProjectRow({
       </div>
       <div className={styles.projectStats}>
         <div className={styles.statItem}>
-          <span className={styles.statLabel}>Baseline (AED)</span>
+          <span className={styles.statLabel}>Baseline</span>
           <span className={styles.statValue}>
             {fmt(item.approved_baseline_amount)}
           </span>
         </div>
         <div className={styles.statItem}>
-          <span className={styles.statLabel}>Forecast (AED)</span>
+          <span className={styles.statLabel}>Forecast</span>
           <span className={styles.statValue}>
             {fmt(item.current_forecast_amount)}
           </span>
         </div>
         <div className={styles.statItem}>
-          <span className={styles.statLabel}>Variance (AED)</span>
+          <span className={styles.statLabel}>Variance</span>
           <span
             className={`${styles.statValue} ${
               item.cost_variance_amount !== null && parseFloat(item.cost_variance_amount) > 0
@@ -123,7 +123,7 @@ function ScorecardProjectRow({
           </span>
         </div>
         <div className={styles.statItem}>
-          <span className={styles.statLabel}>Contingency (AED)</span>
+          <span className={styles.statLabel}>Contingency</span>
           <span className={styles.statValue}>
             {fmt(item.contingency_amount)}
           </span>
