@@ -1,7 +1,7 @@
 """Add currency source-of-truth: project base_currency + missing monetary columns
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0062
+Revises: 0061
 Create Date: 2026-04-04
 
 PR-CURRENCY-002 — Currency Source-of-Truth, Schema Coverage & Project Base
@@ -121,8 +121,8 @@ from alembic import op
 # Alembic revision identifiers
 # ---------------------------------------------------------------------------
 
-revision: str = "0061"
-down_revision: Union[str, None] = "0060"
+revision: str = "0062"
+down_revision: Union[str, None] = "0061"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
