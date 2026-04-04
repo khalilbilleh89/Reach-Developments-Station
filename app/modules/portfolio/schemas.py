@@ -36,13 +36,13 @@ class PortfolioSummary(BaseModel):
     under_contract_units: int = Field(..., description="Units with status 'under_contract'")
     registered_units: int = Field(..., description="Units with status 'registered'")
     contracted_revenue: float = Field(
-        ..., description="Sum of contract_price for all non-cancelled sales contracts (AED)"
+        ..., description="Sum of contract_price for all non-cancelled sales contracts"
     )
     collected_cash: float = Field(
-        ..., description="Sum of amount_paid across all receivables (AED)"
+        ..., description="Sum of amount_paid across all receivables"
     )
     outstanding_balance: float = Field(
-        ..., description="Sum of balance_due across all open receivables (AED)"
+        ..., description="Sum of balance_due across all open receivables"
     )
 
 
@@ -59,13 +59,13 @@ class PortfolioProjectCard(BaseModel):
     under_contract_units: int
     registered_units: int
     contracted_revenue: float = Field(
-        ..., description="Contracted revenue for this project (AED)"
+        ..., description="Contracted revenue for this project"
     )
     collected_cash: float = Field(
-        ..., description="Cash collected for this project (AED)"
+        ..., description="Cash collected for this project"
     )
     outstanding_balance: float = Field(
-        ..., description="Outstanding receivable balance for this project (AED)"
+        ..., description="Outstanding receivable balance for this project"
     )
     sell_through_pct: Optional[float] = Field(
         None,
@@ -99,7 +99,8 @@ class PortfolioCollectionsSummary(BaseModel):
         ..., description="Receivables with status 'overdue'"
     )
     overdue_balance: float = Field(
-        ..., description="Sum of balance_due for overdue receivables (AED)"
+        ...,
+        description="Sum of balance_due for overdue receivables"
     )
     collection_rate_pct: Optional[float] = Field(
         None,
@@ -162,15 +163,15 @@ class PortfolioCostVarianceSummary(BaseModel):
         ..., description="Number of projects that have at least one active comparison set"
     )
     total_baseline_amount: float = Field(
-        ..., description="Sum of all baseline amounts across active comparison lines (AED)"
+        ..., description="Sum of all baseline amounts across active comparison lines"
     )
     total_comparison_amount: float = Field(
-        ..., description="Sum of all comparison amounts across active comparison lines (AED)"
+        ..., description="Sum of all comparison amounts across active comparison lines"
     )
     total_variance_amount: float = Field(
         ...,
         description=(
-            "Total variance amount (comparison - baseline) across active comparison lines (AED). "
+            "Total variance amount (comparison - baseline) across active comparison lines. "
             "Positive → net overrun; negative → net saving."
         ),
     )
@@ -195,15 +196,15 @@ class PortfolioCostVarianceProjectCard(BaseModel):
         None, description="Stage of the most recently created active comparison set"
     )
     baseline_total: float = Field(
-        ..., description="Sum of baseline amounts across all active comparison lines (AED)"
+        ..., description="Sum of baseline amounts across all active comparison lines"
     )
     comparison_total: float = Field(
-        ..., description="Sum of comparison amounts across all active comparison lines (AED)"
+        ..., description="Sum of comparison amounts across all active comparison lines"
     )
     variance_amount: float = Field(
         ...,
         description=(
-            "Net variance (comparison - baseline) across all active comparison lines (AED). "
+            "Net variance (comparison - baseline) across all active comparison lines. "
             "Positive → overrun; negative → saving."
         ),
     )

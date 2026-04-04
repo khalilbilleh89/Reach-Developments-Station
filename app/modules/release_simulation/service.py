@@ -133,15 +133,16 @@ class ReleaseSimulationRepository:
 
     def get_feasibility_baseline(
         self, project_id: str
-    ) -> Tuple[bool, Optional[float], Optional[float], Optional[int], Optional[float]]:
-        """Return (has_run, gdv, total_cost, dev_period_months, irr) from the latest calculated run.
+    ) -> Tuple[bool, Optional[float], Optional[float], Optional[int], Optional[float], str]:
+        """Return (has_run, gdv, total_cost, dev_period_months, irr, currency) from the latest calculated run.
 
         Fetches the latest calculated FeasibilityRun once, then loads result and
         assumptions by that specific run_id to guarantee all values originate from
         the same run.
 
-        Returns (False, None, None, None, None) when no calculated run exists.
+        Returns (False, None, None, None, None, DEFAULT_CURRENCY) when no calculated run exists.
         """
+        from app.core.constants.currency import DEFAULT_CURRENCY
         from app.modules.feasibility.models import (
             FeasibilityAssumptions,
             FeasibilityResult,
@@ -155,7 +156,7 @@ class ReleaseSimulationRepository:
             .first()
         )
         if latest_run is None:
-            return False, None, None, None, None
+            return False, None, None, None, None, DEFAULT_CURRENCY
 
         run_id = latest_run.id
 
@@ -178,8 +179,14 @@ class ReleaseSimulationRepository:
             if feas_assumptions is not None and feas_assumptions.development_period_months is not None
             else None
         )
+        # Currency: prefer result currency, fall back to assumptions, then platform default.
+        currency = DEFAULT_CURRENCY
+        if feas_result is not None and getattr(feas_result, "currency", None):
+            currency = feas_result.currency
+        elif feas_assumptions is not None and getattr(feas_assumptions, "currency", None):
+            currency = feas_assumptions.currency
 
-        return True, gdv, total_cost, dev_period, irr
+        return True, gdv, total_cost, dev_period, irr, currency
 
 
 class ReleaseSimulationService:
@@ -204,7 +211,7 @@ class ReleaseSimulationService:
         if project is None:
             raise ResourceNotFoundError(f"Project '{project_id}' not found.")
 
-        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr = (
+        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr, currency = (
             self.repo.get_feasibility_baseline(project_id)
         )
 
@@ -214,12 +221,14 @@ class ReleaseSimulationService:
             baseline_total_cost=baseline_total_cost,
             baseline_dev_period=baseline_dev_period,
             baseline_irr=baseline_irr,
+            currency=currency,
         )
 
         return SimulateStrategyResponse(
             project_id=project.id,
             project_name=project.name,
             has_feasibility_baseline=has_baseline,
+            currency=currency,
             result=result,
         )
 
@@ -235,7 +244,7 @@ class ReleaseSimulationService:
         if project is None:
             raise ResourceNotFoundError(f"Project '{project_id}' not found.")
 
-        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr = (
+        has_baseline, baseline_gdv, baseline_total_cost, baseline_dev_period, baseline_irr, currency = (
             self.repo.get_feasibility_baseline(project_id)
         )
 
@@ -246,6 +255,7 @@ class ReleaseSimulationService:
                 baseline_total_cost=baseline_total_cost,
                 baseline_dev_period=baseline_dev_period,
                 baseline_irr=baseline_irr,
+                currency=currency,
             )
             for scenario in request.scenarios
         ]
@@ -259,6 +269,7 @@ class ReleaseSimulationService:
             project_id=project.id,
             project_name=project.name,
             has_feasibility_baseline=has_baseline,
+            currency=currency,
             results=results,
             best_scenario_label=best_label,
         )
@@ -274,6 +285,7 @@ class ReleaseSimulationService:
         baseline_total_cost: Optional[float],
         baseline_dev_period: Optional[int],
         baseline_irr: Optional[float],
+        currency: str,
     ) -> SimulationResult:
         """Execute one simulation scenario and return the result.
 
@@ -333,6 +345,7 @@ class ReleaseSimulationService:
             npv=round(simulated_npv, 2),
             cashflow_delay_months=cashflow_delay,
             risk_score=risk_score,
+            currency=currency,
             baseline_gdv=round(baseline_gdv, 2) if baseline_gdv is not None else None,
             baseline_irr=baseline_irr,
             baseline_dev_period_months=baseline_dev_period,

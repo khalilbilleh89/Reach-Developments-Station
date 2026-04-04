@@ -178,4 +178,5 @@ def run_land_calculations(inputs: LandInputs) -> LandOutputs:
         residual_land_value=rlv,
         max_supported_acquisition_price=rlv,
         margin_impact=margin_impact,
+        currency=inputs.currency,
     )

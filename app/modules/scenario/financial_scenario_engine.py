@@ -35,6 +35,7 @@ from app.core.calculation_engine.returns import (
     build_development_cashflows,
 )
 from app.core.calculation_engine.types import ReturnInputs, ReturnOutputs
+from app.core.constants.currency import DEFAULT_CURRENCY
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +100,7 @@ class FinancialScenarioAssumptions:
     debt_ratio: Optional[float] = None
     label: str = "Base Case"
     notes: Optional[str] = None
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inputs/outputs
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,7 @@ class FinancialScenarioRunResult:
     effective_total_cost: float
     effective_equity_invested: float
     effective_development_period_months: int
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary outputs
 
 
 @dataclass(frozen=True)
@@ -261,6 +264,7 @@ def run_financial_scenario(
         sellable_area_sqm=merged.sellable_area_sqm,
         avg_sale_price_per_sqm=merged.avg_sale_price_per_sqm,
         development_period_months=effective_period,
+        currency=merged.currency,
     )
     return_outputs = run_return_calculations(
         return_inputs,
@@ -282,6 +286,7 @@ def run_financial_scenario(
         effective_total_cost=effective_cost,
         effective_equity_invested=effective_equity,
         effective_development_period_months=effective_period,
+        currency=merged.currency,
     )
 
 
