@@ -221,7 +221,7 @@ class PaymentPlanService:
                 "installment_number": line.installment_number,
                 "due_date": line.due_date,
                 "due_amount": line.due_amount,
-                "currency": getattr(contract, "currency", None) or DEFAULT_CURRENCY,
+                "currency": contract.currency if contract.currency else DEFAULT_CURRENCY,
                 "status": PaymentScheduleStatus.PENDING.value,
                 "notes": line.notes,
             }

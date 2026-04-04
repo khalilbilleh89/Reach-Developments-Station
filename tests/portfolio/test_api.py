@@ -462,7 +462,7 @@ def test_collection_rate_single_currency_is_computed(client: TestClient):
     collection_rate_pct = resp.json()["collections"]["collection_rate_pct"]
     # Rate is computable (0.0 % because nothing has been paid yet)
     assert collection_rate_pct is not None
-    assert collection_rate_pct == pytest.approx(0.0, abs=1e-2)
+    assert collection_rate_pct == 0.0
 
 
 def test_collection_rate_mixed_currency_is_none(client: TestClient):
