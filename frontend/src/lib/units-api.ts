@@ -177,7 +177,8 @@ export async function getUnitInventoryReadiness(
 /**
  * Fetch the calculated price for a unit.
  *
- * Returns null when the unit has not been priced yet (404 / not-found).
+ * Returns null when the unit has not been priced yet (404 / not-found) or
+ * when the pricing engine rejects the request due to incomplete data (422).
  * Unexpected errors (5xx, network failures, auth errors) are propagated
  * so that the calling component can show a proper error state.
  */
@@ -186,6 +187,8 @@ export async function getUnitPricing(unitId: string): Promise<UnitPrice | null> 
     return await apiFetch<UnitPrice>(`/pricing/unit/${unitId}`);
   } catch (err: unknown) {
     if (isNotFoundError(err)) return null;
+    // 422 = pricing engine rejected due to incomplete data — treat as unpriced
+    if (err instanceof ApiError && err.status === 422) return null;
     throw err;
   }
 }
