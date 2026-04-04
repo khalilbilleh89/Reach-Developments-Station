@@ -245,6 +245,11 @@ export function StrategyApprovalPanel({
   // prevent setState calls after unmount.
   // ------------------------------------------------------------------
 
+  /** Returns true when the request was aborted or the component has unmounted. */
+  function _isStale(signal: AbortSignal): boolean {
+    return signal.aborted || !mountedRef.current;
+  }
+
   async function handleRequestApproval() {
     actionAbortRef.current?.abort();
     const controller = new AbortController();
@@ -261,18 +266,18 @@ export function StrategyApprovalPanel({
         },
         controller.signal,
       );
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setApproval(result);
       }
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      if (mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionError(
           err instanceof Error ? err.message : "Failed to create approval request.",
         );
       }
     } finally {
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionLoading(false);
       }
     }
@@ -289,18 +294,18 @@ export function StrategyApprovalPanel({
     setActionError(null);
     try {
       const result = await approveStrategy(approval.id, {}, controller.signal);
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setApproval(result);
       }
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      if (mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionError(
           err instanceof Error ? err.message : "Failed to approve strategy.",
         );
       }
     } finally {
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionLoading(false);
       }
     }
@@ -321,20 +326,20 @@ export function StrategyApprovalPanel({
         { rejection_reason: rejectionReason.trim() },
         controller.signal,
       );
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setApproval(result);
         setShowRejectForm(false);
         setRejectionReason("");
       }
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      if (mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionError(
           err instanceof Error ? err.message : "Failed to reject strategy.",
         );
       }
     } finally {
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (!_isStale(controller.signal)) {
         setActionLoading(false);
       }
     }

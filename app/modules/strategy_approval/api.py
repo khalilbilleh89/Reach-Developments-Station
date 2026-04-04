@@ -131,7 +131,7 @@ def approve_strategy(
     Returns HTTP 404 when the approval record does not exist.
     Returns HTTP 422 when the approval is not in pending state.
     """
-    approved_by_user_id: str | None = user_payload.get("sub")
+    approved_by_user_id: Optional[str] = user_payload.get("sub")
     if not approved_by_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
