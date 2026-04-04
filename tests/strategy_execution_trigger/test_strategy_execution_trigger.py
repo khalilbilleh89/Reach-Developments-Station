@@ -669,7 +669,7 @@ class TestPortfolioExecutionTriggers:
         assert len(active) == 1
         assert active[0]["project_name"] == "Trigger Project 010"
 
-    def test_awaiting_excludes_pending_approval_project(
+    def test_awaiting_excludes_project_with_pending_approval(
         self, client: TestClient
     ) -> None:
         """A project whose latest approval is 'pending' must NOT appear awaiting."""
@@ -682,7 +682,7 @@ class TestPortfolioExecutionTriggers:
         ]
         assert project_id not in awaiting_ids
 
-    def test_awaiting_excludes_rejected_approval_project(
+    def test_awaiting_excludes_project_with_rejected_approval(
         self, client: TestClient
     ) -> None:
         """A project whose latest approval is 'rejected' must NOT appear awaiting."""
