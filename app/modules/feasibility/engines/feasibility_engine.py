@@ -22,6 +22,8 @@ A fully discounted IRR model is out of scope for this PR.
 
 from dataclasses import dataclass
 
+from app.core.constants.currency import DEFAULT_CURRENCY
+
 
 @dataclass(frozen=True)
 class FeasibilityInputs:
@@ -34,6 +36,7 @@ class FeasibilityInputs:
     finance_cost_ratio: float
     sales_cost_ratio: float
     development_period_months: int
+    currency: str = DEFAULT_CURRENCY  # denomination of all monetary inputs/outputs
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,7 @@ class FeasibilityOutputs:
     developer_profit: float
     profit_margin: float
     irr_estimate: float
+    currency: str = DEFAULT_CURRENCY  # denomination — inherited from FeasibilityInputs
 
 
 def calculate_gdv(sellable_area_sqm: float, avg_sale_price_per_sqm: float) -> float:
@@ -147,4 +151,5 @@ def run_feasibility(inputs: FeasibilityInputs) -> FeasibilityOutputs:
         developer_profit=developer_profit,
         profit_margin=profit_margin,
         irr_estimate=irr_estimate,
+        currency=inputs.currency,
     )

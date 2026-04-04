@@ -29,6 +29,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
+
 
 class SimulationScenarioInput(BaseModel):
     """Inputs for a single release strategy simulation scenario."""
@@ -95,7 +97,7 @@ class SimulationResult(BaseModel):
     # Simulated economics
     simulated_gdv: float = Field(
         ...,
-        description="Simulated GDV after applying price_adjustment_pct to baseline GDV (AED).",
+        description="Simulated GDV after applying price_adjustment_pct to baseline GDV.",
     )
     simulated_dev_period_months: int = Field(
         ...,
@@ -122,7 +124,7 @@ class SimulationResult(BaseModel):
         ...,
         description=(
             "Net Present Value of the simulated cashflows at the platform discount "
-            "rate (10% p.a.). AED."
+            "rate (10% p.a.)."
         ),
     )
     cashflow_delay_months: int = Field(
@@ -140,10 +142,18 @@ class SimulationResult(BaseModel):
             "'low' (>+2%), 'medium' (0–2%), 'high' (<0%)."
         ),
     )
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        description=(
+            "ISO 4217 currency code for all monetary values in this result "
+            "(simulated_gdv, npv, baseline_gdv, baseline_total_cost). "
+            "Inherited from the feasibility baseline."
+        ),
+    )
 
     # Baseline references (for comparison)
     baseline_gdv: Optional[float] = Field(
-        None, description="Baseline GDV from the latest feasibility result (AED)."
+        None, description="Baseline GDV from the latest feasibility result."
     )
     baseline_irr: Optional[float] = Field(
         None, description="Baseline IRR from the latest feasibility result."
@@ -152,7 +162,7 @@ class SimulationResult(BaseModel):
         None, description="Baseline development period in months."
     )
     baseline_total_cost: Optional[float] = Field(
-        None, description="Baseline total cost from the latest feasibility result (AED)."
+        None, description="Baseline total cost from the latest feasibility result."
     )
 
 
@@ -178,6 +188,14 @@ class SimulateStrategyResponse(BaseModel):
         description=(
             "True when a calculated feasibility run exists for this project. "
             "When false, simulation uses default assumptions and results are indicative only."
+        ),
+    )
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        description=(
+            "ISO 4217 currency code for all monetary values in this response. "
+            "Derived from the project feasibility baseline; defaults to the platform "
+            "default when no baseline exists."
         ),
     )
     result: SimulationResult
@@ -208,6 +226,14 @@ class SimulateStrategiesResponse(BaseModel):
         description=(
             "True when a calculated feasibility run exists for this project. "
             "When false, simulation uses default assumptions and results are indicative only."
+        ),
+    )
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        description=(
+            "ISO 4217 currency code for all monetary values in this response. "
+            "Derived from the project feasibility baseline; defaults to the platform "
+            "default when no baseline exists."
         ),
     )
     results: List[SimulationResult] = Field(

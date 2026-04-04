@@ -317,6 +317,7 @@ class FeasibilityService:
             sales_cost=outputs.sales_cost,
             total_cost=outputs.total_cost,
             developer_profit=outputs.developer_profit,
+            currency=outputs.currency,
             profit_margin=outputs.profit_margin,
             irr_estimate=outputs.irr_estimate,
             irr=irr,
@@ -378,6 +379,7 @@ class FeasibilityService:
             finance_cost_ratio=float(assumptions.finance_cost_ratio),
             sales_cost_ratio=float(assumptions.sales_cost_ratio),
             development_period_months=int(assumptions.development_period_months),
+            currency=assumptions.currency,
         )
         return self._execute_calculation(run_id, inputs)
 
@@ -435,6 +437,7 @@ class FeasibilityService:
             finance_cost_ratio=data.finance_cost_ratio,
             sales_cost_ratio=data.sales_cost_ratio,
             development_period_months=data.development_period_months,
+            currency=data.currency,
         )
         self.assumptions_repo.upsert(run_response.id, assumptions_create)
 
@@ -446,6 +449,7 @@ class FeasibilityService:
             finance_cost_ratio=data.finance_cost_ratio,
             sales_cost_ratio=data.sales_cost_ratio,
             development_period_months=data.development_period_months,
+            currency=data.currency,
         )
         return self._execute_calculation(run_response.id, inputs)
 

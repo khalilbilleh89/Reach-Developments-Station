@@ -157,6 +157,12 @@ class FeasibilityRunRequest(BaseModel):
     finance_cost_ratio: float = Field(..., ge=0, le=1)
     sales_cost_ratio: float = Field(..., ge=0, le=1)
     development_period_months: int = Field(..., ge=1)
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 currency code for all monetary inputs (e.g. 'AED', 'USD').",
+    )
     notes: Optional[str] = None
 
 

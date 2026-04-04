@@ -260,7 +260,7 @@ class PortfolioService:
                     severity=severity,
                     description=(
                         f"{collections.overdue_receivables} overdue receivable(s) with "
-                        f"total outstanding balance of AED {collections.overdue_balance:,.2f}."
+                        f"total outstanding balance of {collections.overdue_balance:,.2f}."
                     ),
                     affected_project_id=None,
                     affected_project_name=None,

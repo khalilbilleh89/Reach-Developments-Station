@@ -81,8 +81,10 @@ class FinanceSummaryService:
         Raises HTTP 404 if the project does not exist.
         All derived monetary values are clamped to prevent invalid schema
         states when accounting data contains over-collection or rounding.
+        The summary currency is sourced from the project's base_currency so
+        callers know the denomination of all returned monetary totals.
         """
-        self._require_project(project_id)
+        project = self._require_project(project_id)
 
         unit_counts = self.repo.get_unit_counts_by_project(project_id)
         contract_agg = self.repo.get_contract_aggregates_by_project(project_id)
@@ -110,6 +112,7 @@ class FinanceSummaryService:
             total_receivable=total_receivable,
             collection_ratio=collection_ratio,
             average_unit_price=average_unit_price,
+            currency=project.base_currency,
         )
 
     # ------------------------------------------------------------------

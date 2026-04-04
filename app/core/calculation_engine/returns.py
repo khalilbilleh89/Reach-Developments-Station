@@ -349,4 +349,5 @@ def run_return_calculations(
         payback_period_months=payback,
         break_even_price_per_sqm=break_even_price,
         break_even_sellable_sqm=break_even_sqm,
+        currency=inputs.currency,
     )

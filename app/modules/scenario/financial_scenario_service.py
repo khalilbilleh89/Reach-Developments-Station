@@ -104,6 +104,7 @@ class FinancialScenarioService:
             debt_ratio=a.debt_ratio,
             label=a.label,
             notes=a.notes,
+            currency=a.currency,
         )
 
     def _result_to_json(self, result: FinancialScenarioRunResult) -> Dict[str, Any]:
@@ -149,6 +150,7 @@ class FinancialScenarioService:
             roi=result.returns.roi,
             developer_margin=result.returns.developer_margin,
             gross_profit=result.returns.gross_profit,
+            currency=result.currency,
         )
         self.db.add(run)
         self.db.commit()

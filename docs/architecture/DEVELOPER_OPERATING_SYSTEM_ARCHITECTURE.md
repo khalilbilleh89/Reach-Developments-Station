@@ -471,3 +471,66 @@ carry explicit currency denomination:
 4. **No FX conversion in this scope** — PR-CURRENCY-002 does not introduce
    exchange rate tables, FX conversion services, or automatic normalization.
    A single-currency-per-project discipline is the intended operating model.
+
+---
+
+## Currency Runtime Enforcement Rules (PR-CURRENCY-003)
+
+### Calculation Contract Denomination Rule
+
+All monetary input dataclasses in the Calculation Engine
+(`PricingInputs`, `ReturnInputs`, `LandInputs`, `CashflowInputs`) and
+the Feasibility Engine (`FeasibilityInputs`) must carry an explicit
+`currency` field.  Corresponding output dataclasses propagate this
+field so every monetary result is unambiguously denominated.
+
+**Rule:** Any code that calls a Calculation Engine or Feasibility Engine
+composite runner must supply a `currency` value. Callers that omit
+`currency` receive the platform default (`DEFAULT_CURRENCY`) but must
+not silently discard the output denomination.
+
+### Aggregation Guard Rule
+
+Backend services and repositories must never return a single raw
+monetary total that sums across records of different currencies.
+Permitted approaches are:
+
+- **Filter** — query only records matching a known base currency (e.g.
+  the project's `base_currency`).
+- **Group** — return a structured response where totals are keyed by
+  currency (e.g. `{ "AED": 1_200_000, "USD": 500_000 }`).
+- **Reject** — raise a 422 error when mixed-currency inputs are
+  detected and no currency filter has been specified.
+
+**Forbidden:** summing `SUM(amount)` or similar across rows that carry
+different `currency` values and returning the result as a single scalar
+without currency annotation.
+
+### Project Base Currency Enforcement Rule
+
+Financial summary endpoints scoped to a single project
+(e.g. `GET /projects/{id}/finance`) must:
+
+1. Read the project's `base_currency` field.
+2. Include `currency` in the response payload so callers know the
+   denomination of all returned monetary totals.
+3. Aggregate only records denominated in that currency, or return a
+   clearly grouped structure if mixed-currency records exist.
+
+### Receivable Generation Continuity Rule
+
+When generating receivables from a contract's payment schedule, all
+installment records must share the same currency as the parent
+contract.  Mismatched installment currencies must raise a 422 error
+before any receivables are created.
+
+**Rationale:** receivables feed finance summaries and portfolio
+aggregations.  Silently propagating a wrong denomination into those
+surfaces produces incorrect financial totals with no visible error.
+
+### No FX Conversion in This Scope
+
+PR-CURRENCY-003 does not introduce exchange-rate tables, FX conversion
+services, or automatic normalization.  Its sole purpose is to make
+unsafe arithmetic fail explicitly rather than silently.  FX conversion
+is deferred to a future PR.
