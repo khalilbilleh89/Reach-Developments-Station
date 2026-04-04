@@ -231,8 +231,8 @@ def upgrade() -> None:
         # 1. Backfill any NULL values to 'AED'.
         op.execute(
             sa.text(
-                f"UPDATE land_parcels SET currency = '{_DEFAULT}' WHERE currency IS NULL"
-            )
+                "UPDATE land_parcels SET currency = :default_currency WHERE currency IS NULL"
+            ).bindparams(default_currency=_DEFAULT)
         )
         # 2. Alter to NOT NULL with server default.
         op.alter_column(

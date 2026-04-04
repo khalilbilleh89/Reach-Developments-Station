@@ -941,9 +941,12 @@ class TestMigrationIdempotency:
         engine = create_engine(db_url)
         with engine.connect() as conn:
             for tbl in ("sales_contracts", "payment_schedules"):
+                # Table name is a literal from a controlled tuple — not
+                # user-supplied.  SQLite does not support bind parameters in
+                # ALTER TABLE, so we construct the DDL from the trusted constant.
                 conn.execute(
                     text(
-                        f"ALTER TABLE {tbl} ADD COLUMN currency VARCHAR(10) "
+                        "ALTER TABLE " + tbl + " ADD COLUMN currency VARCHAR(10) "
                         "NOT NULL DEFAULT 'AED'"
                     )
                 )
