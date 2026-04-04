@@ -193,6 +193,20 @@ export function StrategyApprovalPanel({
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const actionAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  // ------------------------------------------------------------------
+  // Track mount state for abort-safe action handlers
+  // ------------------------------------------------------------------
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      actionAbortRef.current?.abort();
+    };
+  }, []);
 
   // ------------------------------------------------------------------
   // Load latest approval on mount / projectId change
@@ -226,60 +240,103 @@ export function StrategyApprovalPanel({
   }, [projectId]);
 
   // ------------------------------------------------------------------
-  // Actions
+  // Actions — each action gets its own AbortController so unmount
+  // or a subsequent action can cancel an in-flight request and
+  // prevent setState calls after unmount.
   // ------------------------------------------------------------------
 
   async function handleRequestApproval() {
+    actionAbortRef.current?.abort();
+    const controller = new AbortController();
+    actionAbortRef.current = controller;
+
     setActionLoading(true);
     setActionError(null);
     try {
-      const result = await createStrategyApproval(projectId, {
-        strategy_snapshot: strategySnapshot,
-        execution_package_snapshot: executionPackageSnapshot,
-      });
-      setApproval(result);
-    } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to create approval request.",
+      const result = await createStrategyApproval(
+        projectId,
+        {
+          strategy_snapshot: strategySnapshot,
+          execution_package_snapshot: executionPackageSnapshot,
+        },
+        controller.signal,
       );
+      if (!controller.signal.aborted && mountedRef.current) {
+        setApproval(result);
+      }
+    } catch (err: unknown) {
+      if (controller.signal.aborted) return;
+      if (mountedRef.current) {
+        setActionError(
+          err instanceof Error ? err.message : "Failed to create approval request.",
+        );
+      }
     } finally {
-      setActionLoading(false);
+      if (!controller.signal.aborted && mountedRef.current) {
+        setActionLoading(false);
+      }
     }
   }
 
   async function handleApprove() {
     if (!approval) return;
+
+    actionAbortRef.current?.abort();
+    const controller = new AbortController();
+    actionAbortRef.current = controller;
+
     setActionLoading(true);
     setActionError(null);
     try {
-      const result = await approveStrategy(approval.id, {});
-      setApproval(result);
+      const result = await approveStrategy(approval.id, {}, controller.signal);
+      if (!controller.signal.aborted && mountedRef.current) {
+        setApproval(result);
+      }
     } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to approve strategy.",
-      );
+      if (controller.signal.aborted) return;
+      if (mountedRef.current) {
+        setActionError(
+          err instanceof Error ? err.message : "Failed to approve strategy.",
+        );
+      }
     } finally {
-      setActionLoading(false);
+      if (!controller.signal.aborted && mountedRef.current) {
+        setActionLoading(false);
+      }
     }
   }
 
   async function handleReject() {
     if (!approval || !rejectionReason.trim()) return;
+
+    actionAbortRef.current?.abort();
+    const controller = new AbortController();
+    actionAbortRef.current = controller;
+
     setActionLoading(true);
     setActionError(null);
     try {
-      const result = await rejectStrategy(approval.id, {
-        rejection_reason: rejectionReason.trim(),
-      });
-      setApproval(result);
-      setShowRejectForm(false);
-      setRejectionReason("");
-    } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to reject strategy.",
+      const result = await rejectStrategy(
+        approval.id,
+        { rejection_reason: rejectionReason.trim() },
+        controller.signal,
       );
+      if (!controller.signal.aborted && mountedRef.current) {
+        setApproval(result);
+        setShowRejectForm(false);
+        setRejectionReason("");
+      }
+    } catch (err: unknown) {
+      if (controller.signal.aborted) return;
+      if (mountedRef.current) {
+        setActionError(
+          err instanceof Error ? err.message : "Failed to reject strategy.",
+        );
+      }
     } finally {
-      setActionLoading(false);
+      if (!controller.signal.aborted && mountedRef.current) {
+        setActionLoading(false);
+      }
     }
   }
 

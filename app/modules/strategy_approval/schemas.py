@@ -53,16 +53,12 @@ class StrategyApprovalCreateRequest(BaseModel):
 
 
 class ApproveStrategyRequest(BaseModel):
-    """Body for approving a pending strategy approval request.
+    """Body placeholder for approving a pending strategy approval request.
 
-    Notes are optional — callers may supply a free-text comment that is
-    stored alongside the approval decision.
+    The approve action requires no additional fields beyond authentication.
+    This class is retained so the endpoint can accept an empty JSON body
+    without FastAPI raising a validation error.
     """
-
-    notes: Optional[str] = Field(
-        None,
-        description="Optional approval notes or commentary.",
-    )
 
 
 class RejectStrategyRequest(BaseModel):

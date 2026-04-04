@@ -1,5 +1,5 @@
 """
-Tests for the Strategy Approval Workflow (PR-V7-08).
+Tests for the Strategy Approval Workflow (PR-V7-08 / PR-V7-08A).
 
 Validates:
   POST /api/v1/projects/{id}/strategy-approval
@@ -11,6 +11,7 @@ Validates:
 
   POST /api/v1/approvals/{id}/approve
     - HTTP contract (200, 404, 422, auth required)
+    - 401 when JWT sub is missing
     - Status transitions to approved
     - approved_by_user_id and approved_at populated
     - Cannot approve an already-approved record (422)
@@ -39,6 +40,8 @@ from fastapi.testclient import TestClient
 from app.modules.strategy_approval.service import _assert_transition
 from app.modules.strategy_approval.models import StrategyApproval
 from app.core.errors import ValidationError as DomainValidationError
+from app.modules.auth.security import get_current_user_payload
+from app.main import app
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +194,6 @@ class TestApproveStrategy:
         approval = _create_approval(client, project_id)
         resp = client.post(
             f"/api/v1/approvals/{approval['id']}/approve",
-            json={"notes": "Looks good."},
         )
         assert resp.status_code == 200
 
@@ -247,8 +249,27 @@ class TestApproveStrategy:
         assert resp.status_code == 422
 
     def test_auth_required(self, unauth_client: TestClient) -> None:
-        resp = unauth_client.post("/api/v1/approvals/any-id/approve", json={})
+        resp = unauth_client.post("/api/v1/approvals/any-id/approve")
         assert resp.status_code == 401
+
+    def test_401_when_sub_missing_from_token(
+        self, client: TestClient, db_session
+    ) -> None:
+        """Approve endpoint must reject when JWT sub is absent."""
+        project_id = _create_project(client, code="SAP-A07")
+        approval = _create_approval(client, project_id)
+
+        # Override auth to return a payload without 'sub'
+        app.dependency_overrides[get_current_user_payload] = lambda: {"roles": ["admin"]}
+        try:
+            resp = client.post(f"/api/v1/approvals/{approval['id']}/approve")
+            assert resp.status_code == 401
+        finally:
+            # Restore the original test-user override
+            app.dependency_overrides[get_current_user_payload] = lambda: {
+                "sub": "test-user",
+                "roles": ["admin"],
+            }
 
 
 # ---------------------------------------------------------------------------

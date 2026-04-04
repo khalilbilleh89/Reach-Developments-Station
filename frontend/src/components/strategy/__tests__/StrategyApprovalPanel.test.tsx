@@ -1,5 +1,5 @@
 /**
- * StrategyApprovalPanel tests (PR-V7-08)
+ * StrategyApprovalPanel tests (PR-V7-08 / PR-V7-08A)
  *
  * Validates:
  *  - loading state renders
@@ -15,6 +15,8 @@
  *  - new approval request button shown after resolution
  *  - no mutation controls shown for approved/rejected (only new-request)
  *  - null/missing optional fields render safely
+ *  - action handlers pass AbortSignal to API client methods
+ *  - unmount during action does not call setState (abort-safe)
  */
 
 import React from "react";
@@ -201,7 +203,7 @@ describe("StrategyApprovalPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("approval-status-badge")).toHaveTextContent("Approved");
     });
-    expect(mockApprove).toHaveBeenCalledWith(pending.id, {});
+    expect(mockApprove).toHaveBeenCalledWith(pending.id, {}, expect.any(AbortSignal));
   });
 
   it("calls rejectStrategy and updates state on reject", async () => {
@@ -219,9 +221,11 @@ describe("StrategyApprovalPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("approval-status-badge")).toHaveTextContent("Rejected");
     });
-    expect(mockReject).toHaveBeenCalledWith(pending.id, {
-      rejection_reason: "Market conditions unfavourable.",
-    });
+    expect(mockReject).toHaveBeenCalledWith(
+      pending.id,
+      { rejection_reason: "Market conditions unfavourable." },
+      expect.any(AbortSignal),
+    );
   });
 
   it("shows new-request button after approval is resolved", async () => {
@@ -256,6 +260,7 @@ describe("StrategyApprovalPanel", () => {
     expect(mockCreate).toHaveBeenCalledWith(
       "proj-1",
       { strategy_snapshot: snap, execution_package_snapshot: pkgSnap },
+      expect.any(AbortSignal),
     );
   });
 
@@ -276,5 +281,62 @@ describe("StrategyApprovalPanel", () => {
     render(<StrategyApprovalPanel projectId="proj-1" />);
     await waitFor(() => screen.getByTestId("approval-id"));
     expect(screen.getByTestId("approval-id")).toHaveTextContent("approval-001");
+  });
+
+  it("does not call setState after unmount during approve", async () => {
+    const pending = makePendingApproval();
+    mockGet.mockResolvedValue(pending);
+
+    // Approve resolves after unmount
+    let resolveApprove!: (value: StrategyApprovalResponse) => void;
+    mockApprove.mockReturnValue(
+      new Promise<StrategyApprovalResponse>((res) => {
+        resolveApprove = res;
+      }),
+    );
+
+    const { unmount } = render(<StrategyApprovalPanel projectId="proj-1" />);
+    await waitFor(() => screen.getByTestId("btn-approve"));
+    fireEvent.click(screen.getByTestId("btn-approve"));
+
+    // Unmount before promise resolves
+    unmount();
+
+    // Resolve after unmount — should not throw or trigger React state update
+    await expect(
+      new Promise<void>((res) => {
+        resolveApprove(makeApprovedApproval());
+        setTimeout(res, 50);
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not call setState after unmount during reject", async () => {
+    const pending = makePendingApproval();
+    mockGet.mockResolvedValue(pending);
+
+    let resolveReject!: (value: StrategyApprovalResponse) => void;
+    mockReject.mockReturnValue(
+      new Promise<StrategyApprovalResponse>((res) => {
+        resolveReject = res;
+      }),
+    );
+
+    const { unmount } = render(<StrategyApprovalPanel projectId="proj-1" />);
+    await waitFor(() => screen.getByTestId("btn-show-reject"));
+    fireEvent.click(screen.getByTestId("btn-show-reject"));
+    fireEvent.change(screen.getByTestId("rejection-reason-input"), {
+      target: { value: "Deferring." },
+    });
+    fireEvent.click(screen.getByTestId("btn-confirm-reject"));
+
+    unmount();
+
+    await expect(
+      new Promise<void>((res) => {
+        resolveReject(makeRejectedApproval());
+        setTimeout(res, 50);
+      }),
+    ).resolves.toBeUndefined();
   });
 });

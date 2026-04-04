@@ -30,9 +30,10 @@ strategy_approvals
   Constraints:
     fk_strategy_approvals_project_id → projects.id ON DELETE CASCADE
 
-  At most one pending row per project_id is enforced by the service layer,
-  not by a DB constraint, so that concurrent race conditions surface as
-  ConflictError rather than a hard DB failure.
+  At most one pending row per project_id is enforced by a partial unique
+  index added in migration 0062.  The application layer translates any
+  IntegrityError from a concurrent race into ConflictError for a clean
+  HTTP 409 response.
 
 No destructive changes.  Existing tables are unmodified.
 

@@ -21,13 +21,12 @@ Forbidden
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.strategy_approval.schemas import (
-    ApproveStrategyRequest,
     RejectStrategyRequest,
     StrategyApprovalCreateRequest,
     StrategyApprovalResponse,
@@ -120,7 +119,6 @@ def get_latest_approval(
 )
 def approve_strategy(
     approval_id: str,
-    body: ApproveStrategyRequest,
     service: ServiceDep,
     user_payload: UserPayloadDep,
 ) -> StrategyApprovalResponse:
@@ -129,10 +127,16 @@ def approve_strategy(
     Transitions the approval from pending → approved and records the
     approving user ID and timestamp.
 
+    Returns HTTP 401 when the authenticated user identity (sub) is absent.
     Returns HTTP 404 when the approval record does not exist.
     Returns HTTP 422 when the approval is not in pending state.
     """
-    approved_by_user_id: str = user_payload.get("sub", "unknown")
+    approved_by_user_id: str | None = user_payload.get("sub")
+    if not approved_by_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user identity (sub) is missing from token.",
+        )
     approval = service.approve_strategy(
         approval_id=approval_id,
         approved_by_user_id=approved_by_user_id,

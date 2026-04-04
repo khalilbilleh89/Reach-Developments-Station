@@ -10,8 +10,10 @@ forbidden — this repository only touches strategy_approvals and projects
 
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.errors import ConflictError
 from app.modules.projects.models import Project
 from app.modules.strategy_approval.models import StrategyApproval
 
@@ -35,11 +37,23 @@ class StrategyApprovalRepository:
     # ------------------------------------------------------------------
 
     def create(self, approval: StrategyApproval) -> StrategyApproval:
-        """Persist a new approval record and return it with generated fields."""
-        self._db.add(approval)
-        self._db.commit()
-        self._db.refresh(approval)
-        return approval
+        """Persist a new approval record and return it with generated fields.
+
+        Translates any IntegrityError (e.g. from the partial unique index on
+        pending approvals per project) into ConflictError so concurrent races
+        are surfaced as a clean HTTP 409 rather than an unhandled 500.
+        """
+        try:
+            self._db.add(approval)
+            self._db.commit()
+            self._db.refresh(approval)
+            return approval
+        except IntegrityError:
+            self._db.rollback()
+            raise ConflictError(
+                f"A pending approval already exists for project '{approval.project_id}'. "
+                "Resolve the existing request before creating a new one."
+            )
 
     def save(self, approval: StrategyApproval) -> StrategyApproval:
         """Flush an in-place-mutated approval record and return it refreshed."""
