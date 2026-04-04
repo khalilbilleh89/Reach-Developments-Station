@@ -97,6 +97,16 @@ class PortfolioRepository:
         )
         return float(result) if result is not None else 0.0
 
+    def contracted_revenue_by_currency(self) -> Dict[str, float]:
+        """Sum of contract_price grouped by currency for all non-cancelled contracts."""
+        rows = (
+            self.db.query(SalesContract.currency, func.sum(SalesContract.contract_price))
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .group_by(SalesContract.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
+
     def sum_contracted_revenue_for_project(self, project_id: str) -> float:
         """Contracted revenue for a single project."""
         result = (
@@ -120,14 +130,33 @@ class PortfolioRepository:
         result = self.db.query(func.sum(Receivable.amount_paid)).scalar()
         return float(result) if result is not None else 0.0
 
+    def collected_cash_by_currency(self) -> Dict[str, float]:
+        """Sum of amount_paid grouped by currency across all receivables."""
+        rows = (
+            self.db.query(Receivable.currency, func.sum(Receivable.amount_paid))
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
+
     def sum_outstanding_balance(self) -> float:
-        """Sum of balance_due across all non-paid receivables (portfolio-wide)."""
+        """Sum of balance_due across all non-paid/cancelled receivables (portfolio-wide)."""
         result = (
             self.db.query(func.sum(Receivable.balance_due))
             .filter(Receivable.status.notin_(["paid", "cancelled"]))
             .scalar()
         )
         return float(result) if result is not None else 0.0
+
+    def outstanding_balance_by_currency(self) -> Dict[str, float]:
+        """Sum of balance_due grouped by currency for non-paid/cancelled receivables."""
+        rows = (
+            self.db.query(Receivable.currency, func.sum(Receivable.balance_due))
+            .filter(Receivable.status.notin_(["paid", "cancelled"]))
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
 
     def sum_collected_cash_for_project(self, project_id: str) -> float:
         """Cash collected for a single project."""
@@ -179,6 +208,16 @@ class PortfolioRepository:
             .scalar()
         )
         return float(result) if result is not None else 0.0
+
+    def overdue_balance_by_currency(self) -> Dict[str, float]:
+        """Sum of balance_due grouped by currency for overdue receivables."""
+        rows = (
+            self.db.query(Receivable.currency, func.sum(Receivable.balance_due))
+            .filter(Receivable.status == "overdue")
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
 
     def count_overdue_receivables_for_project(self, project_id: str) -> int:
         """Count of overdue receivables for a single project."""
@@ -264,21 +303,30 @@ class PortfolioRepository:
         return result
 
     def get_contracted_revenue_by_project(self) -> Dict[str, float]:
-        """Return project_id → contracted revenue for all projects in one query."""
+        """Return project_id → contracted revenue in project base currency for all projects.
+
+        Filters to contracts whose currency matches the project's base_currency to
+        enforce the aggregation guard rule (no cross-currency scalar totals).
+        """
         rows = (
             self.db.query(Phase.project_id, func.sum(SalesContract.contract_price))
             .join(Unit, SalesContract.unit_id == Unit.id)
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
+            .join(Project, Phase.project_id == Project.id)
             .filter(SalesContract.status.notin_(["cancelled"]))
+            .filter(SalesContract.currency == Project.base_currency)
             .group_by(Phase.project_id)
             .all()
         )
         return {pid: float(total) for pid, total in rows if total is not None}
 
     def get_collected_cash_by_project(self) -> Dict[str, float]:
-        """Return project_id → amount_paid sum for all projects in one query."""
+        """Return project_id → amount_paid sum in project base currency for all projects.
+
+        Filters to receivables whose currency matches the project's base_currency.
+        """
         rows = (
             self.db.query(Phase.project_id, func.sum(Receivable.amount_paid))
             .join(SalesContract, Receivable.contract_id == SalesContract.id)
@@ -286,13 +334,18 @@ class PortfolioRepository:
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
+            .join(Project, Phase.project_id == Project.id)
+            .filter(Receivable.currency == Project.base_currency)
             .group_by(Phase.project_id)
             .all()
         )
         return {pid: float(total) for pid, total in rows if total is not None}
 
     def get_outstanding_balance_by_project(self) -> Dict[str, float]:
-        """Return project_id → balance_due sum (non-paid/cancelled) for all projects in one query."""
+        """Return project_id → balance_due sum in project base currency (non-paid/cancelled).
+
+        Filters to receivables whose currency matches the project's base_currency.
+        """
         rows = (
             self.db.query(Phase.project_id, func.sum(Receivable.balance_due))
             .join(SalesContract, Receivable.contract_id == SalesContract.id)
@@ -300,7 +353,9 @@ class PortfolioRepository:
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
+            .join(Project, Phase.project_id == Project.id)
             .filter(Receivable.status.notin_(["paid", "cancelled"]))
+            .filter(Receivable.currency == Project.base_currency)
             .group_by(Phase.project_id)
             .all()
         )
@@ -367,11 +422,45 @@ class PortfolioRepository:
             Decimal(str(row[2])),
         )
 
+    def get_portfolio_variance_totals_by_currency(
+        self,
+    ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
+        """Aggregate baseline, comparison, and variance totals grouped by comparison set currency.
+
+        Returns {currency: (baseline, comparison, variance)} as Decimals.
+        Guards against mixed-currency aggregation by grouping on the comparison set's
+        currency rather than summing blindly across all active sets.
+        """
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.currency,
+                func.coalesce(func.sum(ConstructionCostComparisonLine.baseline_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.comparison_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.variance_amount), 0),
+            )
+            .join(
+                ConstructionCostComparisonSet,
+                ConstructionCostComparisonLine.comparison_set_id == ConstructionCostComparisonSet.id,
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.currency)
+            .all()
+        )
+        return {
+            currency: (
+                Decimal(str(baseline)),
+                Decimal(str(comparison)),
+                Decimal(str(variance)),
+            )
+            for currency, baseline, comparison, variance in rows
+        }
+
     def get_variance_totals_by_project(
         self,
     ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
         """Return project_id → (baseline_total, comparison_total, variance_total)
-        aggregated across all active comparison lines in one query.
+        aggregated across active comparison lines whose currency matches the project's
+        base_currency (aggregation guard rule).
         """
         rows = (
             self.db.query(
@@ -384,7 +473,9 @@ class PortfolioRepository:
                 ConstructionCostComparisonSet,
                 ConstructionCostComparisonLine.comparison_set_id == ConstructionCostComparisonSet.id,
             )
+            .join(Project, ConstructionCostComparisonSet.project_id == Project.id)
             .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .filter(ConstructionCostComparisonSet.currency == Project.base_currency)
             .group_by(ConstructionCostComparisonSet.project_id)
             .all()
         )

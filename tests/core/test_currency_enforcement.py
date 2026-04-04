@@ -466,9 +466,8 @@ class TestReceivableCurrencyEnforcement:
         assert "currency mismatch" in exc_info.value.detail.lower()
 
     def test_receivables_service_proceeds_same_currency(self, db_session):
-        """ReceivableService.generate_for_contract does not raise currency error when currencies match."""
+        """ReceivableService.generate_for_contract does not raise when currencies match."""
         import datetime
-        from fastapi import HTTPException
         from unittest.mock import MagicMock, patch
 
         from app.modules.receivables.service import ReceivableService
@@ -487,19 +486,36 @@ class TestReceivableCurrencyEnforcement:
         mock_installment.template_id = None
         mock_installment.id = "inst-001"
 
+        # Build a receivable-like namespace that satisfies ReceivableResponse.model_validate
+        now = datetime.datetime.now()
+        mock_receivable = MagicMock()
+        mock_receivable.id = "recv-001"
+        mock_receivable.contract_id = "ctr-match"
+        mock_receivable.payment_plan_id = None
+        mock_receivable.installment_id = "inst-001"
+        mock_receivable.receivable_number = 1
+        mock_receivable.due_date = datetime.date.today()
+        mock_receivable.amount_due = 50_000.0
+        mock_receivable.amount_paid = 0.0
+        mock_receivable.balance_due = 50_000.0
+        mock_receivable.currency = shared_currency
+        mock_receivable.status = "due"
+        mock_receivable.notes = None
+        mock_receivable.created_at = now
+        mock_receivable.updated_at = now
+
         service = ReceivableService(db_session)
-        with patch.object(service, "_require_contract", return_value=mock_contract):
-            with patch.object(db_session, "query") as mock_query:
-                mock_query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-                    [mock_installment]
-                )
-                mock_query.return_value.filter.return_value.all.return_value = []
-                try:
-                    service.generate_for_contract("ctr-match")
-                except HTTPException as exc:
-                    assert "currency mismatch" not in exc.detail.lower(), (
-                        f"Unexpected currency mismatch error: {exc.detail}"
-                    )
+        with (
+            patch.object(service, "_require_contract", return_value=mock_contract),
+            patch.object(db_session, "query") as mock_query,
+            patch.object(service.repo, "list_by_contract", return_value=[]),
+            patch.object(service.repo, "bulk_create", return_value=[mock_receivable]),
+        ):
+            mock_query.return_value.filter.return_value.order_by.return_value.all.return_value = (
+                [mock_installment]
+            )
+            # Any exception here is a failure — matching-currency path must succeed
+            service.generate_for_contract("ctr-match")
 
 
 # ---------------------------------------------------------------------------
