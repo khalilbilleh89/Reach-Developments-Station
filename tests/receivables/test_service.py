@@ -60,6 +60,7 @@ def _make_contract(
     project_code: str = "PRJ-RCV-SVC",
     contract_price: float = 300_000.0,
     number: str = "001",
+    currency: str = "AED",
 ) -> str:
     from app.modules.sales.models import Buyer, SalesContract
 
@@ -78,6 +79,7 @@ def _make_contract(
         contract_number=f"CNT-{project_code}-{number}",
         contract_date=date(2026, 1, 1),
         contract_price=contract_price,
+        currency=currency,
     )
     db.add(contract)
     db.commit()
@@ -91,6 +93,7 @@ def _add_installments(
     count: int = 3,
     template_id: str | None = None,
     start_date: date | None = None,
+    currency: str = "AED",
 ) -> list[str]:
     """Create `count` PaymentSchedule rows for a contract; return installment IDs."""
     from app.modules.payment_plans.models import PaymentSchedule
@@ -110,6 +113,7 @@ def _add_installments(
             installment_number=i,
             due_date=due,
             due_amount=100_000.0,
+            currency=currency,
             status="pending",
         )
         db.add(inst)
@@ -406,3 +410,50 @@ def test_get_receivable_raises_404_for_missing(db_session: Session):
     with pytest.raises(HTTPException) as exc_info:
         svc.get_receivable("non-existent")
     assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PR-CURRENCY-002A: receivables inherit installment currency
+# ---------------------------------------------------------------------------
+
+
+def test_receivables_inherit_jod_installment_currency(db_session: Session):
+    """Receivables must be denominated in JOD when installments are JOD."""
+    contract_id = _make_contract(db_session, project_code="PRJ-RCV-JOD", number="j01", currency="JOD")
+    _add_installments(db_session, contract_id, count=2, currency="JOD")
+    svc = ReceivableService(db_session)
+    result = svc.generate_for_contract(contract_id)
+    for item in result.items:
+        assert item.currency == "JOD", f"Expected JOD, got {item.currency!r}"
+
+
+def test_receivables_inherit_usd_installment_currency(db_session: Session):
+    """Receivables must be denominated in USD when installments are USD."""
+    contract_id = _make_contract(db_session, project_code="PRJ-RCV-USD", number="u01", currency="USD")
+    _add_installments(db_session, contract_id, count=2, currency="USD")
+    svc = ReceivableService(db_session)
+    result = svc.generate_for_contract(contract_id)
+    for item in result.items:
+        assert item.currency == "USD", f"Expected USD, got {item.currency!r}"
+
+
+def test_receivables_fall_back_to_default_when_installment_currency_missing(db_session: Session):
+    """Receivables fall back to DEFAULT_CURRENCY when installment has no currency attribute."""
+    from app.core.constants.currency import DEFAULT_CURRENCY
+    from app.modules.payment_plans.models import PaymentSchedule
+
+    contract_id = _make_contract(db_session, project_code="PRJ-RCV-FBACK", number="fb1")
+    # Create installment without explicit currency (relies on DB/ORM default)
+    inst = PaymentSchedule(
+        contract_id=contract_id,
+        installment_number=1,
+        due_date=date(2026, 3, 1),
+        due_amount=50_000.0,
+        status="pending",
+    )
+    db_session.add(inst)
+    db_session.commit()
+
+    svc = ReceivableService(db_session)
+    result = svc.generate_for_contract(contract_id)
+    assert result.items[0].currency == DEFAULT_CURRENCY

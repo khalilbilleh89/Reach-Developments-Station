@@ -418,10 +418,16 @@ Existing API endpoints must not be modified without a dedicated PR.
 
 The platform canonical default currency is `AED` (UAE Dirham).
 
-All currency defaults — in ORM models, Pydantic schemas, and migration
-backfills — must be sourced from `app.core.constants.currency.DEFAULT_CURRENCY`.
-Inline string literals such as `"AED"` must not appear in model column defaults
-or schema field defaults. Import the constant instead.
+Currency defaults in ORM models and Pydantic schemas must be sourced from
+`app.core.constants.currency.DEFAULT_CURRENCY`. Inline string literals such as
+`"AED"` must not appear in model column defaults or schema field defaults.
+Import the constant instead.
+
+**Alembic migrations are an exception**: migrations must be historically stable
+and deterministic. They may (and should) pin the default value as a literal
+string (e.g. `server_default="AED"`) rather than importing a runtime constant.
+This prevents a future rename of the constant from silently rewriting the
+meaning of a historical migration.
 
 ### Project Base Currency
 
@@ -455,9 +461,11 @@ carry explicit currency denomination:
 
 ### Rules
 
-1. **No inline currency strings** — Never hardcode `"AED"` (or any ISO code)
-   as a Python default value in ORM models or schemas. Always import
-   `DEFAULT_CURRENCY` from `app.core.constants.currency`.
+1. **No inline currency strings in runtime code** — Never hardcode `"AED"` (or
+   any ISO code) as a Python default value in ORM models or Pydantic schemas.
+   Always import `DEFAULT_CURRENCY` from `app.core.constants.currency`.
+   *Exception*: Alembic migrations must use literal strings (`server_default="AED"`)
+   for historical determinism — do not import runtime constants in migrations.
 
 2. **New monetary tables must include currency** — Any new table with monetary
    columns must include a `currency VARCHAR(10) NOT NULL DEFAULT 'AED'` column

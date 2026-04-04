@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.core.constants.currency import DEFAULT_CURRENCY
 from app.core.constants.scenario import DEFAULT_SCENARIO_SOURCE_TYPE
 
 
