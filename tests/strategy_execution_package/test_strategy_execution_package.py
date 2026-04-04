@@ -769,7 +769,7 @@ def test_portfolio_execution_packages_respects_project_cap(client: TestClient) -
     assert len(data["packages"]) <= _PORTFOLIO_PROJECT_LIMIT
 
 
-def test_portfolio_execution_packages_cap_value_is_50(client: TestClient) -> None:
+def test_portfolio_execution_packages_cap_value_is_50() -> None:
     """Portfolio cap constant must equal 50 to align with strategy generator."""
     from app.modules.strategy_execution_package.service import _PORTFOLIO_PROJECT_LIMIT
 
