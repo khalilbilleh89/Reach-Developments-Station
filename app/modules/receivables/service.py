@@ -151,6 +151,9 @@ class ReceivableService:
                 amount_due=amount_due,
                 amount_paid=0.0,
                 balance_due=amount_due,
+                # Use contract_currency (already validated above to match all
+                # installments) so receivables are deterministically denominated
+                # in the governing contract currency, not the installment field.
                 currency=contract_currency,
                 status=status,
             )
