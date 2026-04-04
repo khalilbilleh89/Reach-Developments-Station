@@ -222,13 +222,22 @@ class PortfolioService:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
         overdue_balance = self.repo.overdue_balance_by_currency()
-        # Collection rate is a dimensionless portfolio-wide ratio computed from the
-        # pre-fetched currency-keyed totals, avoiding extra scalar sum queries.
-        collected_cash_total = sum(collected_cash_by_ccy.values())
-        outstanding_balance_total = sum(outstanding_balance_by_ccy.values())
-        collection_rate_pct = _safe_pct(
-            collected_cash_total, collected_cash_total + outstanding_balance_total
-        )
+        # Collection rate is only meaningful when all receivables share a single currency.
+        # Summing amounts across different currencies without FX conversion would produce
+        # a mathematically invalid ratio, violating the aggregation guard rule.
+        participating_currencies = {
+            currency
+            for currency in set(collected_cash_by_ccy) | set(outstanding_balance_by_ccy)
+            if collected_cash_by_ccy.get(currency, 0) != 0
+            or outstanding_balance_by_ccy.get(currency, 0) != 0
+        }
+        collection_rate_pct: Optional[float] = None
+        if len(participating_currencies) <= 1:
+            collected_cash_total = sum(collected_cash_by_ccy.values())
+            outstanding_balance_total = sum(outstanding_balance_by_ccy.values())
+            collection_rate_pct = _safe_pct(
+                collected_cash_total, collected_cash_total + outstanding_balance_total
+            )
 
         return PortfolioCollectionsSummary(
             total_receivables=total_receivables,

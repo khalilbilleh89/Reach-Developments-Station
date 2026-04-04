@@ -79,6 +79,7 @@ def _create_contract(
     buyer_id: str,
     contract_number: str = "CNT-001",
     price: float = 500000.0,
+    currency: str = "AED",
 ) -> str:
     resp = client.post(
         "/api/v1/sales/contracts",
@@ -88,6 +89,7 @@ def _create_contract(
             "contract_number": contract_number,
             "contract_date": str(date.today()),
             "contract_price": price,
+            "currency": currency,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -408,3 +410,83 @@ def test_dashboard_does_not_mutate_projects(client: TestClient):
     assert before["name"] == after["name"]
     assert before["status"] == after["status"]
     assert before["code"] == after["code"]
+
+
+# ---------------------------------------------------------------------------
+# Collection rate — aggregation guard: mixed-currency yields None
+# ---------------------------------------------------------------------------
+
+
+def _generate_receivables_for_contract(client: TestClient, contract_id: str) -> None:
+    """Create a single-installment payment plan (future date) and generate receivables."""
+    from datetime import timedelta
+
+    future_date = (date.today() + timedelta(days=30)).isoformat()
+    plan_resp = client.post(
+        "/api/v1/payment-plans",
+        json={
+            "contract_id": contract_id,
+            "plan_name": "Test Plan",
+            "number_of_installments": 1,
+            "start_date": future_date,
+        },
+    )
+    assert plan_resp.status_code == 201, plan_resp.text
+    gen_resp = client.post(f"/api/v1/contracts/{contract_id}/receivables/generate")
+    assert gen_resp.status_code == 201, gen_resp.text
+
+
+def test_collection_rate_single_currency_is_computed(client: TestClient):
+    """collection_rate_pct is computed when all receivables share a single currency.
+
+    Creates two contracts (both AED) each with a generated receivable so that
+    amount_paid == 0 and balance_due > 0 across a single-currency portfolio.
+    The rate must be 0 % (nothing collected yet) and definitely not None.
+    """
+    proj1_id, unit1_id = _create_unit(client, "PRJ-COL1")
+    buyer1_id = _create_buyer(client, "col1@example.com")
+    contract1_id = _create_contract(
+        client, unit1_id, buyer1_id, "CNT-COL1-001", price=100_000.0, currency="AED"
+    )
+    _generate_receivables_for_contract(client, contract1_id)
+
+    proj2_id, unit2_id = _create_unit(client, "PRJ-COL2")
+    buyer2_id = _create_buyer(client, "col2@example.com")
+    contract2_id = _create_contract(
+        client, unit2_id, buyer2_id, "CNT-COL2-001", price=200_000.0, currency="AED"
+    )
+    _generate_receivables_for_contract(client, contract2_id)
+
+    resp = client.get("/api/v1/portfolio/dashboard")
+    assert resp.status_code == 200
+    collection_rate_pct = resp.json()["collections"]["collection_rate_pct"]
+    # Rate is computable (0.0 % because nothing has been paid yet)
+    assert collection_rate_pct is not None
+    assert collection_rate_pct == pytest.approx(0.0, abs=1e-2)
+
+
+def test_collection_rate_mixed_currency_is_none(client: TestClient):
+    """collection_rate_pct is None when receivables span multiple currencies.
+
+    Creates one AED receivable and one JOD receivable.  Summing their amounts
+    without FX conversion is invalid, so the collection rate must be None.
+    """
+    proj1_id, unit1_id = _create_unit(client, "PRJ-MCA")
+    buyer1_id = _create_buyer(client, "mca1@example.com")
+    contract1_id = _create_contract(
+        client, unit1_id, buyer1_id, "CNT-MCA-001", price=100_000.0, currency="AED"
+    )
+    _generate_receivables_for_contract(client, contract1_id)
+
+    proj2_id, unit2_id = _create_unit(client, "PRJ-MCB")
+    buyer2_id = _create_buyer(client, "mca2@example.com")
+    contract2_id = _create_contract(
+        client, unit2_id, buyer2_id, "CNT-MCB-001", price=50_000.0, currency="JOD"
+    )
+    _generate_receivables_for_contract(client, contract2_id)
+
+    resp = client.get("/api/v1/portfolio/dashboard")
+    assert resp.status_code == 200
+    collection_rate_pct = resp.json()["collections"]["collection_rate_pct"]
+    # Mixed-currency: rate must not be computed
+    assert collection_rate_pct is None

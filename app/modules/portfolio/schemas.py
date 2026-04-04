@@ -117,8 +117,9 @@ class PortfolioCollectionsSummary(BaseModel):
         None,
         description=(
             "Portfolio-wide collection rate: amount_paid / (amount_paid + balance_due) "
-            "expressed as a percentage; approximate across currencies; "
-            "null when no receivables exist"
+            "expressed as a percentage; "
+            "null when no receivables exist or when receivables span multiple currencies "
+            "(cross-currency summing is invalid without FX conversion)"
         ),
     )
 
