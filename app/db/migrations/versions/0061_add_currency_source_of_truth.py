@@ -6,6 +6,8 @@ Create Date: 2026-04-04
 
 PR-CURRENCY-002 — Currency Source-of-Truth, Schema Coverage & Project Base
                   Currency Foundation
+PR-V7-09B — Made idempotent so upgrade is safe on fresh DB, partially-migrated
+             DB, and drifted DB where columns already exist.
 
 Summary
 -------
@@ -13,6 +15,10 @@ This migration establishes the currency data foundation required for safe
 financial enforcement in later PRs.  It does NOT change any formulas or
 aggregation behaviour — it only adds denomination fields so that every stored
 monetary value carries an explicit currency code.
+
+Each DDL operation is wrapped with an existence check so the migration is
+idempotent: re-running it on a database that already has the columns (e.g.
+schema drift or a previously-interrupted run) is a no-op.
 
 Changes
 -------
@@ -116,6 +122,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect as sa_inspect
 
 # ---------------------------------------------------------------------------
 # Alembic revision identifiers
@@ -133,8 +140,26 @@ depends_on: Union[str, Sequence[str], None] = None
 _DEFAULT = "AED"  # platform canonical default at migration time
 
 
+def _column_exists(table: str, column: str) -> bool:
+    """Return True if *column* already exists on *table* in the connected DB.
+
+    Used to make each DDL step idempotent so that upgrade is safe on:
+      - a fresh database (column absent → added),
+      - a partially-migrated or drifted database (column present → skipped),
+      - a retry after a previously-interrupted migration run.
+    """
+    bind = op.get_bind()
+    insp = sa_inspect(bind)
+    return column in {c["name"] for c in insp.get_columns(table)}
+
+
 def _add_currency_column(table: str) -> None:
-    """Add a non-null currency VARCHAR(10) column with 'AED' server default."""
+    """Add a non-null currency VARCHAR(10) column with 'AED' server default.
+
+    Idempotent: no-op when the column already exists.
+    """
+    if _column_exists(table, "currency"):
+        return
     op.add_column(
         table,
         sa.Column(
@@ -147,7 +172,8 @@ def _add_currency_column(table: str) -> None:
 
 
 def _drop_currency_column(table: str) -> None:
-    op.drop_column(table, "currency")
+    if _column_exists(table, "currency"):
+        op.drop_column(table, "currency")
 
 
 # ---------------------------------------------------------------------------
@@ -157,15 +183,18 @@ def _drop_currency_column(table: str) -> None:
 
 def upgrade() -> None:
     # -- projects: add base_currency ----------------------------------------
-    op.add_column(
-        "projects",
-        sa.Column(
-            "base_currency",
-            sa.String(10),
-            nullable=False,
-            server_default=sa.text(f"'{_DEFAULT}'"),
-        ),
-    )
+    # Idempotent: skip if the column already exists (e.g. schema drift or a
+    # previously-interrupted migration run).
+    if not _column_exists("projects", "base_currency"):
+        op.add_column(
+            "projects",
+            sa.Column(
+                "base_currency",
+                sa.String(10),
+                nullable=False,
+                server_default=sa.text(f"'{_DEFAULT}'"),
+            ),
+        )
 
     # -- sales_contracts: add currency -------------------------------------
     _add_currency_column("sales_contracts")
@@ -193,18 +222,26 @@ def upgrade() -> None:
 
     # -- land_parcels: fill NULLs then make NOT NULL -----------------------
     # land_parcels.currency already exists but is nullable with no default.
-    # 1. Backfill any NULL values to 'AED'.
-    op.execute(
-        sa.text(f"UPDATE land_parcels SET currency = '{_DEFAULT}' WHERE currency IS NULL")
-    )
-    # 2. Alter to NOT NULL with server default.
-    op.alter_column(
-        "land_parcels",
-        "currency",
-        existing_type=sa.String(10),
-        nullable=False,
-        server_default=sa.text(f"'{_DEFAULT}'"),
-    )
+    # Only perform the alter when the column is still nullable — if it was
+    # already converted to NOT NULL (e.g. by a prior partial run) we skip.
+    bind = op.get_bind()
+    insp = sa_inspect(bind)
+    lp_col_map = {c["name"]: c for c in insp.get_columns("land_parcels")}
+    if "currency" in lp_col_map and lp_col_map["currency"]["nullable"]:
+        # 1. Backfill any NULL values to 'AED'.
+        op.execute(
+            sa.text(
+                f"UPDATE land_parcels SET currency = '{_DEFAULT}' WHERE currency IS NULL"
+            )
+        )
+        # 2. Alter to NOT NULL with server default.
+        op.alter_column(
+            "land_parcels",
+            "currency",
+            existing_type=sa.String(10),
+            nullable=False,
+            server_default=sa.text(f"'{_DEFAULT}'"),
+        )
 
     # -- land_valuations: add currency -------------------------------------
     _add_currency_column("land_valuations")
@@ -225,20 +262,25 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Reverse all additions in reverse order
+    # Reverse all additions in reverse order — each drop is guarded so the
+    # downgrade is also idempotent.
     _drop_currency_column("cashflow_forecast_periods")
     _drop_currency_column("construction_cost_comparison_sets")
     _drop_currency_column("sales_exceptions")
     _drop_currency_column("land_valuations")
 
     # land_parcels: revert to nullable (no server default)
-    op.alter_column(
-        "land_parcels",
-        "currency",
-        existing_type=sa.String(10),
-        nullable=True,
-        server_default=None,
-    )
+    bind = op.get_bind()
+    insp = sa_inspect(bind)
+    lp_col_map = {c["name"]: c for c in insp.get_columns("land_parcels")}
+    if "currency" in lp_col_map and not lp_col_map["currency"]["nullable"]:
+        op.alter_column(
+            "land_parcels",
+            "currency",
+            existing_type=sa.String(10),
+            nullable=True,
+            server_default=None,
+        )
 
     _drop_currency_column("financial_scenario_runs")
     _drop_currency_column("feasibility_results")
@@ -249,4 +291,5 @@ def downgrade() -> None:
     _drop_currency_column("payment_schedules")
     _drop_currency_column("sales_contracts")
 
-    op.drop_column("projects", "base_currency")
+    if _column_exists("projects", "base_currency"):
+        op.drop_column("projects", "base_currency")
