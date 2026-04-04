@@ -94,3 +94,32 @@ export interface ScenarioCompareItem {
 export interface ScenarioCompareResponse {
   scenarios: ScenarioCompareItem[];
 }
+
+// ---------------------------------------------------------------------------
+// Financial Scenario Runs
+// ---------------------------------------------------------------------------
+
+/** A persisted financial scenario run produced by the Financial Scenario Engine. */
+export interface FinancialScenarioRun {
+  id: string;
+  scenario_id: string;
+  label: string;
+  notes: string | null;
+  is_baseline: boolean;
+  assumptions_json: Record<string, unknown> | null;
+  results_json: Record<string, unknown> | null;
+  irr: number | null;
+  npv: number | null;
+  roi: number | null;
+  developer_margin: number | null;
+  gross_profit: number | null;
+  /** ISO 4217 currency code for monetary outputs (npv, gross_profit). */
+  currency: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinancialScenarioRunList {
+  items: FinancialScenarioRun[];
+  total: number;
+}

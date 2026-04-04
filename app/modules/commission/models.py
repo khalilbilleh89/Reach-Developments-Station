@@ -23,6 +23,7 @@ from typing import Optional
 from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.commission import (
     CalculationMode,
@@ -121,6 +122,7 @@ class CommissionPayout(Base, TimestampMixin):
     )
     gross_sale_value: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     commission_pool_value: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     calculation_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(
         String(50),
@@ -156,6 +158,7 @@ class CommissionPayoutLine(Base, TimestampMixin):
         index=True,
     )
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     percentage: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
     value_covered: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

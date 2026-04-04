@@ -20,6 +20,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.settings import CommissionCalculationMode, PricingPriceMode
 
 
@@ -32,7 +33,7 @@ class PricingPolicyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(default=None)
     is_default: bool = False
-    currency: str = Field(default="AED", max_length=10)
+    currency: str = Field(default=DEFAULT_CURRENCY, max_length=10)
     base_markup_percent: Decimal = Field(default=Decimal("0"), ge=0, le=9999)
     balcony_price_factor: Decimal = Field(default=Decimal("0"), ge=0, le=9999)
     parking_price_mode: PricingPriceMode = PricingPriceMode.EXCLUDED
@@ -126,7 +127,7 @@ class ProjectTemplateCreate(BaseModel):
     description: Optional[str] = Field(default=None)
     default_pricing_policy_id: Optional[str] = None
     default_commission_policy_id: Optional[str] = None
-    default_currency: str = Field(default="AED", max_length=10)
+    default_currency: str = Field(default=DEFAULT_CURRENCY, max_length=10)
     is_active: bool = True
 
 

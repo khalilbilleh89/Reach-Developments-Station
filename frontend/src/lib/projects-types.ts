@@ -16,6 +16,8 @@ export interface Project {
   target_end_date: string | null;
   status: ProjectStatus;
   description: string | null;
+  /** ISO 4217 currency code governing all financial records for this project. */
+  base_currency: string;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,8 @@ export interface ProjectCreate {
   target_end_date?: string | null;
   status?: ProjectStatus;
   description?: string | null;
+  /** ISO 4217 currency code. Defaults to "AED" when not supplied. */
+  base_currency?: string;
 }
 
 export interface ProjectUpdate {
@@ -44,6 +48,8 @@ export interface ProjectUpdate {
   target_end_date?: string | null;
   status?: ProjectStatus;
   description?: string | null;
+  /** ISO 4217 currency code update. When supplied, changes the project base currency. */
+  base_currency?: string;
 }
 
 export interface ProjectSummary {

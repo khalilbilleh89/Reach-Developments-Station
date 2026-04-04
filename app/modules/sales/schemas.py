@@ -9,6 +9,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.sales import ContractPaymentStatus, ContractStatus, ReservationStatus
 
 
@@ -103,12 +104,14 @@ class SalesContractCreate(BaseModel):
     contract_number: str = Field(..., min_length=1, max_length=100)
     contract_date: date
     contract_price: float = Field(..., gt=0)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     notes: Optional[str] = Field(default=None, max_length=1000)
 
 
 class SalesContractUpdate(BaseModel):
     contract_date: Optional[date] = None
     contract_price: Optional[float] = Field(default=None, gt=0)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
     notes: Optional[str] = Field(default=None, max_length=1000)
 
 
@@ -120,6 +123,7 @@ class SalesContractResponse(BaseModel):
     contract_number: str
     contract_date: date
     contract_price: float
+    currency: str
     status: ContractStatus
     notes: Optional[str]
     created_at: datetime

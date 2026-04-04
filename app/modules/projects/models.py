@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.project import ProjectStatus
 
@@ -42,6 +43,12 @@ class Project(Base, TimestampMixin):
         default=ProjectStatus.PIPELINE.value,
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Project base currency — governs denomination of all financial records
+    # linked to this project.  Defaults to the platform canonical default.
+    base_currency: Mapped[str] = mapped_column(
+        String(10), nullable=False, default=DEFAULT_CURRENCY
+    )
 
     phases: Mapped[List["Phase"]] = relationship("Phase", back_populates="project", cascade="all, delete-orphan")
     parcels: Mapped[List["LandParcel"]] = relationship("LandParcel", back_populates="project", cascade="all, delete-orphan")

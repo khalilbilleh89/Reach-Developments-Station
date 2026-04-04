@@ -18,6 +18,7 @@ from typing import Any, Optional
 from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 
 
@@ -54,7 +55,7 @@ class Receivable(Base, TimestampMixin):
     )
     balance_due: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="AED"
+        String(10), nullable=False, default=DEFAULT_CURRENCY
     )
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="pending", index=True

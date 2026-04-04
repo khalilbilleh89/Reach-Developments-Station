@@ -66,6 +66,8 @@ export interface FeasibilityAssumptions {
   finance_cost_ratio: number | null;
   sales_cost_ratio: number | null;
   development_period_months: number | null;
+  /** ISO 4217 currency code for monetary input assumptions. */
+  currency: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -79,6 +81,8 @@ export interface FeasibilityAssumptionsCreate {
   finance_cost_ratio: number;
   sales_cost_ratio: number;
   development_period_months: number;
+  /** ISO 4217 currency code. Defaults to "AED" when not supplied. */
+  currency?: string;
   notes?: string | null;
 }
 
@@ -90,6 +94,7 @@ export interface FeasibilityAssumptionsUpdate {
   finance_cost_ratio?: number | null;
   sales_cost_ratio?: number | null;
   development_period_months?: number | null;
+  currency?: string | null;
   notes?: string | null;
 }
 
@@ -140,6 +145,8 @@ export interface FeasibilityResult {
   sales_cost: number | null;
   total_cost: number | null;
   developer_profit: number | null;
+  /** ISO 4217 currency code for all monetary outputs in this result. */
+  currency: string;
   profit_margin: number | null;
   irr_estimate: number | null;
   irr: number | null;

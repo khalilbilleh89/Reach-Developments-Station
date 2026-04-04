@@ -16,6 +16,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.commission import (
     CalculationMode,
     CommissionPartyType,
@@ -138,6 +139,7 @@ class CommissionPayoutLineResponse(BaseModel):
     party_reference: Optional[str]
     slab_id: Optional[str]
     amount: float
+    currency: str
     percentage: float
     value_covered: float
     notes: Optional[str]
@@ -154,6 +156,7 @@ class CommissionPayoutResponse(BaseModel):
     commission_plan_id: str
     gross_sale_value: float
     commission_pool_value: float
+    currency: str
     calculation_mode: CalculationMode
     status: CommissionPayoutStatus
     calculated_at: Optional[datetime]
@@ -180,6 +183,7 @@ class CommissionPayoutListItem(BaseModel):
     commission_plan_id: str
     gross_sale_value: float
     commission_pool_value: float
+    currency: str
     calculation_mode: CalculationMode
     status: CommissionPayoutStatus
     calculated_at: Optional[datetime]

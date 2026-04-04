@@ -88,6 +88,8 @@ export interface CommissionPayoutLine {
   party_reference: string | null;
   slab_id: string | null;
   amount: number;
+  /** ISO 4217 currency code for amount. */
+  currency: string;
   percentage: number;
   value_covered: number;
   notes: string | null;
@@ -107,6 +109,8 @@ export interface CommissionPayout {
   commission_plan_id: string;
   gross_sale_value: number;
   commission_pool_value: number;
+  /** ISO 4217 currency code for gross_sale_value and commission_pool_value. */
+  currency: string;
   calculation_mode: CalculationMode;
   status: CommissionPayoutStatus;
   calculated_at: string | null;
@@ -125,6 +129,8 @@ export interface CommissionPayoutListItem {
   commission_plan_id: string;
   gross_sale_value: number;
   commission_pool_value: number;
+  /** ISO 4217 currency code for gross_sale_value and commission_pool_value. */
+  currency: string;
   calculation_mode: CalculationMode;
   status: CommissionPayoutStatus;
   calculated_at: string | null;

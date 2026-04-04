@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.finance import PaymentMethod, ReceiptStatus, ReceivableStatus
 
 
@@ -24,6 +25,7 @@ class PaymentReceiptCreate(BaseModel):
     payment_schedule_id: str = Field(..., min_length=1)
     receipt_date: date
     amount_received: float = Field(..., gt=0)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=3)
     payment_method: Optional[PaymentMethod] = None
     reference_number: Optional[str] = Field(None, max_length=100)
     notes: Optional[str] = Field(None, max_length=1000)
@@ -37,6 +39,7 @@ class PaymentReceiptResponse(BaseModel):
     payment_schedule_id: str
     receipt_date: date
     amount_received: float
+    currency: str
     payment_method: Optional[PaymentMethod]
     reference_number: Optional[str]
     notes: Optional[str]

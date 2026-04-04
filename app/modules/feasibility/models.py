@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.finance import FeasibilityDecision, FeasibilityRiskLevel, FeasibilityScenarioType, FeasibilityViabilityStatus
 
@@ -87,6 +88,7 @@ class FeasibilityAssumptions(Base, TimestampMixin):
     sellable_area_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
     avg_sale_price_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
     construction_cost_per_sqm: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     soft_cost_ratio: Mapped[Optional[float]] = mapped_column(Numeric(6, 4), nullable=True)
     finance_cost_ratio: Mapped[Optional[float]] = mapped_column(Numeric(6, 4), nullable=True)
     sales_cost_ratio: Mapped[Optional[float]] = mapped_column(Numeric(6, 4), nullable=True)
@@ -112,6 +114,7 @@ class FeasibilityResult(Base, TimestampMixin):
     sales_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     total_cost: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
     developer_profit: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     profit_margin: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
     irr_estimate: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)
     irr: Mapped[Optional[float]] = mapped_column(Numeric(10, 6), nullable=True)

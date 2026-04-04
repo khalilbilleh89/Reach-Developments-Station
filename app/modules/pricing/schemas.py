@@ -9,9 +9,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-# Authoritative default currency for the platform.  All pricing values inherit
-# this when no explicit currency is available from the pricing record.
-DEFAULT_CURRENCY = "AED"
+from app.core.constants.currency import DEFAULT_CURRENCY
 
 # Valid pricing status values.  The canonical lifecycle is:
 #   draft → submitted → approved → archived
@@ -118,7 +116,7 @@ class UnitPricingCreate(BaseModel):
         default=0.0,
         description="Manual upward or downward price adjustment.",
     )
-    currency: str = Field(default="AED", min_length=1, max_length=10)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=1, max_length=10)
     pricing_status: str = Field(
         default="draft",
         pattern=r"^(draft|submitted|reviewed)$",

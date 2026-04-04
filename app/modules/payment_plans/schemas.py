@@ -123,6 +123,7 @@ class PaymentScheduleResponse(BaseModel):
     installment_number: int
     due_date: date
     due_amount: float
+    currency: str
     status: PaymentScheduleStatus
     notes: Optional[str]
     created_at: datetime

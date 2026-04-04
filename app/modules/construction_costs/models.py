@@ -16,6 +16,7 @@ from typing import Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 from app.shared.enums.construction_costs import CostCategory, CostSource, CostStage
 
@@ -63,7 +64,7 @@ class ConstructionCostRecord(Base, TimestampMixin):
         nullable=False,
         default=Decimal("0.00"),
     )
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="AED")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default=DEFAULT_CURRENCY)
     effective_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     reference_number: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True

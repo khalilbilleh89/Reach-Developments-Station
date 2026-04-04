@@ -409,3 +409,65 @@ Existing API endpoints must not be modified without a dedicated PR.
 - [`../03-technical/frontend-architecture.md`](../03-technical/frontend-architecture.md) — Frontend architecture
 - [`../03-technical/database-architecture.md`](../03-technical/database-architecture.md) — Database architecture
 - [`../SYSTEM_RULES.md`](../SYSTEM_RULES.md) — Mandatory system architecture rules
+
+---
+
+## Currency Source-of-Truth Rules (PR-CURRENCY-002)
+
+### Canonical Default Currency
+
+The platform canonical default currency is `AED` (UAE Dirham).
+
+All currency defaults — in ORM models, Pydantic schemas, and migration
+backfills — must be sourced from `app.core.constants.currency.DEFAULT_CURRENCY`.
+Inline string literals such as `"AED"` must not appear in model column defaults
+or schema field defaults. Import the constant instead.
+
+### Project Base Currency
+
+Every `Project` record carries a `base_currency` field (ISO 4217, e.g. "AED").
+This field is the governing currency for all financial records linked to the
+project. Downstream services and aggregators should use this field when they
+need to verify or group financial values for a project.
+
+### Monetary Record Denomination Rule
+
+Every table storing monetary amounts must carry an explicit `currency` column
+(VARCHAR 10, NOT NULL, DEFAULT canonical constant). The following tables now
+carry explicit currency denomination:
+
+| Table | Column | Coverage |
+|---|---|---|
+| projects | base_currency | project governing currency |
+| sales_contracts | currency | contract_price denomination |
+| payment_schedules | currency | due_amount denomination |
+| payment_receipts | currency | amount_received denomination |
+| commission_payouts | currency | gross_sale_value denomination |
+| commission_payout_lines | currency | amount denomination |
+| feasibility_assumptions | currency | price/cost input denomination |
+| feasibility_results | currency | gdv/total_cost/profit denomination |
+| financial_scenario_runs | currency | npv/gross_profit denomination |
+| land_parcels | currency | acquisition_price denomination (non-nullable) |
+| land_valuations | currency | gdv/residual_value denomination |
+| sales_exceptions | currency | base_price/discount denomination |
+| construction_cost_comparison_sets | currency | comparison line denomination |
+| cashflow_forecast_periods | currency | inflow/outflow denomination |
+
+### Rules
+
+1. **No inline currency strings** — Never hardcode `"AED"` (or any ISO code)
+   as a Python default value in ORM models or schemas. Always import
+   `DEFAULT_CURRENCY` from `app.core.constants.currency`.
+
+2. **New monetary tables must include currency** — Any new table with monetary
+   columns must include a `currency VARCHAR(10) NOT NULL DEFAULT 'AED'` column
+   at creation time. This is not a backlog item; it is a schema creation rule.
+
+3. **Base currency is informational for now** — In PR-CURRENCY-002, `base_currency`
+   and per-record `currency` fields are source-of-truth data. Calculation
+   enforcement (rejecting mixed-currency aggregation) and FX conversion are
+   deferred to PR-CURRENCY-003 and later.
+
+4. **No FX conversion in this scope** — PR-CURRENCY-002 does not introduce
+   exchange rate tables, FX conversion services, or automatic normalization.
+   A single-currency-per-project discipline is the intended operating model.

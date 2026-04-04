@@ -29,8 +29,10 @@ def test_constants_common_imports():
 
 def test_constants_currency_imports():
     mod = importlib.import_module("app.core.constants.currency")
+    assert hasattr(mod, "CURRENCY_AED")
     assert hasattr(mod, "CURRENCY_JOD")
     assert hasattr(mod, "CURRENCY_USD")
+    assert hasattr(mod, "SUPPORTED_CURRENCIES")
     assert hasattr(mod, "DEFAULT_CURRENCY")
 
 
@@ -106,15 +108,25 @@ class TestCommonConstants:
 
 class TestCurrencyConstants:
     def test_currency_codes(self):
-        from app.core.constants.currency import CURRENCY_JOD, CURRENCY_USD
+        from app.core.constants.currency import CURRENCY_AED, CURRENCY_JOD, CURRENCY_USD
 
+        assert CURRENCY_AED == "AED"
         assert CURRENCY_JOD == "JOD"
         assert CURRENCY_USD == "USD"
 
     def test_default_currency(self):
-        from app.core.constants.currency import CURRENCY_JOD, DEFAULT_CURRENCY
+        from app.core.constants.currency import CURRENCY_AED, DEFAULT_CURRENCY
 
-        assert DEFAULT_CURRENCY == CURRENCY_JOD
+        assert DEFAULT_CURRENCY == CURRENCY_AED
+        assert DEFAULT_CURRENCY == "AED"
+
+    def test_supported_currencies(self):
+        from app.core.constants.currency import CURRENCY_AED, CURRENCY_JOD, CURRENCY_USD, SUPPORTED_CURRENCIES
+
+        assert isinstance(SUPPORTED_CURRENCIES, list)
+        assert CURRENCY_AED in SUPPORTED_CURRENCIES
+        assert CURRENCY_JOD in SUPPORTED_CURRENCIES
+        assert CURRENCY_USD in SUPPORTED_CURRENCIES
 
 
 # ---------------------------------------------------------------------------
