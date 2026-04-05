@@ -22,8 +22,8 @@ from app.modules.pricing.models import (
 from app.modules.pricing.override_rules import assert_override_allowed, calculate_override_percent
 from app.modules.pricing.premium_rules import calculate_premium_breakdown
 from app.modules.pricing.repository import UnitPricingAttributesRepository, UnitPricingRepository, PricingHistoryRepository
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.pricing.schemas import (
-    DEFAULT_CURRENCY,
     PremiumBreakdownResponse,
     PricingAuditEntry,
     PricingAuditTrailResponse,

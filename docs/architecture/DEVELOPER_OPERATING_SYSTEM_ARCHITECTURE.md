@@ -769,12 +769,44 @@ when the portfolio contains more than one currency denomination.
 
 This rule is established in Rule C and restated here for completeness.
 
+### Rule J — Payment-Plan Schedule and Response Must Use Parent Contract as Currency Source-of-Truth
+
+When generating payment schedule rows for a sales contract, the service must
+explicitly write the parent `SalesContract.currency` onto every created
+`PaymentSchedule` row.  Response builders must derive `currency` from the
+governing parent contract — not by inferring it from persisted child rows.
+
+```python
+# ✅ Correct — schedule rows inherit parent contract denomination
+row = {
+    "contract_id": contract.id,
+    "currency": contract.currency,   # explicit parent propagation
+    ...
+}
+# ✅ Correct — response builder uses contract currency as source-of-truth
+return PaymentPlanResponse(currency=contract.currency, ...)
+
+# ❌ Forbidden — trusts that child rows are already correct, hiding write-path bugs
+currency = items[0].currency if items else DEFAULT_CURRENCY
+```
+
+Applies to:
+
+- `PaymentSchedule` rows ← `SalesContract.currency` (write path)
+- `PaymentPlanResponse.currency` ← `SalesContract.currency` (response assembly)
+- `PaymentScheduleListResponse.currency` ← `SalesContract.currency` (list response)
+
+This prevents a non-default-currency contract from silently producing
+platform-default-denominated schedule rows and responses.
+
 ### Enforcement Summary
 
 | Layer | Rule |
 |---|---|
 | Services / repositories | No inline ISO literals (`"AED"`) — use `DEFAULT_CURRENCY` |
 | Child record creation | Explicit parent currency propagation required |
+| Payment schedule rows | Must persist `SalesContract.currency` explicitly |
 | Response assembly | Every aggregate monetary field must carry denomination |
+| Payment plan responses | Currency sourced from parent contract, not child rows |
 | Portfolio ratios | `Optional[float]` — `None` for multi-currency portfolios |
 | API response schemas | Follow Rules A–E from PR-CURRENCY-007 |
