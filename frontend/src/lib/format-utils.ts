@@ -29,12 +29,12 @@ export function formatCurrencyPrecise(
   value: number,
   currency: string = DEFAULT_CURRENCY,
 ): string {
-  if (currency === "AED") {
+  if (currency === DEFAULT_CURRENCY) {
     const sign = value < 0 ? "-" : "";
     const formatted = Math.abs(value).toLocaleString("en-US", {
       maximumFractionDigits: 0,
     });
-    return `AED ${sign}${formatted}`;
+    return `${DEFAULT_CURRENCY} ${sign}${formatted}`;
   }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -63,18 +63,18 @@ export function formatCurrency(
   value: number,
   currency: string = DEFAULT_CURRENCY,
 ): string {
-  if (currency !== "AED") {
+  if (currency !== DEFAULT_CURRENCY) {
     return formatAmount(value, currency);
   }
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
   if (abs >= 1_000_000) {
-    return `AED ${sign}${(abs / 1_000_000).toFixed(1)}M`;
+    return `${DEFAULT_CURRENCY} ${sign}${(abs / 1_000_000).toFixed(1)}M`;
   }
   if (abs >= 1_000) {
-    return `AED ${sign}${(abs / 1_000).toFixed(0)}K`;
+    return `${DEFAULT_CURRENCY} ${sign}${(abs / 1_000).toFixed(0)}K`;
   }
-  return `AED ${value.toLocaleString()}`;
+  return `${DEFAULT_CURRENCY} ${value.toLocaleString()}`;
 }
 
 /**
@@ -94,8 +94,8 @@ export function formatCurrency(
  *   formatAmount(-5000, "EUR")   → "-€5,000"
  */
 export function formatAmount(value: number, currency: string): string {
-  if (currency === "AED") {
-    return formatCurrency(value, "AED");
+  if (currency === DEFAULT_CURRENCY) {
+    return formatCurrency(value, DEFAULT_CURRENCY);
   }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -110,11 +110,13 @@ export function formatAmount(value: number, currency: string): string {
  *
  * Use this helper when the backend returns portfolio-wide totals grouped by
  * currency instead of a single scalar.  Each currency bucket is formatted
- * with `formatAmount` and the results are joined with " / ".
+ * with `formatAmount` and the results are joined with " / ", so non-AED
+ * values use locale-correct currency formatting rather than compact K/M
+ * abbreviations.
  *
  * Example:
  *   formatCurrencyMap({ AED: 5_000_000, USD: 1_200_000 })
- *   → "AED 5.0M / $1.2M"
+ *   → "AED 5.0M / $1,200,000"
  *
  * Returns "—" when the map is empty.
  */
@@ -148,9 +150,9 @@ export function formatAdjustment(value: number, currency: string): string {
   const absFormatted = formatAmount(Math.abs(value), currency);
   const sign = value > 0 ? "+" : "-";
 
-  if (currency === "AED") {
+  if (currency === DEFAULT_CURRENCY) {
     // absFormatted = "AED 25K" — insert sign after "AED "
-    return absFormatted.replace("AED ", `AED ${sign}`);
+    return absFormatted.replace(`${DEFAULT_CURRENCY} `, `${DEFAULT_CURRENCY} ${sign}`);
   }
   // For Intl-formatted strings (e.g. "$25,000"), prepend the sign
   return `${sign}${absFormatted}`;
