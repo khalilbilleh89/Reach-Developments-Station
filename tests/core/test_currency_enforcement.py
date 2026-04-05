@@ -608,3 +608,309 @@ class TestScenarioFinancialRunCurrency:
         data = response.json()
         assert "currency" in data
         assert data["currency"] == DEFAULT_CURRENCY
+
+
+# ---------------------------------------------------------------------------
+# J. PR-CURRENCY-008 — final leak closure
+# ---------------------------------------------------------------------------
+
+
+class TestPricingServiceNoCurrencyLiteral:
+    """Pricing service and repository must use DEFAULT_CURRENCY constant, not inline literals."""
+
+    def test_pricing_repository_record_change_default_uses_constant(self):
+        """PricingHistoryRepository.record_change must default currency to DEFAULT_CURRENCY."""
+        import inspect
+
+        from app.modules.pricing.repository import PricingHistoryRepository
+
+        sig = inspect.signature(PricingHistoryRepository.record_change)
+        currency_param = sig.parameters.get("currency")
+        assert currency_param is not None
+        assert currency_param.default == DEFAULT_CURRENCY, (
+            f"Expected DEFAULT_CURRENCY ({DEFAULT_CURRENCY!r}), "
+            f"got {currency_param.default!r} — do not use inline ISO literals"
+        )
+
+    def test_portfolio_service_cost_variance_uses_constant(self, db_session):
+        """Portfolio service must fall back to DEFAULT_CURRENCY when project currency
+        is absent from the currency map — not to a raw 'AED' literal."""
+        from unittest.mock import MagicMock, patch
+
+        from app.modules.portfolio.service import PortfolioService
+
+        service = PortfolioService(db_session)
+
+        pid = "proj-fallback-test"
+        mock_project = MagicMock()
+        mock_project.id = pid
+        mock_project.name = "Test Project"
+
+        with (
+            patch.object(service.repo, "list_projects", return_value=[]),
+            patch.object(service.repo, "list_projects_with_active_comparison_sets",
+                         return_value=[mock_project]),
+            patch.object(service.repo, "get_variance_totals_by_project",
+                         return_value={pid: (__import__("decimal").Decimal("1000000"),
+                                             __import__("decimal").Decimal("900000"),
+                                             __import__("decimal").Decimal("-100000"))}),
+            patch.object(service.repo, "get_active_set_count_by_project",
+                         return_value={pid: 1}),
+            patch.object(service.repo, "get_latest_comparison_stage_by_project",
+                         return_value={pid: "tender"}),
+            # Deliberately exclude pid from the currency map to trigger the fallback
+            patch.object(service.repo, "get_currency_by_project_comparison_sets",
+                         return_value={}),
+            patch.object(service.repo, "get_portfolio_variance_totals_grouped",
+                         return_value={}),
+        ):
+            result = service.get_cost_variance()
+
+            assert len(result.projects) == 1
+            card = result.projects[0]
+            assert card.currency == DEFAULT_CURRENCY, (
+                f"Expected DEFAULT_CURRENCY ({DEFAULT_CURRENCY!r}), got {card.currency!r}"
+            )
+
+
+class TestCommissionPayoutCurrencyPropagation:
+    """CommissionPayout and payout lines must inherit contract currency."""
+
+    def test_commission_payout_inherits_contract_currency(self, client: TestClient):
+        """Calculating a payout for a JOD-denominated contract must produce a
+        JOD-denominated payout record with JOD-denominated payout lines."""
+        # Build hierarchy
+        proj_resp = client.post(
+            "/api/v1/projects",
+            json={"name": "Comm Currency Project", "code": "CCP-008", "base_currency": "JOD"},
+        )
+        assert proj_resp.status_code == 201, proj_resp.text
+        project_id = proj_resp.json()["id"]
+
+        phase_resp = client.post(
+            "/api/v1/phases",
+            json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
+        )
+        assert phase_resp.status_code == 201
+        phase_id = phase_resp.json()["id"]
+
+        bldg_resp = client.post(
+            f"/api/v1/phases/{phase_id}/buildings",
+            json={"name": "Block A", "code": "BLK-CCP008"},
+        )
+        assert bldg_resp.status_code == 201
+        building_id = bldg_resp.json()["id"]
+
+        floor_resp = client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
+        )
+        assert floor_resp.status_code == 201
+        floor_id = floor_resp.json()["id"]
+
+        unit_resp = client.post(
+            "/api/v1/units",
+            json={
+                "floor_id": floor_id,
+                "unit_number": "201",
+                "unit_type": "studio",
+                "internal_area": 90.0,
+            },
+        )
+        assert unit_resp.status_code == 201
+        unit_id = unit_resp.json()["id"]
+
+        buyer_resp = client.post(
+            "/api/v1/sales/buyers",
+            json={"full_name": "JOD Buyer", "email": "jod.buyer@test.com", "phone": "+9621111111"},
+        )
+        assert buyer_resp.status_code == 201
+        buyer_id = buyer_resp.json()["id"]
+
+        # Create JOD-denominated contract
+        contract_resp = client.post(
+            "/api/v1/sales/contracts",
+            json={
+                "unit_id": unit_id,
+                "buyer_id": buyer_id,
+                "contract_number": "CCP-JOD-001",
+                "contract_date": "2026-01-01",
+                "contract_price": 200_000.0,
+                "currency": "JOD",
+            },
+        )
+        assert contract_resp.status_code == 201, contract_resp.text
+        contract_id = contract_resp.json()["id"]
+
+        # Create commission plan and slab
+        plan_resp = client.post(
+            "/api/v1/commission/plans",
+            json={
+                "project_id": project_id,
+                "name": "JOD Plan",
+                "pool_percentage": 5.0,
+                "calculation_mode": "marginal",
+            },
+        )
+        assert plan_resp.status_code == 201, plan_resp.text
+        plan_id = plan_resp.json()["id"]
+
+        slab_resp = client.post(
+            f"/api/v1/commission/plans/{plan_id}/slabs",
+            json={
+                "range_from": 0,
+                "range_to": None,
+                "sequence": 1,
+                "sales_rep_pct": 60.0,
+                "team_lead_pct": 20.0,
+                "manager_pct": 10.0,
+                "broker_pct": 5.0,
+                "platform_pct": 5.0,
+            },
+        )
+        assert slab_resp.status_code == 201, slab_resp.text
+
+        # Calculate payout
+        payout_resp = client.post(
+            "/api/v1/commission/payouts/calculate",
+            json={
+                "sale_contract_id": contract_id,
+                "commission_plan_id": plan_id,
+            },
+        )
+        assert payout_resp.status_code == 201, payout_resp.text
+        payout_data = payout_resp.json()
+
+        assert payout_data["currency"] == "JOD", (
+            f"Payout must inherit contract currency 'JOD', got {payout_data['currency']!r}"
+        )
+        lines = payout_data.get("lines", [])
+        assert len(lines) > 0, "Expected at least one payout line"
+        for line in lines:
+            assert line["currency"] == "JOD", (
+                f"Payout line must inherit contract currency 'JOD', got {line['currency']!r}"
+            )
+
+
+class TestPaymentPlanResponseCurrency:
+    """PaymentPlanResponse and PaymentScheduleListResponse must include denomination."""
+
+    def test_payment_plan_response_has_currency_field(self):
+        """PaymentPlanResponse schema must declare a currency field."""
+        from app.modules.payment_plans.schemas import PaymentPlanResponse
+
+        fields = PaymentPlanResponse.model_fields
+        assert "currency" in fields, (
+            "PaymentPlanResponse must include a 'currency' field for denomination safety"
+        )
+
+    def test_payment_schedule_list_response_has_currency_field(self):
+        """PaymentScheduleListResponse schema must declare a currency field."""
+        from app.modules.payment_plans.schemas import PaymentScheduleListResponse
+
+        fields = PaymentScheduleListResponse.model_fields
+        assert "currency" in fields, (
+            "PaymentScheduleListResponse must include a 'currency' field for denomination safety"
+        )
+
+    def test_payment_plan_response_currency_defaults_to_platform_default(self):
+        """PaymentPlanResponse.currency must default to DEFAULT_CURRENCY."""
+        from datetime import datetime, timezone
+
+        from app.modules.payment_plans.schemas import PaymentPlanResponse
+
+        response = PaymentPlanResponse(
+            id="plan-001",
+            contract_id="ctr-001",
+            plan_name="Test Plan",
+            plan_type="standard_installments",
+            installments=[],
+            total_installments=0,
+            total_due=0.0,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        assert response.currency == DEFAULT_CURRENCY
+
+    def test_payment_plan_api_response_includes_currency(self, client: TestClient):
+        """POST /payment-plans/contracts/{id}/plan must return currency in response."""
+        # Build a minimal hierarchy
+        proj_resp = client.post(
+            "/api/v1/projects",
+            json={"name": "Plan Currency Project", "code": "PCP-008"},
+        )
+        assert proj_resp.status_code == 201
+        project_id = proj_resp.json()["id"]
+
+        phase_resp = client.post(
+            "/api/v1/phases",
+            json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
+        )
+        assert phase_resp.status_code == 201
+        phase_id = phase_resp.json()["id"]
+
+        bldg_resp = client.post(
+            f"/api/v1/phases/{phase_id}/buildings",
+            json={"name": "Block A", "code": "BLK-PCP008"},
+        )
+        assert bldg_resp.status_code == 201
+        building_id = bldg_resp.json()["id"]
+
+        floor_resp = client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
+        )
+        assert floor_resp.status_code == 201
+        floor_id = floor_resp.json()["id"]
+
+        unit_resp = client.post(
+            "/api/v1/units",
+            json={
+                "floor_id": floor_id,
+                "unit_number": "301",
+                "unit_type": "studio",
+                "internal_area": 60.0,
+            },
+        )
+        assert unit_resp.status_code == 201
+        unit_id = unit_resp.json()["id"]
+
+        buyer_resp = client.post(
+            "/api/v1/sales/buyers",
+            json={
+                "full_name": "Plan Buyer",
+                "email": "plan.buyer@test.com",
+                "phone": "+9622222222",
+            },
+        )
+        assert buyer_resp.status_code == 201
+        buyer_id = buyer_resp.json()["id"]
+
+        contract_resp = client.post(
+            "/api/v1/sales/contracts",
+            json={
+                "unit_id": unit_id,
+                "buyer_id": buyer_id,
+                "contract_number": "PCP-AED-001",
+                "contract_date": "2026-01-01",
+                "contract_price": 300_000.0,
+            },
+        )
+        assert contract_resp.status_code == 201, contract_resp.text
+        contract_id = contract_resp.json()["id"]
+
+        plan_resp = client.post(
+            "/api/v1/payment-plans",
+            json={
+                "contract_id": contract_id,
+                "plan_name": "Quarterly Plan",
+                "number_of_installments": 4,
+                "start_date": "2026-02-01",
+            },
+        )
+        assert plan_resp.status_code == 201, plan_resp.text
+        plan_data = plan_resp.json()
+        assert "currency" in plan_data, (
+            "Payment plan response must include 'currency' field"
+        )
+        assert plan_data["currency"] == DEFAULT_CURRENCY

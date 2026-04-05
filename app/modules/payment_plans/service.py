@@ -22,6 +22,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.payment_plans.models import PaymentPlanTemplate, PaymentSchedule
 from app.modules.payment_plans.repository import (
     PaymentPlanTemplateRepository,
@@ -288,11 +289,15 @@ class PaymentPlanService:
         contract_id: str, rows: List[PaymentSchedule]
     ) -> PaymentScheduleListResponse:
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
+        # Derive currency from the first installment (all items in a single
+        # contract plan share the same denomination via contract.currency).
+        currency = items[0].currency if items else DEFAULT_CURRENCY
         return PaymentScheduleListResponse(
             contract_id=contract_id,
             items=items,
             total=len(items),
             total_due=round(sum(i.due_amount for i in items), 2),
+            currency=currency,
         )
 
     # ------------------------------------------------------------------
@@ -435,6 +440,9 @@ class PaymentPlanService:
             else ""
         )
         contract_id = rows[0].contract_id if rows else ""
+        # Derive currency from the first installment (all items in a single
+        # contract plan share the same denomination via contract.currency).
+        currency = items[0].currency if items else DEFAULT_CURRENCY
         return PaymentPlanResponse(
             id=plan_id,
             contract_id=contract_id,
@@ -443,6 +451,7 @@ class PaymentPlanService:
             installments=items,
             total_installments=len(items),
             total_due=round(sum(i.due_amount for i in items), 2),
+            currency=currency,
             created_at=created_at,
             updated_at=updated_at,
         )

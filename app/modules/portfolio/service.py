@@ -25,6 +25,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.portfolio.repository import PortfolioRepository
 from app.modules.portfolio.schemas import (
     PortfolioCollectionsSummary,
@@ -379,7 +380,7 @@ class PortfolioService:
                         else None
                     ),
                     variance_status=variance_status,
-                    currency=currency_by_project.get(pid, "AED"),
+                    currency=currency_by_project.get(pid, DEFAULT_CURRENCY),
                 )
             )
 

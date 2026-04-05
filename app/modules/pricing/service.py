@@ -502,7 +502,7 @@ class UnitPricingService:
         payload = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
         base_price = payload.get("base_price", 0.0)
         manual_adjustment = payload.get("manual_adjustment", 0.0)
-        currency = payload.get("currency", "AED")
+        currency = payload.get("currency", DEFAULT_CURRENCY)
         notes = payload.get("notes", None)
         # Schema accepts draft/submitted/reviewed; blocks approved/archived.
         # Default to draft here as an additional safety net.
@@ -647,7 +647,7 @@ class UnitPricingService:
             "manual_adjustment",
             float(existing.manual_adjustment) if existing else 0.0,
         )
-        currency = payload.get("currency", existing.currency if existing else "AED")
+        currency = payload.get("currency", existing.currency if existing else DEFAULT_CURRENCY)
 
         # Strip restricted status values — approval must go through the
         # dedicated approval endpoint, archival is handled by supersede.

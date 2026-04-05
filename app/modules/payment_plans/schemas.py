@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.finance import (
     InstallmentFrequency,
     PaymentPlanType,
@@ -139,6 +140,7 @@ class PaymentScheduleListResponse(BaseModel):
     items: List[PaymentScheduleResponse]
     total: int
     total_due: float
+    currency: str = DEFAULT_CURRENCY
 
 
 # ---------------------------------------------------------------------------
@@ -176,5 +178,6 @@ class PaymentPlanResponse(BaseModel):
     installments: List[PaymentScheduleResponse]
     total_installments: int
     total_due: float
+    currency: str = DEFAULT_CURRENCY
     created_at: datetime
     updated_at: datetime

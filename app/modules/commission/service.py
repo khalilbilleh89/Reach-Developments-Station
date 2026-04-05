@@ -209,6 +209,7 @@ class CommissionService:
             commission_plan_id=plan.id,
             gross_sale_value=gross,
             commission_pool_value=pool,
+            currency=contract.currency,
             calculation_mode=mode.value,
             status=CommissionPayoutStatus.CALCULATED.value,
             calculated_at=now,
@@ -218,9 +219,9 @@ class CommissionService:
 
         # 7. Build payout lines
         if mode == CalculationMode.MARGINAL:
-            lines = self._calc_marginal(payout.id, gross, pool, slabs)
+            lines = self._calc_marginal(payout.id, gross, pool, slabs, contract.currency)
         else:
-            lines = self._calc_cumulative(payout.id, gross, pool, slabs)
+            lines = self._calc_cumulative(payout.id, gross, pool, slabs, contract.currency)
 
         for line in lines:
             self._repo.create_payout_line(line)
@@ -300,6 +301,7 @@ class CommissionService:
         gross: float,
         pool: float,
         slabs: List[CommissionSlab],
+        currency: str,
     ) -> List[CommissionPayoutLine]:
         """Marginal (bracket) commission allocation."""
         lines: List[CommissionPayoutLine] = []
@@ -332,6 +334,7 @@ class CommissionService:
                         party_type=party_type.value,
                         slab_id=slab.id,
                         amount=amount,
+                        currency=currency,
                         percentage=pct,
                         value_covered=round(value_in_slab, 2),
                     )
@@ -347,6 +350,7 @@ class CommissionService:
         gross: float,
         pool: float,
         slabs: List[CommissionSlab],
+        currency: str,
     ) -> List[CommissionPayoutLine]:
         """Cumulative (whole-pool) allocation using the applicable slab."""
         applicable: CommissionSlab | None = None
@@ -372,6 +376,7 @@ class CommissionService:
                     party_type=party_type.value,
                     slab_id=applicable.id,
                     amount=amount,
+                    currency=currency,
                     percentage=pct,
                     value_covered=round(gross, 2),
                 )
