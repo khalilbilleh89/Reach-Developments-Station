@@ -44,7 +44,7 @@ from app.modules.cashflow.api import router as cashflow_router
 from app.modules.reservations.api import router as reservations_router
 from app.modules.receivables.api import router as receivables_router
 from app.modules.construction.api import router as construction_router
-from app.modules.settings.api import router as settings_router, system_router as system_router
+from app.modules.settings.api import router as settings_router, system_router
 from app.modules.scenario.api import router as scenario_router
 from app.modules.concept_design.api import router as concept_design_router
 from app.modules.portfolio.api import router as portfolio_router

@@ -4,14 +4,14 @@ admin.currency_audit_service
 Currency integrity audit service.
 
 Scans all project-linked financial records and reports anomalies:
-  - mismatch    — record.currency differs from project.base_currency
-  - suspicious  — record.currency is the platform default but
-                  project.base_currency is not the platform default
-                  (suggests the record was not initialised with the
-                  project's governing currency)
-  - null        — record.currency is NULL or empty (should not occur
-                  with current schema constraints, but checked for
-                  defence-in-depth)
+  - mismatch           — record.currency differs from project.base_currency
+  - suspicious_default — record.currency is the platform default but
+                         project.base_currency is not the platform default
+                         (suggests the record was not initialised with the
+                         project's governing currency)
+  - null_currency      — record.currency is NULL or empty (should not occur
+                         with current schema constraints, but checked for
+                         defence-in-depth)
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _scan_feasibility_runs(db: Session, issues: list[dict[str, Any]]) -> None:
 
     rows = (
         db.query(
-            FeasibilityRun.id,
+            FeasibilityAssumptions.id,
             FeasibilityRun.project_id,
             FeasibilityAssumptions.currency,
             Project.base_currency,
@@ -101,18 +101,17 @@ def _scan_feasibility_runs(db: Session, issues: list[dict[str, Any]]) -> None:
         .join(
             FeasibilityAssumptions,
             FeasibilityAssumptions.run_id == FeasibilityRun.id,
-            isouter=True,
         )
         .join(Project, Project.id == FeasibilityRun.project_id)
         .filter(FeasibilityRun.project_id.isnot(None))
         .all()
     )
 
-    for run_id, project_id, currency, base_currency in rows:
+    for assumptions_id, project_id, currency, base_currency in rows:
         _add_issue(
             issues,
             record_type="feasibility_assumptions",
-            record_id=run_id,
+            record_id=assumptions_id,
             project_id=project_id,
             project_currency=base_currency,
             record_currency=currency,

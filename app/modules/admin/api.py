@@ -14,12 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.modules.admin.currency_audit_service import scan_currency_integrity
-from app.modules.auth.security import get_current_user_payload
+from app.modules.auth.security import require_roles
 
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
-    dependencies=[Depends(get_current_user_payload)],
+    dependencies=[Depends(require_roles("admin"))],
 )
 
 DbDep = Annotated[Session, Depends(get_db)]
