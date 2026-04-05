@@ -22,13 +22,13 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.payment_plans.models import PaymentPlanTemplate, PaymentSchedule
 from app.modules.payment_plans.repository import (
     PaymentPlanTemplateRepository,
     PaymentScheduleRepository,
 )
 from app.modules.payment_plans.schemas import (
-    DEFAULT_CURRENCY,
     PaymentPlanCreate,
     PaymentPlanGenerateRequest,
     PaymentPlanResponse,
