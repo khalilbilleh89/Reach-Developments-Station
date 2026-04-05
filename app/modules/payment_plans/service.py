@@ -22,7 +22,6 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.payment_plans.models import PaymentPlanTemplate, PaymentSchedule
 from app.modules.payment_plans.repository import (
     PaymentPlanTemplateRepository,
@@ -214,7 +213,7 @@ class PaymentPlanService:
 
         self._validate_schedule_total(lines, contract_price)
 
-        contract_currency = getattr(contract, "currency", DEFAULT_CURRENCY) or DEFAULT_CURRENCY
+        contract_currency = contract.currency
         return [
             {
                 "contract_id": contract.id,
@@ -288,7 +287,7 @@ class PaymentPlanService:
 
     @staticmethod
     def _build_list_response(
-        contract_id: str, rows: List[PaymentSchedule], currency: str = DEFAULT_CURRENCY
+        contract_id: str, rows: List[PaymentSchedule], currency: str
     ) -> PaymentScheduleListResponse:
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
         return PaymentScheduleListResponse(
@@ -419,7 +418,7 @@ class PaymentPlanService:
         plan_name: str,
         plan_type: str,
         rows: List[PaymentSchedule],
-        currency: str = DEFAULT_CURRENCY,
+        currency: str,
     ) -> PaymentPlanResponse:
         """Build a PaymentPlanResponse from a list of persisted schedule rows."""
         from datetime import datetime as dt, timezone
