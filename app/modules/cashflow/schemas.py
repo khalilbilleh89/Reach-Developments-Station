@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.shared.enums.cashflow import (
     CashflowForecastBasis,
     CashflowForecastStatus,
@@ -82,6 +83,13 @@ class CashflowForecastResponse(BaseModel):
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
+    currency: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 4217 currency code for all monetary values in this forecast. "
+            "Sourced from the project base_currency and populated by the service layer."
+        ),
+    )
 
     model_config = {"from_attributes": True}
 
@@ -113,6 +121,13 @@ class CashflowForecastPeriodResponse(BaseModel):
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
+    currency: str = Field(
+        DEFAULT_CURRENCY,
+        description=(
+            "ISO 4217 currency code for all monetary values in this period row. "
+            "Inherited from the forecast's project base_currency."
+        ),
+    )
 
     model_config = {"from_attributes": True}
 
@@ -133,3 +148,10 @@ class CashflowForecastSummaryResponse(BaseModel):
     total_expected_outflows: float
     total_net_cashflow: float
     closing_balance: float
+    currency: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 4217 currency code for all monetary values in this summary. "
+            "Sourced from the project base_currency and populated by the service layer."
+        ),
+    )

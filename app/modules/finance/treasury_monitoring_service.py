@@ -5,11 +5,11 @@ Aggregates liquidity and exposure metrics across the development portfolio
 to provide a treasury-level monitoring snapshot.
 
 Responsibilities:
-  - Compute portfolio cash position from recognized revenue.
-  - Compute receivable exposure and overdue concentration.
+  - Compute portfolio cash position from recognized revenue, grouped by currency.
+  - Compute receivable exposure and overdue concentration, grouped by currency.
   - Rank projects by receivable exposure.
   - Extract next-calendar-month forecast inflow per project.
-  - Derive the portfolio liquidity ratio.
+  - Derive the portfolio liquidity ratio (single-currency only).
 
 All computation is read-only; no records are created or mutated.
 This service delegates data-loading to the existing financial engines and
@@ -18,7 +18,7 @@ performs treasury-level aggregation on top of their outputs.
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -59,61 +59,160 @@ class TreasuryMonitoringService:
         """Return the portfolio treasury monitoring snapshot.
 
         Aggregates data from the revenue recognition, receivables aging,
-        and cashflow forecasting engines.  All derived values are clamped
-        and rounded to prevent invalid schema states.
+        and cashflow forecasting engines.  Monetary totals are grouped by
+        currency so consumers receive denomination-safe payloads.
+
+        ``liquidity_ratio`` is None when the portfolio spans more than one
+        currency (the ratio is mathematically invalid across currencies).
         """
-        # --- Cash position: total recognized revenue across the portfolio ---
+        # --- Cash position: recognized revenue grouped by contract currency ---
+        # total_recognized_revenue is now a Dict[str, float] from the revenue service.
         revenue_overview = self._revenue_svc.get_total_recognized_revenue()
-        cash_position = round(revenue_overview.total_recognized_revenue, 2)
-
-        # --- Receivables aging ---
         aging_overview = self._aging_svc.get_portfolio_aging()
-        receivables_exposure = round(aging_overview.total_outstanding, 2)
 
-        overdue_receivables = round(
-            sum(
-                b.amount for b in aging_overview.aging_buckets if b.bucket != "current"
-            ),
-            2,
+        # Use the grouped recognized revenue dict directly as the cash position proxy.
+        cash_position_grouped: Dict[str, float] = dict(revenue_overview.total_recognized_revenue)
+        if not cash_position_grouped and len(revenue_overview.currencies) == 0:
+            # Fall back to the direct installment query when revenue is empty
+            cash_position_grouped = self._get_cash_position_grouped()
+
+        # --- Receivables aging grouped by currency ---
+        receivables_grouped = self._get_receivables_grouped()
+        overdue_grouped = self._get_overdue_grouped()
+
+        # Aggregate all known currencies from cash, receivables, and overdue data
+        all_currencies = sorted(
+            set(cash_position_grouped.keys())
+            | set(receivables_grouped.keys())
+            | set(overdue_grouped.keys())
         )
 
-        # --- Liquidity ratio: collected fraction of total expected cash ---
-        total_base = cash_position + receivables_exposure
-        if total_base > 0:
-            liquidity_ratio = round(
-                min(cash_position / total_base, 1.0),
-                6,
+        # --- Liquidity ratio: only valid for single-currency portfolio ---
+        total_cash = sum(cash_position_grouped.values())
+        total_receivables = sum(receivables_grouped.values())
+        total_base = total_cash + total_receivables
+        if len(all_currencies) <= 1 and total_base > 0:
+            liquidity_ratio: Optional[float] = round(
+                min(total_cash / total_base, 1.0), 6
             )
-        else:
+        elif len(all_currencies) <= 1:
             liquidity_ratio = 0.0
+        else:
+            # Multi-currency: ratio is mathematically invalid
+            liquidity_ratio = None
 
-        # --- Cashflow forecast — next calendar month ---
+        # --- Cashflow forecast — next calendar month grouped by currency ---
         cashflow = self._forecast_svc.get_portfolio_forecast()
         next_month = next_month_key()
-        forecast_next_month = 0.0
-        for entry in cashflow.monthly_entries:
-            if entry.month == next_month:
-                forecast_next_month = entry.expected_collections
-                break
+        forecast_grouped: Dict[str, float] = {}
+        for pf in cashflow.project_forecasts:
+            project_currency = pf.currency
+            for entry in pf.monthly_entries:
+                if entry.month == next_month:
+                    forecast_grouped[project_currency] = (
+                        forecast_grouped.get(project_currency, 0.0) + entry.expected_collections
+                    )
+                    break
 
         # --- Per-project exposure entries ---
+        portfolio_receivables = round(total_receivables, 2)
         project_exposures = self._build_project_exposures(
-            cashflow, next_month, receivables_exposure
+            cashflow, next_month, portfolio_receivables
         )
 
         return TreasuryMonitoringResponse(
-            cash_position=cash_position,
-            receivables_exposure=receivables_exposure,
-            overdue_receivables=overdue_receivables,
+            cash_position=cash_position_grouped,
+            receivables_exposure=receivables_grouped,
+            overdue_receivables=overdue_grouped,
             liquidity_ratio=liquidity_ratio,
-            forecast_next_month=forecast_next_month,
+            forecast_next_month=forecast_grouped,
             project_count=revenue_overview.project_count,
             project_exposures=project_exposures,
+            currencies=all_currencies,
         )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _get_cash_position_grouped(self) -> Dict[str, float]:
+        """Return recognized revenue (cash position proxy) grouped by contract currency.
+
+        Computes: for each currency, sum the paid installment amounts on all
+        contracts denominated in that currency (same logic as recognized revenue
+        but grouped by currency).
+        """
+        from sqlalchemy import func as _func
+        from app.modules.sales.models import ContractPaymentSchedule, SalesContract
+        from app.shared.enums.sales import ContractPaymentStatus
+
+        rows = (
+            self.db.query(
+                SalesContract.currency,
+                _func.coalesce(_func.sum(ContractPaymentSchedule.amount), 0),
+            )
+            .join(
+                ContractPaymentSchedule,
+                ContractPaymentSchedule.contract_id == SalesContract.id,
+            )
+            .filter(ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value)
+            .group_by(SalesContract.currency)
+            .all()
+        )
+        return {currency: round(float(total), 2) for currency, total in rows}
+
+    def _get_receivables_grouped(self) -> Dict[str, float]:
+        """Return total outstanding receivables grouped by installment currency."""
+        from sqlalchemy import func as _func
+        from app.modules.finance.constants import RECEIVABLE_STATUSES
+        from app.modules.sales.models import ContractPaymentSchedule, SalesContract
+
+        rows = (
+            self.db.query(
+                ContractPaymentSchedule.currency,
+                _func.sum(ContractPaymentSchedule.amount),
+            )
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .filter(ContractPaymentSchedule.status.in_(RECEIVABLE_STATUSES))
+            .group_by(ContractPaymentSchedule.currency)
+            .all()
+        )
+        return {
+            currency: round(float(total), 2)
+            for currency, total in rows
+            if total is not None
+        }
+
+    def _get_overdue_grouped(self) -> Dict[str, float]:
+        """Return overdue receivables grouped by installment currency."""
+        from datetime import date as _date
+        from sqlalchemy import func as _func
+        from app.modules.finance.constants import RECEIVABLE_STATUSES
+        from app.modules.sales.models import ContractPaymentSchedule, SalesContract
+
+        today = _date.today()
+        rows = (
+            self.db.query(
+                ContractPaymentSchedule.currency,
+                _func.sum(ContractPaymentSchedule.amount),
+            )
+            .join(
+                SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id
+            )
+            .filter(
+                ContractPaymentSchedule.status.in_(RECEIVABLE_STATUSES),
+                ContractPaymentSchedule.due_date < today,
+            )
+            .group_by(ContractPaymentSchedule.currency)
+            .all()
+        )
+        return {
+            currency: round(float(total), 2)
+            for currency, total in rows
+            if total is not None
+        }
 
     def _build_project_exposures(
         self,

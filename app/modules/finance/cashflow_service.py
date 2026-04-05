@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.finance.cashflow_engine import (
     CashflowForecastResult,
     ForecastAssumptions,
@@ -134,7 +135,7 @@ class CashflowForecastService:
 
         Raises ResourceNotFoundError if the project does not exist.
         """
-        self._require_project(project_id)
+        project = self._require_project(project_id)
         installments = self._load_project_installments_legacy(project_id)
         result = build_project_forecast(project_id, installments)
 
@@ -149,12 +150,20 @@ class CashflowForecastService:
                 )
                 for e in result.monthly_entries
             ],
+            currency=project.base_currency,
         )
 
     def get_portfolio_forecast(self) -> PortfolioCashflowForecastResponse:
         """Return the monthly cashflow forecast aggregated across all projects."""
         project_installments = self._load_all_project_installments_legacy()
         result = build_portfolio_forecast(project_installments)
+
+        # Build a map of project_id → base_currency for per-project cards
+        project_ids = list(project_installments.keys())
+        currency_map: dict[str, str] = {}
+        if project_ids:
+            projects = self.db.query(Project).filter(Project.id.in_(project_ids)).all()
+            currency_map = {p.id: p.base_currency for p in projects}
 
         project_responses = [
             ProjectCashflowForecastResponse(
@@ -168,12 +177,22 @@ class CashflowForecastService:
                     )
                     for e in pf.monthly_entries
                 ],
+                currency=currency_map.get(pf.project_id, DEFAULT_CURRENCY),
             )
             for pf in result.project_forecasts
         ]
 
+        all_currencies = sorted({pf.currency for pf in project_responses})
+
+        # Group total_expected by currency using per-project totals
+        total_expected_grouped: Dict[str, float] = {}
+        for pf in project_responses:
+            total_expected_grouped[pf.currency] = round(
+                total_expected_grouped.get(pf.currency, 0.0) + pf.total_expected, 2
+            )
+
         return PortfolioCashflowForecastResponse(
-            total_expected=result.total_expected,
+            total_expected=total_expected_grouped,
             project_count=len(project_responses),
             monthly_entries=[
                 MonthlyForecastEntryResponse(
@@ -184,6 +203,7 @@ class CashflowForecastService:
                 for e in result.monthly_entries
             ],
             project_forecasts=project_responses,
+            currencies=all_currencies,
         )
 
     # ------------------------------------------------------------------
@@ -219,7 +239,7 @@ class CashflowForecastService:
             When start_date is after end_date.
         """
         self._validate_date_window(start_date, end_date)
-        self._require_contract(contract_id)
+        contract = self._require_contract(contract_id)
 
         assumptions = _schema_to_assumptions(assumptions_schema)
         installments = self._load_contract_installments(contract_id)
@@ -236,7 +256,11 @@ class CashflowForecastService:
             contract_id,
             len(result.periods),
         )
-        return _result_to_contract_response(result, assumptions_schema or CashflowForecastAssumptions())
+        return _result_to_contract_response(
+            result,
+            assumptions_schema or CashflowForecastAssumptions(),
+            currency=contract.currency,
+        )
 
     def get_project_forecast_v2(
         self,
@@ -255,7 +279,7 @@ class CashflowForecastService:
             When start_date is after end_date.
         """
         self._validate_date_window(start_date, end_date)
-        self._require_project(project_id)
+        project = self._require_project(project_id)
 
         assumptions = _schema_to_assumptions(assumptions_schema)
         installments = self._load_project_installments_full(project_id)
@@ -266,7 +290,11 @@ class CashflowForecastService:
             project_id,
             len(result.periods),
         )
-        return _result_to_project_response(result, assumptions_schema or CashflowForecastAssumptions())
+        return _result_to_project_response(
+            result,
+            assumptions_schema or CashflowForecastAssumptions(),
+            currency=project.base_currency,
+        )
 
     def get_portfolio_forecast_v2(
         self,
@@ -287,12 +315,23 @@ class CashflowForecastService:
         project_installments = self._load_all_project_installments_full()
         result = compute_portfolio_forecast(project_installments, start_date, end_date, assumptions)
 
+        # Build currency map for per-project cards
+        project_ids_list = list(project_installments.keys())
+        currency_map: dict[str, str] = {}
+        if project_ids_list:
+            projects_list = self.db.query(Project).filter(Project.id.in_(project_ids_list)).all()
+            currency_map = {p.id: p.base_currency for p in projects_list}
+
         _logger.debug(
             "Portfolio cashflow forecast computed: projects=%d periods=%d",
             len(result.project_forecasts),
             len(result.periods),
         )
-        return _result_to_portfolio_response(result, assumptions_schema or CashflowForecastAssumptions())
+        return _result_to_portfolio_response(
+            result,
+            assumptions_schema or CashflowForecastAssumptions(),
+            project_currencies=currency_map,
+        )
 
     # ------------------------------------------------------------------
     # Validation helpers
@@ -790,18 +829,22 @@ def _period_to_row(period: object) -> CashflowPeriodRow:
     )
 
 
-def _summary_to_response(summary: object) -> CashflowForecastSummaryResponse:
+def _summary_to_response(
+    summary: object, currency: Optional[str] = None
+) -> CashflowForecastSummaryResponse:
     return CashflowForecastSummaryResponse(
         scheduled_total=summary.scheduled_total,
         collected_total=summary.collected_total,
         expected_total=summary.expected_total,
         variance_to_schedule=summary.variance_to_schedule,
+        currency=currency,
     )
 
 
 def _result_to_contract_response(
     result: CashflowForecastResult,
     assumptions_schema: CashflowForecastAssumptions,
+    currency: Optional[str] = None,
 ) -> ContractCashflowForecastResponse:
     return ContractCashflowForecastResponse(
         scope_type=result.scope_type,
@@ -810,14 +853,16 @@ def _result_to_contract_response(
         end_date=result.end_date,
         granularity=result.granularity,
         assumptions=assumptions_schema,
-        summary=_summary_to_response(result.summary),
+        summary=_summary_to_response(result.summary, currency=currency),
         periods=[_period_to_row(p) for p in result.periods],
+        currency=currency or DEFAULT_CURRENCY,
     )
 
 
 def _result_to_project_response(
     result: CashflowForecastResult,
     assumptions_schema: CashflowForecastAssumptions,
+    currency: Optional[str] = None,
 ) -> ProjectCashflowForecastV2Response:
     return ProjectCashflowForecastV2Response(
         scope_type=result.scope_type,
@@ -826,28 +871,33 @@ def _result_to_project_response(
         end_date=result.end_date,
         granularity=result.granularity,
         assumptions=assumptions_schema,
-        summary=_summary_to_response(result.summary),
+        summary=_summary_to_response(result.summary, currency=currency),
         periods=[_period_to_row(p) for p in result.periods],
+        currency=currency or DEFAULT_CURRENCY,
     )
 
 
 def _result_to_portfolio_response(
     result: PortfolioCashflowResult,
     assumptions_schema: CashflowForecastAssumptions,
+    project_currencies: Optional[dict] = None,
 ) -> PortfolioCashflowForecastV2Response:
+    pmap = project_currencies or {}
     project_responses = [
-        _result_to_project_response(pf, assumptions_schema)
+        _result_to_project_response(pf, assumptions_schema, currency=pmap.get(pf.scope_id))
         for pf in result.project_forecasts
     ]
+    all_currencies = sorted({pr.currency for pr in project_responses})
     return PortfolioCashflowForecastV2Response(
         scope_type=result.scope_type,
         start_date=result.start_date,
         end_date=result.end_date,
         granularity=result.granularity,
         assumptions=assumptions_schema,
-        summary=_summary_to_response(result.summary),
+        summary=_summary_to_response(result.summary, currency=None),
         periods=[_period_to_row(p) for p in result.periods],
         project_forecasts=project_responses,
+        currencies=all_currencies,
     )
 
 

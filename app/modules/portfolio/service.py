@@ -124,9 +124,9 @@ class PortfolioService:
             reserved_units=unit_counts.get("reserved", 0),
             under_contract_units=unit_counts.get("under_contract", 0),
             registered_units=unit_counts.get("registered", 0),
-            contracted_revenue=self.repo.sum_contracted_revenue(),
-            collected_cash=collected_cash,
-            outstanding_balance=outstanding_balance,
+            contracted_revenue=self.repo.sum_contracted_revenue_grouped(),
+            collected_cash=self.repo.sum_collected_cash_grouped(),
+            outstanding_balance=self.repo.sum_outstanding_balance_grouped(),
         )
 
     def _build_project_cards(self) -> List[PortfolioProjectCard]:
@@ -177,6 +177,7 @@ class PortfolioService:
                     outstanding_balance=outstanding_balance,
                     sell_through_pct=sell_through_pct,
                     health_badge=health_badge,
+                    currency=project.base_currency,
                 )
             )
 
@@ -203,14 +204,21 @@ class PortfolioService:
     ) -> PortfolioCollectionsSummary:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
-        overdue_balance = self.repo.sum_overdue_balance()
-        collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
+        overdue_balance_grouped = self.repo.sum_overdue_balance_grouped()
+        currencies = sorted(overdue_balance_grouped.keys())
+        # collection_rate_pct is only valid when single-currency; mixed-currency
+        # totals are not comparable across denominations.
+        if len(currencies) <= 1:
+            collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
+        else:
+            collection_rate_pct = None
 
         return PortfolioCollectionsSummary(
             total_receivables=total_receivables,
             overdue_receivables=overdue_receivables,
-            overdue_balance=overdue_balance,
+            overdue_balance=overdue_balance_grouped,
             collection_rate_pct=collection_rate_pct,
+            currencies=currencies,
         )
 
     # ------------------------------------------------------------------
@@ -254,13 +262,26 @@ class PortfolioService:
             severity = (
                 "critical" if collections.overdue_receivables >= 10 else "warning"
             )
+            # Build denomination-safe description: per-currency amounts when multi-currency
+            overdue_parts = collections.overdue_balance
+            if len(overdue_parts) == 1:
+                ccy, amount = next(iter(overdue_parts.items()))
+                balance_desc = f"total outstanding balance of {amount:,.2f} {ccy}"
+            elif len(overdue_parts) > 1:
+                parts = ", ".join(
+                    f"{amount:,.2f} {ccy}"
+                    for ccy, amount in sorted(overdue_parts.items())
+                )
+                balance_desc = f"outstanding balances of {parts}"
+            else:
+                balance_desc = "outstanding balances pending review"
             flags.append(
                 PortfolioRiskFlag(
                     flag_type="overdue_receivables",
                     severity=severity,
                     description=(
                         f"{collections.overdue_receivables} overdue receivable(s) with "
-                        f"total outstanding balance of {collections.overdue_balance:,.2f}."
+                        f"{balance_desc}."
                     ),
                     affected_project_id=None,
                     affected_project_name=None,
@@ -322,6 +343,7 @@ class PortfolioService:
         variance_by_project = self.repo.get_variance_totals_by_project()
         set_count_by_project = self.repo.get_active_set_count_by_project()
         stage_by_project = self.repo.get_latest_comparison_stage_by_project()
+        currency_by_project = self.repo.get_currency_by_project_comparison_sets()
 
         # Build per-project variance cards — keep variance_pct as Decimal for
         # threshold comparisons; convert to float only at response boundary.
@@ -357,30 +379,40 @@ class PortfolioService:
                         else None
                     ),
                     variance_status=variance_status,
+                    currency=currency_by_project.get(pid, "AED"),
                 )
             )
 
         # Sort all cards by variance_amount descending (largest overrun first)
         project_cards.sort(key=lambda c: c.variance_amount, reverse=True)
 
-        # Build portfolio-wide summary
-        total_baseline, total_comparison, total_variance = (
-            self.repo.get_portfolio_variance_totals()
-        )
+        # Build portfolio-wide summary using grouped-by-currency totals
+        grouped_variance = self.repo.get_portfolio_variance_totals_grouped()
+        total_baseline_grouped: Dict[str, float] = {}
+        total_comparison_grouped: Dict[str, float] = {}
+        total_variance_grouped: Dict[str, float] = {}
+        for currency, (b, c, v) in grouped_variance.items():
+            total_baseline_grouped[currency] = float(b)
+            total_comparison_grouped[currency] = float(c)
+            total_variance_grouped[currency] = float(v)
+
+        # total_variance_pct is only valid for a single-currency portfolio
         total_variance_pct: Optional[float] = None
-        if total_baseline != Decimal("0"):
-            total_variance_pct = float(
-                round(
-                    (total_variance / total_baseline) * Decimal("100"),
-                    _VARIANCE_PCT_PRECISION,
+        if len(grouped_variance) == 1:
+            b, _, v = next(iter(grouped_variance.values()))
+            if b != Decimal("0"):
+                total_variance_pct = float(
+                    round(
+                        (v / b) * Decimal("100"),
+                        _VARIANCE_PCT_PRECISION,
+                    )
                 )
-            )
 
         summary = PortfolioCostVarianceSummary(
             projects_with_comparison_sets=len(projects_with_sets),
-            total_baseline_amount=float(total_baseline),
-            total_comparison_amount=float(total_comparison),
-            total_variance_amount=float(total_variance),
+            total_baseline_amount=total_baseline_grouped,
+            total_comparison_amount=total_comparison_grouped,
+            total_variance_amount=total_variance_grouped,
             total_variance_pct=total_variance_pct,
         )
 
@@ -554,6 +586,7 @@ class PortfolioService:
                     absorption_vs_plan_pct=None,
                     contracted_revenue=0.0,
                     absorption_status="no_data",
+                    currency=project.base_currency,
                 )
             cards.append(card)
 
@@ -705,4 +738,5 @@ class PortfolioService:
             absorption_vs_plan_pct=absorption_vs_plan_pct,
             contracted_revenue=contracted_revenue,
             absorption_status=absorption_status,
+            currency=project.base_currency,
         )

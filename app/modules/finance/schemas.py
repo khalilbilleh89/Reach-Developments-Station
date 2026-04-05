@@ -8,7 +8,7 @@ no raw financial tables are exposed.
 """
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -85,17 +85,51 @@ class ProjectRevenueSummaryResponse(BaseModel):
     overall_recognition_percentage: float = Field(..., ge=0, le=100)
     contract_count: int = Field(..., ge=0)
     contracts: List[RevenueRecognitionResponse] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this summary. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioRevenueOverviewResponse(BaseModel):
-    """Portfolio-wide revenue recognition overview across all projects."""
+    """Portfolio-wide revenue recognition overview across all projects.
 
-    total_contract_value: float = Field(..., ge=0)
-    total_recognized_revenue: float = Field(..., ge=0)
-    total_deferred_revenue: float = Field(..., ge=0)
-    overall_recognition_percentage: float = Field(..., ge=0, le=100)
+    Monetary totals are grouped by ISO 4217 currency code so consumers
+    receive denomination-safe aggregates even for multi-currency portfolios.
+    ``overall_recognition_percentage`` is ``None`` when the portfolio spans
+    more than one currency (the ratio would otherwise cross currency boundaries).
+    """
+
+    total_contract_value: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total contract value grouped by ISO 4217 currency code.",
+    )
+    total_recognized_revenue: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total recognized revenue grouped by ISO 4217 currency code.",
+    )
+    total_deferred_revenue: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total deferred revenue grouped by ISO 4217 currency code.",
+    )
+    overall_recognition_percentage: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description=(
+            "Portfolio-wide recognition percentage. "
+            "None when the portfolio spans more than one currency."
+        ),
+    )
     project_count: int = Field(..., ge=0)
     contract_count: int = Field(..., ge=0)
+    currencies: List[str] = Field(
+        default_factory=list,
+        description="Distinct ISO 4217 currency codes present across all contracts.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +153,10 @@ class ContractAgingResponse(BaseModel):
     paid_amount: float = Field(..., ge=0)
     outstanding_amount: float = Field(..., ge=0)
     aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description="ISO 4217 currency code for all monetary values in this contract aging breakdown.",
+    )
 
 
 class ProjectAgingResponse(BaseModel):
@@ -128,6 +166,13 @@ class ProjectAgingResponse(BaseModel):
     total_outstanding: float = Field(..., ge=0)
     installment_count: int = Field(..., ge=0)
     aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this project aging summary. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioAgingResponse(BaseModel):
@@ -137,6 +182,13 @@ class PortfolioAgingResponse(BaseModel):
     installment_count: int = Field(..., ge=0)
     project_count: int = Field(..., ge=0)
     aging_buckets: List[AgingBucketSummary] = Field(default_factory=list)
+    currencies: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Distinct ISO 4217 currency codes present across outstanding installments in "
+            "this portfolio aging snapshot."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -229,16 +281,36 @@ class ProjectCashflowForecastResponse(BaseModel):
     project_id: str
     total_expected: float = Field(..., ge=0)
     monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this forecast. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioCashflowForecastResponse(BaseModel):
-    """Portfolio-wide cashflow forecast aggregated across all projects (legacy simple format)."""
+    """Portfolio-wide cashflow forecast aggregated across all projects (legacy simple format).
 
-    total_expected: float = Field(..., ge=0)
+    ``total_expected`` is grouped by ISO 4217 currency code so consumers
+    receive denomination-safe aggregates for multi-currency portfolios.
+    """
+
+    total_expected: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total expected collections grouped by ISO 4217 currency code.",
+    )
     project_count: int = Field(..., ge=0)
     monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
     project_forecasts: List[ProjectCashflowForecastResponse] = Field(
         default_factory=list
+    )
+    currencies: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Distinct ISO 4217 currency codes present across all project forecasts."
+        ),
     )
 
 
@@ -337,6 +409,14 @@ class CashflowForecastSummaryResponse(BaseModel):
         ...,
         description="expected_total − scheduled_total (negative = shortfall).",
     )
+    currency: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 4217 currency code for all monetary totals in this summary. "
+            "Sourced from the governing project or contract base_currency. "
+            "Null for portfolio-level summaries that aggregate across multiple currencies."
+        ),
+    )
 
 
 class ContractCashflowForecastResponse(BaseModel):
@@ -353,6 +433,13 @@ class ContractCashflowForecastResponse(BaseModel):
     assumptions: CashflowForecastAssumptions
     summary: CashflowForecastSummaryResponse
     periods: List[CashflowPeriodRow] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this forecast. "
+            "Sourced from the contract currency."
+        ),
+    )
 
 
 class ProjectCashflowForecastV2Response(BaseModel):
@@ -369,6 +456,13 @@ class ProjectCashflowForecastV2Response(BaseModel):
     assumptions: CashflowForecastAssumptions
     summary: CashflowForecastSummaryResponse
     periods: List[CashflowPeriodRow] = Field(default_factory=list)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this forecast. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioCashflowForecastV2Response(BaseModel):
@@ -387,6 +481,14 @@ class PortfolioCashflowForecastV2Response(BaseModel):
     project_forecasts: List[ProjectCashflowForecastV2Response] = Field(
         default_factory=list
     )
+    currencies: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Distinct ISO 4217 currency codes present across all project forecasts. "
+            "When multiple currencies are present, the portfolio-level summary totals "
+            "are cross-currency aggregates; use project_forecasts for per-currency accuracy."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,23 +503,68 @@ class ProjectFinancialSummaryEntry(BaseModel):
     recognized_revenue: float = Field(..., ge=0)
     receivables_exposure: float = Field(..., ge=0)
     collection_rate: float = Field(..., ge=0, le=1)
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values in this project entry. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioFinancialSummaryResponse(BaseModel):
     """Consolidated financial summary for the entire portfolio.
 
-    Aggregates recognized revenue, receivables exposure, overdue exposure,
-    and next-month cashflow forecast across all projects.
+    Monetary totals are grouped by currency (Dict[currency_code → amount]) so
+    that consumers cannot silently treat cross-currency aggregates as a single
+    denominated total.  When the portfolio contains only one currency the dicts
+    will each have a single key.
+
+    ``overdue_receivables_pct`` is ``None`` when the portfolio spans more than
+    one currency because a percentage derived from cross-currency amounts is
+    mathematically invalid.
     """
 
-    total_revenue_recognized: float = Field(..., ge=0)
-    total_deferred_revenue: float = Field(..., ge=0)
-    total_receivables: float = Field(..., ge=0)
-    overdue_receivables: float = Field(..., ge=0)
-    overdue_receivables_pct: float = Field(..., ge=0, le=100)
-    forecast_next_month: float = Field(..., ge=0)
+    total_revenue_recognized: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Recognized revenue grouped by ISO 4217 currency code. "
+            "Each key is a currency and each value is the total recognized revenue "
+            "for contracts denominated in that currency."
+        ),
+    )
+    total_deferred_revenue: Dict[str, float] = Field(
+        ...,
+        description="Deferred revenue grouped by ISO 4217 currency code.",
+    )
+    total_receivables: Dict[str, float] = Field(
+        ...,
+        description="Total outstanding receivables grouped by ISO 4217 currency code.",
+    )
+    overdue_receivables: Dict[str, float] = Field(
+        ...,
+        description="Overdue receivables grouped by ISO 4217 currency code.",
+    )
+    overdue_receivables_pct: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        description=(
+            "Overdue receivables as a percentage of total receivables; "
+            "null when the portfolio spans multiple currencies (the ratio is "
+            "mathematically invalid across currencies)."
+        ),
+    )
+    forecast_next_month: Dict[str, float] = Field(
+        ...,
+        description="Expected next-month cashflow inflows grouped by ISO 4217 currency code.",
+    )
     project_count: int = Field(..., ge=0)
     project_summaries: List[ProjectFinancialSummaryEntry] = Field(default_factory=list)
+    currencies: List[str] = Field(
+        default_factory=list,
+        description="Distinct ISO 4217 currency codes present across the portfolio.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -437,19 +584,49 @@ class ProjectExposureEntry(BaseModel):
 class TreasuryMonitoringResponse(BaseModel):
     """Portfolio-level treasury monitoring snapshot.
 
-    Provides liquidity and exposure indicators derived from the existing
-    financial engines.  No financial calculations are performed here —
-    values are aggregated from revenue recognition, aging, and cashflow
-    forecast outputs.
+    Monetary totals are grouped by currency (Dict[currency_code → amount]) so
+    that consumers cannot silently treat cross-currency aggregates as a single
+    denominated total.
+
+    ``liquidity_ratio`` is ``None`` when the portfolio spans more than one
+    currency because the ratio is derived from cross-currency amounts and is
+    therefore mathematically invalid as a single scalar.
+
+    No financial calculations are performed here — values are aggregated from
+    revenue recognition, aging, and cashflow forecast outputs.
     """
 
-    cash_position: float = Field(..., ge=0)
-    receivables_exposure: float = Field(..., ge=0)
-    overdue_receivables: float = Field(..., ge=0)
-    liquidity_ratio: float = Field(..., ge=0, le=1)
-    forecast_next_month: float = Field(..., ge=0)
+    cash_position: Dict[str, float] = Field(
+        ...,
+        description="Total recognized revenue grouped by ISO 4217 currency code.",
+    )
+    receivables_exposure: Dict[str, float] = Field(
+        ...,
+        description="Total outstanding receivables grouped by ISO 4217 currency code.",
+    )
+    overdue_receivables: Dict[str, float] = Field(
+        ...,
+        description="Overdue receivables grouped by ISO 4217 currency code.",
+    )
+    liquidity_ratio: Optional[float] = Field(
+        None,
+        ge=0,
+        le=1,
+        description=(
+            "Ratio of cash position to total expected cash (cash + receivables); "
+            "null when the portfolio spans multiple currencies."
+        ),
+    )
+    forecast_next_month: Dict[str, float] = Field(
+        ...,
+        description="Expected next-month cashflow inflows grouped by ISO 4217 currency code.",
+    )
     project_count: int = Field(..., ge=0)
     project_exposures: List[ProjectExposureEntry] = Field(default_factory=list)
+    currencies: List[str] = Field(
+        default_factory=list,
+        description="Distinct ISO 4217 currency codes present across the portfolio.",
+    )
 
 
 # ---------------------------------------------------------------------------
