@@ -85,6 +85,33 @@ class ProjectRepository:
             .first()
         ) is not None
 
+    def has_financial_records(self, project_id: str) -> bool:
+        """Return True if the project has any financial records that carry currency.
+
+        Checks for the presence of:
+        - Scenarios linked to this project
+        - Feasibility runs linked to this project
+        - Construction cost records linked to this project
+        - Land parcels linked to this project
+
+        Used by the base_currency lock guard to prevent currency changes
+        after financial data has been established for the project.
+        """
+        from app.modules.construction_costs.models import ConstructionCostRecord
+        from app.modules.feasibility.models import FeasibilityRun
+        from app.modules.land.models import LandParcel
+        from app.modules.scenario.models import Scenario
+
+        if self.db.query(Scenario.id).filter(Scenario.project_id == project_id).first():
+            return True
+        if self.db.query(FeasibilityRun.id).filter(FeasibilityRun.project_id == project_id).first():
+            return True
+        if self.db.query(ConstructionCostRecord.id).filter(ConstructionCostRecord.project_id == project_id).first():
+            return True
+        if self.db.query(LandParcel.id).filter(LandParcel.project_id == project_id).first():
+            return True
+        return False
+
     def update(self, project: Project, data: ProjectUpdate) -> Project:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():

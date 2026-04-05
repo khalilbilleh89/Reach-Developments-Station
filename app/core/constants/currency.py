@@ -27,10 +27,11 @@ the imported constant so future changes propagate automatically.
 CURRENCY_AED = "AED"  # UAE Dirham — primary platform currency
 CURRENCY_JOD = "JOD"  # Jordanian Dinar
 CURRENCY_USD = "USD"  # US Dollar
+CURRENCY_EUR = "EUR"  # Euro
 
 # Ordered list of ISO codes the platform supports.  Used for validation and
 # frontend currency-selector components.
-SUPPORTED_CURRENCIES: list[str] = [CURRENCY_AED, CURRENCY_JOD, CURRENCY_USD]
+SUPPORTED_CURRENCIES: list[str] = [CURRENCY_AED, CURRENCY_JOD, CURRENCY_USD, CURRENCY_EUR]
 
 # ---------------------------------------------------------------------------
 # Platform default
@@ -42,3 +43,13 @@ SUPPORTED_CURRENCIES: list[str] = [CURRENCY_AED, CURRENCY_JOD, CURRENCY_USD]
 # All ORM models must import and reference this constant rather than using
 # inline string literals so that the default stays consistent system-wide.
 DEFAULT_CURRENCY: str = CURRENCY_AED
+
+
+# ---------------------------------------------------------------------------
+# Governance helpers
+# ---------------------------------------------------------------------------
+
+
+def is_supported_currency(code: str) -> bool:
+    """Return True if ``code`` is in the platform's supported currency list."""
+    return code in SUPPORTED_CURRENCIES
