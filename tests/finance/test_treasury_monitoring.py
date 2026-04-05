@@ -144,11 +144,11 @@ class TestTreasuryMonitoringEmpty:
         result = svc.get_treasury_monitoring()
 
         assert isinstance(result, TreasuryMonitoringResponse)
-        assert result.cash_position == 0.0
-        assert result.receivables_exposure == 0.0
-        assert result.overdue_receivables == 0.0
+        assert result.cash_position == {}
+        assert result.receivables_exposure == {}
+        assert result.overdue_receivables == {}
         assert result.liquidity_ratio == 0.0
-        assert result.forecast_next_month == 0.0
+        assert result.forecast_next_month == {}
         assert result.project_count == 0
         assert result.project_exposures == []
 
@@ -180,7 +180,7 @@ class TestTreasuryCashPosition:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.cash_position == pytest.approx(0.0)
+        assert result.cash_position.get("AED", 0.0) == pytest.approx(0.0)
 
     def test_fully_paid_contract_cash_position_equals_contract_value(
         self, db_session: Session
@@ -196,7 +196,7 @@ class TestTreasuryCashPosition:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.cash_position == pytest.approx(150_000.0)
+        assert result.cash_position.get("AED", 0.0) == pytest.approx(150_000.0)
 
     def test_partial_payment_reflected_in_cash_position(self, db_session: Session):
         pid = _make_project(db_session, "TM-CASH-03")
@@ -210,8 +210,8 @@ class TestTreasuryCashPosition:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.cash_position == pytest.approx(80_000.0)
-        assert result.receivables_exposure == pytest.approx(120_000.0)
+        assert result.cash_position.get("AED", 0.0) == pytest.approx(80_000.0)
+        assert result.receivables_exposure.get("AED", 0.0) == pytest.approx(120_000.0)
 
 
 # ---------------------------------------------------------------------------
@@ -234,8 +234,8 @@ class TestTreasuryReceivableExposure:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.receivables_exposure == pytest.approx(100_000.0)
-        assert result.overdue_receivables == pytest.approx(0.0)
+        assert result.receivables_exposure.get("AED", 0.0) == pytest.approx(100_000.0)
+        assert result.overdue_receivables.get("AED", 0.0) == pytest.approx(0.0)
 
     def test_all_overdue_receivables(self, db_session: Session):
         pid = _make_project(db_session, "TM-RCV-02")
@@ -249,8 +249,8 @@ class TestTreasuryReceivableExposure:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.receivables_exposure == pytest.approx(100_000.0)
-        assert result.overdue_receivables == pytest.approx(100_000.0)
+        assert result.receivables_exposure.get("AED", 0.0) == pytest.approx(100_000.0)
+        assert result.overdue_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
 
     def test_paid_and_cancelled_excluded_from_exposure(self, db_session: Session):
         pid = _make_project(db_session, "TM-RCV-03")
@@ -267,7 +267,7 @@ class TestTreasuryReceivableExposure:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.receivables_exposure == pytest.approx(100_000.0)
+        assert result.receivables_exposure.get("AED", 0.0) == pytest.approx(100_000.0)
 
 
 # ---------------------------------------------------------------------------
@@ -295,9 +295,9 @@ class TestTreasuryLiquidityRatio:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        # cash_position = 200k, receivables_exposure = 0 → ratio = 1.0
-        assert result.cash_position == pytest.approx(200_000.0)
-        assert result.receivables_exposure == pytest.approx(0.0)
+        # cash_position = 200k (in AED), receivables_exposure = 0 → ratio = 1.0
+        assert result.cash_position.get("AED", 0.0) == pytest.approx(200_000.0)
+        assert sum(result.receivables_exposure.values()) == pytest.approx(0.0)
         assert result.liquidity_ratio == pytest.approx(1.0)
 
     def test_half_collected_liquidity_is_half(self, db_session: Session):
@@ -419,11 +419,12 @@ class TestTreasuryMonitoringAPI:
         resp = client.get("/api/v1/finance/treasury/monitoring")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["cash_position"] == 0.0
-        assert data["receivables_exposure"] == 0.0
-        assert data["overdue_receivables"] == 0.0
+        # Monetary fields are now grouped dicts — empty when no data
+        assert data["cash_position"] == {}
+        assert data["receivables_exposure"] == {}
+        assert data["overdue_receivables"] == {}
         assert data["liquidity_ratio"] == 0.0
-        assert data["forecast_next_month"] == 0.0
+        assert data["forecast_next_month"] == {}
         assert data["project_count"] == 0
         assert data["project_exposures"] == []
 
@@ -485,7 +486,7 @@ class TestTreasuryForecastNextMonth:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.forecast_next_month == pytest.approx(250_000.0)
+        assert result.forecast_next_month.get("AED", 0.0) == pytest.approx(250_000.0)
 
     def test_installments_not_in_next_month_excluded_from_forecast(
         self, db_session: Session
@@ -502,7 +503,7 @@ class TestTreasuryForecastNextMonth:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.forecast_next_month == pytest.approx(0.0)
+        assert sum(result.forecast_next_month.values()) == pytest.approx(0.0)
 
     def test_mixed_months_only_next_month_counted(self, db_session: Session):
         """Only the installment due next month appears in forecast_next_month."""
@@ -519,7 +520,7 @@ class TestTreasuryForecastNextMonth:
         svc = TreasuryMonitoringService(db_session)
         result = svc.get_treasury_monitoring()
 
-        assert result.forecast_next_month == pytest.approx(300_000.0)
+        assert result.forecast_next_month.get("AED", 0.0) == pytest.approx(300_000.0)
 
     def test_project_forecast_inflow_equals_next_month_installments(
         self, db_session: Session

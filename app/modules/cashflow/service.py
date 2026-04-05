@@ -151,7 +151,7 @@ class CashflowService:
         7. Stage header (flush for ID) and all period rows, then commit once
            so that header + periods are atomic.  Roll back on any failure.
         """
-        self._require_project(data.project_id)
+        project = self._require_project(data.project_id)
 
         today = date.today()
         outflow_schedule = data.expected_outflows_schedule or {}
@@ -282,7 +282,7 @@ class CashflowService:
             self.repo.rollback()
             raise
 
-        return CashflowForecastResponse.model_validate(forecast)
+        return self._build_forecast_response(forecast, project)
 
     # ------------------------------------------------------------------
     # Retrieve
@@ -290,17 +290,18 @@ class CashflowService:
 
     def get_forecast(self, forecast_id: str) -> CashflowForecastResponse:
         forecast = self._require_forecast(forecast_id)
-        return CashflowForecastResponse.model_validate(forecast)
+        project = self._require_project(forecast.project_id)
+        return self._build_forecast_response(forecast, project)
 
     def list_forecasts_by_project(
         self, project_id: str, skip: int = 0, limit: int = 100
     ) -> CashflowForecastListResponse:
-        self._require_project(project_id)
+        project = self._require_project(project_id)
         items = self.repo.list_forecasts_by_project(project_id, skip=skip, limit=limit)
         total = self.repo.count_forecasts_by_project(project_id)
         return CashflowForecastListResponse(
             total=total,
-            items=[CashflowForecastResponse.model_validate(f) for f in items],
+            items=[self._build_forecast_response(f, project) for f in items],
         )
 
     def list_forecast_periods(
@@ -317,7 +318,7 @@ class CashflowService:
     def get_project_cashflow_summary(
         self, project_id: str
     ) -> CashflowForecastSummaryResponse:
-        self._require_project(project_id)
+        project = self._require_project(project_id)
         total = self.repo.count_forecasts_by_project(project_id)
         latest = self.repo.get_latest_forecast_by_project(project_id)
 
@@ -333,6 +334,7 @@ class CashflowService:
                 total_expected_outflows=0.0,
                 total_net_cashflow=0.0,
                 closing_balance=0.0,
+                currency=project.base_currency,
             )
 
         # Aggregate latest forecast periods
@@ -354,4 +356,20 @@ class CashflowService:
             total_expected_outflows=total_expected_outflows,
             total_net_cashflow=total_net_cashflow,
             closing_balance=closing_balance,
+            currency=project.base_currency,
         )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _build_forecast_response(
+        self, forecast: "CashflowForecast", project: "Project"
+    ) -> CashflowForecastResponse:
+        """Construct a denomination-safe CashflowForecastResponse from an ORM object.
+
+        Populates ``currency`` from the project's ``base_currency`` since
+        the cashflow_forecasts table does not carry an explicit currency column.
+        """
+        response = CashflowForecastResponse.model_validate(forecast)
+        return response.model_copy(update={"currency": project.base_currency})

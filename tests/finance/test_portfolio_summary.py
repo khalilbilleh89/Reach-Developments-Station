@@ -185,14 +185,15 @@ class TestPortfolioSummaryServiceEmpty:
         result = svc.get_portfolio_summary()
 
         assert isinstance(result, PortfolioFinancialSummaryResponse)
-        assert result.total_revenue_recognized == 0.0
-        assert result.total_deferred_revenue == 0.0
-        assert result.total_receivables == 0.0
-        assert result.overdue_receivables == 0.0
+        assert result.total_revenue_recognized == {}
+        assert result.total_deferred_revenue == {}
+        assert result.total_receivables == {}
+        assert result.overdue_receivables == {}
         assert result.overdue_receivables_pct == 0.0
-        assert result.forecast_next_month == 0.0
+        assert result.forecast_next_month == {}
         assert result.project_count == 0
         assert result.project_summaries == []
+        assert result.currencies == []
 
     def test_project_with_no_contracts_not_in_summaries(self, db_session: Session):
         """A project with no contracts should not appear in project_summaries."""
@@ -215,8 +216,8 @@ class TestPortfolioRevenueSummary:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_revenue_recognized == pytest.approx(0.0)
-        assert result.total_deferred_revenue == pytest.approx(200_000.0)
+        assert result.total_revenue_recognized.get("AED", 0.0) == pytest.approx(0.0)
+        assert result.total_deferred_revenue.get("AED", 0.0) == pytest.approx(200_000.0)
 
     def test_single_project_partial_payment(self, db_session: Session):
         pid = _make_project(db_session, "PS-REV-02")
@@ -228,8 +229,8 @@ class TestPortfolioRevenueSummary:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_revenue_recognized == pytest.approx(100_000.0)
-        assert result.total_deferred_revenue == pytest.approx(100_000.0)
+        assert result.total_revenue_recognized.get("AED", 0.0) == pytest.approx(100_000.0)
+        assert result.total_deferred_revenue.get("AED", 0.0) == pytest.approx(100_000.0)
 
     def test_multi_project_revenue_aggregation(self, db_session: Session):
         pid1 = _make_project(db_session, "PS-REV-03")
@@ -251,8 +252,8 @@ class TestPortfolioRevenueSummary:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_revenue_recognized == pytest.approx(350_000.0)
-        assert result.total_deferred_revenue == pytest.approx(350_000.0)
+        assert result.total_revenue_recognized.get("AED", 0.0) == pytest.approx(350_000.0)
+        assert result.total_deferred_revenue.get("AED", 0.0) == pytest.approx(350_000.0)
 
 
 class TestPortfolioReceivables:
@@ -271,8 +272,8 @@ class TestPortfolioReceivables:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_receivables == pytest.approx(100_000.0)
-        assert result.overdue_receivables == pytest.approx(0.0)
+        assert result.total_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
+        assert result.overdue_receivables.get("AED", 0.0) == pytest.approx(0.0)
         assert result.overdue_receivables_pct == pytest.approx(0.0)
 
     def test_all_overdue_receivables(self, db_session: Session):
@@ -288,8 +289,8 @@ class TestPortfolioReceivables:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_receivables == pytest.approx(100_000.0)
-        assert result.overdue_receivables == pytest.approx(100_000.0)
+        assert result.total_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
+        assert result.overdue_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
         assert result.overdue_receivables_pct == pytest.approx(100.0)
 
     def test_mixed_current_and_overdue(self, db_session: Session):
@@ -306,8 +307,8 @@ class TestPortfolioReceivables:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_receivables == pytest.approx(200_000.0)
-        assert result.overdue_receivables == pytest.approx(100_000.0)
+        assert result.total_receivables.get("AED", 0.0) == pytest.approx(200_000.0)
+        assert result.overdue_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
         assert result.overdue_receivables_pct == pytest.approx(50.0)
 
     def test_paid_cancelled_excluded_from_receivables(self, db_session: Session):
@@ -326,7 +327,7 @@ class TestPortfolioReceivables:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.total_receivables == pytest.approx(100_000.0)
+        assert result.total_receivables.get("AED", 0.0) == pytest.approx(100_000.0)
 
 
 class TestPortfolioForecastNextMonth:
@@ -349,10 +350,10 @@ class TestPortfolioForecastNextMonth:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.forecast_next_month == pytest.approx(500_000.0)
+        assert result.forecast_next_month.get("AED", 0.0) == pytest.approx(500_000.0)
 
     def test_no_next_month_installments_returns_zero(self, db_session: Session):
-        """When no installments fall in next month, forecast_next_month is 0."""
+        """When no installments fall in next month, forecast_next_month is empty."""
         pid = _make_project(db_session, "PS-FCT-02")
         uid = _make_unit(db_session, pid, "PS-FCT02-U01")
         cid = _make_contract(
@@ -366,7 +367,7 @@ class TestPortfolioForecastNextMonth:
         svc = PortfolioSummaryService(db_session)
         result = svc.get_portfolio_summary()
 
-        assert result.forecast_next_month == pytest.approx(0.0)
+        assert sum(result.forecast_next_month.values()) == pytest.approx(0.0)
 
 
 class TestProjectFinancialSummaryEntries:
@@ -549,8 +550,11 @@ class TestPortfolioSummaryApiEndpoint:
         response = client.get("/api/v1/finance/portfolio/summary")
         assert response.status_code == 200
         data = response.json()
-        assert data["total_revenue_recognized"] == pytest.approx(50_000.0)
-        assert data["total_receivables"] == pytest.approx(50_000.0)
+        # Monetary totals are now grouped by currency
+        assert isinstance(data["total_revenue_recognized"], dict)
+        assert data["total_revenue_recognized"].get("AED", 0.0) == pytest.approx(50_000.0)
+        assert isinstance(data["total_receivables"], dict)
+        assert data["total_receivables"].get("AED", 0.0) == pytest.approx(50_000.0)
         assert len(data["project_summaries"]) >= 1
 
         proj_entry = next(

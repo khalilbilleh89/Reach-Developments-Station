@@ -127,9 +127,10 @@ def test_dashboard_empty_portfolio_schema(client: TestClient):
     assert summary["reserved_units"] == 0
     assert summary["under_contract_units"] == 0
     assert summary["registered_units"] == 0
-    assert summary["contracted_revenue"] == 0.0
-    assert summary["collected_cash"] == 0.0
-    assert summary["outstanding_balance"] == 0.0
+    # Monetary totals are now grouped by currency — empty dict when no data
+    assert summary["contracted_revenue"] == {}
+    assert summary["collected_cash"] == {}
+    assert summary["outstanding_balance"] == {}
 
     # Projects list
     assert data["projects"] == []
@@ -146,7 +147,8 @@ def test_dashboard_empty_portfolio_schema(client: TestClient):
     collections = data["collections"]
     assert collections["total_receivables"] == 0
     assert collections["overdue_receivables"] == 0
-    assert collections["overdue_balance"] == 0.0
+    # overdue_balance is now grouped by currency — empty dict when no data
+    assert collections["overdue_balance"] == {}
     assert collections["collection_rate_pct"] is None
 
     # Risk flags — empty when no data
@@ -261,11 +263,15 @@ def test_dashboard_contracted_revenue_reflects_contracts(client: TestClient):
     resp = client.get("/api/v1/portfolio/dashboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["summary"]["contracted_revenue"] == pytest.approx(300000.0, rel=1e-3)
-    # Project card should also reflect revenue
+    # contracted_revenue is now grouped by currency
+    summary_revenue = data["summary"]["contracted_revenue"]
+    assert isinstance(summary_revenue, dict)
+    assert summary_revenue.get("AED", 0.0) == pytest.approx(300000.0, rel=1e-3)
+    # Project card retains scalar + currency
     cards = data["projects"]
     assert len(cards) == 1
     assert cards[0]["contracted_revenue"] == pytest.approx(300000.0, rel=1e-3)
+    assert "currency" in cards[0]
 
 
 # ---------------------------------------------------------------------------

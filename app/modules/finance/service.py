@@ -198,6 +198,7 @@ class RevenueRecognitionService:
                 overall_recognition_percentage=0.0,
                 contract_count=0,
                 contracts=[],
+                currency=project.base_currency,
             )
 
         contract_ids = [c.id for c in contracts]
@@ -232,6 +233,7 @@ class RevenueRecognitionService:
             overall_recognition_percentage=overall_pct,
             contract_count=len(contract_details),
             contracts=contract_details,
+            currency=project.base_currency,
         )
 
     def get_total_recognized_revenue(self) -> PortfolioRevenueOverviewResponse:
@@ -259,6 +261,7 @@ class RevenueRecognitionService:
                 overall_recognition_percentage=0.0,
                 project_count=0,
                 contract_count=0,
+                currencies=[],
             )
 
         contract_ids = [contract.id for contract, _ in rows]
@@ -268,6 +271,7 @@ class RevenueRecognitionService:
         total_recognized = 0.0
         total_deferred = 0.0
         project_ids: set[str] = set()
+        contract_currencies: set[str] = set()
 
         for contract, project_id in rows:
             paid_amount = paid_map.get(contract.id, 0.0)
@@ -281,6 +285,8 @@ class RevenueRecognitionService:
             total_recognized += result.recognized_revenue
             total_deferred += result.deferred_revenue
             project_ids.add(project_id)
+            if hasattr(contract, "currency") and contract.currency:
+                contract_currencies.add(contract.currency)
 
         total_contract_value = round(total_contract_value, 2)
         total_recognized = round(total_recognized, 2)
@@ -300,6 +306,7 @@ class RevenueRecognitionService:
             overall_recognition_percentage=overall_pct,
             project_count=len(project_ids),
             contract_count=len(rows),
+            currencies=sorted(contract_currencies),
         )
 
     # ------------------------------------------------------------------
@@ -451,6 +458,7 @@ class CollectionsAgingService:
             paid_amount=round(paid_amount, 2),
             outstanding_amount=outstanding,
             aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+            currency=contract.currency,
         )
 
     def get_project_aging(self, project_id: str) -> ProjectAgingResponse:
@@ -490,6 +498,7 @@ class CollectionsAgingService:
             total_outstanding=total_outstanding,
             installment_count=total_count,
             aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+            currency=project.base_currency,
         )
 
     def get_portfolio_aging(self) -> PortfolioAgingResponse:
@@ -559,11 +568,21 @@ class CollectionsAgingService:
         total_outstanding = round(sum(bucket_amounts.values()), 2)
         total_count = sum(bucket_counts.values())
 
+        # Collect distinct currencies present in outstanding installments.
+        currencies: list[str] = sorted(set(
+            row[0]
+            for row in base_query.with_entities(
+                ContractPaymentSchedule.currency
+            ).distinct().all()
+            if row[0]
+        ))
+
         return PortfolioAgingResponse(
             total_outstanding=total_outstanding,
             installment_count=total_count,
             project_count=project_count,
             aging_buckets=_build_bucket_summaries(bucket_amounts, bucket_counts),
+            currencies=currencies,
         )
 
     def get_project_receivables_map(self) -> dict[str, float]:

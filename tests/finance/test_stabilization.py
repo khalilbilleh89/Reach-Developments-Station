@@ -306,8 +306,9 @@ class TestEmptyPortfolioEdgeCases:
         resp = client.get("/api/v1/finance/portfolio/summary")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_revenue_recognized"] == 0.0
-        assert data["total_receivables"] == 0.0
+        # portfolio/summary — monetary totals are now grouped dicts (empty when no data)
+        assert data["total_revenue_recognized"] == {}
+        assert data["total_receivables"] == {}
         assert data["project_summaries"] == []
 
     def test_revenue_overview_empty(self, client: TestClient):

@@ -92,12 +92,12 @@ def test_cost_variance_empty_state(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    # Summary is all zeros
+    # Summary is all zeros — monetary totals are now grouped dicts
     summary = data["summary"]
     assert summary["projects_with_comparison_sets"] == 0
-    assert summary["total_baseline_amount"] == 0.0
-    assert summary["total_comparison_amount"] == 0.0
-    assert summary["total_variance_amount"] == 0.0
+    assert summary["total_baseline_amount"] == {}
+    assert summary["total_comparison_amount"] == {}
+    assert summary["total_variance_amount"] == {}
     assert summary["total_variance_pct"] is None
 
     # Lists are empty
@@ -124,12 +124,13 @@ def test_cost_variance_summary_totals(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
 
+    # Monetary totals are now grouped by currency
     summary = data["summary"]
     assert summary["projects_with_comparison_sets"] == 1
-    assert summary["total_baseline_amount"] == 1_000_000.0
-    assert summary["total_comparison_amount"] == 1_100_000.0
-    assert summary["total_variance_amount"] == 100_000.0
-    # variance_pct = (100000 / 1000000) * 100 = 10.0
+    assert summary["total_baseline_amount"].get("AED", 0.0) == 1_000_000.0
+    assert summary["total_comparison_amount"].get("AED", 0.0) == 1_100_000.0
+    assert summary["total_variance_amount"].get("AED", 0.0) == 100_000.0
+    # variance_pct = (100000 / 1000000) * 100 = 10.0 (single-currency)
     assert summary["total_variance_pct"] == pytest.approx(10.0, rel=1e-3)
 
 
@@ -147,8 +148,8 @@ def test_cost_variance_summary_saving(client: TestClient) -> None:
     data = resp.json()
 
     summary = data["summary"]
-    assert summary["total_variance_amount"] == pytest.approx(-200_000.0, rel=1e-3)
-    # variance_pct = (-200000 / 2000000) * 100 = -10.0
+    assert summary["total_variance_amount"].get("AED", 0.0) == pytest.approx(-200_000.0, rel=1e-3)
+    # variance_pct = (-200000 / 2000000) * 100 = -10.0 (single-currency)
     assert summary["total_variance_pct"] == pytest.approx(-10.0, rel=1e-3)
 
 
@@ -197,10 +198,10 @@ def test_cost_variance_excludes_inactive_sets(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    # Only active set should contribute
-    assert data["summary"]["total_baseline_amount"] == pytest.approx(500_000.0, rel=1e-3)
-    assert data["summary"]["total_comparison_amount"] == pytest.approx(550_000.0, rel=1e-3)
-    assert data["summary"]["total_variance_amount"] == pytest.approx(50_000.0, rel=1e-3)
+    # Only active set should contribute — check via grouped AED key
+    assert data["summary"]["total_baseline_amount"].get("AED", 0.0) == pytest.approx(500_000.0, rel=1e-3)
+    assert data["summary"]["total_comparison_amount"].get("AED", 0.0) == pytest.approx(550_000.0, rel=1e-3)
+    assert data["summary"]["total_variance_amount"].get("AED", 0.0) == pytest.approx(50_000.0, rel=1e-3)
 
 
 # ---------------------------------------------------------------------------

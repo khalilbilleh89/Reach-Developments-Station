@@ -97,6 +97,23 @@ class PortfolioRepository:
         )
         return float(result) if result is not None else 0.0
 
+    def sum_contracted_revenue_grouped(self) -> Dict[str, float]:
+        """Sum of contract_price grouped by currency for all non-cancelled sales contracts.
+
+        Returns a mapping of ISO 4217 currency code → total contracted revenue so that
+        portfolio-wide monetary totals are denomination-safe.
+        """
+        rows = (
+            self.db.query(
+                SalesContract.currency,
+                func.sum(SalesContract.contract_price),
+            )
+            .filter(SalesContract.status.notin_(["cancelled"]))
+            .group_by(SalesContract.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
+
     def sum_contracted_revenue_for_project(self, project_id: str) -> float:
         """Contracted revenue for a single project."""
         result = (
@@ -120,6 +137,21 @@ class PortfolioRepository:
         result = self.db.query(func.sum(Receivable.amount_paid)).scalar()
         return float(result) if result is not None else 0.0
 
+    def sum_collected_cash_grouped(self) -> Dict[str, float]:
+        """Sum of amount_paid grouped by currency across all receivables (portfolio-wide).
+
+        Returns a mapping of ISO 4217 currency code → total collected cash.
+        """
+        rows = (
+            self.db.query(
+                Receivable.currency,
+                func.sum(Receivable.amount_paid),
+            )
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
+
     def sum_outstanding_balance(self) -> float:
         """Sum of balance_due across all non-paid receivables (portfolio-wide)."""
         result = (
@@ -128,6 +160,22 @@ class PortfolioRepository:
             .scalar()
         )
         return float(result) if result is not None else 0.0
+
+    def sum_outstanding_balance_grouped(self) -> Dict[str, float]:
+        """Sum of balance_due grouped by currency for all non-paid receivables (portfolio-wide).
+
+        Returns a mapping of ISO 4217 currency code → total outstanding balance.
+        """
+        rows = (
+            self.db.query(
+                Receivable.currency,
+                func.sum(Receivable.balance_due),
+            )
+            .filter(Receivable.status.notin_(["paid", "cancelled"]))
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
 
     def sum_collected_cash_for_project(self, project_id: str) -> float:
         """Cash collected for a single project."""
@@ -179,6 +227,22 @@ class PortfolioRepository:
             .scalar()
         )
         return float(result) if result is not None else 0.0
+
+    def sum_overdue_balance_grouped(self) -> Dict[str, float]:
+        """Sum of balance_due grouped by currency for overdue receivables.
+
+        Returns a mapping of ISO 4217 currency code → total overdue balance.
+        """
+        rows = (
+            self.db.query(
+                Receivable.currency,
+                func.sum(Receivable.balance_due),
+            )
+            .filter(Receivable.status == "overdue")
+            .group_by(Receivable.currency)
+            .all()
+        )
+        return {currency: float(total) for currency, total in rows if total is not None}
 
     def count_overdue_receivables_for_project(self, project_id: str) -> int:
         """Count of overdue receivables for a single project."""
@@ -366,6 +430,69 @@ class PortfolioRepository:
             Decimal(str(row[1])),
             Decimal(str(row[2])),
         )
+
+    def get_portfolio_variance_totals_grouped(
+        self,
+    ) -> Dict[str, Tuple[Decimal, Decimal, Decimal]]:
+        """Aggregate baseline, comparison, and variance totals grouped by currency.
+
+        Returns a mapping of ISO 4217 currency code → (baseline, comparison, variance)
+        so that portfolio-wide cost variance totals are denomination-safe.
+        """
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.currency,
+                func.coalesce(func.sum(ConstructionCostComparisonLine.baseline_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.comparison_amount), 0),
+                func.coalesce(func.sum(ConstructionCostComparisonLine.variance_amount), 0),
+            )
+            .join(
+                ConstructionCostComparisonSet,
+                ConstructionCostComparisonLine.comparison_set_id == ConstructionCostComparisonSet.id,
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.currency)
+            .all()
+        )
+        return {
+            currency: (
+                Decimal(str(baseline)),
+                Decimal(str(comparison)),
+                Decimal(str(variance)),
+            )
+            for currency, baseline, comparison, variance in rows
+        }
+
+    def get_currency_by_project_comparison_sets(self) -> Dict[str, str]:
+        """Return project_id → currency from the most recently created active comparison set.
+
+        Used to populate per-project cost variance cards with explicit denomination.
+        """
+        from sqlalchemy import select
+
+        latest_ts_subq = (
+            select(
+                ConstructionCostComparisonSet.project_id,
+                func.max(ConstructionCostComparisonSet.created_at).label("max_ts"),
+            )
+            .where(ConstructionCostComparisonSet.is_active.is_(True))
+            .group_by(ConstructionCostComparisonSet.project_id)
+            .subquery()
+        )
+        rows = (
+            self.db.query(
+                ConstructionCostComparisonSet.project_id,
+                ConstructionCostComparisonSet.currency,
+            )
+            .join(
+                latest_ts_subq,
+                (ConstructionCostComparisonSet.project_id == latest_ts_subq.c.project_id)
+                & (ConstructionCostComparisonSet.created_at == latest_ts_subq.c.max_ts),
+            )
+            .filter(ConstructionCostComparisonSet.is_active.is_(True))
+            .all()
+        )
+        return {project_id: currency for project_id, currency in rows}
 
     def get_variance_totals_by_project(
         self,

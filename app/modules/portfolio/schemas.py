@@ -20,13 +20,19 @@ Schema hierarchy:
   PortfolioCostVarianceResponse       — top-level cost variance envelope
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class PortfolioSummary(BaseModel):
-    """Top-line portfolio KPI strip."""
+    """Top-line portfolio KPI strip.
+
+    Monetary totals are grouped by currency (Dict[currency_code → amount]) so
+    that consumers cannot silently treat cross-currency aggregates as a single
+    denominated total.  When the portfolio contains only one currency the dicts
+    will each have a single key.
+    """
 
     total_projects: int = Field(..., description="Total number of projects in the portfolio")
     active_projects: int = Field(..., description="Projects with status 'active'")
@@ -35,14 +41,26 @@ class PortfolioSummary(BaseModel):
     reserved_units: int = Field(..., description="Units with status 'reserved'")
     under_contract_units: int = Field(..., description="Units with status 'under_contract'")
     registered_units: int = Field(..., description="Units with status 'registered'")
-    contracted_revenue: float = Field(
-        ..., description="Sum of contract_price for all non-cancelled sales contracts"
+    contracted_revenue: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of contract_price for all non-cancelled sales contracts, "
+            "grouped by ISO 4217 currency code."
+        ),
     )
-    collected_cash: float = Field(
-        ..., description="Sum of amount_paid across all receivables"
+    collected_cash: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of amount_paid across all receivables, "
+            "grouped by ISO 4217 currency code."
+        ),
     )
-    outstanding_balance: float = Field(
-        ..., description="Sum of balance_due across all open receivables"
+    outstanding_balance: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of balance_due across all open receivables, "
+            "grouped by ISO 4217 currency code."
+        ),
     )
 
 
@@ -75,6 +93,13 @@ class PortfolioProjectCard(BaseModel):
         None,
         description="Simple health indicator: 'on_track' | 'needs_attention' | 'at_risk'",
     )
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values on this project card. "
+            "Sourced from the project base_currency."
+        ),
+    )
 
 
 class PortfolioPipelineSummary(BaseModel):
@@ -98,9 +123,12 @@ class PortfolioCollectionsSummary(BaseModel):
     overdue_receivables: int = Field(
         ..., description="Receivables with status 'overdue'"
     )
-    overdue_balance: float = Field(
+    overdue_balance: Dict[str, float] = Field(
         ...,
-        description="Sum of balance_due for overdue receivables"
+        description=(
+            "Sum of balance_due for overdue receivables, "
+            "grouped by ISO 4217 currency code."
+        ),
     )
     collection_rate_pct: Optional[float] = Field(
         None,
@@ -108,6 +136,10 @@ class PortfolioCollectionsSummary(BaseModel):
             "amount_paid / (amount_paid + balance_due) expressed as a percentage; "
             "null when no receivables exist"
         ),
+    )
+    currencies: List[str] = Field(
+        default_factory=list,
+        description="Distinct ISO 4217 currency codes present in overdue receivables.",
     )
 
 
@@ -157,21 +189,35 @@ class PortfolioDashboardResponse(BaseModel):
 
 
 class PortfolioCostVarianceSummary(BaseModel):
-    """Portfolio-wide cost variance totals derived from active tender comparison sets."""
+    """Portfolio-wide cost variance totals derived from active tender comparison sets.
+
+    Monetary totals are grouped by currency (Dict[currency_code → amount]) so
+    that consumers cannot silently treat cross-currency aggregates as a single
+    denominated total.
+    """
 
     projects_with_comparison_sets: int = Field(
         ..., description="Number of projects that have at least one active comparison set"
     )
-    total_baseline_amount: float = Field(
-        ..., description="Sum of all baseline amounts across active comparison lines"
-    )
-    total_comparison_amount: float = Field(
-        ..., description="Sum of all comparison amounts across active comparison lines"
-    )
-    total_variance_amount: float = Field(
+    total_baseline_amount: Dict[str, float] = Field(
         ...,
         description=(
-            "Total variance amount (comparison - baseline) across active comparison lines. "
+            "Sum of all baseline amounts across active comparison lines, "
+            "grouped by ISO 4217 currency code."
+        ),
+    )
+    total_comparison_amount: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Sum of all comparison amounts across active comparison lines, "
+            "grouped by ISO 4217 currency code."
+        ),
+    )
+    total_variance_amount: Dict[str, float] = Field(
+        ...,
+        description=(
+            "Total variance amount (comparison - baseline) across active comparison lines, "
+            "grouped by ISO 4217 currency code. "
             "Positive → net overrun; negative → net saving."
         ),
     )
@@ -179,7 +225,7 @@ class PortfolioCostVarianceSummary(BaseModel):
         None,
         description=(
             "Total variance as a percentage of total baseline; "
-            "null when total baseline is zero."
+            "null when total baseline is zero or the portfolio spans multiple currencies."
         ),
     )
 
@@ -217,6 +263,13 @@ class PortfolioCostVarianceProjectCard(BaseModel):
         description=(
             "Transparent status derived from variance_amount: "
             "'overrun' (positive) | 'saving' (negative) | 'neutral' (zero)"
+        ),
+    )
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for all monetary values on this project card. "
+            "Sourced from the active comparison set currency."
         ),
     )
 
@@ -302,6 +355,13 @@ class PortfolioAbsorptionProjectCard(BaseModel):
         description=(
             "Derived badge: 'ahead_of_plan' | 'on_plan' | 'behind_plan' | 'no_data'; "
             "null when no units exist"
+        ),
+    )
+    currency: str = Field(
+        ...,
+        description=(
+            "ISO 4217 currency code for contracted_revenue on this project card. "
+            "Sourced from the project base_currency."
         ),
     )
 
