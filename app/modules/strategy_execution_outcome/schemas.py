@@ -103,8 +103,8 @@ class ExecutionOutcomeComparisonBlock(BaseModel):
     (intended values) and the recorded outcome (actual values).
 
     match_status classification thresholds:
-      price_adjustment_pct  — exact if |diff| < 1 pp, minor if 1-5 pp, major if > 5 pp
-      phase_delay_months    — exact if diff = 0, minor if |diff| <= 1, major if |diff| > 1
+      price_adjustment_pct  — exact if |diff| < 1 pp, minor if 1 pp ≤ |diff| < 5 pp, major if |diff| ≥ 5 pp
+      phase_delay_months    — exact if diff = 0, minor if 0 < |diff| ≤ 1 month, major if |diff| > 1 month
       release_strategy      — exact if equal, major_variance if different
 
     Overall match_status is the worst classification across all comparable fields.

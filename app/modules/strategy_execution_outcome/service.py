@@ -58,11 +58,13 @@ _PORTFOLIO_PROJECT_LIMIT = 50
 _ELIGIBLE_TRIGGER_STATUSES = {"in_progress", "completed"}
 
 # Comparison thresholds for price adjustment (percentage points).
-_PRICE_MINOR_THRESHOLD = 1.0   # |diff| < 1 pp → exact_match
-_PRICE_MAJOR_THRESHOLD = 5.0   # |diff| >= 5 pp → major_variance
+# |diff| < 1 pp → exact_match; 1 pp ≤ |diff| < 5 pp → minor_variance; |diff| ≥ 5 pp → major_variance
+_PRICE_MINOR_THRESHOLD = 1.0
+_PRICE_MAJOR_THRESHOLD = 5.0
 
 # Comparison threshold for phase delay (months).
-_PHASE_MINOR_THRESHOLD = 1.0   # |diff| <= 1 month → minor_variance or exact
+# diff == 0 → exact_match; 0 < |diff| ≤ 1 month → minor_variance; |diff| > 1 month → major_variance
+_PHASE_MINOR_THRESHOLD = 1.0
 
 
 class StrategyExecutionOutcomeService:
