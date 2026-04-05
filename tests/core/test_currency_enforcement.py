@@ -914,3 +914,91 @@ class TestPaymentPlanResponseCurrency:
             "Payment plan response must include 'currency' field"
         )
         assert plan_data["currency"] == DEFAULT_CURRENCY
+
+    def test_payment_plan_api_response_preserves_non_default_contract_currency(
+        self, client: TestClient
+    ):
+        """POST /payment-plans must return the explicit non-default contract currency."""
+        proj_resp = client.post(
+            "/api/v1/projects",
+            json={"name": "Plan Currency Project JOD", "code": "PCP-009"},
+        )
+        assert proj_resp.status_code == 201
+        project_id = proj_resp.json()["id"]
+
+        phase_resp = client.post(
+            "/api/v1/phases",
+            json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
+        )
+        assert phase_resp.status_code == 201
+        phase_id = phase_resp.json()["id"]
+
+        bldg_resp = client.post(
+            f"/api/v1/phases/{phase_id}/buildings",
+            json={"name": "Block A", "code": "BLK-PCP009"},
+        )
+        assert bldg_resp.status_code == 201
+        building_id = bldg_resp.json()["id"]
+
+        floor_resp = client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
+        )
+        assert floor_resp.status_code == 201
+        floor_id = floor_resp.json()["id"]
+
+        unit_resp = client.post(
+            "/api/v1/units",
+            json={
+                "floor_id": floor_id,
+                "unit_number": "302",
+                "unit_type": "studio",
+                "internal_area": 60.0,
+            },
+        )
+        assert unit_resp.status_code == 201
+        unit_id = unit_resp.json()["id"]
+
+        buyer_resp = client.post(
+            "/api/v1/sales/buyers",
+            json={
+                "full_name": "Plan Buyer JOD",
+                "email": "plan.buyer.jod@test.com",
+                "phone": "+9623333333",
+            },
+        )
+        assert buyer_resp.status_code == 201
+        buyer_id = buyer_resp.json()["id"]
+
+        contract_resp = client.post(
+            "/api/v1/sales/contracts",
+            json={
+                "unit_id": unit_id,
+                "buyer_id": buyer_id,
+                "contract_number": "PCP-JOD-001",
+                "contract_date": "2026-01-01",
+                "contract_price": 300_000.0,
+                "currency": CURRENCY_JOD,
+            },
+        )
+        assert contract_resp.status_code == 201, contract_resp.text
+        contract_id = contract_resp.json()["id"]
+
+        plan_resp = client.post(
+            "/api/v1/payment-plans",
+            json={
+                "contract_id": contract_id,
+                "plan_name": "Quarterly Plan JOD",
+                "number_of_installments": 4,
+                "start_date": "2026-02-01",
+            },
+        )
+        assert plan_resp.status_code == 201, plan_resp.text
+        plan_data = plan_resp.json()
+        assert "currency" in plan_data, (
+            "Payment plan response must include 'currency' field"
+        )
+        assert plan_data["currency"] == CURRENCY_JOD, (
+            f"Payment plan response must preserve contract currency {CURRENCY_JOD!r}, "
+            f"got {plan_data['currency']!r}"
+        )
