@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ResourceNotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.finance.cashflow_engine import (
     CashflowForecastResult,
     ForecastAssumptions,
@@ -161,7 +162,6 @@ class CashflowForecastService:
         project_ids = list(project_installments.keys())
         currency_map: dict[str, str] = {}
         if project_ids:
-            from app.core.constants.currency import DEFAULT_CURRENCY
             projects = self.db.query(Project).filter(Project.id.in_(project_ids)).all()
             currency_map = {p.id: p.base_currency for p in projects}
 
@@ -184,8 +184,15 @@ class CashflowForecastService:
 
         all_currencies = sorted({pf.currency for pf in project_responses})
 
+        # Group total_expected by currency using per-project totals
+        total_expected_grouped: Dict[str, float] = {}
+        for pf in project_responses:
+            total_expected_grouped[pf.currency] = round(
+                total_expected_grouped.get(pf.currency, 0.0) + pf.total_expected, 2
+            )
+
         return PortfolioCashflowForecastResponse(
-            total_expected=result.total_expected,
+            total_expected=total_expected_grouped,
             project_count=len(project_responses),
             monthly_entries=[
                 MonthlyForecastEntryResponse(
@@ -312,7 +319,6 @@ class CashflowForecastService:
         project_ids_list = list(project_installments.keys())
         currency_map: dict[str, str] = {}
         if project_ids_list:
-            from app.core.constants.currency import DEFAULT_CURRENCY
             projects_list = self.db.query(Project).filter(Project.id.in_(project_ids_list)).all()
             currency_map = {p.id: p.base_currency for p in projects_list}
 
@@ -849,7 +855,7 @@ def _result_to_contract_response(
         assumptions=assumptions_schema,
         summary=_summary_to_response(result.summary, currency=currency),
         periods=[_period_to_row(p) for p in result.periods],
-        currency=currency or "AED",
+        currency=currency or DEFAULT_CURRENCY,
     )
 
 
@@ -867,7 +873,7 @@ def _result_to_project_response(
         assumptions=assumptions_schema,
         summary=_summary_to_response(result.summary, currency=currency),
         periods=[_period_to_row(p) for p in result.periods],
-        currency=currency or "AED",
+        currency=currency or DEFAULT_CURRENCY,
     )
 
 

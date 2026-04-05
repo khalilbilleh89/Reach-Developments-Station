@@ -321,7 +321,7 @@ class TestRevenueRecognitionService:
             assert pytest.approx(c.recognized_revenue + c.deferred_revenue) == c.contract_total
 
     def test_get_total_recognized_revenue_overview(self, db_session: Session):
-        """Portfolio overview aggregates across contracts."""
+        """Portfolio overview aggregates across contracts, grouped by currency."""
         pid = _make_project(db_session, "RR-SVC-07")
         uid = _make_unit(db_session, pid, "401")
         cid = _make_contract(db_session, uid, 60_000.0, "CNT-RR-07", "rr07@test.com")
@@ -331,15 +331,15 @@ class TestRevenueRecognitionService:
         svc = RevenueRecognitionService(db_session)
         result = svc.get_total_recognized_revenue()
 
-        # The overview includes all contracts in the database, so we just
-        # verify the invariant and non-negative constraint.
-        assert result.total_contract_value >= 0
-        assert result.total_recognized_revenue >= 0
-        assert result.total_deferred_revenue >= 0
-        assert (
-            pytest.approx(
-                result.total_recognized_revenue + result.total_deferred_revenue
-            )
-            == result.total_contract_value
+        # Monetary fields are now grouped dicts; verify via summed values
+        total_cv = sum(result.total_contract_value.values())
+        total_rec = sum(result.total_recognized_revenue.values())
+        total_def = sum(result.total_deferred_revenue.values())
+        assert total_cv >= 0
+        assert total_rec >= 0
+        assert total_def >= 0
+        assert pytest.approx(total_rec + total_def) == total_cv
+        # overall_recognition_percentage is valid for single-currency portfolios
+        assert result.overall_recognition_percentage is None or (
+            0.0 <= result.overall_recognition_percentage <= 100.0
         )
-        assert 0.0 <= result.overall_recognition_percentage <= 100.0

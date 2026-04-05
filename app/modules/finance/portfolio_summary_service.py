@@ -38,6 +38,7 @@ from app.modules.finance.service import (
     CollectionsAgingService,
     RevenueRecognitionService,
 )
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.projects.models import Project
 from app.modules.sales.models import ContractPaymentSchedule, SalesContract
 from app.modules.units.models import Unit
@@ -86,7 +87,7 @@ class PortfolioSummaryService:
         currency so consumers receive denomination-safe payloads.
         """
         # --- Revenue (grouped by currency) ---
-        revenue_recognized_grouped, revenue_deferred_grouped, revenue_currencies = (
+        revenue_recognized_grouped, revenue_deferred_grouped, revenue_currencies, project_count = (
             self._get_recognized_revenue_grouped()
         )
 
@@ -127,7 +128,8 @@ class PortfolioSummaryService:
 
         # --- Per-project breakdown ---
         project_summaries = self._build_project_summaries()
-        project_count = self._count_projects_with_contracts()
+        # project_count is derived from the already-fetched revenue grouped data,
+        # avoiding a redundant full-portfolio query.
 
         return PortfolioFinancialSummaryResponse(
             total_revenue_recognized=revenue_recognized_grouped,
@@ -145,18 +147,15 @@ class PortfolioSummaryService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _count_projects_with_contracts(self) -> int:
-        """Return count of distinct projects that have at least one contract."""
-        revenue_overview = self._revenue_svc.get_total_recognized_revenue()
-        return revenue_overview.project_count
-
     def _get_recognized_revenue_grouped(
         self,
-    ) -> tuple[Dict[str, float], Dict[str, float], list[str]]:
-        """Return (recognized_by_currency, deferred_by_currency, all_currencies).
+    ) -> tuple[Dict[str, float], Dict[str, float], list[str], int]:
+        """Return (recognized_by_currency, deferred_by_currency, all_currencies, project_count).
 
         Executes a single JOIN query and groups recognition results by
         contract currency to produce denomination-safe aggregates.
+        Also returns the count of distinct projects with at least one contract,
+        avoiding a separate query for project_count.
         """
         rows = (
             self.db.query(SalesContract, Phase.project_id)
@@ -168,16 +167,18 @@ class PortfolioSummaryService:
         )
 
         if not rows:
-            return {}, {}, []
+            return {}, {}, [], 0
 
         contract_ids = [c.id for c, _ in rows]
         paid_map = self._sum_paid_installments_bulk(contract_ids)
 
         recognized_by_currency: Dict[str, float] = {}
         deferred_by_currency: Dict[str, float] = {}
+        project_ids: set[str] = set()
 
-        for contract, _ in rows:
-            currency = getattr(contract, "currency", None) or "AED"
+        for contract, project_id in rows:
+            currency = getattr(contract, "currency", None) or DEFAULT_CURRENCY
+            project_ids.add(project_id)
             paid = paid_map.get(contract.id, 0.0)
             cdata = ContractRevenueData(
                 contract_id=contract.id,
@@ -193,7 +194,7 @@ class PortfolioSummaryService:
             )
 
         all_currencies = sorted(set(recognized_by_currency) | set(deferred_by_currency))
-        return recognized_by_currency, deferred_by_currency, all_currencies
+        return recognized_by_currency, deferred_by_currency, all_currencies, len(project_ids)
 
     def _get_receivables_grouped(
         self,

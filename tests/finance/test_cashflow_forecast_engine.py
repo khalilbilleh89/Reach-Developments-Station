@@ -427,7 +427,8 @@ class TestCashflowForecastService:
         svc = CashflowForecastService(db_session)
         result = svc.get_portfolio_forecast()
 
-        assert result.total_expected == 0.0
+        # total_expected is now a grouped Dict[str, float] — empty when no data
+        assert result.total_expected == {}
         assert result.project_count == 0
         assert result.monthly_entries == []
         assert result.project_forecasts == []
@@ -449,7 +450,8 @@ class TestCashflowForecastService:
         result = svc.get_portfolio_forecast()
 
         assert result.project_count == 2
-        assert result.total_expected == pytest.approx(900_000.0)
+        # total_expected is grouped by currency; sum across currencies
+        assert sum(result.total_expected.values()) == pytest.approx(900_000.0)
 
         # September should merge proj1 and proj2
         sep_entry = next(
@@ -479,7 +481,8 @@ class TestCashflowForecastService:
         result = svc.get_portfolio_forecast()
 
         project_sum = sum(pf.total_expected for pf in result.project_forecasts)
-        assert result.total_expected == pytest.approx(project_sum)
+        # total_expected is grouped; compare sum of grouped dict to project sum
+        assert sum(result.total_expected.values()) == pytest.approx(project_sum)
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +525,8 @@ class TestCashflowForecastApi:
         resp = client.get("/api/v1/finance/cashflow/forecast")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data["total_expected"], float)
+        # total_expected is now a grouped Dict[str, float]
+        assert isinstance(data["total_expected"], dict)
         assert isinstance(data["project_count"], int)
         assert isinstance(data["monthly_entries"], list)
         assert isinstance(data["project_forecasts"], list)

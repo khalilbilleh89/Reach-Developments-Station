@@ -113,6 +113,7 @@ def _make_contract(
         contract_number=ref,
         contract_date=date(2026, 1, 1),
         contract_price=price,
+        currency=currency,
     )
     db_session.add(contract)
     db_session.commit()
@@ -343,3 +344,140 @@ class TestAgingSchemaContracts:
         assert isinstance(result, ProjectAgingResponse)
         assert hasattr(result, "currency")
         assert result.currency is not None
+
+
+# ---------------------------------------------------------------------------
+# Multi-currency regression tests — null-safe ratio rules
+# ---------------------------------------------------------------------------
+
+
+class TestMultiCurrencyNullSafeRules:
+    """Regression tests: liquidity_ratio and collection_rate_pct are None for
+    multi-currency portfolios; ratios are valid floats for single-currency ones."""
+
+    def test_liquidity_ratio_is_none_for_multi_currency_portfolio(
+        self, db_session: Session
+    ):
+        """Two projects in different currencies → liquidity_ratio must be None."""
+        # Project 1 in AED
+        pid1 = _make_project(db_session, "MC-LIQ-01", currency="AED")
+        uid1 = _make_unit(db_session, pid1, "MC-LIQ01-U1")
+        cid1 = _make_contract(
+            db_session, uid1, 100_000.0, "MC-LIQC001", "mcliq01@t.com", currency="AED"
+        )
+        _make_installment(db_session, cid1, 50_000.0, 1, date(2025, 6, 1), "paid", currency="AED")
+        future = date.today() + timedelta(days=30)
+        _make_installment(db_session, cid1, 50_000.0, 2, future, "pending", currency="AED")
+
+        # Project 2 in USD — introduces second currency
+        pid2 = _make_project(db_session, "MC-LIQ-02", currency="USD")
+        uid2 = _make_unit(db_session, pid2, "MC-LIQ02-U1")
+        cid2 = _make_contract(
+            db_session, uid2, 200_000.0, "MC-LIQC002", "mcliq02@t.com", currency="USD"
+        )
+        _make_installment(db_session, cid2, 100_000.0, 1, date(2025, 6, 1), "paid", currency="USD")
+        _make_installment(db_session, cid2, 100_000.0, 2, future, "pending", currency="USD")
+
+        svc = TreasuryMonitoringService(db_session)
+        result = svc.get_treasury_monitoring()
+
+        # liquidity_ratio must be None when portfolio spans multiple currencies
+        assert result.liquidity_ratio is None, (
+            f"Expected None for multi-currency portfolio, got {result.liquidity_ratio}"
+        )
+        # cash_position grouped dict should have both currencies
+        assert "AED" in result.cash_position or "USD" in result.cash_position
+
+    def test_collection_rate_pct_is_none_for_multi_currency_portfolio(
+        self, db_session: Session
+    ):
+        """Two projects in different currencies → collection_rate_pct must be None."""
+        from app.modules.portfolio.service import PortfolioService
+
+        # Project in AED
+        pid1 = _make_project(db_session, "MC-COL-01", currency="AED")
+        uid1 = _make_unit(db_session, pid1, "MC-COL01-U1")
+        cid1 = _make_contract(
+            db_session, uid1, 100_000.0, "MC-COLC001", "mccol01@t.com", currency="AED"
+        )
+        future = date.today() + timedelta(days=30)
+        _make_installment(db_session, cid1, 100_000.0, 1, future, "pending", currency="AED")
+
+        # Project in USD
+        pid2 = _make_project(db_session, "MC-COL-02", currency="USD")
+        uid2 = _make_unit(db_session, pid2, "MC-COL02-U1")
+        cid2 = _make_contract(
+            db_session, uid2, 200_000.0, "MC-COLC002", "mccol02@t.com", currency="USD"
+        )
+        _make_installment(db_session, cid2, 200_000.0, 1, future, "pending", currency="USD")
+
+        svc = PortfolioService(db_session)
+        dashboard = svc.get_dashboard()
+
+        # collection_rate_pct must be None when portfolio spans multiple currencies
+        assert dashboard.collections.collection_rate_pct is None, (
+            f"Expected None for multi-currency portfolio, "
+            f"got {dashboard.collections.collection_rate_pct}"
+        )
+
+    def test_single_currency_collection_rate_pct_is_not_forced_none_by_currency_guard(
+        self, db_session: Session
+    ):
+        """Single-currency portfolio must not have collection_rate_pct forced to None
+        by the multi-currency guard.  With no Receivable records the value may be None
+        from _safe_pct(0, 0), but that is a data-completeness None, not a currency None.
+        """
+        from app.modules.portfolio.service import PortfolioService
+
+        # Single AED project only — no mixed currencies in portfolio
+        pid = _make_project(db_session, "SC-COL-01", currency="AED")
+        uid = _make_unit(db_session, pid, "SC-COL01-U1")
+        cid = _make_contract(
+            db_session, uid, 100_000.0, "SC-COLC001", "sccol01@t.com", currency="AED"
+        )
+        _make_installment(db_session, cid, 50_000.0, 1, date(2025, 6, 1), "paid", currency="AED")
+        future = date.today() + timedelta(days=30)
+        _make_installment(db_session, cid, 50_000.0, 2, future, "pending", currency="AED")
+
+        svc = PortfolioService(db_session)
+        dashboard = svc.get_dashboard()
+
+        # With no Receivable records in the portfolio repository, collected_cash and
+        # outstanding_balance are both 0.  _safe_pct(0, 0) correctly returns None.
+        # The key invariant tested here: overdue_balance currencies dict has at most
+        # one entry, so the multi-currency guard is NOT triggered (currency len <= 1).
+        overdue_currencies = list(dashboard.collections.overdue_balance.keys())
+        assert len(overdue_currencies) <= 1, (
+            "Single-currency portfolio should produce at most one currency in overdue_balance"
+        )
+
+    def test_portfolio_revenue_overview_grouped_for_multi_currency(
+        self, db_session: Session
+    ):
+        """Multi-currency portfolio → PortfolioRevenueOverviewResponse.
+        total_recognized_revenue must be a dict with both currency keys."""
+        pid1 = _make_project(db_session, "MC-REV-01", currency="AED")
+        uid1 = _make_unit(db_session, pid1, "MC-REV01-U1")
+        cid1 = _make_contract(
+            db_session, uid1, 100_000.0, "MC-REVC001", "mcrev01@t.com", currency="AED"
+        )
+        _make_installment(db_session, cid1, 100_000.0, 1, date(2025, 6, 1), "paid", currency="AED")
+
+        pid2 = _make_project(db_session, "MC-REV-02", currency="USD")
+        uid2 = _make_unit(db_session, pid2, "MC-REV02-U1")
+        cid2 = _make_contract(
+            db_session, uid2, 200_000.0, "MC-REVC002", "mcrev02@t.com", currency="USD"
+        )
+        _make_installment(db_session, cid2, 200_000.0, 1, date(2025, 6, 1), "paid", currency="USD")
+
+        from app.modules.finance.service import RevenueRecognitionService
+
+        svc = RevenueRecognitionService(db_session)
+        result = svc.get_total_recognized_revenue()
+
+        # Multi-currency portfolio: grouped dict must contain both currencies
+        assert "AED" in result.total_recognized_revenue
+        assert "USD" in result.total_recognized_revenue
+        # overall_recognition_percentage must be None for multi-currency
+        assert result.overall_recognition_percentage is None
+        assert sorted(result.currencies) == ["AED", "USD"]

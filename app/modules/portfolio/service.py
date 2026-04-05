@@ -205,8 +205,13 @@ class PortfolioService:
         total_receivables = self.repo.count_receivables()
         overdue_receivables = self.repo.count_overdue_receivables()
         overdue_balance_grouped = self.repo.sum_overdue_balance_grouped()
-        collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
         currencies = sorted(overdue_balance_grouped.keys())
+        # collection_rate_pct is only valid when single-currency; mixed-currency
+        # totals are not comparable across denominations.
+        if len(currencies) <= 1:
+            collection_rate_pct = _safe_pct(collected_cash, collected_cash + outstanding_balance)
+        else:
+            collection_rate_pct = None
 
         return PortfolioCollectionsSummary(
             total_receivables=total_receivables,
@@ -257,14 +262,26 @@ class PortfolioService:
             severity = (
                 "critical" if collections.overdue_receivables >= 10 else "warning"
             )
-            total_overdue_balance = sum(collections.overdue_balance.values())
+            # Build denomination-safe description: per-currency amounts when multi-currency
+            overdue_parts = collections.overdue_balance
+            if len(overdue_parts) == 1:
+                ccy, amount = next(iter(overdue_parts.items()))
+                balance_desc = f"total outstanding balance of {amount:,.2f} {ccy}"
+            elif len(overdue_parts) > 1:
+                parts = ", ".join(
+                    f"{amount:,.2f} {ccy}"
+                    for ccy, amount in sorted(overdue_parts.items())
+                )
+                balance_desc = f"outstanding balances of {parts}"
+            else:
+                balance_desc = "outstanding balances pending review"
             flags.append(
                 PortfolioRiskFlag(
                     flag_type="overdue_receivables",
                     severity=severity,
                     description=(
                         f"{collections.overdue_receivables} overdue receivable(s) with "
-                        f"total outstanding balance of {total_overdue_balance:,.2f}."
+                        f"{balance_desc}."
                     ),
                     affected_project_id=None,
                     affected_project_name=None,

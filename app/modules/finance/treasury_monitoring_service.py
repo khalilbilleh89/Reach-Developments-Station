@@ -65,34 +65,22 @@ class TreasuryMonitoringService:
         ``liquidity_ratio`` is None when the portfolio spans more than one
         currency (the ratio is mathematically invalid across currencies).
         """
-        # --- Cash position: total paid installments grouped by contract currency ---
-        # Uses _get_cash_position_grouped() which queries paid installment sums
-        # directly from ContractPaymentSchedule, grouped by SalesContract.currency.
+        # --- Cash position: recognized revenue grouped by contract currency ---
+        # total_recognized_revenue is now a Dict[str, float] from the revenue service.
         revenue_overview = self._revenue_svc.get_total_recognized_revenue()
         aging_overview = self._aging_svc.get_portfolio_aging()
 
-        # Determine all currencies present in the portfolio
-        currencies_set = set(revenue_overview.currencies) | set(aging_overview.currencies)
-        all_currencies = sorted(currencies_set)
-
-        # Build minimal cash_position dict
-        if len(all_currencies) == 1:
-            cash_position_grouped: Dict[str, float] = {
-                all_currencies[0]: round(revenue_overview.total_recognized_revenue, 2)
-            }
-        elif len(all_currencies) > 1:
-            # Multi-currency: distribute evenly is wrong — use AED default
-            # Actual grouping requires querying recognized revenue per currency.
-            # We use a helper from the portfolio summary service approach.
+        # Use the grouped recognized revenue dict directly as the cash position proxy.
+        cash_position_grouped: Dict[str, float] = dict(revenue_overview.total_recognized_revenue)
+        if not cash_position_grouped and len(revenue_overview.currencies) == 0:
+            # Fall back to the direct installment query when revenue is empty
             cash_position_grouped = self._get_cash_position_grouped()
-        else:
-            cash_position_grouped = {}
 
         # --- Receivables aging grouped by currency ---
         receivables_grouped = self._get_receivables_grouped()
         overdue_grouped = self._get_overdue_grouped()
 
-        # Refresh all_currencies after getting receivables
+        # Aggregate all known currencies from cash, receivables, and overdue data
         all_currencies = sorted(
             set(cash_position_grouped.keys())
             | set(receivables_grouped.keys())
@@ -156,10 +144,6 @@ class TreasuryMonitoringService:
         """
         from sqlalchemy import func as _func
         from app.modules.sales.models import ContractPaymentSchedule, SalesContract
-        from app.modules.units.models import Unit
-        from app.modules.floors.models import Floor
-        from app.modules.buildings.models import Building
-        from app.modules.phases.models import Phase
         from app.shared.enums.sales import ContractPaymentStatus
 
         rows = (
@@ -182,10 +166,6 @@ class TreasuryMonitoringService:
         from sqlalchemy import func as _func
         from app.modules.finance.constants import RECEIVABLE_STATUSES
         from app.modules.sales.models import ContractPaymentSchedule, SalesContract
-        from app.modules.units.models import Unit
-        from app.modules.floors.models import Floor
-        from app.modules.buildings.models import Building
-        from app.modules.phases.models import Phase
 
         rows = (
             self.db.query(

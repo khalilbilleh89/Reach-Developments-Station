@@ -263,6 +263,7 @@ class CashflowService:
                         closing_balance=closing_balance,
                         receivables_due=scheduled_due,
                         receivables_overdue=receivables_overdue,
+                        currency=project.base_currency,
                     )
                 )
 

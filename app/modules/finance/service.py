@@ -17,7 +17,7 @@ Business rules enforced here:
     both buckets consistently.
 """
 
-from typing import List, cast
+from typing import List, Optional, cast
 
 from fastapi import HTTPException
 from sqlalchemy import case, distinct, func
@@ -36,6 +36,7 @@ from app.modules.collections.aging_engine import (
     classify_receivable_bucket,
 )
 from app.modules.finance.constants import RECEIVABLE_STATUSES
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.finance.repository import FinanceSummaryRepository
 from app.modules.finance.revenue_recognition import (
     ContractRevenueData,
@@ -239,7 +240,9 @@ class RevenueRecognitionService:
     def get_total_recognized_revenue(self) -> PortfolioRevenueOverviewResponse:
         """Return portfolio-wide revenue recognition overview.
 
-        Aggregates across all contracts in all projects.
+        Monetary totals are grouped by ISO 4217 currency code.
+        ``overall_recognition_percentage`` is None when the portfolio spans more
+        than one currency (ratio would cross currency boundaries).
         Uses a single grouped query to sum paid installments for all contracts,
         avoiding N+1 round-trips.
         """
@@ -255,9 +258,9 @@ class RevenueRecognitionService:
 
         if not rows:
             return PortfolioRevenueOverviewResponse(
-                total_contract_value=0.0,
-                total_recognized_revenue=0.0,
-                total_deferred_revenue=0.0,
+                total_contract_value={},
+                total_recognized_revenue={},
+                total_deferred_revenue={},
                 overall_recognition_percentage=0.0,
                 project_count=0,
                 contract_count=0,
@@ -267,13 +270,15 @@ class RevenueRecognitionService:
         contract_ids = [contract.id for contract, _ in rows]
         paid_map = self._sum_paid_installments_bulk(contract_ids)
 
-        total_contract_value = 0.0
-        total_recognized = 0.0
-        total_deferred = 0.0
+        contract_value_by_currency: dict[str, float] = {}
+        recognized_by_currency: dict[str, float] = {}
+        deferred_by_currency: dict[str, float] = {}
         project_ids: set[str] = set()
-        contract_currencies: set[str] = set()
 
         for contract, project_id in rows:
+            currency = (
+                getattr(contract, "currency", None) or DEFAULT_CURRENCY
+            )
             paid_amount = paid_map.get(contract.id, 0.0)
             data = ContractRevenueData(
                 contract_id=contract.id,
@@ -281,32 +286,40 @@ class RevenueRecognitionService:
                 paid_amount=paid_amount,
             )
             result = calculate_contract_revenue_recognition(data)
-            total_contract_value += result.contract_total
-            total_recognized += result.recognized_revenue
-            total_deferred += result.deferred_revenue
-            project_ids.add(project_id)
-            if hasattr(contract, "currency") and contract.currency:
-                contract_currencies.add(contract.currency)
-
-        total_contract_value = round(total_contract_value, 2)
-        total_recognized = round(total_recognized, 2)
-        total_deferred = round(total_deferred, 2)
-
-        if total_contract_value > 0:
-            overall_pct = round(
-                min(total_recognized / total_contract_value * 100, 100.0), 4
+            contract_value_by_currency[currency] = round(
+                contract_value_by_currency.get(currency, 0.0) + result.contract_total, 2
             )
-        else:
+            recognized_by_currency[currency] = round(
+                recognized_by_currency.get(currency, 0.0) + result.recognized_revenue, 2
+            )
+            deferred_by_currency[currency] = round(
+                deferred_by_currency.get(currency, 0.0) + result.deferred_revenue, 2
+            )
+            project_ids.add(project_id)
+
+        all_currencies = sorted(contract_value_by_currency.keys())
+
+        # overall_recognition_percentage is only valid when single-currency
+        if len(all_currencies) == 1:
+            ccy = all_currencies[0]
+            cv = contract_value_by_currency.get(ccy, 0.0)
+            overall_pct: Optional[float] = round(
+                min(recognized_by_currency.get(ccy, 0.0) / cv * 100, 100.0), 4
+            ) if cv > 0 else 0.0
+        elif len(all_currencies) == 0:
             overall_pct = 0.0
+        else:
+            # Multi-currency: percentage across different denominations is invalid
+            overall_pct = None
 
         return PortfolioRevenueOverviewResponse(
-            total_contract_value=total_contract_value,
-            total_recognized_revenue=total_recognized,
-            total_deferred_revenue=total_deferred,
+            total_contract_value=contract_value_by_currency,
+            total_recognized_revenue=recognized_by_currency,
+            total_deferred_revenue=deferred_by_currency,
             overall_recognition_percentage=overall_pct,
             project_count=len(project_ids),
             contract_count=len(rows),
-            currencies=sorted(contract_currencies),
+            currencies=all_currencies,
         )
 
     # ------------------------------------------------------------------

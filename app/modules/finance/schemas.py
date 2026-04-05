@@ -95,21 +95,40 @@ class ProjectRevenueSummaryResponse(BaseModel):
 
 
 class PortfolioRevenueOverviewResponse(BaseModel):
-    """Portfolio-wide revenue recognition overview across all projects."""
+    """Portfolio-wide revenue recognition overview across all projects.
 
-    total_contract_value: float = Field(..., ge=0)
-    total_recognized_revenue: float = Field(..., ge=0)
-    total_deferred_revenue: float = Field(..., ge=0)
-    overall_recognition_percentage: float = Field(..., ge=0, le=100)
+    Monetary totals are grouped by ISO 4217 currency code so consumers
+    receive denomination-safe aggregates even for multi-currency portfolios.
+    ``overall_recognition_percentage`` is ``None`` when the portfolio spans
+    more than one currency (the ratio would otherwise cross currency boundaries).
+    """
+
+    total_contract_value: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total contract value grouped by ISO 4217 currency code.",
+    )
+    total_recognized_revenue: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total recognized revenue grouped by ISO 4217 currency code.",
+    )
+    total_deferred_revenue: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total deferred revenue grouped by ISO 4217 currency code.",
+    )
+    overall_recognition_percentage: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description=(
+            "Portfolio-wide recognition percentage. "
+            "None when the portfolio spans more than one currency."
+        ),
+    )
     project_count: int = Field(..., ge=0)
     contract_count: int = Field(..., ge=0)
     currencies: List[str] = Field(
         default_factory=list,
-        description=(
-            "Distinct ISO 4217 currency codes present across all contracts in this overview. "
-            "When multiple currencies are present, scalar monetary totals are "
-            "cross-currency aggregates and must be interpreted accordingly."
-        ),
+        description="Distinct ISO 4217 currency codes present across all contracts.",
     )
 
 
@@ -272,9 +291,16 @@ class ProjectCashflowForecastResponse(BaseModel):
 
 
 class PortfolioCashflowForecastResponse(BaseModel):
-    """Portfolio-wide cashflow forecast aggregated across all projects (legacy simple format)."""
+    """Portfolio-wide cashflow forecast aggregated across all projects (legacy simple format).
 
-    total_expected: float = Field(..., ge=0)
+    ``total_expected`` is grouped by ISO 4217 currency code so consumers
+    receive denomination-safe aggregates for multi-currency portfolios.
+    """
+
+    total_expected: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Total expected collections grouped by ISO 4217 currency code.",
+    )
     project_count: int = Field(..., ge=0)
     monthly_entries: List[MonthlyForecastEntryResponse] = Field(default_factory=list)
     project_forecasts: List[ProjectCashflowForecastResponse] = Field(
@@ -283,9 +309,7 @@ class PortfolioCashflowForecastResponse(BaseModel):
     currencies: List[str] = Field(
         default_factory=list,
         description=(
-            "Distinct ISO 4217 currency codes present across all project forecasts. "
-            "When multiple currencies are present, total_expected is a cross-currency "
-            "aggregate and must be interpreted per project_forecasts for denomination accuracy."
+            "Distinct ISO 4217 currency codes present across all project forecasts."
         ),
     )
 

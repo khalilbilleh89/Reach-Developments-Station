@@ -316,8 +316,9 @@ class TestEmptyPortfolioEdgeCases:
         resp = client.get("/api/v1/finance/revenue/overview")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_recognized_revenue"] == 0.0
-        assert data["total_deferred_revenue"] == 0.0
+        # Monetary fields are now grouped dicts — empty when no data
+        assert data["total_recognized_revenue"] == {}
+        assert data["total_deferred_revenue"] == {}
 
     def test_aging_overview_empty(self, client: TestClient):
         """GET /finance/receivables/aging-overview with no data returns zeros."""
@@ -331,7 +332,8 @@ class TestEmptyPortfolioEdgeCases:
         resp = client.get("/api/v1/finance/cashflow/forecast")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_expected"] == 0.0
+        # total_expected is now grouped by currency — empty dict when no data
+        assert data["total_expected"] == {}
         assert data["monthly_entries"] == []
 
     def test_collections_alerts_empty(self, client: TestClient):
