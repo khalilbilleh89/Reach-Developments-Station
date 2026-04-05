@@ -698,3 +698,83 @@ portfolio_cash: float
 # ❌ Ratio across currencies — mathematically invalid
 cross_currency_rate: float
 ```
+
+---
+
+## Final Currency Closure Rules (PR-CURRENCY-008)
+
+These rules complete the currency remediation program.  After this point,
+the currency program is considered **complete**.  All new code must comply.
+
+### Rule F — No Inline ISO Literals in Services, Repositories, or Helpers
+
+Service, repository, and helper code must never use a raw ISO 4217 string
+as a Python default value.  Always import and reference the constant:
+
+```python
+# ✅ Correct
+from app.core.constants.currency import DEFAULT_CURRENCY
+currency = payload.get("currency", DEFAULT_CURRENCY)
+
+# ❌ Forbidden — inline literal leaks denomination assumptions
+currency = payload.get("currency", "AED")
+```
+
+**Exception:** Alembic migration scripts may use literal strings for
+`server_default` to maintain deterministic, immutable migration history.
+Runtime code (services, schemas, repositories) must always use the constant.
+
+### Rule G — Parent → Child Financial Workflow Currency Propagation
+
+When a service creates child financial records (payout lines, installments,
+receivables, cashflow period rows) from a parent (contract, plan, forecast),
+the child records must explicitly receive the parent's currency rather than
+relying on an ORM model default.
+
+```python
+# ✅ Correct — payout inherits contract currency
+payout = CommissionPayout(currency=contract.currency, ...)
+line = CommissionPayoutLine(currency=contract.currency, ...)
+
+# ❌ Forbidden — relies on model default, ignores actual denomination
+payout = CommissionPayout(...)   # currency silently defaults to AED
+```
+
+Applies to:
+- `CommissionPayout` and `CommissionPayoutLine` ← `SalesContract.currency`
+- `CashflowForecastPeriod` ← `Project.base_currency`
+- `Receivable` ← `ContractPaymentSchedule.currency`
+- `PaymentSchedule` ← `SalesContract.currency`
+
+### Rule H — Denomination Must Be Preserved Through Response Assembly
+
+Every response builder that aggregates monetary fields must propagate
+denomination through to the response object.  Do not let `total_due`,
+`total_commission`, or any aggregate monetary field exist without an
+accompanying `currency` field.
+
+```python
+# ✅ Correct — PaymentPlanResponse includes denomination
+PaymentPlanResponse(total_due=..., currency=contract.currency, ...)
+
+# ❌ Forbidden — total_due without denomination is anonymous money
+PaymentPlanResponse(total_due=...)
+```
+
+### Rule I — Mixed-Currency Ratios Must Remain Null-Safe
+
+Any ratio, rate, or percentage derived from monetary totals that may span
+multiple project currencies must be `Optional[float]` and return `None`
+when the portfolio contains more than one currency denomination.
+
+This rule is established in Rule C and restated here for completeness.
+
+### Enforcement Summary
+
+| Layer | Rule |
+|---|---|
+| Services / repositories | No inline ISO literals (`"AED"`) — use `DEFAULT_CURRENCY` |
+| Child record creation | Explicit parent currency propagation required |
+| Response assembly | Every aggregate monetary field must carry denomination |
+| Portfolio ratios | `Optional[float]` — `None` for multi-currency portfolios |
+| API response schemas | Follow Rules A–E from PR-CURRENCY-007 |

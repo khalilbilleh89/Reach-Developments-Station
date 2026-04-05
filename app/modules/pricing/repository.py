@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.modules.pricing.models import UnitPricingAttributes
 from app.modules.pricing.schemas import UnitPricingAttributesCreate
 from app.modules.pricing.status_rules import ARCHIVED_STATUS
@@ -157,7 +158,7 @@ class PricingHistoryRepository:
         manual_adjustment: float,
         final_price: float,
         pricing_status: str,
-        currency: str = "AED",
+        currency: str = DEFAULT_CURRENCY,
         override_reason: Optional[str] = None,
         override_requested_by: Optional[str] = None,
         override_approved_by: Optional[str] = None,
