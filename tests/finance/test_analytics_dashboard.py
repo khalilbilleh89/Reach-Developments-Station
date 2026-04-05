@@ -55,6 +55,7 @@ def _seed_revenue_fact(
     month: str,
     recognized_revenue: float,
     contract_value: float = 100_000.0,
+    currency: str = "AED",
 ) -> None:
     fact = FactRevenue(
         project_id=project_id,
@@ -62,6 +63,7 @@ def _seed_revenue_fact(
         month=month,
         recognized_revenue=recognized_revenue,
         contract_value=contract_value,
+        currency=currency,
     )
     db_session.add(fact)
     db_session.commit()
@@ -73,6 +75,7 @@ def _seed_collections_fact(
     month: str,
     amount: float,
     payment_date: date | None = None,
+    currency: str = "AED",
 ) -> None:
     pd = payment_date or date(int(month[:4]), int(month[5:7]), 1)
     fact = FactCollections(
@@ -81,6 +84,7 @@ def _seed_collections_fact(
         month=month,
         amount=amount,
         payment_method="bank_transfer",
+        currency=currency,
     )
     db_session.add(fact)
     db_session.commit()
@@ -91,6 +95,7 @@ def _seed_receivables_snapshot(
     project_id: str,
     snapshot_date: date,
     total_receivables: float,
+    currency: str = "AED",
 ) -> None:
     snap = FactReceivablesSnapshot(
         project_id=project_id,
@@ -100,6 +105,7 @@ def _seed_receivables_snapshot(
         bucket_31_60=0.0,
         bucket_61_90=0.0,
         bucket_90_plus=0.0,
+        currency=currency,
     )
     db_session.add(snap)
     db_session.commit()
@@ -479,3 +485,189 @@ class TestPortfolioAnalyticsEndpoint:
         assert kpis["total_collections"] == pytest.approx(40_000.0)
         assert kpis["total_receivables"] == pytest.approx(30_000.0)
         assert kpis["collection_efficiency"] == pytest.approx(0.8)
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — Currency denomination on trend entries
+# ---------------------------------------------------------------------------
+
+
+class TestCurrencyInTrendEntries:
+    """Verify that trend entries carry the correct currency field."""
+
+    def test_revenue_trend_entry_includes_currency(self, db_session: Session):
+        pid = _make_project(db_session, "AD-CUR-01")
+        uid = _make_unit_for_project(db_session, pid, "AD-C01-U01")
+        _seed_revenue_fact(db_session, pid, uid, "2026-03", 50_000.0, currency="AED")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_revenue_trend()
+
+        assert len(result) == 1
+        assert result[0].currency == "AED"
+
+    def test_collections_trend_entry_includes_currency(self, db_session: Session):
+        pid = _make_project(db_session, "AD-CUR-02")
+        _seed_collections_fact(db_session, pid, "2026-03", 40_000.0, currency="JOD")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_collections_trend()
+
+        assert len(result) == 1
+        assert result[0].currency == "JOD"
+
+    def test_receivables_trend_entry_includes_currency(self, db_session: Session):
+        pid = _make_project(db_session, "AD-CUR-03")
+        _seed_receivables_snapshot(
+            db_session, pid, date(2026, 3, 1), 30_000.0, currency="USD"
+        )
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_receivables_trend()
+
+        assert len(result) == 1
+        assert result[0].currency == "USD"
+
+    def test_multi_currency_revenue_trends_returned_as_separate_entries(
+        self, db_session: Session
+    ):
+        """Projects in different currencies produce distinct trend entries for the
+        same month — they must never be silently aggregated together."""
+        pid_aed = _make_project(db_session, "AD-CUR-04A")
+        pid_usd = _make_project(db_session, "AD-CUR-04B")
+        uid_aed = _make_unit_for_project(db_session, pid_aed, "AD-C04A-U01")
+        uid_usd = _make_unit_for_project(db_session, pid_usd, "AD-C04B-U01")
+        _seed_revenue_fact(db_session, pid_aed, uid_aed, "2026-06", 100_000.0, currency="AED")
+        _seed_revenue_fact(db_session, pid_usd, uid_usd, "2026-06", 50_000.0, currency="USD")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_revenue_trend()
+
+        # Two separate entries — one per currency — must be returned.
+        assert len(result) == 2
+        by_currency = {e.currency: e for e in result}
+        assert "AED" in by_currency
+        assert "USD" in by_currency
+        assert by_currency["AED"].total_recognized_revenue == pytest.approx(100_000.0)
+        assert by_currency["USD"].total_recognized_revenue == pytest.approx(50_000.0)
+
+    def test_multi_currency_collections_trends_returned_as_separate_entries(
+        self, db_session: Session
+    ):
+        pid_aed = _make_project(db_session, "AD-CUR-05A")
+        pid_jod = _make_project(db_session, "AD-CUR-05B")
+        _seed_collections_fact(db_session, pid_aed, "2026-07", 80_000.0, currency="AED")
+        _seed_collections_fact(db_session, pid_jod, "2026-07", 20_000.0, currency="JOD")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_collections_trend()
+
+        assert len(result) == 2
+        by_currency = {e.currency: e for e in result}
+        assert by_currency["AED"].total_amount == pytest.approx(80_000.0)
+        assert by_currency["JOD"].total_amount == pytest.approx(20_000.0)
+
+    def test_multi_currency_receivables_trends_returned_as_separate_entries(
+        self, db_session: Session
+    ):
+        snap_date = date(2026, 8, 1)
+        pid_aed = _make_project(db_session, "AD-CUR-06A")
+        pid_usd = _make_project(db_session, "AD-CUR-06B")
+        _seed_receivables_snapshot(db_session, pid_aed, snap_date, 70_000.0, currency="AED")
+        _seed_receivables_snapshot(db_session, pid_usd, snap_date, 30_000.0, currency="USD")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_receivables_trend()
+
+        assert len(result) == 2
+        by_currency = {e.currency: e for e in result}
+        assert by_currency["AED"].total_receivables == pytest.approx(70_000.0)
+        assert by_currency["USD"].total_receivables == pytest.approx(30_000.0)
+
+    def test_same_currency_same_month_still_aggregates(self, db_session: Session):
+        """Same-currency projects in the same month must still be summed."""
+        pid1 = _make_project(db_session, "AD-CUR-07A")
+        pid2 = _make_project(db_session, "AD-CUR-07B")
+        uid1 = _make_unit_for_project(db_session, pid1, "AD-C07A-U01")
+        uid2 = _make_unit_for_project(db_session, pid2, "AD-C07B-U01")
+        _seed_revenue_fact(db_session, pid1, uid1, "2026-09", 40_000.0, currency="AED")
+        _seed_revenue_fact(db_session, pid2, uid2, "2026-09", 60_000.0, currency="AED")
+
+        svc = AnalyticsDashboardService(db_session)
+        result = svc.get_revenue_trend()
+
+        assert len(result) == 1
+        assert result[0].currency == "AED"
+        assert result[0].total_recognized_revenue == pytest.approx(100_000.0)
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — Multi-currency collection_efficiency guard in PortfolioKPI
+# ---------------------------------------------------------------------------
+
+
+class TestMultiCurrencyKPIGuard:
+    """Verify that collection_efficiency becomes None for a multi-currency portfolio."""
+
+    def test_single_currency_efficiency_computed_normally(self, db_session: Session):
+        pid = _make_project(db_session, "AD-MCC-01")
+        uid = _make_unit_for_project(db_session, pid, "AD-MCC01-U01")
+        _seed_revenue_fact(db_session, pid, uid, "2026-03", 100_000.0, currency="AED")
+        _seed_collections_fact(db_session, pid, "2026-03", 75_000.0, currency="AED")
+
+        svc = AnalyticsDashboardService(db_session)
+        kpis = svc.get_portfolio_kpis()
+
+        assert kpis.collection_efficiency == pytest.approx(0.75)
+        assert kpis.currencies == ["AED"]
+
+    def test_multi_currency_revenue_makes_efficiency_none(self, db_session: Session):
+        """When revenue exists in more than one currency, collection_efficiency
+        must be None — the ratio is mathematically invalid."""
+        pid_aed = _make_project(db_session, "AD-MCC-02A")
+        pid_usd = _make_project(db_session, "AD-MCC-02B")
+        uid_aed = _make_unit_for_project(db_session, pid_aed, "AD-MCC02A-U01")
+        uid_usd = _make_unit_for_project(db_session, pid_usd, "AD-MCC02B-U01")
+        _seed_revenue_fact(db_session, pid_aed, uid_aed, "2026-03", 100_000.0, currency="AED")
+        _seed_revenue_fact(db_session, pid_usd, uid_usd, "2026-03", 50_000.0, currency="USD")
+        _seed_collections_fact(db_session, pid_aed, "2026-03", 80_000.0, currency="AED")
+        _seed_collections_fact(db_session, pid_usd, "2026-03", 40_000.0, currency="USD")
+
+        svc = AnalyticsDashboardService(db_session)
+        kpis = svc.get_portfolio_kpis()
+
+        assert kpis.collection_efficiency is None, (
+            "collection_efficiency must be None for a multi-currency portfolio"
+        )
+        assert set(kpis.currencies) == {"AED", "USD"}
+
+    def test_multi_currency_collections_makes_efficiency_none(self, db_session: Session):
+        """When collections span multiple currencies, collection_efficiency is None."""
+        pid_aed = _make_project(db_session, "AD-MCC-03A")
+        pid_jod = _make_project(db_session, "AD-MCC-03B")
+        uid_aed = _make_unit_for_project(db_session, pid_aed, "AD-MCC03A-U01")
+        _seed_revenue_fact(db_session, pid_aed, uid_aed, "2026-04", 100_000.0, currency="AED")
+        _seed_collections_fact(db_session, pid_aed, "2026-04", 80_000.0, currency="AED")
+        _seed_collections_fact(db_session, pid_jod, "2026-04", 30_000.0, currency="JOD")
+
+        svc = AnalyticsDashboardService(db_session)
+        kpis = svc.get_portfolio_kpis()
+
+        assert kpis.collection_efficiency is None
+        assert set(kpis.currencies) >= {"AED", "JOD"}
+
+    def test_empty_portfolio_currencies_list_is_empty(self, db_session: Session):
+        svc = AnalyticsDashboardService(db_session)
+        kpis = svc.get_portfolio_kpis()
+
+        assert kpis.currencies == []
+        # collection_efficiency defaults to 0.0 when portfolio is empty (no revenue)
+        assert kpis.collection_efficiency == pytest.approx(0.0)
+
+    def test_currencies_field_exposed_in_api_response(self, auth_client, db_session: Session):
+        """The 'currencies' field must be present in the API kpis response."""
+        response = auth_client.get("/api/v1/finance/analytics/portfolio")
+        assert response.status_code == 200
+        kpis = response.json()["kpis"]
+        assert "currencies" in kpis
+        assert isinstance(kpis["currencies"], list)

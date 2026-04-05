@@ -19,6 +19,7 @@ from datetime import date
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants.currency import DEFAULT_CURRENCY
 from app.db.base import Base, TimestampMixin
 
 
@@ -56,6 +57,12 @@ class FactRevenue(Base, TimestampMixin):
     contract_value: Mapped[float] = mapped_column(
         Numeric(14, 2), nullable=False, default=0.0
     )
+    currency: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default=DEFAULT_CURRENCY,
+        comment="ISO 4217 currency code sourced from project.base_currency at ETL time.",
+    )
 
 
 class FactCollections(Base, TimestampMixin):
@@ -84,6 +91,12 @@ class FactCollections(Base, TimestampMixin):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0.0)
     payment_method: Mapped[str] = mapped_column(
         String(50), nullable=False, default="bank_transfer"
+    )
+    currency: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default=DEFAULT_CURRENCY,
+        comment="ISO 4217 currency code sourced from project.base_currency at ETL time.",
     )
 
 
@@ -118,4 +131,10 @@ class FactReceivablesSnapshot(Base, TimestampMixin):
     )
     bucket_90_plus: Mapped[float] = mapped_column(
         Numeric(14, 2), nullable=False, default=0.0
+    )
+    currency: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default=DEFAULT_CURRENCY,
+        comment="ISO 4217 currency code sourced from project.base_currency at ETL time.",
     )

@@ -458,33 +458,47 @@ class TreasuryMonitoringResponse(BaseModel):
 
 
 class RevenueTrendEntry(BaseModel):
-    """Aggregated recognized revenue for a single calendar month."""
+    """Aggregated recognized revenue for a single calendar month and currency."""
 
     month: str
+    currency: str
     total_recognized_revenue: float = Field(..., ge=0)
 
 
 class CollectionsTrendEntry(BaseModel):
-    """Aggregated collections amount for a single calendar month."""
+    """Aggregated collections amount for a single calendar month and currency."""
 
     month: str
+    currency: str
     total_amount: float = Field(..., ge=0)
 
 
 class ReceivablesTrendEntry(BaseModel):
-    """Total receivables across all projects for a single snapshot date."""
+    """Total receivables across all projects for a single snapshot date and currency."""
 
     snapshot_date: str
+    currency: str
     total_receivables: float = Field(..., ge=0)
 
 
 class PortfolioKPI(BaseModel):
-    """Top-level portfolio financial KPIs derived from the analytics fact tables."""
+    """Top-level portfolio financial KPIs derived from the analytics fact tables.
+
+    ``collection_efficiency`` is ``None`` when the portfolio spans more than one
+    currency denomination.  Dividing total collections by total revenue is
+    mathematically invalid when the two totals are expressed in different
+    currencies.  Consumers should treat ``None`` as "multi-currency portfolio —
+    per-currency breakdown required".
+    """
 
     total_revenue: float = Field(..., ge=0)
     total_collections: float = Field(..., ge=0)
     total_receivables: float = Field(..., ge=0)
-    collection_efficiency: float = Field(..., ge=0)
+    collection_efficiency: Optional[float] = Field(None, ge=0)
+    currencies: List[str] = Field(
+        default_factory=list,
+        description="Distinct currency codes present in the analytics facts.",
+    )
 
 
 class PortfolioAnalyticsResponse(BaseModel):

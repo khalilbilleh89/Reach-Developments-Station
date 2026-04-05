@@ -192,6 +192,7 @@ class TestMigrationChainStructure:
             "0061b": "0061",
             "0062": "0061b",
             "0063": "0062",
+            "0064": "0063",
         }
         errors = []
         for rev_id, expected_parent in expected_parents.items():
