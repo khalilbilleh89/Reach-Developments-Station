@@ -290,6 +290,20 @@ class PaymentPlanService:
         contract_id: str, rows: List[PaymentSchedule], currency: str
     ) -> PaymentScheduleListResponse:
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
+        # Guard: every persisted row must carry the contract denomination.
+        # A mismatch means the write path silently used the model default, which
+        # is a data-integrity problem that should surface immediately.
+        mismatched = [i for i in items if i.currency != currency]
+        if mismatched:
+            bad = {i.currency for i in mismatched}
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Schedule currency mismatch for contract {contract_id!r}: "
+                    f"expected {currency!r} on all rows, "
+                    f"found {sorted(bad)}. Data integrity error."
+                ),
+            )
         return PaymentScheduleListResponse(
             contract_id=contract_id,
             items=items,
@@ -424,6 +438,21 @@ class PaymentPlanService:
         from datetime import datetime as dt, timezone
 
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
+        # Guard: every persisted row must carry the contract denomination.
+        # A mismatch means the write path silently used the model default, which
+        # is a data-integrity problem that should surface immediately.
+        contract_id = rows[0].contract_id if rows else ""
+        mismatched = [i for i in items if i.currency != currency]
+        if mismatched:
+            bad = {i.currency for i in mismatched}
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Schedule currency mismatch for contract {contract_id!r}: "
+                    f"expected {currency!r} on all rows, "
+                    f"found {sorted(bad)}. Data integrity error."
+                ),
+            )
         now = dt.now(timezone.utc)
         # Use min/max across all rows so the plan-level timestamps are correct
         # regardless of the ordering of the rows list (which is by installment
@@ -438,7 +467,6 @@ class PaymentPlanService:
             if rows
             else ""
         )
-        contract_id = rows[0].contract_id if rows else ""
         return PaymentPlanResponse(
             id=plan_id,
             contract_id=contract_id,
