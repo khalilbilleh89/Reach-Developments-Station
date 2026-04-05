@@ -88,6 +88,10 @@ from app.modules.strategy_learning.api import (
     projects_router as strategy_learning_projects_router,
     portfolio_router as strategy_learning_portfolio_router,
 )
+from app.modules.adaptive_strategy.api import (
+    projects_router as adaptive_strategy_projects_router,
+    portfolio_router as adaptive_strategy_portfolio_router,
+)
 from app.modules.admin.api import router as admin_router
 
 # Path to the static export produced by `next build` with `output: "export"`.
@@ -202,6 +206,8 @@ app.include_router(strategy_execution_outcome_projects_router, prefix=_API_PREFI
 app.include_router(strategy_execution_outcome_portfolio_router, prefix=_API_PREFIX)
 app.include_router(strategy_learning_projects_router, prefix=_API_PREFIX)
 app.include_router(strategy_learning_portfolio_router, prefix=_API_PREFIX)
+app.include_router(adaptive_strategy_projects_router, prefix=_API_PREFIX)
+app.include_router(adaptive_strategy_portfolio_router, prefix=_API_PREFIX)
 app.include_router(system_router, prefix=_API_PREFIX)
 app.include_router(admin_router, prefix=_API_PREFIX)
 
