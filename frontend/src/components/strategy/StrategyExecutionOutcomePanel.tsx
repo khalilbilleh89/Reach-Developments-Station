@@ -21,7 +21,7 @@
  * PR-V7-10 — Execution Outcome Capture & Feedback Loop Closure
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import {
   getProjectStrategyExecutionOutcome,
   recordStrategyExecutionOutcome,
@@ -458,6 +458,7 @@ interface RecordFormProps {
 }
 
 function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
+  const uid = useId();
   const [outcomeResult, setOutcomeResult] =
     useState<OutcomeResult>("matched_strategy");
   const [priceAdj, setPriceAdj] = useState("");
@@ -467,6 +468,15 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const ids = {
+    outcomeResult: `${uid}-outcome-result`,
+    priceAdj: `${uid}-price-adj`,
+    phaseDelay: `${uid}-phase-delay`,
+    releaseStrategy: `${uid}-release-strategy`,
+    execSummary: `${uid}-execution-summary`,
+    outcomeNotes: `${uid}-outcome-notes`,
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -547,11 +557,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
         }}
       >
         <div>
-          <label style={labelStyle} htmlFor="outcome-result">
+          <label style={labelStyle} htmlFor={ids.outcomeResult}>
             Outcome Result *
           </label>
           <select
-            id="outcome-result"
+            id={ids.outcomeResult}
             value={outcomeResult}
             onChange={(e) => setOutcomeResult(e.target.value as OutcomeResult)}
             style={inputStyle}
@@ -567,11 +577,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
         </div>
 
         <div>
-          <label style={labelStyle} htmlFor="price-adj">
+          <label style={labelStyle} htmlFor={ids.priceAdj}>
             Actual Price Adjustment (%)
           </label>
           <input
-            id="price-adj"
+            id={ids.priceAdj}
             type="number"
             step="0.1"
             value={priceAdj}
@@ -583,11 +593,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
         </div>
 
         <div>
-          <label style={labelStyle} htmlFor="phase-delay">
+          <label style={labelStyle} htmlFor={ids.phaseDelay}>
             Actual Phase Delay (months)
           </label>
           <input
-            id="phase-delay"
+            id={ids.phaseDelay}
             type="number"
             step="0.5"
             min="0"
@@ -600,11 +610,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
         </div>
 
         <div>
-          <label style={labelStyle} htmlFor="release-strategy">
+          <label style={labelStyle} htmlFor={ids.releaseStrategy}>
             Actual Release Strategy
           </label>
           <input
-            id="release-strategy"
+            id={ids.releaseStrategy}
             type="text"
             value={releaseStrategy}
             onChange={(e) => setReleaseStrategy(e.target.value)}
@@ -616,11 +626,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <label style={labelStyle} htmlFor="execution-summary">
+        <label style={labelStyle} htmlFor={ids.execSummary}>
           Execution Summary
         </label>
         <textarea
-          id="execution-summary"
+          id={ids.execSummary}
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           rows={3}
@@ -631,11 +641,11 @@ function RecordOutcomeForm({ triggerId, onRecorded }: RecordFormProps) {
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle} htmlFor="outcome-notes">
+        <label style={labelStyle} htmlFor={ids.outcomeNotes}>
           Outcome Notes
         </label>
         <textarea
-          id="outcome-notes"
+          id={ids.outcomeNotes}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}

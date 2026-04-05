@@ -74,7 +74,7 @@ class StrategyExecutionOutcomeService:
         self._repo = StrategyExecutionOutcomeRepository(db)
 
     # ------------------------------------------------------------------
-    # Record
+    # Record — public method returns a fully-built response
     # ------------------------------------------------------------------
 
     def record_execution_outcome(
@@ -82,18 +82,25 @@ class StrategyExecutionOutcomeService:
         trigger_id: str,
         payload: RecordExecutionOutcomeRequest,
         recorded_by_user_id: str,
-    ) -> StrategyExecutionOutcome:
+    ) -> StrategyExecutionOutcomeResponse:
         """Record the realized execution outcome for a trigger.
 
         Eligibility rule: the trigger must be in 'in_progress' or 'completed'
         state.  Recording for 'triggered' or 'cancelled' triggers is forbidden.
 
         History model: if a prior 'recorded' outcome already exists for this
-        trigger, it is marked 'superseded' before the new record is inserted.
-        The latest 'recorded' row per trigger is always authoritative.
+        trigger, it is marked 'superseded' inside the same transaction before
+        the new record is inserted.  The partial unique index on the DB
+        guarantees at most one 'recorded' outcome per trigger at any time;
+        any concurrent race that slips past the application-layer check is
+        translated into a ConflictError (HTTP 409) by the repository.
+
+        Returns a fully-built StrategyExecutionOutcomeResponse including the
+        live comparison block — callers do not need to touch the repository.
 
         Raises ResourceNotFoundError when the trigger does not exist.
         Raises ValidationError when the trigger is not in an eligible state.
+        Raises ConflictError when a concurrent recording wins the DB race.
         """
         trigger = self._repo.get_trigger(trigger_id)
         if trigger is None:
@@ -107,15 +114,6 @@ class StrategyExecutionOutcomeService:
                 f"trigger status is '{trigger.status}'. "
                 f"Outcome recording requires the trigger to be in "
                 f"'in_progress' or 'completed' state."
-            )
-
-        # Supersede prior outcomes for this trigger (append-only history).
-        superseded = self._repo.supersede_active_for_trigger(trigger_id)
-        if superseded:
-            _logger.info(
-                "Superseded %d prior outcome(s) for trigger: id=%s",
-                superseded,
-                trigger_id,
             )
 
         now = datetime.now(timezone.utc)
@@ -133,7 +131,8 @@ class StrategyExecutionOutcomeService:
             recorded_by_user_id=recorded_by_user_id,
             recorded_at=now,
         )
-        record = self._repo.create(outcome)
+        # Supersede prior outcomes and insert new one atomically.
+        record = self._repo.supersede_and_create(outcome)
         _logger.info(
             "Execution outcome recorded: id=%s project_id=%s trigger_id=%s "
             "result=%s by=%s",
@@ -143,7 +142,7 @@ class StrategyExecutionOutcomeService:
             record.outcome_result,
             recorded_by_user_id,
         )
-        return record
+        return build_outcome_response(record, trigger)
 
     # ------------------------------------------------------------------
     # Project read
@@ -176,7 +175,7 @@ class StrategyExecutionOutcomeService:
                 if trigger is not None and trigger.id == latest_outcome.execution_trigger_id
                 else self._repo.get_trigger(latest_outcome.execution_trigger_id or "")
             )
-            outcome_response = _build_outcome_response(latest_outcome, resolved_trigger)
+            outcome_response = build_outcome_response(latest_outcome, resolved_trigger)
 
         return ProjectExecutionOutcomeResponse(
             project_id=project_id,
@@ -196,9 +195,11 @@ class StrategyExecutionOutcomeService:
         """Assemble a portfolio-level execution outcome summary.
 
         Counts outcomes by result, lists recent recorded outcomes, and
-        identifies projects with completed triggers awaiting outcome recording.
+        identifies projects whose latest completed trigger has no recorded
+        outcome (one entry per project, not per trigger).
 
         List results are capped at _PORTFOLIO_PROJECT_LIMIT.
+        Trigger data for the comparison block is batch-loaded in one query.
         """
         matched_count = self._repo.count_by_outcome_result("matched_strategy")
         partially_count = self._repo.count_by_outcome_result("partially_matched")
@@ -208,32 +209,41 @@ class StrategyExecutionOutcomeService:
 
         # Recent outcomes — cap is pushed into SQL.
         recent_outcomes = self._repo.list_for_portfolio(limit=_PORTFOLIO_PROJECT_LIMIT)
+
+        # Batch-load project names and trigger data — O(2) queries.
         outcome_project_ids = [o.project_id for o in recent_outcomes]
         projects_map: Dict[str, str] = {
             p.id: p.name
             for p in self._repo.list_projects_by_ids(outcome_project_ids)
         }
+        trigger_ids = [
+            o.execution_trigger_id
+            for o in recent_outcomes
+            if o.execution_trigger_id is not None
+        ]
+        triggers_map = self._repo.get_triggers_by_ids(trigger_ids)
 
-        outcome_entries: List[PortfolioOutcomeEntry] = []
-        for outcome in recent_outcomes:
-            project_name = projects_map.get(outcome.project_id, outcome.project_id)
-            # Load the trigger for comparison block derivation.
-            trigger = self._repo.get_trigger(outcome.execution_trigger_id or "")
-            outcome_entries.append(
-                PortfolioOutcomeEntry(
-                    project_id=outcome.project_id,
-                    project_name=project_name,
-                    outcome=_build_outcome_response(outcome, trigger),
-                )
+        outcome_entries: List[PortfolioOutcomeEntry] = [
+            PortfolioOutcomeEntry(
+                project_id=outcome.project_id,
+                project_name=projects_map.get(outcome.project_id, outcome.project_id),
+                outcome=build_outcome_response(
+                    outcome,
+                    triggers_map.get(outcome.execution_trigger_id or ""),
+                ),
             )
+            for outcome in recent_outcomes
+        ]
 
-        # Projects with completed triggers but no recorded outcome.
-        all_awaiting: List[Tuple[str, str]] = (
-            self._repo.list_completed_triggers_without_outcome()
+        # Projects awaiting outcome recording — project-based (one entry per project),
+        # capped at _PORTFOLIO_PROJECT_LIMIT at the DB level.
+        awaiting_pairs: List[Tuple[str, str]] = (
+            self._repo.list_projects_awaiting_outcome(limit=_PORTFOLIO_PROJECT_LIMIT)
         )
-        awaiting_count = len(all_awaiting)
-        awaiting_slice = all_awaiting[:_PORTFOLIO_PROJECT_LIMIT]
-        awaiting_project_ids = [pid for pid, _ in awaiting_slice]
+        # Get the total count without the limit for the summary field.
+        awaiting_count = self._repo.count_projects_awaiting_outcome()
+
+        awaiting_project_ids = [pid for pid, _ in awaiting_pairs]
         awaiting_projects_map: Dict[str, str] = {
             p.id: p.name
             for p in self._repo.list_projects_by_ids(awaiting_project_ids)
@@ -245,7 +255,7 @@ class StrategyExecutionOutcomeService:
                 project_name=awaiting_projects_map.get(pid, pid),
                 trigger_id=tid,
             )
-            for pid, tid in awaiting_slice
+            for pid, tid in awaiting_pairs
         ]
 
         return PortfolioExecutionOutcomeSummaryResponse(
@@ -261,15 +271,19 @@ class StrategyExecutionOutcomeService:
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers — no I/O (easy to unit-test)
+# Public response builder — no I/O (easy to unit-test)
 # ---------------------------------------------------------------------------
 
 
-def _build_outcome_response(
+def build_outcome_response(
     outcome: StrategyExecutionOutcome,
     trigger: Optional[StrategyExecutionTrigger],
 ) -> StrategyExecutionOutcomeResponse:
-    """Build the full outcome response including the comparison block."""
+    """Build the full outcome response including the comparison block.
+
+    Public so that callers outside this module (e.g. tests) can construct
+    typed responses without going through a full service instantiation.
+    """
     comparison = compare_intended_vs_realized(trigger, outcome)
     return StrategyExecutionOutcomeResponse(
         id=outcome.id,
@@ -303,8 +317,8 @@ def compare_intended_vs_realized(
     does not contain supporting_metrics, all intended values are None.
 
     match_status classification:
-      price_adjustment_pct — exact if |diff| < 1 pp, minor if 1–5 pp, major if > 5 pp
-      phase_delay_months   — exact if diff = 0, minor if |diff| <= 1, major if |diff| > 1
+      price_adjustment_pct — exact if |diff| < 1 pp, minor if 1–5 pp, major if ≥ 5 pp
+      phase_delay_months   — exact if diff = 0, minor if 0 < |diff| ≤ 1 month, major if |diff| > 1 month
       release_strategy     — exact if equal, major_variance if different
 
     Overall match_status is the worst classification across all comparable fields.
@@ -420,3 +434,4 @@ def compare_intended_vs_realized(
         execution_quality=execution_quality,  # type: ignore[arg-type]
         has_material_divergence=(match_status == "major_variance"),
     )
+

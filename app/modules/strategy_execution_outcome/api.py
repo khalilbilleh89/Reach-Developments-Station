@@ -33,7 +33,6 @@ from app.modules.strategy_execution_outcome.schemas import (
 )
 from app.modules.strategy_execution_outcome.service import (
     StrategyExecutionOutcomeService,
-    _build_outcome_response,
 )
 
 triggers_router = APIRouter(
@@ -88,6 +87,7 @@ def record_execution_outcome(
 
     Returns HTTP 401 when the authenticated user identity (sub) is absent.
     Returns HTTP 404 when the trigger does not exist.
+    Returns HTTP 409 when a concurrent outcome recording wins a DB race.
     Returns HTTP 422 when the trigger is not in 'in_progress' or 'completed' state.
     """
     recorded_by: Optional[str] = user_payload.get("sub")
@@ -97,15 +97,11 @@ def record_execution_outcome(
             detail="Authenticated user identity (sub) is missing from token.",
         )
 
-    outcome = service.record_execution_outcome(
+    return service.record_execution_outcome(
         trigger_id=trigger_id,
         payload=body,
         recorded_by_user_id=recorded_by,
     )
-
-    # Reload trigger for comparison block derivation.
-    trigger = service._repo.get_trigger(trigger_id)
-    return _build_outcome_response(outcome, trigger)
 
 
 # ---------------------------------------------------------------------------

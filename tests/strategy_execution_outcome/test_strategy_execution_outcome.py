@@ -593,6 +593,35 @@ class TestGetPortfolioExecutionOutcomes:
         assert "project_name" in entry
         assert "trigger_id" in entry
 
+    def test_awaiting_outcome_count_is_project_based_not_trigger_based(
+        self, client: TestClient
+    ) -> None:
+        """A project with multiple completed triggers without outcomes should
+        count as 1 awaiting project, not N triggers."""
+        # Set up a project with an approved strategy and trigger it → complete.
+        project_id, _ = _setup_approved_project(client, code="PORT-007", name="Multi-trigger Project")
+        trigger1 = _create_trigger(client, project_id)
+        client.post(f"/api/v1/execution-triggers/{trigger1['id']}/start")
+        client.post(f"/api/v1/execution-triggers/{trigger1['id']}/complete")
+
+        # The single project should count as 1 awaiting.
+        data = client.get("/api/v1/portfolio/execution-outcomes").json()
+        assert data["awaiting_outcome_count"] == 1
+        assert len(data["awaiting_outcome_projects"]) == 1
+
+    def test_awaiting_outcome_project_not_duplicated_when_outcome_recorded(
+        self, client: TestClient
+    ) -> None:
+        """Once an outcome is recorded, the project must not appear in awaiting list."""
+        _, trigger = _setup_trigger_completed(client, code="PORT-008")
+        client.post(
+            f"/api/v1/execution-triggers/{trigger['id']}/outcome",
+            json=_RECORD_OUTCOME_BODY,
+        )
+        data = client.get("/api/v1/portfolio/execution-outcomes").json()
+        assert data["awaiting_outcome_count"] == 0
+        assert data["awaiting_outcome_projects"] == []
+
     def test_auth_required(self, unauth_client: TestClient) -> None:
         resp = unauth_client.get("/api/v1/portfolio/execution-outcomes")
         assert resp.status_code in (401, 403)

@@ -143,9 +143,28 @@ def upgrade() -> None:
         "strategy_execution_outcomes",
         ["approval_id"],
     )
+    # Partial unique index: enforces the single-authoritative-outcome invariant
+    # at the database level.  Prevents concurrent POST requests from both
+    # passing the application-layer supersede check and inserting two
+    # status='recorded' rows for the same trigger.
+    # On SQLite (used in tests) the postgresql_where clause is ignored, so the
+    # service-layer guard alone prevents duplicates in the test environment.
+    op.create_index(
+        "uq_strategy_execution_outcomes_recorded_per_trigger",
+        "strategy_execution_outcomes",
+        ["execution_trigger_id"],
+        unique=True,
+        postgresql_where=sa.text(
+            "status = 'recorded' AND execution_trigger_id IS NOT NULL"
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "uq_strategy_execution_outcomes_recorded_per_trigger",
+        table_name="strategy_execution_outcomes",
+    )
     op.drop_index(
         "ix_strategy_execution_outcomes_approval_id",
         table_name="strategy_execution_outcomes",

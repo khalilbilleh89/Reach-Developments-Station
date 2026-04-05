@@ -9,10 +9,13 @@ strategy_execution_triggers (read-only), strategy_approvals (read-only),
 and projects (read-only).
 """
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.errors import ConflictError
 from app.modules.projects.models import Project
 from app.modules.strategy_execution_trigger.models import StrategyExecutionTrigger
 from app.modules.strategy_execution_outcome.models import StrategyExecutionOutcome
@@ -65,18 +68,60 @@ class StrategyExecutionOutcomeRepository:
             .first()
         )
 
+    def get_triggers_by_ids(
+        self, trigger_ids: List[str]
+    ) -> Dict[str, StrategyExecutionTrigger]:
+        """Return a {trigger_id: trigger} map for the given IDs in one query."""
+        if not trigger_ids:
+            return {}
+        rows = (
+            self._db.query(StrategyExecutionTrigger)
+            .filter(StrategyExecutionTrigger.id.in_(trigger_ids))
+            .all()
+        )
+        return {t.id: t for t in rows}
+
     # ------------------------------------------------------------------
     # Outcome writes
     # ------------------------------------------------------------------
 
-    def create(
+    def supersede_and_create(
         self, outcome: StrategyExecutionOutcome
     ) -> StrategyExecutionOutcome:
-        """Persist a new outcome record and return it with generated fields."""
-        self._db.add(outcome)
-        self._db.commit()
-        self._db.refresh(outcome)
-        return outcome
+        """Supersede prior 'recorded' outcomes for the same trigger and insert the new one.
+
+        Both operations run inside a single transaction so there is never a
+        moment where the trigger has zero authoritative outcomes or two.
+
+        Translates any IntegrityError (from the partial unique index on
+        recorded outcomes per trigger) into ConflictError so concurrent
+        races surface as HTTP 409 rather than an unhandled 500.
+        """
+        trigger_id = outcome.execution_trigger_id
+        try:
+            if trigger_id is not None:
+                # Supersede prior recorded outcomes inside the same transaction.
+                superseded_rows = (
+                    self._db.query(StrategyExecutionOutcome)
+                    .filter(
+                        StrategyExecutionOutcome.execution_trigger_id == trigger_id,
+                        StrategyExecutionOutcome.status == "recorded",
+                    )
+                    .all()
+                )
+                for row in superseded_rows:
+                    row.status = "superseded"
+
+            self._db.add(outcome)
+            self._db.commit()
+            self._db.refresh(outcome)
+            return outcome
+        except IntegrityError:
+            self._db.rollback()
+            raise ConflictError(
+                f"A concurrent outcome recording is already in progress for trigger "
+                f"'{trigger_id}'. Retry once the concurrent request completes."
+            )
 
     def save(
         self, outcome: StrategyExecutionOutcome
@@ -86,25 +131,6 @@ class StrategyExecutionOutcomeRepository:
         self._db.commit()
         self._db.refresh(outcome)
         return outcome
-
-    def supersede_active_for_trigger(self, trigger_id: str) -> int:
-        """Mark all 'recorded' outcomes for a trigger as 'superseded'.
-
-        Returns the count of rows that were superseded.
-        """
-        rows = (
-            self._db.query(StrategyExecutionOutcome)
-            .filter(
-                StrategyExecutionOutcome.execution_trigger_id == trigger_id,
-                StrategyExecutionOutcome.status == "recorded",
-            )
-            .all()
-        )
-        for row in rows:
-            row.status = "superseded"
-        if rows:
-            self._db.commit()
-        return len(rows)
 
     # ------------------------------------------------------------------
     # Outcome reads
@@ -187,40 +213,123 @@ class StrategyExecutionOutcomeRepository:
             .count()
         )
 
-    def list_completed_triggers_without_outcome(
+    def list_projects_awaiting_outcome(
         self,
+        limit: Optional[int] = None,
     ) -> List[Tuple[str, str]]:
-        """Return (project_id, trigger_id) for completed triggers with no recorded outcome.
+        """Return one (project_id, trigger_id) per project whose most recent
+        completed trigger has no recorded outcome.
 
-        Used to surface projects that finished execution but haven't had
-        an outcome recorded yet.
+        De-duplicates by project: for each project with at least one completed
+        trigger, we select the *latest* completed trigger.  If that trigger
+        has no recorded outcome the project is included in the result.
+
+        When *limit* is provided the database applies the cap directly so the
+        caller does not need to slice.
+
+        Returns a list of (project_id, trigger_id) tuples.
         """
-        completed = (
+        # Step 1 — Latest completed-trigger timestamp per project.
+        latest_ts_subq = (
+            self._db.query(
+                StrategyExecutionTrigger.project_id,
+                func.max(StrategyExecutionTrigger.created_at).label("max_created_at"),
+            )
+            .filter(StrategyExecutionTrigger.status == "completed")
+            .group_by(StrategyExecutionTrigger.project_id)
+            .subquery()
+        )
+
+        # Step 2 — Join back to get the actual trigger rows for those timestamps.
+        latest_completed = (
             self._db.query(
                 StrategyExecutionTrigger.id,
                 StrategyExecutionTrigger.project_id,
             )
+            .join(
+                latest_ts_subq,
+                (StrategyExecutionTrigger.project_id == latest_ts_subq.c.project_id)
+                & (
+                    StrategyExecutionTrigger.created_at
+                    == latest_ts_subq.c.max_created_at
+                ),
+            )
             .filter(StrategyExecutionTrigger.status == "completed")
-            .all()
+            .subquery()
         )
-        if not completed:
-            return []
 
-        trigger_ids = [row[0] for row in completed]
-
-        with_outcome = (
-            self._db.query(StrategyExecutionOutcome.execution_trigger_id)
+        # Step 3 — Exclude trigger IDs that already have a recorded outcome
+        #          (NOT EXISTS correlated subquery).
+        recorded_outcome_exists = (
+            self._db.query(StrategyExecutionOutcome.id)
             .filter(
-                StrategyExecutionOutcome.execution_trigger_id.in_(trigger_ids),
+                StrategyExecutionOutcome.execution_trigger_id == latest_completed.c.id,
                 StrategyExecutionOutcome.status == "recorded",
             )
-            .distinct()
-            .all()
+            .exists()
         )
-        with_outcome_ids = {row[0] for row in with_outcome}
 
-        return [
-            (project_id, trigger_id)
-            for trigger_id, project_id in completed
-            if trigger_id not in with_outcome_ids
-        ]
+        query = (
+            self._db.query(
+                latest_completed.c.project_id,
+                latest_completed.c.id,
+            )
+            .filter(~recorded_outcome_exists)
+            .order_by(latest_completed.c.project_id)
+        )
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        return [(row[0], row[1]) for row in query.all()]
+
+    def count_projects_awaiting_outcome(self) -> int:
+        """Return the count of distinct projects whose latest completed trigger
+        has no recorded outcome.
+
+        Uses the same logic as list_projects_awaiting_outcome but returns
+        only the total count without the display limit applied.
+        """
+        # Latest completed-trigger timestamp per project.
+        latest_ts_subq = (
+            self._db.query(
+                StrategyExecutionTrigger.project_id,
+                func.max(StrategyExecutionTrigger.created_at).label("max_created_at"),
+            )
+            .filter(StrategyExecutionTrigger.status == "completed")
+            .group_by(StrategyExecutionTrigger.project_id)
+            .subquery()
+        )
+
+        latest_completed = (
+            self._db.query(
+                StrategyExecutionTrigger.id,
+                StrategyExecutionTrigger.project_id,
+            )
+            .join(
+                latest_ts_subq,
+                (StrategyExecutionTrigger.project_id == latest_ts_subq.c.project_id)
+                & (
+                    StrategyExecutionTrigger.created_at
+                    == latest_ts_subq.c.max_created_at
+                ),
+            )
+            .filter(StrategyExecutionTrigger.status == "completed")
+            .subquery()
+        )
+
+        recorded_outcome_exists = (
+            self._db.query(StrategyExecutionOutcome.id)
+            .filter(
+                StrategyExecutionOutcome.execution_trigger_id == latest_completed.c.id,
+                StrategyExecutionOutcome.status == "recorded",
+            )
+            .exists()
+        )
+
+        return (
+            self._db.query(latest_completed.c.project_id)
+            .filter(~recorded_outcome_exists)
+            .count()
+        )
+
