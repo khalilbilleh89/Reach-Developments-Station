@@ -1100,39 +1100,44 @@ class TestPaymentPlanResponseCurrency:
     def test_build_list_response_mismatch_guard_raises_500(self):
         """_build_list_response must raise HTTP 500 if any persisted row carries
         a currency different from the contract denomination passed in."""
+        import datetime
         from unittest.mock import MagicMock
 
+        import pytest
         from fastapi import HTTPException
 
         from app.modules.payment_plans.service import PaymentPlanService
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        today = datetime.date.today()
 
         good_row = MagicMock()
         good_row.id = "row-001"
         good_row.contract_id = "ctr-guard"
         good_row.template_id = None
         good_row.installment_number = 1
-        good_row.due_date = __import__("datetime").date.today()
+        good_row.due_date = today
         good_row.due_amount = 50_000.0
         good_row.currency = CURRENCY_JOD
         good_row.status = "pending"
         good_row.notes = None
-        good_row.created_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
-        good_row.updated_at = good_row.created_at
+        good_row.created_at = now
+        good_row.updated_at = now
 
         bad_row = MagicMock()
         bad_row.id = "row-002"
         bad_row.contract_id = "ctr-guard"
         bad_row.template_id = None
         bad_row.installment_number = 2
-        bad_row.due_date = __import__("datetime").date.today()
+        bad_row.due_date = today
         bad_row.due_amount = 50_000.0
         bad_row.currency = DEFAULT_CURRENCY  # wrong — default instead of JOD
         bad_row.status = "pending"
         bad_row.notes = None
-        bad_row.created_at = good_row.created_at
-        bad_row.updated_at = good_row.created_at
+        bad_row.created_at = now
+        bad_row.updated_at = now
 
-        with __import__("pytest").raises(HTTPException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             PaymentPlanService._build_list_response(
                 "ctr-guard", [good_row, bad_row], CURRENCY_JOD
             )
@@ -1142,14 +1147,16 @@ class TestPaymentPlanResponseCurrency:
     def test_build_plan_response_mismatch_guard_raises_500(self):
         """_build_plan_response must raise HTTP 500 if any persisted row carries
         a currency different from the contract denomination passed in."""
+        import datetime
         from unittest.mock import MagicMock
 
+        import pytest
         from fastapi import HTTPException
 
         from app.modules.payment_plans.service import PaymentPlanService
 
-        _dt = __import__("datetime")
-        now = _dt.datetime.now(_dt.timezone.utc)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        today = datetime.date.today()
 
         def _make_row(idx: int, currency: str) -> MagicMock:
             row = MagicMock()
@@ -1157,7 +1164,7 @@ class TestPaymentPlanResponseCurrency:
             row.contract_id = "ctr-guard2"
             row.template_id = "tmpl-001"
             row.installment_number = idx
-            row.due_date = _dt.date.today()
+            row.due_date = today
             row.due_amount = 30_000.0
             row.currency = currency
             row.status = "pending"
@@ -1168,7 +1175,7 @@ class TestPaymentPlanResponseCurrency:
 
         rows = [_make_row(1, CURRENCY_JOD), _make_row(2, DEFAULT_CURRENCY)]
 
-        with __import__("pytest").raises(HTTPException) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             PaymentPlanService._build_plan_response(
                 "Test Plan", "standard_installments", rows, CURRENCY_JOD
             )
