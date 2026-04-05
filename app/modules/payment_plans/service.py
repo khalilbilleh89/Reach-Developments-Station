@@ -147,15 +147,15 @@ class PaymentPlanService:
 
         rows = self._build_schedule_rows(contract, template, request.start_date)
         persisted = self.schedule_repo.bulk_create(rows)
-        return self._build_list_response(contract.id, persisted)
+        return self._build_list_response(contract.id, persisted, contract.currency)
 
     def get_schedule_for_contract(
         self, contract_id: str
     ) -> PaymentScheduleListResponse:
         """Retrieve persisted schedule rows for a contract."""
-        self._require_contract(contract_id)
+        contract = self._require_contract(contract_id)
         rows = self.schedule_repo.list_by_contract(contract_id)
-        return self._build_list_response(contract_id, rows)
+        return self._build_list_response(contract_id, rows, contract.currency)
 
     def regenerate_schedule_for_contract(
         self, contract_id: str, request: PaymentPlanGenerateRequest
@@ -183,7 +183,7 @@ class PaymentPlanService:
         self.schedule_repo.replace_for_contract(contract_id, rows)
 
         persisted = self.schedule_repo.list_by_contract(contract_id)
-        return self._build_list_response(contract_id, persisted)
+        return self._build_list_response(contract_id, persisted, contract.currency)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -214,6 +214,7 @@ class PaymentPlanService:
 
         self._validate_schedule_total(lines, contract_price)
 
+        contract_currency = getattr(contract, "currency", DEFAULT_CURRENCY) or DEFAULT_CURRENCY
         return [
             {
                 "contract_id": contract.id,
@@ -221,6 +222,7 @@ class PaymentPlanService:
                 "installment_number": line.installment_number,
                 "due_date": line.due_date,
                 "due_amount": line.due_amount,
+                "currency": contract_currency,
                 "status": PaymentScheduleStatus.PENDING.value,
                 "notes": line.notes,
             }
@@ -286,12 +288,9 @@ class PaymentPlanService:
 
     @staticmethod
     def _build_list_response(
-        contract_id: str, rows: List[PaymentSchedule]
+        contract_id: str, rows: List[PaymentSchedule], currency: str = DEFAULT_CURRENCY
     ) -> PaymentScheduleListResponse:
         items = [PaymentScheduleResponse.model_validate(r) for r in rows]
-        # Derive currency from the first installment (all items in a single
-        # contract plan share the same denomination via contract.currency).
-        currency = items[0].currency if items else DEFAULT_CURRENCY
         return PaymentScheduleListResponse(
             contract_id=contract_id,
             items=items,
@@ -379,7 +378,7 @@ class PaymentPlanService:
 
         # Re-query ordered rows so _build_plan_response gets correct ordering.
         persisted = self.schedule_repo.list_by_contract(contract.id)
-        return self._build_plan_response(template.name, template.plan_type, persisted)
+        return self._build_plan_response(template.name, template.plan_type, persisted, contract.currency)
 
     def get_schedule_item(self, schedule_item_id: str) -> PaymentScheduleResponse:
         """Return a single payment schedule item by its ID."""
@@ -393,7 +392,7 @@ class PaymentPlanService:
 
     def get_contract_payment_plan(self, contract_id: str) -> PaymentPlanResponse:
         """Return the payment plan for a contract as a plan-centric response."""
-        self._require_contract(contract_id)
+        contract = self._require_contract(contract_id)
         rows = self.schedule_repo.list_by_contract(contract_id)
         if not rows:
             raise HTTPException(
@@ -407,7 +406,7 @@ class PaymentPlanService:
             if rows[0].template
             else PaymentPlanType.STANDARD_INSTALLMENTS.value
         )
-        return self._build_plan_response(plan_name, plan_type, rows)
+        return self._build_plan_response(plan_name, plan_type, rows, contract.currency)
 
     def list_contract_installments(
         self, contract_id: str
@@ -420,6 +419,7 @@ class PaymentPlanService:
         plan_name: str,
         plan_type: str,
         rows: List[PaymentSchedule],
+        currency: str = DEFAULT_CURRENCY,
     ) -> PaymentPlanResponse:
         """Build a PaymentPlanResponse from a list of persisted schedule rows."""
         from datetime import datetime as dt, timezone
@@ -440,9 +440,6 @@ class PaymentPlanService:
             else ""
         )
         contract_id = rows[0].contract_id if rows else ""
-        # Derive currency from the first installment (all items in a single
-        # contract plan share the same denomination via contract.currency).
-        currency = items[0].currency if items else DEFAULT_CURRENCY
         return PaymentPlanResponse(
             id=plan_id,
             contract_id=contract_id,

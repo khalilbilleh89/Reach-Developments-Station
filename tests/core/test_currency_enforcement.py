@@ -914,3 +914,177 @@ class TestPaymentPlanResponseCurrency:
             "Payment plan response must include 'currency' field"
         )
         assert plan_data["currency"] == DEFAULT_CURRENCY
+
+    def test_jod_contract_payment_plan_preserves_jod_denomination(self, client: TestClient):
+        """Creating a payment plan for a JOD contract must produce JOD schedule rows
+        and a JOD-denominated plan response — not fall back to the platform default."""
+        proj_resp = client.post(
+            "/api/v1/projects",
+            json={"name": "JOD Plan Project", "code": "JPP-008A", "base_currency": "JOD"},
+        )
+        assert proj_resp.status_code == 201, proj_resp.text
+        project_id = proj_resp.json()["id"]
+
+        phase_resp = client.post(
+            "/api/v1/phases",
+            json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
+        )
+        assert phase_resp.status_code == 201
+        phase_id = phase_resp.json()["id"]
+
+        bldg_resp = client.post(
+            f"/api/v1/phases/{phase_id}/buildings",
+            json={"name": "Block A", "code": "BLK-JPP008A"},
+        )
+        assert bldg_resp.status_code == 201
+        building_id = bldg_resp.json()["id"]
+
+        floor_resp = client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
+        )
+        assert floor_resp.status_code == 201
+        floor_id = floor_resp.json()["id"]
+
+        unit_resp = client.post(
+            "/api/v1/units",
+            json={
+                "floor_id": floor_id,
+                "unit_number": "401",
+                "unit_type": "studio",
+                "internal_area": 75.0,
+            },
+        )
+        assert unit_resp.status_code == 201
+        unit_id = unit_resp.json()["id"]
+
+        buyer_resp = client.post(
+            "/api/v1/sales/buyers",
+            json={"full_name": "JOD Plan Buyer", "email": "jod.plan@test.com", "phone": "+9623333333"},
+        )
+        assert buyer_resp.status_code == 201
+        buyer_id = buyer_resp.json()["id"]
+
+        contract_resp = client.post(
+            "/api/v1/sales/contracts",
+            json={
+                "unit_id": unit_id,
+                "buyer_id": buyer_id,
+                "contract_number": "JPP-JOD-001",
+                "contract_date": "2026-01-01",
+                "contract_price": 250_000.0,
+                "currency": "JOD",
+            },
+        )
+        assert contract_resp.status_code == 201, contract_resp.text
+        contract_id = contract_resp.json()["id"]
+
+        plan_resp = client.post(
+            "/api/v1/payment-plans",
+            json={
+                "contract_id": contract_id,
+                "plan_name": "JOD Quarterly Plan",
+                "number_of_installments": 4,
+                "start_date": "2026-02-01",
+            },
+        )
+        assert plan_resp.status_code == 201, plan_resp.text
+        plan_data = plan_resp.json()
+
+        # Plan-level response must carry JOD denomination
+        assert plan_data["currency"] == CURRENCY_JOD, (
+            f"Payment plan response must use contract currency 'JOD', "
+            f"got {plan_data['currency']!r}"
+        )
+
+        # Every persisted schedule row must also be JOD
+        for installment in plan_data["installments"]:
+            assert installment["currency"] == CURRENCY_JOD, (
+                f"Installment {installment['installment_number']} must carry "
+                f"contract currency 'JOD', got {installment['currency']!r}"
+            )
+
+    def test_jod_contract_schedule_list_response_preserves_jod_denomination(self, client: TestClient):
+        """GET schedule list for a JOD contract must return currency='JOD' at the
+        list-response level — sourced from the parent contract, not items[0]."""
+        proj_resp = client.post(
+            "/api/v1/projects",
+            json={"name": "JOD Schedule List Project", "code": "JSL-008A", "base_currency": "JOD"},
+        )
+        assert proj_resp.status_code == 201
+        project_id = proj_resp.json()["id"]
+
+        phase_resp = client.post(
+            "/api/v1/phases",
+            json={"project_id": project_id, "name": "Phase 1", "sequence": 1},
+        )
+        assert phase_resp.status_code == 201
+        phase_id = phase_resp.json()["id"]
+
+        bldg_resp = client.post(
+            f"/api/v1/phases/{phase_id}/buildings",
+            json={"name": "Block A", "code": "BLK-JSL008A"},
+        )
+        assert bldg_resp.status_code == 201
+        building_id = bldg_resp.json()["id"]
+
+        floor_resp = client.post(
+            f"/api/v1/buildings/{building_id}/floors",
+            json={"name": "Floor 1", "code": "FL-01", "sequence_number": 1},
+        )
+        assert floor_resp.status_code == 201
+        floor_id = floor_resp.json()["id"]
+
+        unit_resp = client.post(
+            "/api/v1/units",
+            json={
+                "floor_id": floor_id,
+                "unit_number": "501",
+                "unit_type": "studio",
+                "internal_area": 100.0,
+            },
+        )
+        assert unit_resp.status_code == 201
+        unit_id = unit_resp.json()["id"]
+
+        buyer_resp = client.post(
+            "/api/v1/sales/buyers",
+            json={"full_name": "JOD Schedule Buyer", "email": "jod.schedule@test.com", "phone": "+9624444444"},
+        )
+        assert buyer_resp.status_code == 201
+        buyer_id = buyer_resp.json()["id"]
+
+        contract_resp = client.post(
+            "/api/v1/sales/contracts",
+            json={
+                "unit_id": unit_id,
+                "buyer_id": buyer_id,
+                "contract_number": "JSL-JOD-001",
+                "contract_date": "2026-01-01",
+                "contract_price": 180_000.0,
+                "currency": "JOD",
+            },
+        )
+        assert contract_resp.status_code == 201, contract_resp.text
+        contract_id = contract_resp.json()["id"]
+
+        # Create payment plan
+        client.post(
+            "/api/v1/payment-plans",
+            json={
+                "contract_id": contract_id,
+                "plan_name": "JOD Schedule Plan",
+                "number_of_installments": 3,
+                "start_date": "2026-03-01",
+            },
+        )
+
+        # Fetch the schedule list — must preserve JOD at the list level
+        schedule_resp = client.get(f"/api/v1/payment-plans/contracts/{contract_id}/schedule")
+        assert schedule_resp.status_code == 200, schedule_resp.text
+        schedule_data = schedule_resp.json()
+
+        assert schedule_data["currency"] == CURRENCY_JOD, (
+            f"Schedule list response must use contract currency 'JOD', "
+            f"got {schedule_data['currency']!r}"
+        )
