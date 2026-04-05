@@ -1,5 +1,5 @@
 """
-Tests for the Strategy Learning & Confidence Recalibration Engine (PR-V7-11).
+Tests for the Strategy Learning & Confidence Recalibration Engine (PR-V7-11 / PR-V7-11A).
 
 Validates:
   POST /api/v1/projects/{id}/strategy-learning/recalibrate
@@ -10,6 +10,8 @@ Validates:
     - Low-sample cap applied when sample_size < 5
     - Per-strategy-type breakdowns present
     - Upsert: recalibrating twice gives updated values
+    - pricing_accuracy_score populated from trigger snapshot
+    - phasing_accuracy_score populated from trigger snapshot
 
   GET /api/v1/projects/{id}/strategy-learning
     - HTTP contract (200, 404, auth required)
@@ -20,13 +22,16 @@ Validates:
     - HTTP contract (200, auth required)
     - Returns empty payload when no data
     - Returns summary after recalibration with data
+    - KPI total_projects_with_data reflects full portfolio (not capped subset)
 
   Pure unit tests (no DB/HTTP):
     - compute_confidence_score: correct formula
     - compute_confidence_score: low-sample cap
     - compute_trend_direction: improving / declining / stable / insufficient_data
-    - compute_pricing_accuracy: correct fraction
-    - compute_phasing_accuracy: correct fraction
+    - compute_pricing_accuracy: correct fraction with triggers_map
+    - compute_phasing_accuracy: correct fraction with triggers_map
+    - _get_intended_price / _get_intended_phase: extract from snapshot
+    - _get_nested_value: safe traversal
 """
 
 import pytest
@@ -37,8 +42,10 @@ from app.modules.strategy_learning.service import (
     compute_trend_direction,
     compute_pricing_accuracy,
     compute_phasing_accuracy,
+    _get_intended_price,
+    _get_intended_phase,
+    _get_nested_value,
 )
-from app.modules.auth.security import get_current_user_payload
 from app.main import app
 
 
@@ -120,15 +127,15 @@ def _setup_project_with_outcomes(
     code: str,
     outcomes: list[dict],
 ) -> str:
-    """Create a project, record N outcomes, and return project_id."""
+    """Create a project, record N outcomes (one trigger per outcome), return project_id."""
     project_id = _create_project(client, code=code, name=f"Project {code}")
-    _create_and_approve(client, project_id)
     for i, outcome_body in enumerate(outcomes):
-        trigger = _create_completed_trigger(client, project_id)
         if i > 0:
-            # Re-approve after first trigger (approval consumed by prior trigger)
+            # Re-approve: each trigger requires an active approved strategy.
             _create_and_approve(client, project_id)
-            trigger = _create_completed_trigger(client, project_id)
+        else:
+            _create_and_approve(client, project_id)
+        trigger = _create_completed_trigger(client, project_id)
         _record_outcome(client, trigger["id"], outcome_body)
     return project_id
 
@@ -203,12 +210,9 @@ class TestRecalibrateProjectLearning:
         resp = client.post("/api/v1/projects/nonexistent-proj/strategy-learning/recalibrate")
         assert resp.status_code == 404
 
-    def test_recalibrate_requires_auth(self) -> None:
-        app.dependency_overrides.clear()
-        client_no_auth = TestClient(app, raise_server_exceptions=False)
-        resp = client_no_auth.post("/api/v1/projects/any/strategy-learning/recalibrate")
+    def test_recalibrate_requires_auth(self, unauth_client: TestClient) -> None:
+        resp = unauth_client.post("/api/v1/projects/any/strategy-learning/recalibrate")
         assert resp.status_code in (401, 403)
-        app.dependency_overrides[get_current_user_payload] = lambda: {"sub": "test-user"}
 
     def test_recalibrate_accuracy_breakdown_fields_present(self, client: TestClient) -> None:
         project_id = _create_project(client, code="RC-008")
@@ -287,12 +291,9 @@ class TestGetProjectLearning:
         resp = client.get("/api/v1/projects/ghost-project/strategy-learning")
         assert resp.status_code == 404
 
-    def test_get_requires_auth(self) -> None:
-        app.dependency_overrides.clear()
-        client_no_auth = TestClient(app, raise_server_exceptions=False)
-        resp = client_no_auth.get("/api/v1/projects/any/strategy-learning")
+    def test_get_requires_auth(self, unauth_client: TestClient) -> None:
+        resp = unauth_client.get("/api/v1/projects/any/strategy-learning")
         assert resp.status_code in (401, 403)
-        app.dependency_overrides[get_current_user_payload] = lambda: {"sub": "test-user"}
 
     def test_get_project_id_in_response(self, client: TestClient) -> None:
         project_id = _create_project(client, code="GL-004")
@@ -323,12 +324,9 @@ class TestGetPortfolioLearning:
         assert isinstance(body["low_confidence_count"], int)
         assert isinstance(body["all_project_entries"], list)
 
-    def test_portfolio_requires_auth(self) -> None:
-        app.dependency_overrides.clear()
-        client_no_auth = TestClient(app, raise_server_exceptions=False)
-        resp = client_no_auth.get("/api/v1/portfolio/strategy-learning")
+    def test_portfolio_requires_auth(self, unauth_client: TestClient) -> None:
+        resp = unauth_client.get("/api/v1/portfolio/strategy-learning")
         assert resp.status_code in (401, 403)
-        app.dependency_overrides[get_current_user_payload] = lambda: {"sub": "test-user"}
 
     def test_portfolio_has_counts_after_data(self, client: TestClient) -> None:
         project_id = _create_project(client, code="PF-001")
@@ -440,6 +438,7 @@ class TestComputeAccuracyScores:
         class FakeOutcome:
             actual_price_adjustment_pct = None
             actual_phase_delay_months = None
+            execution_trigger_id = None
 
         assert compute_pricing_accuracy([FakeOutcome()]) is None  # type: ignore[list-item]
 
@@ -447,5 +446,229 @@ class TestComputeAccuracyScores:
         class FakeOutcome:
             actual_price_adjustment_pct = None
             actual_phase_delay_months = None
+            execution_trigger_id = None
 
         assert compute_phasing_accuracy([FakeOutcome()]) is None  # type: ignore[list-item]
+
+    def test_pricing_accuracy_none_without_triggers_map(self) -> None:
+        """When no triggers_map supplied, intended is always None → score None."""
+
+        class FakeOutcome:
+            actual_price_adjustment_pct = 5.0
+            actual_phase_delay_months = None
+            execution_trigger_id = "t-1"
+
+        assert compute_pricing_accuracy([FakeOutcome()]) is None  # type: ignore[list-item]
+
+    def test_pricing_accuracy_with_trigger_snapshot(self) -> None:
+        """Accuracy score is 1.0 when actual == intended."""
+
+        class FakeOutcome:
+            actual_price_adjustment_pct = 5.0
+            actual_phase_delay_months = None
+            execution_trigger_id = "t-1"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"price_adjustment_pct": 5.0}
+            }
+
+        score = compute_pricing_accuracy(
+            [FakeOutcome()],  # type: ignore[list-item]
+            triggers_map={"t-1": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert score == pytest.approx(1.0)
+
+    def test_pricing_accuracy_inaccurate_when_diff_over_threshold(self) -> None:
+        """Accuracy score is 0.0 when |actual - intended| >= 5 pp."""
+
+        class FakeOutcome:
+            actual_price_adjustment_pct = 12.0
+            actual_phase_delay_months = None
+            execution_trigger_id = "t-2"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"price_adjustment_pct": 5.0}
+            }
+
+        score = compute_pricing_accuracy(
+            [FakeOutcome()],  # type: ignore[list-item]
+            triggers_map={"t-2": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert score == pytest.approx(0.0)
+
+    def test_phasing_accuracy_with_trigger_snapshot(self) -> None:
+        """Accuracy score is 1.0 when |actual - intended| <= 1 month."""
+
+        class FakeOutcome:
+            actual_price_adjustment_pct = None
+            actual_phase_delay_months = 2.0
+            execution_trigger_id = "t-3"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"phase_delay_months": 2}
+            }
+
+        score = compute_phasing_accuracy(
+            [FakeOutcome()],  # type: ignore[list-item]
+            triggers_map={"t-3": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert score == pytest.approx(1.0)
+
+    def test_phasing_accuracy_inaccurate_when_diff_over_threshold(self) -> None:
+        """Accuracy score is 0.0 when |actual - intended| > 1 month."""
+
+        class FakeOutcome:
+            actual_price_adjustment_pct = None
+            actual_phase_delay_months = 6.0
+            execution_trigger_id = "t-4"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"phase_delay_months": 2}
+            }
+
+        score = compute_phasing_accuracy(
+            [FakeOutcome()],  # type: ignore[list-item]
+            triggers_map={"t-4": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert score == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Pure unit tests — _get_intended_price / _get_intended_phase / _get_nested_value
+# ---------------------------------------------------------------------------
+
+
+class TestIntendedValueExtraction:
+    def test_get_intended_price_none_without_map(self) -> None:
+        class FakeOutcome:
+            execution_trigger_id = "t-1"
+
+        assert _get_intended_price(FakeOutcome()) is None  # type: ignore[arg-type]
+
+    def test_get_intended_price_from_snapshot(self) -> None:
+        class FakeOutcome:
+            execution_trigger_id = "t-1"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"price_adjustment_pct": 7.5}
+            }
+
+        result = _get_intended_price(
+            FakeOutcome(),  # type: ignore[arg-type]
+            triggers_map={"t-1": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert result == pytest.approx(7.5)
+
+    def test_get_intended_price_none_when_field_missing(self) -> None:
+        class FakeOutcome:
+            execution_trigger_id = "t-2"
+
+        class FakeTrigger:
+            execution_package_snapshot = {"supporting_metrics": {}}
+
+        result = _get_intended_price(
+            FakeOutcome(),  # type: ignore[arg-type]
+            triggers_map={"t-2": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert result is None
+
+    def test_get_intended_phase_from_snapshot(self) -> None:
+        class FakeOutcome:
+            execution_trigger_id = "t-3"
+
+        class FakeTrigger:
+            execution_package_snapshot = {
+                "supporting_metrics": {"phase_delay_months": 3}
+            }
+
+        result = _get_intended_phase(
+            FakeOutcome(),  # type: ignore[arg-type]
+            triggers_map={"t-3": FakeTrigger()},  # type: ignore[dict-item]
+        )
+        assert result == pytest.approx(3.0)
+
+    def test_get_nested_value_dict_path(self) -> None:
+        data = {"a": {"b": {"c": 42}}}
+        assert _get_nested_value(data, "a", "b", "c") == 42
+
+    def test_get_nested_value_missing_key_returns_none(self) -> None:
+        data = {"a": {}}
+        assert _get_nested_value(data, "a", "b", "c") is None
+
+    def test_get_nested_value_none_source_returns_none(self) -> None:
+        assert _get_nested_value(None, "a") is None
+
+
+# ---------------------------------------------------------------------------
+# Integration: accuracy scores populated from trigger snapshot via recalibrate
+# ---------------------------------------------------------------------------
+
+
+class TestAccuracyScoresFromTriggerSnapshot:
+    def test_pricing_accuracy_populated_after_recalibrate(
+        self, client: TestClient
+    ) -> None:
+        """pricing_accuracy_score must be non-None when trigger has snapshot metrics."""
+        project_id = _create_project(client, code="ACC-001")
+        _create_and_approve(client, project_id)
+        trigger = _create_completed_trigger(client, project_id)
+        _record_outcome(client, trigger["id"], _MATCHED_OUTCOME)
+        resp = client.post(f"/api/v1/projects/{project_id}/strategy-learning/recalibrate")
+        metrics = resp.json()["overall_metrics"]
+        # Trigger snapshot has price_adjustment_pct=5.0; outcome has actual=5.0 → match
+        assert metrics["accuracy_breakdown"]["pricing_accuracy_score"] is not None
+        assert metrics["accuracy_breakdown"]["pricing_accuracy_score"] == pytest.approx(1.0)
+
+    def test_phasing_accuracy_populated_after_recalibrate(
+        self, client: TestClient
+    ) -> None:
+        """phasing_accuracy_score must be non-None when trigger has snapshot metrics."""
+        project_id = _create_project(client, code="ACC-002")
+        _create_and_approve(client, project_id)
+        trigger = _create_completed_trigger(client, project_id)
+        _record_outcome(client, trigger["id"], _MATCHED_OUTCOME)
+        resp = client.post(f"/api/v1/projects/{project_id}/strategy-learning/recalibrate")
+        metrics = resp.json()["overall_metrics"]
+        # Trigger snapshot has phase_delay_months=2; outcome has actual=2.0 → match
+        assert metrics["accuracy_breakdown"]["phasing_accuracy_score"] is not None
+        assert metrics["accuracy_breakdown"]["phasing_accuracy_score"] == pytest.approx(1.0)
+
+    def test_pricing_accuracy_zero_on_diverged_outcome(
+        self, client: TestClient
+    ) -> None:
+        """pricing_accuracy_score must be 0.0 when actual is far from intended."""
+        project_id = _create_project(client, code="ACC-003")
+        _create_and_approve(client, project_id)
+        trigger = _create_completed_trigger(client, project_id)
+        _record_outcome(client, trigger["id"], _DIVERGED_OUTCOME)
+        resp = client.post(f"/api/v1/projects/{project_id}/strategy-learning/recalibrate")
+        metrics = resp.json()["overall_metrics"]
+        # Trigger intended price=5.0; actual=12.0 → |diff|=7.0 ≥ 5 → inaccurate
+        assert metrics["accuracy_breakdown"]["pricing_accuracy_score"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Portfolio KPI correctness
+# ---------------------------------------------------------------------------
+
+
+class TestPortfolioKpiCorrectness:
+    def test_portfolio_total_reflects_all_projects(self, client: TestClient) -> None:
+        """total_projects_with_data counts ALL projects, not just display-capped ones."""
+        # Create two distinct projects with outcomes and recalibrate both.
+        for code in ("KPI-001", "KPI-002"):
+            pid = _create_project(client, code=code, name=f"KPI Project {code}")
+            _create_and_approve(client, pid)
+            trigger = _create_completed_trigger(client, pid)
+            _record_outcome(client, trigger["id"], _MATCHED_OUTCOME)
+            client.post(f"/api/v1/projects/{pid}/strategy-learning/recalibrate")
+
+        resp = client.get("/api/v1/portfolio/strategy-learning")
+        body = resp.json()
+        # At least 2 projects should be reflected in the KPI count.
+        assert body["total_projects_with_data"] >= 2

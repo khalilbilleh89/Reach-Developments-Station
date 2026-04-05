@@ -47,13 +47,14 @@ Forbidden
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import ResourceNotFoundError
 from app.core.logging import get_logger
 from app.modules.strategy_execution_outcome.models import StrategyExecutionOutcome
+from app.modules.strategy_execution_trigger.models import StrategyExecutionTrigger
 from app.modules.strategy_learning.models import StrategyLearningMetrics
 from app.modules.strategy_learning.repository import StrategyLearningRepository
 from app.modules.strategy_learning.schemas import (
@@ -134,6 +135,16 @@ class StrategyLearningService:
             self._repo.get_metrics_for_project(project_id)
         )
 
+        # Load triggers in one batch query for intended-value extraction.
+        trigger_ids = [
+            o.execution_trigger_id
+            for o in outcomes
+            if o.execution_trigger_id is not None
+        ]
+        triggers_map: Dict[str, StrategyExecutionTrigger] = (
+            self._repo.get_triggers_by_ids(trigger_ids)
+        )
+
         now = datetime.now(timezone.utc)
 
         # Compute aggregate row (all outcomes, strategy_type = "_all_").
@@ -143,6 +154,7 @@ class StrategyLearningService:
             outcomes=outcomes,
             prior_confidence=prior_metrics_map.get(_ALL_STRATEGIES_LABEL),
             now=now,
+            triggers_map=triggers_map,
         )
 
         # Compute per-strategy-type rows.
@@ -161,6 +173,7 @@ class StrategyLearningService:
                 outcomes=type_outcomes,
                 prior_confidence=prior_metrics_map.get(stype),
                 now=now,
+                triggers_map=triggers_map,
             )
             per_type_rows.append(row)
 
@@ -220,12 +233,16 @@ class StrategyLearningService:
     def get_portfolio_learning(self) -> PortfolioLearningSummaryResponse:
         """Assemble the portfolio-level learning summary from stored metrics.
 
-        Returns aggregate statistics across all projects, top/weak lists, and
-        per-project entries.  Results are capped at _PORTFOLIO_PROJECT_LIMIT.
+        KPI values (total, averages, counts) are computed over the FULL
+        portfolio dataset.  The display lists (all_project_entries, top/weak)
+        are capped at _PORTFOLIO_PROJECT_LIMIT entries so the payload remains
+        bounded.
         """
-        aggregate_rows = self._repo.get_portfolio_aggregate_metrics()
+        # Load ALL aggregate rows (no limit) so KPIs are computed on the full
+        # portfolio, not just the first 50 entries.
+        all_aggregate_rows = self._repo.get_portfolio_aggregate_metrics()
 
-        if not aggregate_rows:
+        if not all_aggregate_rows:
             return PortfolioLearningSummaryResponse(
                 total_projects_with_data=0,
                 average_confidence_score=None,
@@ -238,8 +255,29 @@ class StrategyLearningService:
                 all_project_entries=[],
             )
 
-        # Build project-name map.
-        project_ids = [r.project_id for r in aggregate_rows]
+        # --- KPIs: computed over the FULL dataset ---
+        total = len(all_aggregate_rows)
+        avg_conf: Optional[float] = (
+            sum(r.confidence_score for r in all_aggregate_rows) / total
+        )
+        high_conf = sum(
+            1 for r in all_aggregate_rows
+            if r.confidence_score >= _HIGH_CONFIDENCE_THRESHOLD
+        )
+        low_conf = sum(
+            1 for r in all_aggregate_rows
+            if r.confidence_score < _LOW_CONFIDENCE_THRESHOLD
+        )
+        improving = sum(
+            1 for r in all_aggregate_rows if r.trend_direction == "improving"
+        )
+        declining = sum(
+            1 for r in all_aggregate_rows if r.trend_direction == "declining"
+        )
+
+        # --- Display lists: capped at _PORTFOLIO_PROJECT_LIMIT ---
+        display_rows = all_aggregate_rows[:_PORTFOLIO_PROJECT_LIMIT]
+        project_ids = [r.project_id for r in display_rows]
         projects_map: Dict[str, str] = {
             p.id: p.name
             for p in self._repo.list_projects_by_ids(project_ids)
@@ -254,24 +292,8 @@ class StrategyLearningService:
                 trend_direction=row.trend_direction,  # type: ignore[arg-type]
                 overall_strategy_accuracy=row.overall_strategy_accuracy,
             )
-            for row in aggregate_rows
+            for row in display_rows
         ]
-
-        # Apply portfolio cap.
-        entries = entries[:_PORTFOLIO_PROJECT_LIMIT]
-
-        total = len(entries)
-        avg_conf: Optional[float] = (
-            sum(e.confidence_score for e in entries) / total if total > 0 else None
-        )
-        high_conf = sum(
-            1 for e in entries if e.confidence_score >= _HIGH_CONFIDENCE_THRESHOLD
-        )
-        low_conf = sum(
-            1 for e in entries if e.confidence_score < _LOW_CONFIDENCE_THRESHOLD
-        )
-        improving = sum(1 for e in entries if e.trend_direction == "improving")
-        declining = sum(1 for e in entries if e.trend_direction == "declining")
 
         # Top-performing: best confidence, min sample required.
         ranked = [
@@ -340,10 +362,13 @@ def compute_trend_direction(
 
 def compute_pricing_accuracy(
     outcomes: Sequence[StrategyExecutionOutcome],
+    triggers_map: Optional[Dict[str, StrategyExecutionTrigger]] = None,
 ) -> Optional[float]:
     """Fraction of outcomes where the price adjustment was accurate.
 
     Accurate = |actual - intended| < PRICE_MAJOR_THRESHOLD.
+    Intended values are read from the trigger's execution_package_snapshot
+    (supporting_metrics.price_adjustment_pct) via *triggers_map*.
     Returns None when no outcomes have both intended and actual price values.
     """
     total = 0
@@ -352,7 +377,7 @@ def compute_pricing_accuracy(
         actual = outcome.actual_price_adjustment_pct
         if actual is None:
             continue
-        intended = _get_intended_price(outcome)
+        intended = _get_intended_price(outcome, triggers_map)
         if intended is None:
             continue
         total += 1
@@ -363,10 +388,13 @@ def compute_pricing_accuracy(
 
 def compute_phasing_accuracy(
     outcomes: Sequence[StrategyExecutionOutcome],
+    triggers_map: Optional[Dict[str, StrategyExecutionTrigger]] = None,
 ) -> Optional[float]:
     """Fraction of outcomes where the phase delay was accurate.
 
     Accurate = |actual - intended| <= PHASE_MINOR_THRESHOLD.
+    Intended values are read from the trigger's execution_package_snapshot
+    (supporting_metrics.phase_delay_months) via *triggers_map*.
     Returns None when no outcomes have both intended and actual phase values.
     """
     total = 0
@@ -375,7 +403,7 @@ def compute_phasing_accuracy(
         actual = outcome.actual_phase_delay_months
         if actual is None:
             continue
-        intended = _get_intended_phase(outcome)
+        intended = _get_intended_phase(outcome, triggers_map)
         if intended is None:
             continue
         total += 1
@@ -390,33 +418,81 @@ def compute_phasing_accuracy(
 
 
 def _extract_strategy_type(outcome: StrategyExecutionOutcome) -> str:
-    """Extract the strategy type label from an outcome's execution_trigger snapshot.
+    """Extract the strategy type label from an outcome.
 
-    Falls back to "unknown" when no strategy type can be identified.
+    Uses ``actual_release_strategy`` as the grouping key (the closest proxy
+    available without requiring a trigger join here).  Falls back to
+    ``"unknown"`` when the field is absent or empty.
     """
-    # Outcomes don't have a direct strategy_type field, so we derive it from
-    # the actual_release_strategy (closest proxy available without requiring a
-    # trigger join here) or from the outcome_result.
     if outcome.actual_release_strategy:
         return outcome.actual_release_strategy.lower()
     return "unknown"
 
 
-def _get_intended_price(outcome: StrategyExecutionOutcome) -> Optional[float]:
-    """Extract intended price adjustment from the trigger snapshot stored in the
-    outcome's execution_trigger relationship.
+def _get_nested_value(source: Any, *path: str) -> Any:
+    """Safely traverse a nested dict/attribute path.
 
-    Since the outcome ORM model does not carry the trigger snapshot directly,
-    this returns None.  Sub-scores based on the actual values only can be
-    derived at the service level when the trigger map is available.  For the
-    learning service we rely on the outcome_result classification as the
-    primary signal and treat pricing accuracy as None here.
+    Each step in *path* is first tried as a dict key, then as an attribute.
+    Returns None as soon as any step is absent or the source is None.
     """
+    current: Any = source
+    for key in path:
+        if current is None:
+            return None
+        if isinstance(current, dict):
+            current = current.get(key)
+        else:
+            current = getattr(current, key, None)
+    return current
+
+
+def _get_intended_price(
+    outcome: StrategyExecutionOutcome,
+    triggers_map: Optional[Dict[str, StrategyExecutionTrigger]] = None,
+) -> Optional[float]:
+    """Extract intended price adjustment from the trigger's execution package snapshot.
+
+    Looks up ``execution_package_snapshot.supporting_metrics.price_adjustment_pct``
+    on the trigger identified by ``outcome.execution_trigger_id``.
+    Returns None when the trigger is unavailable or the field is absent.
+    """
+    if triggers_map is None or outcome.execution_trigger_id is None:
+        return None
+    trigger = triggers_map.get(outcome.execution_trigger_id)
+    if trigger is None:
+        return None
+    raw = _get_nested_value(
+        trigger.execution_package_snapshot,
+        "supporting_metrics",
+        "price_adjustment_pct",
+    )
+    if isinstance(raw, (int, float)):
+        return float(raw)
     return None
 
 
-def _get_intended_phase(outcome: StrategyExecutionOutcome) -> Optional[float]:
-    """See _get_intended_price — same rationale."""
+def _get_intended_phase(
+    outcome: StrategyExecutionOutcome,
+    triggers_map: Optional[Dict[str, StrategyExecutionTrigger]] = None,
+) -> Optional[float]:
+    """Extract intended phase delay from the trigger's execution package snapshot.
+
+    Looks up ``execution_package_snapshot.supporting_metrics.phase_delay_months``
+    on the trigger identified by ``outcome.execution_trigger_id``.
+    Returns None when the trigger is unavailable or the field is absent.
+    """
+    if triggers_map is None or outcome.execution_trigger_id is None:
+        return None
+    trigger = triggers_map.get(outcome.execution_trigger_id)
+    if trigger is None:
+        return None
+    raw = _get_nested_value(
+        trigger.execution_package_snapshot,
+        "supporting_metrics",
+        "phase_delay_months",
+    )
+    if isinstance(raw, (int, float)):
+        return float(raw)
     return None
 
 
@@ -426,6 +502,7 @@ def _compute_metrics_row(
     outcomes: List[StrategyExecutionOutcome],
     prior_confidence: Optional[float],
     now: datetime,
+    triggers_map: Optional[Dict[str, StrategyExecutionTrigger]] = None,
 ) -> StrategyLearningMetrics:
     """Compute a single StrategyLearningMetrics row from a list of outcomes."""
     total = len(outcomes)
@@ -450,8 +527,8 @@ def _compute_metrics_row(
         confidence = compute_confidence_score(match_rate, divergence_rate, total)
 
     trend = compute_trend_direction(confidence, prior_confidence)
-    pricing_acc = compute_pricing_accuracy(outcomes)
-    phasing_acc = compute_phasing_accuracy(outcomes)
+    pricing_acc = compute_pricing_accuracy(outcomes, triggers_map)
+    phasing_acc = compute_phasing_accuracy(outcomes, triggers_map)
 
     return StrategyLearningMetrics(
         project_id=project_id,

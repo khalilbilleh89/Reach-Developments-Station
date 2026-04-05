@@ -18,10 +18,12 @@ Cross-module rules
 
 from typing import Dict, List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.projects.models import Project
 from app.modules.strategy_execution_outcome.models import StrategyExecutionOutcome
+from app.modules.strategy_execution_trigger.models import StrategyExecutionTrigger
 from app.modules.strategy_learning.models import StrategyLearningMetrics
 
 
@@ -67,6 +69,19 @@ class StrategyLearningRepository:
             .all()
         )
 
+    def get_triggers_by_ids(
+        self, trigger_ids: List[str]
+    ) -> Dict[str, StrategyExecutionTrigger]:
+        """Return a {trigger_id: trigger} map for the given IDs in one query."""
+        if not trigger_ids:
+            return {}
+        rows = (
+            self._db.query(StrategyExecutionTrigger)
+            .filter(StrategyExecutionTrigger.id.in_(trigger_ids))
+            .all()
+        )
+        return {t.id: t for t in rows}
+
     # ------------------------------------------------------------------
     # Metrics reads
     # ------------------------------------------------------------------
@@ -95,14 +110,23 @@ class StrategyLearningRepository:
             .first()
         )
 
-    def get_portfolio_aggregate_metrics(self) -> List[StrategyLearningMetrics]:
-        """Return all '_all_' aggregate rows across all projects."""
-        return (
+    def get_portfolio_aggregate_metrics(
+        self, limit: Optional[int] = None
+    ) -> List[StrategyLearningMetrics]:
+        """Return '_all_' aggregate rows across all projects.
+
+        When *limit* is provided the database applies the cap directly.
+        Omit the limit (default) to retrieve the full dataset for KPI
+        aggregation.
+        """
+        query = (
             self._db.query(StrategyLearningMetrics)
             .filter(StrategyLearningMetrics.strategy_type == "_all_")
             .order_by(StrategyLearningMetrics.confidence_score.desc())
-            .all()
         )
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        return query.all()
 
     def get_metrics_for_portfolio(self) -> List[StrategyLearningMetrics]:
         """Return all metrics rows across all projects (for portfolio views)."""
@@ -153,36 +177,70 @@ class StrategyLearningRepository:
     def upsert_metrics_batch(
         self, rows: List[StrategyLearningMetrics]
     ) -> List[StrategyLearningMetrics]:
-        """Upsert a list of metrics rows in a single transaction."""
-        # Build lookup for existing rows using one query per project.
+        """Upsert a list of metrics rows in a single transaction.
+
+        Concurrency-safe: if a concurrent request inserts a row between this
+        transaction's read and commit, the resulting IntegrityError is caught,
+        the transaction is rolled back, and the rows are re-fetched and updated
+        in a second pass.
+        """
+        results = self._apply_upsert_pass(rows)
+        try:
+            self._db.commit()
+        except IntegrityError:
+            # A concurrent recalibration inserted one or more rows between our
+            # read and our commit.  Roll back and retry as pure updates.
+            self._db.rollback()
+            results = self._apply_upsert_pass(rows, force_update=True)
+            self._db.commit()
+        for r in results:
+            self._db.refresh(r)
+        return results
+
+    def _apply_upsert_pass(
+        self,
+        rows: List[StrategyLearningMetrics],
+        force_update: bool = False,
+    ) -> List[StrategyLearningMetrics]:
+        """Build the upsert result list for *rows*.
+
+        When *force_update* is True, every row is treated as an update
+        (used in the IntegrityError retry path where rows now definitely
+        exist from a concurrent insert).
+        """
         project_ids = list({r.project_id for r in rows})
         existing_map: Dict[tuple, StrategyLearningMetrics] = {}
         for pid in project_ids:
-            for row in self.get_metrics_for_project(pid):
-                existing_map[(row.project_id, row.strategy_type)] = row
+            for existing_row in self.get_metrics_for_project(pid):
+                existing_map[
+                    (existing_row.project_id, existing_row.strategy_type)
+                ] = existing_row
 
         results: List[StrategyLearningMetrics] = []
         for metrics in rows:
             key = (metrics.project_id, metrics.strategy_type)
             existing = existing_map.get(key)
-            if existing is not None:
-                existing.sample_size = metrics.sample_size
-                existing.match_rate = metrics.match_rate
-                existing.partial_rate = metrics.partial_rate
-                existing.divergence_rate = metrics.divergence_rate
-                existing.confidence_score = metrics.confidence_score
-                existing.pricing_accuracy_score = metrics.pricing_accuracy_score
-                existing.phasing_accuracy_score = metrics.phasing_accuracy_score
-                existing.overall_strategy_accuracy = metrics.overall_strategy_accuracy
-                existing.trend_direction = metrics.trend_direction
-                existing.last_updated = metrics.last_updated
-                self._db.add(existing)
-                results.append(existing)
-            else:
-                self._db.add(metrics)
-                results.append(metrics)
-
-        self._db.commit()
-        for r in results:
-            self._db.refresh(r)
+            if existing is not None or force_update:
+                if existing is None:
+                    # Concurrent insert won the race; re-fetch before updating.
+                    existing = self.get_metrics_by_strategy_type(
+                        metrics.project_id, metrics.strategy_type
+                    )
+                if existing is not None:
+                    existing.sample_size = metrics.sample_size
+                    existing.match_rate = metrics.match_rate
+                    existing.partial_rate = metrics.partial_rate
+                    existing.divergence_rate = metrics.divergence_rate
+                    existing.confidence_score = metrics.confidence_score
+                    existing.pricing_accuracy_score = metrics.pricing_accuracy_score
+                    existing.phasing_accuracy_score = metrics.phasing_accuracy_score
+                    existing.overall_strategy_accuracy = metrics.overall_strategy_accuracy
+                    existing.trend_direction = metrics.trend_direction
+                    existing.last_updated = metrics.last_updated
+                    self._db.add(existing)
+                    results.append(existing)
+                    continue
+            # Fresh insert.
+            self._db.add(metrics)
+            results.append(metrics)
         return results
