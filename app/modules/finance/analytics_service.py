@@ -139,6 +139,7 @@ class AnalyticsService:
                 year_expr.label("paid_year"),
                 month_expr.label("paid_month"),
                 func.sum(ContractPaymentSchedule.amount).label("recognized"),
+                Project.base_currency.label("currency"),
             )
             .select_from(ContractPaymentSchedule)
             .join(SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id)
@@ -146,11 +147,12 @@ class AnalyticsService:
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
+            .join(Project, Phase.project_id == Project.id)
             .filter(
                 ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
                 ContractPaymentSchedule.paid_at.isnot(None),
             )
-            .group_by(Phase.project_id, SalesContract.unit_id, year_expr, month_expr)
+            .group_by(Phase.project_id, SalesContract.unit_id, year_expr, month_expr, Project.base_currency)
             .all()
         )
 
@@ -178,7 +180,7 @@ class AnalyticsService:
         }
 
         inserted = 0
-        for project_id, unit_id, paid_year, paid_month, recognized in agg_rows:
+        for project_id, unit_id, paid_year, paid_month, recognized, currency in agg_rows:
             month_key = f"{int(paid_year):04d}-{int(paid_month):02d}"
             contract_value = contract_value_map.get((str(project_id), str(unit_id)), 0.0)
             fact = FactRevenue(
@@ -187,6 +189,7 @@ class AnalyticsService:
                 month=month_key,
                 recognized_revenue=round(float(recognized), 2),
                 contract_value=round(contract_value, 2),
+                currency=currency,
             )
             self.db.add(fact)
             inserted += 1
@@ -227,6 +230,7 @@ class AnalyticsService:
                 year_expr.label("paid_year"),
                 month_expr.label("paid_month"),
                 func.sum(ContractPaymentSchedule.amount).label("total_amount"),
+                Project.base_currency.label("currency"),
             )
             .select_from(ContractPaymentSchedule)
             .join(SalesContract, ContractPaymentSchedule.contract_id == SalesContract.id)
@@ -234,16 +238,17 @@ class AnalyticsService:
             .join(Floor, Unit.floor_id == Floor.id)
             .join(Building, Floor.building_id == Building.id)
             .join(Phase, Building.phase_id == Phase.id)
+            .join(Project, Phase.project_id == Project.id)
             .filter(
                 ContractPaymentSchedule.status == ContractPaymentStatus.PAID.value,
                 ContractPaymentSchedule.paid_at.isnot(None),
             )
-            .group_by(Phase.project_id, year_expr, month_expr)
+            .group_by(Phase.project_id, year_expr, month_expr, Project.base_currency)
             .all()
         )
 
         inserted = 0
-        for project_id, paid_year, paid_month, total_amount in agg_rows:
+        for project_id, paid_year, paid_month, total_amount, currency in agg_rows:
             year_int = int(paid_year)
             month_int = int(paid_month)
             month_key = f"{year_int:04d}-{month_int:02d}"
@@ -256,6 +261,7 @@ class AnalyticsService:
                 month=month_key,
                 amount=round(float(total_amount), 2),
                 payment_method="bank_transfer",
+                currency=currency,
             )
             self.db.add(fact)
             inserted += 1
@@ -345,6 +351,7 @@ class AnalyticsService:
                 bucket_31_60=bucket_31_60,
                 bucket_61_90=bucket_61_90,
                 bucket_90_plus=bucket_90_plus,
+                currency=project.base_currency,
             )
             self.db.add(snapshot)
             inserted += 1
