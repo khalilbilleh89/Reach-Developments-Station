@@ -42,6 +42,7 @@ import app.modules.construction_costs.models  # noqa: F401
 import app.modules.tender_comparison.models  # noqa: F401
 import app.modules.strategy_approval.models  # noqa: F401
 import app.modules.strategy_execution_trigger.models  # noqa: F401
+import app.modules.strategy_execution_outcome.models  # noqa: F401
 
 from app.main import app
 

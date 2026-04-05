@@ -79,6 +79,11 @@ from app.modules.strategy_execution_trigger.api import (
     triggers_router as strategy_execution_trigger_triggers_router,
     portfolio_router as strategy_execution_trigger_portfolio_router,
 )
+from app.modules.strategy_execution_outcome.api import (
+    triggers_router as strategy_execution_outcome_triggers_router,
+    projects_router as strategy_execution_outcome_projects_router,
+    portfolio_router as strategy_execution_outcome_portfolio_router,
+)
 from app.modules.admin.api import router as admin_router
 
 # Path to the static export produced by `next build` with `output: "export"`.
@@ -188,6 +193,9 @@ app.include_router(strategy_approval_approvals_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_projects_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_triggers_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_portfolio_router, prefix=_API_PREFIX)
+app.include_router(strategy_execution_outcome_triggers_router, prefix=_API_PREFIX)
+app.include_router(strategy_execution_outcome_projects_router, prefix=_API_PREFIX)
+app.include_router(strategy_execution_outcome_portfolio_router, prefix=_API_PREFIX)
 app.include_router(system_router, prefix=_API_PREFIX)
 app.include_router(admin_router, prefix=_API_PREFIX)
 
