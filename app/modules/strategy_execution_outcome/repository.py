@@ -229,6 +229,48 @@ class StrategyExecutionOutcomeRepository:
 
         Returns a list of (project_id, trigger_id) tuples.
         """
+        latest_completed, recorded_outcome_exists = (
+            self._latest_completed_without_outcome_subqueries()
+        )
+        query = (
+            self._db.query(
+                latest_completed.c.project_id,
+                latest_completed.c.id,
+            )
+            .filter(~recorded_outcome_exists)
+            .order_by(latest_completed.c.project_id)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return [(row[0], row[1]) for row in query.all()]
+
+    def count_projects_awaiting_outcome(self) -> int:
+        """Return the count of distinct projects whose latest completed trigger
+        has no recorded outcome.
+
+        Uses the same subquery logic as list_projects_awaiting_outcome but
+        returns only the total count without the display limit applied.
+        """
+        latest_completed, recorded_outcome_exists = (
+            self._latest_completed_without_outcome_subqueries()
+        )
+        return (
+            self._db.query(latest_completed.c.project_id)
+            .filter(~recorded_outcome_exists)
+            .count()
+        )
+
+    def _latest_completed_without_outcome_subqueries(self):  # type: ignore[return]
+        """Return (latest_completed_subquery, recorded_outcome_exists_clause).
+
+        Shared subquery logic used by both list_projects_awaiting_outcome and
+        count_projects_awaiting_outcome.
+
+        latest_completed_subquery — one row per project; the latest completed
+          trigger for that project.
+        recorded_outcome_exists_clause — correlated EXISTS clause that is True
+          when the trigger already has a 'recorded' outcome.
+        """
         # Step 1 — Latest completed-trigger timestamp per project.
         latest_ts_subq = (
             self._db.query(
@@ -258,8 +300,7 @@ class StrategyExecutionOutcomeRepository:
             .subquery()
         )
 
-        # Step 3 — Exclude trigger IDs that already have a recorded outcome
-        #          (NOT EXISTS correlated subquery).
+        # Step 3 — Correlated EXISTS: True when trigger already has recorded outcome.
         recorded_outcome_exists = (
             self._db.query(StrategyExecutionOutcome.id)
             .filter(
@@ -269,67 +310,5 @@ class StrategyExecutionOutcomeRepository:
             .exists()
         )
 
-        query = (
-            self._db.query(
-                latest_completed.c.project_id,
-                latest_completed.c.id,
-            )
-            .filter(~recorded_outcome_exists)
-            .order_by(latest_completed.c.project_id)
-        )
-
-        if limit is not None:
-            query = query.limit(limit)
-
-        return [(row[0], row[1]) for row in query.all()]
-
-    def count_projects_awaiting_outcome(self) -> int:
-        """Return the count of distinct projects whose latest completed trigger
-        has no recorded outcome.
-
-        Uses the same logic as list_projects_awaiting_outcome but returns
-        only the total count without the display limit applied.
-        """
-        # Latest completed-trigger timestamp per project.
-        latest_ts_subq = (
-            self._db.query(
-                StrategyExecutionTrigger.project_id,
-                func.max(StrategyExecutionTrigger.created_at).label("max_created_at"),
-            )
-            .filter(StrategyExecutionTrigger.status == "completed")
-            .group_by(StrategyExecutionTrigger.project_id)
-            .subquery()
-        )
-
-        latest_completed = (
-            self._db.query(
-                StrategyExecutionTrigger.id,
-                StrategyExecutionTrigger.project_id,
-            )
-            .join(
-                latest_ts_subq,
-                (StrategyExecutionTrigger.project_id == latest_ts_subq.c.project_id)
-                & (
-                    StrategyExecutionTrigger.created_at
-                    == latest_ts_subq.c.max_created_at
-                ),
-            )
-            .filter(StrategyExecutionTrigger.status == "completed")
-            .subquery()
-        )
-
-        recorded_outcome_exists = (
-            self._db.query(StrategyExecutionOutcome.id)
-            .filter(
-                StrategyExecutionOutcome.execution_trigger_id == latest_completed.c.id,
-                StrategyExecutionOutcome.status == "recorded",
-            )
-            .exists()
-        )
-
-        return (
-            self._db.query(latest_completed.c.project_id)
-            .filter(~recorded_outcome_exists)
-            .count()
-        )
+        return latest_completed, recorded_outcome_exists
 
