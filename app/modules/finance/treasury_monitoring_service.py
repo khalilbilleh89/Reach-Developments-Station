@@ -65,20 +65,13 @@ class TreasuryMonitoringService:
         ``liquidity_ratio`` is None when the portfolio spans more than one
         currency (the ratio is mathematically invalid across currencies).
         """
-        # --- Cash position: total recognized revenue grouped by currency ---
+        # --- Cash position: total paid installments grouped by contract currency ---
+        # Uses _get_cash_position_grouped() which queries paid installment sums
+        # directly from ContractPaymentSchedule, grouped by SalesContract.currency.
         revenue_overview = self._revenue_svc.get_total_recognized_revenue()
-        # Build cash_position grouped dict from portfolio aging
-        # (revenue_overview still returns scalar totals; we use aging for grouping)
-        # We approximate cash position as scalar divided by currency count or
-        # use a dedicated grouped query via the aging service.
-        # Here we use the per-project aging + revenue svc to build currency groups.
-        # For simplicity: get aging currencies and group revenue by those currencies.
         aging_overview = self._aging_svc.get_portfolio_aging()
 
-        # Cash position grouped = recognized revenue from revenue_overview,
-        # approximated by attaching currencies from aging if available.
-        # The most accurate grouping: use portfolio_summary_service helpers.
-        # For now, build as scalar with currency context from contracts.
+        # Determine all currencies present in the portfolio
         currencies_set = set(revenue_overview.currencies) | set(aging_overview.currencies)
         all_currencies = sorted(currencies_set)
 
@@ -134,9 +127,9 @@ class TreasuryMonitoringService:
                     break
 
         # --- Per-project exposure entries ---
-        total_receivables_float = round(total_receivables, 2)
+        portfolio_receivables = round(total_receivables, 2)
         project_exposures = self._build_project_exposures(
-            cashflow, next_month, total_receivables_float
+            cashflow, next_month, portfolio_receivables
         )
 
         return TreasuryMonitoringResponse(

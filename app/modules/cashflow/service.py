@@ -364,7 +364,7 @@ class CashflowService:
     # ------------------------------------------------------------------
 
     def _build_forecast_response(
-        self, forecast: "CashflowForecast", project: "Project"
+        self, forecast: CashflowForecast, project: Project
     ) -> CashflowForecastResponse:
         """Construct a denomination-safe CashflowForecastResponse from an ORM object.
 

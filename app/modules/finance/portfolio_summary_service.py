@@ -18,7 +18,7 @@ performs portfolio-level aggregation on top of their outputs.
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -103,7 +103,7 @@ class PortfolioSummaryService:
         if len(all_currencies) <= 1 and aging_overview.total_outstanding > 0:
             total_overdue = sum(overdue_grouped.values())
             total_outstanding = sum(receivables_grouped.values())
-            overdue_pct: float | None = round(
+            overdue_pct: Optional[float] = round(
                 min(total_overdue / total_outstanding * 100, 100.0), 4
             ) if total_outstanding > 0 else 0.0
         elif len(all_currencies) <= 1:
