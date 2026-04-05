@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import type { PricingStatus, UnitPricingRecord, UnitPricingRecordSave } from "@/lib/units-types";
 import { formatAmount } from "@/lib/format-utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import styles from "@/styles/projects.module.css";
 
 interface EditPricingModalProps {
@@ -58,7 +59,7 @@ export function EditPricingModal({
   const [adjustment, setAdjustment] = useState(
     existing != null ? String(existing.manual_adjustment) : "0",
   );
-  const [currency, setCurrency] = useState(existing?.currency ?? "AED");
+  const [currency, setCurrency] = useState(existing?.currency ?? DEFAULT_CURRENCY);
   const [pricingStatus, setPricingStatus] = useState<PricingStatus>(
     existing?.pricing_status ?? "draft",
   );
@@ -70,7 +71,7 @@ export function EditPricingModal({
   useEffect(() => {
     setBasePrice(existing != null ? String(existing.base_price) : "");
     setAdjustment(existing != null ? String(existing.manual_adjustment) : "0");
-    setCurrency(existing?.currency ?? "AED");
+    setCurrency(existing?.currency ?? DEFAULT_CURRENCY);
     setPricingStatus(existing?.pricing_status ?? "draft");
     setNotes(existing?.notes ?? "");
     setError(null);

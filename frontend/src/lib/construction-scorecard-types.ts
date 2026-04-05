@@ -38,7 +38,7 @@ export interface ConstructionProjectScorecard {
   /** ID of the approved baseline comparison set; null when none */
   approved_baseline_set_id: string | null;
   /**
-   * Total comparison amount from the approved baseline set lines (AED).
+   * Total comparison amount from the approved baseline set lines (project currency).
    * Decimal serialised as string. Null when has_approved_baseline is false.
    */
   approved_baseline_amount: string | null;
@@ -46,13 +46,13 @@ export interface ConstructionProjectScorecard {
   approved_at: string | null;
 
   /**
-   * Sum of all active construction cost records for this project (AED).
+   * Sum of all active construction cost records for this project (project currency).
    * Decimal serialised as string.
    */
   current_forecast_amount: string;
 
   /**
-   * Absolute cost variance (current_forecast - approved_baseline) (AED).
+   * Absolute cost variance (current_forecast - approved_baseline) (project currency).
    * Decimal serialised as string. Positive → overrun; negative → saving.
    * Null when has_approved_baseline is false.
    */
@@ -65,7 +65,7 @@ export interface ConstructionProjectScorecard {
   cost_status: ConstructionHealthStatus;
 
   /**
-   * Sum of active construction cost records with category 'contingency' (AED).
+   * Sum of active construction cost records with category 'contingency' (project currency).
    * Decimal serialised as string.
    */
   contingency_amount: string;

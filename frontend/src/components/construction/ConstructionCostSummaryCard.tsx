@@ -9,6 +9,7 @@
 
 import React from "react";
 import type { ConstructionCostSummary } from "@/lib/construction-types";
+import { DEFAULT_CURRENCY } from "@/lib/currency-constants";
 import styles from "@/styles/construction.module.css";
 
 interface ConstructionCostSummaryCardProps {
@@ -30,7 +31,7 @@ function varianceClass(value: string | number): string {
 
 export function ConstructionCostSummaryCard({
   summary,
-  currency = "AED",
+  currency = DEFAULT_CURRENCY,
 }: ConstructionCostSummaryCardProps) {
   const categories = Object.entries(summary.by_category);
 

@@ -37,12 +37,12 @@ export type PortfolioCostVarianceFlagType =
 export interface PortfolioCostVarianceSummary {
   /** Number of projects with at least one active comparison set */
   projects_with_comparison_sets: number;
-  /** Sum of all baseline amounts across active comparison lines (AED) */
+  /** Sum of all baseline amounts across active comparison lines (project currency) */
   total_baseline_amount: number;
-  /** Sum of all comparison amounts across active comparison lines (AED) */
+  /** Sum of all comparison amounts across active comparison lines (project currency) */
   total_comparison_amount: number;
   /**
-   * Total variance (comparison - baseline) across active lines (AED).
+   * Total variance (comparison - baseline) across active lines (project currency).
    * Positive → net overrun; negative → net saving.
    */
   total_variance_amount: number;
@@ -59,12 +59,12 @@ export interface PortfolioCostVarianceProjectCard {
   comparison_set_count: number;
   /** Stage of the most recently created active comparison set; null if none */
   latest_comparison_stage: string | null;
-  /** Sum of baseline amounts across all active comparison lines (AED) */
+  /** Sum of baseline amounts across all active comparison lines (project currency) */
   baseline_total: number;
-  /** Sum of comparison amounts across all active comparison lines (AED) */
+  /** Sum of comparison amounts across all active comparison lines (project currency) */
   comparison_total: number;
   /**
-   * Net variance (comparison - baseline) across all active lines (AED).
+   * Net variance (comparison - baseline) across all active lines (project currency).
    * Positive → overrun; negative → saving.
    */
   variance_amount: number;

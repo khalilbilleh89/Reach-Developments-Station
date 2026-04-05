@@ -56,6 +56,16 @@ jest.mock("@/lib/format-utils", () => {
       const sign = v < 0 ? "-" : "";
       return `AED ${sign}${currencyFormatter.format(Math.abs(v))}`;
     },
+    formatAmount: (v: number, currency: string) => {
+      if (currency === "AED") {
+        return `AED ${currencyFormatter.format(v)}`;
+      }
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 0,
+      }).format(v);
+    },
   };
 });
 
