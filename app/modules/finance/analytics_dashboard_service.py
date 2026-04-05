@@ -193,12 +193,25 @@ class AnalyticsDashboardService:
             r[0]
             for r in self.db.query(FactCollections.currency).distinct().all()
         }
-        all_currencies = sorted(revenue_currencies | collections_currencies)
+        if latest_date is not None:
+            receivables_currencies = {
+                r[0]
+                for r in self.db.query(FactReceivablesSnapshot.currency)
+                .filter(FactReceivablesSnapshot.snapshot_date == latest_date)
+                .distinct()
+                .all()
+            }
+        else:
+            receivables_currencies = set()
+        efficiency_currencies = revenue_currencies | collections_currencies
+        all_currencies = sorted(
+            revenue_currencies | collections_currencies | receivables_currencies
+        )
 
-        # collection_efficiency is only valid when all facts share a single
-        # currency.  Set to None for multi-currency portfolios so callers cannot
-        # silently consume a cross-currency ratio.
-        multi_currency = len(all_currencies) > 1
+        # collection_efficiency is only valid when revenue and collections share
+        # a single currency. Set to None for multi-currency portfolios so callers
+        # cannot silently consume a cross-currency ratio.
+        multi_currency = len(efficiency_currencies) > 1
         if multi_currency:
             collection_efficiency: Optional[float] = None
         else:
