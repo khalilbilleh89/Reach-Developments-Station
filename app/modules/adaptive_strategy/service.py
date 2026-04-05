@@ -320,15 +320,7 @@ class AdaptiveStrategyService:
             and confidence_score != 0.5
             and sample_size > 0
         )
-        changed = (
-            raw_best is not None
-            and adaptive_best is not None
-            and (
-                raw_best.release_strategy != adaptive_best.release_strategy
-                or raw_best.price_adjustment_pct != adaptive_best.price_adjustment_pct
-                or raw_best.phase_delay_months != adaptive_best.phase_delay_months
-            )
-        )
+        changed = _strategies_differ(raw_best, adaptive_best)
 
         adjusted_reason = _build_adjusted_reason(
             confidence_score, confidence_band, sample_size, changed
@@ -464,6 +456,21 @@ class AdaptiveStrategyService:
             top_low_confidence_projects=top_low,
             project_cards=cards,
         )
+
+
+def _strategies_differ(raw: object, adaptive: object) -> bool:
+    """Return True when the two SimulationResult objects represent different strategies.
+
+    Compares release_strategy, price_adjustment_pct, and phase_delay_months.
+    Returns False when either argument is None.
+    """
+    if raw is None or adaptive is None:
+        return False
+    return (
+        raw.release_strategy != adaptive.release_strategy
+        or raw.price_adjustment_pct != adaptive.price_adjustment_pct
+        or raw.phase_delay_months != adaptive.phase_delay_months
+    )
 
 
 def _card_changed(card: PortfolioAdaptiveStrategyProjectCard) -> bool:

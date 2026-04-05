@@ -212,13 +212,15 @@ class TestComputeAdjustedScore:
         assert result == 0.0
 
     def test_negative_irr_with_high_confidence(self):
-        # Negative IRR with high confidence: the proportional adjustment still
-        # applies — negative × (1 + positive_weight) = more negative.
-        # The influence model scales proportionally regardless of sign.
+        # Negative IRR with high confidence: multiplying by (1 + positive_weight)
+        # where weight > 0 makes a negative number MORE negative.
+        # e.g. raw=-0.05, weight=+0.3, adjusted = -0.05 * 1.03 = -0.0515
+        # -0.0515 < -0.05 (further from zero, i.e. more negative).
         raw = -0.05
         result = compute_adjusted_score(raw, 0.9, 10)
-        # adjusted = raw * (1 + 0.3*0.10) = -0.05 * 1.03 = -0.0515 (more negative)
-        assert result < raw  # proportional scale makes negative IRR more negative
+        expected = raw * (1 + 0.3 * 0.10)  # -0.0515
+        assert abs(result - expected) < 1e-9
+        assert result < raw  # more negative than the raw value
 
 
 # ---------------------------------------------------------------------------
