@@ -32,6 +32,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.constants.currency import DEFAULT_CURRENCY, SUPPORTED_CURRENCIES
 from app.core.dependencies import get_db
 from app.modules.auth.security import get_current_user_payload
 from app.modules.settings.schemas import (
@@ -51,6 +52,8 @@ from app.modules.settings.schemas import (
 from app.modules.settings.service import SettingsService
 
 router = APIRouter(prefix="/settings", tags=["Settings"], dependencies=[Depends(get_current_user_payload)])
+
+system_router = APIRouter(prefix="/system", tags=["System"], dependencies=[Depends(get_current_user_payload)])
 
 DbDep = Annotated[Session, Depends(get_db)]
 
@@ -263,3 +266,26 @@ def delete_project_template(
 ) -> Response:
     service.delete_project_template(template_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# System — supported currencies endpoint
+# ---------------------------------------------------------------------------
+
+
+@system_router.get("/currencies", tags=["System"])
+def get_supported_currencies() -> dict:
+    """Return the platform's authoritative currency configuration.
+
+    This endpoint is the single source of truth for supported currencies.
+    Frontend components should fetch from here instead of maintaining a
+    duplicate local list.
+
+    Response fields:
+        default_currency       — platform default ISO 4217 code
+        supported_currencies   — ordered list of all accepted ISO 4217 codes
+    """
+    return {
+        "default_currency": DEFAULT_CURRENCY,
+        "supported_currencies": SUPPORTED_CURRENCIES,
+    }

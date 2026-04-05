@@ -534,3 +534,79 @@ PR-CURRENCY-003 does not introduce exchange-rate tables, FX conversion
 services, or automatic normalization.  Its sole purpose is to make
 unsafe arithmetic fail explicitly rather than silently.  FX conversion
 is deferred to a future PR.
+
+---
+
+## Currency Governance Rules (PR-CURRENCY-005)
+
+### Authoritative Supported Currency List
+
+The backend is the single source of truth for the platform's supported
+currency list.  The canonical list lives in
+`app/core/constants/currency.py` as `SUPPORTED_CURRENCIES`.
+
+**Rule:** Frontend components must not maintain their own hardcoded
+currency list that could diverge from the backend.  Use the static
+constants in `frontend/src/lib/currency-constants.ts` for synchronous
+access (type guards, form validation), and keep that file in sync with
+the backend constants in the same PR whenever the list changes.
+
+**Backend API:** `GET /api/v1/system/currencies` exposes the
+authoritative currency configuration at runtime:
+
+```json
+{
+  "default_currency": "AED",
+  "supported_currencies": ["AED", "JOD", "USD", "EUR"]
+}
+```
+
+### Base Currency Immutability Rule
+
+A project's `base_currency` is immutable once financial records have
+been linked to it.  Attempting to change `base_currency` via
+`PATCH /api/v1/projects/{id}` after any of the following records exist
+will return HTTP 400:
+
+- Scenarios (`scenarios.project_id`)
+- Feasibility runs (`feasibility_runs.project_id`)
+- Construction cost records (`construction_cost_records.project_id`)
+- Land parcels (`land_parcels.project_id`)
+
+**Rationale:** changing the governing currency of a project after
+financial data exists would silently invalidate all monetary totals,
+aggregation guards, and portfolio roll-ups for that project.
+
+### Currency Audit Tools
+
+Two tools are provided to detect currency anomalies in persisted data:
+
+1. **Admin API endpoint** — `GET /api/v1/admin/currency-audit`
+   Returns a structured JSON report of all detected anomalies.
+
+2. **CLI tool** — `scripts/currency_audit.py`
+   Runs the same scan and prints a human-readable summary.  Exits with
+   code 0 if clean, 1 if issues are found.
+
+#### Issue Types Detected
+
+| Type | Description |
+|---|---|
+| `mismatch` | `record.currency` ≠ `project.base_currency` |
+| `suspicious_default` | `record.currency` is the platform default but `project.base_currency` is not — suggests the record was not initialised with the project's currency |
+| `null_currency` | `record.currency` is NULL or empty |
+
+#### Tables Scanned
+
+- `feasibility_assumptions` (via `feasibility_runs.project_id`)
+- `construction_cost_records`
+- `construction_cost_comparison_sets`
+- `land_parcels`
+- `financial_scenario_runs` (via `scenarios.project_id`)
+
+### No Silent Currency Drift
+
+Currency lists, project governing currencies, and record denominations
+must all remain consistent.  The audit tools provide operational
+visibility; the base currency lock and supported-currency API provide
+enforcement.  Together these form the Currency Governance Layer.

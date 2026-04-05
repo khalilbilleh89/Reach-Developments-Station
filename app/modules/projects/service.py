@@ -68,6 +68,18 @@ class ProjectService:
 
     def update_project(self, project_id: str, data: ProjectUpdate) -> ProjectResponse:
         project = self._require_project(project_id)
+        # Guard: base_currency is immutable once financial records exist
+        if "base_currency" in data.model_fields_set and data.base_currency != project.base_currency:
+            if self.repo.has_financial_records(project_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Cannot change base_currency after financial records exist "
+                        "for this project. Currency is locked once scenarios, "
+                        "feasibility runs, construction costs, or land parcels "
+                        "have been recorded."
+                    ),
+                )
         # Validate date range using merged values: payload overrides persisted
         effective_start = (
             data.start_date if "start_date" in data.model_fields_set else project.start_date

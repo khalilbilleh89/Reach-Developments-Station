@@ -44,7 +44,7 @@ from app.modules.cashflow.api import router as cashflow_router
 from app.modules.reservations.api import router as reservations_router
 from app.modules.receivables.api import router as receivables_router
 from app.modules.construction.api import router as construction_router
-from app.modules.settings.api import router as settings_router
+from app.modules.settings.api import router as settings_router, system_router
 from app.modules.scenario.api import router as scenario_router
 from app.modules.concept_design.api import router as concept_design_router
 from app.modules.portfolio.api import router as portfolio_router
@@ -79,6 +79,7 @@ from app.modules.strategy_execution_trigger.api import (
     triggers_router as strategy_execution_trigger_triggers_router,
     portfolio_router as strategy_execution_trigger_portfolio_router,
 )
+from app.modules.admin.api import router as admin_router
 
 # Path to the static export produced by `next build` with `output: "export"`.
 # Next.js writes self-contained HTML files and assets to this directory.
@@ -187,6 +188,8 @@ app.include_router(strategy_approval_approvals_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_projects_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_triggers_router, prefix=_API_PREFIX)
 app.include_router(strategy_execution_trigger_portfolio_router, prefix=_API_PREFIX)
+app.include_router(system_router, prefix=_API_PREFIX)
+app.include_router(admin_router, prefix=_API_PREFIX)
 
 # Mount Next.js compiled static chunks (/_next/static/*) when the build exists.
 # These are the JS/CSS assets referenced by the pre-rendered HTML pages.
