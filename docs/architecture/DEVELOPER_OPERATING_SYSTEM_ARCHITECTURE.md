@@ -610,3 +610,91 @@ Currency lists, project governing currencies, and record denominations
 must all remain consistent.  The audit tools provide operational
 visibility; the base currency lock and supported-currency API provide
 enforcement.  Together these form the Currency Governance Layer.
+
+---
+
+## API Response Contract Rules (PR-CURRENCY-007)
+
+The following rules govern all finance, portfolio, cashflow, and aging
+API response schemas.  These rules are enforced at the schema layer and
+must be respected in every service that produces monetary responses.
+
+### Rule A — Portfolio-Wide Money Must Be Grouped
+
+If a response exposes monetary totals that can aggregate across
+multiple project currencies, those fields must be typed as:
+
+```python
+Dict[str, float]  # ISO 4217 currency code → amount
+```
+
+Example schemas:
+- `PortfolioFinancialSummaryResponse.total_revenue_recognized`
+- `TreasuryMonitoringResponse.cash_position`
+- `PortfolioCollectionsSummary.overdue_balance`
+- `PortfolioCostVarianceSummary.total_baseline_amount`
+- `PortfolioCashflowForecastResponse.currencies`
+
+### Rule B — Project-Scoped Money Must Include Explicit Currency
+
+If a response is scoped to a single project (or single contract), scalar
+monetary totals are permitted but the response **must** include:
+
+```python
+currency: str  # ISO 4217 currency code, from project.base_currency
+```
+
+Example schemas:
+- `PortfolioProjectCard.currency`
+- `ProjectRevenueSummaryResponse.currency`
+- `ProjectAgingResponse.currency`
+- `ContractAgingResponse.currency`
+- `CashflowForecastResponse.currency`
+- `ProjectFinancialSummaryEntry.currency`
+- `PortfolioAbsorptionProjectCard.currency`
+- `PortfolioCostVarianceProjectCard.currency`
+
+### Rule C — Ratios Derived From Multi-Currency Money Must Be Null-Safe
+
+If a ratio (percentage, rate, efficiency metric) is derived from
+monetary totals that may span multiple currencies, the field must be:
+
+```python
+Optional[float]  # None when multi-currency makes the ratio invalid
+```
+
+Example:
+- `TreasuryMonitoringResponse.liquidity_ratio` → `None` for multi-currency portfolios
+- `PortfolioKPI.collection_efficiency` → `None` when currencies > 1
+- `PortfolioFinancialSummaryResponse.overdue_receivables_pct` → `None` for multi-currency
+
+### Rule D — No Anonymous Money in API Contracts
+
+No response schema may expose a monetary field without either:
+1. A grouped currency-keyed dict (`Dict[str, float]`), or
+2. An explicit `currency: str` field scoping the value.
+
+This rule applies to all schemas modified after PR-CURRENCY-007.
+Any new financial response schemas must comply from creation.
+
+### Rule E — Portfolio-Wide Currency Inventory
+
+Portfolio-level responses should include a `currencies: List[str]` field
+listing all ISO 4217 currency codes present in the aggregated data.
+This allows API consumers to reason about denomination diversity
+without iterating all grouped dict keys.
+
+### Forbidden Patterns
+
+The following patterns are forbidden in API response schemas:
+
+```python
+# ❌ Anonymous money — no currency context
+total_revenue: float
+
+# ❌ Portfolio-wide scalar — cannot be valid across currencies
+portfolio_cash: float
+
+# ❌ Ratio across currencies — mathematically invalid
+cross_currency_rate: float
+```
