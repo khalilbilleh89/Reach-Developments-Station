@@ -1,1 +1,0 @@
-"""Settings business domain module."""
