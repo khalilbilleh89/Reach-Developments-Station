@@ -1,3 +1,0 @@
-"""
-app.core.middleware package.
-"""
