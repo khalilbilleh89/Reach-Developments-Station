@@ -14,7 +14,7 @@ export default function HomePage() {
   const { state } = useSession();
 
   useEffect(() => {
-    if (state.status === "authenticated") router.replace("/settings/");
+    if (state.status === "authenticated") router.replace("/projects/");
     if (state.status === "anonymous") router.replace("/login/");
   }, [state, router]);
 

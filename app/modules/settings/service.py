@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.patching import resolve_updates
 from app.modules.audit.service import record_event
 from app.modules.settings.models import (
     CountryApprovalThreshold,
@@ -51,28 +52,6 @@ THRESHOLD_FIELDS = (
 
 def _snapshot(instance: object, fields: tuple[str, ...]) -> dict[str, Any]:
     return {field: getattr(instance, field) for field in fields}
-
-
-def _resolve_updates(
-    changes: dict[str, object], *, fields: tuple[str, ...], clearable: frozenset[str]
-) -> dict[str, object]:
-    """Turn a PATCH body into the assignments to apply.
-
-    The routes build ``changes`` with ``exclude_unset``, so an absent key and an
-    explicit ``null`` arrive differently and must stay different: absent says
-    nothing about the field, ``null`` says the value is gone. A ``null`` aimed at
-    a column that cannot hold one is a client error, not something to drop on the
-    floor and answer 200 to.
-    """
-    resolved: dict[str, object] = {}
-    for field in fields:
-        if field not in changes:
-            continue
-        value = changes[field]
-        if value is None and field not in clearable:
-            raise ValidationError(f"{field} cannot be null.")
-        resolved[field] = value.strip() if isinstance(value, str) else value
-    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -164,7 +143,7 @@ def update_currency(
     **changes: object,
 ) -> Currency:
     currency = get_currency(session, currency_id)
-    updates = _resolve_updates(changes, fields=_CURRENCY_UPDATABLE, clearable=_CURRENCY_CLEARABLE)
+    updates = resolve_updates(changes, fields=_CURRENCY_UPDATABLE, clearable=_CURRENCY_CLEARABLE)
     if updates.get("is_active") is False:
         _guard_currency_still_needed(session, currency.id)
     before = _snapshot(currency, _CURRENCY_FIELDS)
@@ -297,7 +276,7 @@ def update_country_pack(
     **changes: object,
 ) -> CountryPack:
     pack = get_country_pack(session, country_pack_id)
-    updates = _resolve_updates(changes, fields=_PACK_UPDATABLE, clearable=frozenset())
+    updates = resolve_updates(changes, fields=_PACK_UPDATABLE, clearable=frozenset())
     # Validate the state the pack will end up in, not only the fields the request
     # happens to name. Reactivating a retired pack revives its stored currency
     # reference too, and that currency may have been retired in the meantime —
@@ -495,7 +474,7 @@ def update_tax_rule(
     rule = get_tax_rule(session, tax_rule_id)
     before = _snapshot(rule, _TAX_FIELDS)
 
-    updates = _resolve_updates(changes, fields=_TAX_UPDATABLE, clearable=_TAX_CLEARABLE)
+    updates = resolve_updates(changes, fields=_TAX_UPDATABLE, clearable=_TAX_CLEARABLE)
     # Validate the values the row will actually hold, not the ones it holds now:
     # clearing an end date reopens the rule and can collide with its successor.
     valid_from = updates.get("valid_from", rule.valid_from)
@@ -589,6 +568,54 @@ def get_reference_value(session: Session, reference_value_id: uuid.UUID) -> Refe
     return value
 
 
+def require_active_reference_value(
+    session: Session,
+    *,
+    category: str,
+    code: str,
+    country_pack_id: uuid.UUID | None,
+) -> ReferenceValue:
+    """Resolve a configured code, or refuse the assignment that named it.
+
+    The public entry point other modules use to validate a reference code. It
+    exists so that no domain reaches into ``reference_values`` itself, and so
+    that "which value applies here" is answered in one place: a country-scoped
+    value shadows a global one of the same category and code.
+
+    Only *newly assigned* codes go through this. A record that already carries a
+    since-retired code keeps it — history is not rewritten because configuration
+    moved on.
+    """
+    normalized = code.strip()
+    scoped = (
+        session.scalars(
+            select(ReferenceValue).where(
+                ReferenceValue.country_pack_id == country_pack_id,
+                ReferenceValue.category == category,
+                ReferenceValue.code == normalized,
+            )
+        ).first()
+        if country_pack_id is not None
+        else None
+    )
+    value = (
+        scoped
+        or session.scalars(
+            select(ReferenceValue).where(
+                ReferenceValue.country_pack_id.is_(None),
+                ReferenceValue.category == category,
+                ReferenceValue.code == normalized,
+            )
+        ).first()
+    )
+
+    if value is None:
+        raise ValidationError(f"No configured {category} value named {normalized!r}.")
+    if not value.is_active:
+        raise ValidationError(f"The {category} value {normalized!r} is no longer active.")
+    return value
+
+
 def create_reference_value(
     session: Session,
     *,
@@ -660,7 +687,7 @@ def update_reference_value(
     value = get_reference_value(session, reference_value_id)
     before = _snapshot(value, _REFERENCE_FIELDS)
 
-    updates = _resolve_updates(changes, fields=_REFERENCE_UPDATABLE, clearable=_REFERENCE_CLEARABLE)
+    updates = resolve_updates(changes, fields=_REFERENCE_UPDATABLE, clearable=_REFERENCE_CLEARABLE)
     valid_from = updates.get("valid_from", value.valid_from)
     valid_to = updates.get("valid_to", value.valid_to)
     if valid_from and valid_to and valid_to < valid_from:

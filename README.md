@@ -32,7 +32,7 @@ or rules engines, no microservices. The full forbidden list lives in
 | Completed                |      2 |
 | Remaining                |     10 |
 
-Current: **PR-MVP-01 — Governance, Country Packs & Access**.
+Current: **PR-MVP-02 — Project, Land & Permits**.
 Next: **PR-MVP-02 — Project, Land & Permits**.
 
 The system now has authentication, the fixed role catalogue, country
@@ -86,10 +86,11 @@ there is no permission table and no policy language.
 │   └── modules/
 │       ├── access/             identity, sessions, fixed roles, user administration
 │       ├── settings/           currencies, country packs, tax rules, lookups, thresholds
+│       ├── projects/           projects, access, land, planning, permits, documents
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
-│   ├── src/app/                login, settings shell, design tokens
-│   ├── src/components/         UI pieces and settings sections
+│   ├── src/app/                login, projects workspace, settings shell, design tokens
+│   ├── src/components/         UI pieces, project workspace tabs, settings sections
 │   └── src/lib/api/            the only place the browser calls the API
 ├── docs/                       architecture, roadmap, engineering rules, deployment
 ├── scripts/                    Render build and start commands

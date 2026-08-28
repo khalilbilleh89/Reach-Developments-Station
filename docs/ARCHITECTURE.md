@@ -150,7 +150,7 @@ in advance. No circular imports.
 
 ---
 
-## 7. Current state (through PR-MVP-01)
+## 7. Current state (through PR-MVP-02)
 
 ```text
 app/
@@ -160,12 +160,30 @@ app/
 ├── core/correlation.py      per-request correlation identity
 ├── core/database.py         the one engine, the one session factory
 ├── core/errors.py           service error types, mapped to status codes in one place
-├── db/base.py               the one declarative base
+├── core/patching.py         PATCH change-set semantics (omitted vs explicit null)
+├── db/base.py               the one declarative base, money/rate column types
 └── modules/
     ├── access/              identity, sessions, fixed roles, user administration
     ├── settings/            currencies, country packs, tax rules, lookups, thresholds
+    ├── projects/            projects, project access, land, planning, permits, documents
     └── audit/               append-only governance history
 ```
+
+The `projects` module carries a fifth file beside the usual four:
+
+```text
+app/modules/projects/
+├── models.py
+├── schemas.py
+├── permissions.py    the project security boundary
+├── service.py
+└── api.py
+```
+
+`permissions.py` earns its place because project-scoped authorization is a
+first-class concern every nested route depends on, and encoding it separately in
+each route is how one route ends up missing it. It is four small functions and
+one dependency — not a policy engine, and not a generic RBAC framework.
 
 ### Authentication
 
@@ -183,13 +201,28 @@ The raw token exists only in the browser cookie. Passwords are hashed with
 Argon2id. There is no permission table and no policy language: authorization is
 explicit role checks against the eleven fixed system roles.
 
+### Project access
+
+`user_project_access` arrived in PR-MVP-02, keyed to a real `Project` with a real
+foreign key. It answers exactly one question — may this user open this project —
+and carries no role, no resource type and no permission string. Roles stay in the
+fixed catalogue; a global role decides what someone may do *inside* a project,
+never which projects exist for them.
+
+A System Administrator reaches every project without a membership row. Everyone
+else needs an active one, and a project they may not see reports **404** rather
+than 403: a 403 would confirm that an identifier names something real.
+
 ### Deferred by design
 
-Project-scoped access (`user_project_access`) waits for PR-MVP-02, when a real
-`Project` exists to key it to. No orphan identifiers are created in advance.
+**Phase-scoped access waits for PR-MVP-03.** The MVP specification describes
+project *and phase* row access, but `Phase` does not exist yet. No nullable
+`phase_id`, no placeholder Phase and no generic `resource_type`/`resource_id`
+table was created in advance — when Phase is real, phase scoping can be added
+against a real foreign key if the product still needs it.
 
-No real-estate domain exists yet beyond this control layer. Domains arrive on the
-schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
+No inventory, pricing, sales, collections, construction or cashflow domain
+exists. Domains arrive on the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

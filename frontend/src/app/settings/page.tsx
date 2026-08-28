@@ -84,6 +84,13 @@ export default function SettingsPage() {
           <button
             className="button button-small"
             type="button"
+            onClick={() => router.push("/projects/")}
+          >
+            Projects
+          </button>
+          <button
+            className="button button-small"
+            type="button"
             onClick={() => void signOut().then(() => router.replace("/login/"))}
           >
             Sign out
