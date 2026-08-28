@@ -29,13 +29,14 @@ target_metadata = Base.metadata
 def run_migrations_offline() -> None:
     """Emit SQL to stdout without connecting to a database (``alembic --sql``).
 
-    The password is masked: offline mode never opens a connection and uses the
-    URL only to select a dialect, so carrying a live credential into generated
-    SQL — or into any error that renders the URL — buys nothing.
+    Offline mode never opens a connection and uses the URL only to select a
+    dialect, so no credential is carried in. ``safe_database_url`` is the one
+    redaction helper: unlike ``render_as_string(hide_password=True)`` it also
+    masks libpq's ``?password=`` query-parameter form.
     """
     settings = get_settings()
     context.configure(
-        url=settings.sqlalchemy_database_url.render_as_string(hide_password=True),
+        url=settings.safe_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,

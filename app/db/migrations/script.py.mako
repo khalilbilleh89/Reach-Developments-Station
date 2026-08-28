@@ -13,10 +13,15 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 ${imports if imports else ""}
-revision: str = ${repr(up_revision)}
-down_revision: str | None = ${repr(down_revision)}
-branch_labels: str | Sequence[str] | None = ${repr(branch_labels)}
-depends_on: str | Sequence[str] | None = ${repr(depends_on)}
+## repr() renders str literals with single quotes; this project's ruff profile
+## formats with double quotes, so a generated revision would fail
+## `ruff format --check .` in CI until someone reformatted it by hand.
+## Revision ids are alphanumeric by convention, so the swap is safe, and it
+## leaves None and tuple forms (merge revisions) rendering correctly.
+revision: str = ${repr(up_revision).replace("'", '"')}
+down_revision: str | Sequence[str] | None = ${repr(down_revision).replace("'", '"')}
+branch_labels: str | Sequence[str] | None = ${repr(branch_labels).replace("'", '"')}
+depends_on: str | Sequence[str] | None = ${repr(depends_on).replace("'", '"')}
 
 
 def upgrade() -> None:
