@@ -21,8 +21,13 @@ if config.config_file_name is not None:
     # Keep loggers configured by the host process (uvicorn, pytest) alive.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-#: PR-MVP-00 registers no domain model, so this metadata is intentionally empty.
-#: Future roadmap PRs import their models here so autogenerate can see them.
+# Importing the model modules registers them on ``Base.metadata`` so that
+# autogenerate and the migration environment see the full schema. Each roadmap
+# PR adds its module here.
+from app.modules.access import models as access_models  # noqa: E402,F401
+from app.modules.audit import models as audit_models  # noqa: E402,F401
+from app.modules.settings import models as settings_models  # noqa: E402,F401
+
 target_metadata = Base.metadata
 
 

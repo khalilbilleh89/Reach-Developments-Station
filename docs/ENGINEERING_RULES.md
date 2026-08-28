@@ -220,6 +220,11 @@ One shape, everywhere — FastAPI's native error body:
   after every router and before the static mount. An unmatched API path returns
   `{"detail": "Not Found."}`, never the frontend's 404 HTML page. Any new router
   must be included *before* that guard.
+
+  A known consequence: the guard matches every method, so calling an existing
+  path with an unsupported method returns `404` rather than `405`. Both are the
+  JSON contract, and the alternative is HTML leaking out of the namespace, so
+  the trade is deliberate.
 - `422` — FastAPI's request validation body, unchanged.
 - `5xx` — the global handler in `app/main.py` returns
   `{"detail": "Internal server error."}` and logs the full exception

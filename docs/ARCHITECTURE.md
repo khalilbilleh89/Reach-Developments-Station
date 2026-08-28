@@ -150,19 +150,46 @@ in advance. No circular imports.
 
 ---
 
-## 7. Current state (PR-MVP-00)
+## 7. Current state (through PR-MVP-01)
 
 ```text
 app/
-├── main.py            application factory, error handling, static mount
-├── api/health.py      liveness and readiness
-├── core/config.py     environment configuration, database URL normalisation
-├── core/database.py   the one engine, the one session factory
-└── db/base.py         the one declarative base (no models yet)
+├── main.py                  application factory, middleware, error mapping, static mount
+├── api/health.py            liveness and readiness
+├── core/config.py           environment configuration, database URL normalisation
+├── core/correlation.py      per-request correlation identity
+├── core/database.py         the one engine, the one session factory
+├── core/errors.py           service error types, mapped to status codes in one place
+├── db/base.py               the one declarative base
+└── modules/
+    ├── access/              identity, sessions, fixed roles, user administration
+    ├── settings/            currencies, country packs, tax rules, lookups, thresholds
+    └── audit/               append-only governance history
 ```
 
-No business domain exists yet. Domains arrive on the schedule in
-[MVP_ROADMAP.md](MVP_ROADMAP.md).
+### Authentication
+
+Server-side opaque sessions, not JWT:
+
+```text
+Browser
+  → same-origin FastAPI          (one service, one origin, no CORS)
+  → HttpOnly SameSite=Strict cookie carrying a random token
+  → SHA-256 digest of that token stored in PostgreSQL
+  → authenticated User
+```
+
+The raw token exists only in the browser cookie. Passwords are hashed with
+Argon2id. There is no permission table and no policy language: authorization is
+explicit role checks against the eleven fixed system roles.
+
+### Deferred by design
+
+Project-scoped access (`user_project_access`) waits for PR-MVP-02, when a real
+`Project` exists to key it to. No orphan identifiers are created in advance.
+
+No real-estate domain exists yet beyond this control layer. Domains arrive on the
+schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

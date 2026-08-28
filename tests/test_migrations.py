@@ -19,6 +19,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
+HEAD_REVISION = "0001_governance_access"
 
 
 def _alembic_config() -> Config:
@@ -51,22 +52,25 @@ def empty_database(postgres: None) -> None:
     command.downgrade(_alembic_config(), "base")
 
 
-def test_baseline_upgrades_downgrades_and_upgrades_again(postgres: None) -> None:
-    """Given PostgreSQL, when the baseline is applied and reversed, then it round-trips."""
+def test_the_history_round_trips_from_empty_to_head_and_back(postgres: None) -> None:
+    """Given PostgreSQL, when every revision is applied and reversed, then it round-trips."""
     config = _alembic_config()
 
     command.upgrade(config, "head")
-    assert _current_revision() == BASELINE_REVISION
+    assert _current_revision() == HEAD_REVISION
 
     command.downgrade(config, "base")
     assert _current_revision() is None
 
     command.upgrade(config, "head")
-    assert _current_revision() == BASELINE_REVISION
+    assert _current_revision() == HEAD_REVISION
 
 
 def test_baseline_creates_no_business_schema(empty_database: None) -> None:
     """Given an empty database, when the baseline is applied, then it adds no tables.
+
+    Targets the baseline revision by name rather than ``head``: the point is
+    what *this* revision does, and that must stay true as later revisions land.
 
     The fixture guarantees the upgrade really runs, so this measures the
     revision's own effect rather than whatever was already in the database. The
@@ -75,13 +79,16 @@ def test_baseline_creates_no_business_schema(empty_database: None) -> None:
     """
     before = _public_tables()
 
-    command.upgrade(_alembic_config(), "head")
+    command.upgrade(_alembic_config(), BASELINE_REVISION)
 
     created = _public_tables() - before
     assert created <= {"alembic_version"}, (
         f"the baseline migration created business tables: {sorted(created)}"
     )
     assert "alembic_version" in _public_tables()
+
+    # Restore head so the rest of the suite still has its schema.
+    command.upgrade(_alembic_config(), "head")
 
 
 def test_baseline_is_the_single_root_of_the_migration_history(postgres: None) -> None:

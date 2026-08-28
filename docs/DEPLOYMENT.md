@@ -50,13 +50,27 @@ Do not rely on Render's current default language versions.
 
 ### Environment variables
 
-| Variable         | Production value                                     |
-| ---------------- | ---------------------------------------------------- |
-| `APP_NAME`       | `reach-developments-station`                         |
-| `APP_ENV`        | `production`                                         |
-| `APP_DEBUG`      | `false` (startup fails if true in production)         |
-| `DATABASE_URL`   | Render PostgreSQL **internal** connection URL         |
-| `API_V1_PREFIX`  | `/api/v1`                                             |
+| Variable              | Production value                                  |
+| --------------------- | ------------------------------------------------- |
+| `APP_NAME`            | `reach-developments-station`                      |
+| `APP_ENV`             | `production`                                      |
+| `APP_DEBUG`           | `false` (startup fails if true in production)     |
+| `DATABASE_URL`        | Render PostgreSQL **internal** connection URL     |
+| `API_V1_PREFIX`       | `/api/v1`                                         |
+| `SESSION_TTL_MINUTES` | `480` — optional; this is the default             |
+
+That is the complete list. In particular there is **no** JWT secret, no token
+signing key and no bootstrap admin password: sessions are opaque random tokens
+stored as SHA-256 digests, and the first administrator is created interactively.
+
+### Legacy V1 variables
+
+The Render service may still carry variables from the demolished V1
+application — a JWT algorithm and secret, an access-token expiry, a public
+frontend API URL, an admin bootstrap credential. **This application reads none
+of them.** Once the checks below pass, they can be removed from Render by hand.
+Do not have the application delete them; application code does not change Render
+configuration.
 
 Use the **internal** connection URL whenever the web service and the database
 are in the same Render region: it is faster and never leaves Render's network.
@@ -83,7 +97,33 @@ SPA fallback router to maintain.
 
 ---
 
-## 4. Post-merge verification
+## 4. Creating the first administrator
+
+The application does not create an administrator on startup. That would be a
+hidden privileged write on every boot and would require a standing password in
+the environment. It is a deliberate one-off act instead.
+
+After the service is running:
+
+1. Open the Render **Shell** for the web service.
+2. Run:
+
+   ```bash
+   python -m app.modules.access.bootstrap_admin
+   ```
+
+3. Enter the email, display name and password when prompted. The password is
+   read with `getpass`, so it is not echoed and does not enter shell history.
+4. Sign in through the application. You will be required to replace the password
+   immediately, which revokes the session and asks you to sign in again.
+
+The command refuses to run a second time while an active System Administrator
+exists: further users are created through the administration UI, where they are
+audited. It writes one audit event with source `bootstrap` and no actor.
+
+---
+
+## 5. Post-merge verification
 
 After merging to `main`, do not assume the deploy succeeded. Verify:
 
@@ -99,13 +139,38 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
 10. `GET /api/v1/health/ready` returns `200`.
 11. The root URL serves the new frontend.
 12. No old V1 routes or UI are reachable.
+13. `GET /docs`, `/redoc` and `/api/v1/openapi.json` all return **404** in
+    production. The schema enumerates every administrative endpoint, so it is
+    withheld once real APIs exist.
+14. The bootstrap command has been run and the first administrator can sign in.
+15. The schema contains exactly the expected tables and nothing from V1:
+
+    ```sql
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
+    ```
+
+    Expected after PR-MVP-01, and nothing else:
+
+    ```text
+    alembic_version, audit_events, country_approval_thresholds, country_packs,
+    currencies, reference_values, roles, tax_rules, user_roles, user_sessions,
+    users
+    ```
+
+    ```sql
+    SELECT version_num FROM alembic_version;   -- 0001_governance_access
+    SELECT count(*) FROM roles;                -- 11
+    ```
+
+    There must be no `projects` table yet: project-scoped access arrives in
+    PR-MVP-02.
 
 Do not create another Render web service. Do not create another PostgreSQL
 resource from a PR.
 
 ---
 
-## 5. Rollback
+## 6. Rollback
 
 PR-MVP-00 contains no business data migration, so rollback risk is low.
 
@@ -120,7 +185,7 @@ The legacy history remains separate and untouched.
 
 ---
 
-## 6. Local equivalent
+## 7. Local equivalent
 
 ```bash
 # Build exactly what Render builds
@@ -129,4 +194,7 @@ The legacy history remains separate and untouched.
 # Run exactly what Render runs
 export DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/reach_station"
 ./scripts/render-start.sh
+
+# Create the first administrator (once, interactively)
+python -m app.modules.access.bootstrap_admin
 ```

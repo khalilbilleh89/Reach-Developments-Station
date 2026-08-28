@@ -29,15 +29,18 @@ or rules engines, no microservices. The full forbidden list lives in
 | Scope                    | Status |
 | ------------------------ | -----: |
 | Total planned MVP PRs    |     12 |
-| Completed                |      1 |
-| Remaining                |     11 |
+| Completed                |      2 |
+| Remaining                |     10 |
 
-Current: **PR-MVP-00 — Repository Foundation & Engineering Constitution**.
-Next: **PR-MVP-01 — Governance, Country Packs & Access**.
+Current: **PR-MVP-01 — Governance, Country Packs & Access**.
+Next: **PR-MVP-02 — Project, Land & Permits**.
 
-PR-MVP-00 builds infrastructure only. There is deliberately **no business
-domain**, no authentication and no database table other than Alembic's own
-`alembic_version`.
+The system now has authentication, the fixed role catalogue, country
+configuration and an append-only audit trail. There is still **no real-estate
+domain**: no projects, inventory, pricing, sales, collections or construction.
+
+Project-scoped access is deliberately deferred to PR-MVP-02, because a
+`Project` must exist before access can be scoped to one.
 
 ---
 
@@ -61,22 +64,33 @@ one migration history, one API namespace. Full detail in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.x · Alembic · Psycopg 3 ·
-PostgreSQL 16 · Node.js 22 · Next.js (App Router, static export) · TypeScript.
+Argon2id · PostgreSQL 16 · Node.js 22 · Next.js (App Router, static export) ·
+TypeScript.
+
+**Authentication** is server-side opaque sessions in an HttpOnly,
+`SameSite=Strict` cookie — no JWT, no auth framework, no token in
+`localStorage`. Authorization is explicit checks against eleven fixed roles;
+there is no permission table and no policy language.
 
 ## Repository structure
 
 ```text
 .
 ├── app/                        FastAPI modular monolith
-│   ├── main.py                 application factory, error handling, static mount
+│   ├── main.py                 application factory, middleware, error mapping, static mount
 │   ├── api/health.py           liveness and readiness probes
-│   ├── core/config.py          environment configuration, database URL normalisation
-│   ├── core/database.py        the one engine and session factory
-│   └── db/
-│       ├── base.py             the one declarative base
-│       └── migrations/         Alembic history (root: 0000_mvp_baseline)
+│   ├── core/                   configuration, database, correlation, error types
+│   ├── db/
+│   │   ├── base.py             the one declarative base
+│   │   └── migrations/         Alembic history (root: 0000_mvp_baseline)
+│   └── modules/
+│       ├── access/             identity, sessions, fixed roles, user administration
+│       ├── settings/           currencies, country packs, tax rules, lookups, thresholds
+│       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
-│   └── src/app/                layout, page, design tokens
+│   ├── src/app/                login, settings shell, design tokens
+│   ├── src/components/         UI pieces and settings sections
+│   └── src/lib/api/            the only place the browser calls the API
 ├── docs/                       architecture, roadmap, engineering rules, deployment
 ├── scripts/                    Render build and start commands
 ├── tests/                      backend test suite
@@ -107,7 +121,17 @@ uvicorn app.main:app --reload
 
 - Liveness: <http://localhost:8000/api/v1/health/live>
 - Readiness: <http://localhost:8000/api/v1/health/ready>
-- OpenAPI: <http://localhost:8000/docs>
+- OpenAPI: <http://localhost:8000/docs> — development only; withheld in production
+
+Create the first administrator once the schema exists:
+
+```bash
+python -m app.modules.access.bootstrap_admin
+```
+
+The password is prompted for, never passed as an argument or read from the
+environment. The command refuses to run while an active System Administrator
+already exists.
 
 The backend runs without a frontend build. If `frontend/out` is absent it logs a
 warning and serves the API only.

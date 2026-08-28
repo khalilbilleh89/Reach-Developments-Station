@@ -6,6 +6,10 @@
 # be justified in the pull request template.
 
 alembic==1.19.1
+# Argon2id password hashing. Authentication is the one place a hand-rolled
+# scheme is unacceptable, so this is a justified production dependency
+# (PR-MVP-01). Used directly — no Passlib, no auth framework.
+argon2-cffi==25.1.0
 fastapi==0.141.1
 psycopg[binary]==3.3.4
 pydantic-settings==2.15.0
