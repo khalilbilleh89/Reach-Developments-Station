@@ -799,6 +799,10 @@ _PARCEL_CLEARABLE = frozenset(
     if field not in {"plot_number", "land_area", "area_unit", "is_active"}
 )
 
+#: The parcel fields denominated in the project's base currency. Writing one is
+#: what establishes a monetary fact the currency can no longer be changed under.
+_PARCEL_MONEY_FIELDS = frozenset({"purchase_price", "acquisition_fees"})
+
 #: Reference-backed parcel codes and the category each is drawn from.
 _PARCEL_REFERENCE_FIELDS = {
     "ownership_type_code": CATEGORY_OWNERSHIP_TYPE,
@@ -854,6 +858,13 @@ def create_parcel(
     area_unit: str | None = None,
     **fields: object,
 ) -> LandParcel:
+    # The country pack decides which ownership, title and zoning codes are legal
+    # here, so read it under the project lock: a concurrent move to another
+    # jurisdiction must either land first — and be validated against — or wait
+    # behind this parcel and then be refused by the country-pack guard, which
+    # will now see a child record. There is no third outcome.
+    project = _lock_project(session, project.id)
+
     _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=fields)
     if area_unit is None:
         pack = session.get(CountryPack, project.country_pack_id)
@@ -905,6 +916,15 @@ def update_parcel(
     **changes: object,
 ) -> LandParcel:
     updates = resolve_updates(changes, fields=_PARCEL_UPDATABLE, clearable=_PARCEL_CLEARABLE)
+
+    # A parcel carrying no cost does not lock the base currency, so the write
+    # that first puts money on it is the one that has to serialise against a
+    # currency change. Locking whenever the amount is named — rather than only
+    # when it moves from null — costs one row lock and removes the case
+    # analysis.
+    if not _PARCEL_MONEY_FIELDS.isdisjoint(updates):
+        project = _lock_project(session, project.id)
+
     _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=dict(updates))
     if "plot_number" in updates and updates["plot_number"] != parcel.plot_number:
         clash = session.scalars(
@@ -1439,6 +1459,14 @@ def create_permit(
     status_effective_date: date | None = None,
     **fields: object,
 ) -> Permit:
+    # Everything below is decided against the project: the permit type against
+    # its country pack, the parcel and prerequisite against its children, the
+    # responsible users against its membership — and ``fee_amount`` may be the
+    # first money recorded under its base currency. Read that project under
+    # lock so a basis change cannot commit alongside this permit and leave it
+    # validated against a jurisdiction the project has already left.
+    project = _lock_project(session, project.id)
+
     values = dict(fields)
     values["permit_type_code"] = permit_type_code
     _validate_permit_links(session, project=project, permit_id=None, values=values)
@@ -1499,8 +1527,12 @@ def update_permit(
     # prerequisite change serialises on the project that owns the chain:
     # otherwise "A depends on B" and "B depends on A" each validate against a
     # graph that does not yet contain the other, and both commit.
-    if "prerequisite_permit_id" in updates:
-        _lock_project(session, project.id)
+    #
+    # ``fee_amount`` joins it for a different reason: a permit with no fee does
+    # not lock the base currency, so the write that first puts money on it is
+    # the one that has to serialise against a currency change.
+    if "prerequisite_permit_id" in updates or "fee_amount" in updates:
+        project = _lock_project(session, project.id)
 
     # The freeze is decided by the permit's status, so read it under lock: a
     # concurrent transition to ``submitted`` must either land before this update
@@ -1742,6 +1774,12 @@ def create_document(
     reference_number: str | None = None,
     notes: str | None = None,
 ) -> DocumentReference:
+    # The document type is drawn from the project's country pack, so the same
+    # lock applies here: this reference is one of the child records that makes
+    # the jurisdiction permanent, and it must not be created against a pack the
+    # project is concurrently leaving.
+    project = _lock_project(session, project.id)
+
     if parcel_id is not None and permit_id is not None:
         raise ValidationError("A document reference attaches to a parcel or a permit, not to both.")
     if parcel_id is not None:

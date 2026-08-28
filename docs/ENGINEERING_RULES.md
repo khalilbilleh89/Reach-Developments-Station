@@ -140,6 +140,12 @@ proves they are necessary.
   writes a foreign key, so a path that locked the child first would deadlock
   against one doing the reverse. A new lock joins the order; it does not start
   its own.
+- A guard is only as safe as the writes it guards against. If a rule reads
+  "this may not change once X exists", the write that first establishes X must
+  take the same lock the rule does — otherwise the guard can read "no X yet"
+  while another transaction is committing the first one. Lock on the field
+  being named, not on whether it is currently null: the case analysis is where
+  the hole comes back.
 - Declare a uniqueness rule exactly once. `unique=True` on a column *and* a
   `UniqueConstraint` over the same column is two declarations of one rule:
   PostgreSQL silently keeps whichever it reads first, so the surviving name is
