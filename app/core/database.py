@@ -20,6 +20,18 @@ logger = logging.getLogger(__name__)
 #: Recycle pooled connections before managed PostgreSQL services drop them.
 _POOL_RECYCLE_SECONDS = 1800
 
+#: Bound on a single connection attempt. libpq defaults to waiting forever, so a
+#: PostgreSQL that accepts TCP but never completes the startup handshake (an
+#: overloaded server, a wedged pooler, a stateful firewall) would block the
+#: calling thread indefinitely. Readiness probes run in the shared threadpool
+#: that also serves liveness, so an unbounded probe eventually takes liveness
+#: down with it and Render kills a process that is otherwise healthy.
+#: libpq treats values below 2 as 2.
+_CONNECT_TIMEOUT_SECONDS = 5
+
+#: Bound on waiting for a pooled connection, for the same reason.
+_POOL_TIMEOUT_SECONDS = 5
+
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
@@ -34,6 +46,8 @@ def get_engine() -> Engine:
         settings.sqlalchemy_database_url,
         pool_pre_ping=True,
         pool_recycle=_POOL_RECYCLE_SECONDS,
+        pool_timeout=_POOL_TIMEOUT_SECONDS,
+        connect_args={"connect_timeout": _CONNECT_TIMEOUT_SECONDS},
     )
 
 

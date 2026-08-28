@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
@@ -39,6 +40,17 @@ def _public_tables() -> set[str]:
         return {row[0] for row in rows}
 
 
+@pytest.fixture
+def empty_database(postgres: None) -> None:
+    """Reverse every migration so the next upgrade genuinely executes.
+
+    Without this, a database already stamped at head makes ``upgrade()`` a no-op,
+    and any assertion about what the migration produced would pass no matter what
+    the revision actually contains.
+    """
+    command.downgrade(_alembic_config(), "base")
+
+
 def test_baseline_upgrades_downgrades_and_upgrades_again(postgres: None) -> None:
     """Given PostgreSQL, when the baseline is applied and reversed, then it round-trips."""
     config = _alembic_config()
@@ -53,11 +65,23 @@ def test_baseline_upgrades_downgrades_and_upgrades_again(postgres: None) -> None
     assert _current_revision() == BASELINE_REVISION
 
 
-def test_baseline_creates_no_business_schema(postgres: None) -> None:
-    """Given the baseline at head, then only Alembic bookkeeping exists."""
+def test_baseline_creates_no_business_schema(empty_database: None) -> None:
+    """Given an empty database, when the baseline is applied, then it adds no tables.
+
+    The fixture guarantees the upgrade really runs, so this measures the
+    revision's own effect rather than whatever was already in the database. The
+    assertion is on the delta, so an unrelated table left in a developer's test
+    database is reported as such instead of being blamed on the migration.
+    """
+    before = _public_tables()
+
     command.upgrade(_alembic_config(), "head")
 
-    assert _public_tables() == {"alembic_version"}
+    created = _public_tables() - before
+    assert created <= {"alembic_version"}, (
+        f"the baseline migration created business tables: {sorted(created)}"
+    )
+    assert "alembic_version" in _public_tables()
 
 
 def test_baseline_is_the_single_root_of_the_migration_history(postgres: None) -> None:

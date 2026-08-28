@@ -21,6 +21,10 @@ AppEnv = Literal["development", "test", "staging", "production"]
 #: always supply ``DATABASE_URL`` explicitly.
 DEV_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/reach_station"
 
+#: Query keys libpq accepts as a password. SQLAlchemy's ``hide_password`` masks
+#: only the userinfo password, so these would otherwise be logged in cleartext.
+_CREDENTIAL_QUERY_KEYS = frozenset({"password", "sslpassword"})
+
 #: The only PostgreSQL driver this application ships (Psycopg 3).
 _SUPPORTED_DRIVER = "psycopg"
 _SUPPORTED_BACKENDS = frozenset({"postgres", "postgresql"})
@@ -111,7 +115,15 @@ class Settings(BaseSettings):
 
         Never return this to an HTTP client — it still names the host and user.
         """
-        return self.sqlalchemy_database_url.render_as_string(hide_password=True)
+        url = self.sqlalchemy_database_url
+        if url.query:
+            url = url.set(
+                query={
+                    key: ("***" if key in _CREDENTIAL_QUERY_KEYS else value)
+                    for key, value in url.query.items()
+                }
+            )
+        return url.render_as_string(hide_password=True)
 
 
 @lru_cache(maxsize=1)

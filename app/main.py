@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -77,6 +77,27 @@ def _mount_frontend(app: FastAPI) -> None:
     app.mount("/", StaticFiles(directory=FRONTEND_EXPORT_DIR, html=True), name="frontend")
 
 
+def _reserve_api_namespace(app: FastAPI, prefix: str) -> None:
+    """Keep every path under the API prefix on the JSON error contract.
+
+    ``StaticFiles(html=True)`` answers *any* unmatched path with the frontend's
+    404 page, so without this a mistyped endpoint would hand an API client seven
+    kilobytes of HTML instead of ``{"detail": ...}``. Registering routers before
+    the static mount only protects routes that exist; this reserves the rest of
+    the namespace.
+
+    Must be registered after every API router and before the static mount.
+    """
+
+    @app.api_route(
+        f"{prefix}/{{unmatched_path:path}}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        include_in_schema=False,
+    )
+    async def api_not_found(unmatched_path: str) -> None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found.")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the FastAPI application."""
     settings = settings or get_settings()
@@ -98,8 +119,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": _INTERNAL_ERROR_DETAIL},
         )
 
-    # API first, static export second. Order is load-bearing.
+    # Order is load-bearing: real API routes, then the namespace guard that
+    # claims whatever is left under /api/v1, then the static export.
     app.include_router(health.router, prefix=settings.API_V1_PREFIX)
+    _reserve_api_namespace(app, settings.API_V1_PREFIX)
     _mount_frontend(app)
 
     return app

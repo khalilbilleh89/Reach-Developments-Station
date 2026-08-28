@@ -179,3 +179,18 @@ def test_configuration_errors_never_echo_the_database_url(
     # `raise ... from None` — the pydantic error is never chained into the output.
     assert error.__cause__ is None
     assert error.__suppress_context__ is True
+
+
+def test_safe_database_url_redacts_a_password_given_as_a_query_parameter() -> None:
+    """Given libpq's query-parameter password form, then it is redacted too.
+
+    SQLAlchemy's ``hide_password`` masks only the userinfo password, so this
+    otherwise reaches the deploy log in cleartext.
+    """
+    secret = "R3nd3rSecret"
+    settings = build_settings(
+        DATABASE_URL=f"postgresql://reach_user@dpg-abc.render.com:5432/reach?password={secret}"
+    )
+
+    assert secret not in settings.safe_database_url
+    assert "reach_user" in settings.safe_database_url

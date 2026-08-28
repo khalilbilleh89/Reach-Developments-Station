@@ -216,6 +216,10 @@ One shape, everywhere — FastAPI's native error body:
 ```
 
 - `4xx` — raise `HTTPException` with a safe `detail`.
+- `404` — the whole `/api/v1` namespace is reserved by a catch-all registered
+  after every router and before the static mount. An unmatched API path returns
+  `{"detail": "Not Found."}`, never the frontend's 404 HTML page. Any new router
+  must be included *before* that guard.
 - `422` — FastAPI's request validation body, unchanged.
 - `5xx` — the global handler in `app/main.py` returns
   `{"detail": "Internal server error."}` and logs the full exception
