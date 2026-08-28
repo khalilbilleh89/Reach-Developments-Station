@@ -399,6 +399,30 @@ def test_a_null_start_date_is_refused_rather_than_silently_dropped(
     assert response.json() == {"detail": "valid_from cannot be null."}
 
 
+def test_a_reversed_window_on_an_inactive_rule_is_a_client_error(
+    client: TestClient, pack_id: str
+) -> None:
+    """Given an inactive rule, then a reversed window is still refused cleanly.
+
+    Overlap is not evaluated for an inactive rule, so before this the write went
+    straight to the database and surfaced as an unhandled check violation.
+    """
+    created = client.post(f"{PACKS}/{pack_id}/tax-rules", json=_tax_payload()).json()
+    assert (
+        client.patch(
+            f"/api/v1/settings/tax-rules/{created['id']}", json={"is_active": False}
+        ).status_code
+        == 200
+    )
+
+    response = client.patch(
+        f"/api/v1/settings/tax-rules/{created['id']}", json={"valid_to": "2025-01-01"}
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "valid_to must not be earlier than valid_from."}
+
+
 def _wait_until_a_backend_blocks(timeout: float = 15.0) -> bool:
     """Poll until some other backend in this database is waiting on a lock.
 
