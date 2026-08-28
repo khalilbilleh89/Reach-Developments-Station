@@ -22,13 +22,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api import health
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.core.database import dispose_engine
 
 logger = logging.getLogger(__name__)
 
 #: Build output of `npm run build` in frontend/ (Next.js `output: "export"`).
 FRONTEND_EXPORT_DIR = Path(__file__).resolve().parent.parent / "frontend" / "out"
+
+#: HTTP methods the API namespace guard answers on.
+_GUARDED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
 #: Returned for any unhandled server error. Raw exception strings never reach a client.
 _INTERNAL_ERROR_DETAIL = "Internal server error."
@@ -86,21 +89,36 @@ def _reserve_api_namespace(app: FastAPI, prefix: str) -> None:
     the static mount only protects routes that exist; this reserves the rest of
     the namespace.
 
+    Two patterns are required. ``{prefix}/{path:path}`` does not match the prefix
+    root, so a bare ``/api/v1`` would otherwise fall through to the static mount
+    and answer with HTML.
+
     Must be registered after every API router and before the static mount.
     """
 
+    @app.api_route(prefix, methods=_GUARDED_METHODS, include_in_schema=False)
+    async def api_root_not_found() -> None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found.")
+
     @app.api_route(
         f"{prefix}/{{unmatched_path:path}}",
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        methods=_GUARDED_METHODS,
         include_in_schema=False,
     )
     async def api_not_found(unmatched_path: str) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found.")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    """Build the FastAPI application."""
-    settings = settings or get_settings()
+def create_app() -> FastAPI:
+    """Build the FastAPI application from the canonical settings.
+
+    Deliberately takes no settings argument. Accepting one would imply the whole
+    app could be built against an injected configuration, but the lifespan and
+    the database layer read ``get_settings()`` directly, so only the OpenAPI URL
+    and the router prefix would ever follow it. Tests re-point configuration
+    through the environment and clear the settings cache instead.
+    """
+    settings = get_settings()
 
     app = FastAPI(
         title="Reach Developments Station",

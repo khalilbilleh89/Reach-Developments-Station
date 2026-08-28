@@ -110,12 +110,31 @@ def test_unmatched_api_paths_answer_with_json_not_the_frontend_404(
     StaticFiles(html=True) answers any unmatched path with the frontend's 404
     page, so without a namespace guard an API client would receive HTML.
     """
-    for path in (f"{API_PREFIX}/projects", f"{API_PREFIX}/health/liv", f"{API_PREFIX}/"):
+    # The bare prefix matters as much as the paths beneath it: a
+    # "{prefix}/{path:path}" route does not match the prefix root, so /api/v1
+    # itself would otherwise fall through to the static export and answer HTML.
+    paths = (
+        API_PREFIX,
+        f"{API_PREFIX}/",
+        f"{API_PREFIX}/projects",
+        f"{API_PREFIX}/health",
+        f"{API_PREFIX}/health/liv",
+    )
+    for path in paths:
         response = client.get(path)
 
         assert response.status_code == 404, path
         assert response.headers["content-type"].startswith("application/json"), path
         assert response.json() == {"detail": "Not Found."}, path
+
+
+def test_the_namespace_guard_covers_every_write_method(client: TestClient) -> None:
+    """Given a non-GET request to an unknown API path, then it still answers JSON."""
+    for method in ("POST", "PUT", "PATCH", "DELETE"):
+        response = client.request(method, API_PREFIX)
+
+        assert response.status_code == 404, method
+        assert response.json() == {"detail": "Not Found."}, method
 
 
 def test_the_namespace_guard_does_not_shadow_real_routes(client: TestClient) -> None:
