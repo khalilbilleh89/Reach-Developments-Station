@@ -1,0 +1,13 @@
+# Reach Developments Station — MVP 1.0 production dependencies.
+#
+# Dependency policy (docs/ENGINEERING_RULES.md): this file is the canonical
+# source of truth for backend runtime dependencies. Versions are pinned exactly
+# so that local, CI and Render installs are deterministic. Every addition must
+# be justified in the pull request template.
+
+alembic==1.19.1
+fastapi==0.141.1
+psycopg[binary]==3.3.4
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
+uvicorn==0.52.4

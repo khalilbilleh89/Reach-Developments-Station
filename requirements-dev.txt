@@ -1,0 +1,11 @@
+# Reach Developments Station — MVP 1.0 development / CI dependencies.
+#
+# Installed on top of requirements.txt. Never installed on Render.
+
+-r requirements.txt
+
+# Starlette 1.x drives its TestClient with httpx2; using httpx here raises a
+# deprecation warning, and pytest is configured to treat warnings as errors.
+httpx2==2.12.0
+pytest==9.1.1
+ruff==0.16.4

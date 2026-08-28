@@ -1,0 +1,46 @@
+# Reach Developments Station — MVP 1.0
+#
+# This file carries tooling configuration only.
+# `requirements.txt` and `requirements-dev.txt` remain the canonical, pinned
+# source of truth for backend dependencies (see docs/ENGINEERING_RULES.md).
+
+[project]
+name = "reach-developments-station"
+version = "1.0.0.dev0"  # keep in sync with app/__init__.py::__version__
+description = "Real estate development tracking and financial control system."
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [".venv", "frontend"]
+
+[tool.ruff.lint]
+select = [
+    "ANN", # flake8-annotations  — public functions must be explicitly typed
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "RUF", # ruff-specific rules
+    "SIM", # flake8-simplify
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic revisions are produced from app/db/migrations/script.py.mako, which
+# always imports `sqlalchemy as sa` whether or not a revision uses it.
+"app/db/migrations/versions/*.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["error"]

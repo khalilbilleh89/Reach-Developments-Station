@@ -1,0 +1,63 @@
+"""Alembic runtime environment for MVP 1.0.
+
+The migration runner and the application share one canonical database
+configuration: the URL comes from ``app.core.config`` and the engine from
+``app.core.database``. ``alembic.ini`` deliberately carries no ``sqlalchemy.url``.
+"""
+
+from __future__ import annotations
+
+from logging.config import fileConfig
+
+from alembic import context
+
+from app.core.config import get_settings
+from app.core.database import dispose_engine, get_engine
+from app.db.base import Base
+
+config = context.config
+
+if config.config_file_name is not None:
+    # Keep loggers configured by the host process (uvicorn, pytest) alive.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
+
+#: PR-MVP-00 registers no domain model, so this metadata is intentionally empty.
+#: Future roadmap PRs import their models here so autogenerate can see them.
+target_metadata = Base.metadata
+
+
+def run_migrations_offline() -> None:
+    """Emit SQL to stdout without connecting to a database (``alembic --sql``)."""
+    settings = get_settings()
+    context.configure(
+        url=settings.sqlalchemy_database_url.render_as_string(hide_password=False),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations against a live PostgreSQL connection."""
+    engine = get_engine()
+    try:
+        with engine.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                compare_type=True,
+                compare_server_default=True,
+            )
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        dispose_engine()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
