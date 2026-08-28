@@ -181,16 +181,33 @@ def test_configuration_errors_never_echo_the_database_url(
     assert error.__suppress_context__ is True
 
 
-def test_safe_database_url_redacts_a_password_given_as_a_query_parameter() -> None:
+@pytest.mark.parametrize(
+    "query_key",
+    ["password", "Password", "PASSWORD", "sslpassword", "SSLPassword"],
+)
+def test_safe_database_url_redacts_a_password_given_as_a_query_parameter(
+    query_key: str,
+) -> None:
     """Given libpq's query-parameter password form, then it is redacted too.
 
     SQLAlchemy's ``hide_password`` masks only the userinfo password, so this
-    otherwise reaches the deploy log in cleartext.
+    otherwise reaches the deploy log in cleartext. Casing is covered because the
+    redacted URL is logged before any connection is attempted: libpq would
+    reject a mis-cased keyword, but only after the secret was already written.
     """
     secret = "R3nd3rSecret"
     settings = build_settings(
-        DATABASE_URL=f"postgresql://reach_user@dpg-abc.render.com:5432/reach?password={secret}"
+        DATABASE_URL=f"postgresql://reach_user@dpg-abc.render.com:5432/reach?{query_key}={secret}"
     )
 
     assert secret not in settings.safe_database_url
     assert "reach_user" in settings.safe_database_url
+
+
+def test_safe_database_url_keeps_non_secret_query_parameters_readable() -> None:
+    """Given a diagnostic parameter such as sslmode, then it is left intact."""
+    settings = build_settings(
+        DATABASE_URL="postgresql://reach_user@host:5432/reach?sslmode=require"
+    )
+
+    assert "sslmode=require" in settings.safe_database_url

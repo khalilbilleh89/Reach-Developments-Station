@@ -23,6 +23,10 @@ DEV_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/reach_
 
 #: Query keys libpq accepts as a password. SQLAlchemy's ``hide_password`` masks
 #: only the userinfo password, so these would otherwise be logged in cleartext.
+#: Matched case-insensitively: libpq itself rejects a mis-cased keyword, but the
+#: redacted URL is logged at engine creation, before any connection is attempted,
+#: so a typo like ``?Password=`` would still put the secret in the log. Redaction
+#: should over-approximate — masking a key that turns out to be invalid is free.
 _CREDENTIAL_QUERY_KEYS = frozenset({"password", "sslpassword"})
 
 #: The only PostgreSQL driver this application ships (Psycopg 3).
@@ -119,7 +123,7 @@ class Settings(BaseSettings):
         if url.query:
             url = url.set(
                 query={
-                    key: ("***" if key in _CREDENTIAL_QUERY_KEYS else value)
+                    key: ("***" if key.casefold() in _CREDENTIAL_QUERY_KEYS else value)
                     for key, value in url.query.items()
                 }
             )
