@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     API_V1_PREFIX: str = "/api/v1"
 
+    #: Lifetime of a server-side session, in minutes. Default is roughly one
+    #: working day. There are no refresh tokens and no remember-me: when this
+    #: expires the user logs in again.
+    SESSION_TTL_MINUTES: int = 480
+
+    @field_validator("SESSION_TTL_MINUTES")
+    @classmethod
+    def _validate_session_ttl(cls, value: int) -> int:
+        if not 5 <= value <= 60 * 24 * 7:
+            raise ValueError("SESSION_TTL_MINUTES must be between 5 minutes and 7 days.")
+        return value
+
     @field_validator("API_V1_PREFIX")
     @classmethod
     def _validate_api_prefix(cls, value: str) -> str:
@@ -107,6 +119,18 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Whether this process is running under production rules."""
         return self.APP_ENV == "production"
+
+    @property
+    def expose_api_docs(self) -> bool:
+        """Whether interactive API documentation is served.
+
+        PR-MVP-00 left ``/docs`` public because the API exposed only health
+        probes. Authentication and governance administration exist now, so the
+        schema is withheld in production: it enumerates every administrative
+        endpoint and its payload shape for an unauthenticated reader. There is
+        no authenticated Swagger UI — the schema is simply absent.
+        """
+        return not self.is_production
 
     @property
     def sqlalchemy_database_url(self) -> URL:

@@ -13,13 +13,23 @@ below instead of whatever was in scope at import time.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import check_database_connection, dispose_engine
+from app.core.database import (
+    check_database_connection,
+    dispose_engine,
+    get_engine,
+    get_session_factory,
+)
 from app.main import create_app
 
 PINNED_TEST_CONFIG = {
@@ -78,3 +88,58 @@ def postgres() -> None:
             "This test requires PostgreSQL. Point DATABASE_URL at a reachable test "
             f"database before running pytest (got {type(exc).__name__})."
         )
+
+
+# --------------------------------------------------------------------------- #
+# Governance schema and data isolation
+# --------------------------------------------------------------------------- #
+
+#: Emptied before every test. `roles` is excluded: it is seeded by migration and
+#: is reference data, not test state.
+_DATA_TABLES = (
+    "audit_events",
+    "user_sessions",
+    "user_roles",
+    "users",
+    "country_approval_thresholds",
+    "tax_rules",
+    "reference_values",
+    "country_packs",
+    "currencies",
+)
+
+
+def alembic_config() -> Config:
+    """Alembic configuration pointed at this repository."""
+    root = Path(__file__).resolve().parents[1]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "app" / "db" / "migrations"))
+    return config
+
+
+@pytest.fixture(scope="session", autouse=True)
+def migrated_schema() -> None:
+    """Bring the test database to head once for the whole session."""
+    command.upgrade(alembic_config(), "head")
+
+
+@pytest.fixture(autouse=True)
+def clean_database(migrated_schema: None, isolated_configuration: None) -> None:
+    """Empty every data table before each test.
+
+    One TRUNCATE covers all of them, so foreign keys between them are not an
+    ordering problem. Seeded roles survive.
+    """
+    engine = get_engine()
+    with engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {', '.join(_DATA_TABLES)} RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture
+def db() -> Iterator[Session]:
+    """A database session for arranging test state directly."""
+    session = get_session_factory()()
+    try:
+        yield session
+    finally:
+        session.close()

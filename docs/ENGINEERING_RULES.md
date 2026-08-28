@@ -113,6 +113,17 @@ proves they are necessary.
 - No `Base.metadata.create_all()` for production schema management.
 - All schema changes go through Alembic.
 - Database constraints should protect critical invariants.
+- An invariant a database constraint cannot express (one that spans rows, such
+  as "no two active tax rules for a code overlap") is decided by reading and
+  then writing, which two concurrent transactions can both win. Lock the row
+  that owns the invariant — `select(Owner).where(...).with_for_update()` — before
+  the read, and hold it through the write and commit. Pick the narrowest owner
+  the check never looks past; a row lock is the tool, not a queue, a cache or an
+  advisory-lock scheme.
+- Declare a uniqueness rule exactly once. `unique=True` on a column *and* a
+  `UniqueConstraint` over the same column is two declarations of one rule:
+  PostgreSQL silently keeps whichever it reads first, so the surviving name is
+  not the one the convention promised and autogenerate then sees drift.
 - Avoid unnecessary inheritance; prefer composition over framework abstractions.
 - Exactly one engine and one session factory per process, both in
   `app/core/database.py`. No module creates its own engine.
@@ -202,6 +213,12 @@ PATCH  /api/v1/projects/{project_id}
 ```
 
 - Do not invent RPC-style endpoints when resource semantics work.
+- `PATCH` bodies are read with `exclude_unset=True`, so an absent key and an
+  explicit `null` are different requests and must stay different all the way
+  into the service: absent leaves the column alone, `null` clears it. A `null`
+  aimed at a column that cannot hold one is a `422`, never a silent `200` that
+  changed nothing. When a cleared value feeds a validation rule, re-run that
+  rule against the values the row will actually hold.
 - Do not return database objects directly. Pydantic response schemas define the
   public contract.
 - Do not leak raw exception strings, stack traces, connection strings, hostnames
@@ -220,6 +237,11 @@ One shape, everywhere — FastAPI's native error body:
   after every router and before the static mount. An unmatched API path returns
   `{"detail": "Not Found."}`, never the frontend's 404 HTML page. Any new router
   must be included *before* that guard.
+
+  A known consequence: the guard matches every method, so calling an existing
+  path with an unsupported method returns `404` rather than `405`. Both are the
+  JSON contract, and the alternative is HTML leaking out of the namespace, so
+  the trade is deliberate.
 - `422` — FastAPI's request validation body, unchanged.
 - `5xx` — the global handler in `app/main.py` returns
   `{"detail": "Internal server error."}` and logs the full exception

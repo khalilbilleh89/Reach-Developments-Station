@@ -3,11 +3,11 @@
 Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 `PR-MVP-11`, each merged into `main` on its own short-lived branch.
 
-| Scope                     | Count |
-| ------------------------- | ----: |
-| Total planned MVP PRs     |    12 |
-| Complete (PR-MVP-00)      |     1 |
-| Remaining                 |    11 |
+| Scope                            | Count |
+| -------------------------------- | ----: |
+| Total planned MVP PRs            |    12 |
+| Complete (PR-MVP-00, PR-MVP-01)  |     2 |
+| Remaining                        |    10 |
 
 Branch naming follows the roadmap:
 
@@ -39,7 +39,7 @@ tokens, CI, PR template, and Render build/start separation.
 ## PR-MVP-01 — Governance, Country Packs & Access
 
 - user/account foundation
-- roles and project access
+- roles
 - country packs
 - currencies
 - tax configuration
@@ -47,9 +47,23 @@ tokens, CI, PR template, and Render build/start separation.
 - approval thresholds
 - audit actor context
 
+> **Sequencing correction.** This entry originally read "roles and project
+> access". Project-scoped access cannot be built here: the `Project` entity does
+> not exist until PR-MVP-02, so persisting it now would mean orphan
+> `project_id` columns with no foreign key, or a generic resource/ACL table —
+> exactly the abstraction-heavy design this rebuild exists to remove.
+>
+> PR-MVP-01 therefore delivers authentication, identity, the fixed role
+> catalogue and role-aware API enforcement. **`user_project_access`,
+> project-scoped authorization and real foreign-key integrity to Projects move
+> to PR-MVP-02**, where there is something to point at. This is an integrity
+> correction, not a scope reduction.
+
 ## PR-MVP-02 — Project, Land & Permits
 
 - project
+- **`user_project_access` and project-scoped authorization** (deferred from
+  PR-MVP-01, which had no Project to reference)
 - parcel
 - planning controls
 - permit register

@@ -4,6 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Reach Developments Station",
+  robots: { index: false, follow: false },
   description:
     "Real estate development tracking and financial control. Projects, inventory, pricing, sales, collections and cashflow in one auditable source of truth.",
 };
