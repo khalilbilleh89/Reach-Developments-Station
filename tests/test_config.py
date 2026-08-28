@@ -7,9 +7,11 @@ with the ambient environment and ``.env`` removed.
 
 from __future__ import annotations
 
+import traceback
+
 import pytest
 
-from app.core.config import DEV_DATABASE_URL, Settings, normalize_database_url
+from app.core.config import DEV_DATABASE_URL, Settings, get_settings, normalize_database_url
 
 CONFIG_ENV_VARS = ("APP_NAME", "APP_ENV", "APP_DEBUG", "DATABASE_URL", "API_V1_PREFIX")
 
@@ -96,6 +98,18 @@ def test_normalisation_preserves_every_url_component() -> None:
     assert url.database == "postgres"
 
 
+@pytest.mark.parametrize(
+    "raw_url",
+    [
+        "POSTGRES://user:pw@host:5432/reach",
+        "PostgreSQL+PsycoPG://user:pw@host:5432/reach",
+    ],
+)
+def test_url_schemes_are_case_insensitive(raw_url: str) -> None:
+    """Given an upper-cased scheme, then it is accepted (RFC 3986 section 3.1)."""
+    assert normalize_database_url(raw_url).drivername == "postgresql+psycopg"
+
+
 def test_normalisation_preserves_connection_query_parameters() -> None:
     """Given Render-style options such as sslmode, then they survive normalisation."""
     url = normalize_database_url("postgres://user:pw@host:5432/reach?sslmode=require")
@@ -135,3 +149,33 @@ def test_api_prefix_must_be_a_rooted_path(prefix: str) -> None:
     """Given a malformed API prefix, then configuration refuses it."""
     with pytest.raises(ValueError, match="API_V1_PREFIX"):
         build_settings(API_V1_PREFIX=prefix)
+
+
+def test_configuration_errors_never_echo_the_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given an invalid DATABASE_URL, then nothing rendered from the error carries it.
+
+    Pydantic reports the offending input inside its own ValidationError. Left
+    alone, a startup failure would therefore write a live connection string —
+    password included — straight into the deploy log.
+    """
+    secret = "sup3rs3cret-do-not-log"
+    monkeypatch.setenv("DATABASE_URL", f"mysql://reach_user:{secret}@db.internal:3306/reach")
+    get_settings.cache_clear()
+
+    with pytest.raises(RuntimeError) as raised:
+        get_settings()
+
+    error = raised.value
+    # What a logger actually renders: the message, plus the chained causes it
+    # would follow. Frame source is excluded — this file contains the literal.
+    rendered = "".join(traceback.format_exception_only(type(error), error))
+
+    assert secret not in rendered
+    assert "reach_user" not in rendered
+    assert "Invalid application configuration" in rendered
+    assert "Unsupported database backend" in rendered
+    # `raise ... from None` — the pydantic error is never chained into the output.
+    assert error.__cause__ is None
+    assert error.__suppress_context__ is True

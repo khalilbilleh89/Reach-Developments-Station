@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
@@ -43,7 +43,8 @@ def normalize_database_url(raw_url: str) -> URL:
     except ArgumentError as exc:  # pragma: no cover - exercised via Settings
         raise ValueError("DATABASE_URL is not a valid database URL.") from exc
 
-    backend, _, driver = url.drivername.partition("+")
+    # URI schemes are case-insensitive (RFC 3986 section 3.1).
+    backend, _, driver = url.drivername.lower().partition("+")
     if backend not in _SUPPORTED_BACKENDS:
         raise ValueError(
             f"Unsupported database backend '{backend}'. "
@@ -119,5 +120,19 @@ def get_settings() -> Settings:
 
     Cached so that configuration is parsed and validated exactly once. Tests that
     change the environment must call ``get_settings.cache_clear()``.
+
+    Raises:
+        RuntimeError: if configuration is invalid. Pydantic echoes the offending
+            input into its own error, which would put a live ``DATABASE_URL`` —
+            password and all — into the deploy log. The error is re-raised here
+            with the field names and reasons only, and ``from None`` keeps the
+            original values out of the traceback.
     """
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc']) or 'configuration'}: {error['msg']}"
+            for error in exc.errors()
+        )
+        raise RuntimeError(f"Invalid application configuration. {problems}") from None
