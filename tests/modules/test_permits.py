@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
-from app.modules.projects.models import Permit
+from app.modules.projects.models import Permit, UserProjectAccess
 from tests.factories import client_for
 from tests.modules.conftest import (
     PROJECTS,
@@ -404,3 +404,199 @@ def test_permit_changes_are_audited(
     assert [event.action for event in events] == ["permit.created", "permit.updated"]
     assert events[1].before_data["next_action"] == "Draft drawings"
     assert events[1].after_data["next_action"] == "Submit drawings"
+
+
+# --------------------------------------------------------------------------- #
+# Responsibility can only point at someone who can open the project
+# --------------------------------------------------------------------------- #
+
+
+def test_a_permit_owner_must_be_able_to_open_the_project(
+    admin_client: TestClient, db: Session, permits_url: str
+) -> None:
+    """Given an active user with no access, then they cannot be made responsible.
+
+    Making someone accountable for an approval they cannot even see is not an
+    assignment, it is a gap in the register.
+    """
+    from tests.factories import make_user
+
+    outsider = make_user(db, email="stranger@example.com", roles=("legal",))
+
+    response = admin_client.post(permits_url, json=permit_payload(owner_user_id=str(outsider.id)))
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Permit owner must already have access to this project."}
+
+
+def test_a_permit_owner_with_project_access_is_accepted(
+    admin_client: TestClient, db: Session, project_id: str, permits_url: str
+) -> None:
+    from tests.factories import make_user
+
+    member = make_user(db, email="member@example.com", roles=("legal",))
+    grant_access(admin_client, project_id, member)
+
+    response = admin_client.post(permits_url, json=permit_payload(owner_user_id=str(member.id)))
+
+    assert response.status_code == 201
+
+
+def test_an_administrator_needs_no_membership_row_to_be_responsible(
+    admin_client: TestClient, admin: User, permits_url: str
+) -> None:
+    """Given a System Administrator, then they reach every project already."""
+    response = admin_client.post(permits_url, json=permit_payload(owner_user_id=str(admin.id)))
+
+    assert response.status_code == 201
+
+
+def test_the_escalation_owner_follows_the_same_rule(
+    admin_client: TestClient, db: Session, permits_url: str
+) -> None:
+    from tests.factories import make_user
+
+    outsider = make_user(db, email="stranger2@example.com", roles=("finance",))
+
+    response = admin_client.post(
+        permits_url, json=permit_payload(escalation_owner_user_id=str(outsider.id))
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Escalation owner must already have access to this project."
+    }
+
+
+def test_assigning_responsibility_never_grants_access(
+    admin_client: TestClient, db: Session, engineer: User, project_id: str, permits_url: str
+) -> None:
+    """Given an engineer tries it, then no membership appears as a side effect.
+
+    Creating access from permit editing would hand every technical writer a
+    route into security administration.
+    """
+    from tests.factories import make_user
+
+    outsider = make_user(db, email="stranger3@example.com", roles=("legal",))
+    grant_access(admin_client, project_id, engineer)
+
+    response = client_for(engineer.email).post(
+        permits_url, json=permit_payload(owner_user_id=str(outsider.id))
+    )
+
+    assert response.status_code == 422
+    assert (
+        db.scalars(select(UserProjectAccess).where(UserProjectAccess.user_id == outsider.id)).all()
+        == []
+    )
+
+
+def test_a_historical_owner_survives_losing_access(
+    admin_client: TestClient, db: Session, project_id: str, permits_url: str
+) -> None:
+    """Given the owner's access is later revoked, then the record is not rewritten.
+
+    History says who was responsible at the time. Silently reassigning it would
+    lose that.
+    """
+    from tests.factories import make_user
+
+    member = make_user(db, email="departing@example.com", roles=("legal",))
+    grant_access(admin_client, project_id, member)
+    created = admin_client.post(
+        permits_url, json=permit_payload(owner_user_id=str(member.id))
+    ).json()
+
+    admin_client.patch(f"{PROJECTS}/{project_id}/access/{member.id}", json={"is_active": False})
+
+    read = admin_client.get(f"{permits_url}/{created['id']}")
+    assert read.status_code == 200
+    assert read.json()["owner_user_id"] == str(member.id)
+
+
+# --------------------------------------------------------------------------- #
+# The register's counts describe the whole matching set, not the page
+# --------------------------------------------------------------------------- #
+
+
+def _register_of(admin_client: TestClient, permits_url: str) -> None:
+    """Five permits: three blocking, two on the critical path, one overdue."""
+    overdue = (date.today() - timedelta(days=40)).isoformat()
+    rows = [
+        permit_payload(permit_code="A-001", is_blocking=True, is_critical_path=True),
+        permit_payload(permit_code="B-002", is_blocking=True),
+        permit_payload(
+            permit_code="C-003",
+            is_blocking=True,
+            statutory_sla_days=30,
+            status_effective_date=overdue,
+        ),
+        permit_payload(permit_code="D-004", is_critical_path=True),
+        permit_payload(permit_code="E-005"),
+    ]
+    for row in rows:
+        assert admin_client.post(permits_url, json=row).status_code == 201
+
+
+def test_the_register_counts_the_whole_set_not_the_page(
+    admin_client: TestClient, permits_url: str
+) -> None:
+    """Given a page smaller than the register, then the counts still describe all of it.
+
+    Reporting the size of one page under the name ``total`` tells a manager
+    there are two permits when there are five.
+    """
+    _register_of(admin_client, permits_url)
+
+    register = admin_client.get(f"{permits_url}?limit=2").json()
+
+    assert len(register["permits"]) == 2
+    assert register["total"] == 5
+    assert register["blocking_count"] == 3
+    assert register["critical_path_count"] == 2
+    assert register["sla_overdue_count"] == 1
+
+
+def test_the_counts_do_not_move_with_the_offset(admin_client: TestClient, permits_url: str) -> None:
+    """Given a later page, then the same totals come back with it."""
+    _register_of(admin_client, permits_url)
+
+    first = admin_client.get(f"{permits_url}?limit=2&offset=0").json()
+    last = admin_client.get(f"{permits_url}?limit=2&offset=4").json()
+
+    assert len(last["permits"]) == 1
+    for key in ("total", "blocking_count", "critical_path_count", "sla_overdue_count"):
+        assert first[key] == last[key], key
+
+
+def test_a_filter_narrows_the_counts_as_well_as_the_rows(
+    admin_client: TestClient, permits_url: str
+) -> None:
+    """Given a filter, then the counts describe the filtered population."""
+    _register_of(admin_client, permits_url)
+
+    register = admin_client.get(f"{permits_url}?is_blocking=true&limit=1").json()
+
+    assert len(register["permits"]) == 1
+    assert register["total"] == 3
+    assert register["blocking_count"] == 3
+    assert register["critical_path_count"] == 1
+    assert register["sla_overdue_count"] == 1
+
+
+def test_the_summary_and_the_rows_agree_about_overdue(
+    admin_client: TestClient, permits_url: str
+) -> None:
+    """Given one overdue permit, then the row flag and the count say the same thing.
+
+    Row-level and summary definitions of "overdue" are the same predicate; if
+    they were written out twice they could drift.
+    """
+    _register_of(admin_client, permits_url)
+
+    register = admin_client.get(permits_url).json()
+
+    flagged = [permit["permit_code"] for permit in register["permits"] if permit["sla_overdue"]]
+    assert flagged == ["C-003"]
+    assert register["sla_overdue_count"] == len(flagged)

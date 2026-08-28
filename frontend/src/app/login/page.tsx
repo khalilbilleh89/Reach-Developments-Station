@@ -23,7 +23,7 @@ export default function LoginPage() {
   useEffect(() => {
     auth
       .me()
-      .then(() => router.replace("/settings/"))
+      .then(() => router.replace("/projects/"))
       .catch(() => undefined);
   }, [router]);
 
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await auth.login(email, password);
-      router.replace("/settings/");
+      router.replace("/projects/");
     } catch (caught) {
       setError(
         caught instanceof ApiError ? caught.message : "Could not sign in. Please try again.",

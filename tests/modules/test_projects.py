@@ -233,11 +233,15 @@ def test_an_inactive_manager_is_rejected(
 
 
 def test_the_project_code_is_immutable(admin_client: TestClient, project_id: str) -> None:
-    """Given an update naming a code, then the field is simply not accepted."""
+    """Given an update naming a code, then the request is refused, not quietly ignored.
+
+    Silently dropping a field a client asked for and answering 200 tells them a
+    change happened that did not.
+    """
     response = admin_client.patch(f"{PROJECTS}/{project_id}", json={"code": "RENAMED"})
 
-    assert response.status_code == 200
-    assert response.json()["code"] == "GALINI-BLU"
+    assert response.status_code == 422
+    assert admin_client.get(f"{PROJECTS}/{project_id}").json()["code"] == "GALINI-BLU"
 
 
 def test_the_basis_may_be_corrected_during_setup(admin_client: TestClient, project_id: str) -> None:

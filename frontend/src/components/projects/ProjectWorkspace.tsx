@@ -6,6 +6,8 @@ import { ApiError, projects } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { Badge, Loading, Notice, Panel } from "@/components/ui";
 import { AccessTab } from "@/components/projects/AccessTab";
+import { EditForm, asValue } from "@/components/projects/EditForm";
+import type { EditField } from "@/components/projects/EditForm";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
@@ -25,6 +27,31 @@ const PROJECT_WRITERS = new Set(["system_admin", "project_manager"]);
 /** Roles that may maintain planning, permits and document references. */
 const TECHNICAL_WRITERS = new Set(["system_admin", "project_manager", "design_engineering"]);
 
+/** Editable project identity. `code` is absent: it is immutable once issued. */
+function projectFields(project: ProjectDetail): EditField[] {
+  return [
+    { name: "name", label: "Name" },
+    { name: "developer_entity", label: "Developer entity" },
+    { name: "city", label: "City" },
+    { name: "location", label: "Location" },
+    { name: "latitude", label: "Latitude", kind: "number", hint: "Decimal degrees." },
+    { name: "longitude", label: "Longitude", kind: "number" },
+    { name: "project_type_code", label: "Project type", hint: "A configured code." },
+    {
+      name: "status",
+      label: "Status",
+      kind: "select",
+      options: Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+      // Setup is the opening state only: the backend refuses a return to it,
+      // so it is not offered once the project has left it.
+      hint: project.status === "setup" ? undefined : "A project cannot return to setup.",
+    },
+    { name: "fiscal_year_start_month", label: "Fiscal year starts (month)", kind: "number" },
+    { name: "planned_start", label: "Planned start", kind: "date" },
+    { name: "planned_completion", label: "Planned completion", kind: "date" },
+  ];
+}
+
 /**
  * One cohesive project workspace rather than a separate page per record type.
  *
@@ -42,6 +69,7 @@ export function ProjectWorkspace({
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tab, setTab] = useState("overview");
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const roles = new Set(user.roles.map((role) => role.key));
@@ -132,7 +160,44 @@ export function ProjectWorkspace({
       </nav>
 
       {tab === "overview" ? (
-        <Panel title="Overview" description="What this project is, and what is holding it up.">
+        <Panel
+          title="Overview"
+          description="What this project is, and what is holding it up."
+          actions={
+            canWriteProject ? (
+              <button
+                className="button button-small"
+                type="button"
+                onClick={() => setEditing((open) => !open)}
+              >
+                {editing ? "Cancel" : "Edit project"}
+              </button>
+            ) : undefined
+          }
+        >
+          {editing ? (
+            <EditForm
+              fields={projectFields(project)}
+              initial={{
+                name: asValue(project.name),
+                developer_entity: asValue(project.developer_entity),
+                city: asValue(project.city),
+                location: asValue(project.location),
+                latitude: asValue(project.latitude),
+                longitude: asValue(project.longitude),
+                project_type_code: asValue(project.project_type_code),
+                status: asValue(project.status),
+                fiscal_year_start_month: asValue(project.fiscal_year_start_month),
+                planned_start: asValue(project.planned_start),
+                planned_completion: asValue(project.planned_completion),
+              }}
+              onSave={async (changes) => {
+                await projects.update(projectId, changes);
+                await load();
+              }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : null}
           <dl className="reference-list">
             <div>
               <dt className="reference-term">Developer entity</dt>

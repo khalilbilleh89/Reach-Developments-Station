@@ -5,6 +5,20 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, Permit, ReferenceValue } from "@/lib/api";
 import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import { EditForm, asValue } from "@/components/projects/EditForm";
+import type { EditField } from "@/components/projects/EditForm";
+
+/**
+ * The metadata a reference carries. What it is attached to is fixed at
+ * creation: moving evidence between records is not a metadata edit.
+ */
+const DOCUMENT_FIELDS: EditField[] = [
+  { name: "title", label: "Title" },
+  { name: "document_type_code", label: "Document type" },
+  { name: "reference_number", label: "Reference number" },
+  { name: "external_url", label: "Link" },
+  { name: "notes", label: "Notes", kind: "textarea" },
+];
 
 /**
  * Document *references*, deliberately named as such.
@@ -31,6 +45,7 @@ export function DocumentsTab({
     attach_to: "",
   });
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<DocumentReference | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -145,6 +160,25 @@ export function DocumentsTab({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      {editing ? (
+        <EditForm
+          fields={DOCUMENT_FIELDS}
+          submitLabel="Save reference"
+          initial={Object.fromEntries(
+            DOCUMENT_FIELDS.map((field) => [
+              field.name,
+              asValue(editing[field.name as keyof DocumentReference] as never),
+            ]),
+          )}
+          onSave={async (changes) => {
+            await projects.updateDocument(projectId, editing.id, changes);
+            await load();
+            setNotice("Reference updated.");
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      ) : null}
 
       {creating ? (
         <form className="panel-section" onSubmit={submit}>
@@ -262,7 +296,14 @@ export function DocumentsTab({
                     )}
                   </td>
                   {canWrite ? (
-                    <td>
+                    <td className="chip-list">
+                      <button
+                        className="button button-small"
+                        type="button"
+                        onClick={() => setEditing(document)}
+                      >
+                        Edit
+                      </button>
                       <button
                         className="button button-small"
                         type="button"

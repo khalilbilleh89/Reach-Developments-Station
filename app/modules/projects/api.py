@@ -195,6 +195,7 @@ def update_project(
         session,
         project=project,
         actor_user_id=actor.user_id,
+        actor_is_system_admin=actor.is_system_admin,
         correlation_id=actor.correlation_id,
         **payload.model_dump(exclude_unset=True),
     )
@@ -442,13 +443,20 @@ def list_permits(
         limit=limit,
         offset=offset,
     )
-    reads = [_permit_read(session, project, permit, actor) for permit in permits]
+    totals = service.permit_register_totals(
+        session,
+        project_id=project.id,
+        status=permit_status,
+        permit_type_code=permit_type_code,
+        parcel_id=parcel_id,
+        is_blocking=is_blocking,
+        is_critical_path=is_critical_path,
+    )
+    # The counts describe every permit matching the filter; `permits` is the
+    # requested page of them.
     return PermitRegister(
-        permits=reads,
-        total=len(reads),
-        blocking_count=sum(1 for read in reads if read.is_blocking),
-        critical_path_count=sum(1 for read in reads if read.is_critical_path),
-        sla_overdue_count=sum(1 for read in reads if read.sla_overdue),
+        permits=[_permit_read(session, project, permit, actor) for permit in permits],
+        **totals,
     )
 
 

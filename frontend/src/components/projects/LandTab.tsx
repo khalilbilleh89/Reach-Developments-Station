@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { LandParcel, PlanningControl, ReferenceValue } from "@/lib/api";
 import { EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import { EditForm, asValue } from "@/components/projects/EditForm";
+import type { EditField } from "@/components/projects/EditForm";
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
 function utility(value: boolean | null): string {
@@ -44,6 +46,61 @@ function emptyPlanning() {
 }
 
 /**
+ * The parcel fields the API accepts on update.
+ *
+ * Cost is described only when the caller's own response said they may see it:
+ * a caller who receives `financials_visible: false` never had the values, so
+ * there is nothing to render and nothing to send back.
+ */
+function parcelFields(parcel: LandParcel, canSeeCost: boolean): EditField[] {
+  return [
+    { name: "plot_number", label: "Plot number" },
+    { name: "title_deed_number", label: "Title deed number" },
+    { name: "cadastral_reference", label: "Cadastral reference" },
+    { name: "land_area", label: "Land area", kind: "number" },
+    {
+      name: "area_unit",
+      label: "Area unit",
+      kind: "select",
+      options: [
+        { value: "sqm", label: "sqm" },
+        { value: "sqft", label: "sqft" },
+      ],
+    },
+    { name: "ownership_type_code", label: "Ownership type" },
+    {
+      name: "ownership_share_fraction",
+      label: "Ownership share",
+      kind: "number",
+      hint: "A fraction of one: 0.500000 is a half share.",
+    },
+    { name: "acquisition_date", label: "Acquisition date", kind: "date" },
+    { name: "seller", label: "Seller" },
+    { name: "title_status_code", label: "Title status" },
+    { name: "zoning_class_code", label: "Zoning class" },
+    { name: "frontage", label: "Frontage", kind: "number" },
+    { name: "road_access", label: "Road access" },
+    { name: "topography", label: "Topography" },
+    { name: "geotechnical_status", label: "Geotechnical status" },
+    { name: "contamination_status", label: "Contamination status" },
+    { name: "flood_drainage_status", label: "Flood and drainage" },
+    { name: "archaeology_heritage_status", label: "Archaeology and heritage" },
+    { name: "utility_notes", label: "Utility notes", kind: "textarea" },
+    { name: "easements", label: "Easements", kind: "textarea" },
+    { name: "encroachments", label: "Encroachments", kind: "textarea" },
+    { name: "constraints_notes", label: "Constraints", kind: "textarea" },
+    {
+      name: "purchase_price",
+      label: `Purchase price${parcel.base_currency_code ? ` (${parcel.base_currency_code})` : ""}`,
+      kind: "number",
+      visible: canSeeCost,
+    },
+    { name: "acquisition_fees", label: "Acquisition fees", kind: "number", visible: canSeeCost },
+    { name: "is_active", label: "Parcel is active", kind: "checkbox" },
+  ];
+}
+
+/**
  * The land register and, for the selected parcel, its planning envelope.
  *
  * Planning belongs to a parcel, so it lives here beside the parcel it governs
@@ -65,6 +122,7 @@ export function LandTab({
   const [planningForm, setPlanningForm] = useState(emptyPlanning());
   const [form, setForm] = useState(emptyParcel());
   const [creating, setCreating] = useState(false);
+  const [editingParcel, setEditingParcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,6 +158,7 @@ export function LandTab({
 
   const open = async (parcel: LandParcel) => {
     setSelected(parcel);
+    setEditingParcel(false);
     setNotice(null);
     try {
       const control = await projects.planning(projectId, parcel.id);
@@ -365,15 +424,44 @@ export function LandTab({
           title={`Plot ${selected.plot_number}`}
           description="Physical facts and the current planning envelope."
           actions={
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setSelected(null)}
-            >
-              Close
-            </button>
+            <>
+              {canWriteLand ? (
+                <button
+                  className="button button-small"
+                  type="button"
+                  onClick={() => setEditingParcel((open) => !open)}
+                >
+                  {editingParcel ? "Cancel" : "Edit parcel"}
+                </button>
+              ) : null}
+              <button
+                className="button button-small"
+                type="button"
+                onClick={() => setSelected(null)}
+              >
+                Close
+              </button>
+            </>
           }
         >
+          {editingParcel ? (
+            <EditForm
+              fields={parcelFields(selected, selected.financials_visible)}
+              initial={Object.fromEntries(
+                parcelFields(selected, selected.financials_visible).map((field) => [
+                  field.name,
+                  asValue(selected[field.name as keyof LandParcel] as never),
+                ]),
+              )}
+              onSave={async (changes) => {
+                const updated = await projects.updateParcel(projectId, selected.id, changes);
+                setSelected(updated);
+                await load();
+                setNotice(`Plot ${updated.plot_number} updated.`);
+              }}
+              onCancel={() => setEditingParcel(false)}
+            />
+          ) : null}
           <dl className="reference-list">
             <div>
               <dt className="reference-term">Cadastral reference</dt>

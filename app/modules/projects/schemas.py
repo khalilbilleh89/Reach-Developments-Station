@@ -25,6 +25,22 @@ from app.modules.projects.models import (
 )
 from app.modules.settings.models import AREA_UNITS
 
+
+class StrictRequest(BaseModel):
+    """A request body that refuses anything it does not declare.
+
+    Pydantic's default is to ignore an unknown key, which means a client that
+    misspells a control flag — or names a field this API deliberately does not
+    accept, such as a permit ``status`` — is told the mutation succeeded when
+    part of it was silently dropped. For a register of statutory and financial
+    record that is the wrong default.
+
+    Deliberately one base class with one setting, not an application framework.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 ProjectStatus = Literal[PROJECT_STATUSES]  # type: ignore[valid-type]
 PermitStatus = Literal[PERMIT_STATUSES]  # type: ignore[valid-type]
 AreaUnit = Literal[AREA_UNITS]  # type: ignore[valid-type]
@@ -100,7 +116,7 @@ class ProjectDetail(ProjectSummary):
     planned_duration_days: int | None = None
 
 
-class ProjectCreateRequest(BaseModel):
+class ProjectCreateRequest(StrictRequest):
     code: ProjectCode
     name: str = Field(min_length=1, max_length=200)
     developer_entity: str = Field(min_length=1, max_length=200)
@@ -119,7 +135,7 @@ class ProjectCreateRequest(BaseModel):
     project_manager_user_id: uuid.UUID | None = None
 
 
-class ProjectUpdateRequest(BaseModel):
+class ProjectUpdateRequest(StrictRequest):
     """``code`` is absent: a project code is immutable once issued."""
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -162,7 +178,7 @@ class ProjectAccessRead(BaseModel):
     revoked_at: datetime | None
 
 
-class ProjectAccessUpdateRequest(BaseModel):
+class ProjectAccessUpdateRequest(StrictRequest):
     is_active: bool
 
 
@@ -171,7 +187,7 @@ class ProjectAccessUpdateRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
-class _ParcelFacts(BaseModel):
+class _ParcelFacts(StrictRequest):
     """Everything about a parcel that is not commercially sensitive."""
 
     title_deed_number: str | None = Field(default=None, max_length=120)
@@ -201,7 +217,9 @@ class _ParcelFacts(BaseModel):
 
 
 class LandParcelRead(_ParcelFacts):
-    model_config = ConfigDict(from_attributes=True)
+    # A response is built from an ORM row, so it stays permissive; only the
+    # request models are strict.
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -266,7 +284,7 @@ class LandParcelUpdateRequest(_ParcelFacts):
 # --------------------------------------------------------------------------- #
 
 
-class PlanningControlWriteRequest(BaseModel):
+class PlanningControlWriteRequest(StrictRequest):
     """The complete current planning envelope for a parcel.
 
     A full replacement rather than a patch: these controls are issued and read
@@ -293,7 +311,7 @@ class PlanningControlWriteRequest(BaseModel):
 
 
 class PlanningControlRead(PlanningControlWriteRequest):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -307,7 +325,7 @@ class PlanningControlRead(PlanningControlWriteRequest):
 # --------------------------------------------------------------------------- #
 
 
-class _PermitFacts(BaseModel):
+class _PermitFacts(StrictRequest):
     parcel_id: uuid.UUID | None = None
     authority_reference: str | None = Field(default=None, max_length=120)
     prerequisite_permit_id: uuid.UUID | None = None
@@ -334,7 +352,7 @@ class _PermitFacts(BaseModel):
 
 
 class PermitRead(_PermitFacts):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -406,7 +424,7 @@ class PermitUpdateRequest(_PermitFacts):
     fee_amount: Money | None = None
 
 
-class PermitTransitionRequest(BaseModel):
+class PermitTransitionRequest(StrictRequest):
     to_status: PermitStatus
     effective_date: date
     reason: str | None = Field(default=None, max_length=500)
@@ -459,7 +477,7 @@ class DocumentReferenceRead(BaseModel):
     updated_at: datetime
 
 
-class DocumentReferenceCreateRequest(BaseModel):
+class DocumentReferenceCreateRequest(StrictRequest):
     title: str = Field(min_length=1, max_length=200)
     document_type_code: str = Field(min_length=1, max_length=64)
     #: Validated as a URL, then stored as text. This records where a document
@@ -471,7 +489,7 @@ class DocumentReferenceCreateRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
-class DocumentReferenceUpdateRequest(BaseModel):
+class DocumentReferenceUpdateRequest(StrictRequest):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     document_type_code: str | None = Field(default=None, min_length=1, max_length=64)
     external_url: AnyHttpUrl | None = None

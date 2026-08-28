@@ -16,13 +16,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.patching import resolve_updates
-from app.modules.access.models import User
+from app.modules.access.models import ROLE_SYSTEM_ADMIN, User
 from app.modules.audit.service import record_event
 from app.modules.projects.models import (
     CATEGORY_DOCUMENT_TYPE,
@@ -250,6 +250,10 @@ def revoke_project_access(
     correlation_id: uuid.UUID,
 ) -> UserProjectAccess:
     """Withdraw access, keeping the row so the history stays readable."""
+    # Lock the project before reading the manager, so a concurrent assignment of
+    # this same user as manager cannot commit against a stale "not the manager"
+    # reading of it. Both sides of the invariant queue on the same row.
+    project = _lock_project(session, project.id)
     access = _find_access(session, project_id=project.id, user_id=user_id)
     if access is None:
         raise NotFoundError("That user has no access record for this project.")
@@ -338,8 +342,80 @@ _PROJECT_CLEARABLE = frozenset(
 
 #: Changing the legal or monetary basis of a project after work has started
 #: would silently restate every amount already recorded against it. Allowed
-#: only while the project is still being set up.
+#: only while the project is still being set up, and then only while the
+#: guards below still hold.
 _BASIS_FIELDS = ("country_pack_id", "base_currency_id", "reporting_currency_id")
+
+
+def _lock_project(session: Session, project_id: uuid.UUID) -> Project:
+    """Take the project row for update and return the persisted state.
+
+    The project row is the synchronisation point for anything whose invariant
+    spans more than one of its records — the manager/access pairing, and the
+    prerequisite graph. Locking it first means two requests decide in sequence
+    against committed state rather than each against its own stale read.
+    """
+    locked = session.scalars(
+        select(Project)
+        .where(Project.id == project_id)
+        .with_for_update()
+        # Without this, SQLAlchemy takes the lock but hands back the copy
+        # already in the identity map — so the row would be locked and the
+        # attributes still stale, which is the failure this lock exists to
+        # prevent. Nothing has been mutated yet at any call site, so there are
+        # no pending changes for the refresh to discard.
+        .execution_options(populate_existing=True)
+    ).first()
+    if locked is None:
+        raise NotFoundError("Project not found.")
+    return locked
+
+
+def _guard_base_currency_change(session: Session, project_id: uuid.UUID) -> None:
+    """Refuse to re-denominate money that has already been recorded.
+
+    Changing the base currency does not touch the stored numbers — it changes
+    what they *mean*. A parcel bought for 1,000,000 JOD would silently become
+    1,000,000 USD. There is no FX and no restatement in this MVP, and inventing
+    one here would be worse than refusing.
+    """
+    has_money = session.scalars(
+        select(LandParcel.id)
+        .where(
+            LandParcel.project_id == project_id,
+            (LandParcel.purchase_price.is_not(None)) | (LandParcel.acquisition_fees.is_not(None)),
+        )
+        .limit(1)
+        .union_all(
+            select(Permit.id)
+            .where(Permit.project_id == project_id, Permit.fee_amount.is_not(None))
+            .limit(1)
+        )
+    ).first()
+    if has_money is not None:
+        raise ConflictError(
+            "Project base currency cannot be changed after monetary amounts have been recorded."
+        )
+
+
+def _guard_country_pack_change(session: Session, project_id: uuid.UUID) -> None:
+    """Refuse to move recorded records under a different jurisdiction.
+
+    Parcels, permits and document references carry codes validated against the
+    country pack that was current when they were entered — ownership type, title
+    status, zoning class, permit type, document type. Repointing the project at
+    another country would leave every one of them describing the wrong legal
+    regime, and reconciling that is a controlled migration, not a field edit.
+    """
+    for model in (LandParcel, PlanningControl, Permit, DocumentReference):
+        existing = session.scalars(
+            select(model.id).where(model.project_id == project_id).limit(1)
+        ).first()
+        if existing is not None:
+            raise ConflictError(
+                "Country pack cannot be changed after project land, planning, "
+                "permits or documents have been recorded."
+            )
 
 
 def normalize_project_code(code: str) -> str:
@@ -357,23 +433,42 @@ def normalize_project_code(code: str) -> str:
     return candidate.upper()
 
 
+def _has_active_access(session: Session, *, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    access = _find_access(session, project_id=project_id, user_id=user_id)
+    return access is not None and access.is_active
+
+
 def _assign_project_manager(
     session: Session,
     *,
     project: Project,
     user_id: uuid.UUID,
     actor_user_id: uuid.UUID,
+    actor_is_system_admin: bool,
     correlation_id: uuid.UUID,
 ) -> None:
-    """Validate a manager and make sure they can actually reach the project.
+    """Validate a manager, and settle who is allowed to give them access.
 
-    A manager who cannot open the project is not managing it, so the access row
-    is created here in the same transaction rather than left as a second step
-    somebody has to remember.
+    Two rules meet here and both have to hold. A manager who cannot open the
+    project is not managing it — so an administrator's assignment creates the
+    access row in the same transaction. But project membership is security
+    administration, reserved to a System Administrator; if assigning a manager
+    also granted access, any Project Manager could add whoever they liked to a
+    project simply by naming them. So a non-administrator may only hand the role
+    to someone who is already a member.
     """
     user = _require_active_user(session, user_id, label="Project manager")
     if ROLE_PROJECT_MANAGER not in user.role_keys:
         raise ValidationError("The project manager must hold the Project Manager role.")
+
+    if not actor_is_system_admin and not _has_active_access(
+        session, project_id=project.id, user_id=user_id
+    ):
+        raise ConflictError(
+            "Only a System Administrator can grant project access. Add the user to "
+            "the project before assigning them as project manager."
+        )
+
     _ensure_access(
         session,
         project_id=project.id,
@@ -381,6 +476,24 @@ def _assign_project_manager(
         actor_user_id=actor_user_id,
         correlation_id=correlation_id,
     )
+
+
+def _require_project_member(
+    session: Session, *, project_id: uuid.UUID, user_id: uuid.UUID, label: str
+) -> User:
+    """Refuse to make someone responsible for a project they cannot open.
+
+    A System Administrator reaches every project without a membership row, so
+    they qualify. For anyone else this is deliberately a check and not a grant:
+    creating access from permit editing would hand every technical writer a
+    route into security administration.
+    """
+    user = _require_active_user(session, user_id, label=label)
+    if ROLE_SYSTEM_ADMIN in user.role_keys:
+        return user
+    if not _has_active_access(session, project_id=project_id, user_id=user_id):
+        raise ValidationError(f"{label} must already have access to this project.")
+    return user
 
 
 def create_project(
@@ -485,6 +598,7 @@ def create_project(
             project=project,
             user_id=project_manager_user_id,
             actor_user_id=actor_user_id,
+            actor_is_system_admin=actor_is_system_admin,
             correlation_id=correlation_id,
         )
         project.project_manager_user_id = project_manager_user_id
@@ -500,10 +614,15 @@ def update_project(
     *,
     project: Project,
     actor_user_id: uuid.UUID,
+    actor_is_system_admin: bool,
     correlation_id: uuid.UUID,
     **changes: object,
 ) -> Project:
     updates = resolve_updates(changes, fields=_PROJECT_UPDATABLE, clearable=_PROJECT_CLEARABLE)
+
+    # The manager/access pairing is decided below against this row, and a
+    # concurrent access revocation must queue behind it rather than race it.
+    project = _lock_project(session, project.id)
 
     basis_changes = [
         field
@@ -515,6 +634,17 @@ def update_project(
             "The country pack and currencies can only be changed while the project "
             "is still in setup."
         )
+
+    # Setup is the opening configuration state, not a state to come back to.
+    # Without this, the basis lock would be trivially reversible: leave setup,
+    # return to it, and change the currency after all.
+    if updates.get("status") == PROJECT_STATUS_SETUP and project.status != PROJECT_STATUS_SETUP:
+        raise ConflictError("A project cannot return to setup once it has left it.")
+
+    if "base_currency_id" in updates and updates["base_currency_id"] != project.base_currency_id:
+        _guard_base_currency_change(session, project.id)
+    if "country_pack_id" in updates and updates["country_pack_id"] != project.country_pack_id:
+        _guard_country_pack_change(session, project.id)
 
     if "country_pack_id" in updates:
         _require_active_country_pack(session, updates["country_pack_id"])  # type: ignore[arg-type]
@@ -538,12 +668,19 @@ def update_project(
         updates.get("planned_completion", project.planned_completion),  # type: ignore[arg-type]
         detail="Planned completion must not be earlier than planned start.",
     )
-    if updates.get("project_type_code") is not None:
+    # Validate the type the row will hold against the pack it will belong to —
+    # moving country revalidates the code already on the project, not only a
+    # code the request happens to name.
+    resulting_pack = updates.get("country_pack_id", project.country_pack_id)
+    resulting_type = updates.get("project_type_code", project.project_type_code)
+    if resulting_type is not None and (
+        "project_type_code" in updates or resulting_pack != project.country_pack_id
+    ):
         require_active_reference_value(
             session,
             category=CATEGORY_PROJECT_TYPE,
-            code=updates["project_type_code"],  # type: ignore[arg-type]
-            country_pack_id=updates.get("country_pack_id", project.country_pack_id),  # type: ignore[arg-type]
+            code=resulting_type,  # type: ignore[arg-type]
+            country_pack_id=resulting_pack,  # type: ignore[arg-type]
         )
 
     before = _snapshot(project, _PROJECT_FIELDS)
@@ -554,6 +691,7 @@ def update_project(
             project=project,
             user_id=new_manager,  # type: ignore[arg-type]
             actor_user_id=actor_user_id,
+            actor_is_system_admin=actor_is_system_admin,
             correlation_id=correlation_id,
         )
 
@@ -586,12 +724,7 @@ def permit_summary(session: Session, project_ids: list[uuid.UUID]) -> dict[uuid.
             func.count(Permit.id),
             func.count(Permit.id).filter(Permit.is_blocking.is_(True)),
             func.count(Permit.id).filter(Permit.is_critical_path.is_(True)),
-            # PostgreSQL adds a plain integer to a date as days, so the SLA
-            # deadline is expressed without an interval cast.
-            func.count(Permit.id).filter(
-                Permit.statutory_sla_days.is_not(None),
-                Permit.status_effective_date + Permit.statutory_sla_days < today,
-            ),
+            func.count(Permit.id).filter(_sla_overdue_clause(today)),
         )
         .where(Permit.project_id.in_(project_ids))
         .group_by(Permit.project_id)
@@ -1067,6 +1200,47 @@ _SATISFYING_STATUSES = frozenset({"issued", "renewed"})
 _MAX_PREREQUISITE_DEPTH = 64
 
 
+def _sla_overdue_clause(today: date) -> ColumnElement[bool]:
+    """The one definition of an overdue permit, as SQL.
+
+    PostgreSQL adds a plain integer to a date as days. This mirrors
+    :func:`derive_permit_metrics` exactly — the register's summary and each
+    row's own ``sla_overdue`` must never be able to disagree about what overdue
+    means, which they would the moment the rule were written out twice.
+    """
+    return (Permit.statutory_sla_days.is_not(None)) & (
+        Permit.status_effective_date + Permit.statutory_sla_days < today
+    )
+
+
+def _permit_filters(
+    *,
+    project_id: uuid.UUID,
+    status: str | None,
+    permit_type_code: str | None,
+    parcel_id: uuid.UUID | None,
+    is_blocking: bool | None,
+    is_critical_path: bool | None,
+) -> list[ColumnElement[bool]]:
+    """The WHERE clauses shared by the page query and the summary query.
+
+    Built once so the counts can never describe a different population from the
+    rows they are reported alongside.
+    """
+    clauses: list[ColumnElement[bool]] = [Permit.project_id == project_id]
+    if status is not None:
+        clauses.append(Permit.status == status)
+    if permit_type_code is not None:
+        clauses.append(Permit.permit_type_code == permit_type_code)
+    if parcel_id is not None:
+        clauses.append(Permit.parcel_id == parcel_id)
+    if is_blocking is not None:
+        clauses.append(Permit.is_blocking.is_(is_blocking))
+    if is_critical_path is not None:
+        clauses.append(Permit.is_critical_path.is_(is_critical_path))
+    return clauses
+
+
 def list_permits(
     session: Session,
     *,
@@ -1079,25 +1253,88 @@ def list_permits(
     limit: int = 200,
     offset: int = 0,
 ) -> list[Permit]:
-    statement = select(Permit).where(Permit.project_id == project_id)
-    if status is not None:
-        statement = statement.where(Permit.status == status)
-    if permit_type_code is not None:
-        statement = statement.where(Permit.permit_type_code == permit_type_code)
-    if parcel_id is not None:
-        statement = statement.where(Permit.parcel_id == parcel_id)
-    if is_blocking is not None:
-        statement = statement.where(Permit.is_blocking.is_(is_blocking))
-    if is_critical_path is not None:
-        statement = statement.where(Permit.is_critical_path.is_(is_critical_path))
-    statement = statement.order_by(Permit.permit_code).limit(limit).offset(offset)
-    return list(session.scalars(statement))
+    clauses = _permit_filters(
+        project_id=project_id,
+        status=status,
+        permit_type_code=permit_type_code,
+        parcel_id=parcel_id,
+        is_blocking=is_blocking,
+        is_critical_path=is_critical_path,
+    )
+    return list(
+        session.scalars(
+            select(Permit).where(*clauses).order_by(Permit.permit_code).limit(limit).offset(offset)
+        )
+    )
+
+
+def permit_register_totals(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    status: str | None = None,
+    permit_type_code: str | None = None,
+    parcel_id: uuid.UUID | None = None,
+    is_blocking: bool | None = None,
+    is_critical_path: bool | None = None,
+    today: date | None = None,
+) -> dict[str, int]:
+    """Counts over the whole matching set, not over the page being returned.
+
+    A register that reports the size of one page under the name ``total`` is
+    telling a manager there are fifty permits when there are two hundred and
+    fifty. Aggregated in SQL, so no row leaves the database to be counted.
+    """
+    clauses = _permit_filters(
+        project_id=project_id,
+        status=status,
+        permit_type_code=permit_type_code,
+        parcel_id=parcel_id,
+        is_blocking=is_blocking,
+        is_critical_path=is_critical_path,
+    )
+    overdue = _sla_overdue_clause(today or date.today())
+    row = session.execute(
+        select(
+            func.count(Permit.id),
+            func.count(Permit.id).filter(Permit.is_blocking.is_(True)),
+            func.count(Permit.id).filter(Permit.is_critical_path.is_(True)),
+            func.count(Permit.id).filter(overdue),
+        ).where(*clauses)
+    ).one()
+    return {
+        "total": row[0],
+        "blocking_count": row[1],
+        "critical_path_count": row[2],
+        "sla_overdue_count": row[3],
+    }
 
 
 def get_permit(session: Session, *, project_id: uuid.UUID, permit_id: uuid.UUID) -> Permit:
     """Load a permit within a project. Scoped for the same reason parcels are."""
     permit = session.scalars(
         select(Permit).where(Permit.id == permit_id, Permit.project_id == project_id)
+    ).first()
+    if permit is None:
+        raise NotFoundError("Permit not found.")
+    return permit
+
+
+def _lock_permit(session: Session, *, project_id: uuid.UUID, permit_id: uuid.UUID) -> Permit:
+    """Take the permit row for update and return its committed state.
+
+    Status is a read-then-write decision, so the row the rules are evaluated
+    against must be the locked one, not the copy the route loaded earlier. Two
+    requests reading ``submitted`` could otherwise both find a valid exit and
+    each append an event claiming to follow it, leaving a history that forks and
+    a current status decided by whichever write landed last.
+    """
+    permit = session.scalars(
+        select(Permit)
+        .where(Permit.id == permit_id, Permit.project_id == project_id)
+        .with_for_update()
+        # See ``_lock_project``: the lock alone would return stale attributes.
+        .execution_options(populate_existing=True)
     ).first()
     if permit is None:
         raise NotFoundError("Permit not found.")
@@ -1187,7 +1424,7 @@ def _validate_permit_links(
     ):
         user_id = values.get(field)
         if user_id is not None:
-            _require_active_user(session, user_id, label=label)
+            _require_project_member(session, project_id=project.id, user_id=user_id, label=label)
 
 
 def create_permit(
@@ -1253,6 +1490,24 @@ def update_permit(
 ) -> Permit:
     updates = resolve_updates(changes, fields=_PERMIT_UPDATABLE, clearable=_PERMIT_CLEARABLE)
 
+    # Lock order is always project first, then permit. Writing a prerequisite
+    # link makes PostgreSQL take a key-share lock on the referenced permit's
+    # parent row, so a path that took the permit first and the project second
+    # would deadlock against one doing the reverse.
+    #
+    # A cycle is a property of the whole chain rather than of one row, so a
+    # prerequisite change serialises on the project that owns the chain:
+    # otherwise "A depends on B" and "B depends on A" each validate against a
+    # graph that does not yet contain the other, and both commit.
+    if "prerequisite_permit_id" in updates:
+        _lock_project(session, project.id)
+
+    # The freeze is decided by the permit's status, so read it under lock: a
+    # concurrent transition to ``submitted`` must either land before this update
+    # is judged, or wait behind it — never run alongside it and leave a
+    # submitted application whose identity changed as it was submitted.
+    permit = _lock_permit(session, project_id=project.id, permit_id=permit.id)
+
     if permit.status not in _PRE_SUBMISSION_STATUSES:
         frozen = [
             field
@@ -1303,6 +1558,10 @@ def transition_permit(
     milestone date it establishes and the audit entry all commit together, so
     the register can never show a status whose history is missing.
     """
+    # Re-read under lock: every rule below is decided against committed state,
+    # and the lock is held until this transaction commits.
+    permit = _lock_permit(session, project_id=permit.project_id, permit_id=permit.id)
+
     from_status = permit.status
     if to_status not in PERMIT_STATUSES:
         raise ValidationError("Unknown permit status.")

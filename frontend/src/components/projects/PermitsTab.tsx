@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { Permit, PermitRegister, PermitStatusEvent, ReferenceValue } from "@/lib/api";
 import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import { EditForm, asValue } from "@/components/projects/EditForm";
+import type { EditField } from "@/components/projects/EditForm";
 
 /**
  * The moves the API will accept from each state. Mirrored here only so the
@@ -80,6 +82,54 @@ function slaLabel(permit: Permit): string {
 }
 
 /**
+ * The permit fields an ordinary update may carry.
+ *
+ * `status` and `permit_code` are absent by construction: status moves only
+ * through a transition that records why, and a permit code is immutable. The
+ * API rejects either outright, so they cannot be sent from here at all.
+ *
+ * Identity fields are still offered before submission; once the application is
+ * with the authority the API refuses them and the conflict is shown.
+ */
+function permitFields(permit: Permit): EditField[] {
+  const frozen = !["not_started", "preparing"].includes(permit.status);
+  return [
+    {
+      name: "authority",
+      label: "Authority",
+      visible: !frozen,
+      hint: "Fixed once the application is submitted.",
+    },
+    { name: "permit_type_code", label: "Permit type", visible: !frozen },
+    { name: "authority_reference", label: "Authority reference" },
+    { name: "consultant", label: "Consultant" },
+    { name: "planned_submission_date", label: "Planned submission", kind: "date" },
+    { name: "forecast_submission_date", label: "Forecast submission", kind: "date" },
+    { name: "actual_submission_date", label: "Actual submission", kind: "date" },
+    { name: "accepted_for_review_date", label: "Accepted for review", kind: "date" },
+    { name: "comments_received_date", label: "Comments received", kind: "date" },
+    { name: "resubmission_date", label: "Resubmission", kind: "date" },
+    { name: "planned_issue_date", label: "Planned issue", kind: "date" },
+    { name: "forecast_issue_date", label: "Forecast issue", kind: "date" },
+    { name: "issue_date", label: "Issued", kind: "date" },
+    { name: "expiry_date", label: "Expiry", kind: "date" },
+    { name: "renewal_date", label: "Renewal", kind: "date" },
+    { name: "statutory_sla_days", label: "Statutory period (days)", kind: "number" },
+    {
+      name: "fee_amount",
+      label: `Fee${permit.base_currency_code ? ` (${permit.base_currency_code})` : ""}`,
+      kind: "number",
+      visible: permit.financials_visible,
+    },
+    { name: "conditions", label: "Conditions", kind: "textarea" },
+    { name: "next_action", label: "Next action" },
+    { name: "notes", label: "Notes", kind: "textarea" },
+    { name: "is_blocking", label: "Blocking", kind: "checkbox" },
+    { name: "is_critical_path", label: "On the critical path", kind: "checkbox" },
+  ];
+}
+
+/**
  * The permit tracker: the register plus the one control that moves a permit.
  *
  * Status is deliberately not an editable field anywhere here. It moves through
@@ -102,6 +152,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
   });
   const [move, setMove] = useState({ to_status: "", effective_date: today(), reason: "" });
   const [filter, setFilter] = useState("");
+  const [editingPermit, setEditingPermit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,6 +187,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
 
   const open = async (permit: Permit) => {
     setSelected(permit);
+    setEditingPermit(false);
     setMove({ to_status: "", effective_date: today(), reason: "" });
     setHistory(await projects.permitHistory(projectId, permit.id));
   };
@@ -381,15 +433,44 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
           title={`${selected.permit_code} — ${STATUS_LABELS[selected.status] ?? selected.status}`}
           description={selected.authority}
           actions={
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setSelected(null)}
-            >
-              Close
-            </button>
+            <>
+              {canWrite ? (
+                <button
+                  className="button button-small"
+                  type="button"
+                  onClick={() => setEditingPermit((open) => !open)}
+                >
+                  {editingPermit ? "Cancel" : "Edit permit"}
+                </button>
+              ) : null}
+              <button
+                className="button button-small"
+                type="button"
+                onClick={() => setSelected(null)}
+              >
+                Close
+              </button>
+            </>
           }
         >
+          {editingPermit ? (
+            <EditForm
+              fields={permitFields(selected)}
+              initial={Object.fromEntries(
+                permitFields(selected).map((field) => [
+                  field.name,
+                  asValue(selected[field.name as keyof Permit] as never),
+                ]),
+              )}
+              onSave={async (changes) => {
+                const updated = await projects.updatePermit(projectId, selected.id, changes);
+                await load();
+                await open(updated);
+                setNotice(`${updated.permit_code} updated.`);
+              }}
+              onCancel={() => setEditingPermit(false)}
+            />
+          ) : null}
           <dl className="reference-list">
             <div>
               <dt className="reference-term">Status since</dt>

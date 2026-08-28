@@ -131,6 +131,15 @@ proves they are necessary.
   the read, and hold it through the write and commit. Pick the narrowest owner
   the check never looks past; a row lock is the tool, not a queue, a cache or an
   advisory-lock scheme.
+- A `with_for_update()` query needs `.execution_options(populate_existing=True)`
+  to be worth taking. Without it SQLAlchemy takes the lock and then returns the
+  copy already in the identity map, so the decision is still made against the
+  stale read the lock existed to prevent.
+- Take locks in one order across the whole codebase — currently project, then
+  permit. PostgreSQL takes a key-share lock on the parent row when a child row
+  writes a foreign key, so a path that locked the child first would deadlock
+  against one doing the reverse. A new lock joins the order; it does not start
+  its own.
 - Declare a uniqueness rule exactly once. `unique=True` on a column *and* a
   `UniqueConstraint` over the same column is two declarations of one rule:
   PostgreSQL silently keeps whichever it reads first, so the surviving name is

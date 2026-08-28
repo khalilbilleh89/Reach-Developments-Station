@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
-from app.modules.projects.models import UserProjectAccess
+from app.modules.projects.models import Project, UserProjectAccess
 from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, grant_access, project_payload
 
@@ -276,3 +276,159 @@ def test_access_cannot_be_granted_on_an_unknown_project(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Project not found."}
+
+
+# --------------------------------------------------------------------------- #
+# Membership can only be granted by an administrator — including indirectly
+# --------------------------------------------------------------------------- #
+
+
+def test_an_administrator_assigning_a_manager_grants_their_access(
+    admin_client: TestClient, db: Session, project_id: str
+) -> None:
+    """Given an administrator, then assigning a manager creates the access they need."""
+    outsider = make_user(db, email="pm2@example.com", roles=("project_manager",))
+
+    response = admin_client.patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(outsider.id)}
+    )
+
+    assert response.status_code == 200, response.text
+    access = db.scalars(
+        select(UserProjectAccess).where(UserProjectAccess.user_id == outsider.id)
+    ).one()
+    assert access.is_active is True
+
+
+def test_a_manager_may_hand_the_role_to_an_existing_member(
+    admin_client: TestClient, db: Session, manager: User, project_id: str
+) -> None:
+    """Given the target is already on the project, then a manager may reassign."""
+    colleague = make_user(db, email="pm3@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, manager)
+    grant_access(admin_client, project_id, colleague)
+
+    response = client_for(manager.email).patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(colleague.id)}
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_a_manager_cannot_grant_access_by_naming_someone_manager(
+    admin_client: TestClient, db: Session, manager: User, project_id: str
+) -> None:
+    """Given an outsider, then a manager cannot add them by assigning them the role.
+
+    Otherwise manager assignment is a back door into security administration:
+    any Project Manager could put whoever they liked on a project simply by
+    naming them.
+    """
+    outsider = make_user(db, email="outsider@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, manager)
+
+    response = client_for(manager.email).patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(outsider.id)}
+    )
+
+    assert response.status_code == 409
+    assert "Only a System Administrator can grant project access" in response.json()["detail"]
+
+
+def test_a_refused_manager_assignment_creates_no_access_row(
+    admin_client: TestClient, db: Session, manager: User, project_id: str
+) -> None:
+    """Given the refusal, then no membership was created on the way to it."""
+    outsider = make_user(db, email="outsider2@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, manager)
+
+    client_for(manager.email).patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(outsider.id)}
+    )
+
+    assert (
+        db.scalars(select(UserProjectAccess).where(UserProjectAccess.user_id == outsider.id)).all()
+        == []
+    )
+    assert db.scalars(select(Project)).one().project_manager_user_id is None
+
+
+def test_a_manager_creating_a_project_may_name_themselves(
+    manager: User,
+    manager_client: TestClient,
+    country_pack_id: str,
+    currency_id: str,
+    reference_data: None,
+) -> None:
+    """Given the creator receives access, then they may take the role themselves."""
+    response = manager_client.post(
+        PROJECTS,
+        json=project_payload(
+            country_pack_id,
+            currency_id,
+            code="SELF-PM",
+            project_manager_user_id=str(manager.id),
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["project_manager_user_id"] == str(manager.id)
+
+
+def test_a_manager_cannot_use_project_creation_to_add_someone(
+    manager_client: TestClient,
+    db: Session,
+    country_pack_id: str,
+    currency_id: str,
+    reference_data: None,
+) -> None:
+    """Given a brand-new project, then nominating an outsider as manager is refused.
+
+    Creation is not a loophole around the same rule: only the creator has access
+    to a project that did not exist a moment ago.
+    """
+    outsider = make_user(db, email="outsider3@example.com", roles=("project_manager",))
+
+    response = manager_client.post(
+        PROJECTS,
+        json=project_payload(
+            country_pack_id,
+            currency_id,
+            code="NOT-MINE",
+            project_manager_user_id=str(outsider.id),
+        ),
+    )
+
+    assert response.status_code == 409
+    assert (
+        db.scalars(select(UserProjectAccess).where(UserProjectAccess.user_id == outsider.id)).all()
+        == []
+    )
+
+
+def test_an_administrator_may_nominate_another_manager_at_creation(
+    admin_client: TestClient,
+    db: Session,
+    manager: User,
+    country_pack_id: str,
+    currency_id: str,
+    reference_data: None,
+) -> None:
+    """Given an administrator creates the project, then the manager gets access."""
+    response = admin_client.post(
+        PROJECTS,
+        json=project_payload(
+            country_pack_id,
+            currency_id,
+            code="ADMIN-MADE",
+            project_manager_user_id=str(manager.id),
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    assert (
+        db.scalars(select(UserProjectAccess).where(UserProjectAccess.user_id == manager.id))
+        .one()
+        .is_active
+        is True
+    )

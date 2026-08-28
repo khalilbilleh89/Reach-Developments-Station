@@ -234,17 +234,37 @@ def test_an_explicit_milestone_date_is_never_silently_overwritten(
 def test_an_ordinary_update_cannot_change_the_status(
     admin_client: TestClient, permits_url: str, permit_id: str, db: Session
 ) -> None:
-    """Given a PATCH naming a status, then the field is simply not accepted.
+    """Given a PATCH naming a status, then the whole request is refused.
 
     Status is history; it moves only through a transition that records the move.
+    Accepting the rest of the body and dropping ``status`` would report success
+    for a change that never happened — and the caller would have no way to tell.
     """
     response = admin_client.patch(
         f"{permits_url}/{permit_id}", json={"status": "issued", "next_action": "Chase"}
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "not_started"
+    assert response.status_code == 422
+    permit = db.scalars(select(Permit)).one()
+    assert permit.status == "not_started"
+    # The rest of the body is refused with it: a partial write is not on offer.
+    assert permit.next_action is None
     assert db.scalars(select(PermitStatusEvent)).all() == []
+    assert db.scalars(select(AuditEvent).where(AuditEvent.action == "permit.updated")).all() == []
+
+
+def test_a_misspelled_field_is_refused_rather_than_dropped(
+    admin_client: TestClient, permits_url: str, permit_id: str
+) -> None:
+    """Given a typo in a control flag, then the request fails loudly.
+
+    ``is_blockng`` silently ignored would leave a permit that someone believes
+    is flagged as blocking and that the register does not show as blocking.
+    """
+    response = admin_client.patch(f"{permits_url}/{permit_id}", json={"is_blockng": True})
+
+    assert response.status_code == 422
+    assert admin_client.get(f"{permits_url}/{permit_id}").json()["is_blocking"] is False
 
 
 def test_a_transition_appends_exactly_one_event(
@@ -430,8 +450,8 @@ def test_operational_fields_stay_editable_after_submission(
 def test_the_permit_code_is_immutable_from_creation(
     admin_client: TestClient, permits_url: str, permit_id: str
 ) -> None:
-    """Given an update naming a permit code, then the field is not accepted at all."""
+    """Given an update naming a permit code, then the request is refused."""
     response = admin_client.patch(f"{permits_url}/{permit_id}", json={"permit_code": "OTHER-1"})
 
-    assert response.status_code == 200
-    assert response.json()["permit_code"] == "BLD-001"
+    assert response.status_code == 422
+    assert admin_client.get(f"{permits_url}/{permit_id}").json()["permit_code"] == "BLD-001"
