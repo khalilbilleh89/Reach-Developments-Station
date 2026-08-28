@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core.database import get_engine, get_session_factory
+from app.core.errors import ConflictError
 from app.modules.access.models import User
-from app.modules.settings.models import CountryApprovalThreshold, TaxRule
+from app.modules.audit.models import AuditEvent
+from app.modules.settings import service
+from app.modules.settings.models import (
+    CountryApprovalThreshold,
+    CountryPack,
+    Currency,
+    ReferenceValue,
+    TaxRule,
+)
 from tests.factories import client_for, make_user
 
 CURRENCIES = "/api/v1/settings/currencies"
@@ -82,6 +95,61 @@ def test_invalid_currency_codes_are_rejected(client: TestClient, code: str) -> N
     response = client.post(CURRENCIES, json={"code": code, "name": "Bad"})
 
     assert response.status_code in (409, 422)
+
+
+def test_an_unused_currency_can_be_deactivated(client: TestClient, currency_id: str) -> None:
+    """Given a currency no country pack depends on, then it can be retired."""
+    response = client.patch(f"{CURRENCIES}/{currency_id}", json={"is_active": False})
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+def test_the_default_currency_of_an_active_pack_cannot_be_deactivated(
+    client: TestClient, currency_id: str, pack_id: str, db: Session
+) -> None:
+    """Given an active pack defaulting to it, then deactivating the currency is refused."""
+    response = client.patch(f"{CURRENCIES}/{currency_id}", json={"is_active": False})
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            "Currency cannot be deactivated while it is the default currency "
+            "of an active country pack."
+        )
+    }
+    # The refusal is total: neither the row nor the audit trail moved.
+    listed = client.get(CURRENCIES).json()
+    assert [item["is_active"] for item in listed] == [True]
+    assert db.scalars(select(Currency).where(Currency.id == uuid.UUID(currency_id))).one().is_active
+    updates = db.scalars(select(AuditEvent).where(AuditEvent.action == "currency.updated")).all()
+    assert updates == []
+
+
+def test_a_currency_used_only_by_an_inactive_pack_can_be_deactivated(
+    client: TestClient, currency_id: str, pack_id: str
+) -> None:
+    """Given the only pack using it is retired, then the currency may be retired too."""
+    assert client.patch(f"{PACKS}/{pack_id}", json={"is_active": False}).status_code == 200
+
+    response = client.patch(f"{CURRENCIES}/{currency_id}", json={"is_active": False})
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+def test_unrelated_currency_edits_still_apply_while_a_pack_depends_on_it(
+    client: TestClient, currency_id: str, pack_id: str
+) -> None:
+    """Given a depended-on currency, then the guard blocks only deactivation."""
+    response = client.patch(
+        f"{CURRENCIES}/{currency_id}", json={"name": "Jordanian dinar", "symbol": "JD"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Jordanian dinar"
+    assert response.json()["symbol"] == "JD"
+    assert response.json()["is_active"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -258,6 +326,230 @@ def test_tax_rules_have_no_delete_endpoint(client: TestClient, pack_id: str) -> 
     assert deactivated.json()["is_active"] is False
 
 
+def test_an_explicit_null_clears_a_tax_rule_end_date(
+    client: TestClient, pack_id: str, db: Session
+) -> None:
+    """Given ``valid_to: null``, then the rule reopens instead of being ignored.
+
+    An omitted key and an explicit null are different requests: the first says
+    nothing about the field, the second says "there is no end date".
+    """
+    created = client.post(
+        f"{PACKS}/{pack_id}/tax-rules", json=_tax_payload(valid_to="2026-05-31")
+    ).json()
+
+    response = client.patch(f"/api/v1/settings/tax-rules/{created['id']}", json={"valid_to": None})
+
+    assert response.status_code == 200
+    assert response.json()["valid_to"] is None
+    assert db.scalars(select(TaxRule)).one().valid_to is None
+    # The trail has to show the end date going away, not a no-op update.
+    event = db.scalars(select(AuditEvent).where(AuditEvent.action == "tax_rule.updated")).one()
+    assert event.before_data["valid_to"] == "2026-05-31"
+    assert event.after_data["valid_to"] is None
+
+
+def test_omitting_a_tax_rule_end_date_leaves_it_alone(client: TestClient, pack_id: str) -> None:
+    """Given a body without ``valid_to``, then the stored end date survives."""
+    created = client.post(
+        f"{PACKS}/{pack_id}/tax-rules", json=_tax_payload(valid_to="2026-05-31")
+    ).json()
+
+    response = client.patch(
+        f"/api/v1/settings/tax-rules/{created['id']}", json={"label": "VAT (standard)"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid_to"] == "2026-05-31"
+
+
+def test_clearing_a_tax_rule_end_date_is_revalidated_against_its_successor(
+    client: TestClient, pack_id: str, db: Session
+) -> None:
+    """Given a later rule, then reopening the earlier one is refused, not applied."""
+    first = client.post(
+        f"{PACKS}/{pack_id}/tax-rules", json=_tax_payload(valid_to="2026-05-31")
+    ).json()
+    assert (
+        client.post(
+            f"{PACKS}/{pack_id}/tax-rules",
+            json=_tax_payload(label="VAT 18", rate_fraction="0.18", valid_from="2026-06-01"),
+        ).status_code
+        == 201
+    )
+
+    response = client.patch(f"/api/v1/settings/tax-rules/{first['id']}", json={"valid_to": None})
+
+    assert response.status_code == 409
+    stored = db.scalars(select(TaxRule).where(TaxRule.id == uuid.UUID(first["id"]))).one()
+    assert stored.valid_to is not None
+
+
+def test_a_null_start_date_is_refused_rather_than_silently_dropped(
+    client: TestClient, pack_id: str
+) -> None:
+    """Given ``valid_from: null`` on a column that cannot be null, then it is a 422."""
+    created = client.post(f"{PACKS}/{pack_id}/tax-rules", json=_tax_payload()).json()
+
+    response = client.patch(
+        f"/api/v1/settings/tax-rules/{created['id']}", json={"valid_from": None}
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "valid_from cannot be null."}
+
+
+def _wait_until_a_backend_blocks(timeout: float = 15.0) -> bool:
+    """Poll until some other backend in this database is waiting on a lock.
+
+    Polling PostgreSQL's own view of who is waiting keeps the test deterministic:
+    it waits *until* the condition holds rather than guessing at a sleep long
+    enough to hide a race.
+    """
+    query = text(
+        "SELECT count(*) FROM pg_stat_activity "
+        "WHERE datname = current_database() "
+        "AND pid <> pg_backend_pid() "
+        "AND wait_event_type = 'Lock'"
+    )
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with get_engine().connect() as connection:
+            if connection.execute(query).scalar():
+                return True
+        time.sleep(0.05)
+    return False
+
+
+def test_a_concurrent_writer_cannot_slip_an_overlapping_tax_rule_past_the_check(
+    admin: User, pack_id: str, db: Session
+) -> None:
+    """Given two real transactions, then only one overlapping rule survives.
+
+    Overlap protection is a read-then-write decision, so proving it holds needs
+    two genuine PostgreSQL transactions racing: a mocked session would only prove
+    that the mock was called in the order the test itself chose.
+
+    The first writer takes the country-pack lock the service takes and holds it,
+    so the second writer's request is pinned mid-flight. If the service read the
+    existing rules *before* locking, it would have seen an empty table, and its
+    insert would land after the first writer's commit — two overlapping active
+    rules, and no error for anyone to notice.
+    """
+    pack = uuid.UUID(pack_id)
+    factory = get_session_factory()
+    holder = factory()
+    holder.execute(select(CountryPack).where(CountryPack.id == pack).with_for_update())
+
+    outcome: list[object] = []
+
+    def second_writer() -> None:
+        session = factory()
+        try:
+            service.create_tax_rule(
+                session,
+                country_pack_id=pack,
+                actor_user_id=admin.id,
+                correlation_id=uuid.uuid4(),
+                tax_code="VAT",
+                label="VAT 18",
+                applies_to="sale",
+                calculation_basis="net_amount",
+                rate_fraction=Decimal("0.180000"),
+                valid_from=date(2026, 6, 1),
+                valid_to=None,
+            )
+            outcome.append("created")
+        # Deliberately broad: whatever the writer raises has to reach the
+        # asserting thread, which cannot see this thread's traceback.
+        except BaseException as exc:
+            outcome.append(exc)
+        finally:
+            session.rollback()
+            session.close()
+
+    thread = threading.Thread(target=second_writer, name="second-tax-writer")
+    thread.start()
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        # Only now, with the second writer still waiting, does the first commit a
+        # rule that covers the period the second one asked for.
+        holder.add(
+            TaxRule(
+                country_pack_id=pack,
+                tax_code="VAT",
+                label="VAT 16",
+                applies_to="sale",
+                calculation_basis="net_amount",
+                rate_fraction=Decimal("0.160000"),
+                valid_from=date(2026, 1, 1),
+                valid_to=None,
+                is_active=True,
+            )
+        )
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+
+    assert blocked, "the second writer evaluated overlap without taking the country-pack lock"
+    assert not thread.is_alive()
+    assert isinstance(outcome[0], ConflictError), outcome[0]
+    surviving = db.scalars(select(TaxRule)).all()
+    assert [rule.label for rule in surviving] == ["VAT 16"]
+
+
+def test_racing_writers_leave_exactly_one_active_tax_rule(
+    admin: User, pack_id: str, db: Session
+) -> None:
+    """Given writers released together, then one wins and the rest conflict."""
+    pack = uuid.UUID(pack_id)
+    factory = get_session_factory()
+    writers = 6
+    start = threading.Barrier(writers)
+    outcome: list[object] = []
+    guard = threading.Lock()
+
+    def writer(index: int) -> None:
+        session = factory()
+        start.wait(timeout=30)
+        try:
+            service.create_tax_rule(
+                session,
+                country_pack_id=pack,
+                actor_user_id=admin.id,
+                correlation_id=uuid.uuid4(),
+                tax_code="VAT",
+                label=f"VAT {index}",
+                applies_to="sale",
+                calculation_basis="net_amount",
+                rate_fraction=Decimal("0.160000"),
+                valid_from=date(2026, 1, 1),
+                valid_to=None,
+            )
+            result: object = "created"
+        # Deliberately broad: whatever the writer raises has to reach the
+        # asserting thread, which cannot see this thread's traceback.
+        except BaseException as exc:
+            result = exc
+        finally:
+            session.rollback()
+            session.close()
+        with guard:
+            outcome.append(result)
+
+    threads = [threading.Thread(target=writer, args=(index,)) for index in range(writers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=60)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert outcome.count("created") == 1, outcome
+    assert all(isinstance(item, ConflictError) for item in outcome if item != "created"), outcome
+    assert len(db.scalars(select(TaxRule)).all()) == 1
+
+
 # --------------------------------------------------------------------------- #
 # Reference values
 # --------------------------------------------------------------------------- #
@@ -272,6 +564,92 @@ def test_reference_keys_are_unique_within_a_scope(client: TestClient, pack_id: s
     scoped = {**body, "country_pack_id": pack_id}
     assert client.post(REFERENCE, json=scoped).status_code == 201
     assert client.post(REFERENCE, json=scoped).status_code == 409
+
+
+def test_an_explicit_null_clears_optional_reference_fields(client: TestClient, db: Session) -> None:
+    """Given nulls, then the optional description and validity window are cleared."""
+    created = client.post(
+        REFERENCE,
+        json={
+            "category": "permit_type",
+            "code": "BUILD",
+            "label": "Building permit",
+            "description": "Issued by the municipality",
+            "valid_from": "2026-01-01",
+            "valid_to": "2026-12-31",
+        },
+    ).json()
+
+    response = client.patch(
+        f"{REFERENCE}/{created['id']}",
+        json={"description": None, "valid_from": None, "valid_to": None},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["description"], body["valid_from"], body["valid_to"]) == (None, None, None)
+    stored = db.scalars(select(ReferenceValue)).one()
+    assert (stored.description, stored.valid_from, stored.valid_to) == (None, None, None)
+    event = db.scalars(
+        select(AuditEvent).where(AuditEvent.action == "reference_value.updated")
+    ).one()
+    assert event.before_data["description"] == "Issued by the municipality"
+    assert event.after_data["description"] is None
+    assert event.after_data["valid_to"] is None
+
+
+def test_omitting_reference_fields_leaves_them_alone(client: TestClient) -> None:
+    """Given a body naming only the label, then the other fields survive."""
+    created = client.post(
+        REFERENCE,
+        json={
+            "category": "permit_type",
+            "code": "BUILD",
+            "label": "Building permit",
+            "description": "Issued by the municipality",
+            "valid_to": "2026-12-31",
+        },
+    ).json()
+
+    response = client.patch(f"{REFERENCE}/{created['id']}", json={"label": "Building permit (new)"})
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "Issued by the municipality"
+    assert response.json()["valid_to"] == "2026-12-31"
+
+
+def test_a_reversed_reference_window_is_still_rejected_after_a_partial_clear(
+    client: TestClient,
+) -> None:
+    """Given a cleared start and an earlier end, then the ordering rule still applies."""
+    created = client.post(
+        REFERENCE,
+        json={
+            "category": "permit_type",
+            "code": "BUILD",
+            "label": "Building permit",
+            "valid_from": "2026-01-01",
+        },
+    ).json()
+
+    response = client.patch(f"{REFERENCE}/{created['id']}", json={"valid_to": "2025-01-01"})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "valid_to must not be earlier than valid_from."}
+
+
+def test_a_null_reference_label_is_refused_rather_than_silently_dropped(
+    client: TestClient,
+) -> None:
+    """Given ``label: null`` on a column that cannot be null, then it is a 422."""
+    created = client.post(
+        REFERENCE, json={"category": "legal_stage", "code": "DRAFT", "label": "Draft"}
+    ).json()
+
+    response = client.patch(f"{REFERENCE}/{created['id']}", json={"label": None})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "label cannot be null."}
 
 
 def test_inactive_reference_values_remain_available(client: TestClient) -> None:

@@ -53,11 +53,36 @@ def _snapshot(instance: object, fields: tuple[str, ...]) -> dict[str, Any]:
     return {field: getattr(instance, field) for field in fields}
 
 
+def _resolve_updates(
+    changes: dict[str, object], *, fields: tuple[str, ...], clearable: frozenset[str]
+) -> dict[str, object]:
+    """Turn a PATCH body into the assignments to apply.
+
+    The routes build ``changes`` with ``exclude_unset``, so an absent key and an
+    explicit ``null`` arrive differently and must stay different: absent says
+    nothing about the field, ``null`` says the value is gone. A ``null`` aimed at
+    a column that cannot hold one is a client error, not something to drop on the
+    floor and answer 200 to.
+    """
+    resolved: dict[str, object] = {}
+    for field in fields:
+        if field not in changes:
+            continue
+        value = changes[field]
+        if value is None and field not in clearable:
+            raise ValidationError(f"{field} cannot be null.")
+        resolved[field] = value.strip() if isinstance(value, str) else value
+    return resolved
+
+
 # --------------------------------------------------------------------------- #
 # Currencies
 # --------------------------------------------------------------------------- #
 
 _CURRENCY_FIELDS = ("id", "code", "name", "symbol", "minor_units", "is_active")
+#: A currency code is immutable: rows elsewhere are read through it.
+_CURRENCY_UPDATABLE = ("name", "symbol", "minor_units", "is_active")
+_CURRENCY_CLEARABLE = frozenset({"symbol"})
 
 
 def list_currencies(session: Session, *, is_active: bool | None = None) -> list[Currency]:
@@ -109,6 +134,27 @@ def create_currency(
     return currency
 
 
+def _guard_currency_still_needed(session: Session, currency_id: uuid.UUID) -> None:
+    """Refuse to retire a currency an active country pack still defaults to.
+
+    A pack may not be *created* against an inactive currency, so letting one be
+    deactivated underneath a live pack would leave that pack in a state the API
+    would never have accepted. Packs that are themselves retired do not object:
+    their currency is history too.
+    """
+    depended_on = session.scalars(
+        select(CountryPack).where(
+            CountryPack.default_currency_id == currency_id,
+            CountryPack.is_active.is_(True),
+        )
+    ).first()
+    if depended_on is not None:
+        raise ConflictError(
+            "Currency cannot be deactivated while it is the default currency "
+            "of an active country pack."
+        )
+
+
 def update_currency(
     session: Session,
     *,
@@ -118,11 +164,12 @@ def update_currency(
     **changes: object,
 ) -> Currency:
     currency = get_currency(session, currency_id)
+    updates = _resolve_updates(changes, fields=_CURRENCY_UPDATABLE, clearable=_CURRENCY_CLEARABLE)
+    if updates.get("is_active") is False:
+        _guard_currency_still_needed(session, currency.id)
     before = _snapshot(currency, _CURRENCY_FIELDS)
-    for field in ("name", "symbol", "minor_units", "is_active"):
-        value = changes.get(field)
-        if value is not None:
-            setattr(currency, field, value.strip() if isinstance(value, str) else value)
+    for field, value in updates.items():
+        setattr(currency, field, value)
     session.flush()
     record_event(
         session,
@@ -146,6 +193,19 @@ def update_currency(
 _PACK_FIELDS = (
     "id",
     "country_code",
+    "name",
+    "locale",
+    "timezone",
+    "default_currency_id",
+    "area_unit",
+    "fiscal_year_start_month",
+    "is_active",
+)
+
+
+#: The country code is immutable: it is how a pack is identified elsewhere.
+#: Nothing here is nullable, so no field is clearable.
+_PACK_UPDATABLE = (
     "name",
     "locale",
     "timezone",
@@ -237,21 +297,12 @@ def update_country_pack(
     **changes: object,
 ) -> CountryPack:
     pack = get_country_pack(session, country_pack_id)
+    updates = _resolve_updates(changes, fields=_PACK_UPDATABLE, clearable=frozenset())
     before = _snapshot(pack, _PACK_FIELDS)
-    if changes.get("default_currency_id") is not None:
-        _require_active_currency(session, changes["default_currency_id"])
-    for field in (
-        "name",
-        "locale",
-        "timezone",
-        "default_currency_id",
-        "area_unit",
-        "fiscal_year_start_month",
-        "is_active",
-    ):
-        value = changes.get(field)
-        if value is not None:
-            setattr(pack, field, value.strip() if isinstance(value, str) else value)
+    if "default_currency_id" in updates:
+        _require_active_currency(session, updates["default_currency_id"])
+    for field, value in updates.items():
+        setattr(pack, field, value)
     session.flush()
     record_event(
         session,
@@ -286,6 +337,19 @@ _TAX_FIELDS = (
 )
 
 
+#: ``valid_from`` is NOT NULL; only the end of the window may be cleared.
+_TAX_UPDATABLE = (
+    "label",
+    "applies_to",
+    "calculation_basis",
+    "rate_fraction",
+    "valid_from",
+    "valid_to",
+    "is_active",
+)
+_TAX_CLEARABLE = frozenset({"valid_to"})
+
+
 def _ranges_overlap(a_from: date, a_to: date | None, b_from: date, b_to: date | None) -> bool:
     """Whether two half-bounded date ranges intersect. ``None`` means open-ended."""
     starts_before_other_ends = a_to is None or b_from <= a_to
@@ -306,9 +370,24 @@ def _guard_tax_overlap(
 
     Superseding a rate means closing the old row's validity, not silently
     stacking a second active one: tax history has to stay readable.
+
+    Locks the owning country pack first. Overlap is decided by reading what
+    already exists and then writing, so without a lock two transactions can each
+    read a clear period and each insert into it: both commit, the invariant is
+    broken, and neither writer sees an error. Taking the row lock *before* the
+    read serialises writers per country pack, which is the smallest unit that
+    covers the invariant — the check never looks beyond one pack. The caller
+    validates, mutates and commits inside this same transaction, so the lock is
+    held for the whole decision and released by that commit.
     """
     if valid_to is not None and valid_to < valid_from:
         raise ValidationError("valid_to must not be earlier than valid_from.")
+
+    owner = session.scalars(
+        select(CountryPack).where(CountryPack.id == country_pack_id).with_for_update()
+    ).first()
+    if owner is None:
+        raise NotFoundError("Country pack not found.")
 
     existing = session.scalars(
         select(TaxRule).where(
@@ -408,9 +487,12 @@ def update_tax_rule(
     rule = get_tax_rule(session, tax_rule_id)
     before = _snapshot(rule, _TAX_FIELDS)
 
-    valid_from = changes.get("valid_from") or rule.valid_from
-    valid_to = changes.get("valid_to", rule.valid_to)
-    will_be_active = changes.get("is_active", rule.is_active)
+    updates = _resolve_updates(changes, fields=_TAX_UPDATABLE, clearable=_TAX_CLEARABLE)
+    # Validate the values the row will actually hold, not the ones it holds now:
+    # clearing an end date reopens the rule and can collide with its successor.
+    valid_from = updates.get("valid_from", rule.valid_from)
+    valid_to = updates.get("valid_to", rule.valid_to)
+    will_be_active = updates.get("is_active", rule.is_active)
     if will_be_active:
         _guard_tax_overlap(
             session,
@@ -420,19 +502,11 @@ def update_tax_rule(
             valid_to=valid_to,
             exclude_id=rule.id,
         )
+    elif valid_to is not None and valid_to < valid_from:
+        raise ValidationError("valid_to must not be earlier than valid_from.")
 
-    for field in (
-        "label",
-        "applies_to",
-        "calculation_basis",
-        "rate_fraction",
-        "valid_from",
-        "valid_to",
-        "is_active",
-    ):
-        if field in changes and changes[field] is not None:
-            value = changes[field]
-            setattr(rule, field, value.strip() if isinstance(value, str) else value)
+    for field, value in updates.items():
+        setattr(rule, field, value)
     session.flush()
     record_event(
         session,
@@ -466,6 +540,18 @@ _REFERENCE_FIELDS = (
     "valid_from",
     "valid_to",
 )
+
+
+#: Both ends of the validity window are optional here, unlike a tax rule.
+_REFERENCE_UPDATABLE = (
+    "label",
+    "description",
+    "sort_order",
+    "is_active",
+    "valid_from",
+    "valid_to",
+)
+_REFERENCE_CLEARABLE = frozenset({"description", "valid_from", "valid_to"})
 
 
 def list_reference_values(
@@ -566,15 +652,14 @@ def update_reference_value(
     value = get_reference_value(session, reference_value_id)
     before = _snapshot(value, _REFERENCE_FIELDS)
 
-    valid_from = changes.get("valid_from") or value.valid_from
-    valid_to = changes.get("valid_to", value.valid_to)
+    updates = _resolve_updates(changes, fields=_REFERENCE_UPDATABLE, clearable=_REFERENCE_CLEARABLE)
+    valid_from = updates.get("valid_from", value.valid_from)
+    valid_to = updates.get("valid_to", value.valid_to)
     if valid_from and valid_to and valid_to < valid_from:
         raise ValidationError("valid_to must not be earlier than valid_from.")
 
-    for field in ("label", "description", "sort_order", "is_active", "valid_from", "valid_to"):
-        if field in changes and changes[field] is not None:
-            item = changes[field]
-            setattr(value, field, item.strip() if isinstance(item, str) else item)
+    for field, item in updates.items():
+        setattr(value, field, item)
     session.flush()
     record_event(
         session,

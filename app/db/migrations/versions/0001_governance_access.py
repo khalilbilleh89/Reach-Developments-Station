@@ -358,7 +358,6 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_country_approval_thresholds")),
-        sa.UniqueConstraint("country_pack_id", name="country_pack"),
         sa.UniqueConstraint(
             "country_pack_id", name=op.f("uq_country_approval_thresholds_country_pack_id")
         ),

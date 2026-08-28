@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import pytest
 from alembic import command
-from sqlalchemy import inspect, text
+from sqlalchemy import UniqueConstraint, inspect, text
 
 from app.core.database import get_engine
 from app.modules.access.models import SYSTEM_ROLES
+from app.modules.settings.models import CountryApprovalThreshold
 from tests.conftest import alembic_config
 
 BASELINE = "0000_mvp_baseline"
@@ -138,6 +139,54 @@ def test_the_revision_round_trips(at_baseline: None) -> None:
             assert connection.execute(text("SELECT count(*) FROM roles")).scalar() == 11
     finally:
         _restore_head()
+
+
+THRESHOLD_LINK_CONSTRAINT = "uq_country_approval_thresholds_country_pack_id"
+
+
+def test_one_country_pack_link_is_guarded_by_exactly_one_constraint(at_baseline: None) -> None:
+    """Given the migrated schema, then one invariant is enforced by one constraint.
+
+    Two unique constraints over the same column cost two indexes to maintain and
+    leave a later migration guessing which name to drop, for no added safety.
+    """
+    command.upgrade(alembic_config(), GOVERNANCE)
+
+    try:
+        inspector = inspect(get_engine())
+        on_the_link = [
+            constraint
+            for constraint in inspector.get_unique_constraints("country_approval_thresholds")
+            if tuple(constraint["column_names"]) == ("country_pack_id",)
+        ]
+        assert [constraint["name"] for constraint in on_the_link] == [THRESHOLD_LINK_CONSTRAINT]
+
+        # One constraint means PostgreSQL maintains one backing index, not two.
+        with get_engine().connect() as connection:
+            indexes = connection.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = 'public' "
+                    "AND tablename = 'country_approval_thresholds' "
+                    "AND indexdef LIKE '%UNIQUE%(country_pack_id)'"
+                )
+            ).scalars()
+            assert sorted(indexes) == [THRESHOLD_LINK_CONSTRAINT]
+    finally:
+        _restore_head()
+
+
+def test_the_model_declares_the_same_single_constraint() -> None:
+    """Given the mapped table, then it agrees with the migration on one constraint."""
+    declared = {
+        constraint.name: tuple(constraint.columns.keys())
+        for constraint in CountryApprovalThreshold.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+
+    assert declared == {THRESHOLD_LINK_CONSTRAINT: ("country_pack_id",)}
+    # ``unique=True`` on the column would silently add a second one back.
+    assert CountryApprovalThreshold.__table__.c.country_pack_id.unique is not True
 
 
 def test_constraints_survive_the_round_trip(at_baseline: None) -> None:

@@ -229,11 +229,12 @@ class CountryApprovalThreshold(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    #: One row per country pack. The uniqueness lives in ``__table_args__`` so
+    #: exactly one named constraint reaches the database.
     country_pack_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("country_packs.id", ondelete="RESTRICT"),
         nullable=False,
-        unique=True,
     )
 
     # Pricing and discounting — PR-MVP-04.
@@ -333,5 +334,7 @@ class CountryApprovalThreshold(Base):
             "OR construction_variation_review_amount >= 0",
             name="variation_amount_non_negative",
         ),
-        UniqueConstraint("country_pack_id", name="country_pack"),
+        # Unnamed on purpose: the metadata naming convention renders this as
+        # ``uq_country_approval_thresholds_country_pack_id``.
+        UniqueConstraint("country_pack_id"),
     )
