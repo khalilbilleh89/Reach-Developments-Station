@@ -1,7 +1,13 @@
 """Shared test fixtures.
 
-Every test starts from freshly resolved configuration so that tests which
-re-point ``DATABASE_URL`` cannot leak state into their neighbours.
+The suite pins its own configuration so that a developer's shell, a stray
+``.env`` file or a CI job's environment cannot change what the tests assert.
+``DATABASE_URL`` is the single intentional external input: it must point at a
+reachable throwaway PostgreSQL database.
+
+Applications under test are built through :func:`app.main.create_app` rather
+than the module-level instance, so each test sees the configuration pinned
+below instead of whatever was in scope at import time.
 """
 
 from __future__ import annotations
@@ -14,7 +20,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
 from app.core.database import check_database_connection, dispose_engine
-from app.main import app
+from app.main import create_app
+
+PINNED_TEST_CONFIG = {
+    "APP_NAME": "reach-developments-station",
+    "APP_ENV": "test",
+    "APP_DEBUG": "false",
+    "API_V1_PREFIX": "/api/v1",
+}
 
 #: A deliberately unroutable PostgreSQL target with distinctive credentials, so
 #: that leak assertions have something unmistakable to look for.
@@ -35,8 +48,10 @@ def _reset_configuration() -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_configuration() -> Iterator[None]:
-    """Clear cached settings and engine around every test."""
+def isolated_configuration(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Pin configuration and clear cached settings and engine around every test."""
+    for name, value in PINNED_TEST_CONFIG.items():
+        monkeypatch.setenv(name, value)
     _reset_configuration()
     yield
     _reset_configuration()
@@ -44,8 +59,8 @@ def isolated_configuration() -> Iterator[None]:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    """An HTTP client bound to the real application instance."""
-    with TestClient(app) as test_client:
+    """An HTTP client bound to a freshly built application."""
+    with TestClient(create_app()) as test_client:
         yield test_client
 
 

@@ -1,4 +1,9 @@
-"""Configuration contract and database URL normalisation."""
+"""Configuration contract and database URL normalisation.
+
+These tests assert what the code does, never what the developer's shell or CI
+job happens to export. Every ``Settings`` here is built from explicit values
+with the ambient environment and ``.env`` removed.
+"""
 
 from __future__ import annotations
 
@@ -6,20 +11,35 @@ import pytest
 
 from app.core.config import DEV_DATABASE_URL, Settings, normalize_database_url
 
+CONFIG_ENV_VARS = ("APP_NAME", "APP_ENV", "APP_DEBUG", "DATABASE_URL", "API_V1_PREFIX")
+
+
+@pytest.fixture(autouse=True)
+def bare_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove every configuration variable this module reasons about."""
+    for name in CONFIG_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def build_settings(**overrides: object) -> Settings:
+    """Construct Settings from explicit values only, ignoring any .env file."""
+    return Settings(_env_file=None, **overrides)
+
 
 def test_defaults_describe_the_service() -> None:
-    """Given no overrides, then the documented development defaults apply."""
-    settings = Settings(DATABASE_URL=DEV_DATABASE_URL)
+    """Given a bare environment, then the documented development defaults apply."""
+    settings = build_settings()
 
     assert settings.APP_NAME == "reach-developments-station"
     assert settings.APP_ENV == "development"
     assert settings.APP_DEBUG is False
     assert settings.API_V1_PREFIX == "/api/v1"
+    assert settings.DATABASE_URL == DEV_DATABASE_URL
 
 
 def test_development_falls_back_to_the_local_database() -> None:
     """Given no DATABASE_URL outside production, then the local default is used."""
-    settings = Settings(APP_ENV="development", DATABASE_URL="")
+    settings = build_settings(APP_ENV="development", DATABASE_URL="")
 
     assert settings.DATABASE_URL == DEV_DATABASE_URL
 
@@ -27,13 +47,13 @@ def test_development_falls_back_to_the_local_database() -> None:
 def test_production_requires_an_explicit_database_url() -> None:
     """Given production without DATABASE_URL, then startup configuration fails."""
     with pytest.raises(ValueError, match="DATABASE_URL must be set"):
-        Settings(APP_ENV="production", DATABASE_URL="")
+        build_settings(APP_ENV="production", DATABASE_URL="")
 
 
 def test_production_forbids_debug_mode() -> None:
     """Given production with debug enabled, then startup configuration fails."""
     with pytest.raises(ValueError, match="APP_DEBUG must be false"):
-        Settings(
+        build_settings(
             APP_ENV="production",
             APP_DEBUG=True,
             DATABASE_URL="postgresql://user:pw@db.internal:5432/reach",
@@ -42,7 +62,7 @@ def test_production_forbids_debug_mode() -> None:
 
 def test_production_accepts_a_render_style_database_url() -> None:
     """Given a Render PostgreSQL URL in production, then configuration succeeds."""
-    settings = Settings(
+    settings = build_settings(
         APP_ENV="production",
         DATABASE_URL="postgres://reach_user:pw@dpg-internal:5432/reach",
     )
@@ -76,6 +96,14 @@ def test_normalisation_preserves_every_url_component() -> None:
     assert url.database == "postgres"
 
 
+def test_normalisation_preserves_connection_query_parameters() -> None:
+    """Given Render-style options such as sslmode, then they survive normalisation."""
+    url = normalize_database_url("postgres://user:pw@host:5432/reach?sslmode=require")
+
+    assert url.drivername == "postgresql+psycopg"
+    assert url.query["sslmode"] == "require"
+
+
 def test_non_postgresql_backends_are_rejected() -> None:
     """Given a non-PostgreSQL URL, then configuration refuses it."""
     with pytest.raises(ValueError, match="Unsupported database backend"):
@@ -91,12 +119,12 @@ def test_other_postgresql_drivers_are_rejected() -> None:
 def test_malformed_database_urls_fail_at_startup() -> None:
     """Given an unparseable URL, then Settings construction fails rather than a request."""
     with pytest.raises(ValueError):
-        Settings(DATABASE_URL="not-a-database-url")
+        build_settings(DATABASE_URL="not-a-database-url")
 
 
 def test_safe_database_url_redacts_the_password() -> None:
     """Given a log-bound summary, then the password is never rendered."""
-    settings = Settings(DATABASE_URL="postgres://reach_user:sup3rs3cret@host:5432/reach")
+    settings = build_settings(DATABASE_URL="postgres://reach_user:sup3rs3cret@host:5432/reach")
 
     assert "sup3rs3cret" not in settings.safe_database_url
     assert settings.safe_database_url.startswith("postgresql+psycopg://reach_user:")
@@ -106,4 +134,4 @@ def test_safe_database_url_redacts_the_password() -> None:
 def test_api_prefix_must_be_a_rooted_path(prefix: str) -> None:
     """Given a malformed API prefix, then configuration refuses it."""
     with pytest.raises(ValueError, match="API_V1_PREFIX"):
-        Settings(API_V1_PREFIX=prefix, DATABASE_URL=DEV_DATABASE_URL)
+        build_settings(API_V1_PREFIX=prefix)

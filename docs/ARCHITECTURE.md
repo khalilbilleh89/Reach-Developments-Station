@@ -135,14 +135,14 @@ Forbidden:
 
 ```python
 # sales/service.py
-collections_row.amount_paid = ...   # reaching into another domain's models
+collections_row.amount_paid = ...  # reaching into another domain's models
 ```
 
 Preferred:
 
 ```python
 # sales/service.py
-collections_service.record_allocation(...)   # a small public contract
+collections_service.record_allocation(...)  # a small public contract
 ```
 
 Create that contract **when the cross-domain interaction actually appears**, not

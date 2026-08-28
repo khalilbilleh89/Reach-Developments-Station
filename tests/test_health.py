@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
 from app.core.database import dispose_engine
-from app.main import app
+from app.main import create_app
 from tests.conftest import UNREACHABLE_DATABASE_SECRETS, UNREACHABLE_DATABASE_URL
 
 LIVE_URL = "/api/v1/health/live"
@@ -32,7 +32,7 @@ def test_liveness_does_not_require_a_database(monkeypatch: pytest.MonkeyPatch) -
     get_settings.cache_clear()
     dispose_engine()
 
-    with TestClient(app) as client:
+    with TestClient(create_app()) as client:
         response = client.get(LIVE_URL)
 
     assert response.status_code == 200
@@ -61,7 +61,7 @@ def test_readiness_reports_503_when_postgresql_is_unreachable(
     get_settings.cache_clear()
     dispose_engine()
 
-    with TestClient(app) as client:
+    with TestClient(create_app()) as client:
         response = client.get(READY_URL)
 
     assert response.status_code == 503
@@ -76,7 +76,7 @@ def test_readiness_failure_never_leaks_connection_details(
     get_settings.cache_clear()
     dispose_engine()
 
-    with TestClient(app) as client:
+    with TestClient(create_app()) as client:
         response = client.get(READY_URL)
 
     exposed = f"{response.text} {dict(response.headers)}"
