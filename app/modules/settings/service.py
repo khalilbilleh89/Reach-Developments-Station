@@ -298,9 +298,17 @@ def update_country_pack(
 ) -> CountryPack:
     pack = get_country_pack(session, country_pack_id)
     updates = _resolve_updates(changes, fields=_PACK_UPDATABLE, clearable=frozenset())
+    # Validate the state the pack will end up in, not only the fields the request
+    # happens to name. Reactivating a retired pack revives its stored currency
+    # reference too, and that currency may have been retired in the meantime —
+    # checking only `default_currency_id` when present would let a live pack end
+    # up pointing at a dead currency, which is the state pack creation and the
+    # currency guard both exist to prevent.
+    resulting_is_active = updates.get("is_active", pack.is_active)
+    resulting_currency_id = updates.get("default_currency_id", pack.default_currency_id)
+    if resulting_is_active:
+        _require_active_currency(session, resulting_currency_id)
     before = _snapshot(pack, _PACK_FIELDS)
-    if "default_currency_id" in updates:
-        _require_active_currency(session, updates["default_currency_id"])
     for field, value in updates.items():
         setattr(pack, field, value)
     session.flush()

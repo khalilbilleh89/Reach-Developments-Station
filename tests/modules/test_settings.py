@@ -211,6 +211,85 @@ def test_duplicate_country_codes_are_rejected(
     assert response.status_code == 409
 
 
+def _retired_pack_and_currency(client: TestClient, currency_id: str, pack_id: str) -> None:
+    """Retire the pack, then the currency it points at. Both steps are allowed."""
+    assert client.patch(f"{PACKS}/{pack_id}", json={"is_active": False}).status_code == 200
+    assert client.patch(f"{CURRENCIES}/{currency_id}", json={"is_active": False}).status_code == 200
+
+
+def test_a_retired_pack_cannot_be_reactivated_onto_a_retired_currency(
+    client: TestClient, currency_id: str, pack_id: str, db: Session
+) -> None:
+    """Given both are retired, then reactivating the pack alone is refused.
+
+    Reactivation revives the stored currency reference along with the pack, so
+    validating only the fields named in the request would recreate exactly the
+    state the currency guard exists to prevent.
+    """
+    _retired_pack_and_currency(client, currency_id, pack_id)
+    events_before = len(
+        db.scalars(select(AuditEvent).where(AuditEvent.action == "country_pack.updated")).all()
+    )
+
+    response = client.patch(f"{PACKS}/{pack_id}", json={"is_active": True})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Default currency must be active."}
+    assert client.get(f"{PACKS}/{pack_id}").json()["is_active"] is False
+    events_after = db.scalars(
+        select(AuditEvent).where(AuditEvent.action == "country_pack.updated")
+    ).all()
+    assert len(events_after) == events_before
+
+
+def test_a_retired_pack_can_be_reactivated_with_a_replacement_currency(
+    client: TestClient, currency_id: str, pack_id: str
+) -> None:
+    """Given a live replacement currency, then reactivation succeeds in one request."""
+    _retired_pack_and_currency(client, currency_id, pack_id)
+    replacement = client.post(CURRENCIES, json={"code": "USD", "name": "US dollar"}).json()
+
+    response = client.patch(
+        f"{PACKS}/{pack_id}", json={"is_active": True, "default_currency_id": replacement["id"]}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_active"] is True
+    assert body["default_currency_id"] == replacement["id"]
+
+
+def test_a_retired_pack_may_keep_referencing_a_retired_currency(
+    client: TestClient, currency_id: str, pack_id: str
+) -> None:
+    """Given the pack stays retired, then it is not forced to replace its currency.
+
+    History keeps the currency it was actually configured with; the rule binds
+    only packs that will be active.
+    """
+    _retired_pack_and_currency(client, currency_id, pack_id)
+
+    response = client.patch(f"{PACKS}/{pack_id}", json={"name": "Jordan (retired)"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Jordan (retired)"
+    assert response.json()["default_currency_id"] == currency_id
+    assert response.json()["is_active"] is False
+
+
+def test_an_active_pack_cannot_be_moved_onto_a_retired_currency(
+    client: TestClient, currency_id: str, pack_id: str
+) -> None:
+    """Given an active pack, then it may only point at an active currency."""
+    spare = client.post(CURRENCIES, json={"code": "USD", "name": "US dollar"}).json()
+    assert client.patch(f"{CURRENCIES}/{spare['id']}", json={"is_active": False}).status_code == 200
+
+    response = client.patch(f"{PACKS}/{pack_id}", json={"default_currency_id": spare["id"]})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Default currency must be active."}
+
+
 @pytest.mark.parametrize("month", [0, 13, -1])
 def test_invalid_fiscal_start_months_are_rejected(
     client: TestClient, currency_id: str, month: int
