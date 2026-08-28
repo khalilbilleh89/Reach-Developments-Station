@@ -36,6 +36,7 @@ from app.core.errors import (
 from app.modules.access.api import admin_router, auth_router
 from app.modules.access.dependencies import SESSION_COOKIE_NAME
 from app.modules.audit.api import router as audit_router
+from app.modules.projects.api import router as projects_router
 from app.modules.settings.api import router as settings_router
 
 logger = logging.getLogger(__name__)
@@ -214,7 +215,14 @@ def create_app() -> FastAPI:
 
     # Order is load-bearing: real API routes, then the namespace guard that
     # claims whatever is left under /api/v1, then the static export.
-    for router in (health.router, auth_router, admin_router, settings_router, audit_router):
+    for router in (
+        health.router,
+        auth_router,
+        admin_router,
+        settings_router,
+        projects_router,
+        audit_router,
+    ):
         app.include_router(router, prefix=settings.API_V1_PREFIX)
     _reserve_api_namespace(app, settings.API_V1_PREFIX)
     _mount_frontend(app)

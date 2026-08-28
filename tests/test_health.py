@@ -116,7 +116,10 @@ def test_unmatched_api_paths_answer_with_json_not_the_frontend_404(
     paths = (
         API_PREFIX,
         f"{API_PREFIX}/",
-        f"{API_PREFIX}/projects",
+        # A collection nothing serves. `/projects` used to sit here; it is a
+        # real router as of PR-MVP-02, so the example moved to one that is
+        # still genuinely unclaimed.
+        f"{API_PREFIX}/inventory",
         f"{API_PREFIX}/health",
         f"{API_PREFIX}/health/liv",
     )

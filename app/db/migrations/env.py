@@ -26,6 +26,7 @@ if config.config_file_name is not None:
 # PR adds its module here.
 from app.modules.access import models as access_models  # noqa: E402,F401
 from app.modules.audit import models as audit_models  # noqa: E402,F401
+from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.settings import models as settings_models  # noqa: E402,F401
 
 target_metadata = Base.metadata

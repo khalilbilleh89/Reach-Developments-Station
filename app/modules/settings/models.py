@@ -18,7 +18,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -27,14 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
-
-#: Monetary amounts. NUMERIC always — never float, anywhere, for money.
-MONEY = Numeric(18, 2)
-
-#: Rates are stored as explicit fractions: 0.160000 means 16%. The column name
-#: always ends in ``_rate_fraction`` so the unit can never be misread.
-RATE = Numeric(9, 6)
+from app.db.base import MONEY, RATE, Base, in_list
 
 #: Area units a country pack may declare. Deliberately closed — this is not a
 #: unit-conversion engine.
@@ -45,11 +37,6 @@ TAX_APPLIES_TO = ("sale", "rental", "service_charge", "construction", "other")
 
 #: What the rate is applied against.
 TAX_CALCULATION_BASIS = ("net_amount", "gross_amount")
-
-
-def _in_list(column: str, allowed: tuple[str, ...]) -> str:
-    values = ", ".join(f"'{value}'" for value in allowed)
-    return f"{column} IN ({values})"
 
 
 class Currency(Base):
@@ -113,7 +100,7 @@ class CountryPack(Base):
             "country_code = upper(country_code) AND length(country_code) = 2",
             name="country_code_upper_alpha2",
         ),
-        CheckConstraint(_in_list("area_unit", AREA_UNITS), name="area_unit_allowed"),
+        CheckConstraint(in_list("area_unit", AREA_UNITS), name="area_unit_allowed"),
         CheckConstraint("fiscal_year_start_month BETWEEN 1 AND 12", name="fiscal_month_range"),
     )
 
@@ -151,9 +138,9 @@ class TaxRule(Base):
     __table_args__ = (
         CheckConstraint("rate_fraction >= 0 AND rate_fraction <= 1", name="rate_fraction_range"),
         CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="valid_range"),
-        CheckConstraint(_in_list("applies_to", TAX_APPLIES_TO), name="applies_to_allowed"),
+        CheckConstraint(in_list("applies_to", TAX_APPLIES_TO), name="applies_to_allowed"),
         CheckConstraint(
-            _in_list("calculation_basis", TAX_CALCULATION_BASIS), name="calculation_basis_allowed"
+            in_list("calculation_basis", TAX_CALCULATION_BASIS), name="calculation_basis_allowed"
         ),
     )
 

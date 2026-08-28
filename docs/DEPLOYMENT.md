@@ -158,7 +158,7 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
     ```
 
     ```sql
-    SELECT version_num FROM alembic_version;   -- 0001_governance_access
+    SELECT version_num FROM alembic_version;   -- 0002_project_land_permits
     SELECT count(*) FROM roles;                -- 11
     ```
 

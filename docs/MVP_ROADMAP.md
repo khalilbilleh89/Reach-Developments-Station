@@ -59,7 +59,7 @@ tokens, CI, PR template, and Render build/start separation.
 > to PR-MVP-02**, where there is something to point at. This is an integrity
 > correction, not a scope reduction.
 
-## PR-MVP-02 — Project, Land & Permits
+## PR-MVP-02 — Project, Land & Permits ✅
 
 - project
 - **`user_project_access` and project-scoped authorization** (deferred from
@@ -70,6 +70,17 @@ tokens, CI, PR template, and Render build/start separation.
 - permit dates/statuses
 - blocking/critical-path indicators
 - documents/references
+
+> **Phase-scoped access is deferred to PR-MVP-03.** The MVP specification
+> describes project *and phase* row-level access. `Phase` does not exist until
+> PR-MVP-03, so building phase scoping now would mean a nullable `phase_id` with
+> no foreign key, a placeholder Phase, or a generic `resource_type`/`resource_id`
+> table — the same abstraction-first mistake the project deferral avoided in
+> PR-MVP-01.
+>
+> PR-MVP-02 therefore delivers project-level row access with real foreign-key
+> integrity. Phase-scoped narrowing can be added in PR-MVP-03 against a real
+> Phase, if the product still needs it.
 
 ## PR-MVP-03 — Inventory & Configurable Fields
 

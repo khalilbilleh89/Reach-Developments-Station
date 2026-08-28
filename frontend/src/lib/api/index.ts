@@ -12,7 +12,16 @@ import type {
   CountryPack,
   Currency,
   CurrentUser,
+  DocumentReference,
+  LandParcel,
   Page,
+  Permit,
+  PermitRegister,
+  PermitStatusEvent,
+  PlanningControl,
+  ProjectAccess,
+  ProjectDetail,
+  ProjectSummary,
   ReferenceValue,
   Role,
   TaxRule,
@@ -109,4 +118,63 @@ export const settings = {
 
 export const audit = {
   list: (limit = 100) => get<Page<AuditEvent>>(`/audit-events?limit=${limit}`),
+};
+
+/**
+ * Project workspace operations.
+ *
+ * Every path is project-scoped. The API establishes the security boundary for
+ * itself on each request; these helpers just describe the shape of the call.
+ */
+export const projects = {
+  list: (query: { search?: string; status?: string } = {}) => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (query.search) params.set("search", query.search);
+    if (query.status) params.set("status", query.status);
+    return get<ProjectSummary[]>(`/projects?${params.toString()}`);
+  },
+  read: (id: string) => get<ProjectDetail>(`/projects/${id}`),
+  create: (input: Record<string, unknown>) => post<ProjectDetail>("/projects", input),
+  update: (id: string, input: Record<string, unknown>) =>
+    patch<ProjectDetail>(`/projects/${id}`, input),
+
+  access: (id: string) => get<ProjectAccess[]>(`/projects/${id}/access`),
+  grantAccess: (id: string, userId: string) =>
+    put<ProjectAccess>(`/projects/${id}/access/${userId}`, {}),
+  setAccess: (id: string, userId: string, isActive: boolean) =>
+    patch<ProjectAccess>(`/projects/${id}/access/${userId}`, { is_active: isActive }),
+
+  parcels: (id: string) => get<LandParcel[]>(`/projects/${id}/parcels`),
+  createParcel: (id: string, input: Record<string, unknown>) =>
+    post<LandParcel>(`/projects/${id}/parcels`, input),
+  updateParcel: (id: string, parcelId: string, input: Record<string, unknown>) =>
+    patch<LandParcel>(`/projects/${id}/parcels/${parcelId}`, input),
+
+  planning: (id: string, parcelId: string) =>
+    get<PlanningControl>(`/projects/${id}/parcels/${parcelId}/planning-controls`),
+  writePlanning: (id: string, parcelId: string, input: Record<string, unknown>) =>
+    put<PlanningControl>(`/projects/${id}/parcels/${parcelId}/planning-controls`, input),
+
+  permits: (id: string, query: Record<string, string> = {}) => {
+    const params = new URLSearchParams(query);
+    const suffix = params.toString();
+    return get<PermitRegister>(`/projects/${id}/permits${suffix ? `?${suffix}` : ""}`);
+  },
+  createPermit: (id: string, input: Record<string, unknown>) =>
+    post<Permit>(`/projects/${id}/permits`, input),
+  updatePermit: (id: string, permitId: string, input: Record<string, unknown>) =>
+    patch<Permit>(`/projects/${id}/permits/${permitId}`, input),
+  transitionPermit: (
+    id: string,
+    permitId: string,
+    input: { to_status: string; effective_date: string; reason?: string; notes?: string },
+  ) => post<Permit>(`/projects/${id}/permits/${permitId}/transitions`, input),
+  permitHistory: (id: string, permitId: string) =>
+    get<PermitStatusEvent[]>(`/projects/${id}/permits/${permitId}/status-history`),
+
+  documents: (id: string) => get<DocumentReference[]>(`/projects/${id}/documents`),
+  createDocument: (id: string, input: Record<string, unknown>) =>
+    post<DocumentReference>(`/projects/${id}/documents`, input),
+  updateDocument: (id: string, documentId: string, input: Record<string, unknown>) =>
+    patch<DocumentReference>(`/projects/${id}/documents/${documentId}`, input),
 };

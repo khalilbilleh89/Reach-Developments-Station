@@ -113,6 +113,17 @@ proves they are necessary.
 - No `Base.metadata.create_all()` for production schema management.
 - All schema changes go through Alembic.
 - Database constraints should protect critical invariants.
+- Keep constraint names short. PostgreSQL truncates identifiers at 63
+  characters, and a truncated name no longer matches the metadata, so
+  autogenerate reports drift for ever afterwards.
+- Load a record scoped by its owner, never by its own identifier alone.
+  `select(Child).where(Child.id == child_id, Child.parent_id == parent_id)` is
+  what stops one tenant's identifier being substituted into another's path;
+  fetching by primary key and checking the parent afterwards is the shape that
+  lets it through.
+- A row-level access rule belongs in the SQL that selects the rows. Fetching
+  everything and filtering in Python puts data the caller may not see into
+  memory, into the query plan, and one refactor away from the response.
 - An invariant a database constraint cannot express (one that spans rows, such
   as "no two active tax rules for a code overlap") is decided by reading and
   then writing, which two concurrent transactions can both win. Lock the row
@@ -273,6 +284,12 @@ Diagnostics belong in server logs. Clients get facts they are entitled to.
 - Every migration must be tested forward **and** backward before merge.
 - Destructive changes must be called out in the PR and must state a rollback
   procedure.
+- **Never edit a revision that has already shipped to production.** Revisions
+  through `0001_governance_access` are deployed; from there migrations are
+  incremental, and a correction is a new revision, never a rewrite of an old one.
+- A migration changes only what its PR is for. `alembic revision --autogenerate`
+  will happily fold in unrelated drift it noticed elsewhere in the schema —
+  read the generated file and delete anything that is not this change.
 
 ---
 
