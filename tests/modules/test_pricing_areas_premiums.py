@@ -112,8 +112,9 @@ def test_the_price_freezes_the_area_schedule_it_used(
     schedule = db.scalars(select(UnitAreaSchedule)).one()
 
     assert version["unit_area_schedule_id"] == str(schedule.id)
-    assert version["basis_snapshot_json"]["unit_basis"]["area_schedule"]["revision_code"] == "R0"
-    assert version["basis_snapshot_json"]["unit_basis"]["areas"]["INTERNAL"] == "100.0000"
+    basis = version["basis_snapshot_json"]["pricing_basis"]
+    assert basis["area_schedule"]["revision_code"] == "R0"
+    assert basis["areas"]["INTERNAL"] == "100.0000"
 
 
 def test_an_area_type_with_no_rule_contributes_nothing_and_no_line(
@@ -155,19 +156,20 @@ def test_an_area_type_with_no_rule_contributes_nothing_and_no_line(
     assert version["reference_price_ex_tax"] == "150000.00"
 
 
-def test_one_configuration_prices_one_internal_base(
+def test_only_the_internal_area_may_be_the_internal_base(
     finance_client: TestClient,
     project_id: str,
     draft_configuration: str,
     area_types: dict[str, str],
 ) -> None:
-    """Two areas quoted at the headline rate is two answers to one question."""
+    """A balcony priced at the "internal" rate makes every internal figure a balcony figure."""
     response = finance_client.post(
         f"{pricing_url(project_id)}/configurations/{draft_configuration}/area-rules",
         json={"area_type_id": area_types["BALCONY"], "pricing_method": "internal_base"},
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 422
+    assert "internal area" in response.json()["detail"]
 
 
 def test_a_fixed_rate_rule_needs_a_rate(

@@ -40,10 +40,21 @@ from app.core.patching import resolve_updates
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.inventory import custom_fields as inventory_fields
+from app.modules.inventory import models as inventory_models
 from app.modules.inventory import service as inventory
 from app.modules.inventory.models import (
+    AREA_ROLE_INTERNAL,
+    CATEGORY_ACCESSIBILITY,
+    CATEGORY_FLOOR_BAND,
+    CATEGORY_GARDEN_CLASS,
+    CATEGORY_ORIENTATION,
+    CATEGORY_SUB_ASSET_SUBTYPE,
+    CATEGORY_UNIT_TYPE,
+    CATEGORY_VIEW_CLASS,
     AreaType,
     Building,
+    CustomFieldDefinition,
+    CustomFieldOption,
     Floor,
     InventorySubAsset,
     Phase,
@@ -85,6 +96,7 @@ from app.modules.pricing.models import (
     ESCALATION_SCOPE_PHASE,
     ESCALATION_SCOPE_PROJECT,
     ESCALATION_SCOPE_UNIT_TYPE,
+    ESCALATION_TRIGGER_INPUTS,
     FLAG_ABOVE,
     FLAG_BELOW,
     FLAG_NONE,
@@ -99,6 +111,7 @@ from app.modules.pricing.models import (
     STATUS_SUBMITTED,
     STATUS_SUPERSEDED,
     TRIGGER_DATE,
+    TRIGGER_SALES_PERCENTAGE,
     MarketBenchmark,
     PricingAreaRule,
     PricingConfiguration,
@@ -119,7 +132,20 @@ from app.modules.settings.models import Currency, TaxRule
 #: behind it.
 __all__ = ["UpgradeInput"]
 
+#: The reference catalogue behind each code-matching premium source. It is the
+#: same catalogue inventory validates the unit's own columns against, so a rule
+#: and the units it hopes to match are checked against one list rather than two.
+PREMIUM_REFERENCE_CATEGORIES = {
+    "unit_type": CATEGORY_UNIT_TYPE,
+    "view_class": CATEGORY_VIEW_CLASS,
+    "floor_band": CATEGORY_FLOOR_BAND,
+    "orientation": CATEGORY_ORIENTATION,
+    "accessibility": CATEGORY_ACCESSIBILITY,
+    "garden_class": CATEGORY_GARDEN_CLASS,
+}
+
 ZERO = Decimal("0")
+ONE = Decimal("1")
 
 #: The largest number of units one bulk request may act on. Generous for a real
 #: development — the reference project is 247 units — and there only to refuse a
@@ -417,6 +443,28 @@ def _require_active_currency(session: Session, currency_id: uuid.UUID) -> Curren
     return currency
 
 
+def _require_configuration_validity(
+    configuration: PricingConfiguration, *, effective_from: date
+) -> None:
+    """A price may only be effective on a day its policy was in force.
+
+    A configuration states the window it governs. Pricing a unit effective
+    before that window means the number was produced by a policy nobody had
+    adopted yet; pricing it after means a policy already withdrawn. Neither is
+    a price anyone could defend, so neither is stored.
+    """
+    if effective_from < configuration.valid_from:
+        raise ConflictError(
+            f"This pricing configuration takes effect on "
+            f"{configuration.valid_from.isoformat()}. A price cannot be effective before it."
+        )
+    if configuration.valid_to is not None and effective_from > configuration.valid_to:
+        raise ConflictError(
+            f"This pricing configuration ended on {configuration.valid_to.isoformat()}. "
+            "A price cannot be effective after it."
+        )
+
+
 def _require_draft(configuration: PricingConfiguration) -> None:
     if configuration.status != STATUS_DRAFT:
         raise ConflictError(
@@ -521,14 +569,7 @@ def submit_configuration(
     lock_project(session, project.id)
     session.refresh(configuration)
     _require_draft(configuration)
-    rules = list_area_rules(session, configuration_id=configuration.id)
-    if not any(
-        rule.pricing_method == AREA_METHOD_INTERNAL_BASE and rule.is_active for rule in rules
-    ):
-        raise ValidationError(
-            "This configuration prices no internal area. Add an area rule using the "
-            "internal base rate before submitting it."
-        )
+    _require_internal_base_rule(session, project=project, configuration=configuration)
 
     before = _snapshot(configuration, _CONFIG_FIELDS)
     configuration.status = STATUS_SUBMITTED
@@ -551,6 +592,52 @@ def submit_configuration(
     session.commit()
     session.refresh(configuration)
     return configuration
+
+
+def _require_internal_base_rule(
+    session: Session, *, project: Project, configuration: PricingConfiguration
+) -> None:
+    """Exactly one active internal-base rule, and it is the internal area.
+
+    Checked again at submission rather than trusted from creation time, because
+    a rule can be deactivated or the project's area types reconfigured after the
+    rule was written. Submission is the last moment before an approver is asked
+    to sanction a policy, so it is the moment the policy has to still be one.
+
+    The internal area is also refused an attached-area method: pricing it as an
+    add-on would leave the configuration with a ``base_internal_rate`` that no
+    area is quoted against.
+    """
+    rules = list_area_rules(session, configuration_id=configuration.id)
+    active = [rule for rule in rules if rule.is_active]
+    bases = [rule for rule in active if rule.pricing_method == AREA_METHOD_INTERNAL_BASE]
+    if not bases:
+        raise ValidationError(
+            "This configuration prices no internal area. Add an area rule using the "
+            "internal base rate before submitting it."
+        )
+    if len(bases) > 1:  # pragma: no cover - the partial unique index refuses this first
+        raise ConflictError("This configuration prices two area types at the internal base rate.")
+    internal = inventory.internal_area_type(session, project_id=project.id)
+    if internal is None:
+        raise ValidationError(
+            "This project has no active internal area type to price at the internal base rate."
+        )
+    if bases[0].area_type_id != internal.id:
+        raise ValidationError(
+            f"The internal base rate is applied to an area that is not this project's "
+            f"internal area ('{internal.code}'). Correct the area rule before submitting."
+        )
+    misplaced = [
+        rule
+        for rule in active
+        if rule.area_type_id == internal.id and rule.pricing_method != AREA_METHOD_INTERNAL_BASE
+    ]
+    if misplaced:  # pragma: no cover - one rule per area type, and it is the base above
+        raise ValidationError(
+            f"'{internal.code}' is this project's internal area and must be priced at the "
+            "internal base rate."
+        )
 
 
 def return_configuration(
@@ -646,6 +733,11 @@ def activate_configuration(
     session.refresh(configuration)
     if configuration.status != STATUS_APPROVED:
         raise ConflictError("Only an approved pricing configuration can be activated.")
+    # A future-dated policy stays approved until somebody activates it on a day
+    # it actually governs. No scheduler: nothing in this module runs unless a
+    # person asks it to, and a policy that switched itself on overnight is the
+    # silent repricing the whole design refuses.
+    _require_configuration_validity(configuration, effective_from=inventory_fields.business_today())
 
     current = active_configuration(session, project_id=project.id)
     before = _snapshot(configuration, _CONFIG_FIELDS)
@@ -735,6 +827,50 @@ def _require_one_internal_base(
         )
 
 
+def _require_internal_area_role(session: Session, *, project: Project, area_type: AreaType) -> None:
+    """``internal_base`` must name the area that actually *is* internal.
+
+    Nothing else in the system asks whether the "internal base" is internal, and
+    everything downstream assumes it: ``base_internal_rate`` is applied to it,
+    ``internal_area_snapshot`` is its measurement, ``price_per_internal_area``
+    divides by it, and a benchmark quoted on an internal basis is compared
+    against it. Point that at a balcony and every one of those numbers is
+    quietly about balconies while still being labelled internal.
+    """
+    if area_type.area_role != AREA_ROLE_INTERNAL:
+        raise ValidationError(
+            f"'{area_type.code}' is a {area_type.area_role} area. Only the project's "
+            "internal area can be priced at the internal base rate."
+        )
+
+
+def _require_matching_unit_of_measure(
+    session: Session, *, project: Project, area_type: AreaType
+) -> None:
+    """A factor of the internal rate has to be a factor of *this* rate.
+
+    ``factor_of_internal_rate`` multiplies a rate quoted per unit of internal
+    area. Applying a JOD-per-square-metre rate to an area measured in square
+    feet needs a conversion, and there is deliberately no conversion anywhere in
+    this system — so the two measurements have to already agree.
+
+    ``fixed_rate_per_area`` is exempt on purpose: its rate is stated against that
+    area's own unit, so nothing is being carried across from anywhere else.
+    """
+    internal = inventory.internal_area_type(session, project_id=project.id)
+    if internal is None:
+        raise ValidationError(
+            "This project has no active internal area type, so there is no internal "
+            "rate to take a factor of."
+        )
+    if area_type.unit_of_measure != internal.unit_of_measure:
+        raise ValidationError(
+            f"'{area_type.code}' is measured in {area_type.unit_of_measure} and the "
+            f"internal rate is quoted per {internal.unit_of_measure}. There is no "
+            "conversion here — price this area with its own rate instead."
+        )
+
+
 def create_area_rule(
     session: Session,
     *,
@@ -757,7 +893,10 @@ def create_area_rule(
     )
     area_type = inventory.get_area_type(session, project_id=project.id, area_type_id=area_type_id)
     if pricing_method == AREA_METHOD_INTERNAL_BASE:
+        _require_internal_area_role(session, project=project, area_type=area_type)
         _require_one_internal_base(session, configuration_id=configuration.id, area_rule_id=None)
+    if pricing_method == AREA_METHOD_FACTOR:
+        _require_matching_unit_of_measure(session, project=project, area_type=area_type)
 
     rule = PricingAreaRule(
         project_id=project.id,
@@ -822,8 +961,14 @@ def update_area_rule(
         rate_per_area=rule.rate_per_area,
         internal_rate_factor=rule.internal_rate_factor,
     )
+    area_type = inventory.get_area_type(
+        session, project_id=project.id, area_type_id=rule.area_type_id
+    )
     if rule.pricing_method == AREA_METHOD_INTERNAL_BASE and rule.is_active:
+        _require_internal_area_role(session, project=project, area_type=area_type)
         _require_one_internal_base(session, configuration_id=configuration.id, area_rule_id=rule.id)
+    if rule.pricing_method == AREA_METHOD_FACTOR:
+        _require_matching_unit_of_measure(session, project=project, area_type=area_type)
     _flush(session)
     record_event(
         session,
@@ -867,6 +1012,7 @@ def _validate_premium_rule(
     percentage_fraction: Decimal | None,
     amount: Decimal | None,
     custom_field_definition_id: uuid.UUID | None,
+    custom_option_code: str | None = None,
 ) -> None:
     """Refuse a rule that could never match, or that names a number it will not read.
 
@@ -892,12 +1038,28 @@ def _validate_premium_rule(
     if source_kind == "custom_field":
         if custom_field_definition_id is None:
             raise ValidationError("A custom-field premium must name the field it reads.")
+        _require_custom_field_source(
+            session,
+            project=project,
+            definition_id=custom_field_definition_id,
+            option_code=custom_option_code,
+        )
         return
     if source_kind in PREMIUM_FLAG_SOURCES:
         if match_code is not None:
             raise ValidationError(f"A {source_kind} premium takes no match code.")
         return
     if source_kind in PREMIUM_ASSET_SOURCES:
+        # Optional here: no subtype means "any parking bay". A subtype that was
+        # supplied still has to be one the catalogue knows, or the rule counts
+        # nothing for ever.
+        if match_code is not None:
+            settings_service.require_active_reference_value(
+                session,
+                category=CATEGORY_SUB_ASSET_SUBTYPE,
+                code=match_code,
+                country_pack_id=project.country_pack_id,
+            )
         return
     if match_code is None:
         raise ValidationError(f"A {source_kind} premium needs a match code.")
@@ -907,6 +1069,72 @@ def _validate_premium_rule(
         _require_building_code(session, project=project, code=match_code)
     elif source_kind == "area_type":
         _require_area_type_code(session, project=project, code=match_code)
+    else:
+        # unit_type, view_class, floor_band, orientation, accessibility,
+        # garden_class: the same catalogue inventory validates a unit against,
+        # so a rule cannot name a value no unit could ever carry. A typo like
+        # 'SEAA_VEIW' saves happily and then prices nothing, which is the
+        # failure that never announces itself.
+        settings_service.require_active_reference_value(
+            session,
+            category=PREMIUM_REFERENCE_CATEGORIES[source_kind],
+            code=match_code,
+            country_pack_id=project.country_pack_id,
+        )
+
+
+def _require_custom_field_source(
+    session: Session,
+    *,
+    project: Project,
+    definition_id: uuid.UUID,
+    option_code: str | None,
+) -> None:
+    """A custom-field premium must read a field this project's units can carry.
+
+    The matcher supports exactly two unambiguous readings, and validation is
+    what keeps it to two. A **boolean** field prices the unit when the answer is
+    yes. An **option** field prices it when the answer is one named choice. Any
+    other data type would need a comparison — greater than, contains, between —
+    and that is an expression language, which this module does not have and is
+    not getting.
+
+    So a decimal, text, integer or date field is refused here rather than
+    accepted and silently never matched.
+    """
+    definition = session.get(CustomFieldDefinition, definition_id)
+    if definition is None:
+        raise ValidationError("That custom field does not exist.")
+    if definition.entity_type != inventory_models.ENTITY_UNIT:
+        raise ValidationError("A premium can only read a unit custom field.")
+    applicable = {
+        item.id for item in inventory_fields.unit_definitions_of_project(session, project=project)
+    }
+    if definition.id not in applicable:
+        # Covers another project's field, another country pack's field, one
+        # that has been retired, and one whose validity window has closed.
+        raise ValidationError("That custom field does not apply to units of this project.")
+    if definition.data_type == "boolean":
+        if option_code is not None:
+            raise ValidationError("A boolean custom-field premium takes no option code.")
+        return
+    if definition.data_type != "option":
+        raise ValidationError(
+            f"A {definition.data_type} custom field cannot drive a premium. "
+            "Use a boolean field, or an option field with an option code."
+        )
+    if option_code is None:
+        raise ValidationError("An option custom-field premium must name the option it prices.")
+    option = session.scalars(
+        select(CustomFieldOption).where(
+            CustomFieldOption.definition_id == definition.id,
+            CustomFieldOption.code == option_code,
+        )
+    ).first()
+    if option is None:
+        raise ValidationError(f"'{option_code}' is not an option of that custom field.")
+    if not option.is_active:
+        raise ValidationError(f"The option '{option_code}' is no longer active.")
 
 
 def _require_phase_code(session: Session, *, project: Project, code: str) -> None:
@@ -956,6 +1184,7 @@ def create_premium_rule(
         percentage_fraction=fields.get("percentage_fraction"),
         amount=fields.get("amount"),
         custom_field_definition_id=fields.get("custom_field_definition_id"),
+        custom_option_code=fields.get("custom_option_code"),
     )
     rule = PricingPremiumRule(
         project_id=project.id,
@@ -1020,6 +1249,7 @@ def update_premium_rule(
         percentage_fraction=rule.percentage_fraction,
         amount=rule.amount,
         custom_field_definition_id=rule.custom_field_definition_id,
+        custom_option_code=rule.custom_option_code,
     )
     _flush(session)
     record_event(
@@ -1070,16 +1300,44 @@ def get_escalation_rule(
     return rule
 
 
+#: What each trigger input is called when a person is told it is missing.
+_TRIGGER_INPUT_LABELS = {
+    "threshold_date": "a threshold date",
+    "threshold_fraction": "a threshold share of inventory sold",
+    "milestone_reference": "a construction milestone reference",
+    "market_index_reference": "a market index reference",
+}
+
+
 def _validate_escalation_rule(
     *,
     trigger_type: str,
-    threshold_date: date | None,
+    trigger_inputs: dict[str, object],
     adjustment_method: str,
     adjustment_percentage_fraction: Decimal | None,
     adjustment_amount: Decimal | None,
 ) -> None:
-    if trigger_type == TRIGGER_DATE and threshold_date is None:
-        raise ValidationError("A date-triggered escalation needs a threshold date.")
+    """A rule carries the fact its trigger is about, and no other.
+
+    "Escalate at 30% sold" with no 30% recorded cannot be activated against
+    evidence, because there is nothing to compare the evidence to. "Escalate on
+    a milestone" naming no milestone is the same shape of hole. And a rule
+    carrying two triggers' inputs is a rule two readers read two ways.
+
+    The database says the same thing; this exists so a person is told which
+    field is missing instead of receiving a CHECK violation as a 500.
+    """
+    required = ESCALATION_TRIGGER_INPUTS[trigger_type]
+    if trigger_inputs.get(required) is None:
+        raise ValidationError(
+            f"A {trigger_type} escalation needs {_TRIGGER_INPUT_LABELS[required]}."
+        )
+    for name in ESCALATION_TRIGGER_INPUTS.values():
+        if name != required and trigger_inputs.get(name) is not None:
+            raise ValidationError(
+                f"{name} applies to a different trigger. "
+                f"A {trigger_type} escalation carries only {required}."
+            )
     if adjustment_method == ADJUSTMENT_PERCENTAGE and adjustment_percentage_fraction is None:
         raise ValidationError("A percentage escalation needs adjustment_percentage_fraction.")
     if adjustment_method != ADJUSTMENT_PERCENTAGE and adjustment_amount is None:
@@ -1113,9 +1371,16 @@ def create_escalation_rule(
         fields.get("phase_id") is not None or fields.get("unit_type_code")
     ):
         raise ValidationError("A project-scoped escalation names no phase or unit type.")
+    if scope_type == ESCALATION_SCOPE_UNIT_TYPE:
+        settings_service.require_active_reference_value(
+            session,
+            category=CATEGORY_UNIT_TYPE,
+            code=str(fields["unit_type_code"]),
+            country_pack_id=project.country_pack_id,
+        )
     _validate_escalation_rule(
         trigger_type=str(fields["trigger_type"]),
-        threshold_date=fields.get("threshold_date"),  # type: ignore[arg-type]
+        trigger_inputs={name: fields.get(name) for name in ESCALATION_TRIGGER_INPUTS.values()},
         adjustment_method=str(fields["adjustment_method"]),
         adjustment_percentage_fraction=fields.get("adjustment_percentage_fraction"),  # type: ignore[arg-type]
         adjustment_amount=fields.get("adjustment_amount"),  # type: ignore[arg-type]
@@ -1165,7 +1430,7 @@ def update_escalation_rule(
         setattr(rule, name, value)
     _validate_escalation_rule(
         trigger_type=rule.trigger_type,
-        threshold_date=rule.threshold_date,
+        trigger_inputs={name: getattr(rule, name) for name in ESCALATION_TRIGGER_INPUTS.values()},
         adjustment_method=rule.adjustment_method,
         adjustment_percentage_fraction=rule.adjustment_percentage_fraction,
         adjustment_amount=rule.adjustment_amount,
@@ -1251,9 +1516,12 @@ def activate_escalation(
         raise ConflictError(
             "Only an escalation of the active pricing configuration can be activated."
         )
-    eligible_from = rule.threshold_date if rule.trigger_type == TRIGGER_DATE else None
-    if eligible_from is not None and effective_date < eligible_from:
-        raise ConflictError(f"This escalation is not eligible before {eligible_from.isoformat()}.")
+    _require_activation_evidence(
+        rule,
+        effective_date=effective_date,
+        evidence_value=evidence_value,
+        evidence_date=evidence_date,
+    )
 
     activation = PricingEscalationActivation(
         project_id=project.id,
@@ -1285,6 +1553,49 @@ def activate_escalation(
     session.commit()
     session.refresh(activation)
     return activation
+
+
+def _require_activation_evidence(
+    rule: PricingEscalationRule,
+    *,
+    effective_date: date,
+    evidence_value: Decimal | None,
+    evidence_date: date | None,
+) -> None:
+    """The evidence has to actually satisfy the rule it is offered against.
+
+    A date rule cannot start before its date. A sales rule stating 30% cannot be
+    activated on evidence saying 12% — an approver signing that is signing a
+    number the policy does not authorise, and the audit trail would record a
+    correctly approved escalation that never became due.
+
+    The two manually evidenced triggers get no derived check, because the
+    transactions that would prove them do not exist yet. What they get is a
+    date: an approver saying "certified on the 14th" leaves an audit entry
+    saying *when* the fact was true, which "certified" alone does not.
+    """
+    if rule.trigger_type == TRIGGER_DATE:
+        if effective_date < rule.threshold_date:
+            raise ConflictError(
+                f"This escalation is not eligible before {rule.threshold_date.isoformat()}."
+            )
+        return
+    if rule.trigger_type == TRIGGER_SALES_PERCENTAGE:
+        if evidence_value is None:
+            raise ValidationError(
+                "Activating a sales-percentage escalation needs the share of inventory sold "
+                "as evidence."
+            )
+        if evidence_value < ZERO or evidence_value > ONE:
+            raise ValidationError("The share of inventory sold is a fraction between 0 and 1.")
+        if evidence_value < rule.threshold_fraction:
+            raise ConflictError(
+                f"This escalation becomes due at {rule.threshold_fraction}. "
+                f"The evidence records {evidence_value}."
+            )
+        return
+    if evidence_date is None:
+        raise ValidationError("Activating this escalation needs the date the evidence was true.")
 
 
 def reverse_activation(
@@ -1589,16 +1900,48 @@ def _custom_values(
     return dict(sorted(by_key.items())), by_definition
 
 
-def unit_basis(
+def descriptive_snapshot(session: Session, *, unit: Unit) -> dict[str, Any]:
+    """What the unit was *called* when it was priced. Never compared.
+
+    A reference, a number and an asset class are labels. Inventory deliberately
+    does not clear ``pricing_approved`` when one of them is corrected, because
+    renaming A-101 to A1-101 does not make it a different apartment — and a
+    fingerprint that included them would then refuse the very approval inventory
+    had just decided was still valid.
+
+    They are kept because an auditor reading a two-year-old price wants to know
+    which unit it was, in the words used at the time. They are kept *here*, apart
+    from :func:`pricing_basis`, so that keeping them can never mean comparing
+    them.
+    """
+    phase, building, floor = hierarchy_of(session, unit)
+    return {
+        "unit_reference": unit.unit_reference,
+        "unit_number": unit.unit_number,
+        "asset_class": unit.asset_class,
+        "phase_code": phase.code,
+        "building_code": building.code,
+        "floor_code": floor.code,
+    }
+
+
+def pricing_basis(
     session: Session, *, project: Project, unit: Unit, schedule: UnitAreaSchedule
 ) -> dict[str, Any]:
-    """Everything about the unit that a price depends on, as it is right now.
+    """Everything about the unit that the *calculation* reads, as it is now.
 
-    This is the dictionary a draft freezes and every later step compares against.
-    It holds the physical and configured facts only: not the pricing policy,
-    which the version pins by identifier, and not the escalations, which are a
-    commercial decision that produces new versions rather than invalidating
-    existing ones.
+    This is the fingerprint a draft freezes and every later step compares
+    against. Membership is a deliberate rule rather than a convenience: a fact
+    belongs here only if changing it could change the arithmetic, which is
+    exactly the set inventory clears ``pricing_approved`` for
+    (:data:`~app.modules.inventory.service.PRICING_RELEVANT_UNIT_FIELDS`), plus
+    the hierarchy premiums match on, the approved measurement, the priced
+    sub-assets and the configurable values a premium can read.
+
+    It holds no pricing policy — the version pins that by identifier — and no
+    escalations, which are a commercial decision that produces new versions
+    rather than invalidating existing ones. And it holds no labels: see
+    :func:`descriptive_snapshot`.
     """
     phase, building, floor = hierarchy_of(session, unit)
     areas = {
@@ -1613,9 +1956,6 @@ def unit_basis(
     return {
         "unit": {
             "id": str(unit.id),
-            "unit_reference": unit.unit_reference,
-            "unit_number": unit.unit_number,
-            "asset_class": unit.asset_class,
             "unit_type_code": unit.unit_type_code,
             "furnishing_specification_code": unit.furnishing_specification_code,
             "floor_band_code": unit.floor_band_code,
@@ -1627,13 +1967,15 @@ def unit_basis(
             "pool_access": unit.pool_access,
             "plot_coverage_fraction": _text(unit.plot_coverage_fraction),
         },
+        # Codes, not only identifiers: a premium rule matches a phase or a
+        # building by its code, so recoding one really does change what the
+        # calculation would produce.
         "hierarchy": {
             "phase_id": str(phase.id),
             "phase_code": phase.code,
             "building_id": str(building.id),
             "building_code": building.code,
             "floor_id": str(floor.id),
-            "floor_code": floor.code,
         },
         "area_schedule": {
             "id": str(schedule.id),
@@ -1650,7 +1992,7 @@ def _current_basis(session: Session, *, project: Project, unit: Unit) -> dict[st
     schedule = inventory.approved_schedule(session, unit_id=unit.id)
     if schedule is None:
         return None
-    return unit_basis(session, project=project, unit=unit, schedule=schedule)
+    return pricing_basis(session, project=project, unit=unit, schedule=schedule)
 
 
 def _require_current_basis(session: Session, *, version: UnitPriceVersion) -> None:
@@ -1660,6 +2002,10 @@ def _require_current_basis(session: Session, *, version: UnitPriceVersion) -> No
     with these features, costs this". If any of that has moved, the sentence is
     no longer true, and the fix is a new version rather than an approval that
     quietly means something else.
+
+    Only the pricing fingerprint is compared. A label correction is not a change
+    of unit, and refusing an approval over one would teach approvers that the
+    message does not mean what it says.
     """
     unit = session.get(Unit, version.unit_id)
     if unit is None or unit.project_id != version.project_id:  # pragma: no cover - FK guaranteed
@@ -1670,7 +2016,7 @@ def _require_current_basis(session: Session, *, version: UnitPriceVersion) -> No
     current = _current_basis(session, project=project, unit=unit)
     if current is None:
         raise ConflictError("Unit pricing basis changed. Generate a new price version.")
-    frozen = version.basis_snapshot_json.get("unit_basis")
+    frozen = version.basis_snapshot_json.get("pricing_basis")
     if frozen != current:
         raise ConflictError("Unit pricing basis changed. Generate a new price version.")
 
@@ -1910,6 +2256,63 @@ def _deviation(price_per_area: Decimal, benchmark_price: Decimal) -> Decimal:
     return quantised
 
 
+def benchmark_observation(benchmark: MarketBenchmark | None) -> dict[str, Any] | None:
+    """The benchmark as it read at the moment a price was calculated.
+
+    Frozen into the version rather than followed by reference. A benchmark row
+    is governed configuration that people revise; reinterpreting a submitted
+    price against a figure that arrived afterwards would silently rewrite what
+    the approver was shown, and "within tolerance" would stop being a statement
+    about a decision anybody actually made.
+
+    Everything needed to reproduce the classification is here, plus the source
+    and date needed to explain it.
+    """
+    if benchmark is None:
+        return None
+    return {
+        "id": str(benchmark.id),
+        "area_basis": benchmark.area_basis,
+        "benchmark_price_per_area": str(benchmark.benchmark_price_per_area),
+        "tolerance_fraction": str(benchmark.tolerance_fraction),
+        "comparison_date": benchmark.comparison_date.isoformat(),
+        "source_name": benchmark.source_name,
+        "source_reference": benchmark.source_reference,
+        "currency_id": str(benchmark.currency_id),
+    }
+
+
+def classify_against(
+    observation: dict[str, Any] | None,
+    *,
+    reference_price: Decimal,
+    internal_area: Decimal | None,
+    weighted_area: Decimal | None,
+) -> tuple[Decimal | None, Decimal | None, str]:
+    """Where one price sits against one frozen benchmark observation.
+
+    Pure arithmetic on the observation and the price handed in, so the same
+    classification can be re-derived whenever the price changes — which is the
+    whole point: an overridden draft that keeps the flag its pre-override price
+    earned is a false signal on a management screen.
+    """
+    if observation is None:
+        return None, None, FLAG_NONE
+    benchmark_price = Decimal(observation["benchmark_price_per_area"])
+    tolerance = Decimal(observation["tolerance_fraction"])
+    area = internal_area if observation["area_basis"] == BASIS_INTERNAL else weighted_area
+    if area is None or area <= 0:
+        return benchmark_price, None, FLAG_NONE
+    deviation = _deviation(money(reference_price / area), benchmark_price)
+    if deviation > tolerance:
+        flag = FLAG_ABOVE
+    elif deviation < -tolerance:
+        flag = FLAG_BELOW
+    else:
+        flag = FLAG_WITHIN
+    return benchmark_price, deviation, flag
+
+
 def compare_to_market(
     session: Session,
     *,
@@ -1920,30 +2323,45 @@ def compare_to_market(
     reference_price: Decimal,
     internal_area: Decimal | None,
     weighted_area: Decimal | None,
-) -> tuple[MarketBenchmark | None, Decimal | None, Decimal | None, str]:
+) -> tuple[MarketBenchmark | None, dict[str, Any] | None, Decimal | None, Decimal | None, str]:
     """Compare a price against the one benchmark that governs this unit."""
     benchmark = select_benchmark(
         session, project_id=project_id, phase_id=phase_id, unit_type_code=unit_type_code
     )
     if benchmark is None:
-        return None, None, None, FLAG_NONE
+        return None, None, None, None, FLAG_NONE
     if benchmark.currency_id != currency_id:
         raise ValidationError(
             f"Benchmark '{benchmark.source_name}' is quoted in a different currency from "
             "this project's pricing. There is no conversion here."
         )
-    area = internal_area if benchmark.area_basis == BASIS_INTERNAL else weighted_area
-    if area is None or area <= 0:
-        return benchmark, benchmark.benchmark_price_per_area, None, FLAG_NONE
-    price_per_area = money(reference_price / area)
-    deviation = _deviation(price_per_area, benchmark.benchmark_price_per_area)
-    if deviation > benchmark.tolerance_fraction:
-        flag = FLAG_ABOVE
-    elif deviation < -benchmark.tolerance_fraction:
-        flag = FLAG_BELOW
-    else:
-        flag = FLAG_WITHIN
-    return benchmark, benchmark.benchmark_price_per_area, deviation, flag
+    observation = benchmark_observation(benchmark)
+    price, deviation, flag = classify_against(
+        observation,
+        reference_price=reference_price,
+        internal_area=internal_area,
+        weighted_area=weighted_area,
+    )
+    return benchmark, observation, price, deviation, flag
+
+
+def _apply_market(version: UnitPriceVersion) -> None:
+    """Re-derive a version's market position from its own current final price.
+
+    Called after anything that can move ``reference_price_ex_tax`` on a draft,
+    and again immediately before submission, so the figure an approver reads was
+    computed from the number they are approving — not from the number the rules
+    first produced.
+    """
+    price, deviation, flag = classify_against(
+        version.basis_snapshot_json.get("market_benchmark"),
+        reference_price=version.reference_price_ex_tax,
+        internal_area=version.internal_area_snapshot,
+        weighted_area=version.weighted_area_snapshot,
+    )
+    version.market_benchmark_price_snapshot = price
+    version.market_deviation_fraction = deviation
+    version.market_flag = flag
 
 
 # --------------------------------------------------------------------------- #
@@ -2079,7 +2497,14 @@ def _build_version(
         _require_reason(override_reason, detail="An overridden internal rate needs a reason.")
         rate = internal_rate_override
 
-    as_of = valid_from or inventory_fields.business_today()
+    # The effective date is a calculation input, not a label applied afterwards:
+    # which escalations are in force depends on it. Resolve it once, here, and
+    # store the same value on the version — a draft whose date could be edited
+    # later would be a price calculated for one day and made effective on
+    # another, with a different escalation set behind it.
+    effective_from = valid_from or inventory_fields.business_today()
+    _require_configuration_validity(configuration, effective_from=effective_from)
+    as_of = effective_from
     source = PricingInput(
         base_internal_rate=rate,
         areas=tuple(areas),
@@ -2108,7 +2533,7 @@ def _build_version(
 
     lines = inventory.area_lines(session, project_id=project.id, schedule=schedule)
     weighted_area = inventory.weighted_saleable_area(lines)
-    benchmark, benchmark_price, deviation, flag = compare_to_market(
+    benchmark, observation, benchmark_price, deviation, flag = compare_to_market(
         session,
         project_id=project.id,
         phase_id=phase.id,
@@ -2130,7 +2555,7 @@ def _build_version(
         unit_area_schedule_id=schedule.id,
         status=STATUS_DRAFT,
         currency_id=configuration.pricing_currency_id,
-        valid_from=valid_from,
+        valid_from=effective_from,
         base_area_value=result.base_area_value,
         scope_adjustment_total=result.scope_adjustment_total,
         premium_total=result.premium_total,
@@ -2147,7 +2572,9 @@ def _build_version(
         market_deviation_fraction=deviation,
         market_flag=flag,
         basis_snapshot_json={
-            "unit_basis": unit_basis(session, project=project, unit=unit, schedule=schedule),
+            "pricing_basis": pricing_basis(session, project=project, unit=unit, schedule=schedule),
+            "descriptive": descriptive_snapshot(session, unit=unit),
+            "market_benchmark": observation,
             "configuration": {
                 "id": str(configuration.id),
                 "version_number": configuration.version_number,
@@ -2159,7 +2586,7 @@ def _build_version(
             "escalation_activation_ids": sorted(
                 str(item.activation_id) for item in source.escalations
             ),
-            "generated_on": as_of.isoformat(),
+            "effective_from": effective_from.isoformat(),
         },
         change_reason=(change_reason or override_reason or None),
         created_by_user_id=actor.user_id,
@@ -2321,7 +2748,6 @@ def update_price_version(
     project: Project,
     version: UnitPriceVersion,
     actor: ActorContext,
-    valid_from: date | None = None,
     change_reason: str | None = None,
     overrides: list[dict[str, object]] | None = None,
 ) -> UnitPriceVersion:
@@ -2331,6 +2757,11 @@ def update_price_version(
     reason. Both are kept: the approver sees what the rules produced and what a
     person decided instead, which is the whole value of allowing an override at
     all. Once submitted, nothing here can run again.
+
+    ``valid_from`` is deliberately absent. The effective date decided which
+    escalations the calculation read, so moving it afterwards would leave a
+    price whose components describe a different date from the one it claims.
+    Changing the effective date means generating a new version.
     """
     lock_project(session, project.id)
     inventory.lock_unit(session, project_id=project.id, unit_id=version.unit_id)
@@ -2339,8 +2770,6 @@ def update_price_version(
         raise ConflictError("Only a draft price version can be changed.")
 
     before = _snapshot(version, _VERSION_FIELDS)
-    if valid_from is not None:
-        version.valid_from = valid_from
     if change_reason is not None:
         version.change_reason = change_reason.strip() or None
 
@@ -2377,6 +2806,10 @@ def update_price_version(
     version.price_per_weighted_area = _per_area(
         version.reference_price_ex_tax, version.weighted_area_snapshot
     )
+    # An override moved the price, so the market position it earned moved with
+    # it. Leaving "within tolerance" beside a price that is no longer within it
+    # is a false signal on the screen an approver decides from.
+    _apply_market(version)
     _flush(session)
     record_event(
         session,
@@ -2418,6 +2851,7 @@ def _validate_submittable(session: Session, *, version: UnitPriceVersion) -> Non
         )
     if version.currency_id != configuration.pricing_currency_id:
         raise ConflictError("This price is not in the project's pricing currency.")
+    _require_configuration_validity(configuration, effective_from=version.valid_from)
     components = list_components(session, version_id=version.id)
     if not components:
         raise ConflictError("This price has no components.")
@@ -2437,6 +2871,25 @@ def _validate_submittable(session: Session, *, version: UnitPriceVersion) -> Non
         )
     if version.reference_price_ex_tax <= ZERO:
         raise ValidationError("A price must be greater than zero before it can be submitted.")
+    # The market position has to describe the price being moved, not the one the
+    # rules first produced. Submission recalculates it a line above; every later
+    # step re-checks, because from submission onwards the version is immutable
+    # and a mismatch would mean something wrote to it that should not have.
+    price, deviation, flag = classify_against(
+        version.basis_snapshot_json.get("market_benchmark"),
+        reference_price=version.reference_price_ex_tax,
+        internal_area=version.internal_area_snapshot,
+        weighted_area=version.weighted_area_snapshot,
+    )
+    if (
+        version.market_benchmark_price_snapshot != price
+        or version.market_deviation_fraction != deviation
+        or version.market_flag != flag
+    ):
+        raise ConflictError(
+            "This price's market comparison does not match its final amount. "
+            "Generate a new version."
+        )
     _require_current_basis(session, version=version)
 
 
@@ -2454,6 +2907,10 @@ def submit_price_version(
     session.refresh(version)
     if version.status != STATUS_DRAFT:
         raise ConflictError("Only a draft price version can be submitted.")
+    # The last moment this is still a draft, and so the last moment the market
+    # position can be brought in line with the price actually being submitted.
+    # From here the version is immutable and the figure has to already be right.
+    _apply_market(version)
     _validate_submittable(session, version=version)
 
     before = _snapshot(version, _VERSION_FIELDS)
@@ -2571,7 +3028,6 @@ def activate_price_version(
     project: Project,
     version: UnitPriceVersion,
     actor: ActorContext,
-    valid_from: date | None = None,
     commit: bool = True,
 ) -> UnitPriceVersion:
     """Make an approved price the unit's list price.
@@ -2593,7 +3049,10 @@ def activate_price_version(
         raise ConflictError("Only an approved price version can be activated.")
     _validate_submittable(session, version=version)
 
-    effective = valid_from or version.valid_from or inventory_fields.business_today()
+    # The date the version was calculated for, and no other. Activation is
+    # publication, not recalculation: supplying a different date here would put
+    # a price live on a day its escalation set was never evaluated against.
+    effective = version.valid_from
     current = active_price(session, unit_id=unit.id)
     before = _snapshot(version, _VERSION_FIELDS)
     if current is not None and current.id != version.id:
@@ -2614,7 +3073,6 @@ def activate_price_version(
         )
 
     version.status = STATUS_ACTIVE
-    version.valid_from = effective
     version.activated_at = func.now()
     version.activated_by_user_id = actor.user_id
     unit.pricing_approved = True
@@ -2643,7 +3101,6 @@ def bulk_transition(
     actor: ActorContext,
     action: str,
     reason: str | None = None,
-    valid_from: date | None = None,
 ) -> list[UnitPriceVersion]:
     """Submit, approve or activate a selection of prices — all of them or none.
 
@@ -2674,12 +3131,7 @@ def bulk_transition(
             commit=False,
         ),
         "activate": lambda version: activate_price_version(
-            session,
-            project=project,
-            version=version,
-            actor=actor,
-            valid_from=valid_from,
-            commit=False,
+            session, project=project, version=version, actor=actor, commit=False
         ),
     }
     handler = handlers.get(action)
@@ -2916,6 +3368,21 @@ def quote_preview(
     active = active_price(session, unit_id=unit.id)
     if active is None:
         raise ConflictError("This unit has no active price to quote from.")
+    # A live price whose unit has since changed stays readable — it is what the
+    # unit was offered at, and history is not deleted here. What it may not do
+    # is become the basis of a *new* commercial offer: inventory already
+    # withdrew the pricing approval, and quoting from it anyway would step
+    # around the release gate rather than through it.
+    #
+    # Two checks rather than one. ``pricing_approved`` is the flag inventory
+    # maintains and the register displays; the basis comparison is the same
+    # arithmetic every transition runs, and catches a drift the flag missed.
+    if not unit.pricing_approved:
+        raise ConflictError("This unit requires repricing before a quote can be prepared.")
+    try:
+        _require_current_basis(session, version=active)
+    except ConflictError as exc:
+        raise ConflictError("This unit requires repricing before a quote can be prepared.") from exc
     configuration = get_configuration(
         session,
         project_id=project.id,

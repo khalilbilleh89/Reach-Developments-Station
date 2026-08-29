@@ -384,7 +384,13 @@ def test_a_unit_in_a_hidden_phase_is_not_bulk_priced(
     active_configuration: str,
     db: Session,
 ) -> None:
-    """A filter narrows what a caller may see. An explicit identifier cannot widen it."""
+    """An explicit identifier cannot widen what a caller may see, and cannot half-succeed.
+
+    Naming a unit in an ungranted phase refuses the whole request rather than
+    quietly returning the other n-1 drafts, and the refusal does not say which
+    identifier failed — that would answer the question the phase grant exists
+    to refuse.
+    """
     from tests.factories import client_for
     from tests.modules.conftest import PROJECTS
 
@@ -400,7 +406,8 @@ def test_a_unit_in_a_hidden_phase_is_not_bulk_priced(
     )
 
     assert response.status_code == 422
-    assert "at least one unit" in response.json()["detail"]
+    assert response.json()["detail"] == "One or more selected units are unavailable."
+    assert db.scalars(select(UnitPriceVersion)).all() == []
     db.expire_all()
     assert db.scalars(select(UnitPriceVersion)).all() == []
 

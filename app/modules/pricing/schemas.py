@@ -423,9 +423,14 @@ class ComponentOverrideRequest(StrictRequest):
 
 
 class PriceVersionUpdateRequest(StrictRequest):
-    """Draft only. ``status`` is absent: transitions have their own routes."""
+    """Draft only. ``status`` is absent: transitions have their own routes.
 
-    valid_from: date | None = None
+    ``valid_from`` is absent too, and for a stronger reason than tidiness: the
+    effective date chose which escalations the price was calculated with, so
+    editing it afterwards would leave components describing one date and a
+    version claiming another. A different effective date is a different price.
+    """
+
     change_reason: Reason | None = None
     overrides: list[ComponentOverrideRequest] = Field(default_factory=list, max_length=200)
 
@@ -448,9 +453,12 @@ class BulkGenerateRequest(StrictRequest):
 
 
 class BulkVersionRequest(StrictRequest):
+    """A selection to submit, approve or activate. No date: see
+    :class:`PriceVersionUpdateRequest`. Activation publishes the date each
+    version was calculated for."""
+
     version_ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
     reason: Reason | None = None
-    valid_from: date | None = None
 
 
 class PriceComponentRead(BaseModel):
@@ -486,7 +494,7 @@ class PriceVersionRead(BaseModel):
     unit_area_schedule_id: uuid.UUID
     status: str
     currency_id: uuid.UUID
-    valid_from: date | None
+    valid_from: date
     valid_to: date | None
     base_area_value: DecimalStr
     scope_adjustment_total: DecimalStr

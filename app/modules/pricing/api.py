@@ -857,16 +857,38 @@ def quote_preview(
 # --------------------------------------------------------------------------- #
 
 
+def _require_available_units(
+    session: DbSession, actor: ActorContext, project: Project, unit_ids: list[uuid.UUID]
+) -> None:
+    """Every explicitly named unit must be real, active, ours and visible — or none is.
+
+    A filter narrows, and that is fine: asking for "phase 2" and getting the
+    forty units of phase 2 the caller may see is the answer to the question.
+    Naming a hundred identifiers is a different question. It says *these*, and
+    quietly returning ninety-nine drafts leaves a price list that looks complete
+    and is not, with nothing on screen naming the unit that fell out.
+
+    The refusal is deliberately uninformative. Saying which identifier failed,
+    or why, would turn this route into a way to ask whether a unit exists in a
+    phase the caller was never granted — the same question a direct read answers
+    with 404.
+    """
+    if len(set(unit_ids)) != len(unit_ids):
+        raise ValidationError("The same unit is listed more than once.")
+    statement = select(Unit.id).where(
+        Unit.project_id == project.id,
+        Unit.is_active.is_(True),
+        Unit.id.in_(unit_ids),
+    )
+    statement = visible_units_for_pricing(statement, session, project_id=project.id, actor=actor)
+    if len(set(session.scalars(statement))) != len(unit_ids):
+        raise ValidationError("One or more selected units are unavailable.")
+
+
 def _selected_units(
     session: DbSession, actor: ActorContext, project: Project, payload: BulkGenerateRequest
 ) -> list[Unit]:
-    """The units a bulk request selects, narrowed to what the caller may see.
-
-    A filter narrows; it never widens. An explicit identifier for a unit in a
-    phase the caller was not granted is simply not selected, and the count in
-    the response says so — which is the same answer they would get by asking
-    for that unit directly.
-    """
+    """The units a bulk request selects, narrowed to what the caller may see."""
     if not any(
         (
             payload.unit_ids,
@@ -880,6 +902,8 @@ def _selected_units(
             "Name the units to price: identifiers, a phase, a building, a unit type "
             "or a commercial status."
         )
+    if payload.unit_ids:
+        _require_available_units(session, actor, project, payload.unit_ids)
     statement = (
         select(Unit)
         .join(Floor, Floor.id == Unit.floor_id)
@@ -1009,7 +1033,6 @@ def bulk_activate(
             actor=actor,
             action="activate",
             reason=payload.reason,
-            valid_from=payload.valid_from,
         )
     ]
 
@@ -1053,7 +1076,6 @@ def update_price_version(
         project=project,
         version=version,
         actor=actor,
-        valid_from=body.get("valid_from"),
         change_reason=body.get("change_reason"),
         overrides=body.get("overrides"),
     )

@@ -329,6 +329,23 @@ and the version does not. A price change is a new version; the one it replaces
 is superseded and stays readable for ever. One active price per unit, again by
 partial unique index.
 
+The version's **effective date is a calculation input**, resolved once when the
+price is generated and immutable from then on. It decides which escalations were
+in force, so a date that could be edited afterwards — on the draft, or supplied
+again at activation — would leave a price whose components describe one day and
+whose row claims another. Changing the effective date means generating a new
+version, and that date must fall inside the validity window of the configuration
+that produced it.
+
+What the version freezes is the **pricing basis**: the facts the arithmetic
+reads. It is deliberately the same set inventory withdraws `pricing_approved`
+for, plus the hierarchy premiums match on, the approved measurement, the priced
+sub-assets and the configurable values. The unit's reference, number and asset
+class are labels, kept in a separate descriptive snapshot for the auditor and
+never compared — inventory does not treat renaming A-101 to A1-101 as a change
+of unit, and a fingerprint that disagreed would refuse the very approval
+inventory had just declared valid.
+
 Every price is decomposed into **component lines** — the area, the rate, the
 factor, the basis, what the rules produced and what a person overrode — and the
 lines sum to the stored total exactly. A total that cannot be taken apart is the
@@ -369,6 +386,26 @@ this phase, then unit type, then phase, then project), and a second equally
 specific active benchmark is refused. Currencies must match — there is no FX
 table in this MVP, and a deviation computed across an ungoverned rate would look
 like a fact.
+
+The observation is **frozen into the version** rather than followed by
+reference, and the classification is re-derived from the version's own final
+amount whenever that amount moves — an override included. A "within tolerance"
+chip beside a price a person pushed a third above the benchmark is a false
+signal on the screen an approver decides from; and a benchmark revised next
+quarter must not silently restate what last quarter's approver was shown.
+
+**Configuration cannot silently mean nothing.** Every premium source is checked
+against the same catalogue the units themselves are checked against, so a rule
+naming a view class that was never configured is refused rather than saved and
+never matched. A custom-field premium reads a boolean field or one named option
+of an option field — the only two unambiguous readings — and any other data type
+is refused, because "above three metres" is a comparison and a comparison is an
+expression language. An escalation rule carries the fact its own trigger is
+about and none of the others, in the service and in a CHECK constraint; a
+sales-percentage escalation cannot be activated on evidence below its own
+threshold. And `internal_base` may only name the project's actual internal area,
+with a partial unique index behind the rule, because every "per internal area"
+figure in the system divides by whatever that rule points at.
 
 ### Deferred by design
 

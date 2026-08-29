@@ -21,7 +21,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -431,27 +431,24 @@ def test_a_draft_price_is_never_calculated_from_superseded_geometry(
     thread, outcome = _run(generate)
     try:
         blocked = _wait_until_a_backend_blocks()
-        # The new measurement is approved while the price generator waits.
-        # ``approved_complete`` requires the approver and the timestamp beside
-        # the status, so the direct write sets what the API would have set.
-        #
-        # The old revision is superseded and flushed before the new one is
-        # approved, exactly as ``approve_area_schedule`` does it. A partial
-        # unique index cannot be deferred to the end of the transaction, so
-        # both statements have to reach PostgreSQL in that order; mutating the
-        # two rows and letting one flush order them leaves the order to their
-        # primary keys, which are random.
+        # The new measurement is approved while the price generator waits —
+        # through the real inventory service, so the test exercises the
+        # production sequence: supersede R0, flush, approve R1, clear the
+        # pricing approval, commit. Setting the two statuses directly and
+        # letting one flush order them would leave the order to the primary
+        # keys, and a partial unique index cannot be deferred to commit.
         approver = holder.scalars(select(User)).first()
-        schedules = {
-            schedule.revision_code: schedule
-            for schedule in holder.scalars(select(UnitAreaSchedule))
-        }
-        schedules["R0"].status = "superseded"
-        holder.flush()
-        schedules["R1"].status = "approved"
-        schedules["R1"].approved_by_user_id = approver.id
-        schedules["R1"].approved_at = datetime.now(UTC)
-        holder.commit()
+        revision = holder.scalars(
+            select(UnitAreaSchedule).where(UnitAreaSchedule.id == uuid.UUID(revised))
+        ).one()
+        inventory.approve_area_schedule(
+            holder,
+            project=_project(holder, project_id),
+            unit=holder.scalars(select(Unit).where(Unit.id == uuid.UUID(unit_id))).one(),
+            schedule=revision,
+            actor_user_id=approver.id,
+            correlation_id=uuid.uuid4(),
+        )
     finally:
         holder.close()
         thread.join(timeout=30)

@@ -336,6 +336,13 @@ def upgrade() -> None:
         ["pricing_configuration_id"],
         unique=False,
     )
+    op.create_index(
+        "uq_pricing_area_rules_internal_base",
+        "pricing_area_rules",
+        ["pricing_configuration_id"],
+        unique=True,
+        postgresql_where=sa.text("pricing_method = 'internal_base' AND is_active"),
+    )
     op.create_table(
         "pricing_escalation_rules",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -385,8 +392,19 @@ def upgrade() -> None:
             name=op.f("ck_pricing_escalation_rules_scope_inputs"),
         ),
         sa.CheckConstraint(
-            "(trigger_type = 'date' AND threshold_date IS NOT NULL) OR trigger_type <> 'date'",
-            name=op.f("ck_pricing_escalation_rules_date_trigger_has_date"),
+            "(trigger_type = 'date' AND threshold_date IS NOT NULL "
+            "  AND threshold_fraction IS NULL AND milestone_reference IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'sales_percentage' AND threshold_fraction IS NOT NULL "
+            "  AND threshold_date IS NULL AND milestone_reference IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'construction_milestone' AND milestone_reference IS NOT NULL "
+            "  AND threshold_date IS NULL AND threshold_fraction IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'market_index' AND market_index_reference IS NOT NULL "
+            "  AND threshold_date IS NULL AND threshold_fraction IS NULL "
+            "  AND milestone_reference IS NULL)",
+            name=op.f("ck_pricing_escalation_rules_trigger_inputs"),
         ),
         sa.CheckConstraint(
             "adjustment_method IN ('percentage', 'fixed')",
@@ -634,7 +652,7 @@ def upgrade() -> None:
         sa.Column("unit_area_schedule_id", sa.UUID(), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("currency_id", sa.UUID(), nullable=False),
-        sa.Column("valid_from", sa.Date(), nullable=True),
+        sa.Column("valid_from", sa.Date(), nullable=False),
         sa.Column("valid_to", sa.Date(), nullable=True),
         sa.Column("base_area_value", sa.Numeric(precision=18, scale=2), nullable=False),
         sa.Column("scope_adjustment_total", sa.Numeric(precision=18, scale=2), nullable=False),
@@ -695,7 +713,7 @@ def upgrade() -> None:
             "reference_price_ex_tax >= 0", name=op.f("ck_unit_price_versions_price_nonneg")
         ),
         sa.CheckConstraint(
-            "valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from",
+            "valid_to IS NULL OR valid_to >= valid_from",
             name=op.f("ck_unit_price_versions_valid_range"),
         ),
         sa.CheckConstraint(
@@ -900,6 +918,7 @@ def downgrade() -> None:
     op.drop_table("pricing_premium_rules")
     op.drop_index("ix_pricing_escalation_rules_config_id", table_name="pricing_escalation_rules")
     op.drop_table("pricing_escalation_rules")
+    op.drop_index("uq_pricing_area_rules_internal_base", table_name="pricing_area_rules")
     op.drop_index("ix_pricing_area_rules_configuration_id", table_name="pricing_area_rules")
     op.drop_table("pricing_area_rules")
     op.drop_index(

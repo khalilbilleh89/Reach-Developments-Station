@@ -674,7 +674,7 @@ export interface PriceVersion {
   unit_area_schedule_id: string;
   status: PricingStatus;
   currency_id: string;
-  valid_from: string | null;
+  valid_from: string;
   valid_to: string | null;
   base_area_value: string;
   scope_adjustment_total: string;

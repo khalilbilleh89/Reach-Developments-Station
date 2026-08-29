@@ -161,6 +161,20 @@ STACKING_COMPOUND = "compound"
 #: Faking those sources would put invented facts in a price.
 ESCALATION_TRIGGERS = ("date", "sales_percentage", "construction_milestone", "market_index")
 TRIGGER_DATE = "date"
+TRIGGER_SALES_PERCENTAGE = "sales_percentage"
+TRIGGER_CONSTRUCTION_MILESTONE = "construction_milestone"
+TRIGGER_MARKET_INDEX = "market_index"
+
+#: The one fact each trigger is *about*. A rule carries exactly its own and none
+#: of the others: "escalate when we are 30% sold" with no 30% in it is not a
+#: policy, it is a policy-shaped row, and the day somebody tries to activate it
+#: there is nothing to check the evidence against.
+ESCALATION_TRIGGER_INPUTS = {
+    TRIGGER_DATE: "threshold_date",
+    TRIGGER_SALES_PERCENTAGE: "threshold_fraction",
+    TRIGGER_CONSTRUCTION_MILESTONE: "milestone_reference",
+    TRIGGER_MARKET_INDEX: "market_index_reference",
+}
 
 #: How far an escalation rule reaches.
 ESCALATION_SCOPES = ("project", "phase", "unit_type")
@@ -428,6 +442,16 @@ class PricingAreaRule(Base):
             name="method_inputs",
         ),
         Index("ix_pricing_area_rules_configuration_id", "pricing_configuration_id"),
+        # One configuration, one internal base. The project lock is the friendly
+        # mechanism and this is the backstop: "which area is the internal rate
+        # quoted against" has to have one answer, or the price per internal
+        # metre printed on every screen is a number with two meanings.
+        Index(
+            "uq_pricing_area_rules_internal_base",
+            "pricing_configuration_id",
+            unique=True,
+            postgresql_where=text("pricing_method = 'internal_base' AND is_active"),
+        ),
     )
 
 
@@ -631,9 +655,24 @@ class PricingEscalationRule(Base):
             "OR (scope_type = 'project' AND phase_id IS NULL AND unit_type_code IS NULL)",
             name="scope_inputs",
         ),
+        # Exactly one trigger input family, in the database as well as the
+        # service: a structural financial invariant, and a direct write is
+        # exactly the path that would otherwise store a construction-milestone
+        # escalation with no milestone in it.
         CheckConstraint(
-            "(trigger_type = 'date' AND threshold_date IS NOT NULL) OR trigger_type <> 'date'",
-            name="date_trigger_has_date",
+            "(trigger_type = 'date' AND threshold_date IS NOT NULL "
+            "  AND threshold_fraction IS NULL AND milestone_reference IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'sales_percentage' AND threshold_fraction IS NOT NULL "
+            "  AND threshold_date IS NULL AND milestone_reference IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'construction_milestone' AND milestone_reference IS NOT NULL "
+            "  AND threshold_date IS NULL AND threshold_fraction IS NULL "
+            "  AND market_index_reference IS NULL) "
+            "OR (trigger_type = 'market_index' AND market_index_reference IS NOT NULL "
+            "  AND threshold_date IS NULL AND threshold_fraction IS NULL "
+            "  AND milestone_reference IS NULL)",
+            name="trigger_inputs",
         ),
         Index("ix_pricing_escalation_rules_config_id", "pricing_configuration_id"),
     )
@@ -808,7 +847,11 @@ class UnitPriceVersion(Base):
     currency_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("currencies.id", ondelete="RESTRICT"), nullable=False
     )
-    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: The date this price takes effect, decided once when it was calculated.
+    #: Not nullable, because it is a calculation input rather than a label: it
+    #: chose which escalations applied, so a version without one would be a
+    #: price whose components nobody could reproduce.
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     base_area_value: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
@@ -897,9 +940,7 @@ class UnitPriceVersion(Base):
         CheckConstraint("base_area_value >= 0", name="base_nonneg"),
         CheckConstraint("premium_cap_adjustment <= 0", name="cap_not_positive"),
         CheckConstraint("paid_upgrade_total >= 0", name="upgrade_nonneg"),
-        CheckConstraint(
-            "valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from", name="valid_range"
-        ),
+        CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="valid_range"),
         # One live list price per unit. This is the constraint the whole module
         # is built around; the service takes the unit lock so the second writer
         # loses cleanly rather than here.

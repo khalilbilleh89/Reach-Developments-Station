@@ -687,7 +687,7 @@ export function UnitDetailPanel({
                   {unitPricing.active_price.reference_price_ex_tax} ex tax
                 </span>
                 <span className="chip">v{unitPricing.active_price.version_number}</span>
-                <span className="chip">from {unitPricing.active_price.valid_from ?? "—"}</span>
+                <span className="chip">from {unitPricing.active_price.valid_from}</span>
                 <span className="chip mono">
                   {unitPricing.active_price.price_per_internal_area ?? "—"} per internal unit
                 </span>
@@ -722,7 +722,7 @@ export function UnitDetailPanel({
                       <tr key={version.id}>
                         <th scope="row">{version.version_number}</th>
                         <td>{version.status}</td>
-                        <td>{version.valid_from ?? "—"}</td>
+                        <td>{version.valid_from}</td>
                         <td>{version.valid_to ?? "—"}</td>
                         <td className="mono nowrap">{version.reference_price_ex_tax}</td>
                         <td>{version.change_reason ?? "—"}</td>
