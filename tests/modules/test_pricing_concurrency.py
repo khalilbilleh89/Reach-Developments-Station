@@ -434,14 +434,23 @@ def test_a_draft_price_is_never_calculated_from_superseded_geometry(
         # The new measurement is approved while the price generator waits.
         # ``approved_complete`` requires the approver and the timestamp beside
         # the status, so the direct write sets what the API would have set.
+        #
+        # The old revision is superseded and flushed before the new one is
+        # approved, exactly as ``approve_area_schedule`` does it. A partial
+        # unique index cannot be deferred to the end of the transaction, so
+        # both statements have to reach PostgreSQL in that order; mutating the
+        # two rows and letting one flush order them leaves the order to their
+        # primary keys, which are random.
         approver = holder.scalars(select(User)).first()
-        for schedule in holder.scalars(select(UnitAreaSchedule)):
-            if schedule.revision_code == "R0":
-                schedule.status = "superseded"
-            else:
-                schedule.status = "approved"
-                schedule.approved_by_user_id = approver.id
-                schedule.approved_at = datetime.now(UTC)
+        schedules = {
+            schedule.revision_code: schedule
+            for schedule in holder.scalars(select(UnitAreaSchedule))
+        }
+        schedules["R0"].status = "superseded"
+        holder.flush()
+        schedules["R1"].status = "approved"
+        schedules["R1"].approved_by_user_id = approver.id
+        schedules["R1"].approved_at = datetime.now(UTC)
         holder.commit()
     finally:
         holder.close()
