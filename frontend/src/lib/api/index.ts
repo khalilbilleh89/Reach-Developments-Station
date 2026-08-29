@@ -4,27 +4,39 @@
  * Every network call the application makes goes through one of these.
  */
 
-import { get, patch, post, put } from "./client";
+import { get, patch, post, postCsv, put } from "./client";
 import type {
   AdminUser,
   ApprovalThresholds,
+  AreaSchedule,
+  AreaType,
   AuditEvent,
+  Building,
   CountryPack,
   Currency,
   CurrentUser,
+  CustomValue,
   DocumentReference,
+  Floor,
+  ImportReport,
   LandParcel,
   Page,
   Permit,
   PermitRegister,
   PermitStatusEvent,
+  Phase,
+  PhaseAccess,
   PlanningControl,
   ProjectAccess,
   ProjectDetail,
   ProjectSummary,
   ReferenceValue,
   Role,
+  SubAsset,
   TaxRule,
+  Unit,
+  UnitRegister,
+  UnitStatusEvent,
 } from "./types";
 
 export { ApiError } from "./client";
@@ -177,4 +189,133 @@ export const projects = {
     post<DocumentReference>(`/projects/${id}/documents`, input),
   updateDocument: (id: string, documentId: string, input: Record<string, unknown>) =>
     patch<DocumentReference>(`/projects/${id}/documents/${documentId}`, input),
+};
+
+/**
+ * Inventory: the physical catalogue inside a project.
+ *
+ * Grouped separately from `projects` because it is a separate domain on the
+ * server, and every path here is scoped to the project that owns the records.
+ */
+export const inventory = {
+  phases: (projectId: string) => get<Phase[]>(`/projects/${projectId}/inventory/phases`),
+  createPhase: (projectId: string, input: Record<string, unknown>) =>
+    post<Phase>(`/projects/${projectId}/inventory/phases`, input),
+  updatePhase: (projectId: string, phaseId: string, input: Record<string, unknown>) =>
+    patch<Phase>(`/projects/${projectId}/inventory/phases/${phaseId}`, input),
+
+  buildings: (projectId: string, phaseId?: string) =>
+    get<Building[]>(
+      `/projects/${projectId}/inventory/buildings${phaseId ? `?phase_id=${phaseId}` : ""}`,
+    ),
+  createBuilding: (projectId: string, input: Record<string, unknown>) =>
+    post<Building>(`/projects/${projectId}/inventory/buildings`, input),
+
+  floors: (projectId: string, query: { building_id?: string; phase_id?: string } = {}) => {
+    const params = new URLSearchParams(query as Record<string, string>);
+    const suffix = params.toString();
+    return get<Floor[]>(`/projects/${projectId}/inventory/floors${suffix ? `?${suffix}` : ""}`);
+  },
+  createFloor: (projectId: string, input: Record<string, unknown>) =>
+    post<Floor>(`/projects/${projectId}/inventory/floors`, input),
+
+  units: (projectId: string, query: Record<string, string> = {}) => {
+    const params = new URLSearchParams(query);
+    const suffix = params.toString();
+    return get<UnitRegister>(`/projects/${projectId}/inventory/units${suffix ? `?${suffix}` : ""}`);
+  },
+  unit: (projectId: string, unitId: string) =>
+    get<Unit>(`/projects/${projectId}/inventory/units/${unitId}`),
+  createUnit: (projectId: string, input: Record<string, unknown>) =>
+    post<Unit>(`/projects/${projectId}/inventory/units`, input),
+  updateUnit: (projectId: string, unitId: string, input: Record<string, unknown>) =>
+    patch<Unit>(`/projects/${projectId}/inventory/units/${unitId}`, input),
+  releaseControls: (projectId: string, unitId: string, input: Record<string, unknown>) =>
+    patch<Unit>(`/projects/${projectId}/inventory/units/${unitId}/release-controls`, input),
+  transitionUnit: (
+    projectId: string,
+    unitId: string,
+    input: { to_status: string; effective_date: string; reason?: string; notes?: string },
+  ) => post<Unit>(`/projects/${projectId}/inventory/units/${unitId}/commercial-transitions`, input),
+  unitHistory: (projectId: string, unitId: string) =>
+    get<UnitStatusEvent[]>(`/projects/${projectId}/inventory/units/${unitId}/status-history`),
+
+  areaTypes: (projectId: string) =>
+    get<AreaType[]>(`/projects/${projectId}/inventory/area-types`),
+  createAreaType: (projectId: string, input: Record<string, unknown>) =>
+    post<AreaType>(`/projects/${projectId}/inventory/area-types`, input),
+  updateAreaType: (projectId: string, areaTypeId: string, input: Record<string, unknown>) =>
+    patch<AreaType>(`/projects/${projectId}/inventory/area-types/${areaTypeId}`, input),
+
+  areaSchedules: (projectId: string, unitId: string) =>
+    get<AreaSchedule[]>(`/projects/${projectId}/inventory/units/${unitId}/area-schedules`),
+  createAreaSchedule: (projectId: string, unitId: string, input: Record<string, unknown>) =>
+    post<AreaSchedule>(`/projects/${projectId}/inventory/units/${unitId}/area-schedules`, input),
+  updateAreaSchedule: (
+    projectId: string,
+    unitId: string,
+    scheduleId: string,
+    input: Record<string, unknown>,
+  ) =>
+    patch<AreaSchedule>(
+      `/projects/${projectId}/inventory/units/${unitId}/area-schedules/${scheduleId}`,
+      input,
+    ),
+  approveAreaSchedule: (projectId: string, unitId: string, scheduleId: string) =>
+    post<AreaSchedule>(
+      `/projects/${projectId}/inventory/units/${unitId}/area-schedules/${scheduleId}/approve`,
+    ),
+
+  subAssets: (projectId: string, query: Record<string, string> = {}) => {
+    const params = new URLSearchParams(query);
+    const suffix = params.toString();
+    return get<SubAsset[]>(
+      `/projects/${projectId}/inventory/sub-assets${suffix ? `?${suffix}` : ""}`,
+    );
+  },
+  createSubAsset: (projectId: string, input: Record<string, unknown>) =>
+    post<SubAsset>(`/projects/${projectId}/inventory/sub-assets`, input),
+  updateSubAsset: (projectId: string, assetId: string, input: Record<string, unknown>) =>
+    patch<SubAsset>(`/projects/${projectId}/inventory/sub-assets/${assetId}`, input),
+
+  unitValues: (projectId: string, unitId: string) =>
+    get<CustomValue[]>(`/projects/${projectId}/inventory/units/${unitId}/custom-values`),
+  writeUnitValues: (
+    projectId: string,
+    unitId: string,
+    values: Record<string, unknown>,
+    changeReason?: string,
+  ) =>
+    put<CustomValue[]>(`/projects/${projectId}/inventory/units/${unitId}/custom-values`, {
+      values,
+      ...(changeReason ? { change_reason: changeReason } : {}),
+    }),
+
+  phaseScope: (projectId: string, userId: string, scope: "all" | "selected") =>
+    patch<{ phase_scope: string }>(`/projects/${projectId}/access/${userId}/phase-scope`, {
+      phase_scope: scope,
+    }),
+  phaseAccess: (projectId: string, userId: string) =>
+    get<PhaseAccess[]>(`/projects/${projectId}/access/${userId}/phases`),
+  setPhaseAccess: (projectId: string, userId: string, phaseId: string, isActive: boolean) =>
+    patch<PhaseAccess>(`/projects/${projectId}/access/${userId}/phases/${phaseId}`, {
+      is_active: isActive,
+    }),
+  grantPhaseAccess: (projectId: string, userId: string, phaseId: string) =>
+    put<PhaseAccess>(`/projects/${projectId}/access/${userId}/phases/${phaseId}`, {}),
+
+  importTemplate: (projectId: string) =>
+    get<{ filename: string; content: string }>(
+      `/projects/${projectId}/inventory/import/template`,
+    ),
+  validateImport: (projectId: string, csv: string, query: Record<string, string>) =>
+    postCsv<ImportReport>(
+      `/projects/${projectId}/inventory/import/validate?${new URLSearchParams(query)}`,
+      csv,
+    ),
+  applyImport: (projectId: string, csv: string, query: Record<string, string>) =>
+    postCsv<ImportReport>(
+      `/projects/${projectId}/inventory/import/apply?${new URLSearchParams(query)}`,
+      csv,
+    ),
 };

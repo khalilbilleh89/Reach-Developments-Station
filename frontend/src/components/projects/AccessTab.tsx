@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, users } from "@/lib/api";
 import type { AdminUser, ProjectAccess } from "@/lib/api";
 import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import { PhaseAccessEditor } from "@/components/projects/inventory/PhaseAccessEditor";
 
 /**
  * Project membership administration. System Administrator only.
@@ -19,6 +20,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [scopeFor, setScopeFor] = useState<ProjectAccess | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +119,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
                 <th scope="col">Email</th>
                 <th scope="col">Roles</th>
                 <th scope="col">Access</th>
+                <th scope="col">Inventory scope</th>
                 <th scope="col">Granted</th>
                 <th scope="col">Revoked</th>
                 <th scope="col">Action</th>
@@ -141,9 +144,16 @@ export function AccessTab({ projectId }: { projectId: string }) {
                       <Badge tone="muted">Revoked</Badge>
                     )}
                   </td>
+                  <td>
+                    {row.phase_scope === "selected" ? (
+                      <Badge tone="neutral">Selected phases</Badge>
+                    ) : (
+                      <span className="subtle">All phases</span>
+                    )}
+                  </td>
                   <td className="nowrap">{row.granted_at.slice(0, 10)}</td>
                   <td className="nowrap">{row.revoked_at?.slice(0, 10) ?? "—"}</td>
-                  <td>
+                  <td className="chip-list">
                     <button
                       className="button button-small"
                       type="button"
@@ -152,6 +162,15 @@ export function AccessTab({ projectId }: { projectId: string }) {
                     >
                       {row.is_active ? "Revoke" : "Restore"}
                     </button>
+                    <button
+                      className="button button-small"
+                      type="button"
+                      onClick={() =>
+                        setScopeFor(scopeFor?.user_id === row.user_id ? null : row)
+                      }
+                    >
+                      {scopeFor?.user_id === row.user_id ? "Close phases" : "Phases"}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -159,6 +178,22 @@ export function AccessTab({ projectId }: { projectId: string }) {
           </table>
         </div>
       )}
+
+      {scopeFor ? (
+        <PhaseAccessEditor
+          projectId={projectId}
+          userId={scopeFor.user_id}
+          displayName={scopeFor.display_name}
+          phaseScope={scopeFor.phase_scope}
+          onScopeChanged={async () => {
+            const refreshed = await projects.access(projectId);
+            setRows(refreshed);
+            setScopeFor(
+              refreshed.find((entry) => entry.user_id === scopeFor.user_id) ?? null,
+            );
+          }}
+        />
+      ) : null}
     </Panel>
   );
 }

@@ -76,6 +76,13 @@ jobs:
       - name: Apply migrations
         run: alembic upgrade head
 
+      # A difference between the ORM metadata and the migration history is a
+      # defect, not background noise: PR-MVP-02 shipped with two of them and
+      # only noticed because an unrelated autogenerate run had something to say.
+      # This checks; it never generates.
+      - name: Check for model and schema drift
+        run: alembic check
+
       - name: Test
         run: pytest -q
 

@@ -11,7 +11,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     String,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -112,7 +111,9 @@ class UserRole(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "role_id", name="user_role"),)
+    # No UniqueConstraint here. The composite primary key above already
+    # enforces one row per (user, role); declaring it twice made PostgreSQL keep
+    # only the primary key and left `alembic check` reporting drift for ever.
 
 
 class UserSession(Base):

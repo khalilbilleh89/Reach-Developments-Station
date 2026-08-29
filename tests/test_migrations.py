@@ -19,7 +19,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0002_project_land_permits"
+HEAD_REVISION = "0003_inventory"
 
 
 def _alembic_config() -> Config:

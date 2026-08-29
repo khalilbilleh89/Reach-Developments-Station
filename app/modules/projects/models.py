@@ -31,11 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import MONEY, RATE, Base, in_list
-
-#: Physical measures — areas, lengths, heights, densities. Four decimals so a
-#: cadastral area survives the round trip exactly as the title records it.
-MEASURE = Numeric(18, 4)
+from app.db.base import MEASURE, MONEY, RATE, Base, in_list
 
 #: Floor area ratio. Not a fraction of one — an FAR of 4.5 is ordinary.
 RATIO = Numeric(12, 4)
@@ -54,6 +50,15 @@ PROJECT_STATUSES = (
 #: The one status in which the legal and monetary basis of a project may still
 #: be corrected. See :func:`app.modules.projects.service.update_project`.
 PROJECT_STATUS_SETUP = "setup"
+
+#: How much of a project's inventory a member may see. The column lives on
+#: ``user_project_access`` because it narrows that membership, so the closed set
+#: lives here beside it; the phase grants it points at are inventory's.
+#: ``all`` is the historical behaviour and the default — every row that existed
+#: before phases did means it, and must keep meaning it.
+PHASE_SCOPES = ("all", "selected")
+PHASE_SCOPE_ALL = "all"
+PHASE_SCOPE_SELECTED = "selected"
 
 #: Machine states for a permit. Fixed rather than configurable because system
 #: behaviour depends on their meaning — a workflow whose states are data is a
@@ -183,6 +188,12 @@ class UserProjectAccess(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Whether this membership reaches every phase or only the ones explicitly
+    #: granted in ``user_phase_access``. Added in PR-MVP-03, when Phase became
+    #: real; existing rows default to ``all``, which is exactly what they meant.
+    phase_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=PHASE_SCOPE_ALL, server_default=PHASE_SCOPE_ALL
+    )
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -196,8 +207,11 @@ class UserProjectAccess(Base):
 
     __table_args__ = (
         # One row per pairing, ever. Re-granting reactivates the existing row so
-        # the grant/revoke history stays on a single line.
+        # the grant/revoke history stays on a single line. Also the composite
+        # key ``user_phase_access`` points at: a phase grant without a project
+        # membership behind it is a foreign-key violation, not a service check.
         UniqueConstraint("project_id", "user_id"),
+        CheckConstraint(in_list("phase_scope", PHASE_SCOPES), name="phase_scope_allowed"),
         Index("ix_user_project_access_user_id", "user_id"),
     )
 

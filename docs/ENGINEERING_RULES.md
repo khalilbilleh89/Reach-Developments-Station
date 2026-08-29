@@ -175,7 +175,7 @@ proves they are necessary.
 
 ---
 
-## 6. Money, rates and dates
+## 6. Money, rates, dates and data modelling
 
 ### Money
 
@@ -216,6 +216,33 @@ installment_1_amount
 installment_2_amount
 installment_3_amount
 ```
+
+### Separate status dimensions
+
+Commercial, legal, collection and delivery status are four columns. They are
+never collapsed into one `status`, and never derived from one another: a unit can
+be contracted, registered, overdue and under construction at the same time, and
+each of those facts belongs to a different team.
+
+Status changes are recorded as append-only events with actor, timestamp and —
+where the transition is a reversal or a cancellation — a reason.
+
+### Configurable fields are metadata, not programming
+
+A configurable field names a data type from a fixed list, an optional option set
+and where it applies. It never carries an executable formula, JavaScript, Python,
+SQL, an expression, a lookup query, arbitrary JSON or rich text that something
+later evaluates. If a requirement needs computation, it needs code and a
+migration, not a field.
+
+Values are stored per entity in real tables with real foreign keys — never one
+polymorphic `entity_type`/`entity_id` table that no constraint can protect.
+
+### Derived values are derived
+
+A number the system can compute is computed, not stored as independent truth and
+not made editable. A weighted area, a completeness percentage or a total that a
+user can type is a number that will disagree with its own inputs.
 
 ### Financial and legal deletion
 
@@ -300,11 +327,17 @@ Diagnostics belong in server logs. Clients get facts they are entitled to.
 - Destructive changes must be called out in the PR and must state a rollback
   procedure.
 - **Never edit a revision that has already shipped to production.** Revisions
-  through `0001_governance_access` are deployed; from there migrations are
+  through `0002_project_land_permits` are deployed; from there migrations are
   incremental, and a correction is a new revision, never a rewrite of an old one.
 - A migration changes only what its PR is for. `alembic revision --autogenerate`
   will happily fold in unrelated drift it noticed elsewhere in the schema —
   read the generated file and delete anything that is not this change.
+- **CI runs `alembic check` after `alembic upgrade head`** and fails when the
+  models and the migrated schema disagree. It never generates a revision
+  automatically: a drift report is a request to write a migration, not a licence
+  for CI to invent one. When drift is a naming difference, rename the constraint
+  in place — `ALTER TABLE … RENAME CONSTRAINT` — rather than dropping and
+  recreating it.
 
 ---
 
@@ -318,8 +351,14 @@ Diagnostics belong in server logs. Clients get facts they are entitled to.
   connection strings or stack traces.
 - CI uses a throwaway PostgreSQL service container and never points at Render
   production PostgreSQL.
-- Authentication, roles and project access arrive in PR-MVP-01. Until then the
-  service exposes no business data.
+- Row-level narrowing is applied **in SQL**, never by fetching everything and
+  filtering in Python. A filter parameter can only narrow what a caller may
+  already see; it can never widen it.
+- A record a caller may not see answers **404**, never 403. A 403 confirms that
+  an identifier names something real, which is precisely what an enumerator
+  wants.
+- Field-level visibility is applied **before serialisation**. A field hidden
+  from a role is absent from the response body, not hidden by the browser.
 
 ---
 

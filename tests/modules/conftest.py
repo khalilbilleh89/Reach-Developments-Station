@@ -8,6 +8,8 @@ tests should fail if that stops being true.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -155,3 +157,186 @@ def permit_payload(**overrides: object) -> dict[str, object]:
 def grant_access(admin_client: TestClient, project_id: str, user: User) -> None:
     response = admin_client.put(f"{PROJECTS}/{project_id}/access/{user.id}")
     assert response.status_code == 200, response.text
+
+
+# --------------------------------------------------------------------------- #
+# Inventory (PR-MVP-03)
+# --------------------------------------------------------------------------- #
+
+#: Reference values the inventory domain validates unit codes against, on top of
+#: the ones PR-MVP-02's conftest already seeds.
+INVENTORY_REFERENCE_VALUES = (
+    ("unit_type", "2BR", "Two bedroom"),
+    ("unit_type", "3BR", "Three bedroom"),
+    ("floor_band", "MID", "Middle floors"),
+    ("orientation", "NORTH", "North facing"),
+    ("view_class", "SEA", "Sea view"),
+    ("furnishing_specification", "STANDARD", "Standard finish"),
+    ("accessibility", "STEP_FREE", "Step free"),
+    ("garden_class", "PRIVATE", "Private garden"),
+    ("sub_asset_subtype", "COVERED", "Covered bay"),
+)
+
+
+def inventory_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/inventory"
+
+
+@pytest.fixture
+def inventory_reference_data(admin_client: TestClient, country_pack_id: str) -> None:
+    for category, code, label in INVENTORY_REFERENCE_VALUES:
+        response = admin_client.post(
+            f"{SETTINGS}/reference-values",
+            json={
+                "country_pack_id": country_pack_id,
+                "category": category,
+                "code": code,
+                "label": label,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+
+@pytest.fixture
+def phase_id(admin_client: TestClient, project_id: str, inventory_reference_data: None) -> str:
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/phases",
+        json={"code": "PHASE-1", "name": "Phase 1", "sequence": 1},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def building_id(admin_client: TestClient, project_id: str, phase_id: str) -> str:
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/buildings",
+        json={"phase_id": phase_id, "code": "B1", "name": "Building 1"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def floor_id(admin_client: TestClient, project_id: str, building_id: str) -> str:
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/floors",
+        json={"building_id": building_id, "code": "01", "label": "First floor"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def unit_payload(floor_id: str, **overrides: object) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "floor_id": floor_id,
+        "unit_number": "101",
+        "unit_reference": "B1-101",
+        "asset_class": "apartment",
+        "unit_type_code": "2BR",
+        "bedrooms": 2,
+        "bathrooms": 2,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.fixture
+def unit_id(admin_client: TestClient, project_id: str, floor_id: str) -> str:
+    response = admin_client.post(f"{inventory_url(project_id)}/units", json=unit_payload(floor_id))
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def area_types(admin_client: TestClient, project_id: str) -> dict[str, str]:
+    """An internal area required for release, and a half-weighted balcony."""
+    created: dict[str, str] = {}
+    for code, label, role, factor, required in (
+        ("INTERNAL", "Internal area", "internal", "1.000000", True),
+        ("BALCONY", "Balcony", "outdoor", "0.500000", False),
+    ):
+        response = admin_client.post(
+            f"{inventory_url(project_id)}/area-types",
+            json={
+                "code": code,
+                "label": label,
+                "area_role": role,
+                "weight_factor": factor,
+                "required_for_release": required,
+            },
+        )
+        assert response.status_code == 201, response.text
+        created[code] = response.json()["id"]
+    return created
+
+
+def approve_areas(
+    client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    *,
+    internal: str = "100.0000",
+    balcony: str | None = "20.0000",
+    revision: str = "R0",
+) -> str:
+    """Record and approve one measured revision, the way the UI would."""
+    values = [{"area_type_id": area_types["INTERNAL"], "raw_area": internal}]
+    if balcony is not None:
+        values.append({"area_type_id": area_types["BALCONY"], "raw_area": balcony})
+    created = client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/area-schedules",
+        json={"revision_code": revision, "reconciled": True, "values": values},
+    )
+    assert created.status_code == 201, created.text
+    schedule_id = created.json()["id"]
+    approved = client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/area-schedules/{schedule_id}/approve"
+    )
+    assert approved.status_code == 200, approved.text
+    return schedule_id
+
+
+def make_releasable(
+    client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+    *,
+    release_date: str = "2026-01-01",
+) -> None:
+    """Satisfy every release gate, including the one no API may set.
+
+    ``pricing_approved`` is written directly because PR-MVP-03 deliberately
+    exposes no way to set it: PR-MVP-04 does that when a real approved price
+    exists. A test of the final release formula still needs the flag, and using
+    the database for it keeps the API honest.
+    """
+    from sqlalchemy import select
+
+    from app.modules.inventory.models import Unit
+
+    approve_areas(client, project_id, unit_id, area_types)
+    response = client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}/release-controls",
+        json={
+            "drawings_approved": True,
+            "legal_sale_eligible": True,
+            "release_date": release_date,
+        },
+    )
+    assert response.status_code == 200, response.text
+    unit = db.scalars(select(Unit).where(Unit.id == unit_id)).one()
+    unit.pricing_approved = True
+    db.commit()
+
+
+@pytest.fixture
+def engineer_member(db: Session, admin_client: TestClient, project_id: str) -> User:
+    """A Design / Engineering user who is a member of the project."""
+    user = make_user(db, email="design2@example.com", roles=("design_engineering",))
+    response = admin_client.put(f"{PROJECTS}/{project_id}/access/{user.id}")
+    assert response.status_code == 200, response.text
+    return user
