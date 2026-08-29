@@ -265,8 +265,14 @@ def unit_id(admin_client: TestClient, project_id: str, floor_id: str) -> str:
 
 
 @pytest.fixture
-def area_types(admin_client: TestClient, project_id: str) -> dict[str, str]:
-    """An internal area required for release, and a half-weighted balcony."""
+def area_types(
+    admin_client: TestClient, project_id: str, operational_project: str
+) -> dict[str, str]:
+    """An internal area required for release, and a half-weighted balcony.
+
+    Area types are a project's own inventory configuration, so like every other
+    inventory fixture this one needs the project's basis settled first.
+    """
     created: dict[str, str] = {}
     for code, label, role, factor, required in (
         ("INTERNAL", "Internal area", "internal", "1.000000", True),
