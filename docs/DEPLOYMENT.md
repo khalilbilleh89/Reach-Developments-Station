@@ -149,27 +149,29 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
     ```
 
-    Expected after PR-MVP-03, and nothing else:
+    Expected after PR-MVP-04, and nothing else:
 
     ```text
     alembic_version, area_types, audit_events, buildings,
     country_approval_thresholds, country_packs, currencies,
     custom_field_definitions, custom_field_options, document_references, floors,
     inventory_sub_assets, land_parcel_custom_field_values, land_parcels,
-    permit_status_events, permits, phases, planning_controls,
+    market_benchmarks, permit_status_events, permits, phases, planning_controls,
+    pricing_area_rules, pricing_configurations, pricing_escalation_activations,
+    pricing_escalation_rules, pricing_premium_rules,
     project_custom_field_values, projects, reference_values, roles, tax_rules,
     unit_area_schedules, unit_area_values, unit_custom_field_values,
-    unit_status_events, units, user_phase_access, user_project_access,
-    user_roles, user_sessions, users
+    unit_price_components, unit_price_versions, unit_status_events, units,
+    user_phase_access, user_project_access, user_roles, user_sessions, users
     ```
 
     ```sql
-    SELECT version_num FROM alembic_version;   -- 0003_inventory
+    SELECT version_num FROM alembic_version;   -- 0004_pricing
     SELECT count(*) FROM roles;                -- 11
     ```
 
-    There must be no pricing, sales, reservation, payment-plan or receipt table
-    yet: money arrives in PR-MVP-04 and later.
+    There must be no sales, reservation, payment-plan, receipt or unit-cost
+    table yet: a sale arrives in PR-MVP-05 and cost in PR-MVP-08.
 
 16. Existing project memberships still mean "the whole project":
 
@@ -180,6 +182,16 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
     Every row created before PR-MVP-03 must read `all`. A row reading `selected`
     would mean somebody's access silently narrowed on deploy.
 
+17. No unit's pricing approval changed on deploy:
+
+    ```sql
+    SELECT pricing_approved, count(*) FROM units GROUP BY 1;
+    ```
+
+    `0004_pricing` writes no data, so this must read exactly what it read
+    before. Every unit priced under PR-MVP-03 had `false` — nothing could set it
+    — and it stays `false` until somebody activates a price.
+
 Do not create another Render web service. Do not create another PostgreSQL
 resource from a PR.
 
@@ -187,12 +199,16 @@ resource from a PR.
 
 ## 6. Rollback
 
-`0003_inventory` creates new tables and adds one column to
-`user_project_access`; it moves no existing data. `alembic downgrade
-0002_project_land_permits` drops the inventory tables and that column, so a
-rollback loses inventory records entered after the deploy and nothing else.
-Take a database snapshot before deploying if any inventory has already been
-loaded.
+`0004_pricing` creates eight tables and alters nothing; it moves no existing
+data. `alembic downgrade 0003_inventory` drops exactly those tables, so a
+rollback loses pricing entered after the deploy and nothing else — inventory,
+land and permits are untouched, and `units.pricing_approved` keeps whatever
+value it held. Take a database snapshot before deploying if any pricing has
+already been loaded.
+
+`0003_inventory` before it creates new tables and adds one column to
+`user_project_access`, also without moving existing data; `alembic downgrade
+0002_project_land_permits` drops the inventory tables and that column.
 
 If a deploy fails:
 

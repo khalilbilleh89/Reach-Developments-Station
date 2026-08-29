@@ -1,0 +1,524 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+import { ApiError, pricing } from "@/lib/api";
+import type {
+  AreaType,
+  MarketBenchmark,
+  Phase,
+  PriceRegister,
+  PricingConfiguration,
+  PricingOverview,
+} from "@/lib/api";
+import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import { inventory } from "@/lib/api";
+import { ConfigurationPanel } from "@/components/projects/pricing/ConfigurationPanel";
+
+/**
+ * The Pricing Studio, inside the project workspace.
+ *
+ * Three questions, in the order somebody actually asks them: what is this
+ * development priced at, which units are priced, and which of them are no longer
+ * priced against their own facts. Everything below is a number the backend
+ * computed; nothing on this screen does pricing arithmetic.
+ */
+const MARKET_LABELS: Record<string, string> = {
+  within_tolerance: "In line",
+  above_tolerance: "Above market",
+  below_tolerance: "Below market",
+  no_benchmark: "No benchmark",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  submitted: "Submitted",
+  approved: "Approved",
+  active: "Active",
+  superseded: "Superseded",
+};
+
+export function PricingTab({
+  projectId,
+  projectStatus,
+  reportingCurrencyId,
+  canPrice,
+  canApprove,
+  canSeeInternal,
+  onOpenUnit,
+}: {
+  projectId: string;
+  projectStatus: string;
+  reportingCurrencyId: string;
+  canPrice: boolean;
+  canApprove: boolean;
+  canSeeInternal: boolean;
+  onOpenUnit: (unitId: string) => void;
+}) {
+  const [overview, setOverview] = useState<PricingOverview | null>(null);
+  const [register, setRegister] = useState<PriceRegister | null>(null);
+  const [configurations, setConfigurations] = useState<PricingConfiguration[]>([]);
+  const [benchmarks, setBenchmarks] = useState<MarketBenchmark[]>([]);
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
+  const [filters, setFilters] = useState({ phase_id: "", market_flag: "" });
+  const [open, setOpen] = useState<"none" | "configuration" | "benchmarks">("none");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const query: Record<string, string> = { limit: "100" };
+      for (const [key, value] of Object.entries(filters)) {
+        if (value) query[key] = value;
+      }
+      const [head, rows, configs, marks, phaseList, typeList] = await Promise.all([
+        pricing.overview(projectId),
+        pricing.register(projectId, query),
+        pricing.configurations(projectId),
+        pricing.benchmarks(projectId),
+        inventory.phases(projectId),
+        inventory.areaTypes(projectId),
+      ]);
+      setOverview(head);
+      setRegister(rows);
+      setConfigurations(configs);
+      setBenchmarks(marks);
+      setPhases(phaseList);
+      setAreaTypes(typeList);
+      setError(null);
+    } catch (caught) {
+      setOverview(null);
+      setError(caught instanceof ApiError ? caught.message : "Could not load pricing.");
+    }
+  }, [projectId, filters]);
+
+  useEffect(() => {
+    void (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  const generateAll = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await pricing.generatePrices(projectId, {
+        ...(filters.phase_id ? { phase_id: filters.phase_id } : {}),
+        ...(filters.phase_id ? {} : { commercial_status: "unreleased" }),
+      });
+      setNotice(
+        `${created.length} draft ${created.length === 1 ? "price" : "prices"} generated. ` +
+          "Nothing is live until each is approved and activated.",
+      );
+      await load();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not generate prices.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Pricing is refused while the project is in setup, because that is the
+  // window in which its currency can still change under whatever was priced in
+  // it. Saying so beats a row of identical 409s.
+  if (projectStatus === "setup") {
+    return (
+      <Panel title="Pricing" description="Not yet — the project basis is still open.">
+        <EmptyState
+          title="Finalize project setup"
+          hint="Confirm country and currency settings, then move the project to
+                Pre-development before configuring pricing."
+        />
+      </Panel>
+    );
+  }
+
+  if (!canSeeInternal) {
+    return (
+      <Panel title="Pricing">
+        <EmptyState
+          title="Not available to you"
+          hint="Live unit prices are on each unit. Pricing configuration belongs to Finance."
+        />
+      </Panel>
+    );
+  }
+
+  return (
+    <>
+      <Panel
+        title="Pricing"
+        description="What this development is priced at, and what that price is made of."
+        actions={
+          <>
+            {canPrice || canApprove ? (
+              <button
+                className="button button-small"
+                type="button"
+                onClick={() => setOpen(open === "configuration" ? "none" : "configuration")}
+              >
+                {open === "configuration" ? "Cancel" : "Configuration"}
+              </button>
+            ) : null}
+            {canPrice ? (
+              <button
+                className="button button-small"
+                type="button"
+                onClick={() => setOpen(open === "benchmarks" ? "none" : "benchmarks")}
+              >
+                {open === "benchmarks" ? "Cancel" : "Market benchmarks"}
+              </button>
+            ) : null}
+            {canPrice && overview?.configuration ? (
+              <button
+                className="button button-small"
+                type="button"
+                disabled={busy}
+                onClick={generateAll}
+              >
+                {busy ? "Generating…" : "Generate draft prices"}
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+        {overview === null ? (
+          <Loading label="Loading pricing…" />
+        ) : overview.configuration === null ? (
+          <EmptyState
+            title="No active pricing configuration"
+            hint="Create one, add the area rules and premiums it prices by, then have it
+                  approved and activated. Until then no unit can be priced."
+          />
+        ) : (
+          <div className="chip-list">
+            <Badge tone="success">
+              {overview.configuration.name} · v{overview.configuration.version_number}
+            </Badge>
+            <span className="chip mono">{overview.base_internal_rate} per internal unit</span>
+            <span className="chip">{overview.units_total} units</span>
+            <span className="chip">{overview.units_priced} priced</span>
+            <span className="chip">{overview.units_not_priced} not priced</span>
+            <span className="chip">{overview.units_repricing_required} need repricing</span>
+            <span className="chip">{overview.active_escalations} active escalations</span>
+          </div>
+        )}
+      </Panel>
+
+      {open === "configuration" ? (
+        <ConfigurationPanel
+          projectId={projectId}
+          configurations={configurations}
+          areaTypes={areaTypes}
+          phases={phases}
+          defaultCurrencyId={overview?.currency_id ?? reportingCurrencyId}
+          canWrite={canPrice}
+          canApprove={canApprove}
+          onChanged={load}
+        />
+      ) : null}
+
+      {open === "benchmarks" ? (
+        <BenchmarksPanel
+          projectId={projectId}
+          benchmarks={benchmarks}
+          phases={phases}
+          currencyId={overview?.currency_id ?? null}
+          onChanged={load}
+        />
+      ) : null}
+
+      <Panel title="Price register" description="Every unit, and the price it is offered at.">
+        <div className="form-inline">
+          <Field label="Phase">
+            <select
+              className="input"
+              value={filters.phase_id}
+              onChange={(event) => setFilters({ ...filters, phase_id: event.target.value })}
+            >
+              <option value="">All phases</option>
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.id}>
+                  {phase.code} — {phase.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Market">
+            <select
+              className="input"
+              value={filters.market_flag}
+              onChange={(event) => setFilters({ ...filters, market_flag: event.target.value })}
+            >
+              <option value="">Any</option>
+              {Object.entries(MARKET_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {register === null ? (
+          <Loading label="Loading the register…" />
+        ) : register.rows.length === 0 ? (
+          <EmptyState title="No units match" hint="Adjust the filters, or load inventory first." />
+        ) : (
+          <>
+            <div className="chip-list">
+              <span className="chip">{register.total} units</span>
+              <span className="chip">{register.priced} priced</span>
+              <span className="chip">{register.not_priced} not priced</span>
+              <span className="chip">{register.repricing_required} need repricing</span>
+            </div>
+            <div className="table-scroll">
+              <table className="table">
+                <caption className="visually-hidden">Price register</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Unit</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Internal</th>
+                    <th scope="col">Weighted</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Per internal</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Market</th>
+                    <th scope="col">Pricing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {register.rows.map((row) => (
+                    <tr key={row.unit_id}>
+                      <th scope="row">
+                        <button
+                          className="button button-small"
+                          type="button"
+                          onClick={() => onOpenUnit(row.unit_id)}
+                        >
+                          {row.unit_reference}
+                        </button>
+                      </th>
+                      <td>{row.unit_type_code ?? "—"}</td>
+                      <td className="mono nowrap">{row.internal_area_snapshot ?? "—"}</td>
+                      <td className="mono nowrap">{row.weighted_area_snapshot ?? "—"}</td>
+                      <td className="mono nowrap">{row.reference_price_ex_tax ?? "—"}</td>
+                      <td className="mono nowrap">{row.price_per_internal_area ?? "—"}</td>
+                      <td>{row.version_number ?? "—"}</td>
+                      <td>{row.status ? (STATUS_LABELS[row.status] ?? row.status) : "Not priced"}</td>
+                      <td>
+                        {row.market_flag ? (
+                          <Badge
+                            tone={row.market_flag === "within_tolerance" ? "success" : "muted"}
+                          >
+                            {MARKET_LABELS[row.market_flag] ?? row.market_flag}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        {row.repricing_required ? (
+                          <Badge tone="muted">Repricing required</Badge>
+                        ) : row.pricing_approved ? (
+                          <Badge tone="success">Approved</Badge>
+                        ) : (
+                          <span className="subtle">Not approved</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </Panel>
+    </>
+  );
+}
+
+/**
+ * Manually governed market observations.
+ *
+ * There is no feed and no scraper. A benchmark is somebody's recorded reading
+ * of the market, with a date, a source and a tolerance, and a unit price is
+ * compared against exactly one of them.
+ */
+function BenchmarksPanel({
+  projectId,
+  benchmarks,
+  phases,
+  currencyId,
+  onChanged,
+}: {
+  projectId: string;
+  benchmarks: MarketBenchmark[];
+  phases: Phase[];
+  currencyId: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    phase_id: "",
+    unit_type_code: "",
+    area_basis: "internal",
+    benchmark_price_per_area: "",
+    comparison_date: new Date().toISOString().slice(0, 10),
+    source_name: "",
+    tolerance_fraction: "0.100000",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (currencyId === null) {
+      setError("Activate a pricing configuration first: a benchmark needs a currency to match.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await pricing.createBenchmark(projectId, {
+        ...(form.phase_id ? { phase_id: form.phase_id } : {}),
+        ...(form.unit_type_code ? { unit_type_code: form.unit_type_code } : {}),
+        area_basis: form.area_basis,
+        benchmark_price_per_area: form.benchmark_price_per_area,
+        currency_id: currencyId,
+        comparison_date: form.comparison_date,
+        source_name: form.source_name,
+        tolerance_fraction: form.tolerance_fraction,
+      });
+      setForm({ ...form, benchmark_price_per_area: "", source_name: "" });
+      await onChanged();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not record the benchmark.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel title="Market benchmarks" description="Recorded observations, attributed to a source.">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <form className="form-inline" onSubmit={submit}>
+        <Field label="Phase">
+          <select
+            className="input"
+            value={form.phase_id}
+            onChange={(event) => setForm({ ...form, phase_id: event.target.value })}
+          >
+            <option value="">Whole project</option>
+            {phases.map((phase) => (
+              <option key={phase.id} value={phase.id}>
+                {phase.code}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Unit type">
+          <input
+            className="input input-short"
+            value={form.unit_type_code}
+            onChange={(event) => setForm({ ...form, unit_type_code: event.target.value })}
+          />
+        </Field>
+        <Field label="Basis">
+          <select
+            className="input input-short"
+            value={form.area_basis}
+            onChange={(event) => setForm({ ...form, area_basis: event.target.value })}
+          >
+            <option value="internal">Internal</option>
+            <option value="weighted">Weighted</option>
+          </select>
+        </Field>
+        <Field label="Price per area">
+          <input
+            className="input input-short"
+            inputMode="decimal"
+            required
+            value={form.benchmark_price_per_area}
+            onChange={(event) =>
+              setForm({ ...form, benchmark_price_per_area: event.target.value })
+            }
+          />
+        </Field>
+        <Field label="Tolerance" hint="0.100000 is 10%.">
+          <input
+            className="input input-short"
+            inputMode="decimal"
+            required
+            value={form.tolerance_fraction}
+            onChange={(event) => setForm({ ...form, tolerance_fraction: event.target.value })}
+          />
+        </Field>
+        <Field label="Observed on">
+          <input
+            className="input input-short"
+            type="date"
+            required
+            value={form.comparison_date}
+            onChange={(event) => setForm({ ...form, comparison_date: event.target.value })}
+          />
+        </Field>
+        <Field label="Source">
+          <input
+            className="input"
+            required
+            value={form.source_name}
+            onChange={(event) => setForm({ ...form, source_name: event.target.value })}
+          />
+        </Field>
+        <button className="button" type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Record"}
+        </button>
+      </form>
+
+      {benchmarks.length === 0 ? (
+        <EmptyState title="No benchmarks" hint="A unit price is compared only when one exists." />
+      ) : (
+        <div className="table-scroll">
+          <table className="table">
+            <caption className="visually-hidden">Market benchmarks</caption>
+            <thead>
+              <tr>
+                <th scope="col">Scope</th>
+                <th scope="col">Basis</th>
+                <th scope="col">Price per area</th>
+                <th scope="col">Tolerance</th>
+                <th scope="col">Observed</th>
+                <th scope="col">Source</th>
+                <th scope="col">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {benchmarks.map((benchmark) => (
+                <tr key={benchmark.id}>
+                  <th scope="row">
+                    {benchmark.unit_type_code ?? "Any type"} ·{" "}
+                    {phases.find((phase) => phase.id === benchmark.phase_id)?.code ??
+                      "Whole project"}
+                  </th>
+                  <td>{benchmark.area_basis}</td>
+                  <td className="mono nowrap">{benchmark.benchmark_price_per_area}</td>
+                  <td className="mono nowrap">{benchmark.tolerance_fraction}</td>
+                  <td>{benchmark.comparison_date}</td>
+                  <td>{benchmark.source_name}</td>
+                  <td>{benchmark.is_active ? "Yes" : "No"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}

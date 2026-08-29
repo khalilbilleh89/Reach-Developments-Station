@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-03) |     4 |
-| Remaining                             |     8 |
+| Complete (PR-MVP-00 through PR-MVP-04) |     5 |
+| Remaining                             |     7 |
 
 Branch naming follows the roadmap:
 
@@ -110,14 +110,32 @@ tokens, CI, PR template, and Render build/start separation.
 > because no Company entity exists — inventing one to satisfy a scope label would
 > be the same abstraction-first mistake the access deferrals avoided.
 
-## PR-MVP-04 — Pricing & Unit 360
+## PR-MVP-04 — Pricing & Unit 360 ✅
 
-- pricing configuration
-- effective-dated price versions
-- area pricing
-- premiums
-- escalation
-- market comparison fields
+- pricing configuration — one governed, versioned policy per project, and at
+  most one of them active
+- effective-dated price versions — a price is never overwritten; a change is a
+  new version and the one it replaces is superseded and stays readable
+- area pricing — each area type priced at the internal base rate, its own rate,
+  a factor of the internal rate, or excluded
+- premiums — a closed list of real unit facts, additive by default, compounding
+  only when a rule asks for it, capped visibly
+- escalation — configured rules activated by a named approver against recorded
+  evidence, which produce new price versions rather than rewriting live ones
+- market comparison fields — manually governed benchmarks, one per scope, with
+  a stated area basis and a tolerance
+- **`pricing_approved` becomes writable** (deferred from PR-MVP-03), and only
+  by activating a price. There is no button and no override.
+- Unit 360 — the unit detail evolves to carry the live price, its waterfall,
+  its history and a quote preview
+
+> **Cost, margin and profitability are not here.** Governed unit cost
+> allocations arrive in PR-MVP-08, and inventing them earlier would put a
+> fabricated cost inside a real margin. PR-MVP-04 builds the complete
+> revenue-side model and stops there.
+
+> **The quote preview creates nothing.** No client, no reservation, no sale, no
+> stored exception. PR-MVP-05 owns the transaction that freezes any of it.
 - quote controls
 - discounts/packages/allowances
 - pricing approval

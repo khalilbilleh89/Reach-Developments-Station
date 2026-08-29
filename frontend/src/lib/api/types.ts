@@ -152,6 +152,8 @@ export interface ProjectSummary {
 
 export interface ProjectDetail extends ProjectSummary {
   country_code: string | null;
+  base_currency_id: string;
+  reporting_currency_id: string;
   base_currency_code: string | null;
   reporting_currency_code: string | null;
   project_manager_display_name: string | null;
@@ -536,3 +538,256 @@ export type ImportReport = {
   issues: ImportIssue[];
   issues_truncated: boolean;
 };
+
+/* -------------------------------------------------------------------------- *
+ * Pricing (PR-MVP-04)
+ *
+ * Every monetary figure arrives as a string. A JSON number is a float, and a
+ * float is not an acceptable carrier for a price — the browser formats these,
+ * it never computes with them.
+ * -------------------------------------------------------------------------- */
+
+export type PricingStatus = "draft" | "submitted" | "approved" | "active" | "superseded";
+
+export interface PricingConfiguration {
+  id: string;
+  project_id: string;
+  version_number: number;
+  name: string;
+  status: PricingStatus;
+  pricing_currency_id: string;
+  base_internal_rate: string;
+  premium_stacking_default: string;
+  maximum_premium_fraction: string | null;
+  offer_valid_days: number | null;
+  price_lock_days: number | null;
+  reservation_expiry_days: number | null;
+  default_payment_plan_adjustment_fraction: string | null;
+  tax_treatment_code: string;
+  valid_from: string;
+  valid_to: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  activated_at: string | null;
+  superseded_at: string | null;
+  change_reason: string | null;
+}
+
+export interface PricingAreaRule {
+  id: string;
+  pricing_configuration_id: string;
+  area_type_id: string;
+  pricing_method: string;
+  rate_per_area: string | null;
+  internal_rate_factor: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface PricingPremiumRule {
+  id: string;
+  pricing_configuration_id: string;
+  code: string;
+  label: string;
+  source_kind: string;
+  match_code: string | null;
+  method: string;
+  percentage_fraction: string | null;
+  amount: string | null;
+  eligible_base: string;
+  stacking_method: string | null;
+  sequence: number;
+  is_active: boolean;
+}
+
+export interface PricingEscalationRule {
+  id: string;
+  pricing_configuration_id: string;
+  code: string;
+  label: string;
+  trigger_type: string;
+  scope_type: string;
+  phase_id: string | null;
+  unit_type_code: string | null;
+  threshold_date: string | null;
+  threshold_fraction: string | null;
+  adjustment_method: string;
+  adjustment_percentage_fraction: string | null;
+  adjustment_amount: string | null;
+  cumulative: boolean;
+  sequence: number;
+  is_active: boolean;
+}
+
+export interface EscalationActivation {
+  id: string;
+  pricing_escalation_rule_id: string;
+  effective_date: string;
+  evidence_value: string | null;
+  evidence_date: string | null;
+  evidence_reference: string;
+  reason: string;
+  approved_at: string;
+  is_active: boolean;
+  reversal_reason: string | null;
+}
+
+export interface MarketBenchmark {
+  id: string;
+  project_id: string;
+  phase_id: string | null;
+  unit_type_code: string | null;
+  area_basis: string;
+  benchmark_price_per_area: string;
+  currency_id: string;
+  comparison_date: string;
+  source_name: string;
+  source_reference: string | null;
+  tolerance_fraction: string;
+  notes: string | null;
+  is_active: boolean;
+}
+
+export interface PriceComponent {
+  id: string;
+  sequence: number;
+  component_type: string;
+  code: string;
+  label: string;
+  quantity: string | null;
+  unit_of_measure: string | null;
+  basis_amount: string | null;
+  rate: string | null;
+  factor: string | null;
+  calculated_amount: string;
+  override_amount: string | null;
+  final_amount: string;
+  override_reason: string | null;
+}
+
+export interface PriceVersion {
+  id: string;
+  project_id: string;
+  unit_id: string;
+  version_number: number;
+  pricing_configuration_id: string;
+  unit_area_schedule_id: string;
+  status: PricingStatus;
+  currency_id: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  base_area_value: string;
+  scope_adjustment_total: string;
+  premium_total: string;
+  premium_cap_adjustment: string;
+  escalation_total: string;
+  paid_upgrade_total: string;
+  reference_price_ex_tax: string;
+  internal_area_snapshot: string | null;
+  weighted_area_snapshot: string | null;
+  price_per_internal_area: string | null;
+  price_per_weighted_area: string | null;
+  market_benchmark_price_snapshot: string | null;
+  market_deviation_fraction: string | null;
+  market_flag: string;
+  change_reason: string | null;
+  created_at: string;
+}
+
+export interface PriceVersionDetail extends PriceVersion {
+  components: PriceComponent[];
+  basis_snapshot_json: Record<string, unknown>;
+}
+
+export interface UnitPricing {
+  unit_id: string;
+  unit_reference: string;
+  unit_type_code: string | null;
+  pricing_approved: boolean;
+  repricing_required: boolean;
+  has_active_configuration: boolean;
+  active_price: PriceVersionDetail | null;
+  history: PriceVersion[];
+}
+
+export interface PriceRegisterRow {
+  unit_id: string;
+  unit_reference: string;
+  unit_number: string;
+  unit_type_code: string | null;
+  commercial_status: string;
+  pricing_approved: boolean;
+  repricing_required: boolean;
+  version_id: string | null;
+  version_number: number | null;
+  status: string | null;
+  reference_price_ex_tax: string | null;
+  internal_area_snapshot: string | null;
+  weighted_area_snapshot: string | null;
+  price_per_internal_area: string | null;
+  price_per_weighted_area: string | null;
+  market_flag: string | null;
+  market_deviation_fraction: string | null;
+}
+
+export interface PriceRegister {
+  rows: PriceRegisterRow[];
+  total: number;
+  priced: number;
+  not_priced: number;
+  repricing_required: number;
+}
+
+export interface PricingOverview {
+  configuration: PricingConfiguration | null;
+  currency_id: string | null;
+  base_internal_rate: string | null;
+  active_escalations: number;
+  units_total: number;
+  units_priced: number;
+  units_not_priced: number;
+  units_repricing_required: number;
+}
+
+export interface QuoteTaxLine {
+  tax_code: string;
+  label: string;
+  rate_fraction: string;
+  calculation_basis: string;
+  amount: string;
+}
+
+export interface QuotePreview {
+  unit_id: string;
+  unit_reference: string;
+  version_number: number;
+  approved_reference_price_ex_tax: string;
+  paid_upgrade_price: string;
+  payment_plan_price_adjustment: string;
+  payment_plan_adjustment_fraction: string;
+  gross_quoted_price_ex_tax: string;
+  cash_discount: string;
+  seller_credit: string;
+  net_contract_price_ex_tax: string;
+  seller_package_cost: string;
+  upgrade_allowance_cost: string;
+  commission_support: string;
+  financing_subsidy: string;
+  extended_terms_npv_cost: string;
+  seller_cost_total: string;
+  effective_net_revenue_preview: string;
+  tax_status: string;
+  tax_treatment_code: string;
+  taxes: QuoteTaxLine[];
+  tax_total: string;
+  buyer_paid_fees: string;
+  total_buyer_payable_preview: string;
+  offer_valid_days: number | null;
+  price_lock_days: number | null;
+  reservation_expiry_days: number | null;
+  approval_required: boolean;
+  approval_reason: string | null;
+  threshold_rate_fraction: string | null;
+  threshold_amount: string | null;
+  required_role: string | null;
+}

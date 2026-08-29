@@ -10,8 +10,10 @@ import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { InventoryTab } from "@/components/projects/InventoryTab";
+import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { LandTab } from "@/components/projects/LandTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
+import { PricingTab } from "@/components/projects/PricingTab";
 
 const STATUS_LABELS: Record<string, string> = {
   setup: "Setup",
@@ -27,6 +29,27 @@ const PROJECT_WRITERS = new Set(["system_admin", "project_manager"]);
 
 /** Roles that may maintain planning, permits and document references. */
 const TECHNICAL_WRITERS = new Set(["system_admin", "project_manager", "design_engineering"]);
+
+/** Roles that may prepare pricing: build a policy, price units, submit for approval. */
+const PRICING_WRITERS = new Set(["system_admin", "project_manager", "finance"]);
+
+/**
+ * Roles that may sanction a price. Deliberately not the administrator: the
+ * ability to configure a system is not the authority to approve what it
+ * charges, and the server refuses either way — this only decides which buttons
+ * are worth showing.
+ */
+const PRICING_APPROVERS = new Set(["approver_cfo"]);
+
+/** Roles that may see anything other than the live list price. */
+const INTERNAL_PRICE_READERS = new Set([
+  "system_admin",
+  "project_manager",
+  "finance",
+  "approver_cfo",
+  "executive_viewer",
+  "auditor",
+]);
 
 /** Editable project identity. `code` is absent: it is immutable once issued. */
 function projectFields(project: ProjectDetail): EditField[] {
@@ -70,6 +93,9 @@ export function ProjectWorkspace({
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tab, setTab] = useState("overview");
+  // Opening a unit from the price register reuses the same detail panel the
+  // Inventory tab opens. One Unit 360, reached from wherever the user was.
+  const [pricedUnit, setPricedUnit] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,11 +103,15 @@ export function ProjectWorkspace({
   const isAdmin = roles.has("system_admin");
   const canWriteProject = [...roles].some((role) => PROJECT_WRITERS.has(role));
   const canWriteTechnical = [...roles].some((role) => TECHNICAL_WRITERS.has(role));
+  const canPrice = [...roles].some((role) => PRICING_WRITERS.has(role));
+  const canApprovePricing = [...roles].some((role) => PRICING_APPROVERS.has(role));
+  const canSeeInternalPrices = [...roles].some((role) => INTERNAL_PRICE_READERS.has(role));
 
   const tabs = [
     { key: "overview", label: "Overview" },
     { key: "land", label: "Land" },
     { key: "inventory", label: "Inventory" },
+    { key: "pricing", label: "Pricing" },
     { key: "permits", label: "Permits" },
     { key: "documents", label: "Documents" },
     ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
@@ -287,6 +317,17 @@ export function ProjectWorkspace({
           canConfigure={canWriteProject}
         />
       ) : null}
+      {tab === "pricing" ? (
+        <PricingTab
+          projectId={projectId}
+          projectStatus={project.status}
+          reportingCurrencyId={project.reporting_currency_id}
+          canPrice={canPrice}
+          canApprove={canApprovePricing}
+          canSeeInternal={canSeeInternalPrices}
+          onOpenUnit={(unitId) => setPricedUnit(unitId)}
+        />
+      ) : null}
       {tab === "permits" ? (
         <PermitsTab projectId={projectId} canWrite={canWriteTechnical} />
       ) : null}
@@ -294,6 +335,18 @@ export function ProjectWorkspace({
         <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} />
       ) : null}
       {tab === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
+
+      {pricedUnit ? (
+        <UnitDetailPanel
+          projectId={projectId}
+          roles={roles}
+          unitId={pricedUnit}
+          canWriteStructure={canWriteTechnical}
+          canConfigure={canWriteProject}
+          onClose={() => setPricedUnit(null)}
+          onChanged={load}
+        />
+      ) : null}
     </>
   );
 }

@@ -362,3 +362,146 @@ def engineer_member(db: Session, admin_client: TestClient, project_id: str) -> U
     response = admin_client.put(f"{PROJECTS}/{project_id}/access/{user.id}")
     assert response.status_code == 200, response.text
     return user
+
+
+# --------------------------------------------------------------------------- #
+# Pricing (PR-MVP-04)
+# --------------------------------------------------------------------------- #
+
+
+def pricing_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/pricing"
+
+
+@pytest.fixture
+def finance(db: Session) -> User:
+    """Somebody who prepares pricing but may not sanction it."""
+    return make_user(db, email="finance@example.com", roles=("finance",))
+
+
+@pytest.fixture
+def finance_client(admin_client: TestClient, project_id: str, finance: User) -> TestClient:
+    """Finance, and a member of the project.
+
+    A global role says what somebody may do inside a project; membership says
+    which projects exist for them. Pricing needs both, so the fixture grants the
+    membership rather than letting every pricing test discover the 404.
+    """
+    grant_access(admin_client, project_id, finance)
+    return client_for(finance.email)
+
+
+@pytest.fixture
+def cfo(db: Session) -> User:
+    """The second signature. Deliberately not an administrator."""
+    return make_user(db, email="cfo@example.com", roles=("approver_cfo",))
+
+
+@pytest.fixture
+def cfo_client(admin_client: TestClient, project_id: str, cfo: User) -> TestClient:
+    grant_access(admin_client, project_id, cfo)
+    return client_for(cfo.email)
+
+
+@pytest.fixture
+def advisor_client(admin_client: TestClient, project_id: str, advisor: User) -> TestClient:
+    grant_access(admin_client, project_id, advisor)
+    return client_for(advisor.email)
+
+
+@pytest.fixture
+def sales_ops(db: Session) -> User:
+    return make_user(db, email="salesops@example.com", roles=("sales_operations",))
+
+
+def configuration_payload(currency_id: str, **overrides: object) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "name": "Launch pricing",
+        "pricing_currency_id": currency_id,
+        "base_internal_rate": "1500.00",
+        "valid_from": "2026-01-01",
+        "maximum_premium_fraction": "0.200000",
+        "offer_valid_days": 14,
+        "reservation_expiry_days": 7,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.fixture
+def draft_configuration(
+    finance_client: TestClient,
+    project_id: str,
+    currency_id: str,
+    area_types: dict[str, str],
+) -> str:
+    """A draft policy that prices internal area at 1,500 and balcony at half.
+
+    Built through the API by Finance, exactly as an operator would: a
+    configuration nobody could have created through the real routes is not a
+    fixture worth testing against.
+    """
+    created = finance_client.post(
+        f"{pricing_url(project_id)}/configurations", json=configuration_payload(currency_id)
+    )
+    assert created.status_code == 201, created.text
+    configuration_id = created.json()["id"]
+    for area_type_id, method, extra in (
+        (area_types["INTERNAL"], "internal_base", {}),
+        (area_types["BALCONY"], "factor_of_internal_rate", {"internal_rate_factor": "0.500000"}),
+    ):
+        rule = finance_client.post(
+            f"{pricing_url(project_id)}/configurations/{configuration_id}/area-rules",
+            json={"area_type_id": area_type_id, "pricing_method": method, **extra},
+        )
+        assert rule.status_code == 201, rule.text
+    return configuration_id
+
+
+@pytest.fixture
+def active_configuration(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    draft_configuration: str,
+) -> str:
+    """The same policy, submitted by Finance and put live by the CFO."""
+    base = f"{pricing_url(project_id)}/configurations/{draft_configuration}"
+    submitted = finance_client.post(f"{base}/submit", json={"reason": "Launch pricing"})
+    assert submitted.status_code == 200, submitted.text
+    approved = cfo_client.post(f"{base}/approve", json={"reason": "Reviewed against feasibility"})
+    assert approved.status_code == 200, approved.text
+    activated = cfo_client.post(f"{base}/activate")
+    assert activated.status_code == 200, activated.text
+    return draft_configuration
+
+
+@pytest.fixture
+def priced_unit(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+) -> str:
+    """A unit with measured areas and a live list price.
+
+    Runs the whole governed path — measure, approve, draft, submit, approve,
+    activate — because a price that arrived any other way would not exercise the
+    thing every later test depends on.
+    """
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    draft = finance_client.post(
+        f"{pricing_url(project_id)}/units/{unit_id}/price-versions", json={}
+    )
+    assert draft.status_code == 201, draft.text
+    version_id = draft.json()["id"]
+    base = f"{pricing_url(project_id)}/price-versions/{version_id}"
+    assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+    approved = cfo_client.post(f"{base}/approve", json={"reason": "Within feasibility"})
+    assert approved.status_code == 200, approved.text
+    activated = cfo_client.post(f"{base}/activate")
+    assert activated.status_code == 200, activated.text
+    return version_id

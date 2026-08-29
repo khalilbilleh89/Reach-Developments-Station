@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, inventory } from "@/lib/api";
+import { ApiError, inventory, pricing } from "@/lib/api";
 import type {
   AreaSchedule,
   AreaType,
   CustomValue,
   SubAsset,
   Unit,
+  UnitPricing,
   UnitStatusEvent,
 } from "@/lib/api";
 import { Badge, Field, Loading, Notice, Panel } from "@/components/ui";
+import { PriceWaterfall } from "@/components/projects/pricing/PriceWaterfall";
+import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import {
@@ -88,6 +91,12 @@ const REASON_REQUIRED = new Set(["held", "unreleased"]);
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** Roles that may prepare a price and put it forward. */
+const PRICING_WRITERS = new Set(["system_admin", "project_manager", "finance"]);
+
+/** The one role that may sanction and release a price. */
+const PRICING_APPROVERS = new Set(["approver_cfo"]);
+
 /**
  * One unit, in as much depth as inventory owns.
  *
@@ -117,6 +126,9 @@ export function UnitDetailPanel({
   const [assets, setAssets] = useState<SubAsset[]>([]);
   const [values, setValues] = useState<CustomValue[]>([]);
   const [history, setHistory] = useState<UnitStatusEvent[]>([]);
+  const [unitPricing, setUnitPricing] = useState<UnitPricing | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [pricingBusy, setPricingBusy] = useState(false);
   const [editing, setEditing] = useState<"none" | "unit" | "release" | "fields">("none");
   const [move, setMove] = useState({ to_status: "", effective_date: today(), reason: "" });
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +145,14 @@ export function UnitDetailPanel({
         inventory.unitValues(projectId, unitId),
         inventory.unitHistory(projectId, unitId),
       ]);
+      // Pricing is loaded separately and allowed to fail quietly: a reader who
+      // may open a unit may not always be entitled to its pricing, and a 403
+      // there should not blank the unit they can see.
+      try {
+        setUnitPricing(await pricing.unit(projectId, unitId));
+      } catch {
+        setUnitPricing(null);
+      }
       setUnit(detail);
       setSchedules(scheduleList);
       setAreaTypes(typeList);
@@ -172,6 +192,39 @@ export function UnitDetailPanel({
     }
   };
 
+  /**
+   * Move the unit's pending price one step along.
+   *
+   * The buttons a caller is offered mirror the server's rule rather than
+   * replacing it: the API refuses a submitter approving their own price, and an
+   * administrator approving anything, whichever button was on screen.
+   */
+  const movePrice = async (
+    action: "submit" | "approve" | "activate",
+    versionId: string,
+  ) => {
+    setPricingBusy(true);
+    setError(null);
+    try {
+      if (action === "submit") {
+        await pricing.submitPriceVersion(projectId, versionId);
+        setNotice("Submitted for approval.");
+      } else if (action === "approve") {
+        await pricing.approvePriceVersion(projectId, versionId, "Reviewed against feasibility");
+        setNotice("Approved. Activate it to make it the list price.");
+      } else {
+        await pricing.activatePriceVersion(projectId, versionId);
+        setNotice("Live. This is now the unit's list price.");
+      }
+      await load();
+      await onChanged();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not move that price.");
+    } finally {
+      setPricingBusy(false);
+    }
+  };
+
   const approve = async (scheduleId: string) => {
     try {
       await inventory.approveAreaSchedule(projectId, unitId, scheduleId);
@@ -196,6 +249,14 @@ export function UnitDetailPanel({
   if (unit === null) return <Loading label="Loading unit…" />;
 
   const editableValues = values.filter((value) => value.is_editable);
+  const canPrice = [...roles].some((role) => PRICING_WRITERS.has(role));
+  const canApprovePricing = [...roles].some((role) => PRICING_APPROVERS.has(role));
+  // The newest version that is on its way somewhere. An active price has
+  // arrived; a superseded one is history.
+  const pending =
+    unitPricing?.history.find((version) =>
+      ["draft", "submitted", "approved"].includes(version.status),
+    ) ?? null;
   const releaseFields = RELEASE_FIELDS.filter((field) =>
     field.roles.some((role) => roles.has(role)),
   );
@@ -233,6 +294,15 @@ export function UnitDetailPanel({
               onClick={() => setEditing(editing === "fields" ? "none" : "fields")}
             >
               {editing === "fields" ? "Cancel" : "Additional fields"}
+            </button>
+          ) : null}
+          {unitPricing?.active_price ? (
+            <button
+              className="button button-small"
+              type="button"
+              onClick={() => setQuoting((open) => !open)}
+            >
+              {quoting ? "Cancel" : "Quote preview"}
             </button>
           ) : null}
           <button className="button button-small" type="button" onClick={onClose}>
@@ -555,6 +625,123 @@ export function UnitDetailPanel({
             ))}
           </dl>
         </>
+      ) : null}
+
+      {unitPricing ? (
+        <>
+          <h3 className="section-heading">Pricing</h3>
+          {pending ? (
+            <div className="chip-list">
+              <span className="chip">
+                Version {pending.version_number} is {pending.status}
+              </span>
+              {canPrice && pending.status === "draft" ? (
+                <button
+                  className="button button-small"
+                  type="button"
+                  disabled={pricingBusy}
+                  onClick={() => movePrice("submit", pending.id)}
+                >
+                  Submit for approval
+                </button>
+              ) : null}
+              {canApprovePricing && pending.status === "submitted" ? (
+                <button
+                  className="button button-small"
+                  type="button"
+                  disabled={pricingBusy}
+                  onClick={() => movePrice("approve", pending.id)}
+                >
+                  Approve
+                </button>
+              ) : null}
+              {canApprovePricing && pending.status === "approved" ? (
+                <button
+                  className="button button-small"
+                  type="button"
+                  disabled={pricingBusy}
+                  onClick={() => movePrice("activate", pending.id)}
+                >
+                  Activate
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {unitPricing.repricing_required ? (
+            <Notice tone="error">
+              Repricing required. This unit has changed since its list price was set, so the
+              price below is what it was offered at and no longer describes it. The unit
+              cannot be released until a new price is approved and activated.
+            </Notice>
+          ) : null}
+          {unitPricing.active_price === null ? (
+            <Notice tone="info">
+              {unitPricing.has_active_configuration
+                ? "Not priced. Generate a price from the Pricing tab."
+                : "This project has no active pricing configuration yet."}
+            </Notice>
+          ) : (
+            <>
+              <div className="chip-list">
+                <span className="chip mono">
+                  {unitPricing.active_price.reference_price_ex_tax} ex tax
+                </span>
+                <span className="chip">v{unitPricing.active_price.version_number}</span>
+                <span className="chip">from {unitPricing.active_price.valid_from ?? "—"}</span>
+                <span className="chip mono">
+                  {unitPricing.active_price.price_per_internal_area ?? "—"} per internal unit
+                </span>
+                {unitPricing.pricing_approved ? (
+                  <Badge tone="success">Pricing approved</Badge>
+                ) : (
+                  <Badge tone="muted">Pricing not approved</Badge>
+                )}
+              </div>
+              <PriceWaterfall version={unitPricing.active_price} />
+            </>
+          )}
+
+          {unitPricing.history.length > 1 ? (
+            <>
+              <h3 className="section-heading">Price history</h3>
+              <div className="table-scroll">
+                <table className="table">
+                  <caption className="visually-hidden">Price history</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Version</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">From</th>
+                      <th scope="col">To</th>
+                      <th scope="col">Price</th>
+                      <th scope="col">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unitPricing.history.map((version) => (
+                      <tr key={version.id}>
+                        <th scope="row">{version.version_number}</th>
+                        <td>{version.status}</td>
+                        <td>{version.valid_from ?? "—"}</td>
+                        <td>{version.valid_to ?? "—"}</td>
+                        <td className="mono nowrap">{version.reference_price_ex_tax}</td>
+                        <td>{version.change_reason ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </>
+      ) : null}
+
+      {quoting && unitPricing?.active_price ? (
+        <QuotePreviewPanel
+          projectId={projectId}
+          unitId={unitId}
+          onClose={() => setQuoting(false)}
+        />
       ) : null}
 
       {areaTypes.length === 0 ? (
