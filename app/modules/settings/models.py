@@ -314,7 +314,11 @@ class CountryApprovalThreshold(Base):
         ),
         CheckConstraint(
             "discount_review_amount IS NULL OR discount_review_amount >= 0",
-            name="discount_review_amount_non_negative",
+            # Short on purpose: the previous name rendered 65 characters, past
+            # PostgreSQL's 63-character identifier limit, so the database held a
+            # hashed truncation the metadata could never match again. 0003
+            # renames the deployed constraint to this.
+            name="discount_amount_nonneg",
         ),
         CheckConstraint(
             "construction_variation_review_amount IS NULL "

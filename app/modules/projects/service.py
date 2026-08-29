@@ -33,6 +33,7 @@ from app.modules.projects.models import (
     CATEGORY_ZONING_CLASS,
     PERMIT_STATUS_NOT_STARTED,
     PERMIT_STATUSES,
+    PHASE_SCOPE_ALL,
     PROJECT_STATUS_SETUP,
     DocumentReference,
     LandParcel,
@@ -253,7 +254,7 @@ def revoke_project_access(
     # Lock the project before reading the manager, so a concurrent assignment of
     # this same user as manager cannot commit against a stale "not the manager"
     # reading of it. Both sides of the invariant queue on the same row.
-    project = _lock_project(session, project.id)
+    project = lock_project(session, project.id)
     access = _find_access(session, project_id=project.id, user_id=user_id)
     if access is None:
         raise NotFoundError("That user has no access record for this project.")
@@ -347,13 +348,18 @@ _PROJECT_CLEARABLE = frozenset(
 _BASIS_FIELDS = ("country_pack_id", "base_currency_id", "reporting_currency_id")
 
 
-def _lock_project(session: Session, project_id: uuid.UUID) -> Project:
+def lock_project(session: Session, project_id: uuid.UUID) -> Project:
     """Take the project row for update and return the persisted state.
 
     The project row is the synchronisation point for anything whose invariant
-    spans more than one of its records — the manager/access pairing, and the
-    prerequisite graph. Locking it first means two requests decide in sequence
-    against committed state rather than each against its own stale read.
+    spans more than one of its records — the manager/access pairing, the permit
+    prerequisite graph, and from PR-MVP-03 the inventory hierarchy. Locking it
+    first means two requests decide in sequence against committed state rather
+    than each against its own stale read.
+
+    Public because inventory needs the same lock and must take it through a
+    contract rather than by reaching into this module's queries: one lock, one
+    ordering, one place to change it.
     """
     locked = session.scalars(
         select(Project)
@@ -469,12 +475,54 @@ def _assign_project_manager(
             "the project before assigning them as project manager."
         )
 
-    _ensure_access(
+    access = _ensure_access(
         session,
         project_id=project.id,
         user_id=user_id,
         actor_user_id=actor_user_id,
         correlation_id=correlation_id,
+    )
+    _widen_manager_phase_scope(
+        session,
+        access=access,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+
+
+def _widen_manager_phase_scope(
+    session: Session,
+    *,
+    access: UserProjectAccess,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Give the incoming manager the whole project back.
+
+    The rule is that the assigned project manager sees every phase. Inventory
+    already refuses to narrow the manager, but that only closes one direction:
+    narrow an ordinary member first and assign them second, and the same
+    forbidden state arrives by the other road. Widening here closes it, and the
+    caller's project lock makes the two orders serialise against each other.
+
+    The column lives on this module's own membership row, so nothing about
+    phases needs to be imported to fix it — only the value that means "all of
+    them", which projects already owns.
+    """
+    if access.phase_scope == PHASE_SCOPE_ALL:
+        return
+    before = {"phase_scope": access.phase_scope}
+    access.phase_scope = PHASE_SCOPE_ALL
+    session.flush()
+    record_event(
+        session,
+        action="project_access.phase_scope_changed",
+        entity_type=ENTITY_PROJECT_ACCESS,
+        entity_id=access.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        before=before,
+        after={"phase_scope": access.phase_scope},
     )
 
 
@@ -622,7 +670,7 @@ def update_project(
 
     # The manager/access pairing is decided below against this row, and a
     # concurrent access revocation must queue behind it rather than race it.
-    project = _lock_project(session, project.id)
+    project = lock_project(session, project.id)
 
     basis_changes = [
         field
@@ -863,7 +911,7 @@ def create_parcel(
     # jurisdiction must either land first — and be validated against — or wait
     # behind this parcel and then be refused by the country-pack guard, which
     # will now see a child record. There is no third outcome.
-    project = _lock_project(session, project.id)
+    project = lock_project(session, project.id)
 
     _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=fields)
     if area_unit is None:
@@ -923,7 +971,7 @@ def update_parcel(
     # when it moves from null — costs one row lock and removes the case
     # analysis.
     if not _PARCEL_MONEY_FIELDS.isdisjoint(updates):
-        project = _lock_project(session, project.id)
+        project = lock_project(session, project.id)
 
     _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=dict(updates))
     if "plot_number" in updates and updates["plot_number"] != parcel.plot_number:
@@ -1465,7 +1513,7 @@ def create_permit(
     # first money recorded under its base currency. Read that project under
     # lock so a basis change cannot commit alongside this permit and leave it
     # validated against a jurisdiction the project has already left.
-    project = _lock_project(session, project.id)
+    project = lock_project(session, project.id)
 
     values = dict(fields)
     values["permit_type_code"] = permit_type_code
@@ -1532,7 +1580,7 @@ def update_permit(
     # not lock the base currency, so the write that first puts money on it is
     # the one that has to serialise against a currency change.
     if "prerequisite_permit_id" in updates or "fee_amount" in updates:
-        project = _lock_project(session, project.id)
+        project = lock_project(session, project.id)
 
     # The freeze is decided by the permit's status, so read it under lock: a
     # concurrent transition to ``submitted`` must either land before this update
@@ -1778,7 +1826,7 @@ def create_document(
     # lock applies here: this reference is one of the child records that makes
     # the jurisdiction permanent, and it must not be created against a pack the
     # project is concurrently leaving.
-    project = _lock_project(session, project.id)
+    project = lock_project(session, project.id)
 
     if parcel_id is not None and permit_id is not None:
         raise ValidationError("A document reference attaches to a parcel or a permit, not to both.")

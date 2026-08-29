@@ -36,6 +36,7 @@ from app.core.errors import (
 from app.modules.access.api import admin_router, auth_router
 from app.modules.access.dependencies import SESSION_COOKIE_NAME
 from app.modules.audit.api import router as audit_router
+from app.modules.inventory.api import router as inventory_router
 from app.modules.projects.api import router as projects_router
 from app.modules.settings.api import router as settings_router
 
@@ -221,6 +222,7 @@ def create_app() -> FastAPI:
         admin_router,
         settings_router,
         projects_router,
+        inventory_router,
         audit_router,
     ):
         app.include_router(router, prefix=settings.API_V1_PREFIX)

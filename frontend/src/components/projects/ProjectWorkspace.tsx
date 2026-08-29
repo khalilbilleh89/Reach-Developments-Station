@@ -9,6 +9,7 @@ import { AccessTab } from "@/components/projects/AccessTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
+import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 
@@ -80,6 +81,7 @@ export function ProjectWorkspace({
   const tabs = [
     { key: "overview", label: "Overview" },
     { key: "land", label: "Land" },
+    { key: "inventory", label: "Inventory" },
     { key: "permits", label: "Permits" },
     { key: "documents", label: "Documents" },
     ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
@@ -274,6 +276,15 @@ export function ProjectWorkspace({
           projectId={projectId}
           canWriteLand={canWriteProject}
           canWritePlanning={canWriteTechnical}
+        />
+      ) : null}
+      {tab === "inventory" ? (
+        <InventoryTab
+          projectId={projectId}
+          projectStatus={project.status}
+          roles={roles}
+          canWriteStructure={canWriteTechnical}
+          canConfigure={canWriteProject}
         />
       ) : null}
       {tab === "permits" ? (

@@ -150,7 +150,7 @@ in advance. No circular imports.
 
 ---
 
-## 7. Current state (through PR-MVP-02)
+## 7. Current state (through PR-MVP-03)
 
 ```text
 app/
@@ -166,6 +166,7 @@ app/
     ├── access/              identity, sessions, fixed roles, user administration
     ├── settings/            currencies, country packs, tax rules, lookups, thresholds
     ├── projects/            projects, project access, land, planning, permits, documents
+    ├── inventory/           phases, buildings, floors, units, areas, configurable fields
     └── audit/               append-only governance history
 ```
 
@@ -184,6 +185,47 @@ app/modules/projects/
 first-class concern every nested route depends on, and encoding it separately in
 each route is how one route ends up missing it. It is four small functions and
 one dependency — not a policy engine, and not a generic RBAC framework.
+
+`inventory` carries three extra files, each for a concern that would otherwise
+be spread across every route that touches it:
+
+```text
+app/modules/inventory/
+├── models.py
+├── schemas.py
+├── permissions.py       the phase security boundary and the release-field gate
+├── custom_fields.py     definition, option and value handling for configurable fields
+├── import_service.py    CSV parse, validate and apply
+├── service.py
+└── api.py
+```
+
+`custom_fields.py` and `import_service.py` are separated because each is a
+self-contained problem with its own vocabulary — not because a file grew long.
+Neither is generic: the first handles a fixed list of data types against three
+named entities, and the second parses one documented column set.
+
+### Inventory integrity
+
+Membership is proved by the database, not by the service layer. Every level of
+the hierarchy carries `UNIQUE (id, project_id)`, and every child points at its
+parent with a composite foreign key:
+
+```sql
+FOREIGN KEY (building_id, project_id) REFERENCES buildings (id, project_id)
+```
+
+A floor therefore cannot be attached to a building in a different project, even
+if a request supplies a valid identifier for each. The same pattern runs from
+`Phase` down to `UnitAreaValue`.
+
+Cross-row invariants that a CHECK cannot express are partial unique indexes:
+one primary internal area type per project, one approved area schedule per unit,
+one active custom-field definition per scope.
+
+`Unit` deliberately carries no `phase_id` or `building_id`. A unit belongs to a
+floor; its phase is reached through the floor and building. Denormalising it
+would create a second answer to the same question, and the two would diverge.
 
 ### Authentication
 
@@ -213,16 +255,48 @@ A System Administrator reaches every project without a membership row. Everyone
 else needs an active one, and a project they may not see reports **404** rather
 than 403: a 403 would confirm that an identifier names something real.
 
+### Phase access
+
+PR-MVP-03 completed the narrowing PR-MVP-02 deferred. A membership row carries a
+`phase_scope` of `all` or `selected`; a `selected` member sees only the phases
+granted to them in `user_phase_access`, which points at a real `Phase` with a
+real foreign key. Rows that existed before phases did default to `all`, so the
+migration changes nobody's access.
+
+Narrowing is applied in SQL, in one place, as a join from `Unit` through `Floor`
+and `Building` to `phase_id` — never by fetching a project's inventory and
+filtering it in Python. Anything beneath an ungranted phase answers **404**, on
+reads and writes alike.
+
+Only a System Administrator administers phase access. A Project Manager runs a
+project; they do not decide who may see it.
+
+### Configurable fields
+
+Custom fields are metadata, not programming. A definition names a data type from
+a fixed list, an optional option set, and where it applies; there is no formula,
+no expression, no query and no executable content anywhere in the model. Values
+are stored in three separate tables — one each for `Project`, `LandParcel` and
+`Unit` — with real foreign keys, rather than one polymorphic
+`entity_type`/`entity_id` table that no database constraint can protect.
+
+A field may be marked sensitive and given the roles that may see it. That
+filtering happens before serialisation, so a hidden field is absent from the API
+response rather than hidden by the browser.
+
 ### Deferred by design
 
-**Phase-scoped access waits for PR-MVP-03.** The MVP specification describes
-project *and phase* row access, but `Phase` does not exist yet. No nullable
-`phase_id`, no placeholder Phase and no generic `resource_type`/`resource_id`
-table was created in advance — when Phase is real, phase scoping can be added
-against a real foreign key if the product still needs it.
+**`pricing_approved` is not writable in PR-MVP-03.** It gates release, and it
+becomes writable in PR-MVP-04 when a price exists to approve. There is no
+override.
 
-No inventory, pricing, sales, collections, construction or cashflow domain
-exists. Domains arrive on the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
+**Company-scoped custom fields wait for a Company entity.** A definition may be
+scoped to a country pack, a project or a unit type. Inventing a Company table to
+satisfy a scope label would be the abstraction-first mistake this rebuild exists
+to avoid.
+
+No pricing, sales, collections, construction or cashflow domain exists. Domains
+arrive on the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

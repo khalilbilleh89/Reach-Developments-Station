@@ -174,6 +174,7 @@ class ProjectAccessRead(BaseModel):
     display_name: str
     role_keys: list[str]
     is_active: bool
+    phase_scope: str
     granted_at: datetime
     revoked_at: datetime | None
 

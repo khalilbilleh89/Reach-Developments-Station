@@ -354,14 +354,19 @@ def test_the_revision_round_trips(at_governance: None) -> None:
         _restore_head()
 
 
-def test_this_pr_adds_exactly_one_revision() -> None:
-    """Given the roadmap, then there is a 0002 and no 0003."""
+def test_the_project_revision_is_still_a_single_revision() -> None:
+    """Given the roadmap, then 0002 is one revision and history stays ordered.
+
+    Written as a prefix check rather than an exact list: later roadmap PRs add
+    revisions of their own, and this test is about PR-MVP-02's, not about
+    freezing the migration directory for ever.
+    """
     from pathlib import Path
 
     versions = Path(__file__).resolve().parents[2] / "app" / "db" / "migrations" / "versions"
     names = sorted(path.stem for path in versions.glob("*.py"))
 
-    assert names == [
+    assert names[:3] == [
         "0000_mvp_baseline",
         "0001_governance_access",
         "0002_project_land_permits",

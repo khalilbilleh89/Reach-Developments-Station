@@ -217,6 +217,7 @@ def _access_read(session: DbSession, access: object) -> ProjectAccessRead:
         display_name=user.display_name if user else "",
         role_keys=sorted(user.role_keys) if user else [],
         is_active=access.is_active,  # type: ignore[attr-defined]
+        phase_scope=access.phase_scope,  # type: ignore[attr-defined]
         granted_at=access.granted_at,  # type: ignore[attr-defined]
         revoked_at=access.revoked_at,  # type: ignore[attr-defined]
     )

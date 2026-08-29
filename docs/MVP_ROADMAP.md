@@ -3,11 +3,11 @@
 Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 `PR-MVP-11`, each merged into `main` on its own short-lived branch.
 
-| Scope                            | Count |
-| -------------------------------- | ----: |
-| Total planned MVP PRs            |    12 |
-| Complete (PR-MVP-00, PR-MVP-01)  |     2 |
-| Remaining                        |    10 |
+| Scope                                 | Count |
+| ------------------------------------- | ----: |
+| Total planned MVP PRs                 |    12 |
+| Complete (PR-MVP-00 through PR-MVP-03) |     4 |
+| Remaining                             |     8 |
 
 Branch naming follows the roadmap:
 
@@ -82,19 +82,33 @@ tokens, CI, PR template, and Render build/start separation.
 > integrity. Phase-scoped narrowing can be added in PR-MVP-03 against a real
 > Phase, if the product still needs it.
 
-## PR-MVP-03 — Inventory & Configurable Fields
+## PR-MVP-03 — Inventory & Configurable Fields ✅
 
 - phase
+- **phase-scoped access** (the narrowing PR-MVP-02 deferred, now against a real
+  `Phase` with a real foreign key)
 - building
 - floor
 - unit
-- areas
+- areas — project-configured area types, versioned unit area schedules, weight
+  factors and a derived weighted saleable area
 - features
 - parking/storage/sub-assets
-- separate status dimensions
+- separate status dimensions — commercial, legal, collection and delivery are
+  four columns, never one `status`
 - unit completeness/release controls
 - constrained custom-field metadata/value system
-- bulk import/update
+- bulk import/update — CSV validate then apply, all-or-nothing
+
+> **`pricing_approved` is a release gate, not a price.** A unit cannot be
+> released without it, and PR-MVP-03 exposes no way to set it: the flag becomes
+> writable in PR-MVP-04 when a price exists to approve. There is deliberately no
+> override button and no bypass.
+
+> **Company-scoped configurable fields are deferred.** A field definition can be
+> scoped to a country pack, a project or a unit type. `company` is not offered
+> because no Company entity exists — inventing one to satisfy a scope label would
+> be the same abstraction-first mistake the access deferrals avoided.
 
 ## PR-MVP-04 — Pricing & Unit 360
 

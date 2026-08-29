@@ -149,21 +149,36 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
     ```
 
-    Expected after PR-MVP-01, and nothing else:
+    Expected after PR-MVP-03, and nothing else:
 
     ```text
-    alembic_version, audit_events, country_approval_thresholds, country_packs,
-    currencies, reference_values, roles, tax_rules, user_roles, user_sessions,
-    users
+    alembic_version, area_types, audit_events, buildings,
+    country_approval_thresholds, country_packs, currencies,
+    custom_field_definitions, custom_field_options, document_references, floors,
+    inventory_sub_assets, land_parcel_custom_field_values, land_parcels,
+    permit_status_events, permits, phases, planning_controls,
+    project_custom_field_values, projects, reference_values, roles, tax_rules,
+    unit_area_schedules, unit_area_values, unit_custom_field_values,
+    unit_status_events, units, user_phase_access, user_project_access,
+    user_roles, user_sessions, users
     ```
 
     ```sql
-    SELECT version_num FROM alembic_version;   -- 0002_project_land_permits
+    SELECT version_num FROM alembic_version;   -- 0003_inventory
     SELECT count(*) FROM roles;                -- 11
     ```
 
-    There must be no `projects` table yet: project-scoped access arrives in
-    PR-MVP-02.
+    There must be no pricing, sales, reservation, payment-plan or receipt table
+    yet: money arrives in PR-MVP-04 and later.
+
+16. Existing project memberships still mean "the whole project":
+
+    ```sql
+    SELECT phase_scope, count(*) FROM user_project_access GROUP BY 1;
+    ```
+
+    Every row created before PR-MVP-03 must read `all`. A row reading `selected`
+    would mean somebody's access silently narrowed on deploy.
 
 Do not create another Render web service. Do not create another PostgreSQL
 resource from a PR.
@@ -172,7 +187,12 @@ resource from a PR.
 
 ## 6. Rollback
 
-PR-MVP-00 contains no business data migration, so rollback risk is low.
+`0003_inventory` creates new tables and adds one column to
+`user_project_access`; it moves no existing data. `alembic downgrade
+0002_project_land_permits` drops the inventory tables and that column, so a
+rollback loses inventory records entered after the deploy and nothing else.
+Take a database snapshot before deploying if any inventory has already been
+loaded.
 
 If a deploy fails:
 

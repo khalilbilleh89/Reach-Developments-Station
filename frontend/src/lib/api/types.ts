@@ -166,6 +166,7 @@ export interface ProjectAccess {
   display_name: string;
   role_keys: string[];
   is_active: boolean;
+  phase_scope: string;
   granted_at: string;
   revoked_at: string | null;
 }
@@ -306,3 +307,232 @@ export interface DocumentReference {
   notes: string | null;
   is_active: boolean;
 }
+
+// --------------------------------------------------------------------------- //
+// Inventory (PR-MVP-03)
+// --------------------------------------------------------------------------- //
+
+/** Amounts and measures arrive as strings: a JSON number is a float. */
+export type Phase = {
+  id: string;
+  project_id: string;
+  code: string;
+  name: string;
+  sequence: number;
+  status: string;
+  planned_start: string | null;
+  planned_completion: string | null;
+  notes: string | null;
+  is_active: boolean;
+};
+
+export type Building = {
+  id: string;
+  project_id: string;
+  phase_id: string;
+  code: string;
+  name: string;
+  zone: string | null;
+  block: string | null;
+  entrance_wing: string | null;
+  sequence: number;
+  is_active: boolean;
+};
+
+export type Floor = {
+  id: string;
+  project_id: string;
+  building_id: string;
+  code: string;
+  label: string;
+  level_number: number | null;
+  sequence: number;
+  is_active: boolean;
+};
+
+export type AreaLine = {
+  area_type_id: string;
+  code: string;
+  label: string;
+  area_role: string;
+  unit_of_measure: string;
+  raw_area: string;
+  weight_factor: string;
+  weighted_area: string;
+};
+
+export type UnitSummary = {
+  id: string;
+  project_id: string;
+  unit_reference: string;
+  unit_number: string;
+  floor_id: string;
+  floor_code: string | null;
+  building_id: string | null;
+  building_code: string | null;
+  phase_id: string | null;
+  phase_code: string | null;
+  asset_class: string;
+  unit_type_code: string | null;
+  bedrooms: number | null;
+  internal_area: string | null;
+  weighted_saleable_area: string | null;
+  weighted_saleable_area_unit: string | null;
+  parking_count: number;
+  storage_count: number;
+  commercial_status: string;
+  legal_status: string;
+  collection_status: string;
+  delivery_status: string;
+  is_complete: boolean;
+  completeness_percent: number;
+  release_eligible: boolean;
+  release_blockers: string[];
+  is_active: boolean;
+};
+
+export type Unit = UnitSummary & {
+  bathrooms: number | null;
+  has_maid_room: boolean;
+  is_duplex: boolean;
+  is_penthouse: boolean;
+  furnishing_specification_code: string | null;
+  floor_band_code: string | null;
+  orientation_code: string | null;
+  view_class_code: string | null;
+  is_corner: boolean;
+  pool_access: boolean;
+  accessibility_code: string | null;
+  garden_class_code: string | null;
+  plot_coverage_fraction: string | null;
+  sequence: number;
+  drawings_approved: boolean;
+  legal_sale_eligible: boolean;
+  pricing_approved: boolean;
+  release_date: string | null;
+  release_batch: string | null;
+  block_reason: string | null;
+  missing_requirements: string[];
+  area_lines: AreaLine[];
+  area_schedule_id: string | null;
+  area_revision_code: string | null;
+};
+
+export type UnitRegister = {
+  units: UnitSummary[];
+  total: number;
+  available_count: number;
+  held_count: number;
+  unreleased_count: number;
+};
+
+export type UnitStatusEvent = {
+  id: string;
+  unit_id: string;
+  dimension: string;
+  from_status: string;
+  to_status: string;
+  effective_date: string;
+  reason: string | null;
+  notes: string | null;
+  changed_at: string;
+};
+
+export type SubAsset = {
+  id: string;
+  project_id: string;
+  asset_reference: string;
+  asset_type: string;
+  subtype_code: string | null;
+  floor_id: string | null;
+  linked_unit_id: string | null;
+  area: string | null;
+  transfer_mode: string;
+  notes: string | null;
+  is_active: boolean;
+};
+
+export type AreaType = {
+  id: string;
+  project_id: string;
+  code: string;
+  label: string;
+  area_role: string;
+  unit_of_measure: string;
+  weight_factor: string;
+  required_for_release: boolean;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type AreaSchedule = {
+  id: string;
+  project_id: string;
+  unit_id: string;
+  revision_code: string;
+  status: string;
+  measurement_standard: string | null;
+  plan_revision: string | null;
+  source: string | null;
+  measured_date: string | null;
+  reconciled: boolean;
+  notes: string | null;
+  lines: AreaLine[];
+  weighted_saleable_area: string | null;
+  weighted_saleable_area_unit: string | null;
+};
+
+export type PhaseAccess = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  phase_id: string;
+  phase_code: string | null;
+  phase_name: string | null;
+  is_active: boolean;
+  granted_at: string;
+  revoked_at: string | null;
+};
+
+export type CustomFieldOption = {
+  id: string;
+  code: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type CustomValue = {
+  definition_id: string;
+  field_key: string;
+  display_label: string;
+  data_type: string;
+  unit_of_measure: string | null;
+  help_text: string | null;
+  required: boolean;
+  required_for_release: boolean;
+  is_editable: boolean;
+  options: CustomFieldOption[];
+  value: string | number | boolean | null;
+};
+
+export type ImportIssue = {
+  row: number;
+  column: string | null;
+  severity: "error" | "warning";
+  message: string;
+};
+
+export type ImportReport = {
+  mode: string;
+  applied: boolean;
+  total_rows: number;
+  create_count: number;
+  update_count: number;
+  valid_rows: number;
+  invalid_rows: number;
+  error_count: number;
+  warning_count: number;
+  issues: ImportIssue[];
+  issues_truncated: boolean;
+};

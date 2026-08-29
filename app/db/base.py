@@ -11,6 +11,8 @@ uses the same two.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy import MetaData, Numeric
 from sqlalchemy.orm import DeclarativeBase
 
@@ -20,6 +22,18 @@ MONEY = Numeric(18, 2)
 #: Rates are stored as explicit fractions: 0.160000 means 16%. The column name
 #: always ends in ``_rate_fraction`` so the unit can never be misread.
 RATE = Numeric(9, 6)
+
+#: Physical measures — areas, lengths, heights, densities. Four decimals so a
+#: cadastral or surveyed area survives the round trip exactly as recorded. Here
+#: rather than in one module for the same reason as MONEY and RATE: land,
+#: planning and inventory all measure the same world and must agree on scale.
+MEASURE = Numeric(18, 4)
+
+#: The scale of MEASURE, for quantising a derived figure back to it. An area
+#: multiplied by a six-decimal factor lands on ten decimals; presenting that is
+#: false precision, and summing unquantised lines gives a total that does not
+#: equal the column of figures printed above it.
+MEASURE_EXPONENT = Decimal("0.0001")
 
 #: Deterministic constraint names. Without this, PostgreSQL invents index and
 #: constraint names, Alembic autogenerate cannot reference them, and downgrades

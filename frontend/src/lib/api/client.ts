@@ -106,3 +106,18 @@ export function patch<T>(path: string, body: Json): Promise<T> {
 export function put<T>(path: string, body: Json): Promise<T> {
   return request<T>(path, { method: "PUT", body: JSON.stringify(body) });
 }
+
+/**
+ * POST a CSV file's text as the request body.
+ *
+ * Raw `text/csv` rather than multipart: the browser reads the file itself with
+ * `File.text()`, so there is no upload library here and no multipart parser on
+ * the server — one screen does not justify a dependency on either side.
+ */
+export function postCsv<T>(path: string, csv: string): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    body: csv,
+    headers: { "Content-Type": "text/csv" },
+  });
+}

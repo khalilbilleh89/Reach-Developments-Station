@@ -29,18 +29,22 @@ or rules engines, no microservices. The full forbidden list lives in
 | Scope                    | Status |
 | ------------------------ | -----: |
 | Total planned MVP PRs    |     12 |
-| Completed                |      2 |
-| Remaining                |     10 |
+| Completed                |      4 |
+| Remaining                |      8 |
 
-Current: **PR-MVP-02 — Project, Land & Permits**.
-Next: **PR-MVP-02 — Project, Land & Permits**.
+Current: **PR-MVP-03 — Inventory & Configurable Fields**.
+Next: **PR-MVP-04 — Pricing & Unit 360**.
 
-The system now has authentication, the fixed role catalogue, country
-configuration and an append-only audit trail. There is still **no real-estate
-domain**: no projects, inventory, pricing, sales, collections or construction.
+The system has authentication, the fixed role catalogue, country configuration,
+an append-only audit trail, projects with land, planning controls, permits and
+documents, and a full inventory register: phases, buildings, floors, units,
+versioned area schedules, sub-assets, release controls and constrained
+configurable fields.
 
-Project-scoped access is deliberately deferred to PR-MVP-02, because a
-`Project` must exist before access can be scoped to one.
+There is still **no money in the system**. No pricing, no sales, no reservations,
+no payment plans, no collections and no unit economics. A unit's
+`pricing_approved` release gate exists but cannot be set through any API until
+PR-MVP-04 gives it a price to approve.
 
 ---
 
@@ -87,6 +91,7 @@ there is no permission table and no policy language.
 │       ├── access/             identity, sessions, fixed roles, user administration
 │       ├── settings/           currencies, country packs, tax rules, lookups, thresholds
 │       ├── projects/           projects, access, land, planning, permits, documents
+│       ├── inventory/          phases, buildings, floors, units, areas, custom fields
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
 │   ├── src/app/                login, projects workspace, settings shell, design tokens
@@ -169,8 +174,14 @@ carries no `sqlalchemy.url`.
 alembic upgrade head        # apply
 alembic current             # show applied revision
 alembic history             # show the history
+alembic check               # models and schema still agree
 alembic downgrade base      # reverse to an empty database
 ```
+
+`alembic check` reports any difference between the models and the database the
+migrations produce. CI runs it after `alembic upgrade head` and fails on drift;
+it never generates a revision automatically. When it reports a difference, write
+the migration by hand or autogenerate one locally and read every line of it.
 
 Create a new revision with an explicit, ordered revision id:
 
@@ -193,6 +204,8 @@ ruff check .                # lint
 ruff format --check .       # formatting
 python -m compileall app    # compile
 pip check                   # dependency tree
+alembic upgrade head        # schema
+alembic check               # no drift between models and schema
 pytest -q                   # tests
 ```
 
