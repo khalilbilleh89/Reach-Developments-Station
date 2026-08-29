@@ -242,6 +242,9 @@ def test_two_writers_cannot_produce_two_version_fours(
                 unit_area_schedule_id=existing.unit_area_schedule_id,
                 status="draft",
                 currency_id=existing.currency_id,
+                # Every version carries the date it was calculated for, so even
+                # a write that goes straight past the service has to state one.
+                valid_from=existing.valid_from,
                 base_area_value=Decimal("0.00"),
                 scope_adjustment_total=Decimal("0.00"),
                 premium_total=Decimal("0.00"),
@@ -279,6 +282,7 @@ def test_the_database_refuses_a_duplicate_version_number(
             unit_area_schedule_id=existing.unit_area_schedule_id,
             status="draft",
             currency_id=existing.currency_id,
+            valid_from=existing.valid_from,
             base_area_value=Decimal("0.00"),
             scope_adjustment_total=Decimal("0.00"),
             premium_total=Decimal("0.00"),
@@ -290,9 +294,14 @@ def test_the_database_refuses_a_duplicate_version_number(
             created_by_user_id=existing.created_by_user_id,
         )
     )
-    with pytest.raises(IntegrityError):
+    # Named, so the test cannot start passing because some *other* column
+    # became non-nullable and the row was refused before it ever reached the
+    # constraint this test is about.
+    with pytest.raises(IntegrityError) as raised:
         db.flush()
     db.rollback()
+
+    assert "uq_unit_price_versions_unit_id_version_number" in str(raised.value)
 
 
 # --------------------------------------------------------------------------- #
