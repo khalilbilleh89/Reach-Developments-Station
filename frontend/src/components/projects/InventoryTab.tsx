@@ -30,10 +30,14 @@ import { statusLabel } from "@/components/projects/inventory/statusLabels";
  */
 export function InventoryTab({
   projectId,
+  projectStatus,
+  roles,
   canWriteStructure,
   canConfigure,
 }: {
   projectId: string;
+  projectStatus: string;
+  roles: Set<string>;
   canWriteStructure: boolean;
   canConfigure: boolean;
 }) {
@@ -79,7 +83,6 @@ export function InventoryTab({
         available_count: 0,
         held_count: 0,
         unreleased_count: 0,
-        release_eligible_count: 0,
       });
       setError(caught instanceof ApiError ? caught.message : "Could not load the inventory.");
     }
@@ -126,6 +129,21 @@ export function InventoryTab({
   const visibleFloors = filters.building_id
     ? floors.filter((floor) => floor.building_id === filters.building_id)
     : floors;
+
+  // Inventory is refused while the project is in setup, because that is the
+  // window in which its country and currencies can still change under whatever
+  // was validated against them. Saying so beats eleven identical 409s.
+  if (projectStatus === "setup") {
+    return (
+      <Panel title="Inventory" description="Not yet — the project basis is still open.">
+        <EmptyState
+          title="Finalize project setup"
+          hint="Confirm country and currency settings, then move the project to
+                Pre-development before loading inventory."
+        />
+      </Panel>
+    );
+  }
 
   return (
     <>
@@ -354,6 +372,7 @@ export function InventoryTab({
       {selected ? (
         <UnitDetailPanel
           projectId={projectId}
+          roles={roles}
           unitId={selected.id}
           canWriteStructure={canWriteStructure}
           canConfigure={canConfigure}

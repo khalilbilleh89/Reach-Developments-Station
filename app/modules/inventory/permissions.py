@@ -25,16 +25,22 @@ from fastapi import Depends, Path
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError, PermissionDeniedError
+from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession
 from app.modules.inventory.models import (
     Building,
     Floor,
+    InventorySubAsset,
     Phase,
     Unit,
     UserPhaseAccess,
 )
-from app.modules.projects.models import PHASE_SCOPE_SELECTED, Project, UserProjectAccess
+from app.modules.projects.models import (
+    PHASE_SCOPE_SELECTED,
+    PROJECT_STATUS_SETUP,
+    Project,
+    UserProjectAccess,
+)
 from app.modules.projects.permissions import require_project_access
 
 #: Roles that may shape the physical catalogue: phases, buildings, floors, units,
@@ -67,6 +73,10 @@ RELEASE_CONTROL_FIELD_ROLES: dict[str, frozenset[str]] = {
     "release_batch": RELEASE_CONTROL_ROLES,
     "block_reason": RELEASE_CONTROL_ROLES,
 }
+
+#: Said once, so every route that refuses inventory during setup says the same
+#: thing and an operator learns one sentence rather than eleven.
+_SETUP_DETAIL = "Finalize the project setup before creating inventory."
 
 _NOT_FOUND_DETAIL = "Project not found."
 _PHASE_NOT_FOUND_DETAIL = "Phase not found."
@@ -157,6 +167,60 @@ def visible_units(
     return statement.where(Unit.id.in_(_units_in_visible_phases(allowed)))
 
 
+def _floors_in_visible_phases(allowed: Select[tuple[uuid.UUID]]) -> Select[tuple[uuid.UUID]]:
+    """Floor ids whose building sits in one of ``allowed``."""
+    return (
+        select(Floor.id)
+        .join(Building, Building.id == Floor.building_id)
+        .where(Building.phase_id.in_(allowed))
+    )
+
+
+def visible_sub_assets(
+    statement: Select[tuple[InventorySubAsset]],
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    actor: ActorContext,
+) -> Select[tuple[InventorySubAsset]]:
+    """Narrow a sub-asset query to the phases the caller may see.
+
+    A parking bay gets its phase from whatever it is attached to: the linked
+    unit if there is one, otherwise the floor it physically sits on. Reading
+    only the unit link was the hole — a bay on a floor of a phase the caller
+    cannot open carried a null ``linked_unit_id``, and a null passed the filter.
+
+    An asset attached to neither has no phase to check. For a caller who has
+    been narrowed to particular phases there is no safe answer, so they do not
+    see it; a member who sees the whole project still does. Refusing is the side
+    that fails safe.
+    """
+    allowed = visible_phase_ids(session, project_id=project_id, actor=actor)
+    if allowed is None:
+        return statement
+    return statement.where(
+        (InventorySubAsset.linked_unit_id.in_(_units_in_visible_phases(allowed)))
+        | (
+            InventorySubAsset.linked_unit_id.is_(None)
+            & InventorySubAsset.floor_id.in_(_floors_in_visible_phases(allowed))
+        )
+    )
+
+
+def require_floor(
+    session: Session, *, project: Project, floor_id: uuid.UUID, actor: ActorContext
+) -> Floor:
+    """Load a floor of this project the caller may see, or raise 404."""
+    statement = select(Floor).where(Floor.id == floor_id, Floor.project_id == project.id)
+    allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
+    if allowed is not None:
+        statement = statement.where(Floor.id.in_(_floors_in_visible_phases(allowed)))
+    floor = session.scalars(statement).first()
+    if floor is None:
+        raise NotFoundError("Floor not found.")
+    return floor
+
+
 def require_phase(
     session: Session, *, project: Project, phase_id: uuid.UUID, actor: ActorContext
 ) -> Phase:
@@ -229,6 +293,30 @@ def require_inventory_release_writer(actor: ActorContext, fields: list[str]) -> 
 def require_commercial_transition_writer(actor: ActorContext) -> None:
     """Gate holding, releasing and unreleasing a unit."""
     require_role(actor, COMMERCIAL_TRANSITION_ROLES, detail=_FORBIDDEN_DETAIL)
+
+
+def require_operational_project(project: Project) -> None:
+    """Refuse inventory while the project's basis can still be rewritten.
+
+    A unit's type, orientation, view class and furnishing are validated against
+    the project's country pack, and PR-MVP-02 lets that pack change freely while
+    the project is still in ``setup``. Inventory created first would then be
+    describing a jurisdiction the project no longer belongs to, and the projects
+    module cannot notice — it deliberately does not import inventory, and giving
+    it that import to solve this would be a circular dependency bought for one
+    guard.
+
+    So the rule runs the other way, where the dependency already points: leaving
+    setup is what finalises the basis, and inventory starts after it. PR-MVP-02
+    forbids returning to setup, so the sequence cannot be undone.
+
+    Scoped to a project's own operational inventory. Global and country-level
+    configuration is not a project's inventory and is not gated here — an
+    administrator maintaining a country pack is not blocked because the project
+    they happened to navigate from is still being set up.
+    """
+    if project.status == PROJECT_STATUS_SETUP:
+        raise ConflictError(_SETUP_DETAIL)
 
 
 def accessible_project_for_inventory(

@@ -294,6 +294,9 @@ class UnitSummary(BaseModel):
     #: The project's primary internal area from the current approved schedule.
     internal_area: DecimalStr | None = None
     weighted_saleable_area: DecimalStr | None = None
+    #: The unit that figure is in. A weighted area without its unit is a
+    #: number two people can read two different ways.
+    weighted_saleable_area_unit: str | None = None
     parking_count: int = 0
     storage_count: int = 0
     commercial_status: str
@@ -339,14 +342,21 @@ class UnitDetail(UnitSummary):
 
 
 class UnitRegister(BaseModel):
-    """A page of units, and counts describing the whole filtered set."""
+    """A page of units, and counts describing the whole filtered set.
+
+    Every count here is computed over the entire filtered, authorised set before
+    pagination — never over the page. There is deliberately no release-eligible
+    total: eligibility is derived per unit from its own blockers, and counting
+    it across a whole development means evaluating every unit, which is a
+    reporting question and not a register one. ``release_eligible`` stays on
+    each row, where it can be read against the unit it describes.
+    """
 
     units: list[UnitSummary]
     total: int
     available_count: int
     held_count: int
     unreleased_count: int
-    release_eligible_count: int
 
 
 class UnitStatusEventRead(BaseModel):
@@ -496,6 +506,9 @@ class AreaScheduleRead(BaseModel):
     notes: str | None
     lines: list[AreaLine] = Field(default_factory=list)
     weighted_saleable_area: DecimalStr | None = None
+    #: The unit that figure is in. A weighted area without its unit is a
+    #: number two people can read two different ways.
+    weighted_saleable_area_unit: str | None = None
 
 
 # --------------------------------------------------------------------------- #

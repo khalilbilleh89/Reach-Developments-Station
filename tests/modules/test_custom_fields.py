@@ -20,6 +20,16 @@ from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, inventory_url, unit_payload
 
 
+@pytest.fixture(autouse=True)
+def _finalised_basis(operational_project: str) -> None:
+    """Every test here configures a real project's fields, so its basis is set.
+
+    Field definitions scoped to a project are that project's configuration and
+    wait for the same finalisation inventory does. Declaring it once here keeps
+    each test about the field rule it is actually testing.
+    """
+
+
 def _definitions(project_id: str) -> str:
     return f"{PROJECTS}/{project_id}/field-definitions"
 
@@ -142,6 +152,7 @@ def test_two_projects_may_define_the_same_key(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
     admin_client.post(_definitions(project_id), json=_field(project_id))
 
     response = admin_client.post(_definitions(other), json=_field(other))

@@ -72,7 +72,11 @@ from app.modules.inventory.models import (
     UnitStatusEvent,
     UserPhaseAccess,
 )
-from app.modules.inventory.permissions import visible_phase_ids, visible_units
+from app.modules.inventory.permissions import (
+    visible_phase_ids,
+    visible_sub_assets,
+    visible_units,
+)
 from app.modules.projects.models import (
     PHASE_SCOPE_ALL,
     PHASE_SCOPE_SELECTED,
@@ -287,6 +291,18 @@ _PHASE_UPDATABLE = (
 _PHASE_CLEARABLE = frozenset({"planned_start", "planned_completion", "notes"})
 
 
+def _reload(session: Session, instance: object) -> None:
+    """Re-read a row from the database after waiting for the project lock.
+
+    A phase loaded by the route dependency was read before the lock was
+    available. Deciding "has this phase any active buildings" against that copy
+    is deciding against the state as it was before whoever held the lock
+    committed. Refreshing costs one round trip and is the difference between a
+    serialised decision and a hopeful one.
+    """
+    session.refresh(instance)
+
+
 def list_phases(
     session: Session, *, project: Project, actor: ActorContext, include_inactive: bool = True
 ) -> list[Phase]:
@@ -349,6 +365,14 @@ def update_phase(
     **changes: object,
 ) -> Phase:
     updates = resolve_updates(changes, fields=_PHASE_UPDATABLE, clearable=_PHASE_CLEARABLE)
+
+    # Retiring a parent and creating a child are the same structural decision
+    # seen from two directions, so they queue on the same project row. Without
+    # it, "this phase has no active buildings" can be true when it is read and
+    # false when it commits.
+    lock_project(session, phase.project_id)
+    _reload(session, phase)
+
     resulting_start = updates.get("planned_start", phase.planned_start)
     resulting_end = updates.get("planned_completion", phase.planned_completion)
     _require_ordered(resulting_start, resulting_end)
@@ -432,6 +456,9 @@ def create_building(
     **fields: object,
 ) -> Building:
     project = lock_project(session, project.id)
+    # The phase was loaded before the lock was granted; whoever held it may have
+    # retired the phase in the meantime.
+    _reload(session, phase)
     if not phase.is_active:
         raise ConflictError("That phase is not active.")
     building = Building(
@@ -470,6 +497,8 @@ def update_building(
     **changes: object,
 ) -> Building:
     updates = resolve_updates(changes, fields=_BUILDING_UPDATABLE, clearable=_BUILDING_CLEARABLE)
+    lock_project(session, building.project_id)
+    _reload(session, building)
     if updates.get("is_active") is False and building.is_active:
         active_floor = session.scalars(
             select(Floor.id).where(Floor.building_id == building.id, Floor.is_active.is_(True))
@@ -532,6 +561,7 @@ def create_floor(
     **fields: object,
 ) -> Floor:
     project = lock_project(session, project.id)
+    _reload(session, building)
     if not building.is_active:
         raise ConflictError("That building is not active.")
     floor = Floor(
@@ -568,6 +598,8 @@ def update_floor(
     **changes: object,
 ) -> Floor:
     updates = resolve_updates(changes, fields=_FLOOR_UPDATABLE, clearable=_FLOOR_CLEARABLE)
+    lock_project(session, floor.project_id)
+    _reload(session, floor)
     if updates.get("is_active") is False and floor.is_active:
         active_unit = session.scalars(
             select(Unit.id).where(Unit.floor_id == floor.id, Unit.is_active.is_(True))
@@ -746,6 +778,7 @@ def create_unit(
     # pack, so read that project under lock: a jurisdiction change must either
     # land first and be validated against, or wait behind this unit.
     project = lock_project(session, project.id)
+    _reload(session, floor)
     if not floor.is_active:
         raise ConflictError("That floor is not active.")
     _validate_unit_codes(session, country_pack_id=project.country_pack_id, values=fields)
@@ -907,6 +940,37 @@ _COMMERCIAL_TRANSITIONS: dict[str, frozenset[str]] = {
 _REASON_REQUIRED = frozenset({COMMERCIAL_STATUS_HELD, COMMERCIAL_STATUS_UNRELEASED})
 
 
+def latest_commercial_effective_date(session: Session, *, unit_id: uuid.UUID) -> date | None:
+    """The effective date of this unit's most recent commercial event."""
+    return session.scalars(
+        select(func.max(UnitStatusEvent.effective_date)).where(
+            UnitStatusEvent.unit_id == unit_id,
+            UnitStatusEvent.dimension == DIMENSION_COMMERCIAL,
+        )
+    ).first()
+
+
+def _require_forward_effective_date(session: Session, *, unit: Unit, effective_date: date) -> None:
+    """Refuse a commercial event dated before the one it follows.
+
+    The unit lock already stops two transitions forking the chain, but a linear
+    chain can still carry dates that run backwards: held on the 10th, then
+    available on the 1st. The statuses would be consistent and the history would
+    be a fiction — and every later question asked of it ("what was this unit on
+    the 5th?") has two answers.
+
+    Permits have held this rule since PR-MVP-02. The same date is allowed: a
+    correction recorded the same day is ordinary, and the event order carries
+    the sequence.
+    """
+    latest = latest_commercial_effective_date(session, unit_id=unit.id)
+    if latest is not None and effective_date < latest:
+        raise ValidationError(
+            f"This unit's last commercial change was effective {latest.isoformat()}. "
+            "A later change cannot be dated before it."
+        )
+
+
 def transition_commercial_status(
     session: Session,
     *,
@@ -947,6 +1011,7 @@ def transition_commercial_status(
         )
     if to_status in _REASON_REQUIRED and not (reason or "").strip():
         raise ValidationError("A reason is required for this change.")
+    _require_forward_effective_date(session, unit=unit, effective_date=effective_date)
 
     if to_status == COMMERCIAL_STATUS_AVAILABLE:
         blockers = release_blockers(session, unit=unit, today=effective_date, actor=actor)
@@ -1032,6 +1097,79 @@ def list_area_types(
     return list(session.scalars(statement.order_by(AreaType.sort_order, AreaType.code)))
 
 
+#: The fields that decide what a stored measurement *means*. Everything else
+#: about an area type describes it; these two reinterpret every number already
+#: recorded against it.
+_AREA_TYPE_SEMANTIC_FIELDS = ("area_role", "unit_of_measure")
+
+
+def _area_type_in_use(session: Session, *, area_type_id: uuid.UUID) -> bool:
+    """Whether any measurement has been recorded against this area type."""
+    return (
+        session.scalars(
+            select(UnitAreaValue.id).where(UnitAreaValue.area_type_id == area_type_id).limit(1)
+        ).first()
+        is not None
+    )
+
+
+def _require_coherent_weighted_unit(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    area_type_id: uuid.UUID | None,
+    unit_of_measure: str,
+    weight_factor: Decimal,
+    is_active: bool,
+) -> None:
+    """Every area that contributes to the weighted total must measure the same way.
+
+    The weighted saleable area is a sum. Adding 100 sqm to 200 sqft produces a
+    number with no unit and no meaning, and this MVP has no conversion — nor
+    should it acquire one to paper over a configuration mistake. So the project
+    picks one unit for everything it weighs, and the second unit is refused at
+    the point somebody configures it.
+
+    An area type with a zero factor contributes nothing to the sum, so it may
+    measure in whatever the drawings use.
+    """
+    if not is_active or weight_factor == 0:
+        return
+    statement = select(AreaType).where(
+        AreaType.project_id == project_id,
+        AreaType.is_active.is_(True),
+        AreaType.weight_factor != 0,
+    )
+    if area_type_id is not None:
+        statement = statement.where(AreaType.id != area_type_id)
+    for other in session.scalars(statement):
+        if other.unit_of_measure != unit_of_measure:
+            raise ValidationError(
+                f"This project weighs areas in {other.unit_of_measure} "
+                f"(see {other.code}). An area type that contributes to the weighted "
+                f"saleable area cannot measure in {unit_of_measure}: the total would "
+                "add two different units together."
+            )
+
+
+def weighted_area_unit(session: Session, *, project_id: uuid.UUID) -> str | None:
+    """The unit the project's weighted saleable area is expressed in.
+
+    ``None`` when nothing contributes yet. Returned alongside the figure itself
+    so a weighted area is never a bare number on a screen.
+    """
+    contributor = session.scalars(
+        select(AreaType)
+        .where(
+            AreaType.project_id == project_id,
+            AreaType.is_active.is_(True),
+            AreaType.weight_factor != 0,
+        )
+        .order_by(AreaType.sort_order, AreaType.code)
+    ).first()
+    return contributor.unit_of_measure if contributor is not None else None
+
+
 def create_area_type(
     session: Session,
     *,
@@ -1045,6 +1183,14 @@ def create_area_type(
     **fields: object,
 ) -> AreaType:
     project = lock_project(session, project.id)
+    _require_coherent_weighted_unit(
+        session,
+        project_id=project.id,
+        area_type_id=None,
+        unit_of_measure=str(fields.get("unit_of_measure") or "sqm"),
+        weight_factor=weight_factor,
+        is_active=True,
+    )
     area_type = AreaType(
         project_id=project.id,
         code=_normalize_code(code, label="An area type code"),
@@ -1089,6 +1235,28 @@ def update_area_type(
     """
     updates = resolve_updates(changes, fields=_AREA_TYPE_UPDATABLE, clearable=frozenset())
     lock_project(session, project.id)
+    _reload(session, area_type)
+
+    semantic = [
+        field
+        for field in _AREA_TYPE_SEMANTIC_FIELDS
+        if field in updates and updates[field] != getattr(area_type, field)
+    ]
+    if semantic and _area_type_in_use(session, area_type_id=area_type.id):
+        raise ConflictError(
+            "Measurements have already been recorded against this area type, so its "
+            "role and unit of measure are fixed. Changing them would silently give "
+            "every stored figure a new meaning without anyone re-measuring."
+        )
+
+    _require_coherent_weighted_unit(
+        session,
+        project_id=project.id,
+        area_type_id=area_type.id,
+        unit_of_measure=str(updates.get("unit_of_measure", area_type.unit_of_measure)),
+        weight_factor=updates.get("weight_factor", area_type.weight_factor),  # type: ignore[arg-type]
+        is_active=bool(updates.get("is_active", area_type.is_active)),
+    )
 
     before = _snapshot(area_type, _AREA_TYPE_FIELDS)
     for field, value in updates.items():
@@ -1584,31 +1752,26 @@ def list_sub_assets(
     if is_active is not None:
         statement = statement.where(InventorySubAsset.is_active.is_(is_active))
 
-    allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
-    if allowed is not None:
-        # A sub-asset attached to a unit the caller may not see is not theirs to
-        # see either. Unattached assets carry no phase, so they stay visible.
-        visible = visible_units(
-            select(Unit.id).where(Unit.project_id == project.id),
-            session,
-            project_id=project.id,
-            actor=actor,
-        )
-        statement = statement.where(
-            (InventorySubAsset.linked_unit_id.is_(None))
-            | (InventorySubAsset.linked_unit_id.in_(visible))
-        )
+    statement = visible_sub_assets(statement, session, project_id=project.id, actor=actor)
     return list(session.scalars(statement.order_by(InventorySubAsset.asset_reference)))
 
 
 def get_sub_asset(
     session: Session, *, project: Project, actor: ActorContext, asset_id: uuid.UUID
 ) -> InventorySubAsset:
-    assets = list_sub_assets(session, project=project, actor=actor)
-    for asset in assets:
-        if asset.id == asset_id:
-            return asset
-    raise NotFoundError("Sub-asset not found.")
+    statement = visible_sub_assets(
+        select(InventorySubAsset).where(
+            InventorySubAsset.id == asset_id,
+            InventorySubAsset.project_id == project.id,
+        ),
+        session,
+        project_id=project.id,
+        actor=actor,
+    )
+    asset = session.scalars(statement).first()
+    if asset is None:
+        raise NotFoundError("Sub-asset not found.")
+    return asset
 
 
 def _validate_sub_asset_links(
@@ -1621,7 +1784,12 @@ def _validate_sub_asset_links(
     floor_id = values.get("floor_id")
     unit_id = values.get("linked_unit_id")
     if floor_id is not None:
-        get_floor(session, project_id=project.id, floor_id=floor_id)
+        from app.modules.inventory.permissions import require_floor
+
+        # Not merely "a floor of this project": a floor of a phase this caller
+        # may see. Otherwise a restricted caller parks an asset in a phase they
+        # cannot open, and reads its reference back through the asset.
+        require_floor(session, project=project, floor_id=floor_id, actor=actor)
     if unit_id is not None:
         from app.modules.inventory.permissions import require_unit
 

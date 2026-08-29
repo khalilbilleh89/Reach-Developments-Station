@@ -33,6 +33,7 @@ from app.modules.projects.models import (
     CATEGORY_ZONING_CLASS,
     PERMIT_STATUS_NOT_STARTED,
     PERMIT_STATUSES,
+    PHASE_SCOPE_ALL,
     PROJECT_STATUS_SETUP,
     DocumentReference,
     LandParcel,
@@ -474,12 +475,54 @@ def _assign_project_manager(
             "the project before assigning them as project manager."
         )
 
-    _ensure_access(
+    access = _ensure_access(
         session,
         project_id=project.id,
         user_id=user_id,
         actor_user_id=actor_user_id,
         correlation_id=correlation_id,
+    )
+    _widen_manager_phase_scope(
+        session,
+        access=access,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+
+
+def _widen_manager_phase_scope(
+    session: Session,
+    *,
+    access: UserProjectAccess,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Give the incoming manager the whole project back.
+
+    The rule is that the assigned project manager sees every phase. Inventory
+    already refuses to narrow the manager, but that only closes one direction:
+    narrow an ordinary member first and assign them second, and the same
+    forbidden state arrives by the other road. Widening here closes it, and the
+    caller's project lock makes the two orders serialise against each other.
+
+    The column lives on this module's own membership row, so nothing about
+    phases needs to be imported to fix it — only the value that means "all of
+    them", which projects already owns.
+    """
+    if access.phase_scope == PHASE_SCOPE_ALL:
+        return
+    before = {"phase_scope": access.phase_scope}
+    access.phase_scope = PHASE_SCOPE_ALL
+    session.flush()
+    record_event(
+        session,
+        action="project_access.phase_scope_changed",
+        entity_type=ENTITY_PROJECT_ACCESS,
+        entity_id=access.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        before=before,
+        after={"phase_scope": access.phase_scope},
     )
 
 

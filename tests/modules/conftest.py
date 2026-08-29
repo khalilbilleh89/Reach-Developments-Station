@@ -183,7 +183,23 @@ def inventory_url(project_id: str) -> str:
 
 
 @pytest.fixture
-def inventory_reference_data(admin_client: TestClient, country_pack_id: str) -> None:
+def operational_project(admin_client: TestClient, project_id: str) -> str:
+    """A project whose basis has been finalised, so inventory may begin.
+
+    Inventory is refused while a project is still in ``setup``, because that is
+    exactly the window in which its country pack can still be changed under the
+    units already validated against it. The fixture does what an operator does:
+    confirm the configuration, then leave setup.
+    """
+    response = admin_client.patch(f"{PROJECTS}/{project_id}", json={"status": "predevelopment"})
+    assert response.status_code == 200, response.text
+    return project_id
+
+
+@pytest.fixture
+def inventory_reference_data(
+    admin_client: TestClient, country_pack_id: str, operational_project: str
+) -> None:
     for category, code, label in INVENTORY_REFERENCE_VALUES:
         response = admin_client.post(
             f"{SETTINGS}/reference-values",

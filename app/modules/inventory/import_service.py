@@ -31,11 +31,17 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ValidationError
+from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.inventory import service
-from app.modules.inventory.custom_fields import definitions_for, write_values
+from app.modules.inventory.custom_fields import (
+    can_edit,
+    can_view,
+    check_value,
+    unit_definitions_of_project,
+    write_values,
+)
 from app.modules.inventory.models import (
     AREA_SCHEDULE_APPROVED,
     AREA_SCHEDULE_DRAFT,
@@ -43,15 +49,21 @@ from app.modules.inventory.models import (
     COMMERCIAL_STATUS_UNRELEASED,
     ENTITY_IMPORT,
     ENTITY_UNIT,
+    SCOPE_UNIT_TYPE,
     AreaType,
     Building,
+    CustomFieldDefinition,
     Floor,
     Phase,
     Unit,
     UnitAreaSchedule,
     UnitAreaValue,
 )
-from app.modules.inventory.permissions import visible_phase_ids
+from app.modules.inventory.permissions import (
+    RELEASE_CONTROL_FIELD_ROLES,
+    require_inventory_release_writer,
+    visible_phase_ids,
+)
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.settings.service import require_active_reference_value
@@ -110,6 +122,22 @@ _UNIT_BOOL_COLUMNS = (
     "legal_sale_eligible",
 )
 _UNIT_DECIMAL_COLUMNS = ("plot_coverage_fraction",)
+
+#: The range each decimal column accepts, mirroring the request schema so the
+#: file and the API agree about what a number may be.
+_DECIMAL_BOUNDS: dict[str, tuple[Decimal, Decimal]] = {
+    "plot_coverage_fraction": (Decimal("0"), Decimal("1")),
+}
+
+#: The reason recorded against every value a bulk load writes. Named once
+#: because validation must judge approval-required fields against the same
+#: reason apply will supply — otherwise validate refuses a row apply accepts,
+#: which is the disagreement this file exists to remove.
+IMPORT_CHANGE_REASON = "Bulk inventory import"
+
+#: Columns a unit cannot exist without. `<CLEAR>` on one of these is a row
+#: error, not a NOT NULL violation discovered while applying the batch.
+_NOT_CLEARABLE = frozenset({"unit_number", "unit_reference", "asset_class"})
 _UNIT_DATE_COLUMNS = ("release_date",)
 _AREA_COLUMNS = ("area_revision", "area_source", "area_measured_date", "area_reconciled")
 
@@ -355,9 +383,15 @@ def parse(
             session, project_id=project.id, include_inactive=False
         )
     }
+    # Every unit field of this project, keyed by column name — but only those
+    # this caller may see and write. A hidden field must answer exactly as an
+    # unknown one does, or the header validator becomes a way to ask "does a
+    # field called `owner_litigation_note` exist?" and read the answer off the
+    # error message.
     definitions = {
-        definition.field_key
-        for definition in definitions_for(session, entity_type="unit", project=project)
+        definition.field_key: definition
+        for definition in unit_definitions_of_project(session, project=project)
+        if can_view(definition, actor) and can_edit(definition, actor)
     }
     area_columns, custom_columns = _read_header(
         batch, headers=reader.fieldnames, area_types=area_types, definitions=definitions
@@ -367,7 +401,8 @@ def parse(
     visible = set(session.scalars(allowed)) if allowed is not None else None
     existing = _Existing(session, project=project)
     references_seen: dict[str, int] = {}
-    numbers_seen: dict[tuple[str, str, str], int] = {}
+    numbers_seen: dict[tuple[str, str, str, str], int] = {}
+    declared: dict[tuple[str, ...], tuple[str, int]] = {}
 
     for index, raw in enumerate(reader, start=2):
         if batch.total_rows >= MAX_ROWS:
@@ -380,14 +415,17 @@ def parse(
             index=index,
             raw=raw,
             project=project,
+            actor=actor,
             mode=mode,
             create_missing_hierarchy=create_missing_hierarchy,
             existing=existing,
             visible=visible,
             area_columns=area_columns,
             custom_columns=custom_columns,
+            definitions=definitions,
             references_seen=references_seen,
             numbers_seen=numbers_seen,
+            declared=declared,
         )
         if row is None:
             continue
@@ -404,7 +442,7 @@ def _read_header(
     *,
     headers: list[str],
     area_types: dict[str, AreaType],
-    definitions: set[str],
+    definitions: dict[str, CustomFieldDefinition],
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Split the header into area columns, custom columns and the known rest.
 
@@ -478,14 +516,17 @@ def _read_row(
     index: int,
     raw: dict[str, str],
     project: Project,
+    actor: ActorContext,
     mode: str,
     create_missing_hierarchy: bool,
     existing: _Existing,
     visible: set[uuid.UUID] | None,
     area_columns: dict[str, str],
     custom_columns: dict[str, str],
+    definitions: dict[str, CustomFieldDefinition],
     references_seen: dict[str, int],
-    numbers_seen: dict[tuple[str, str, str], int],
+    numbers_seen: dict[tuple[str, str, str, str], int],
+    declared: dict[tuple[str, ...], tuple[str, int]],
 ) -> Row | None:
     action = (_cell(raw, "action") or "").lower()
     unit_id_text = _cell(raw, "unit_id")
@@ -537,23 +578,28 @@ def _read_row(
                 f"{hierarchy.phase_code}/{hierarchy.building_code}.",
             )
         _check_no_rename(batch, index=index, key=hierarchy, existing=existing)
+        _check_no_self_conflict(batch, index=index, key=hierarchy, declared=declared)
+        _check_hierarchy_active(batch, index=index, key=hierarchy, existing=existing)
 
     phase = existing.phase_for(hierarchy) if hierarchy is not None else None
     if visible is not None:
+        # The unit's CURRENT phase first, and unconditionally. Checking it only
+        # when the row named no destination was the hole: supply a hidden unit's
+        # identifier together with a visible destination phase, and the
+        # destination check passed while the unit nobody was allowed to see got
+        # moved into view.
+        if unit is not None and not _unit_phase_visible(session, unit=unit, visible=visible):
+            batch.error(index, "unit_id", "That unit is not available to you.")
+            return None
         if phase is not None and phase.id not in visible:
             batch.error(index, "phase_code", "That phase is not available to you.")
             return None
         if phase is None and hierarchy is not None:
             batch.error(index, "phase_code", "You may not create a phase in this project.")
             return None
-        if unit is not None and hierarchy is None:
-            unit_floor = session.get(Floor, unit.floor_id)
-            building = session.get(Building, unit_floor.building_id) if unit_floor else None
-            if building is None or building.phase_id not in visible:
-                batch.error(index, "unit_id", "That unit is not available to you.")
-                return None
 
     fields, cleared = _read_unit_columns(batch, index=index, raw=raw)
+    _check_release_controls(batch, index=index, actor=actor, fields=fields, cleared=cleared)
     _check_required(batch, index=index, action=action, fields=fields)
     _check_codes(session, batch, index=index, project=project, fields=fields)
     _check_reference(
@@ -573,8 +619,35 @@ def _read_row(
         for column, key in custom_columns.items()
         if _cell(raw, column)
     }
+    _check_customs(
+        session,
+        batch,
+        index=index,
+        actor=actor,
+        customs=customs,
+        definitions=definitions,
+        resulting_unit_type=(
+            fields.get("unit_type_code")
+            if "unit_type_code" in fields
+            else (unit.unit_type_code if unit is not None else None)
+        ),
+    )
     if areas and not _cell(raw, "area_revision"):
         batch.error(index, "area_revision", "Imported areas need a revision code.")
+
+    measured = _cell(raw, "area_measured_date")
+    if measured and measured != CLEAR_TOKEN:
+        try:
+            date.fromisoformat(measured)
+        except ValueError:
+            batch.error(index, "area_measured_date", f"'{measured}' is not a date as YYYY-MM-DD.")
+    reconciled_text = _cell(raw, "area_reconciled")
+    reconciled = _parse_bool(reconciled_text) if reconciled_text else None
+    if reconciled_text and reconciled is None:
+        # Not quietly false. "maybe" in a reconciliation column means somebody
+        # does not know whether it was reconciled, and defaulting it to no is
+        # answering a question they did not.
+        batch.error(index, "area_reconciled", f"'{reconciled_text}' is not true or false.")
 
     return Row(
         index=index,
@@ -588,8 +661,89 @@ def _read_row(
         area_revision=_cell(raw, "area_revision"),
         area_source=_cell(raw, "area_source"),
         area_measured_date=_cell(raw, "area_measured_date"),
-        area_reconciled=bool(_parse_bool(_cell(raw, "area_reconciled"))),
+        area_reconciled=bool(reconciled),
     )
+
+
+def _check_customs(
+    session: Session,
+    batch: Batch,
+    *,
+    index: int,
+    actor: ActorContext,
+    customs: dict[str, Any],
+    definitions: dict[str, CustomFieldDefinition],
+    resulting_unit_type: str | None,
+) -> None:
+    """Check every custom value against the field it will actually be written to.
+
+    Two things the header alone cannot decide. Whether the field applies at all:
+    a definition scoped to unit type 2BR is not a field of a 3BR unit, and which
+    type this row produces depends on the CSV's own ``unit_type_code`` when it
+    supplies one and the unit's existing type when it does not. And whether the
+    value is any good: type, options, bounds, pattern and the caller's right to
+    write it, all judged by the same helper the ordinary write path uses.
+    """
+    for key, value in customs.items():
+        definition = definitions.get(key)
+        if definition is None:
+            batch.error(index, f"custom:{key}", f"'{key}' is not a field of a unit here.")
+            continue
+        if definition.scope_type == SCOPE_UNIT_TYPE and (
+            resulting_unit_type is None or definition.unit_type_code != resulting_unit_type
+        ):
+            batch.error(
+                index,
+                f"custom:{key}",
+                f"'{key}' applies to unit type {definition.unit_type_code}, "
+                f"and this row is {resulting_unit_type or 'untyped'}.",
+            )
+            continue
+        try:
+            check_value(
+                session,
+                definition=definition,
+                value=value,
+                actor=actor,
+                change_reason=IMPORT_CHANGE_REASON,
+            )
+        except (ValidationError, PermissionDeniedError) as exc:
+            batch.error(index, f"custom:{key}", str(exc))
+
+
+def _check_release_controls(
+    batch: Batch,
+    *,
+    index: int,
+    actor: ActorContext,
+    fields: dict[str, Any],
+    cleared: set[str],
+) -> None:
+    """A CSV is not a way around who owns a release control.
+
+    Drawings belong to design, legal eligibility to legal, the release calendar
+    to sales operations — and a file only needs the structure-writer right to be
+    uploaded. Without this, Design/Engineering could set a unit legally saleable
+    through a column they were never allowed to PATCH.
+
+    The same matrix the API uses, imported rather than restated: two copies of a
+    role table is one copy that eventually disagrees. Clearing counts, because
+    clearing a release control is still changing it.
+    """
+    for control in RELEASE_CONTROL_FIELD_ROLES:
+        if control not in fields and control not in cleared:
+            continue
+        try:
+            require_inventory_release_writer(actor, [control])
+        except PermissionDeniedError as exc:
+            batch.error(index, control, str(exc))
+
+
+def _unit_phase_visible(session: Session, *, unit: Unit, visible: set[uuid.UUID]) -> bool:
+    """Whether the caller may see the phase this unit sits in right now."""
+    floor = session.get(Floor, unit.floor_id)
+    building = session.get(Building, floor.building_id) if floor is not None else None
+    return building is not None and building.phase_id in visible
 
 
 def _read_hierarchy(batch: Batch, *, index: int, raw: dict[str, str]) -> HierarchyKey | None:
@@ -616,6 +770,74 @@ def _read_hierarchy(batch: Batch, *, index: int, raw: dict[str, str]) -> Hierarc
         building_name=_cell(raw, "building_name") or None,
         floor_label=_cell(raw, "floor_label") or None,
     )
+
+
+def _check_no_self_conflict(
+    batch: Batch,
+    *,
+    index: int,
+    key: HierarchyKey,
+    declared: dict[tuple[str, ...], tuple[str, int]],
+) -> None:
+    """Refuse a file that names the same new phase, building or floor two ways.
+
+    Row 2 says PHASE-1 is "North Phase" and row 3 says it is "South Phase". The
+    database cannot settle it because neither exists yet, and "first row wins"
+    would silently pick one and load two hundred units under a name nobody
+    approved. The file has to say one thing.
+    """
+    for scope, code, name, column in (
+        (("phase", key.phase_code), key.phase_code, key.phase_name, "phase_name"),
+        (
+            ("building", key.phase_code, key.building_code),
+            key.building_code,
+            key.building_name,
+            "building_name",
+        ),
+        (
+            ("floor", key.phase_code, key.building_code, key.floor_code),
+            key.floor_code,
+            key.floor_label,
+            "floor_label",
+        ),
+    ):
+        if not name:
+            continue
+        seen = declared.get(scope)
+        if seen is None:
+            declared[scope] = (name, index)
+        elif seen[0] != name:
+            batch.error(
+                index,
+                column,
+                f"'{code}' is called '{seen[0]}' on row {seen[1]} and '{name}' here. "
+                "One file cannot name it two ways.",
+            )
+
+
+def _check_hierarchy_active(
+    batch: Batch, *, index: int, key: HierarchyKey, existing: _Existing
+) -> None:
+    """Refuse to load a unit into a retired phase, building or floor.
+
+    A retired level was retired for a reason. Loading live units beneath it
+    reopens it by the back door and leaves the register saying two things.
+    """
+    phase = existing.phases.get(key.phase_code)
+    if phase is None:
+        return
+    if not phase.is_active:
+        batch.error(index, "phase_code", f"Phase '{key.phase_code}' is not active.")
+        return
+    building = existing.buildings.get((phase.id, key.building_code))
+    if building is None:
+        return
+    if not building.is_active:
+        batch.error(index, "building_code", f"Building '{key.building_code}' is not active.")
+        return
+    floor = existing.floors.get((building.id, key.floor_code))
+    if floor is not None and not floor.is_active:
+        batch.error(index, "floor_code", f"Floor '{key.floor_code}' is not active.")
 
 
 def _check_no_rename(batch: Batch, *, index: int, key: HierarchyKey, existing: _Existing) -> None:
@@ -659,6 +881,13 @@ def _read_unit_columns(
         if not value:
             return None
         if value == CLEAR_TOKEN:
+            if column in _NOT_CLEARABLE:
+                batch.error(
+                    index,
+                    column,
+                    f"{column} cannot be cleared: every unit has one. Give it a new value instead.",
+                )
+                return None
             cleared.add(column)
             return None
         return value
@@ -672,9 +901,17 @@ def _read_unit_columns(
         if value is None:
             continue
         try:
-            fields[column] = int(value)
+            number = int(value)
         except ValueError:
             batch.error(index, column, f"'{value}' is not a whole number.")
+            continue
+        # The same floor the request schema sets. Letting a negative through to
+        # a database CHECK turns an operator's typo into a 500 halfway down a
+        # 247-row file.
+        if number < 0:
+            batch.error(index, column, f"'{value}' cannot be negative.")
+            continue
+        fields[column] = number
     for column in _UNIT_BOOL_COLUMNS:
         value = _cell(raw, column)
         if not value:
@@ -689,9 +926,15 @@ def _read_unit_columns(
         if value is None:
             continue
         try:
-            fields[column] = Decimal(value)
+            number = Decimal(value)
         except InvalidOperation:
             batch.error(index, column, f"'{value}' is not a number.")
+            continue
+        low, high = _DECIMAL_BOUNDS[column]
+        if number < low or number > high:
+            batch.error(index, column, f"'{value}' must be between {low} and {high}.")
+            continue
+        fields[column] = number
     for column in _UNIT_DATE_COLUMNS:
         value = take(column)
         if value is None:
@@ -769,12 +1012,20 @@ def _check_number(
     index: int,
     fields: dict[str, Any],
     hierarchy: HierarchyKey | None,
-    numbers_seen: dict[tuple[str, str, str], int],
+    numbers_seen: dict[tuple[str, str, str, str], int],
 ) -> None:
     number = fields.get("unit_number")
     if not number or hierarchy is None:
         return
-    key = (hierarchy.phase_code, hierarchy.building_code + hierarchy.floor_code, str(number))
+    # Four separate parts, never concatenated: building "B1" + floor "01" and
+    # building "B" + floor "101" produce the same string, and one collision here
+    # rejects a legitimate row or accepts a duplicate.
+    key = (
+        hierarchy.phase_code,
+        hierarchy.building_code,
+        hierarchy.floor_code,
+        str(number),
+    )
     first = numbers_seen.get(key)
     if first is not None:
         batch.error(
@@ -1088,7 +1339,7 @@ def _apply_row(
             entity=unit,
             actor=actor,
             values=row.customs,
-            change_reason="Bulk inventory import",
+            change_reason=IMPORT_CHANGE_REASON,
         )
     if row.areas:
         _apply_areas(session, project=project, actor=actor, unit=unit, row=row, approve=approve)

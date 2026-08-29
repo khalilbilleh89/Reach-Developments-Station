@@ -102,6 +102,7 @@ def test_an_asset_cannot_link_to_another_projects_unit(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
 
     response = admin_client.post(
         _assets(other),
@@ -209,7 +210,7 @@ def test_no_unit_column_repeats_a_parking_slot(db: Session) -> None:
 
 
 def test_creating_a_sub_asset_is_audited(
-    admin_client: TestClient, project_id: str, db: Session
+    admin_client: TestClient, project_id: str, operational_project: str, db: Session
 ) -> None:
     from app.modules.audit.models import AuditEvent
 

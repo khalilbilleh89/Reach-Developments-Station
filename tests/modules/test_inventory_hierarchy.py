@@ -71,6 +71,8 @@ def test_a_building_cannot_be_created_under_another_projects_phase(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    # A second project needs its own basis finalised before it holds inventory.
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
 
     response = admin_client.post(
         f"{inventory_url(other)}/buildings",
@@ -98,6 +100,8 @@ def test_the_database_refuses_a_cross_project_building(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    # A second project needs its own basis finalised before it holds inventory.
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
     admin_id = db.scalars(text("SELECT id FROM users LIMIT 1")).one()
 
     db.add(

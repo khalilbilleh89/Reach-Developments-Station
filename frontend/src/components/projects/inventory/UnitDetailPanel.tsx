@@ -40,13 +40,42 @@ const UNIT_FIELDS: EditField[] = [
   { name: "is_active", label: "Unit is active", kind: "checkbox" },
 ];
 
-/** The gates, each owned by a different role. `pricing_approved` is not here. */
-const RELEASE_FIELDS: EditField[] = [
-  { name: "drawings_approved", label: "Drawings approved", kind: "checkbox" },
-  { name: "legal_sale_eligible", label: "Legally saleable", kind: "checkbox" },
-  { name: "release_date", label: "Release date", kind: "date" },
-  { name: "release_batch", label: "Release batch" },
-  { name: "block_reason", label: "Block reason" },
+/**
+ * The gates, each owned by a different role. `pricing_approved` is not here.
+ *
+ * The roles beside each field mirror the server's own matrix so the form offers
+ * a person only what they can actually save. The server decides — this is an
+ * affordance, not a permission check, and it holds no rule the API does not.
+ */
+const RELEASE_FIELDS: (EditField & { roles: string[] })[] = [
+  {
+    name: "drawings_approved",
+    label: "Drawings approved",
+    kind: "checkbox",
+    roles: ["system_admin", "project_manager", "design_engineering"],
+  },
+  {
+    name: "legal_sale_eligible",
+    label: "Legally saleable",
+    kind: "checkbox",
+    roles: ["system_admin", "project_manager", "legal"],
+  },
+  {
+    name: "release_date",
+    label: "Release date",
+    kind: "date",
+    roles: ["system_admin", "project_manager", "sales_operations"],
+  },
+  {
+    name: "release_batch",
+    label: "Release batch",
+    roles: ["system_admin", "project_manager", "sales_operations"],
+  },
+  {
+    name: "block_reason",
+    label: "Block reason",
+    roles: ["system_admin", "project_manager", "sales_operations"],
+  },
 ];
 
 const TRANSITIONS: Record<string, string[]> = {
@@ -67,6 +96,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  */
 export function UnitDetailPanel({
   projectId,
+  roles,
   unitId,
   canWriteStructure,
   canConfigure,
@@ -74,6 +104,7 @@ export function UnitDetailPanel({
   onChanged,
 }: {
   projectId: string;
+  roles: Set<string>;
   unitId: string;
   canWriteStructure: boolean;
   canConfigure: boolean;
@@ -165,6 +196,9 @@ export function UnitDetailPanel({
   if (unit === null) return <Loading label="Loading unit…" />;
 
   const editableValues = values.filter((value) => value.is_editable);
+  const releaseFields = RELEASE_FIELDS.filter((field) =>
+    field.roles.some((role) => roles.has(role)),
+  );
 
   return (
     <Panel
@@ -183,13 +217,15 @@ export function UnitDetailPanel({
               {editing === "unit" ? "Cancel" : "Edit unit"}
             </button>
           ) : null}
-          <button
-            className="button button-small"
-            type="button"
-            onClick={() => setEditing(editing === "release" ? "none" : "release")}
-          >
-            {editing === "release" ? "Cancel" : "Release controls"}
-          </button>
+          {releaseFields.length > 0 ? (
+            <button
+              className="button button-small"
+              type="button"
+              onClick={() => setEditing(editing === "release" ? "none" : "release")}
+            >
+              {editing === "release" ? "Cancel" : "Release controls"}
+            </button>
+          ) : null}
           {editableValues.length > 0 ? (
             <button
               className="button button-small"
@@ -229,10 +265,10 @@ export function UnitDetailPanel({
 
       {editing === "release" ? (
         <EditForm
-          fields={RELEASE_FIELDS}
+          fields={releaseFields}
           submitLabel="Save release controls"
           initial={Object.fromEntries(
-            RELEASE_FIELDS.map((field) => [
+            releaseFields.map((field) => [
               field.name,
               asValue(unit[field.name as keyof Unit] as never),
             ]),
@@ -337,7 +373,11 @@ export function UnitDetailPanel({
               <tr>
                 <th scope="row">Weighted saleable</th>
                 <td colSpan={2} />
-                <td className="mono nowrap">{unit.weighted_saleable_area ?? "—"}</td>
+                <td className="mono nowrap">
+                  {unit.weighted_saleable_area === null
+                    ? "—"
+                    : `${unit.weighted_saleable_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim()}
+                </td>
               </tr>
             </tbody>
           </table>

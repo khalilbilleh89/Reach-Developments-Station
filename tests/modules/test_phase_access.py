@@ -386,3 +386,98 @@ def test_the_membership_listing_reports_each_members_phase_scope(
     rows = admin_client.get(f"{PROJECTS}/{project_id}/access").json()
 
     assert [row["phase_scope"] for row in rows if row["user_id"] == str(manager.id)] == ["selected"]
+
+
+def test_assigning_a_narrowed_member_as_manager_widens_them_to_every_phase(
+    db: Session,
+    admin_client: TestClient,
+    project_id: str,
+    two_phases: dict[str, dict[str, str]],
+    manager: User,
+) -> None:
+    """Given a narrowed member, then formal assignment gives the project back.
+
+    Narrowing an assigned manager is already refused. That closed one direction
+    only: narrow an ordinary member first and assign them second, and the same
+    forbidden state — a formal project manager who sees one phase — arrives by
+    the other road.
+    """
+    admin_client.put(f"{PROJECTS}/{project_id}/access/{manager.id}")
+    admin_client.patch(
+        f"{PROJECTS}/{project_id}/access/{manager.id}/phase-scope",
+        json={"phase_scope": "selected"},
+    )
+    admin_client.put(
+        f"{PROJECTS}/{project_id}/access/{manager.id}/phases/{two_phases['PHASE-A']['phase']}"
+    )
+
+    response = admin_client.patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(manager.id)}
+    )
+
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    membership = db.scalars(
+        select(UserProjectAccess).where(UserProjectAccess.user_id == manager.id)
+    ).one()
+    assert membership.phase_scope == "all"
+
+
+def test_the_widening_is_audited(
+    db: Session,
+    admin_client: TestClient,
+    project_id: str,
+    two_phases: dict[str, dict[str, str]],
+    manager: User,
+) -> None:
+    """Somebody's visibility changed, so the trail says who and when."""
+    from app.modules.audit.models import AuditEvent
+
+    admin_client.put(f"{PROJECTS}/{project_id}/access/{manager.id}")
+    admin_client.patch(
+        f"{PROJECTS}/{project_id}/access/{manager.id}/phase-scope",
+        json={"phase_scope": "selected"},
+    )
+
+    admin_client.patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(manager.id)}
+    )
+
+    events = db.scalars(
+        select(AuditEvent).where(AuditEvent.action == "project_access.phase_scope_changed")
+    ).all()
+    assert any(
+        event.before_data == {"phase_scope": "selected"}
+        and event.after_data == {"phase_scope": "all"}
+        for event in events
+    )
+
+
+def test_the_widened_manager_sees_the_phase_they_were_never_granted(
+    db: Session,
+    admin_client: TestClient,
+    project_id: str,
+    two_phases: dict[str, dict[str, str]],
+    manager: User,
+) -> None:
+    """The old phase grants stay on file and stop deciding anything.
+
+    Scope is what decides; the grants are only consulted while it says
+    ``selected``. Deleting them would throw away a record of what was once
+    given, and reading them at ``all`` scope would contradict the scope.
+    """
+    admin_client.put(f"{PROJECTS}/{project_id}/access/{manager.id}")
+    admin_client.patch(
+        f"{PROJECTS}/{project_id}/access/{manager.id}/phase-scope",
+        json={"phase_scope": "selected"},
+    )
+    admin_client.put(
+        f"{PROJECTS}/{project_id}/access/{manager.id}/phases/{two_phases['PHASE-A']['phase']}"
+    )
+    admin_client.patch(
+        f"{PROJECTS}/{project_id}", json={"project_manager_user_id": str(manager.id)}
+    )
+
+    phases = client_for(manager.email).get(f"{inventory_url(project_id)}/phases").json()
+
+    assert {phase["code"] for phase in phases} == {"PHASE-A", "PHASE-B"}

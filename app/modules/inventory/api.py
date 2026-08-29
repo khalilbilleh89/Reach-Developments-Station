@@ -17,11 +17,13 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query, Request, status
 from sqlalchemy import select
 
-from app.core.errors import ValidationError
+from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.inventory import custom_fields as fields_service
 from app.modules.inventory import import_service, service
 from app.modules.inventory.models import (
+    SCOPE_PROJECT,
+    SCOPE_UNIT_TYPE,
     CustomFieldDefinition,
     Phase,
     Unit,
@@ -32,6 +34,7 @@ from app.modules.inventory.permissions import (
     require_commercial_transition_writer,
     require_inventory_release_writer,
     require_inventory_structure_writer,
+    require_operational_project,
     require_phase,
     require_project_configurer,
     require_unit,
@@ -74,7 +77,7 @@ from app.modules.inventory.schemas import (
     UnitUpdateRequest,
 )
 from app.modules.projects.models import LandParcel, Project
-from app.modules.projects.permissions import AccessibleProject, require_project_writer
+from app.modules.projects.permissions import AccessibleProject
 
 router = APIRouter(prefix="/projects", tags=["inventory"])
 
@@ -113,6 +116,7 @@ def create_phase(
     project: InventoryProject,
 ) -> PhaseRead:
     require_project_configurer(actor)
+    require_operational_project(project)
     phase = service.create_phase(
         session,
         project=project,
@@ -196,6 +200,7 @@ def create_building(
     project: InventoryProject,
 ) -> BuildingRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     phase = require_phase(session, project=project, phase_id=payload.phase_id, actor=actor)
     values = payload.model_dump(exclude_unset=True)
     values.pop("phase_id")
@@ -262,6 +267,7 @@ def create_floor(
     project: InventoryProject,
 ) -> FloorRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     building = service.get_building(session, project_id=project.id, building_id=payload.building_id)
     require_phase(session, project=project, phase_id=building.phase_id, actor=actor)
     values = payload.model_dump(exclude_unset=True)
@@ -334,6 +340,7 @@ def _unit_summary(
         **labels.get(unit.id, {}),
         "internal_area": internal_area,
         "weighted_saleable_area": service.weighted_saleable_area(lines),
+        "weighted_saleable_area_unit": service.weighted_area_unit(session, project_id=project.id),
         "parking_count": counts.get(unit.id, {}).get("parking", 0),
         "storage_count": counts.get(unit.id, {}).get("storage", 0),
         "is_complete": complete,
@@ -388,9 +395,9 @@ def list_units(
         UnitSummary.model_validate(_unit_summary(session, project, unit, labels, counts, actor))
         for unit in units
     ]
-    # The counts describe every unit matching the filter; `units` is the page.
-    eligible = sum(1 for row in rows if row.release_eligible)
-    return UnitRegister(units=rows, release_eligible_count=eligible, **totals)
+    # Every count in `totals` describes the whole filtered set; `units` is the
+    # page. Nothing derived from `rows` may join them.
+    return UnitRegister(units=rows, **totals)
 
 
 @router.post(
@@ -406,6 +413,7 @@ def create_unit(
     project: InventoryProject,
 ) -> UnitDetail:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     floor = service.get_floor(session, project_id=project.id, floor_id=payload.floor_id)
     phase = service.phase_of_floor(session, floor)
     require_phase(session, project=project, phase_id=phase.id, actor=actor)
@@ -576,6 +584,7 @@ def create_area_type(
     project: InventoryProject,
 ) -> AreaTypeRead:
     require_project_configurer(actor)
+    require_operational_project(project)
     area_type = service.create_area_type(
         session,
         project=project,
@@ -599,6 +608,7 @@ def update_area_type(
     project: InventoryProject,
 ) -> AreaTypeRead:
     require_project_configurer(actor)
+    require_operational_project(project)
     area_type = service.get_area_type(session, project_id=project.id, area_type_id=area_type_id)
     updated = service.update_area_type(
         session,
@@ -624,6 +634,9 @@ def _schedule_read(
             },
             "lines": lines,
             "weighted_saleable_area": service.weighted_saleable_area(lines),
+            "weighted_saleable_area_unit": service.weighted_area_unit(
+                session, project_id=project.id
+            ),
         }
     )
 
@@ -660,6 +673,7 @@ def create_area_schedule(
     project: InventoryProject,
 ) -> AreaScheduleRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
     values = payload.model_dump(exclude_unset=True)
     lines = values.pop("values", [])
@@ -689,6 +703,7 @@ def update_area_schedule(
     project: InventoryProject,
 ) -> AreaScheduleRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
     schedule = service.get_area_schedule(
         session, project_id=project.id, unit_id=unit.id, schedule_id=schedule_id
@@ -721,6 +736,7 @@ def approve_area_schedule(
     project: InventoryProject,
 ) -> AreaScheduleRead:
     require_project_configurer(actor)
+    require_operational_project(project)
     unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
     schedule = service.get_area_schedule(
         session, project_id=project.id, unit_id=unit.id, schedule_id=schedule_id
@@ -782,6 +798,7 @@ def create_sub_asset(
     project: InventoryProject,
 ) -> SubAssetRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     asset = service.create_sub_asset(
         session, project=project, actor=actor, **payload.model_dump(exclude_unset=True)
     )
@@ -817,6 +834,7 @@ def update_sub_asset(
     project: InventoryProject,
 ) -> SubAssetRead:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     asset = service.get_sub_asset(session, project=project, actor=actor, asset_id=asset_id)
     updated = service.update_sub_asset(
         session,
@@ -1047,22 +1065,27 @@ def update_field_definition(
 def _require_definition_authority(
     actor: ActorContext, *, scope_type: str, project: Project, values: dict[str, Any]
 ) -> None:
-    """Who may define a field at which scope.
+    """Who may define a field at which scope, and when.
 
     A System Administrator configures the whole system. A Project Manager
     configures their own project — and only their own: a project-scoped role
     that could edit a global definition would be changing every other project's
     records from inside one of them.
+
+    A project- or unit-type-scoped definition is that project's own
+    configuration and a unit-type one is only meaningful against a configured
+    unit type, so both wait for the basis, exactly as inventory does. Global and
+    country definitions are not this project's inventory: an administrator
+    maintaining a country pack is not blocked because the project they navigated
+    from is still in setup.
     """
+    if not actor.is_system_admin and "project_manager" not in actor.role_keys:
+        raise PermissionDeniedError("You do not have permission to perform this action.")
+    if scope_type in {SCOPE_PROJECT, SCOPE_UNIT_TYPE}:
+        require_operational_project(project)
     if actor.is_system_admin:
         return
-    if "project_manager" not in actor.role_keys:
-        from app.core.errors import PermissionDeniedError
-
-        raise PermissionDeniedError("You do not have permission to perform this action.")
     if scope_type not in {"project", "unit_type"} or values.get("project_id") != project.id:
-        from app.core.errors import PermissionDeniedError
-
         raise PermissionDeniedError(
             "A project manager can define fields for their own project only."
         )
@@ -1101,7 +1124,11 @@ def write_project_values(
     actor: ActiveActor,
     project: AccessibleProject,
 ) -> list[CustomValueRead]:
-    require_project_writer(actor)
+    # No blanket role gate here. The definition's own ``editable_role_keys`` is
+    # published in its contract, and a route that refused Sales Operations
+    # before the definition was consulted made that contract unkeepable. The
+    # project (and for a unit, the phase) boundary above still applies, and
+    # ``write_values`` checks every field against the roles that own it.
     fields_service.write_values(
         session,
         entity_type="project",
@@ -1145,7 +1172,11 @@ def write_parcel_values(
     actor: ActiveActor,
     project: AccessibleProject,
 ) -> list[CustomValueRead]:
-    require_project_writer(actor)
+    # No blanket role gate here. The definition's own ``editable_role_keys`` is
+    # published in its contract, and a route that refused Sales Operations
+    # before the definition was consulted made that contract unkeepable. The
+    # project (and for a unit, the phase) boundary above still applies, and
+    # ``write_values`` checks every field against the roles that own it.
     parcel = _parcel(session, project, parcel_id)
     fields_service.write_values(
         session,
@@ -1194,7 +1225,11 @@ def write_unit_values(
     actor: ActiveActor,
     project: InventoryProject,
 ) -> list[CustomValueRead]:
-    require_inventory_structure_writer(actor)
+    # No blanket role gate here. The definition's own ``editable_role_keys`` is
+    # published in its contract, and a route that refused Sales Operations
+    # before the definition was consulted made that contract unkeepable. The
+    # project (and for a unit, the phase) boundary above still applies, and
+    # ``write_values`` checks every field against the roles that own it.
     unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
     fields_service.write_values(
         session,
@@ -1239,6 +1274,9 @@ async def validate_import(
     create_missing_hierarchy: Annotated[bool, Query()] = False,
 ) -> ImportReport:
     require_inventory_structure_writer(actor)
+    # Before reading a line of the file: a report that called 200 rows valid and
+    # then refused to apply them would be the report telling the lie.
+    require_operational_project(project)
     body = await _csv_body(request)
     return ImportReport.model_validate(
         import_service.validate(
@@ -1267,6 +1305,7 @@ async def apply_import(
     approve_area_schedules: Annotated[bool, Query()] = False,
 ) -> ImportReport:
     require_inventory_structure_writer(actor)
+    require_operational_project(project)
     if approve_area_schedules:
         require_project_configurer(actor)
     body = await _csv_body(request)

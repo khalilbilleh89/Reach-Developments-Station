@@ -377,6 +377,7 @@ export type UnitSummary = {
   bedrooms: number | null;
   internal_area: string | null;
   weighted_saleable_area: string | null;
+  weighted_saleable_area_unit: string | null;
   parking_count: number;
   storage_count: number;
   commercial_status: string;
@@ -423,7 +424,6 @@ export type UnitRegister = {
   available_count: number;
   held_count: number;
   unreleased_count: number;
-  release_eligible_count: number;
 };
 
 export type UnitStatusEvent = {
@@ -479,6 +479,7 @@ export type AreaSchedule = {
   notes: string | null;
   lines: AreaLine[];
   weighted_saleable_area: string | null;
+  weighted_saleable_area_unit: string | null;
 };
 
 export type PhaseAccess = {

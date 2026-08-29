@@ -58,6 +58,7 @@ def test_two_projects_may_use_the_same_phase_code(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
 
     response = admin_client.post(
         f"{inventory_url(other)}/phases", json={"code": "PHASE-1", "name": "Phase 1"}

@@ -25,7 +25,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import ColumnElement, Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -273,11 +273,29 @@ def _validate_scope_columns(
         )
 
 
+def business_today() -> date:
+    """The date applicability is judged against.
+
+    One function so a definition's window is read the same way everywhere — the
+    API, completeness and the CSV importer — rather than three call sites each
+    reaching for ``date.today()`` and one of them eventually not.
+    """
+    return date.today()
+
+
+def _within_validity(as_of: date) -> ColumnElement[bool]:
+    """The SQL form of "this definition is in force on ``as_of``"."""
+    return (
+        CustomFieldDefinition.valid_from.is_(None) | (CustomFieldDefinition.valid_from <= as_of)
+    ) & (CustomFieldDefinition.valid_to.is_(None) | (CustomFieldDefinition.valid_to >= as_of))
+
+
 def _applicable_scope_clause(
     *,
     entity_type: str,
     project: Project | None,
     unit_type_code: str | None,
+    as_of: date,
 ) -> Select[tuple[CustomFieldDefinition]]:
     """Definitions that apply to one entity, by scope.
 
@@ -305,9 +323,13 @@ def _applicable_scope_clause(
     applies = clauses[0]
     for clause in clauses[1:]:
         applies = applies | clause
+    # Effective dates are not decoration. A field dated to start next quarter
+    # must not appear, become editable, or block a release today; an expired one
+    # must stop doing all three.
     return select(CustomFieldDefinition).where(
         CustomFieldDefinition.entity_type == entity_type,
         CustomFieldDefinition.is_active.is_(True),
+        _within_validity(as_of),
         applies,
     )
 
@@ -399,9 +421,20 @@ def list_definitions(
     if entity_type is not None:
         statement = statement.where(CustomFieldDefinition.entity_type == entity_type)
     if project_id is not None:
+        # "Belongs to this project, or to nobody" was too wide: a country-scoped
+        # field carries no project id, so a Jordan project was listing the UAE
+        # pack's fields as if they were its own configuration.
+        project = session.get(Project, project_id)
         statement = statement.where(
             (CustomFieldDefinition.project_id == project_id)
-            | (CustomFieldDefinition.project_id.is_(None))
+            | (CustomFieldDefinition.scope_type == SCOPE_GLOBAL)
+            | (
+                (CustomFieldDefinition.scope_type == SCOPE_COUNTRY)
+                & (
+                    CustomFieldDefinition.country_pack_id
+                    == (project.country_pack_id if project is not None else None)
+                )
+            )
         )
     if not include_inactive:
         statement = statement.where(CustomFieldDefinition.is_active.is_(True))
@@ -507,6 +540,12 @@ def create_definition(
         raise ValidationError("An option field needs at least one option.")
     if fields.get("regex_pattern"):
         _compile_pattern(str(fields["regex_pattern"]))
+    _require_coherent_definition(
+        minimum_value=fields.get("minimum_value"),
+        maximum_value=fields.get("maximum_value"),
+        valid_from=fields.get("valid_from"),
+        valid_to=fields.get("valid_to"),
+    )
 
     definition = CustomFieldDefinition(
         entity_type=entity_type,
@@ -556,6 +595,25 @@ def create_definition(
     session.commit()
     session.refresh(definition)
     return definition
+
+
+def _require_coherent_definition(
+    *,
+    minimum_value: object,
+    maximum_value: object,
+    valid_from: object,
+    valid_to: object,
+) -> None:
+    """Check the definition the row will actually hold, not the request's half of it.
+
+    PostgreSQL refuses both of these, but a CHECK violation surfaces as a 500
+    naming a constraint. A person mistyping a range deserves a sentence telling
+    them which way round it goes.
+    """
+    if minimum_value is not None and maximum_value is not None and maximum_value < minimum_value:
+        raise ValidationError("The maximum cannot be lower than the minimum.")
+    if valid_from is not None and valid_to is not None and valid_to < valid_from:
+        raise ValidationError("The end of a field's validity cannot be before its start.")
 
 
 def update_definition(
@@ -608,6 +666,12 @@ def update_definition(
     resulting_visible = updates.get("visible_role_keys", definition.visible_role_keys)
     if resulting_sensitive and not resulting_visible:
         raise ValidationError("A sensitive field needs an explicit list of roles that may see it.")
+    _require_coherent_definition(
+        minimum_value=updates.get("minimum_value", definition.minimum_value),
+        maximum_value=updates.get("maximum_value", definition.maximum_value),
+        valid_from=updates.get("valid_from", definition.valid_from),
+        valid_to=updates.get("valid_to", definition.valid_to),
+    )
 
     before = _snapshot(definition)
     for field, value in updates.items():
@@ -676,6 +740,30 @@ def can_view(definition: CustomFieldDefinition, actor: ActorContext) -> bool:
     return bool(actor.role_keys.intersection(definition.visible_role_keys))
 
 
+#: Who maintains an entity's configurable values when the definition does not
+#: say. These mirror who maintains the entity itself, so an unconfigured field
+#: behaves like the record it hangs off rather than like everything-goes.
+DEFAULT_EDITOR_ROLES: dict[str, frozenset[str]] = {
+    "project": frozenset({"system_admin", "project_manager"}),
+    "land_parcel": frozenset({"system_admin", "project_manager"}),
+    "unit": frozenset({"system_admin", "project_manager", "design_engineering"}),
+}
+
+
+def editor_roles(definition: CustomFieldDefinition) -> frozenset[str]:
+    """The roles that may write this field, configured or defaulted.
+
+    ``editable_role_keys`` is published in the definition's own contract, so it
+    has to be the answer when it is set — a field configured as editable by
+    Sales Operations that Sales Operations cannot edit is a lie in the metadata.
+    Naming a role here grants that role this one field, never the unit's
+    physical facts, which keep their own gate.
+    """
+    if definition.editable_role_keys:
+        return frozenset(definition.editable_role_keys) | {"system_admin"}
+    return DEFAULT_EDITOR_ROLES.get(definition.entity_type, frozenset({"system_admin"}))
+
+
 def can_edit(definition: CustomFieldDefinition, actor: ActorContext) -> bool:
     """Whether this caller may change this field's value."""
     if actor.is_system_admin:
@@ -687,9 +775,7 @@ def can_edit(definition: CustomFieldDefinition, actor: ActorContext) -> bool:
         return "project_manager" in actor.role_keys
     if not can_view(definition, actor):
         return False
-    if not definition.editable_role_keys:
-        return True
-    return bool(actor.role_keys.intersection(definition.editable_role_keys))
+    return bool(actor.role_keys.intersection(editor_roles(definition)))
 
 
 # --------------------------------------------------------------------------- #
@@ -800,12 +886,49 @@ def definitions_for(
     entity_type: str,
     project: Project | None,
     unit_type_code: str | None = None,
+    as_of: date | None = None,
 ) -> list[CustomFieldDefinition]:
-    """Every active definition that applies to one entity."""
+    """Every definition in force today that applies to one entity."""
     statement = _applicable_scope_clause(
-        entity_type=entity_type, project=project, unit_type_code=unit_type_code
+        entity_type=entity_type,
+        project=project,
+        unit_type_code=unit_type_code,
+        as_of=as_of or business_today(),
     )
     return list(session.scalars(statement.order_by(CustomFieldDefinition.field_key)))
+
+
+def unit_definitions_of_project(
+    session: Session, *, project: Project, as_of: date | None = None
+) -> list[CustomFieldDefinition]:
+    """Every unit field of this project, whatever unit type it is scoped to.
+
+    ``definitions_for`` answers for one entity, so it needs that entity's unit
+    type and excludes every other. A CSV header is read once, before any row has
+    a type, so it needs the project-wide set — and then each row checks the
+    field against the type that row actually produces.
+    """
+    moment = as_of or business_today()
+    return list(
+        session.scalars(
+            select(CustomFieldDefinition)
+            .where(
+                CustomFieldDefinition.entity_type == "unit",
+                CustomFieldDefinition.is_active.is_(True),
+                _within_validity(moment),
+                (CustomFieldDefinition.scope_type == SCOPE_GLOBAL)
+                | (
+                    (CustomFieldDefinition.scope_type == SCOPE_COUNTRY)
+                    & (CustomFieldDefinition.country_pack_id == project.country_pack_id)
+                )
+                | (
+                    CustomFieldDefinition.scope_type.in_((SCOPE_PROJECT, SCOPE_UNIT_TYPE))
+                    & (CustomFieldDefinition.project_id == project.id)
+                ),
+            )
+            .order_by(CustomFieldDefinition.field_key)
+        )
+    )
 
 
 def _entity_context(
@@ -935,6 +1058,35 @@ def write_values(
             before=before,
             after={"value": stored, "field_key": definition.field_key},
         )
+
+
+def check_value(
+    session: Session,
+    *,
+    definition: CustomFieldDefinition,
+    value: object,
+    actor: ActorContext,
+    change_reason: str | None = None,
+) -> None:
+    """Say whether a proposed value would be accepted, writing nothing.
+
+    Exactly the rules ``write_values`` applies, run without a row, a flush or a
+    transaction, so the CSV importer can promise during validation what apply
+    will actually do. The alternative — the importer restating type coercion,
+    option lookup, bounds and regex — is two copies of the rule and one of them
+    drifting.
+    """
+    if not can_view(definition, actor):
+        raise ValidationError(f"'{definition.field_key}' is not a field of this record.")
+    if not can_edit(definition, actor):
+        raise PermissionDeniedError(f"You may not change {definition.display_label}.")
+    if definition.approval_required and not (change_reason or "").strip():
+        raise ValidationError(f"{definition.display_label} needs a reason for the change.")
+    if value is None:
+        if definition.required:
+            raise ValidationError(f"{definition.display_label} is required.")
+        return
+    _coerce(definition, value, session)
 
 
 def missing_required_custom_fields(

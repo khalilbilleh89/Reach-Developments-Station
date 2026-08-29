@@ -105,6 +105,8 @@ def test_the_same_reference_may_recur_in_another_project(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    # A second project needs its own basis finalised before it holds inventory.
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
     phase = admin_client.post(
         f"{inventory_url(other)}/phases", json={"code": "P1", "name": "One"}
     ).json()["id"]
@@ -233,6 +235,8 @@ def test_a_unit_cannot_be_moved_onto_another_projects_floor(
     other = admin_client.post(
         PROJECTS, json=project_payload(country_pack_id, currency_id, code="SECOND")
     ).json()["id"]
+    # A second project needs its own basis finalised before it holds inventory.
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
     phase = admin_client.post(
         f"{inventory_url(other)}/phases", json={"code": "P1", "name": "One"}
     ).json()["id"]

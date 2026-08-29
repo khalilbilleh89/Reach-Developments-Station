@@ -281,6 +281,8 @@ export function ProjectWorkspace({
       {tab === "inventory" ? (
         <InventoryTab
           projectId={projectId}
+          projectStatus={project.status}
+          roles={roles}
           canWriteStructure={canWriteTechnical}
           canConfigure={canWriteProject}
         />

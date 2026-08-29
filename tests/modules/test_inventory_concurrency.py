@@ -405,3 +405,282 @@ def test_narrowing_a_scope_cannot_race_a_manager_assignment(
         select(UserProjectAccess).where(UserProjectAccess.user_id == manager.id)
     ).one()
     assert membership.phase_scope == "all"
+
+
+# --------------------------------------------------------------------------- #
+# Hierarchy: retiring a parent against creating a child
+# --------------------------------------------------------------------------- #
+
+
+def _child_then_deactivate(
+    *,
+    project_id: str,
+    add_child: Callable[[Session, Project], None],
+    deactivate: Callable[[Session, Project], object],
+) -> tuple[list[object], bool]:
+    """Create a child under a held project lock, then try to retire its parent.
+
+    This is the direction that actually tests the deactivation. The child's own
+    creation path takes the project lock already, so racing *it* proves nothing
+    about the retirement — the retirement is the side that used to read "no
+    active children" from before the child existed and commit anyway.
+
+    The holder inserts the child and keeps the lock. The retirement must block,
+    re-read after the commit, and refuse.
+    """
+    factory = get_session_factory()
+    holder = factory()
+    project_row = holder.scalars(
+        select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+    ).one()
+    add_child(holder, project_row)
+    holder.flush()
+
+    def second(session: Session) -> object:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        return deactivate(session, project)
+
+    thread, outcome = _run(second)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+    return outcome, blocked
+
+
+def test_retiring_a_phase_cannot_race_a_new_building(
+    admin: User, project_id: str, phase_id: str, db: Session
+) -> None:
+    """Given a building committing, then the phase retirement must see it.
+
+    Without the lock both transactions are right about what they read: the
+    retirement sees no buildings, the creation sees an active phase. They commit
+    into a register saying the phase is closed and its building is open.
+    """
+    from app.modules.inventory.models import Building, Phase
+
+    def add_child(session: Session, project: Project) -> None:
+        session.add(
+            Building(
+                project_id=project.id,
+                phase_id=uuid.UUID(phase_id),
+                code="B9",
+                name="Late Tower",
+                created_by_user_id=admin.id,
+            )
+        )
+
+    def deactivate(session: Session, project: Project) -> object:
+        phase = session.scalars(select(Phase).where(Phase.id == uuid.UUID(phase_id))).one()
+        return service.update_phase(
+            session,
+            phase=phase,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            is_active=False,
+        )
+
+    outcome, blocked = _child_then_deactivate(
+        project_id=project_id, add_child=add_child, deactivate=deactivate
+    )
+
+    assert blocked, "the phase retirement did not serialise on the project row"
+    assert isinstance(outcome[0], ConflictError), outcome[0]
+    db.expire_all()
+    phase = db.scalars(select(Phase).where(Phase.id == uuid.UUID(phase_id))).one()
+    building = db.scalars(select(Building).where(Building.code == "B9")).one()
+    assert not (phase.is_active is False and building.is_active is True)
+    assert phase.is_active is True
+
+
+def test_retiring_a_building_cannot_race_a_new_floor(
+    admin: User, project_id: str, building_id: str, db: Session
+) -> None:
+    from app.modules.inventory.models import Building, Floor
+
+    def add_child(session: Session, project: Project) -> None:
+        session.add(
+            Floor(
+                project_id=project.id,
+                building_id=uuid.UUID(building_id),
+                code="09",
+                label="Late floor",
+                created_by_user_id=admin.id,
+            )
+        )
+
+    def deactivate(session: Session, project: Project) -> object:
+        building = session.scalars(
+            select(Building).where(Building.id == uuid.UUID(building_id))
+        ).one()
+        return service.update_building(
+            session,
+            building=building,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            is_active=False,
+        )
+
+    outcome, blocked = _child_then_deactivate(
+        project_id=project_id, add_child=add_child, deactivate=deactivate
+    )
+
+    assert blocked, "the building retirement did not serialise on the project row"
+    assert isinstance(outcome[0], ConflictError), outcome[0]
+    db.expire_all()
+    building = db.scalars(select(Building).where(Building.id == uuid.UUID(building_id))).one()
+    floor = db.scalars(select(Floor).where(Floor.code == "09")).one()
+    assert not (building.is_active is False and floor.is_active is True)
+    assert building.is_active is True
+
+
+def test_retiring_a_floor_cannot_race_a_new_unit(
+    admin: User, project_id: str, floor_id: str, db: Session
+) -> None:
+    from app.modules.inventory.models import Floor
+
+    def add_child(session: Session, project: Project) -> None:
+        session.add(
+            Unit(
+                project_id=project.id,
+                floor_id=uuid.UUID(floor_id),
+                unit_number="909",
+                unit_reference="B1-909",
+                asset_class="apartment",
+                created_by_user_id=admin.id,
+            )
+        )
+
+    def deactivate(session: Session, project: Project) -> object:
+        floor = session.scalars(select(Floor).where(Floor.id == uuid.UUID(floor_id))).one()
+        return service.update_floor(
+            session,
+            floor=floor,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            is_active=False,
+        )
+
+    outcome, blocked = _child_then_deactivate(
+        project_id=project_id, add_child=add_child, deactivate=deactivate
+    )
+
+    assert blocked, "the floor retirement did not serialise on the project row"
+    assert isinstance(outcome[0], ConflictError), outcome[0]
+    db.expire_all()
+    floor = db.scalars(select(Floor).where(Floor.id == uuid.UUID(floor_id))).one()
+    unit = db.scalars(select(Unit).where(Unit.unit_reference == "B1-909")).one()
+    assert not (floor.is_active is False and unit.is_active is True)
+    assert floor.is_active is True
+
+
+def test_creating_a_building_re_reads_the_phase_it_waited_for(
+    admin: User, project_id: str, phase_id: str, db: Session
+) -> None:
+    """The other direction, and the reason the lock is not enough on its own.
+
+    The route loads the phase, then the service waits for the project lock. By
+    the time the wait ends the phase may have been retired by whoever held it —
+    but the object in memory still says active. Deciding from that copy creates
+    a building under a closed phase, with the lock dutifully held throughout.
+    """
+    from app.modules.inventory.models import Building, Phase
+
+    factory = get_session_factory()
+    holder = factory()
+    holder.scalars(
+        select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+    ).one()
+
+    def create_late(session: Session) -> object:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        # Loaded before the lock is available, exactly as the route does.
+        phase = session.scalars(select(Phase).where(Phase.id == uuid.UUID(phase_id))).one()
+        assert phase.is_active is True
+        return service.create_building(
+            session,
+            project=project,
+            phase=phase,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            code="B9",
+            name="Late Tower",
+        )
+
+    thread, outcome = _run(create_late)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        retired = holder.scalars(select(Phase).where(Phase.id == uuid.UUID(phase_id))).one()
+        retired.is_active = False
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+
+    assert blocked, "building creation did not serialise on the project row"
+    assert isinstance(outcome[0], ConflictError), outcome[0]
+    db.expire_all()
+    assert db.scalars(select(Building).where(Building.code == "B9")).all() == []
+
+
+def test_assigning_a_manager_cannot_race_a_scope_narrowing(
+    admin: User, manager: User, project_id: str, db: Session
+) -> None:
+    """The mirror of the existing race, run the other way round.
+
+    The narrowing commits first; the assignment must then widen the membership
+    it finds rather than leaving a formal project manager who sees one phase.
+    """
+    from app.modules.projects import service as projects_service
+
+    admin_access = db.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+    assert admin_access is not None
+
+    factory = get_session_factory()
+    holder = factory()
+    project_row = holder.scalars(
+        select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+    ).one()
+
+    def assign(session: Session) -> str:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        projects_service.update_project(
+            session,
+            project=project,
+            actor_user_id=admin.id,
+            actor_is_system_admin=True,
+            correlation_id=uuid.uuid4(),
+            project_manager_user_id=manager.id,
+        )
+        return "assigned"
+
+    # The manager is a member first, narrowed to selected phases.
+    holder.add(
+        UserProjectAccess(
+            project_id=project_row.id,
+            user_id=manager.id,
+            is_active=True,
+            phase_scope="selected",
+            granted_by_user_id=admin.id,
+        )
+    )
+    holder.flush()
+
+    thread, outcome = _run(assign)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+
+    assert blocked, "the assignment did not serialise on the project row"
+    assert outcome[0] == "assigned", outcome[0]
+
+    db.expire_all()
+    membership = db.scalars(
+        select(UserProjectAccess).where(UserProjectAccess.user_id == manager.id)
+    ).one()
+    assert membership.phase_scope == "all"
