@@ -27,8 +27,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_engine, get_session_factory
 from app.core.errors import ConflictError
+from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import User
-from app.modules.inventory import service
+from app.modules.inventory import import_service, service
 from app.modules.inventory.models import (
     Unit,
     UnitAreaSchedule,
@@ -255,6 +256,125 @@ def test_two_commercial_transitions_cannot_fork_a_units_history(
 
     db.expire_all()
     assert db.scalars(select(Unit)).one().commercial_status == "held"
+
+
+# --------------------------------------------------------------------------- #
+# A bulk import against a commercial transition
+# --------------------------------------------------------------------------- #
+
+
+def _actor(admin: User) -> ActorContext:
+    return ActorContext(
+        user_id=admin.id,
+        email=admin.email,
+        display_name=admin.display_name,
+        role_keys=admin.role_keys,
+        correlation_id=uuid.uuid4(),
+        must_change_password=False,
+    )
+
+
+def test_an_import_cannot_move_a_unit_a_hold_has_already_claimed(
+    admin: User,
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    floor_id: str,
+    building_id: str,
+    db: Session,
+) -> None:
+    """Given a hold committed while the import waited, then the move is refused.
+
+    These two writers do not exclude each other by accident: the importer takes
+    the project lock, a commercial transition takes only the unit's. Without the
+    unit lock in Apply the importer judges the move against the status it read
+    during validation, and a unit that is already held changes phase — out of
+    one person's access and into another's, after somebody held it.
+    """
+    second = admin_client.post(
+        f"{inventory_url(project_id)}/floors",
+        json={"building_id": building_id, "code": "02", "label": "Second floor"},
+    )
+    assert second.status_code == 201, second.text
+    csv = f"action,unit_id,phase_code,building_code,floor_code\nupdate,{unit_id},PHASE-1,B1,02\n"
+
+    factory = get_session_factory()
+    holder = factory()
+    holder.execute(select(Unit).where(Unit.id == uuid.UUID(unit_id)).with_for_update())
+
+    def importer(session: Session) -> object:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        return import_service.apply(
+            session,
+            project=project,
+            actor=_actor(admin),
+            body=csv.encode(),
+            mode="upsert",
+            create_missing_hierarchy=False,
+        )
+
+    thread, outcome = _run(importer)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        # The hold commits while the import is still waiting for the unit row.
+        locked = holder.scalars(select(Unit).where(Unit.id == uuid.UUID(unit_id))).one()
+        locked.commercial_status = "held"
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+
+    assert blocked, "the import decided the move without taking the unit row"
+    assert not thread.is_alive()
+    # Not a report saying it applied: the reloaded unit is held, so the move is
+    # refused and the whole batch is rolled back.
+    assert isinstance(outcome[0], BaseException), outcome[0]
+    assert "unreleased" in str(outcome[0])
+
+    db.expire_all()
+    unit = db.scalars(select(Unit)).one()
+    assert unit.commercial_status == "held"
+    assert str(unit.floor_id) == floor_id
+
+
+def test_an_import_that_wins_the_race_moves_the_unit_before_the_hold(
+    admin: User,
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    building_id: str,
+    db: Session,
+) -> None:
+    """The other serialisation is legitimate: the move happened before the hold.
+
+    Nothing here is refused. It is recorded so the rule stays "no move once
+    held", not "no move near a hold".
+    """
+    second = admin_client.post(
+        f"{inventory_url(project_id)}/floors",
+        json={"building_id": building_id, "code": "02", "label": "Second floor"},
+    ).json()["id"]
+    csv = f"action,unit_id,phase_code,building_code,floor_code\nupdate,{unit_id},PHASE-1,B1,02\n"
+
+    report = admin_client.post(
+        f"{inventory_url(project_id)}/import/apply?mode=upsert&create_missing_hierarchy=false",
+        content=csv.encode(),
+        headers={"Content-Type": "text/csv"},
+    )
+    held = admin_client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
+        json={
+            "to_status": "held",
+            "effective_date": "2026-02-01",
+            "reason": "Broker hold pending decision",
+        },
+    )
+
+    assert report.status_code == 200 and report.json()["applied"] is True, report.text
+    assert held.status_code == 201, held.text
+    db.expire_all()
+    unit = db.scalars(select(Unit)).one()
+    assert (str(unit.floor_id), unit.commercial_status) == (second, "held")
 
 
 # --------------------------------------------------------------------------- #

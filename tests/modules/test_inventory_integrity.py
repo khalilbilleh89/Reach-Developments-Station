@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
-from app.modules.inventory.models import AreaType, Unit, UnitStatusEvent
+from app.modules.inventory.models import AreaType, Unit, UnitAreaValue, UnitStatusEvent
 from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, inventory_url, unit_payload
 
@@ -445,6 +445,158 @@ def test_the_weighted_total_says_what_unit_it_is_in(
 
     assert body["weighted_saleable_area"] == "100.0000"
     assert body["weighted_saleable_area_unit"] == "sqm"
+
+
+def _measure(
+    client: TestClient, project_id: str, unit_id: str, area_type_id: str, raw: str = "100.0000"
+) -> None:
+    """Record one measured revision against an area type and approve it."""
+    schedule = client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/area-schedules",
+        json={
+            "revision_code": "R1",
+            "reconciled": True,
+            "values": [{"area_type_id": area_type_id, "raw_area": raw}],
+        },
+    )
+    assert schedule.status_code == 201, schedule.text
+    approved = client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/area-schedules/{schedule.json()['id']}/approve"
+    )
+    assert approved.status_code == 200, approved.text
+
+
+def test_a_retired_area_type_still_measured_against_keeps_naming_the_weighted_unit(
+    admin_client: TestClient, project_id: str, unit_id: str, inventory_reference_data: None
+) -> None:
+    """Given a retired sqm contributor, then the weighted total is still sqm.
+
+    Retirement stops a type being offered; it does not delete the measurements
+    recorded against it, and an approved schedule keeps multiplying them by the
+    factor they were recorded under. Reading the label off active types alone
+    left the figure sqm and the label empty.
+    """
+    internal = _area_type(admin_client, project_id)
+    _measure(admin_client, project_id, unit_id, internal["id"])
+
+    retired = admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}", json={"is_active": False}
+    )
+
+    assert retired.status_code == 200, retired.text
+    body = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}").json()
+    assert body["weighted_saleable_area"] == "100.0000"
+    assert body["weighted_saleable_area_unit"] == "sqm"
+
+
+def test_retiring_a_measured_area_type_does_not_open_the_door_to_another_unit(
+    admin_client: TestClient, project_id: str, unit_id: str, inventory_reference_data: None
+) -> None:
+    """Given the sqm contributor retired, then an active sqft contributor is still refused.
+
+    This is the way the label could be made to lie: retire the type that holds
+    the project at sqm, add a sqft one, and the weighted figure becomes a sum of
+    two units with one of their names printed under it.
+    """
+    internal = _area_type(admin_client, project_id)
+    _measure(admin_client, project_id, unit_id, internal["id"])
+    admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}", json={"is_active": False}
+    )
+
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/area-types",
+        json={
+            "code": "TERRACE",
+            "label": "Terrace",
+            "area_role": "outdoor",
+            "unit_of_measure": "sqft",
+            "weight_factor": "1.000000",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "sqm" in response.json()["detail"]
+    assert "sqft" in response.json()["detail"]
+
+
+def test_a_contributor_that_is_taken_to_zero_stops_holding_the_weighted_unit(
+    admin_client: TestClient, project_id: str, unit_id: str, db: Session
+) -> None:
+    """Given the old factor set to zero, then a new unit of measure is allowed.
+
+    Zero is the explicit, audited way to say a measurement no longer counts
+    toward the weighted total. Nothing is converted and nothing is rewritten:
+    the 100.0000 sqm stays exactly where it was recorded, and now contributes
+    nothing to a total measured in sqft.
+    """
+    internal = _area_type(admin_client, project_id)
+    _measure(admin_client, project_id, unit_id, internal["id"])
+    admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}", json={"is_active": False}
+    )
+
+    zeroed = admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}",
+        json={"weight_factor": "0.000000"},
+    )
+    accepted = admin_client.post(
+        f"{inventory_url(project_id)}/area-types",
+        json={
+            "code": "TERRACE",
+            "label": "Terrace",
+            "area_role": "outdoor",
+            "unit_of_measure": "sqft",
+            "weight_factor": "1.000000",
+        },
+    )
+
+    assert zeroed.status_code == 200, zeroed.text
+    assert accepted.status_code == 201, accepted.text
+    db.expire_all()
+    assert db.scalars(select(UnitAreaValue)).one().raw_area == Decimal("100.0000")
+    body = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}").json()
+    assert body["weighted_saleable_area"] == "0.0000"
+    assert body["weighted_saleable_area_unit"] == "sqft"
+
+
+def test_a_zeroed_contributor_cannot_be_switched_back_on_beside_another_unit(
+    admin_client: TestClient, project_id: str, unit_id: str, inventory_reference_data: None
+) -> None:
+    """Given a sqft contributor in its place, then restoring the old factor is refused.
+
+    Taking the factor to zero is what let the project change the unit it weighs
+    in. Reversing it quietly would put the old sqm measurements back into a
+    total that is now sqft — the same mixed sum, reached the other way round.
+    """
+    internal = _area_type(admin_client, project_id)
+    _measure(admin_client, project_id, unit_id, internal["id"])
+    admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}", json={"is_active": False}
+    )
+    admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}",
+        json={"weight_factor": "0.000000"},
+    )
+    admin_client.post(
+        f"{inventory_url(project_id)}/area-types",
+        json={
+            "code": "TERRACE",
+            "label": "Terrace",
+            "area_role": "outdoor",
+            "unit_of_measure": "sqft",
+            "weight_factor": "1.000000",
+        },
+    )
+
+    response = admin_client.patch(
+        f"{inventory_url(project_id)}/area-types/{internal['id']}",
+        json={"weight_factor": "1.000000"},
+    )
+
+    assert response.status_code == 422
+    assert "sqft" in response.json()["detail"]
+    assert "sqm" in response.json()["detail"]
 
 
 # --------------------------------------------------------------------------- #

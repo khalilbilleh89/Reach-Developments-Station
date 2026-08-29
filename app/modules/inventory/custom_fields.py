@@ -880,6 +880,45 @@ def _canonical(definition: CustomFieldDefinition, stored: object) -> str | None:
     return str(stored)[:200]
 
 
+def canonical_unique_value(
+    session: Session, *, definition: CustomFieldDefinition, value: object
+) -> str | None:
+    """The text a unique field would be stored and compared under, or ``None``.
+
+    Exposed so a caller that has to judge a value before writing it — the CSV
+    importer, deciding what to say in a validation report — compares exactly
+    what the database compares, rather than a second normalisation that starts
+    the same and drifts.
+    """
+    if not definition.is_unique or value is None:
+        return None
+    return _canonical(definition, _coerce(definition, value, session))
+
+
+def unique_value_taken(
+    session: Session,
+    *,
+    definition: CustomFieldDefinition,
+    canonical: str,
+    entity_type: str,
+    entity_id: uuid.UUID | None,
+) -> bool:
+    """Whether another record already holds this canonical value for this field.
+
+    Advisory, and deliberately so: the UNIQUE index stays the authority, because
+    two callers can both read "free" before either writes. This exists so that
+    an operator loading two hundred serial numbers is told about the clash while
+    the file is still open, instead of by a conflict halfway through the load.
+    """
+    model, column = _VALUE_MODELS[entity_type]
+    statement = select(model.id).where(
+        model.definition_id == definition.id, model.unique_value == canonical
+    )
+    if entity_id is not None:
+        statement = statement.where(getattr(model, column) != entity_id)
+    return session.scalars(statement).first() is not None
+
+
 def definitions_for(
     session: Session,
     *,

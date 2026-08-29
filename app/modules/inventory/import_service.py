@@ -38,7 +38,9 @@ from app.modules.inventory import service
 from app.modules.inventory.custom_fields import (
     can_edit,
     can_view,
+    canonical_unique_value,
     check_value,
+    unique_value_taken,
     unit_definitions_of_project,
     write_values,
 )
@@ -238,6 +240,22 @@ class HierarchyKey:
 
 
 @dataclass(slots=True)
+class _Destination:
+    """Where a row leaves its unit standing, and under what number.
+
+    A row has to be judged by the position it produces, not the position it
+    mentions. An update that leaves ``unit_number`` blank keeps the number it
+    already has, and one that names no hierarchy stays on the floor it is
+    already on — and either can still collide with a unit standing there.
+    """
+
+    floor_id: uuid.UUID | None
+    codes: tuple[str, str, str] | None
+    unit_number: str | None
+    moved: bool
+
+
+@dataclass(slots=True)
 class Row:
     index: int
     action: str
@@ -402,6 +420,8 @@ def parse(
     existing = _Existing(session, project=project)
     references_seen: dict[str, int] = {}
     numbers_seen: dict[tuple[str, str, str, str], int] = {}
+    revisions_seen: dict[tuple[uuid.UUID, str], int] = {}
+    uniques_seen: dict[tuple[uuid.UUID, str], int] = {}
     declared: dict[tuple[str, ...], tuple[str, int]] = {}
 
     for index, raw in enumerate(reader, start=2):
@@ -425,6 +445,8 @@ def parse(
             definitions=definitions,
             references_seen=references_seen,
             numbers_seen=numbers_seen,
+            revisions_seen=revisions_seen,
+            uniques_seen=uniques_seen,
             declared=declared,
         )
         if row is None:
@@ -495,6 +517,18 @@ class _Existing:
             (floor.building_id, floor.code): floor
             for floor in session.scalars(select(Floor).where(Floor.project_id == project.id))
         }
+        # A unit that names no hierarchy still has one, and a row that moves
+        # nothing still has to be checked against where it already stands. The
+        # codes are kept as three separate parts for the same reason the batch
+        # key is a tuple: "B1" + "01" and "B" + "101" are not the same floor.
+        phase_by_id = {phase.id: phase for phase in self.phases.values()}
+        building_by_id = {building.id: building for building in self.buildings.values()}
+        self.codes: dict[uuid.UUID, tuple[str, str, str]] = {}
+        for (building_id, code), floor in self.floors.items():
+            building = building_by_id.get(building_id)
+            phase = phase_by_id.get(building.phase_id) if building is not None else None
+            if building is not None and phase is not None:
+                self.codes[floor.id] = (phase.code, building.code, code)
 
     def floor_for(self, key: HierarchyKey) -> Floor | None:
         phase = self.phases.get(key.phase_code)
@@ -526,11 +560,26 @@ def _read_row(
     definitions: dict[str, CustomFieldDefinition],
     references_seen: dict[str, int],
     numbers_seen: dict[tuple[str, str, str, str], int],
+    revisions_seen: dict[tuple[uuid.UUID, str], int],
+    uniques_seen: dict[tuple[uuid.UUID, str], int],
     declared: dict[tuple[str, ...], tuple[str, int]],
 ) -> Row | None:
     action = (_cell(raw, "action") or "").lower()
     unit_id_text = _cell(raw, "unit_id")
     unit: Unit | None = None
+
+    if unit_id_text and action == "create":
+        # The row says create and hands over an identity, and the apply path
+        # decides what to do from the identifier alone. Left alone, a file in
+        # create mode could edit a unit it never claimed to be touching, which
+        # is the one thing "create" is supposed to rule out.
+        batch.error(
+            index,
+            "unit_id",
+            "A create row must not contain unit_id. Existing units are updated "
+            "only with action=update in upsert mode.",
+        )
+        return None
 
     if unit_id_text:
         try:
@@ -611,7 +660,13 @@ def _read_row(
         unit=unit,
         references_seen=references_seen,
     )
-    _check_number(batch, index=index, fields=fields, hierarchy=hierarchy, numbers_seen=numbers_seen)
+    destination = _destination(
+        unit=unit, hierarchy=hierarchy, floor=floor, fields=fields, existing=existing
+    )
+    _check_move_allowed(batch, index=index, unit=unit, destination=destination)
+    _check_number(
+        session, batch, index=index, unit=unit, destination=destination, numbers_seen=numbers_seen
+    )
 
     areas = _read_areas(batch, index=index, raw=raw, area_columns=area_columns)
     customs = {
@@ -626,6 +681,8 @@ def _read_row(
         actor=actor,
         customs=customs,
         definitions=definitions,
+        unit=unit,
+        uniques_seen=uniques_seen,
         resulting_unit_type=(
             fields.get("unit_type_code")
             if "unit_type_code" in fields
@@ -634,6 +691,15 @@ def _read_row(
     )
     if areas and not _cell(raw, "area_revision"):
         batch.error(index, "area_revision", "Imported areas need a revision code.")
+    _check_area_revision(
+        session,
+        batch,
+        index=index,
+        unit=unit,
+        revision=_cell(raw, "area_revision"),
+        areas=areas,
+        revisions_seen=revisions_seen,
+    )
 
     measured = _cell(raw, "area_measured_date")
     if measured and measured != CLEAR_TOKEN:
@@ -673,6 +739,8 @@ def _check_customs(
     actor: ActorContext,
     customs: dict[str, Any],
     definitions: dict[str, CustomFieldDefinition],
+    unit: Unit | None,
+    uniques_seen: dict[tuple[uuid.UUID, str], int],
     resulting_unit_type: str | None,
 ) -> None:
     """Check every custom value against the field it will actually be written to.
@@ -709,6 +777,62 @@ def _check_customs(
             )
         except (ValidationError, PermissionDeniedError) as exc:
             batch.error(index, f"custom:{key}", str(exc))
+            continue
+        _check_unique_custom(
+            session,
+            batch,
+            index=index,
+            key=key,
+            definition=definition,
+            value=value,
+            unit=unit,
+            uniques_seen=uniques_seen,
+        )
+
+
+def _check_unique_custom(
+    session: Session,
+    batch: Batch,
+    *,
+    index: int,
+    key: str,
+    definition: CustomFieldDefinition,
+    value: object,
+    unit: Unit | None,
+    uniques_seen: dict[tuple[uuid.UUID, str], int],
+) -> None:
+    """A unique custom value is checked against the file and the register both.
+
+    ``check_value`` proves a value is well formed; until now only the write
+    proved it was free, so a serial number already held by another unit passed
+    validation and failed the load. The database index stays exactly where it
+    is — it is the only thing that can decide between two simultaneous writers —
+    but nothing about it tells an operator which of 247 rows to fix.
+    """
+    canonical = canonical_unique_value(session, definition=definition, value=value)
+    if canonical is None:
+        return
+    seen = uniques_seen.get((definition.id, canonical))
+    if seen is not None:
+        batch.error(
+            index,
+            f"custom:{key}",
+            f"{definition.display_label} must be unique, and row {seen} already claims this value.",
+        )
+        return
+    uniques_seen[(definition.id, canonical)] = index
+    if unique_value_taken(
+        session,
+        definition=definition,
+        canonical=canonical,
+        entity_type="unit",
+        entity_id=unit.id if unit is not None else None,
+    ):
+        batch.error(
+            index,
+            f"custom:{key}",
+            f"{definition.display_label} must be unique, and another unit already uses this value.",
+        )
 
 
 def _check_release_controls(
@@ -1006,33 +1130,126 @@ def _check_reference(
         batch.error(index, "unit_reference", f"Unit reference '{normalized}' already exists.")
 
 
+def _destination(
+    *,
+    unit: Unit | None,
+    hierarchy: HierarchyKey | None,
+    floor: Floor | None,
+    fields: dict[str, Any],
+    existing: _Existing,
+) -> _Destination:
+    """Resolve where this row leaves its unit, and under what number."""
+    number = fields.get("unit_number") or (unit.unit_number if unit is not None else None)
+    number = str(number) if number else None
+    if hierarchy is not None:
+        return _Destination(
+            floor_id=floor.id if floor is not None else None,
+            codes=(hierarchy.phase_code, hierarchy.building_code, hierarchy.floor_code),
+            unit_number=number,
+            # A floor this file has yet to create is still somewhere else.
+            moved=unit is not None and (floor is None or floor.id != unit.floor_id),
+        )
+    if unit is None:
+        return _Destination(floor_id=None, codes=None, unit_number=None, moved=False)
+    return _Destination(
+        floor_id=unit.floor_id,
+        codes=existing.codes.get(unit.floor_id),
+        unit_number=number,
+        moved=False,
+    )
+
+
+def _check_move_allowed(
+    batch: Batch, *, index: int, unit: Unit | None, destination: _Destination
+) -> None:
+    """A unit changes hierarchy only while it is unreleased — said during validation.
+
+    Apply has always refused this, and the API refuses it too. Validation did
+    not, so a file could be reported clean and then abandon a 247-row load on
+    row 180. The product's promise is validate, fix, apply; a clean report that
+    hides a refusal Apply already knows about is the promise broken.
+    """
+    if unit is None or not destination.moved:
+        return
+    if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
+        batch.error(index, "floor_code", "A unit can only be moved while it is unreleased.")
+
+
 def _check_number(
+    session: Session,
     batch: Batch,
     *,
     index: int,
-    fields: dict[str, Any],
-    hierarchy: HierarchyKey | None,
+    unit: Unit | None,
+    destination: _Destination,
     numbers_seen: dict[tuple[str, str, str, str], int],
 ) -> None:
-    number = fields.get("unit_number")
-    if not number or hierarchy is None:
+    """No two units end up on one floor under one number — in the file or in the register.
+
+    The resulting position is what matters. An update that supplies no number
+    keeps the one it has, and one that supplies no hierarchy stays where it is;
+    both were previously invisible to this check, so moving a unit onto a floor
+    where its own number was already taken validated clean and then hit
+    ``uq_units_floor_id_unit_number`` in the middle of the batch.
+    """
+    number = destination.unit_number
+    if not number or destination.codes is None:
         return
     # Four separate parts, never concatenated: building "B1" + floor "01" and
     # building "B" + floor "101" produce the same string, and one collision here
     # rejects a legitimate row or accepts a duplicate.
-    key = (
-        hierarchy.phase_code,
-        hierarchy.building_code,
-        hierarchy.floor_code,
-        str(number),
-    )
+    key = (*destination.codes, number)
     first = numbers_seen.get(key)
     if first is not None:
         batch.error(
             index, "unit_number", f"Duplicate unit number '{number}' on this floor (row {first})."
         )
-    else:
-        numbers_seen[key] = index
+        return
+    numbers_seen[key] = index
+    if destination.floor_id is None:
+        return
+    clash = session.scalars(
+        select(Unit).where(Unit.floor_id == destination.floor_id, Unit.unit_number == number)
+    ).first()
+    if clash is not None and (unit is None or clash.id != unit.id):
+        batch.error(
+            index, "unit_number", f"Unit number '{number}' already exists on the destination floor."
+        )
+
+
+def _check_area_revision(
+    session: Session,
+    batch: Batch,
+    *,
+    index: int,
+    unit: Unit | None,
+    revision: str,
+    areas: dict[str, Decimal],
+    revisions_seen: dict[tuple[uuid.UUID, str], int],
+) -> None:
+    """A revision code is claimed once per unit, and validation says so first.
+
+    Apply refuses a repeated revision and the database refuses it again. Only
+    the report was silent, and the report is the one place an operator could
+    still have fixed the file.
+    """
+    if not areas or not revision or unit is None:
+        return
+    code = revision.upper()
+    first = revisions_seen.get((unit.id, code))
+    if first is not None:
+        batch.error(
+            index, "area_revision", f"Row {first} already records revision '{code}' for this unit."
+        )
+        return
+    revisions_seen[(unit.id, code)] = index
+    clash = session.scalars(
+        select(UnitAreaSchedule).where(
+            UnitAreaSchedule.unit_id == unit.id, UnitAreaSchedule.revision_code == code
+        )
+    ).first()
+    if clash is not None:
+        batch.error(index, "area_revision", f"Revision '{code}' already exists for this unit.")
 
 
 def _read_areas(
@@ -1308,13 +1525,15 @@ def _apply_row(
             after={"unit_reference": unit.unit_reference, "source": "import"},
         )
     else:
-        unit = session.get(Unit, row.unit_id)
+        # Take the unit row before deciding anything about it. Validation read
+        # this unit unlocked, possibly in an earlier request, and a commercial
+        # transition takes only the unit lock — so between the two reads a unit
+        # this batch believes is unreleased may already be held, and moving it
+        # then would carry it into another phase after the hold.
+        unit = service.lock_unit(session, project_id=project.id, unit_id=row.unit_id)
         before = {"unit_reference": unit.unit_reference, "floor_id": str(unit.floor_id)}
+        _require_appliable(session, row=row, unit=unit, floor=floor, fields=fields)
         if floor is not None and floor.id != unit.floor_id:
-            if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
-                raise ValidationError(
-                    f"Row {row.index}: a unit can only be moved while it is unreleased."
-                )
             unit.floor_id = floor.id
         for name, value in fields.items():
             if name == "unit_reference" and value is not None:
@@ -1343,6 +1562,42 @@ def _apply_row(
         )
     if row.areas:
         _apply_areas(session, project=project, actor=actor, unit=unit, row=row, approve=approve)
+
+
+def _require_appliable(
+    session: Session,
+    *,
+    row: Row,
+    unit: Unit,
+    floor: Floor | None,
+    fields: dict[str, Any],
+) -> None:
+    """Judge the state-dependent rules again, on the locked row.
+
+    Validation is advisory by design: it ran against a snapshot, in an earlier
+    request, and the database is allowed to have moved since. Everything here
+    depends on the unit's own current state, so everything here is decided
+    again — the hierarchy freeze, and the floor and number the row produces.
+
+    The unit type is re-read too, though not here: the custom values are written
+    against this same locked unit after its columns are set, so the definitions
+    that apply are resolved from the type the row actually produces.
+    """
+    moving = floor is not None and floor.id != unit.floor_id
+    if moving and unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
+        raise ValidationError(f"Row {row.index}: a unit can only be moved while it is unreleased.")
+    number = str(fields.get("unit_number") or unit.unit_number)
+    clash = session.scalars(
+        select(Unit).where(
+            Unit.floor_id == (floor.id if floor is not None else unit.floor_id),
+            Unit.unit_number == number,
+            Unit.id != unit.id,
+        )
+    ).first()
+    if clash is not None:
+        raise ValidationError(
+            f"Row {row.index}: unit number '{number}' already exists on the destination floor."
+        )
 
 
 def _apply_areas(

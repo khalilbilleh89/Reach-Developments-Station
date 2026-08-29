@@ -25,7 +25,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1113,6 +1113,34 @@ def _area_type_in_use(session: Session, *, area_type_id: uuid.UUID) -> bool:
     )
 
 
+def weighted_contributors(*, project_id: uuid.UUID) -> Select[tuple[AreaType]]:
+    """Every area type whose unit still shapes this project's weighted total.
+
+    "Active" is not the right population, and using it was a way for the label
+    to start lying. ``area_lines`` multiplies a stored measurement by its area
+    type's factor whether or not that type is still active, so a retired sqm
+    type with measurements against it keeps contributing sqm to every approved
+    schedule that references it. Leaving it out of the coherence check let a new
+    sqft type in beside it, and then the weighted figure was a sum of two units
+    with one of their names on it.
+
+    So a contributor is any type with a non-zero factor that is either active or
+    still referenced by a recorded measurement. Retiring a type does not remove
+    its contribution; setting its factor to zero does, and that is an explicit,
+    audited act.
+    """
+    used = select(UnitAreaValue.area_type_id).where(UnitAreaValue.area_type_id == AreaType.id)
+    return (
+        select(AreaType)
+        .where(
+            AreaType.project_id == project_id,
+            AreaType.weight_factor != 0,
+            AreaType.is_active.is_(True) | used.exists(),
+        )
+        .order_by(AreaType.sort_order, AreaType.code)
+    )
+
+
 def _require_coherent_weighted_unit(
     session: Session,
     *,
@@ -1121,6 +1149,7 @@ def _require_coherent_weighted_unit(
     unit_of_measure: str,
     weight_factor: Decimal,
     is_active: bool,
+    in_use: bool = False,
 ) -> None:
     """Every area that contributes to the weighted total must measure the same way.
 
@@ -1131,15 +1160,12 @@ def _require_coherent_weighted_unit(
     the point somebody configures it.
 
     An area type with a zero factor contributes nothing to the sum, so it may
-    measure in whatever the drawings use.
+    measure in whatever the drawings use. One that has been retired but still has
+    measurements against it does contribute, so it is checked too.
     """
-    if not is_active or weight_factor == 0:
+    if weight_factor == 0 or not (is_active or in_use):
         return
-    statement = select(AreaType).where(
-        AreaType.project_id == project_id,
-        AreaType.is_active.is_(True),
-        AreaType.weight_factor != 0,
-    )
+    statement = weighted_contributors(project_id=project_id)
     if area_type_id is not None:
         statement = statement.where(AreaType.id != area_type_id)
     for other in session.scalars(statement):
@@ -1155,18 +1181,11 @@ def _require_coherent_weighted_unit(
 def weighted_area_unit(session: Session, *, project_id: uuid.UUID) -> str | None:
     """The unit the project's weighted saleable area is expressed in.
 
-    ``None`` when nothing contributes yet. Returned alongside the figure itself
-    so a weighted area is never a bare number on a screen.
+    ``None`` when nothing contributes yet. Read from exactly the population the
+    calculation uses, so the label and the number can never describe different
+    sets of area types.
     """
-    contributor = session.scalars(
-        select(AreaType)
-        .where(
-            AreaType.project_id == project_id,
-            AreaType.is_active.is_(True),
-            AreaType.weight_factor != 0,
-        )
-        .order_by(AreaType.sort_order, AreaType.code)
-    ).first()
+    contributor = session.scalars(weighted_contributors(project_id=project_id)).first()
     return contributor.unit_of_measure if contributor is not None else None
 
 
@@ -1237,12 +1256,13 @@ def update_area_type(
     lock_project(session, project.id)
     _reload(session, area_type)
 
+    in_use = _area_type_in_use(session, area_type_id=area_type.id)
     semantic = [
         field
         for field in _AREA_TYPE_SEMANTIC_FIELDS
         if field in updates and updates[field] != getattr(area_type, field)
     ]
-    if semantic and _area_type_in_use(session, area_type_id=area_type.id):
+    if semantic and in_use:
         raise ConflictError(
             "Measurements have already been recorded against this area type, so its "
             "role and unit of measure are fixed. Changing them would silently give "
@@ -1256,6 +1276,7 @@ def update_area_type(
         unit_of_measure=str(updates.get("unit_of_measure", area_type.unit_of_measure)),
         weight_factor=updates.get("weight_factor", area_type.weight_factor),  # type: ignore[arg-type]
         is_active=bool(updates.get("is_active", area_type.is_active)),
+        in_use=in_use,
     )
 
     before = _snapshot(area_type, _AREA_TYPE_FIELDS)
