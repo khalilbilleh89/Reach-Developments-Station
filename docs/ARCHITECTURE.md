@@ -463,6 +463,39 @@ takes `FOR UPDATE` before deciding. Partial unique indexes on `status IN
 ('active','extended')` and `status IN ('signature_pending','active',
 'termination_pending')` are the backstop, not the mechanism.
 
+**A price lock is a promise, and the two questions it raises are different.**
+Before a reservation commits anything, the quote it holds must still be the
+price the unit is offered at: a draft cut from a superseded version is not
+something to hold a flat with. Once it has committed, that question stops
+mattering and another takes its place. Finance putting a new list price live the
+following Wednesday is commercial repricing — it decides what the unit is
+offered at tomorrow, and says nothing about what this buyer already agreed.
+Refusing the contract because the frozen version is no longer today's active
+price would make the lock mean nothing.
+
+What still blocks the contract is the unit ceasing to be the unit. Pricing owns
+the comparison of a version's frozen basis against current inventory, and
+exposes it as one read-only public contract; a locked price is not permission to
+sell a materially different flat under last month's geometry.
+
+**An expired lock has one explicit way out.** A live reservation whose lock has
+run out cannot proceed to contract and cannot be edited either — a real position
+with no exit except cancelling a genuine commitment or silently repricing the
+buyer, which is the thing the lock exists to prevent. `requote_reservation` is
+the third option: the same buyer, the same unit, the same recorded adjustments,
+re-run against today's approved price, on the record with a reason. The unit
+stays reserved and the standing approval is withdrawn, because an exception
+sanctioned against last month's number says nothing about this month's. It is
+the only route to a committed reservation's commercial terms; everything else
+about them stays frozen.
+
+**A transition cannot be dated later than it happened.** Every sales operation
+changes current state the moment it runs, so an effective date in the future
+would produce a unit contracted today whose own history says the contract begins
+next week. Backdating stays allowed where the chronology rules permit it. There
+is no scheduler and no pending status here, so a future date is not a promise
+this module could keep, and it is refused rather than accepted.
+
 **Sales never writes another module's columns.** Unit status moves through
 inventory's `apply_sales_commercial_status`, `apply_legal_status` and
 `apply_delivery_status` — non-committing contracts that validate the transition,
@@ -477,6 +510,12 @@ mistake is corrected by another dated, attributed event carrying
 `reverses_event_id`; both rows stay, and the unit's legal status is derived from
 whichever events still stand. "We believed the title had transferred until the
 14th" is itself a fact somebody will need.
+
+The reversal key carries the sale and the project alongside the identifier.
+Pointing at an identifier alone would prove only that some event exists
+somewhere; a legal record should not depend on the service for something
+PostgreSQL can express, so a correction that reaches across contracts is refused
+by the database.
 
 **Approval is two role checks and a comparison.** A quote breaches the country's
 configured thresholds or it does not; if it does, exactly one office may

@@ -148,7 +148,11 @@ tokens, CI, PR template, and Render build/start separation.
   ordinary case: shares are a column, and they must total exactly 1.000000
   before a unit can be committed
 - reservations — the first persistent commercial commitment, freezing the quote
-  pricing produced from the unit's live approved price
+  pricing produced from the unit's live approved price, and holding it for the
+  term of a price lock that a later list price does not void
+- an explicit re-quote for a live reservation whose lock has run out: the same
+  buyer and unit at today's approved price, on the record, with the standing
+  approval withdrawn
 - the commitment is exclusive — one live reservation and one live contract per
   unit, decided under the unit row lock with partial unique indexes behind it
 - sale contracts — the SPA, its frozen price, its frozen buyer parties and the
