@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
@@ -750,3 +751,142 @@ def active_sale(
     )
     assert activated.status_code == 200, activated.text
     return submitted_sale
+
+
+# --------------------------------------------------------------------------- #
+# Payment plans (PR-MVP-06)
+# --------------------------------------------------------------------------- #
+
+
+def plans_url(project_id: str) -> str:
+    return f"/api/v1/projects/{project_id}/payment-plans"
+
+
+@pytest.fixture
+def second_cfo(db: Session) -> User:
+    """A second sanctioning officer, for the cases where the first is the maker."""
+    return make_user(db, email="cfo2@example.com", roles=("approver_cfo",))
+
+
+@pytest.fixture
+def second_cfo_client(admin_client: TestClient, project_id: str, second_cfo: User) -> TestClient:
+    grant_access(admin_client, project_id, second_cfo)
+    return client_for(second_cfo.email)
+
+
+@pytest.fixture
+def plan_id(collections_client: TestClient, project_id: str, active_sale: str) -> str:
+    """A payment plan opened on a live contract, with its first draft version."""
+    created = collections_client.post(
+        plans_url(project_id),
+        json={"sale_contract_id": active_sale, "name": "Standard terms"},
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["plan"]["id"]
+
+
+def plan_detail(client: TestClient, project_id: str, plan_id: str) -> dict[str, Any]:
+    response = client.get(f"{plans_url(project_id)}/{plan_id}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def current_version_id(client: TestClient, project_id: str, plan_id: str) -> str:
+    return plan_detail(client, project_id, plan_id)["current"]["version"]["id"]
+
+
+def contract_basis(client: TestClient, project_id: str, plan_id: str) -> dict[str, str]:
+    """The frozen sale figures the schedule has to reconcile against."""
+    version = plan_detail(client, project_id, plan_id)["current"]["version"]
+    return {
+        "principal": version["contract_value_covered"],
+        "tax": version["tax_total_snapshot"],
+        "fee": version["buyer_fee_total_snapshot"],
+        "payable": version["total_buyer_payable_snapshot"],
+    }
+
+
+def write_schedule(
+    client: TestClient,
+    project_id: str,
+    plan_id: str,
+    version_id: str,
+    installments: list[dict[str, Any]],
+    *,
+    allocation_mode: str = "percentage",
+    charge_allocation_mode: str = "pro_rata",
+) -> Response:
+    """Replace a draft version's whole schedule."""
+    return client.put(
+        f"{plans_url(project_id)}/{plan_id}/versions/{version_id}/installments",
+        json={
+            "allocation_mode": allocation_mode,
+            "charge_allocation_mode": charge_allocation_mode,
+            "installments": installments,
+        },
+    )
+
+
+def fixed_row(sequence: int, fraction: str, due: str, **overrides: object) -> dict[str, Any]:
+    """One instalment falling due on a contractual date."""
+    row: dict[str, Any] = {
+        "sequence": sequence,
+        "label": f"Instalment {sequence}",
+        "trigger_type": "fixed_date",
+        "contractual_due_date": due,
+        "principal_fraction": fraction,
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.fixture
+def reconciled_plan(
+    collections_client: TestClient, project_id: str, plan_id: str
+) -> tuple[str, str]:
+    """A plan whose draft schedule reconciles exactly: 20 / 30 / 50."""
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    response = write_schedule(
+        collections_client,
+        project_id,
+        plan_id,
+        version_id,
+        [
+            fixed_row(1, "0.200000", "2026-03-01"),
+            fixed_row(2, "0.300000", "2026-06-01"),
+            fixed_row(3, "0.500000", "2026-09-01"),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["reconciliation"]["is_reconciled"] is True
+    return plan_id, version_id
+
+
+@pytest.fixture
+def approved_plan(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    reconciled_plan: tuple[str, str],
+) -> tuple[str, str]:
+    """A schedule put forward by Collections and sanctioned by the CFO."""
+    plan_id, version_id = reconciled_plan
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    submitted = collections_client.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = cfo_client.post(f"{base}/approve", json={"reason": "Terms reviewed"})
+    assert approved.status_code == 200, approved.text
+    return plan_id, version_id
+
+
+@pytest.fixture
+def active_plan(
+    cfo_client: TestClient, project_id: str, approved_plan: tuple[str, str]
+) -> tuple[str, str]:
+    """The schedule governing the sale."""
+    plan_id, version_id = approved_plan
+    activated = cfo_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions/{version_id}/activate", json={}
+    )
+    assert activated.status_code == 200, activated.text
+    return plan_id, version_id
