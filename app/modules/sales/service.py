@@ -3212,10 +3212,13 @@ def start_cancellation(
 
     project = lock_project(session, project.id)
     sale = _lock_sale(session, project_id=project.id, sale_id=sale.id)
-    if sale.status not in {SALE_SIGNATURE_PENDING, SALE_ACTIVE}:
-        raise ConflictError("Only a live contract can be cancelled.")
+    # The open-case check comes first deliberately: a contract already in
+    # termination is not "live", and telling the operator that would answer a
+    # question they did not ask instead of the one they did.
     if _open_cancellation(session, sale_id=sale.id) is not None:
         raise ConflictError("This contract already has an open cancellation case.")
+    if sale.status not in {SALE_SIGNATURE_PENDING, SALE_ACTIVE}:
+        raise ConflictError("Only a live contract can be cancelled.")
 
     today = inventory_fields.business_today()
     initiation_date = initiation_date or today

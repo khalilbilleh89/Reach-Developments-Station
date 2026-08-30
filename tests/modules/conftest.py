@@ -592,6 +592,18 @@ def collections_client(
 
 
 @pytest.fixture
+def delivery_client(db: Session, admin_client: TestClient, project_id: str) -> TestClient:
+    """Whoever answers for the building being ready — here, the Project Manager.
+
+    Delivery clearance belongs to the people who built the thing, so it is a
+    different signature from Sales Operations completing the handover.
+    """
+    user = make_user(db, email="delivery@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, user)
+    return client_for(user.email)
+
+
+@pytest.fixture
 def released_unit(
     admin_client: TestClient,
     project_id: str,
