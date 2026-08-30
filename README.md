@@ -29,11 +29,11 @@ or rules engines, no microservices. The full forbidden list lives in
 | Scope                    | Status |
 | ------------------------ | -----: |
 | Total planned MVP PRs    |     12 |
-| Completed                |      5 |
-| Remaining                |      7 |
+| Completed                |      6 |
+| Remaining                |      6 |
 
-Current: **PR-MVP-04 — Pricing & Unit 360**.
-Next: **PR-MVP-05 — Sales & Legal**.
+Current: **PR-MVP-05 — Sales & Legal**.
+Next: **PR-MVP-06 — Payment Plans**.
 
 The system has authentication, the fixed role catalogue, country configuration,
 an append-only audit trail, projects with land, planning controls, permits and
@@ -49,11 +49,22 @@ approves and activates, and activating a price is the only thing in the system
 that sets a unit's `pricing_approved` release gate — which inventory withdraws
 again the moment a priced fact about the unit changes.
 
-There is still **no sale in the system**. No clients, no reservations, no
-contracts, no payment plans, no receipts and no collections. There is also no
-unit cost, no margin and no profitability: governed cost allocations arrive in
-PR-MVP-08, and an invented cost inside a real margin would be worse than no
-margin at all.
+It also has **the sale**: buyers and their parties, reservations that freeze the
+quote and hold the unit, sale contracts that freeze the price, the buyer names
+and the tax they were signed under, an append-only legal timeline from SPA
+drafting to title transfer, a controlled cancellation that returns the unit for
+repricing, and a handover that three different departments have to sign off.
+
+One unit cannot carry two live reservations, two live contracts, or one of each.
+That is decided under the unit row lock, with partial unique indexes behind it.
+
+The deposit and first-payment gates are **attestations, not receipts**: they
+record that a named person saw evidence, and are never counted as cash.
+
+There is still **no payment plan, no receipt and no collection**, and no unit
+cost, margin or profitability. Scheduling the money is PR-MVP-06, collecting it
+is PR-MVP-07, and governed cost allocations arrive in PR-MVP-08 — an invented
+cost inside a real margin would be worse than no margin at all.
 
 ---
 
@@ -102,6 +113,7 @@ there is no permission table and no policy language.
 │       ├── projects/           projects, access, land, planning, permits, documents
 │       ├── inventory/          phases, buildings, floors, units, areas, custom fields
 │       ├── pricing/            pricing policy, price versions, premiums, benchmarks
+│       ├── sales/              clients, reservations, contracts, legal, cancellation, handover
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
 │   ├── src/app/                login, projects workspace, settings shell, design tokens

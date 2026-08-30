@@ -152,26 +152,44 @@ After merging to `main`, do not assume the deploy succeeded. Verify:
     Expected after PR-MVP-04, and nothing else:
 
     ```text
-    alembic_version, area_types, audit_events, buildings,
-    country_approval_thresholds, country_packs, currencies,
+    alembic_version, area_types, audit_events, buildings, client_parties,
+    clients, country_approval_thresholds, country_packs, currencies,
     custom_field_definitions, custom_field_options, document_references, floors,
-    inventory_sub_assets, land_parcel_custom_field_values, land_parcels,
-    market_benchmarks, permit_status_events, permits, phases, planning_controls,
+    handover_clearances, handover_records, inventory_sub_assets,
+    land_parcel_custom_field_values, land_parcels, market_benchmarks,
+    permit_status_events, permits, phases, planning_controls,
     pricing_area_rules, pricing_configurations, pricing_escalation_activations,
     pricing_escalation_rules, pricing_premium_rules,
-    project_custom_field_values, projects, reference_values, roles, tax_rules,
+    project_custom_field_values, projects, reference_values,
+    reservation_adjustments, reservation_status_events, reservations, roles,
+    sale_cancellations, sale_contract_parties, sale_contract_tax_lines,
+    sale_contracts, sale_legal_events, sales_project_policies, tax_rules,
     unit_area_schedules, unit_area_values, unit_custom_field_values,
     unit_price_components, unit_price_versions, unit_status_events, units,
     user_phase_access, user_project_access, user_roles, user_sessions, users
     ```
 
     ```sql
-    SELECT version_num FROM alembic_version;   -- 0004_pricing
+    SELECT version_num FROM alembic_version;   -- 0005_sales_legal
     SELECT count(*) FROM roles;                -- 11
     ```
 
-    There must be no sales, reservation, payment-plan, receipt or unit-cost
-    table yet: a sale arrives in PR-MVP-05 and cost in PR-MVP-08.
+    There must be no payment-plan, installment, receipt, refund or unit-cost
+    table yet: the plan arrives in PR-MVP-06, the receipt in PR-MVP-07 and cost
+    in PR-MVP-08.
+
+18. Every unit's legal status was renamed, and nothing else about it moved:
+
+    ```sql
+    SELECT legal_status, count(*) FROM units GROUP BY 1;
+    SELECT commercial_status, count(*) FROM units GROUP BY 1;
+    ```
+
+    `0005_sales_legal` renames `not_started` to `no_spa` in place — the same
+    fact, named for the document whose absence it describes — and changes no
+    other value. Every unit that read `not_started` before the deploy must read
+    `no_spa` after it, and the commercial counts must be identical either side.
+    Nothing else in `units` is touched, and no price version moves.
 
 16. Existing project memberships still mean "the whole project":
 
@@ -199,12 +217,24 @@ resource from a PR.
 
 ## 6. Rollback
 
-`0004_pricing` creates eight tables and alters nothing; it moves no existing
-data. `alembic downgrade 0003_inventory` drops exactly those tables, so a
-rollback loses pricing entered after the deploy and nothing else — inventory,
+`0005_sales_legal` creates thirteen tables, restates the closed sets behind
+`units.commercial_status` and `units.legal_status`, and renames one legal value
+in place. It is the first revision in this history that moves existing data, so
+**take a database snapshot before deploying it** if any inventory is loaded.
+
+`alembic downgrade 0004_pricing` drops the sales tables — losing reservations,
+contracts, legal events, cancellations and handovers entered after the deploy —
+deletes the legal status events this revision's code wrote, and folds the new
+statuses back onto their nearest 0004 ancestor so the older constraints can be
+restored. Only `no_spa` round trips exactly, and it is the only value a database
+that never ran Sales can hold. Unit identity, hierarchy, areas, release controls
+and every price version are untouched in both directions.
+
+`0004_pricing` before it creates eight tables and alters nothing; it moves no
+existing data. `alembic downgrade 0003_inventory` drops exactly those tables, so
+a rollback loses pricing entered after the deploy and nothing else — inventory,
 land and permits are untouched, and `units.pricing_approved` keeps whatever
-value it held. Take a database snapshot before deploying if any pricing has
-already been loaded.
+value it held.
 
 `0003_inventory` before it creates new tables and adds one column to
 `user_project_access`, also without moving existing data; `alembic downgrade
