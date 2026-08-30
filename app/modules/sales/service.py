@@ -1130,6 +1130,12 @@ def create_reservation(
         raise ConflictError("This client is not active.")
 
     today = inventory_fields.business_today()
+    # Asked here as well as at activation. Two people may both prepare terms on
+    # a unit nobody has committed to; neither may start preparing terms on one
+    # somebody already holds, because the answer to "can I sell this?" is
+    # already no and finding that out at activation is finding out late.
+    unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=unit.id)
+    _require_no_commitment(session, unit=unit, today=today)
     reservation_date = reservation_date or today
     if reservation_date > today:
         raise ValidationError("A reservation cannot be dated in the future.")
