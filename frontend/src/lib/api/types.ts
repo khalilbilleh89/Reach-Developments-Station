@@ -1149,3 +1149,207 @@ export interface SalesRegister {
   totals: SalesRegisterTotals;
   total: number;
 }
+
+// --------------------------------------------------------------------------- //
+// Payment plans (PR-MVP-06)
+// --------------------------------------------------------------------------- //
+
+/**
+ * A sale's payment schedule.
+ *
+ * Nothing here says what has been collected. An instalment is what the buyer
+ * contracted to pay and when it falls due; whether money arrived is PR-MVP-07's
+ * to state, and there is deliberately no field on any of these types that could
+ * be mistaken for it.
+ */
+export interface PaymentPlan {
+  id: string;
+  project_id: string;
+  sale_contract_id: string;
+  plan_number: string;
+  name: string;
+  notes: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PlanVersionStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "active"
+  | "superseded"
+  | "rejected";
+
+export type TriggerType =
+  | "fixed_date"
+  | "days_after_spa"
+  | "recurring_monthly"
+  | "recurring_quarterly"
+  | "construction_milestone"
+  | "handover"
+  | "title_transfer"
+  | "manual_approved_event";
+
+/** Where an instalment stands against its own trigger — never against payment. */
+export type TriggerStatus = "scheduled" | "awaiting_trigger" | "triggered";
+
+export interface PaymentPlanVersion {
+  id: string;
+  project_id: string;
+  payment_plan_id: string;
+  version_number: number;
+  status: PlanVersionStatus;
+  effective_date: string;
+  currency_id: string;
+  contract_value_covered: string;
+  tax_total_snapshot: string;
+  buyer_fee_total_snapshot: string;
+  total_buyer_payable_snapshot: string;
+  allocation_mode: "percentage" | "amount";
+  charge_allocation_mode: "pro_rata" | "manual";
+  reservation_treatment: "included_in_schedule" | "reference_only";
+  origin_type: "custom" | "copied_plan";
+  source_version_id: string | null;
+  change_reason: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  submitted_by_user_id: string | null;
+  submitted_at: string | null;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  rejected_by_user_id: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  activated_by_user_id: string | null;
+  activated_at: string | null;
+  superseded_at: string | null;
+}
+
+export interface PlanInstallment {
+  id: string;
+  payment_plan_version_id: string;
+  sequence: number;
+  label: string;
+  trigger_type: TriggerType;
+  trigger_reference: string | null;
+  offset_days: number | null;
+  recurrence_index: number | null;
+  /** What the contract says. Set for date-based triggers. */
+  contractual_due_date: string | null;
+  /** What somebody expects for a contingent trigger. Never makes it due. */
+  forecast_due_date: string | null;
+  /** Set only once the trigger has genuinely occurred. */
+  actual_due_date: string | null;
+  grace_days: number;
+  principal_amount: string;
+  principal_fraction: string;
+  tax_amount: string;
+  fee_amount: string;
+  total_scheduled_amount: string;
+  trigger_status: TriggerStatus;
+  owner_user_id: string | null;
+}
+
+/** Server-derived. The browser renders this and never sums a column itself. */
+export interface PlanReconciliation {
+  installment_count: number;
+  scheduled_principal_total: string;
+  contract_value_covered: string;
+  principal_delta: string;
+  scheduled_fraction_total: string;
+  fraction_delta: string;
+  scheduled_tax_total: string;
+  tax_total_snapshot: string;
+  tax_delta: string;
+  scheduled_fee_total: string;
+  buyer_fee_total_snapshot: string;
+  fee_delta: string;
+  scheduled_buyer_total: string;
+  total_buyer_payable_snapshot: string;
+  buyer_total_delta: string;
+  is_reconciled: boolean;
+  /** Said in words: which figure is wrong, and by how much. */
+  blocking_reasons: string[];
+}
+
+export interface PlanVersionDetail {
+  version: PaymentPlanVersion;
+  installments: PlanInstallment[];
+  reconciliation: PlanReconciliation;
+}
+
+export interface PaymentPlanDetail {
+  plan: PaymentPlan;
+  sale_id: string;
+  sale_number: string;
+  spa_number: string | null;
+  sale_status: string;
+  unit_id: string;
+  unit_reference: string;
+  client_display_name: string;
+  currency_id: string;
+  current: PlanVersionDetail | null;
+  active_version_id: string | null;
+  versions: PaymentPlanVersion[];
+}
+
+export interface PlanRegisterRow {
+  plan_id: string;
+  plan_number: string;
+  sale_id: string;
+  sale_number: string;
+  spa_number: string | null;
+  unit_id: string;
+  unit_reference: string;
+  client_display_name: string;
+  version_id: string | null;
+  version_number: number | null;
+  version_status: PlanVersionStatus | null;
+  currency_id: string;
+  contract_value_covered: string;
+  installment_count: number;
+  scheduled_principal_total: string | null;
+  is_reconciled: boolean;
+  next_actual_due_date: string | null;
+  next_forecast_due_date: string | null;
+  awaiting_trigger_count: number;
+  approved_by_user_id: string | null;
+}
+
+export interface PlanRegister {
+  rows: PlanRegisterRow[];
+  total: number;
+}
+
+export interface SeriesRow {
+  recurrence_index: number;
+  label: string;
+  due_date: string;
+}
+
+export interface SeriesPreview {
+  rows: SeriesRow[];
+}
+
+export interface InstallmentTriggerEvent {
+  id: string;
+  installment_id: string;
+  event_date: string;
+  evidence_reference: string;
+  reason: string;
+  status: "submitted" | "approved" | "reversed";
+  submitted_by_user_id: string;
+  submitted_at: string;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  reversed_by_user_id: string | null;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+}
+
+export interface TriggerRefreshResult {
+  triggered: PlanInstallment[];
+  still_awaiting: PlanInstallment[];
+}

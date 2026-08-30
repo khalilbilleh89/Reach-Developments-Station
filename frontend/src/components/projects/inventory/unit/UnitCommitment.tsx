@@ -12,6 +12,7 @@ import {
   Timeline,
   TimelineItem,
 } from "@/components/ui";
+import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import {
@@ -39,8 +40,10 @@ import {
  * your role" and "not recorded" are different facts.
  */
 export function UnitCommitment({
+  projectId,
   commitment,
 }: {
+  projectId: string;
   commitment: { reservation: Reservation | null; sale: SaleDetail | null } | null;
 }) {
   const currencyCodeOf = useCurrencyCode();
@@ -149,6 +152,14 @@ export function UnitCommitment({
                 }
               />
             </KeyValueGrid>
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Payment plan"
+              description="Scheduled, not collected."
+            />
+            <PlanSummary projectId={projectId} saleId={sale.sale.id} compact />
           </section>
 
           <section>

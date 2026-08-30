@@ -1847,3 +1847,71 @@ select.input {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+
+/* --------------------------------------------------------------------------
+ * Payment plan builder
+ * ------------------------------------------------------------------------ */
+
+/* The reasons a schedule cannot be put forward, listed under the notice that
+ * says so. Each one names a figure and an amount. */
+.reason-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+}
+
+.reason-list li {
+  margin-bottom: var(--space-1);
+}
+
+/*
+ * The schedule editor.
+ *
+ * A wide grid rather than a form per row: a payment plan is read down its
+ * columns — every due date, every percentage — and an operator building forty
+ * instalments is comparing rows, not filling in one record at a time.
+ */
+.schedule-editor {
+  overflow-x: auto;
+  margin: 0 calc(var(--space-5) * -1);
+  padding: 0 var(--space-5);
+  scrollbar-width: thin;
+}
+
+.schedule-editor .input {
+  min-width: 6rem;
+  font-size: var(--text-sm);
+}
+
+.schedule-editor select.input {
+  min-width: 11rem;
+}
+
+.schedule-editor .input-date {
+  min-width: 9.5rem;
+}
+
+.schedule-editor .input-label {
+  min-width: 12rem;
+}
+
+@media (width < 48rem) {
+  .schedule-editor {
+    margin: 0 calc(var(--space-4) * -1);
+    padding: 0 var(--space-4);
+  }
+}
+
+/* One instalment's row number, so the sequence reads as an identifier. */
+.sequence-cell {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A contingent trigger's reference and forecast, stacked in one cell. */
+.trigger-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}

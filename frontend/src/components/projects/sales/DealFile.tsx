@@ -34,6 +34,7 @@ import {
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
+import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import {
   ADJUSTMENT_TYPES,
@@ -1162,6 +1163,14 @@ export function DealFile({
           <section>
             <SectionHeader title="Contract parties" />
             <PartyList parties={sale.parties as unknown as ClientParty[]} />
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Payment plan"
+              description="What the buyer agreed to pay, and when. Not what has been collected."
+            />
+            <PlanSummary projectId={projectId} saleId={sale.sale.id} />
           </section>
 
           {sale.tax_lines.length > 0 ? (

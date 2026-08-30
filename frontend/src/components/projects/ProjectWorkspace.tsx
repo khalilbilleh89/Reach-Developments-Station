@@ -30,6 +30,7 @@ import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { LandTab } from "@/components/projects/LandTab";
+import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PricingTab } from "@/components/projects/PricingTab";
 import { SalesTab } from "@/components/projects/SalesTab";
@@ -60,6 +61,7 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
   inventory: "Every unit in this development, and what stops each one being released.",
   pricing: "What this development is priced at, and what that price is made of.",
   sales: "Where every unit stands commercially, legally and on delivery.",
+  payments: "How each contracted amount is scheduled to be paid, and what makes it due.",
   permits: "The consents this development needs, and which of them are late.",
   documents: "Links to documents held elsewhere. Nothing is uploaded or stored here.",
   access: "Who may open this project. Roles decide what they can do once inside.",
@@ -162,6 +164,7 @@ export function ProjectWorkspace({
     { key: "inventory", label: "Inventory" },
     { key: "pricing", label: "Pricing" },
     { key: "sales", label: "Sales" },
+    { key: "payments", label: "Payment plans" },
     { key: "permits", label: "Permits" },
     { key: "documents", label: "Documents" },
     ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
@@ -422,6 +425,13 @@ export function ProjectWorkspace({
             projectStatus={project.status}
             roles={roles}
             onOpenUnit={(unitId) => setPricedUnit(unitId)}
+          />
+        ) : null}
+        {tab === "payments" ? (
+          <PaymentPlansTab
+            projectId={projectId}
+            projectStatus={project.status}
+            roles={roles}
           />
         ) : null}
         {tab === "permits" ? (
