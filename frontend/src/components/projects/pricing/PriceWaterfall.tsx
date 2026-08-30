@@ -2,6 +2,8 @@
 
 import type { PriceComponent, PriceVersionDetail } from "@/lib/api";
 import { Badge, EmptyState, KeyValue, KeyValueGrid, TableScroll } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { money } from "@/lib/format";
 
 /**
  * The lines a price is made of, in the order they were applied.
@@ -23,8 +25,15 @@ const TYPE_LABELS: Record<string, string> = {
   manual_override: "Override",
 };
 
-function Amount({ value }: { value: string | null }) {
-  return <>{value ?? "—"}</>;
+/**
+ * A money cell: grouped, denominated in the version's own currency.
+ *
+ * The Rate and Factor columns stay undecorated — a rate is money PER AREA and
+ * a factor is a multiplier, and labelling either as a plain currency amount
+ * would misstate what it is.
+ */
+function Amount({ value, code }: { value: string | null; code: string | null }) {
+  return <>{money(value, code)}</>;
 }
 
 function overridden(component: PriceComponent): boolean {
@@ -32,6 +41,8 @@ function overridden(component: PriceComponent): boolean {
 }
 
 export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
+  const currencyCodeOf = useCurrencyCode();
+  const code = currencyCodeOf(version.currency_id);
   if (version.components.length === 0) {
     return <EmptyState title="No components" hint="This price has no lines to show." />;
   }
@@ -90,21 +101,19 @@ export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
                         component.unit_of_measure ? ` ${component.unit_of_measure}` : ""
                       }`}
                 </td>
-                <td className="num">
-                  <Amount value={component.rate} />
-                </td>
+                <td className="num">{money(component.rate)}</td>
                 <td className="num">{component.factor ?? "—"}</td>
                 <td className="num">
-                  <Amount value={component.basis_amount} />
+                  <Amount value={component.basis_amount} code={code} />
                 </td>
                 <td className="num">
-                  <Amount value={component.calculated_amount} />
+                  <Amount value={component.calculated_amount} code={code} />
                 </td>
                 <td className="num">
-                  <Amount value={component.override_amount} />
+                  <Amount value={component.override_amount} code={code} />
                 </td>
                 <td className="num">
-                  <Amount value={component.final_amount} />
+                  <Amount value={component.final_amount} code={code} />
                 </td>
               </tr>
             ))}
@@ -114,7 +123,7 @@ export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
               <th scope="row" colSpan={9}>
                 Approved reference price (ex tax)
               </th>
-              <td className="num">{version.reference_price_ex_tax}</td>
+              <td className="num">{money(version.reference_price_ex_tax, code)}</td>
             </tr>
           </tfoot>
       </TableScroll>

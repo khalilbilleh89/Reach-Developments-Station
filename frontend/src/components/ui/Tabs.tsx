@@ -43,9 +43,18 @@ export function Tabs({
     selected?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active]);
 
+  // Arrow keys move BOTH selection and browser focus. Selection alone is not
+  // enough: the old tab immediately drops to tabIndex -1, and a keyboard user
+  // pressing Right, Right, Right would be typing at a button that is no longer
+  // in the tab order. Focus therefore always follows the selected tab.
+  const select = (key: string) => {
+    onSelect(key);
+    document.getElementById(`${stem}-tab-${key}`)?.focus();
+  };
+
   const move = (index: number, step: number) => {
     const next = tabs[(index + step + tabs.length) % tabs.length];
-    if (next) onSelect(next.key);
+    if (next) select(next.key);
   };
 
   return (
@@ -68,6 +77,13 @@ export function Tabs({
             } else if (event.key === "ArrowLeft") {
               event.preventDefault();
               move(index, -1);
+            } else if (event.key === "Home") {
+              event.preventDefault();
+              if (tabs[0]) select(tabs[0].key);
+            } else if (event.key === "End") {
+              event.preventDefault();
+              const final = tabs[tabs.length - 1];
+              if (final) select(final.key);
             }
           }}
         >

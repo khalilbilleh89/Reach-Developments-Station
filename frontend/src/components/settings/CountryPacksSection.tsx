@@ -15,6 +15,7 @@ import {
   TableScroll,
   Tabs,
 } from "@/components/ui";
+import { percent } from "@/lib/format";
 
 const AREA_UNITS = ["sqm", "sqft"];
 const APPLIES_TO = ["sale", "rental", "service_charge", "construction", "other"];
@@ -344,7 +345,7 @@ export function CountryPacksSection() {
                         <td className="mono">{rule.tax_code}</td>
                         <td>{rule.applies_to.replace("_", " ")}</td>
                         <td className="mono">
-                          {(Number(rule.rate_fraction) * 100).toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}%
+                          {percent(rule.rate_fraction)}
                           <span className="subtle"> ({rule.rate_fraction})</span>
                         </td>
                         <td className="mono">

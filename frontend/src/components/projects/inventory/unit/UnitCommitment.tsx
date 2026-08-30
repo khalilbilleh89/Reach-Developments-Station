@@ -12,6 +12,8 @@ import {
   Timeline,
   TimelineItem,
 } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import {
   gateLabel,
   gateTone,
@@ -41,6 +43,8 @@ export function UnitCommitment({
 }: {
   commitment: { reservation: Reservation | null; sale: SaleDetail | null } | null;
 }) {
+  const currencyCodeOf = useCurrencyCode();
+
   if (commitment === null) {
     return (
       <EmptyState
@@ -78,7 +82,7 @@ export function UnitCommitment({
                 </>
               }
             />
-            <KeyValue label="Expires" mono value={commitment.reservation.expires_on} />
+            <KeyValue label="Expires" mono value={businessDate(commitment.reservation.expires_on)} />
             <KeyValue
               label="Deposit"
               value={
@@ -90,12 +94,15 @@ export function UnitCommitment({
             <KeyValue
               label="Quoted price (ex tax)"
               mono
-              value={commitment.reservation.net_contract_price_ex_tax}
+              value={money(
+                commitment.reservation.net_contract_price_ex_tax,
+                currencyCodeOf(commitment.reservation.currency_id),
+              )}
             />
             <KeyValue
               label="Price locked until"
               mono
-              value={commitment.reservation.price_locked_until}
+              value={businessDate(commitment.reservation.price_locked_until)}
             />
           </KeyValueGrid>
         </section>
@@ -116,7 +123,11 @@ export function UnitCommitment({
                 }
               />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />
-              <KeyValue label="Contract price" mono value={sale.sale.total_contract_price} />
+              <KeyValue
+                label="Contract price"
+                mono
+                value={money(sale.sale.total_contract_price, currencyCodeOf(sale.sale.currency_id))}
+              />
               <KeyValue
                 label="First payment"
                 value={
@@ -182,7 +193,7 @@ export function UnitCommitment({
                     <TimelineItem
                       key={event.id}
                       title={legalEventLabel(event.event_type)}
-                      date={event.event_date}
+                      date={businessDate(event.event_date)}
                       state={stands ? "done" : "void"}
                       aside={
                         stands ? null : (

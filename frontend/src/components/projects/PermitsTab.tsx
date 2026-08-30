@@ -21,6 +21,7 @@ import {
   SubPanel,
   TableScroll,
 } from "@/components/ui";
+import { businessDate, money } from "@/lib/format";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -509,9 +510,13 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
             />
           ) : null}
           <KeyValueGrid columns={3}>
-            <KeyValue label="Status since" mono value={selected.status_effective_date} />
-            <KeyValue label="Submitted" mono value={selected.actual_submission_date} />
-            <KeyValue label="Issued" mono value={selected.issue_date} />
+            <KeyValue
+              label="Status since"
+              mono
+              value={businessDate(selected.status_effective_date)}
+            />
+            <KeyValue label="Submitted" mono value={businessDate(selected.actual_submission_date)} />
+            <KeyValue label="Issued" mono value={businessDate(selected.issue_date)} />
             <KeyValue
               label="Submission variance"
               mono
@@ -536,7 +541,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               <KeyValue
                 label="Fee"
                 mono
-                value={`${selected.fee_amount ?? "—"} ${selected.base_currency_code ?? ""}`.trim()}
+                value={money(selected.fee_amount, selected.base_currency_code)}
               />
             ) : null}
           </KeyValueGrid>
@@ -612,7 +617,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                   {history.map((event) => (
                     <tr key={event.id}>
                       <th scope="row" className="mono nowrap">
-                        {event.effective_date}
+                        {businessDate(event.effective_date)}
                       </th>
                       <td>{STATUS_LABELS[event.from_status] ?? event.from_status}</td>
                       <td>

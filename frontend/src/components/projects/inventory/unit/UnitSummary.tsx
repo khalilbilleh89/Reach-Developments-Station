@@ -12,6 +12,8 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import {
   gateLabel,
@@ -52,6 +54,8 @@ export function UnitSummary({
   onOpenTab: (tab: string) => void;
 }) {
   const blocked = unit.release_blockers.length > 0;
+  const currencyCodeOf = useCurrencyCode();
+  const priceCode = currencyCodeOf(unitPricing?.active_price?.currency_id);
 
   return (
     <>
@@ -93,7 +97,7 @@ export function UnitSummary({
             value={unit.pricing_approved ? "Approved" : "Not approved"}
             small
           />
-          <Stat label="Release date" value={unit.release_date ?? "—"} small />
+          <Stat label="Release date" value={businessDate(unit.release_date)} small />
         </StatRow>
         {blocked ? (
           <Notice tone="warning">
@@ -130,17 +134,17 @@ export function UnitSummary({
           <StatRow>
             <Stat
               label="List price (ex tax)"
-              value={unitPricing.active_price.reference_price_ex_tax}
+              value={money(unitPricing.active_price.reference_price_ex_tax, priceCode)}
             />
             <Stat
               label="Per internal unit"
-              value={unitPricing.active_price.price_per_internal_area ?? "—"}
+              value={money(unitPricing.active_price.price_per_internal_area, priceCode)}
               small
             />
             <Stat
               label="Version"
               value={`v${unitPricing.active_price.version_number}`}
-              note={`Live from ${unitPricing.active_price.valid_from}`}
+              note={`Live from ${businessDate(unitPricing.active_price.valid_from)}`}
               small
             />
           </StatRow>
@@ -186,7 +190,7 @@ export function UnitSummary({
                     </>
                   }
                 />
-                <KeyValue label="Expires" mono value={commitment.reservation.expires_on} />
+                <KeyValue label="Expires" mono value={businessDate(commitment.reservation.expires_on)} />
                 <KeyValue
                   label="Deposit"
                   value={
@@ -214,7 +218,10 @@ export function UnitSummary({
                 <KeyValue
                   label="Contract price"
                   mono
-                  value={commitment.sale.sale.total_contract_price}
+                  value={money(
+                    commitment.sale.sale.total_contract_price,
+                    currencyCodeOf(commitment.sale.sale.currency_id),
+                  )}
                 />
               </>
             ) : null}

@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-
 import { Button } from "./Button";
+import { useOverlay } from "./overlay";
 
 /**
  * The one confirmation.
@@ -10,6 +9,10 @@ import { Button } from "./Button";
  * Reserved for something that cannot be undone from the interface — cancelling
  * a contract, revoking access. Everything reversible just happens, because a
  * dialog in front of a reversible action teaches people to dismiss dialogs.
+ *
+ * Modal behaviour comes from `useOverlay`: focus lands on the safe button
+ * ("Keep it", the first control), stays inside while open, Escape closes this
+ * dialog only, and focus returns to whatever opened it.
  */
 export function ConfirmDialog({
   title,
@@ -28,31 +31,16 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  // Focus moves into the dialog on open, so the keyboard is where the eye is
-  // and Escape reaches the handler below without a click first.
-  useEffect(() => {
-    dialogRef.current?.querySelector("button")?.focus();
-  }, []);
+  const dialog = useOverlay<HTMLDivElement>(onCancel);
 
   return (
     <div
       className="dialog-backdrop"
-      onClick={(event) => {
+      onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
     >
-      <div
-        className="dialog"
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-label={title}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onCancel();
-        }}
-      >
+      <div className="dialog" role="alertdialog" aria-modal="true" aria-label={title} ref={dialog}>
         <h2 className="dialog-title">{title}</h2>
         <p className="dialog-body">{body}</p>
         <div className="dialog-actions">

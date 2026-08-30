@@ -14,6 +14,7 @@ import {
   SectionHeader,
   SubPanel,
 } from "@/components/ui";
+import { businessDate } from "@/lib/format";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -140,7 +141,7 @@ export function UnitRelease({
             label="Pricing approved"
             value={unit.pricing_approved ? "Yes" : "No — set when a price is approved"}
           />
-          <KeyValue label="Release date" mono value={unit.release_date} />
+          <KeyValue label="Release date" mono value={businessDate(unit.release_date)} />
           <KeyValue label="Release batch" value={unit.release_batch} />
         </KeyValueGrid>
         {unit.block_reason ? (

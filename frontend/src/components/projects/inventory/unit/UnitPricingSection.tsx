@@ -12,6 +12,8 @@ import {
   StatRow,
   TableScroll,
 } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import { PriceWaterfall } from "@/components/projects/pricing/PriceWaterfall";
 
 const VERSION_LABELS: Record<string, string> = {
@@ -52,6 +54,8 @@ export function UnitPricingSection({
   onMove: (action: "submit" | "approve" | "activate", versionId: string) => void;
   onQuote: () => void;
 }) {
+  const currencyCodeOf = useCurrencyCode();
+
   if (unitPricing === null) {
     return (
       <EmptyState
@@ -142,17 +146,23 @@ export function UnitPricingSection({
             <StatRow>
               <Stat
                 label="Reference price (ex tax)"
-                value={unitPricing.active_price.reference_price_ex_tax}
+                value={money(
+                  unitPricing.active_price.reference_price_ex_tax,
+                  currencyCodeOf(unitPricing.active_price.currency_id),
+                )}
               />
               <Stat
                 label="Per internal unit"
-                value={unitPricing.active_price.price_per_internal_area ?? "—"}
+                value={money(
+                  unitPricing.active_price.price_per_internal_area,
+                  currencyCodeOf(unitPricing.active_price.currency_id),
+                )}
                 small
               />
               <Stat
                 label="Version"
                 value={`v${unitPricing.active_price.version_number}`}
-                note={`Live from ${unitPricing.active_price.valid_from}`}
+                note={`Live from ${businessDate(unitPricing.active_price.valid_from)}`}
                 small
               />
               <Stat
@@ -194,9 +204,11 @@ export function UnitPricingSection({
                       {VERSION_LABELS[version.status] ?? version.status}
                     </Badge>
                   </td>
-                  <td className="mono nowrap">{version.valid_from}</td>
-                  <td className="mono nowrap">{version.valid_to ?? "—"}</td>
-                  <td className="num">{version.reference_price_ex_tax}</td>
+                  <td className="mono nowrap">{businessDate(version.valid_from)}</td>
+                  <td className="mono nowrap">{businessDate(version.valid_to)}</td>
+                  <td className="num">
+                    {money(version.reference_price_ex_tax, currencyCodeOf(version.currency_id))}
+                  </td>
                   <td>{version.change_reason ?? "—"}</td>
                 </tr>
               ))}

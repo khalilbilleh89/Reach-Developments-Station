@@ -19,6 +19,8 @@ import {
   SubPanel,
   TableScroll,
 } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { DealFile } from "@/components/projects/sales/DealFile";
@@ -104,6 +106,7 @@ export function SalesTab({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const currencyCodeOf = useCurrencyCode();
   const canWriteClients = roles.has("sales_operations") || roles.has("sales_advisor");
   const canSetPolicy = roles.has("system_admin") || roles.has("project_manager");
 
@@ -205,7 +208,9 @@ export function SalesTab({
           <Stat
             label="Contracted value"
             value={
-              totals.mixed_currency ? "Not summed" : (totals.contracted_value ?? "—")
+              totals.mixed_currency
+                ? "Not summed"
+                : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
             }
             note={totals.mixed_currency ? "Mixed currencies" : undefined}
           />
@@ -478,7 +483,7 @@ export function SalesTab({
                       </Badge>
                     ) : null}
                   </td>
-                  <td className="mono nowrap">{row.reservation_expires_on ?? "—"}</td>
+                  <td className="mono nowrap">{businessDate(row.reservation_expires_on)}</td>
                   <td className="mono">{row.spa_number ?? "—"}</td>
                   <td>
                     {row.sale_status ? (
@@ -487,7 +492,9 @@ export function SalesTab({
                       "—"
                     )}
                   </td>
-                  <td className="num">{row.total_contract_price ?? "—"}</td>
+                  <td className="num">
+                    {money(row.total_contract_price, currencyCodeOf(row.currency_id))}
+                  </td>
                   <td>
                     <Badge tone={statusTone(row.legal_status)}>
                       {statusLabel(row.legal_status)}

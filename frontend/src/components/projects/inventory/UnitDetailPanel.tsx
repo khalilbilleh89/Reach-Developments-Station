@@ -16,6 +16,7 @@ import type {
   UnitStatusEvent,
 } from "@/lib/api";
 import { Badge, Drawer, Loading, Notice, SubPanel } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -116,6 +117,7 @@ export function UnitDetailPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const currencyCodeOf = useCurrencyCode();
 
   const load = useCallback(async () => {
     try {
@@ -404,6 +406,7 @@ export function UnitDetailPanel({
             <QuotePreviewPanel
               projectId={projectId}
               unitId={unitId}
+              currencyCode={currencyCodeOf(unitPricing.active_price.currency_id)}
               onClose={() => setQuoting(false)}
             />
           ) : null}

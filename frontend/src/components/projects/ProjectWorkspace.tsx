@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, projects } from "@/lib/api";
+import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import {
   Badge,
@@ -21,6 +21,8 @@ import {
   Tabs,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
+import { CurrencyProvider } from "@/lib/currency";
+import { businessDate } from "@/lib/format";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -134,6 +136,11 @@ export function ProjectWorkspace({
   onBack: () => void;
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  // Which currency each currency_id names, for every money figure below this
+  // point. Seeded from the currency register (readable by any signed-in user)
+  // plus the project's own base and reporting pair, so a row's REAL currency
+  // is resolved rather than assumed from the project.
+  const [currencyCodes, setCurrencyCodes] = useState<Record<string, string>>({});
   const [tab, setTab] = useState("overview");
   // Opening a unit from the price register reuses the same detail panel the
   // Inventory tab opens. One Unit 360, reached from wherever the user was.
@@ -162,7 +169,24 @@ export function ProjectWorkspace({
 
   const load = useCallback(async () => {
     try {
-      setProject(await projects.read(projectId));
+      const detail = await projects.read(projectId);
+      // Allowed to fail quietly: the project's own base and reporting pair
+      // still resolve, and an unknown id shows an undenominated figure rather
+      // than a guessed code.
+      let register: { id: string; code: string }[] = [];
+      try {
+        register = await settings.currencies();
+      } catch {
+        register = [];
+      }
+      const codes: Record<string, string> = {};
+      for (const currency of register) codes[currency.id] = currency.code;
+      if (detail.base_currency_code) codes[detail.base_currency_id] = detail.base_currency_code;
+      if (detail.reporting_currency_code) {
+        codes[detail.reporting_currency_id] = detail.reporting_currency_code;
+      }
+      setCurrencyCodes(codes);
+      setProject(detail);
       setError(null);
     } catch (caught) {
       setProject(null);
@@ -206,7 +230,7 @@ export function ProjectWorkspace({
   }
 
   return (
-    <>
+    <CurrencyProvider codes={currencyCodes}>
       <PageHeader
         eyebrow="Project"
         title={project.name}
@@ -310,8 +334,8 @@ export function ProjectWorkspace({
 
               <h3 className="section-heading">Programme</h3>
               <KeyValueGrid columns={3}>
-                <KeyValue label="Planned start" mono value={project.planned_start} />
-                <KeyValue label="Planned completion" mono value={project.planned_completion} />
+                <KeyValue label="Planned start" mono value={businessDate(project.planned_start)} />
+                <KeyValue label="Planned completion" mono value={businessDate(project.planned_completion)} />
                 <KeyValue
                   label="Planned duration"
                   mono
@@ -331,13 +355,20 @@ export function ProjectWorkspace({
                 <Button onClick={() => setTab("permits")}>Open permits</Button>
               }
             >
+              {/*
+                * These counts describe the PERMITS, never the units. A permit
+                * flagged as blocking is a management flag on the consent
+                * itself; unit release truth lives in inventory and is not
+                * derived from permit status. The copy here must not claim a
+                * rule the backend does not enforce.
+                */}
               <StatRow>
                 <Stat label="Parcels" value={project.parcel_count} />
                 <Stat label="Permits" value={project.permit_count} />
                 <Stat
-                  label="Blocking"
+                  label="Blocking permits"
                   value={project.blocking_permit_count}
-                  note="Stops a unit being released"
+                  note="Consents flagged as blocking"
                 />
                 <Stat
                   label="On the critical path"
@@ -350,8 +381,8 @@ export function ProjectWorkspace({
               </StatRow>
               {project.blocking_permit_count > 0 || project.overdue_permit_count > 0 ? (
                 <p className="footnote">
-                  A blocking or overdue consent is a reason a unit cannot be released. The
-                  Permits section names each one.
+                  These permits are flagged for management attention. Open Permits to see the
+                  affected consents.
                 </p>
               ) : null}
             </Card>
@@ -421,6 +452,6 @@ export function ProjectWorkspace({
           onChanged={load}
         />
       ) : null}
-    </>
+    </CurrencyProvider>
   );
 }

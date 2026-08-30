@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "./Button";
+import { useOverlay } from "./overlay";
 
 /**
  * Ask for the one thing an action needs before it is recorded — almost always a
@@ -14,6 +15,10 @@ import { Button } from "./Button";
  * cannot be labelled, cannot say what the reason is for, is unstyled, and is
  * silently disabled in several embedded browsers — which turns a refused
  * clearance into a button that appears to do nothing.
+ *
+ * Modal behaviour comes from `useOverlay`: focus lands in the input, stays
+ * inside while open, Escape closes this dialog only — never the drawer under
+ * it — and focus returns to the action that opened it.
  */
 export function PromptDialog({
   title,
@@ -35,11 +40,7 @@ export function PromptDialog({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    input.current?.focus();
-  }, []);
+  const dialog = useOverlay<HTMLFormElement>(onCancel, "input");
 
   return (
     <div
@@ -53,9 +54,7 @@ export function PromptDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onCancel();
-        }}
+        ref={dialog}
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit(value.trim());
@@ -65,7 +64,6 @@ export function PromptDialog({
         <label className="field">
           <span className="field-label">{label}</span>
           <input
-            ref={input}
             className="input"
             required={required}
             value={value}

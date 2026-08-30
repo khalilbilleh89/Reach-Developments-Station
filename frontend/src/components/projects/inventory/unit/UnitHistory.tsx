@@ -2,6 +2,7 @@
 
 import type { UnitStatusEvent } from "@/lib/api";
 import { Badge, EmptyState, TableScroll } from "@/components/ui";
+import { businessDate } from "@/lib/format";
 import {
   DIMENSION_LABELS,
   statusLabel,
@@ -40,7 +41,7 @@ export function UnitHistory({ history }: { history: UnitStatusEvent[] }) {
         {history.map((event) => (
           <tr key={event.id}>
             <th scope="row" className="mono nowrap">
-              {event.effective_date}
+              {businessDate(event.effective_date)}
             </th>
             <td>{DIMENSION_LABELS[event.dimension] ?? event.dimension}</td>
             <td>{event.from_status ? statusLabel(event.from_status) : "—"}</td>

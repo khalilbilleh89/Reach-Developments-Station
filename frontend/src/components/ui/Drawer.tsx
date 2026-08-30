@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "./Button";
+import { useOverlay } from "./overlay";
 import { TabPanel, Tabs } from "./Tabs";
 
 /**
  * A record opened over the register that led to it.
  *
- * Escape closes it, clicking the scrim closes it, and the page behind stops
- * scrolling while it is open so a phone does not quietly move the list out from
- * under the person's thumb. Focus moves in on open and the drawer is labelled,
- * so a screen reader announces which record was opened rather than reading the
- * register again.
+ * Modal behaviour — Escape on the topmost overlay only, focus contained while
+ * open and returned to the opening control on close — comes from `useOverlay`,
+ * shared with the dialogs so a reason dialog inside a drawer nests correctly:
+ * the first Escape closes the dialog, the second the drawer, never both. The
+ * page behind stops scrolling while the drawer is open so a phone does not
+ * quietly move the list out from under the person's thumb.
  */
 export function Drawer({
   eyebrow,
@@ -36,21 +38,15 @@ export function Drawer({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useOverlay<HTMLDivElement>(onClose, "container");
 
   useEffect(() => {
-    panel.current?.focus();
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", escape);
     return () => {
       document.body.style.overflow = previous;
-      document.removeEventListener("keydown", escape);
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

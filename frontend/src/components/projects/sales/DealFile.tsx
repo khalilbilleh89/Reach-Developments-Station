@@ -32,6 +32,8 @@ import {
   Timeline,
   TimelineItem,
 } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import {
   ADJUSTMENT_TYPES,
@@ -183,6 +185,7 @@ function LegalTimelineView({
   busy: boolean;
   onReverse: (eventId: string) => void;
 }) {
+  const currencyCodeOf = useCurrencyCode();
   const effective = new Set(timeline.effective_event_ids);
   if (timeline.events.length === 0) {
     return (
@@ -201,7 +204,7 @@ function LegalTimelineView({
           <TimelineItem
             key={event.id}
             title={legalEventLabel(event.event_type)}
-            date={event.event_date}
+            date={businessDate(event.event_date)}
             state={correction ? "void" : stands ? "done" : "void"}
             aside={
               correction ? (
@@ -218,7 +221,9 @@ function LegalTimelineView({
                   {[
                     event.authority_reference ? `Authority ${event.authority_reference}` : null,
                     event.document_reference ? `Document ${event.document_reference}` : null,
-                    event.fee_amount ? `Fee ${event.fee_amount}` : null,
+                    event.fee_amount
+                      ? `Fee ${money(event.fee_amount, currencyCodeOf(event.currency_id))}`
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" · ") || "No references recorded."}
@@ -299,12 +304,20 @@ function HandoverView({
               </Badge>
             }
           />
-          <KeyValue label="Readiness" mono value={detail.handover.readiness_date} />
-          <KeyValue label="Inspection" mono value={detail.handover.inspection_date} />
+          <KeyValue label="Readiness" mono value={businessDate(detail.handover.readiness_date)} />
+          <KeyValue label="Inspection" mono value={businessDate(detail.handover.inspection_date)} />
           <KeyValue label="Snagging" value={detail.handover.snag_status} />
-          <KeyValue label="Client notice" mono value={detail.handover.client_notice_date} />
-          <KeyValue label="Scheduled" mono value={detail.handover.scheduled_handover_date} />
-          <KeyValue label="Handed over" mono value={detail.handover.handover_date} />
+          <KeyValue
+            label="Client notice"
+            mono
+            value={businessDate(detail.handover.client_notice_date)}
+          />
+          <KeyValue
+            label="Scheduled"
+            mono
+            value={businessDate(detail.handover.scheduled_handover_date)}
+          />
+          <KeyValue label="Handed over" mono value={businessDate(detail.handover.handover_date)} />
           <KeyValue
             label="Acceptance document"
             value={detail.handover.acceptance_document_reference}
@@ -463,6 +476,7 @@ export function DealFile({
     refund_due_amount: "",
   });
 
+  const currencyCodeOf = useCurrencyCode();
   const canPrepare = roles.has("sales_operations") || roles.has("sales_advisor");
   const canWriteSale = roles.has("sales_operations");
   const canApprove = roles.has("approver_cfo");
@@ -577,6 +591,11 @@ export function DealFile({
   // screen offers it rather than leaving the operator at a dead end.
   const lockExpired = terms !== null && terms.price_locked_until < today();
   const isRate = RATE_ADJUSTMENTS.has(adjustment.adjustment_type);
+  // Each record names its own denomination; nothing is inherited from the
+  // project. The deposit may be taken in a different currency than the quote.
+  const quoteCode = currencyCodeOf(terms?.currency_id);
+  const depositCode = currencyCodeOf(terms?.deposit_currency_id);
+  const saleCode = currencyCodeOf(sale?.sale.currency_id);
 
   const sections = [
     { key: "deal", label: "Reservation" },
@@ -690,12 +709,20 @@ export function DealFile({
                 </ul>
                 <KeyValueGrid columns={3}>
                   <KeyValue label="Number" mono value={terms.reservation_number} />
-                  <KeyValue label="Reserved on" mono value={terms.reservation_date} />
-                  <KeyValue label="Expires" mono value={terms.expires_on} />
-                  <KeyValue label="Price locked until" mono value={terms.price_locked_until} />
+                  <KeyValue label="Reserved on" mono value={businessDate(terms.reservation_date)} />
+                  <KeyValue label="Expires" mono value={businessDate(terms.expires_on)} />
+                  <KeyValue
+                    label="Price locked until"
+                    mono
+                    value={businessDate(terms.price_locked_until)}
+                  />
                   <KeyValue label="Channel" value={terms.sales_channel_code} />
                   <KeyValue label="Branch" value={terms.sales_branch_code} />
-                  <KeyValue label="Deposit required" mono value={terms.deposit_required_amount} />
+                  <KeyValue
+                    label="Deposit required"
+                    mono
+                    value={money(terms.deposit_required_amount, depositCode)}
+                  />
                   <KeyValue
                     label="Deposit evidence"
                     value={terms.deposit_confirmation_reference}
@@ -703,9 +730,9 @@ export function DealFile({
                 </KeyValueGrid>
                 {lockExpired && live ? (
                   <Notice tone="warning">
-                    The price lock on this reservation ran out on {terms.price_locked_until}. It
-                    cannot go to contract or be edited until it is re-quoted at the unit&rsquo;s
-                    current price.
+                    The price lock on this reservation ran out on{" "}
+                    {businessDate(terms.price_locked_until)}. It cannot go to contract or be
+                    edited until it is re-quoted at the unit&rsquo;s current price.
                   </Notice>
                 ) : null}
               </section>
@@ -716,34 +743,64 @@ export function DealFile({
                   description="Every figure here was computed by the server. The browser does no pricing arithmetic."
                 />
                 <StatRow>
-                  <Stat label="Net contract price" value={terms.net_contract_price_ex_tax} />
-                  <Stat label="Tax" value={terms.tax_total} small />
-                  <Stat label="Total buyer payable" value={terms.total_buyer_payable} />
+                  <Stat
+                    label="Net contract price"
+                    value={money(terms.net_contract_price_ex_tax, quoteCode)}
+                  />
+                  <Stat label="Tax" value={money(terms.tax_total, quoteCode)} small />
+                  <Stat
+                    label="Total buyer payable"
+                    value={money(terms.total_buyer_payable, quoteCode)}
+                  />
                 </StatRow>
                 <h4 className="section-heading">How it was reached</h4>
                 <KeyValueGrid columns={3}>
-                  <KeyValue label="Approved list price" mono value={terms.reference_price_ex_tax} />
-                  <KeyValue label="Paid upgrades" mono value={terms.paid_upgrade_amount} />
+                  <KeyValue
+                    label="Approved list price"
+                    mono
+                    value={money(terms.reference_price_ex_tax, quoteCode)}
+                  />
+                  <KeyValue
+                    label="Paid upgrades"
+                    mono
+                    value={money(terms.paid_upgrade_amount, quoteCode)}
+                  />
                   <KeyValue
                     label="Payment plan adjustment"
                     mono
-                    value={terms.payment_plan_adjustment_amount}
+                    value={money(terms.payment_plan_adjustment_amount, quoteCode)}
                   />
-                  <KeyValue label="Gross quoted" mono value={terms.gross_quoted_price_ex_tax} />
-                  <KeyValue label="Cash discount" mono value={terms.cash_discount_amount} />
-                  <KeyValue label="Seller credit" mono value={terms.seller_credit_amount} />
+                  <KeyValue
+                    label="Gross quoted"
+                    mono
+                    value={money(terms.gross_quoted_price_ex_tax, quoteCode)}
+                  />
+                  <KeyValue
+                    label="Cash discount"
+                    mono
+                    value={money(terms.cash_discount_amount, quoteCode)}
+                  />
+                  <KeyValue
+                    label="Seller credit"
+                    mono
+                    value={money(terms.seller_credit_amount, quoteCode)}
+                  />
                   <KeyValue
                     label="Net contract price"
                     mono
-                    value={terms.net_contract_price_ex_tax}
+                    value={money(terms.net_contract_price_ex_tax, quoteCode)}
                   />
-                  <KeyValue label="Seller costs" mono value={terms.seller_cost_total} />
+                  <KeyValue
+                    label="Seller costs"
+                    mono
+                    value={money(terms.seller_cost_total, quoteCode)}
+                  />
                   <KeyValue
                     label="Effective net revenue"
                     mono
-                    value={terms.effective_net_revenue_preview}
+                    value={money(terms.effective_net_revenue_preview, quoteCode)}
                   />
-                  <KeyValue label="Buyer fees" mono value={terms.buyer_fee_total} />
+                  <KeyValue label="Buyer fees" mono value={money(terms.buyer_fee_total, quoteCode)} />
                 </KeyValueGrid>
                 <p className="footnote">
                   Seller costs sit beside the contract price and never inside it: a package the
@@ -782,7 +839,7 @@ export function DealFile({
                           <th scope="row">{adjustmentLabel(item.adjustment_type)}</th>
                           <td>{treatmentLabel(item.treatment)}</td>
                           <td className="num">{item.rate_fraction ?? "—"}</td>
-                          <td className="num">{item.amount ?? "—"}</td>
+                          <td className="num">{money(item.amount, quoteCode)}</td>
                           <td>{item.reason ?? "—"}</td>
                         </tr>
                       ))}
@@ -1053,12 +1110,19 @@ export function DealFile({
           <section>
             <SectionHeader title="Sale contract" />
             <StatRow>
-              <Stat label="Total contract price" value={sale.sale.total_contract_price} />
-              <Stat label="Net of tax" value={sale.sale.net_contract_price_ex_tax} small />
-              <Stat label="Tax" value={sale.sale.tax_total} small />
+              <Stat
+                label="Total contract price"
+                value={money(sale.sale.total_contract_price, saleCode)}
+              />
+              <Stat
+                label="Net of tax"
+                value={money(sale.sale.net_contract_price_ex_tax, saleCode)}
+                small
+              />
+              <Stat label="Tax" value={money(sale.sale.tax_total, saleCode)} small />
               <Stat
                 label="Effective net revenue"
-                value={sale.sale.effective_net_revenue_snapshot}
+                value={money(sale.sale.effective_net_revenue_snapshot, saleCode)}
                 small
                 note="After seller costs"
               />
@@ -1066,8 +1130,12 @@ export function DealFile({
             <KeyValueGrid columns={3}>
               <KeyValue label="Sale number" mono value={sale.sale.sale_number} />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />
-              <KeyValue label="Contract date" mono value={sale.sale.contract_date} />
-              <KeyValue label="Seller costs" mono value={sale.sale.seller_cost_total} />
+              <KeyValue label="Contract date" mono value={businessDate(sale.sale.contract_date)} />
+              <KeyValue
+                label="Seller costs"
+                mono
+                value={money(sale.sale.seller_cost_total, saleCode)}
+              />
               <KeyValue
                 label="First payment"
                 value={
@@ -1125,9 +1193,13 @@ export function DealFile({
                       <th scope="row">{line.label}</th>
                       <td className="num">{line.rate_fraction}</td>
                       <td>{line.calculation_basis}</td>
-                      <td className="num">{line.taxable_amount}</td>
-                      <td className="num">{line.tax_amount}</td>
-                      <td className="mono nowrap">{line.valid_on}</td>
+                      <td className="num">
+                        {money(line.taxable_amount, currencyCodeOf(line.currency_id))}
+                      </td>
+                      <td className="num">
+                        {money(line.tax_amount, currencyCodeOf(line.currency_id))}
+                      </td>
+                      <td className="mono nowrap">{businessDate(line.valid_on)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1461,10 +1533,22 @@ export function DealFile({
             <KeyValueGrid columns={3}>
               <KeyValue label="Initiated by" value={sale.cancellation.initiated_by_party} />
               <KeyValue label="Reason" value={sale.cancellation.reason} />
-              <KeyValue label="Notice" mono value={sale.cancellation.notice_date} />
-              <KeyValue label="Cure deadline" mono value={sale.cancellation.cure_deadline} />
-              <KeyValue label="Forfeiture" mono value={sale.cancellation.forfeiture_amount} />
-              <KeyValue label="Refund due" mono value={sale.cancellation.refund_due_amount} />
+              <KeyValue label="Notice" mono value={businessDate(sale.cancellation.notice_date)} />
+              <KeyValue
+                label="Cure deadline"
+                mono
+                value={businessDate(sale.cancellation.cure_deadline)}
+              />
+              <KeyValue
+                label="Forfeiture"
+                mono
+                value={money(sale.cancellation.forfeiture_amount, saleCode)}
+              />
+              <KeyValue
+                label="Refund due"
+                mono
+                value={money(sale.cancellation.refund_due_amount, saleCode)}
+              />
               <KeyValue
                 label="Financial approval"
                 value={
@@ -1473,7 +1557,11 @@ export function DealFile({
                     : "Not required"
                 }
               />
-              <KeyValue label="Unit returned" mono value={sale.cancellation.unit_return_date} />
+              <KeyValue
+                label="Unit returned"
+                mono
+                value={businessDate(sale.cancellation.unit_return_date)}
+              />
             </KeyValueGrid>
             <p className="footnote">
               A refund due is what the contract says is owed. Whether it has been paid is a

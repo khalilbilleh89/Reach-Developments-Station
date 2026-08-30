@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CountryPack, Currency, ProjectSummary, ReferenceValue } from "@/lib/api";
+import { businessDate } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -418,7 +419,7 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
                       {STATUS_LABELS[project.status] ?? project.status}
                     </Badge>
                   </td>
-                  <td className="mono nowrap">{project.planned_completion ?? "—"}</td>
+                  <td className="mono nowrap">{businessDate(project.planned_completion)}</td>
                   <td className="num">{project.blocking_permit_count}</td>
                   <td className="num">{project.critical_path_permit_count}</td>
                   <td className="num">{project.overdue_permit_count}</td>

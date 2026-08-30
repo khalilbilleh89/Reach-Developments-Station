@@ -213,16 +213,44 @@ unit can be contracted, unpaid, unregistered and undelivered at the same time,
 and three different teams need their own answer without reading somebody
 else's as theirs.
 
-### Numbers and money
+### Numbers, money and dates
 
 Any figure a person compares down a column gets `.num` in a table (monospace,
 tabular figures, right-aligned, never wrapped) or `mono` on a `KeyValue`. A
 `Stat` is already monospaced and tabular.
 
-Currency codes are shown where the API gives them. Nothing is reformatted,
-rounded or localised in the browser: the server sends a decimal string and that
-string is what appears, because a rounded figure on a contract screen is a
-wrong figure.
+**Calculation and presentation are different things, and only one of them is
+allowed here.** React performs no financial arithmetic — no totals, no tax, no
+discounts, no margins, no currency conversion, ever. Presentation formatting is
+allowed, and `lib/format.ts` is the only place it happens:
+
+- **Money** — `money(value, code)` turns the server's exact Decimal string into
+  `JOD 228,000.00`: integer digits are grouped with commas, the sign is kept
+  (`JOD -5,000.00`), every decimal digit the server sent is preserved, and the
+  REAL currency code is prepended. The value is never passed through
+  `Number()`, `parseFloat` or `Intl.NumberFormat` — a float is an
+  approximation, and nothing on a contract screen may be approximate. No
+  rounding, no scale change, no FX.
+- **Denomination is resolved, never assumed.** Price versions, reservations,
+  contracts, tax lines and benchmarks each carry their own `currency_id`; the
+  project workspace loads the currency register once, seeds it with the
+  project's base and reporting pair, and `useCurrencyCode` (in `lib/currency`)
+  resolves each row's own denomination. An id the map cannot resolve renders
+  the figure grouped but undenominated — never labelled with a guess. A
+  discount is not an error, so negative amounts are not coloured red.
+- **Rates and fractions are not money.** A premium factor, a share fraction or
+  a tolerance is shown as the server sent it; a stored rate fraction is shown
+  as a percentage through `percent()`, which moves the decimal point by string
+  manipulation rather than multiplying by 100 in floating point.
+- **Business dates** — `businessDate("2026-08-30")` renders `30 Aug 2026`. A
+  business date is a calendar fact with no time and no timezone, so it is
+  parsed as calendar components and never constructed into a JavaScript
+  `Date`, which would pin it to an instant and could show the previous day in
+  another timezone. Date inputs and API payloads stay ISO (`YYYY-MM-DD`); only
+  read-only presentation changes.
+- **System timestamps** (`created_at`, `approved_at`, `granted_at`…) are
+  instants, not calendar dates, and keep their own consistent treatment —
+  they are never fed through `businessDate`.
 
 ---
 
@@ -242,6 +270,13 @@ cancellation that was never opened — are not offered.
 `window.prompt`, which could not be labelled, could not say what the reason was
 for, and is silently disabled in several embedded browsers — which turns a
 refused clearance into a button that appears to do nothing.
+
+**Overlays stack, and only the top of the stack owns the keyboard.** Drawer,
+ConfirmDialog and PromptDialog all sit on one shared helper
+(`components/ui/overlay.ts`). A reason dialog inside the deal file's drawer
+nests correctly: the first Escape closes the dialog, the second closes the
+drawer, and one press never closes both. Clicking a scrim closes only the
+overlay it belongs to.
 
 **Confirmation is reserved for the irreversible.** `ConfirmDialog` guards
 things that cannot be undone from the interface. Everything reversible just
@@ -295,11 +330,20 @@ asserts this on every screen at all five widths.
 ## 9. Accessibility
 
 - One `<h1>` per screen; headings descend without skipping.
-- Tabs are a real `tablist`: arrow keys move, `aria-selected` is set, each panel
-  is labelled by its tab. Ids are namespaced per tab group, so a drawer's
-  sections over a project's sections do not collide.
-- Drawers and dialogs are `role="dialog"`/`alertdialog` with `aria-modal`, an
-  accessible name, focus moved in on open and Escape to close.
+- Tabs are a real `tablist`: ArrowLeft/ArrowRight move BOTH selection and
+  focus (wrapping at the ends), Home and End jump to the first and last tab,
+  `aria-selected` and roving `tabIndex` stay in step, and each panel is
+  labelled by its tab. Ids are namespaced per tab group, so a drawer's
+  sections over a project's sections do not collide, and the selected tab is
+  scrolled into view when the row overflows.
+- Drawers and dialogs are `role="dialog"`/`alertdialog` with `aria-modal` and
+  an accessible name, on a shared modal helper: focus moves in on open (a
+  drawer focuses its container so the record is announced, the reason dialog
+  its input, a confirm dialog its safe button), Tab and Shift+Tab are
+  contained inside the topmost overlay so the register behind is not
+  reachable, Escape closes the topmost overlay only, and on close focus
+  returns to the control that opened it — an operator working down a register
+  is put back exactly where they were.
 - Every table has a `<caption>` (visually hidden) and `scope`d headers.
 - `TableScroll` is focusable so a keyboard can scroll it.
 - Controls a finger has to hit are at least 24px tall; the walkthrough asserts

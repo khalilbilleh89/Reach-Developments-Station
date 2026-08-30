@@ -27,6 +27,8 @@ import {
   TableScroll,
 } from "@/components/ui";
 import { inventory } from "@/lib/api";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
 import { ConfigurationPanel } from "@/components/projects/pricing/ConfigurationPanel";
 
 /**
@@ -88,6 +90,7 @@ export function PricingTab({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const currencyCodeOf = useCurrencyCode();
 
   const load = useCallback(async () => {
     try {
@@ -212,7 +215,11 @@ export function PricingTab({
               </li>
             </ul>
             <StatRow>
-              <Stat label="Base rate" value={overview.base_internal_rate} note="Per internal unit" />
+              <Stat
+                label="Base rate"
+                value={money(overview.base_internal_rate, currencyCodeOf(overview.currency_id))}
+                note="Per internal unit"
+              />
               <Stat label="Units" value={overview.units_total} small />
               <Stat label="Priced" value={overview.units_priced} small />
               <Stat label="Not priced" value={overview.units_not_priced} small />
@@ -330,8 +337,12 @@ export function PricingTab({
                       <td>{row.unit_type_code ?? "—"}</td>
                       <td className="num">{row.internal_area_snapshot ?? "—"}</td>
                       <td className="num">{row.weighted_area_snapshot ?? "—"}</td>
-                      <td className="num">{row.reference_price_ex_tax ?? "—"}</td>
-                      <td className="num">{row.price_per_internal_area ?? "—"}</td>
+                      <td className="num">
+                        {money(row.reference_price_ex_tax, currencyCodeOf(overview?.currency_id))}
+                      </td>
+                      <td className="num">
+                        {money(row.price_per_internal_area, currencyCodeOf(overview?.currency_id))}
+                      </td>
                       <td className="num">{row.version_number ?? "—"}</td>
                       <td>{row.status ? (STATUS_LABELS[row.status] ?? row.status) : "Not priced"}</td>
                       <td>
@@ -383,6 +394,7 @@ function BenchmarksPanel({
   currencyId: string | null;
   onChanged: () => Promise<void>;
 }) {
+  const currencyCodeOf = useCurrencyCode();
   const [form, setForm] = useState({
     phase_id: "",
     unit_type_code: "",
@@ -534,9 +546,11 @@ function BenchmarksPanel({
                       "Whole project"}
                   </th>
                   <td>{benchmark.area_basis}</td>
-                  <td className="num">{benchmark.benchmark_price_per_area}</td>
+                  <td className="num">
+                    {money(benchmark.benchmark_price_per_area, currencyCodeOf(benchmark.currency_id))}
+                  </td>
                   <td className="num">{benchmark.tolerance_fraction}</td>
-                  <td className="mono nowrap">{benchmark.comparison_date}</td>
+                  <td className="mono nowrap">{businessDate(benchmark.comparison_date)}</td>
                   <td>{benchmark.source_name}</td>
                   <td>
                     {benchmark.is_active ? (
