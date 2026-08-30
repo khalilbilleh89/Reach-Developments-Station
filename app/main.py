@@ -39,6 +39,7 @@ from app.modules.audit.api import router as audit_router
 from app.modules.inventory.api import router as inventory_router
 from app.modules.pricing.api import router as pricing_router
 from app.modules.projects.api import router as projects_router
+from app.modules.sales.api import router as sales_router
 from app.modules.settings.api import router as settings_router
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,7 @@ def create_app() -> FastAPI:
         projects_router,
         inventory_router,
         pricing_router,
+        sales_router,
         audit_router,
     ):
         app.include_router(router, prefix=settings.API_V1_PREFIX)

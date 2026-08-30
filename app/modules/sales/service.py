@@ -44,7 +44,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.core.errors import (
@@ -66,6 +66,8 @@ from app.modules.inventory.models import (
     COMMERCIAL_STATUS_RESERVED,
     COMMERCIAL_STATUS_RETURNED,
     LEGAL_STATUS_NO_SPA,
+    Building,
+    Floor,
     Unit,
 )
 from app.modules.pricing import service as pricing_service
@@ -597,10 +599,16 @@ def list_parties(
     return list(session.scalars(statement.order_by(ClientParty.created_at)))
 
 
-def _active_shares(session: Session, *, client_id: uuid.UUID) -> Decimal:
+def active_share_total(session: Session, *, client: Client) -> Decimal:
+    """What this client's active buyers currently add up to.
+
+    Public because the workspace shows it before anyone tries to commit a unit:
+    finding out that two buyers hold eighty per cent between them at the moment
+    of activation is finding out too late.
+    """
     total = session.scalar(
         select(func.coalesce(func.sum(ClientParty.share_fraction), 0)).where(
-            ClientParty.client_id == client_id, ClientParty.is_active.is_(True)
+            ClientParty.client_id == client.id, ClientParty.is_active.is_(True)
         )
     )
     return Decimal(str(total or 0)).quantize(SHARE_EXPONENT)
@@ -614,7 +622,7 @@ def _require_reconciled_shares(session: Session, *, client: Client) -> None:
     column stores, so the arithmetic here and the arithmetic in the database
     agree about what "one" means.
     """
-    total = _active_shares(session, client_id=client.id)
+    total = active_share_total(session, client=client)
     if total != ONE:
         raise ConflictError(
             f"The buyer shares on this client total {total}, not 1.000000. "
@@ -2816,7 +2824,7 @@ def _recorded_event_types(session: Session, *, sale_id: uuid.UUID) -> set[str]:
     return {event.event_type for event in effective_legal_events(session, sale_id=sale_id)}
 
 
-def _derived_legal_status(events: list[SaleLegalEvent]) -> str:
+def derived_legal_status(events: list[SaleLegalEvent]) -> str:
     """The legal status the timeline as a whole establishes.
 
     The furthest milestone reached, by the canonical order — not the most
@@ -2909,7 +2917,7 @@ def _apply_derived_legal_status(
     reason: str,
 ) -> None:
     """Push the timeline's conclusion onto the unit, through inventory."""
-    status = _derived_legal_status(effective_legal_events(session, sale_id=sale.id))
+    status = derived_legal_status(effective_legal_events(session, sale_id=sale.id))
     unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=sale.unit_id)
     inventory_service.apply_legal_status(
         session,
@@ -3879,3 +3887,190 @@ def complete_handover(
     session.commit()
     session.refresh(handover)
     return handover
+
+
+# --------------------------------------------------------------------------- #
+# The sales register
+# --------------------------------------------------------------------------- #
+
+#: What the legal timeline is waiting for next, given what it has already got.
+#: Read off the same prerequisite map the recording route enforces, so the
+#: screen and the rule cannot drift apart.
+_NEXT_LEGAL_STEP: tuple[str, ...] = (
+    "spa_drafted",
+    "spa_issued",
+    "buyer_signed",
+    "seller_signed",
+    "land_registry_lodged",
+    "registered",
+    "title_transferred",
+)
+
+
+def next_legal_step(recorded: set[str]) -> str | None:
+    """The next milestone this contract's timeline is waiting for."""
+    if EVENT_WITHDRAWN in recorded:
+        return None
+    for step in _NEXT_LEGAL_STEP:
+        if step not in recorded:
+            return step
+    return None
+
+
+def sales_register(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    phase_id: uuid.UUID | None = None,
+    building_id: uuid.UUID | None = None,
+    commercial_status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    """One line per unit: where it stands commercially, legally and on delivery.
+
+    The four status dimensions are reported side by side and never collapsed
+    into "sold". A unit can be contracted, lodged with the registry, overdue on
+    collections and still under construction; those are four teams' answers, and
+    a register that merged them would be wrong for at least three of them.
+
+    Aggregates are computed over the whole authorised, filtered set rather than
+    the page being displayed. A total that changes when you turn the page is not
+    a total.
+    """
+    permissions.require_sales_reader(actor)
+    units = select(Unit).where(Unit.project_id == project.id, Unit.is_active.is_(True))
+    allowed = permissions.visible_unit_ids(session, project_id=project.id, actor=actor)
+    if allowed is not None:
+        units = units.where(Unit.id.in_(allowed))
+    if commercial_status is not None:
+        units = units.where(Unit.commercial_status == commercial_status)
+    if building_id is not None or phase_id is not None:
+        units = units.where(Unit.floor_id.in_(_floor_ids(phase_id, building_id)))
+
+    every = list(session.scalars(units.order_by(Unit.unit_reference)))
+    total = len(every)
+    page = every[offset : offset + limit]
+    unit_ids = [unit.id for unit in every]
+
+    reservations = {
+        reservation.unit_id: reservation
+        for reservation in session.scalars(
+            select(Reservation).where(
+                Reservation.unit_id.in_(unit_ids),
+                Reservation.status.in_(RESERVATION_COMMITTED),
+            )
+        )
+    }
+    sales = {
+        sale.unit_id: sale
+        for sale in session.scalars(
+            select(SaleContract).where(
+                SaleContract.unit_id.in_(unit_ids), SaleContract.status.in_(SALE_COMMITTED)
+            )
+        )
+    }
+    clients = {
+        client.id: client
+        for client in session.scalars(select(Client).where(Client.project_id == project.id))
+    }
+    handovers = {
+        handover.sale_contract_id: handover
+        for handover in session.scalars(
+            select(HandoverRecord).where(HandoverRecord.project_id == project.id)
+        )
+    }
+    today = inventory_fields.business_today()
+
+    rows: list[dict[str, Any]] = []
+    for unit in page:
+        reservation = reservations.get(unit.id)
+        sale = sales.get(unit.id)
+        client_id = sale.client_id if sale else (reservation.client_id if reservation else None)
+        client = clients.get(client_id) if client_id else None
+        handover = handovers.get(sale.id) if sale else None
+        recorded = _recorded_event_types(session, sale_id=sale.id) if sale else set()
+        rows.append(
+            {
+                "unit_id": unit.id,
+                "unit_reference": unit.unit_reference,
+                "unit_number": unit.unit_number,
+                "commercial_status": unit.commercial_status,
+                "legal_status": unit.legal_status,
+                "delivery_status": unit.delivery_status,
+                "client_id": client.id if client else None,
+                "client_display_name": client.display_name if client else None,
+                "reservation_id": reservation.id if reservation else None,
+                "reservation_number": reservation.reservation_number if reservation else None,
+                "reservation_status": reservation.status if reservation else None,
+                "reservation_expires_on": reservation.expires_on if reservation else None,
+                "closure_required": (
+                    requires_closure(reservation, today=today) if reservation else False
+                ),
+                "sale_id": sale.id if sale else None,
+                "sale_number": sale.sale_number if sale else None,
+                "spa_number": sale.spa_number if sale else None,
+                "sale_status": sale.status if sale else None,
+                "contract_date": sale.contract_date if sale else None,
+                "currency_id": sale.currency_id if sale else None,
+                "net_contract_price_ex_tax": (sale.net_contract_price_ex_tax if sale else None),
+                "cash_discount_amount": sale.cash_discount_amount if sale else None,
+                "total_contract_price": sale.total_contract_price if sale else None,
+                "sales_branch_code": sale.sales_branch_code if sale else None,
+                "advisor_user_id": (
+                    sale.advisor_user_id
+                    if sale
+                    else (reservation.advisor_user_id if reservation else None)
+                ),
+                "next_legal_step": next_legal_step(recorded) if sale else None,
+                "handover_status": handover.status if handover else None,
+            }
+        )
+
+    contracted = [sales[unit.id] for unit in every if unit.id in sales]
+    currencies = {sale.currency_id for sale in contracted}
+    mixed = len(currencies) > 1
+    totals = {
+        "units": total,
+        "available": sum(1 for unit in every if unit.commercial_status == "available"),
+        "reserved": sum(1 for unit in every if unit.commercial_status == "reserved"),
+        "contract_pending": sum(
+            1 for unit in every if unit.commercial_status == "contract_pending"
+        ),
+        "contracted": sum(1 for unit in every if unit.commercial_status == "contracted"),
+        "returned": sum(1 for unit in every if unit.commercial_status == "returned"),
+        "active_reservations": sum(1 for unit in every if unit.id in reservations),
+        "active_contracts": sum(1 for sale in contracted if sale.status == SALE_ACTIVE),
+        "open_cancellations": session.scalar(
+            select(func.count())
+            .select_from(SaleCancellation)
+            .where(
+                SaleCancellation.project_id == project.id,
+                SaleCancellation.status.in_(CANCELLATION_OPEN),
+                SaleCancellation.sale_contract_id.in_([sale.id for sale in contracted] or [None]),
+            )
+        )
+        or 0,
+        # A sum of two currencies is not a number. Where a project's contracts
+        # are denominated in more than one, the value is withheld rather than
+        # added up: PR-MVP-05 has no governed FX model and will not invent one.
+        "contracted_value": (
+            None if mixed else money(sum((sale.total_contract_price for sale in contracted), ZERO))
+        ),
+        "currency_id": next(iter(currencies)) if len(currencies) == 1 else None,
+        "mixed_currency": mixed,
+    }
+    return rows, totals, total
+
+
+def _floor_ids(
+    phase_id: uuid.UUID | None, building_id: uuid.UUID | None
+) -> Select[tuple[uuid.UUID]]:
+    """Floors under one phase or building, as a subquery for the unit filter."""
+    statement = select(Floor.id).join(Building, Building.id == Floor.building_id)
+    if building_id is not None:
+        statement = statement.where(Building.id == building_id)
+    if phase_id is not None:
+        statement = statement.where(Building.phase_id == phase_id)
+    return statement
