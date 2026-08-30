@@ -79,13 +79,21 @@ COMMERCIAL_STATUSES = (
     "available",
     "held",
     "reserved",
+    "contract_pending",
     "contracted",
     "cancelled",
     "returned",
+    "withdrawn",
 )
 COMMERCIAL_STATUS_UNRELEASED = "unreleased"
 COMMERCIAL_STATUS_AVAILABLE = "available"
 COMMERCIAL_STATUS_HELD = "held"
+COMMERCIAL_STATUS_RESERVED = "reserved"
+COMMERCIAL_STATUS_CONTRACT_PENDING = "contract_pending"
+COMMERCIAL_STATUS_CONTRACTED = "contracted"
+COMMERCIAL_STATUS_CANCELLED = "cancelled"
+COMMERCIAL_STATUS_RETURNED = "returned"
+COMMERCIAL_STATUS_WITHDRAWN = "withdrawn"
 
 #: Statuses Inventory may move a unit between. Anything outside this set belongs
 #: to Sales.
@@ -93,18 +101,30 @@ INVENTORY_COMMERCIAL_STATUSES = frozenset(
     {COMMERCIAL_STATUS_UNRELEASED, COMMERCIAL_STATUS_AVAILABLE, COMMERCIAL_STATUS_HELD}
 )
 
-#: The legal life of a unit. Established here so the column exists and starts
-#: honestly at ``not_started``; the transitions belong to Sales / Legal.
+#: The legal life of a unit. PR-MVP-03 established the column with a provisional
+#: vocabulary and said plainly that the transitions belong to Sales / Legal;
+#: PR-MVP-05 owns them now and states them as the legal timeline actually runs.
+#: ``no_spa`` is the zero state PR-MVP-03 called ``not_started`` — the same fact,
+#: named for the document whose absence it describes.
+#:
+#: Every value is produced by a recorded legal event. There is no route that
+#: sets one directly, because a registration nobody recorded is a registration
+#: nobody can produce evidence for.
 LEGAL_STATUSES = (
-    "not_started",
-    "eligible",
-    "spa_in_progress",
-    "spa_signed",
-    "registration_in_progress",
+    "no_spa",
+    "drafting",
+    "issued",
+    "buyer_signed",
+    "fully_signed",
+    "stamped",
+    "lodged_submitted",
     "registered",
-    "title_transferred",
-    "cancelled",
+    "transfer_pending",
+    "transferred",
+    "withdrawal_pending",
+    "withdrawn",
 )
+LEGAL_STATUS_NO_SPA = "no_spa"
 
 #: The collection life of a unit. Owned by PR-MVP-07.
 COLLECTION_STATUSES = (
@@ -132,6 +152,7 @@ STATUS_NOT_STARTED = "not_started"
 #: Which of the four status dimensions an event describes.
 STATUS_DIMENSIONS = ("commercial", "legal", "collection", "delivery")
 DIMENSION_COMMERCIAL = "commercial"
+DIMENSION_LEGAL = "legal"
 
 #: What an area measures. ``internal`` is the legal saleable interior and a
 #: project may configure at most one active one — see the partial index below.
@@ -453,7 +474,7 @@ class Unit(Base):
         String(32), nullable=False, default=COMMERCIAL_STATUS_UNRELEASED
     )
     legal_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=STATUS_NOT_STARTED
+        String(32), nullable=False, default=LEGAL_STATUS_NO_SPA
     )
     collection_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=STATUS_NOT_STARTED

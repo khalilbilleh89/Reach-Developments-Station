@@ -42,7 +42,21 @@ import type {
   ProjectSummary,
   QuotePreview,
   ReferenceValue,
+  Reservation,
+  ReservationAdjustment,
+  ReservationDetail,
   Role,
+  SaleCancellation,
+  SaleContract,
+  SaleDetail,
+  SalesClient,
+  ClientParty,
+  HandoverDetail,
+  HandoverClearance,
+  LegalTimeline,
+  SalesPolicy,
+  SalesRegister,
+  ShareReconciliation,
   SubAsset,
   TaxRule,
   Unit,
@@ -455,4 +469,222 @@ export const pricing = {
 
   quotePreview: (projectId: string, unitId: string, body: Record<string, unknown>) =>
     post<QuotePreview>(`/projects/${projectId}/pricing/units/${unitId}/quote-preview`, body),
+};
+
+/**
+ * Sales and legal.
+ *
+ * Every transition is its own named call. There is no `setStatus` here and no
+ * generic transition helper, because the server has no route that would answer
+ * one: activating a reservation, submitting a contract, recording a
+ * registration and completing a handover are four different acts with four
+ * different rights and four different sets of preconditions.
+ *
+ * Nothing in this file calculates. Discounts, tax, contract price, effective
+ * net revenue and approval thresholds are the server's answers; the browser
+ * sends inputs and displays what comes back.
+ */
+export const sales = {
+  policy: (projectId: string) => get<SalesPolicy>(`/projects/${projectId}/sales/policy`),
+  writePolicy: (projectId: string, body: Record<string, unknown>) =>
+    put<SalesPolicy>(`/projects/${projectId}/sales/policy`, body),
+
+  register: (projectId: string, query: Record<string, string> = {}) =>
+    get<SalesRegister>(
+      `/projects/${projectId}/sales/register?${new URLSearchParams(query).toString()}`,
+    ),
+
+  clients: (projectId: string, query: Record<string, string> = {}) =>
+    get<SalesClient[]>(
+      `/projects/${projectId}/sales/clients?${new URLSearchParams(query).toString()}`,
+    ),
+  client: (projectId: string, clientId: string) =>
+    get<SalesClient>(`/projects/${projectId}/sales/clients/${clientId}`),
+  createClient: (projectId: string, body: Record<string, unknown>) =>
+    post<SalesClient>(`/projects/${projectId}/sales/clients`, body),
+  updateClient: (projectId: string, clientId: string, body: Record<string, unknown>) =>
+    patch<SalesClient>(`/projects/${projectId}/sales/clients/${clientId}`, body),
+
+  parties: (projectId: string, clientId: string) =>
+    get<ClientParty[]>(`/projects/${projectId}/sales/clients/${clientId}/parties`),
+  shareReconciliation: (projectId: string, clientId: string) =>
+    get<ShareReconciliation>(
+      `/projects/${projectId}/sales/clients/${clientId}/share-reconciliation`,
+    ),
+  createParty: (projectId: string, clientId: string, body: Record<string, unknown>) =>
+    post<ClientParty>(`/projects/${projectId}/sales/clients/${clientId}/parties`, body),
+  updateParty: (projectId: string, partyId: string, body: Record<string, unknown>) =>
+    patch<ClientParty>(`/projects/${projectId}/sales/client-parties/${partyId}`, body),
+
+  reservations: (projectId: string, query: Record<string, string> = {}) =>
+    get<Reservation[]>(
+      `/projects/${projectId}/sales/reservations?${new URLSearchParams(query).toString()}`,
+    ),
+  reservation: (projectId: string, reservationId: string) =>
+    get<ReservationDetail>(`/projects/${projectId}/sales/reservations/${reservationId}`),
+  createReservation: (projectId: string, body: Record<string, unknown>) =>
+    post<ReservationDetail>(`/projects/${projectId}/sales/reservations`, body),
+  updateReservation: (projectId: string, reservationId: string, body: Record<string, unknown>) =>
+    patch<ReservationDetail>(`/projects/${projectId}/sales/reservations/${reservationId}`, body),
+  recalculateReservation: (
+    projectId: string,
+    reservationId: string,
+    body: Record<string, unknown> = {},
+  ) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/recalculate`,
+      body,
+    ),
+  addAdjustment: (projectId: string, reservationId: string, body: Record<string, unknown>) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/adjustments`,
+      body,
+    ),
+  updateAdjustment: (projectId: string, adjustmentId: string, body: Record<string, unknown>) =>
+    patch<ReservationAdjustment>(
+      `/projects/${projectId}/sales/reservation-adjustments/${adjustmentId}`,
+      body,
+    ),
+  submitException: (projectId: string, reservationId: string, reason: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/submit-exception`,
+      { reason },
+    ),
+  decideException: (
+    projectId: string,
+    reservationId: string,
+    approved: boolean,
+    reason: string,
+  ) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/approve-exception`,
+      { approved, reason },
+    ),
+  confirmDeposit: (projectId: string, reservationId: string, evidenceReference: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/confirm-deposit`,
+      { evidence_reference: evidenceReference },
+    ),
+  waiveDeposit: (projectId: string, reservationId: string, reason: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/waive-deposit`,
+      { reason },
+    ),
+  requoteReservation: (projectId: string, reservationId: string, reason: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/requote`,
+      { reason },
+    ),
+  activateReservation: (projectId: string, reservationId: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/activate`,
+      {},
+    ),
+  extendReservation: (projectId: string, reservationId: string, body: Record<string, unknown>) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/extend`,
+      body,
+    ),
+  expireReservation: (projectId: string, reservationId: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/expire`,
+      {},
+    ),
+  cancelReservation: (projectId: string, reservationId: string, reason: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/cancel`,
+      { reason },
+    ),
+
+  contracts: (projectId: string, query: Record<string, string> = {}) =>
+    get<SaleContract[]>(
+      `/projects/${projectId}/sales/contracts?${new URLSearchParams(query).toString()}`,
+    ),
+  contract: (projectId: string, saleId: string) =>
+    get<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}`),
+  createContract: (projectId: string, body: Record<string, unknown>) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/contracts`, body),
+  updateContract: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    patch<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}`, body),
+  submitContract: (projectId: string, saleId: string, body: Record<string, unknown> = {}) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}/submit`, body),
+  confirmFirstPayment: (projectId: string, saleId: string, evidenceReference: string) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}/confirm-first-payment`, {
+      evidence_reference: evidenceReference,
+    }),
+  waiveFirstPayment: (projectId: string, saleId: string, reason: string) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}/waive-first-payment`, {
+      reason,
+    }),
+  activateContract: (projectId: string, saleId: string) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/contracts/${saleId}/activate`, {}),
+
+  legalEvents: (projectId: string, saleId: string) =>
+    get<LegalTimeline>(`/projects/${projectId}/sales/contracts/${saleId}/legal-events`),
+  recordLegalEvent: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<LegalTimeline>(`/projects/${projectId}/sales/contracts/${saleId}/legal-events`, body),
+  reverseLegalEvent: (projectId: string, eventId: string, reason: string) =>
+    post<LegalTimeline>(`/projects/${projectId}/sales/legal-events/${eventId}/reverse`, {
+      reason,
+    }),
+
+  cancellation: (projectId: string, saleId: string) =>
+    get<SaleCancellation | null>(`/projects/${projectId}/sales/contracts/${saleId}/cancellation`),
+  startCancellation: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<SaleCancellation>(
+      `/projects/${projectId}/sales/contracts/${saleId}/cancellation`,
+      body,
+    ),
+  approveCancellationTerms: (projectId: string, cancellationId: string, reason: string) =>
+    post<SaleCancellation>(
+      `/projects/${projectId}/sales/cancellations/${cancellationId}/approve-financial-terms`,
+      { reason },
+    ),
+  advanceCancellation: (
+    projectId: string,
+    cancellationId: string,
+    body: Record<string, unknown>,
+  ) =>
+    post<SaleCancellation>(
+      `/projects/${projectId}/sales/cancellations/${cancellationId}/advance`,
+      body,
+    ),
+  completeCancellation: (
+    projectId: string,
+    cancellationId: string,
+    body: Record<string, unknown> = {},
+  ) =>
+    post<SaleCancellation>(
+      `/projects/${projectId}/sales/cancellations/${cancellationId}/complete`,
+      body,
+    ),
+
+  handover: (projectId: string, saleId: string) =>
+    get<HandoverDetail | null>(`/projects/${projectId}/sales/contracts/${saleId}/handover`),
+  createHandover: (projectId: string, saleId: string, body: Record<string, unknown> = {}) =>
+    post<HandoverDetail>(`/projects/${projectId}/sales/contracts/${saleId}/handover`, body),
+  updateHandover: (projectId: string, handoverId: string, body: Record<string, unknown>) =>
+    patch<HandoverDetail>(`/projects/${projectId}/sales/handovers/${handoverId}`, body),
+  grantClearance: (
+    projectId: string,
+    handoverId: string,
+    clearanceType: string,
+    evidenceReference: string,
+  ) =>
+    post<HandoverClearance>(
+      `/projects/${projectId}/sales/handovers/${handoverId}/clearances/${clearanceType}`,
+      { evidence_reference: evidenceReference },
+    ),
+  revokeClearance: (
+    projectId: string,
+    handoverId: string,
+    clearanceType: string,
+    reason: string,
+  ) =>
+    post<HandoverClearance>(
+      `/projects/${projectId}/sales/handovers/${handoverId}/clearances/${clearanceType}/revoke`,
+      { reason },
+    ),
+  completeHandover: (projectId: string, handoverId: string, body: Record<string, unknown>) =>
+    post<HandoverDetail>(`/projects/${projectId}/sales/handovers/${handoverId}/complete`, body),
 };

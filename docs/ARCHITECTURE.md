@@ -150,7 +150,7 @@ in advance. No circular imports.
 
 ---
 
-## 7. Current state (through PR-MVP-04)
+## 7. Current state (through PR-MVP-05)
 
 ```text
 app/
@@ -168,6 +168,7 @@ app/
     ├── projects/            projects, project access, land, planning, permits, documents
     ├── inventory/           phases, buildings, floors, units, areas, configurable fields
     ├── pricing/             pricing policy, price versions, premiums, escalation, benchmarks
+    ├── sales/               clients, reservations, contracts, legal events, cancellation, handover
     └── audit/               append-only governance history
 ```
 
@@ -231,6 +232,24 @@ who prepares a price is not the person who approves it, and a System
 Administrator is not an approver. Phase visibility is imported from inventory
 rather than restated, because a unit's price must be exactly as visible as the
 unit.
+
+`sales` carries the same fifth file, for three separations rather than one:
+
+```text
+app/modules/sales/
+├── models.py
+├── schemas.py
+├── permissions.py    who may sell, who may approve, who may see a passport number
+├── service.py
+└── api.py
+```
+
+Maker is not checker, administration is not business authority, and one
+department cannot clear another's concern. Phase visibility is again imported
+from inventory: a sale must be exactly as visible as the unit it is a sale of.
+Personal data is decided in this file, before serialisation — a caller who may
+not read a buyer's identity documents gets a response on which those fields do
+not exist, which is a different thing from a response that blanks them.
 
 ### Inventory integrity
 
@@ -407,6 +426,122 @@ threshold. And `internal_base` may only name the project's actual internal area,
 with a partial unique index behind the rule, because every "per internal area"
 figure in the system divides by whatever that rule points at.
 
+### Sales and legal
+
+A **client** is a buyer, scoped to the project they are buying in. There is no
+portfolio-wide customer master: deduplication, merge, consent scope and
+cross-project visibility are real problems that deserve a PR about them, and
+scoping to the project keeps the security question the one already answered
+("can you see this project?"). The sensitive fields live on the **buyer
+parties** rather than the client, so the commercial summary a project manager
+needs can be served without the identity documents they do not.
+
+Joint purchase is the ordinary case, so shares are a column. All active shares
+must total exactly `1.000000` at the RATE scale before a unit can be committed:
+two buyers at forty per cent each is a contract that sells eighty per cent of a
+flat to nobody.
+
+A **reservation** is the first persistent commercial commitment. It freezes the
+quote pricing produced from the unit's live approved price — typed columns for
+the figures somebody will be asked about, and the whole calculation beside them
+in `quote_snapshot_json` so the waterfall is still explainable line by line in
+two years. Nothing recalculates it after activation; that is what freezing
+means. Recording or revising a commercial input re-runs the quote and withdraws
+any approval that was standing, because an exception sanctioned against a
+twelve per cent discount says nothing about a twenty per cent one.
+
+A **sale contract** copies the reservation's frozen quote unchanged, and at
+submission it also copies the buyer parties and the tax observation it was
+agreed under into immutable snapshot rows. The client master will be corrected
+later and a tax rate will move next quarter; a signed contract must keep saying
+what it said.
+
+**A commitment is exclusive, and the unit row decides it.** One live
+reservation and one live contract per unit, and never one of each: the invariant
+spans two tables and is serialised through the single unit row every operation
+takes `FOR UPDATE` before deciding. Partial unique indexes on `status IN
+('active','extended')` and `status IN ('signature_pending','active',
+'termination_pending')` are the backstop, not the mechanism.
+
+**A price lock is a promise, and the two questions it raises are different.**
+Before a reservation commits anything, the quote it holds must still be the
+price the unit is offered at: a draft cut from a superseded version is not
+something to hold a flat with. Once it has committed, that question stops
+mattering and another takes its place. Finance putting a new list price live the
+following Wednesday is commercial repricing — it decides what the unit is
+offered at tomorrow, and says nothing about what this buyer already agreed.
+Refusing the contract because the frozen version is no longer today's active
+price would make the lock mean nothing.
+
+What still blocks the contract is the unit ceasing to be the unit. Pricing owns
+the comparison of a version's frozen basis against current inventory, and
+exposes it as one read-only public contract; a locked price is not permission to
+sell a materially different flat under last month's geometry.
+
+**An expired lock has one explicit way out.** A live reservation whose lock has
+run out cannot proceed to contract and cannot be edited either — a real position
+with no exit except cancelling a genuine commitment or silently repricing the
+buyer, which is the thing the lock exists to prevent. `requote_reservation` is
+the third option: the same buyer, the same unit, the same recorded adjustments,
+re-run against today's approved price, on the record with a reason. The unit
+stays reserved and the standing approval is withdrawn, because an exception
+sanctioned against last month's number says nothing about this month's. It is
+the only route to a committed reservation's commercial terms; everything else
+about them stays frozen.
+
+**A transition cannot be dated later than it happened.** Every sales operation
+changes current state the moment it runs, so an effective date in the future
+would produce a unit contracted today whose own history says the contract begins
+next week. Backdating stays allowed where the chronology rules permit it. There
+is no scheduler and no pending status here, so a future date is not a promise
+this module could keep, and it is refused rather than accepted.
+
+**Sales never writes another module's columns.** Unit status moves through
+inventory's `apply_sales_commercial_status`, `apply_legal_status` and
+`apply_delivery_status` — non-committing contracts that validate the transition,
+record the status event and write the audit entry, leaving the transaction
+boundary to the caller. Prices come from pricing's quote service, and codes are
+validated by settings. Nothing in `sales/` reads another domain's tables and
+forms a second opinion about its state.
+
+**The legal timeline is append-only.** Fourteen canonical milestones, a small
+explicit prerequisite map, and no route that edits or deletes an event. A
+mistake is corrected by another dated, attributed event carrying
+`reverses_event_id`; both rows stay, and the unit's legal status is derived from
+whichever events still stand. "We believed the title had transferred until the
+14th" is itself a fact somebody will need.
+
+The reversal key carries the sale and the project alongside the identifier.
+Pointing at an identifier alone would prove only that some event exists
+somewhere; a legal record should not depend on the service for something
+PostgreSQL can express, so a correction that reaches across contracts is refused
+by the database.
+
+**Approval is two role checks and a comparison.** A quote breaches the country's
+configured thresholds or it does not; if it does, exactly one office may
+sanction it, the person who submitted it may not be the person who approves it,
+and a System Administrator is not that office. There is no approval engine, no
+rule table and nothing configurable about who signs.
+
+**A gate is an attestation, not a receipt.** A confirmed deposit and a confirmed
+first payment record that a named person saw evidence, with a reference to it.
+They are never counted as cash: PR-MVP-07 owns receipts, and the naming here —
+in the columns, the API and the interface copy — is chosen so the two cannot be
+confused.
+
+**A cancelled unit comes back as `returned`, not `available`.** Between "we are
+cancelling" and "the unit is back" sit a money decision the CFO signs and, where
+the registry is involved, a recorded withdrawal. The unit's pricing approval is
+withdrawn on the way through, so somebody has to price it again and pass
+inventory's release gate before the next buyer sees it.
+
+**Handover needs three departments' answers.** Legal clears legal, Collections
+clears collections, and delivery belongs to the people who built the thing;
+Sales Operations completes the handover and signs none of the three. Which
+clearances apply is the project's own configuration — six named booleans in
+`sales_project_policies`, not a condition language that could express anything
+and be audited for nothing.
+
 ### Deferred by design
 
 **Company-scoped custom fields wait for a Company entity.** A definition may be
@@ -425,10 +560,17 @@ stored exception — it is arithmetic on a screen. What it does insist on is the
 distinction a spreadsheet always loses: a *price concession* reduces what the
 buyer contracts to pay, and a *seller cost* does not. A furniture package the
 seller absorbs leaves the contract price where it is and reduces net revenue.
-PR-MVP-05 owns the transaction that freezes any of it.
+PR-MVP-05 owns the transaction that freezes it, and carries that distinction
+into the contract snapshot intact.
 
-No sales, collections, construction or cashflow domain exists. Domains arrive on
-the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
+**The payment plan, the receipt and the refund wait for their own PRs.** A
+reservation and a contract carry the terms that were agreed. Scheduling the
+money is PR-MVP-06, collecting it is PR-MVP-07, and a refund actually paid is a
+payment transaction that belongs there — which is why a cancellation records a
+refund *due* and has no field in which to claim one was made.
+
+No collections, construction or cashflow domain exists. Domains arrive on the
+schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

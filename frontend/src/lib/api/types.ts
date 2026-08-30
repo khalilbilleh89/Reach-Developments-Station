@@ -791,3 +791,360 @@ export interface QuotePreview {
   threshold_amount: string | null;
   required_role: string | null;
 }
+
+/* --------------------------------------------------------------------------
+ * Sales and legal (PR-MVP-05)
+ *
+ * Two shapes for a buyer and two for a party, because the API decides what a
+ * caller may see before it serialises anything: a reader who may not see a
+ * passport number receives a response on which the field does not exist. The
+ * optional properties below are that decision arriving in the browser, not a
+ * hint that the browser should hide something.
+ * ------------------------------------------------------------------------ */
+
+export interface SalesPolicy {
+  project_id: string;
+  handover_requires_collection_clearance: boolean;
+  handover_requires_legal_clearance: boolean;
+  handover_requires_delivery_clearance: boolean;
+  handover_requires_title_transfer: boolean;
+  title_transfer_requires_collection_clearance: boolean;
+  reservation_requires_deposit_confirmation: boolean;
+}
+
+export interface SalesClient {
+  id: string;
+  project_id: string;
+  client_number: string;
+  display_name: string;
+  kyc_status: string;
+  preferred_language_code: string | null;
+  owner_advisor_user_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  /** Present only for the roles whose work needs it. */
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  privacy_consent_at?: string | null;
+  privacy_consent_reference?: string | null;
+  notes?: string | null;
+}
+
+export interface ClientParty {
+  id: string;
+  client_id: string;
+  party_role: string;
+  name_as_identification: string;
+  nationality_code: string | null;
+  residency_code: string | null;
+  share_fraction: string;
+  is_primary: boolean;
+  is_active: boolean;
+  /** Present only for the roles whose work needs it. */
+  tax_id?: string | null;
+  identity_document_type?: string | null;
+  identity_document_number?: string | null;
+  representative_name?: string | null;
+  poa_reference?: string | null;
+}
+
+export interface ShareReconciliation {
+  total_share_fraction: string;
+  reconciled: boolean;
+}
+
+export interface ReservationAdjustment {
+  id: string;
+  reservation_id: string;
+  adjustment_type: string;
+  treatment: string;
+  rate_fraction: string | null;
+  amount: string | null;
+  reason: string | null;
+  requested_by_user_id: string;
+  created_at: string;
+}
+
+export interface ReservationStatusEvent {
+  id: string;
+  reservation_id: string;
+  from_status: string;
+  to_status: string;
+  effective_date: string;
+  reason: string | null;
+  actor_user_id: string;
+  created_at: string;
+}
+
+export interface Reservation {
+  id: string;
+  project_id: string;
+  reservation_number: string;
+  unit_id: string;
+  client_id: string;
+  unit_price_version_id: string;
+  status: string;
+  reservation_date: string;
+  expires_on: string;
+  price_locked_until: string;
+  sales_channel_code: string | null;
+  sales_branch_code: string | null;
+  advisor_user_id: string | null;
+  deposit_required_amount: string | null;
+  deposit_currency_id: string | null;
+  deposit_gate_status: string;
+  deposit_confirmation_reference: string | null;
+  deposit_confirmed_by_user_id: string | null;
+  deposit_confirmed_at: string | null;
+  deposit_waiver_reason: string | null;
+  currency_id: string;
+  reference_price_ex_tax: string;
+  paid_upgrade_amount: string;
+  payment_plan_adjustment_amount: string;
+  gross_quoted_price_ex_tax: string;
+  cash_discount_amount: string;
+  seller_credit_amount: string;
+  net_contract_price_ex_tax: string;
+  seller_cost_total: string;
+  effective_net_revenue_preview: string;
+  tax_total: string;
+  buyer_fee_total: string;
+  total_buyer_payable: string;
+  exception_approval_required: boolean;
+  exception_approval_status: string;
+  exception_reason: string | null;
+  exception_required_role: string | null;
+  exception_submitted_by_user_id: string | null;
+  exception_submitted_at: string | null;
+  exception_approved_by_user_id: string | null;
+  exception_approved_at: string | null;
+  exception_decision_reason: string | null;
+  activated_at: string | null;
+  converted_at: string | null;
+  closed_at: string | null;
+  closure_reason: string | null;
+  created_at: string;
+}
+
+export interface ReservationDetail {
+  reservation: Reservation;
+  adjustments: ReservationAdjustment[];
+  events: ReservationStatusEvent[];
+  quote_snapshot: Record<string, unknown>;
+  closure_required: boolean;
+}
+
+export interface SaleParty {
+  id: string;
+  sale_contract_id: string;
+  client_party_id: string | null;
+  party_role: string;
+  name_as_identification: string;
+  nationality_code: string | null;
+  residency_code: string | null;
+  share_fraction: string;
+  tax_id?: string | null;
+  identity_document_type?: string | null;
+  identity_document_number?: string | null;
+  representative_name?: string | null;
+  poa_reference?: string | null;
+}
+
+export interface SaleTaxLine {
+  id: string;
+  sale_contract_id: string;
+  tax_rule_id: string | null;
+  tax_code: string;
+  label: string;
+  rate_fraction: string;
+  calculation_basis: string;
+  taxable_amount: string;
+  tax_amount: string;
+  currency_id: string;
+  valid_on: string;
+}
+
+export interface SaleContract {
+  id: string;
+  project_id: string;
+  sale_number: string;
+  spa_number: string | null;
+  reservation_id: string;
+  unit_id: string;
+  client_id: string;
+  unit_price_version_id: string;
+  currency_id: string;
+  contract_date: string;
+  status: string;
+  reference_price_ex_tax: string;
+  gross_quoted_price_ex_tax: string;
+  cash_discount_amount: string;
+  seller_credit_amount: string;
+  net_contract_price_ex_tax: string;
+  seller_cost_total: string;
+  effective_net_revenue_snapshot: string;
+  tax_total: string;
+  buyer_fee_total: string;
+  total_contract_price: string;
+  sales_channel_code: string | null;
+  sales_branch_code: string | null;
+  advisor_user_id: string | null;
+  first_payment_required_amount: string | null;
+  first_payment_gate_status: string;
+  first_payment_evidence_reference: string | null;
+  first_payment_confirmed_by_user_id: string | null;
+  first_payment_confirmed_at: string | null;
+  first_payment_waiver_reason: string | null;
+  submitted_at: string | null;
+  submitted_by_user_id: string | null;
+  activated_at: string | null;
+  activated_by_user_id: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+}
+
+export interface LegalEvent {
+  id: string;
+  sale_contract_id: string;
+  event_type: string;
+  event_date: string;
+  authority_reference: string | null;
+  document_reference: string | null;
+  fee_amount: string | null;
+  currency_id: string | null;
+  notes: string | null;
+  reverses_event_id: string | null;
+  reversal_reason: string | null;
+  entered_by_user_id: string;
+  created_at: string;
+}
+
+export interface LegalTimeline {
+  events: LegalEvent[];
+  effective_event_ids: string[];
+  legal_status: string;
+}
+
+export interface SaleCancellation {
+  id: string;
+  sale_contract_id: string;
+  initiated_by_party: string;
+  initiation_date: string;
+  notice_date: string | null;
+  cure_deadline: string | null;
+  reason_code: string | null;
+  reason: string;
+  status: string;
+  termination_date: string | null;
+  forfeiture_amount: string | null;
+  refund_due_amount: string | null;
+  financial_approval_required: boolean;
+  financial_approved_by_user_id: string | null;
+  financial_approved_at: string | null;
+  legal_withdrawal_required: boolean;
+  legal_withdrawal_status: string;
+  unit_return_date: string | null;
+  remarketing_required: boolean;
+  created_by_user_id: string;
+  created_at: string;
+}
+
+export interface HandoverClearance {
+  id: string;
+  handover_id: string;
+  clearance_type: string;
+  status: string;
+  evidence_reference: string | null;
+  reason: string | null;
+  cleared_by_user_id: string | null;
+  cleared_at: string | null;
+  revoked_by_user_id: string | null;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  created_at: string;
+}
+
+export interface HandoverRecord {
+  id: string;
+  sale_contract_id: string;
+  readiness_date: string | null;
+  inspection_date: string | null;
+  snag_status: string | null;
+  snag_notes: string | null;
+  client_notice_date: string | null;
+  scheduled_handover_date: string | null;
+  handover_date: string | null;
+  keys_reference: string | null;
+  meter_readings_json: Record<string, unknown> | null;
+  acceptance_document_reference: string | null;
+  notes: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface HandoverDetail {
+  handover: HandoverRecord;
+  clearances: HandoverClearance[];
+  blockers: string[];
+}
+
+export interface SaleDetail {
+  sale: SaleContract;
+  parties: SaleParty[];
+  tax_lines: SaleTaxLine[];
+  legal: LegalTimeline;
+  cancellation: SaleCancellation | null;
+  handover: HandoverDetail | null;
+  quote_snapshot: Record<string, unknown>;
+}
+
+export interface SalesRegisterRow {
+  unit_id: string;
+  unit_reference: string;
+  unit_number: string;
+  commercial_status: string;
+  legal_status: string;
+  delivery_status: string;
+  client_id: string | null;
+  client_display_name: string | null;
+  reservation_id: string | null;
+  reservation_number: string | null;
+  reservation_status: string | null;
+  reservation_expires_on: string | null;
+  closure_required: boolean;
+  sale_id: string | null;
+  sale_number: string | null;
+  spa_number: string | null;
+  sale_status: string | null;
+  contract_date: string | null;
+  currency_id: string | null;
+  net_contract_price_ex_tax: string | null;
+  cash_discount_amount: string | null;
+  total_contract_price: string | null;
+  sales_branch_code: string | null;
+  advisor_user_id: string | null;
+  next_legal_step: string | null;
+  handover_status: string | null;
+}
+
+export interface SalesRegisterTotals {
+  units: number;
+  available: number;
+  reserved: number;
+  contract_pending: number;
+  contracted: number;
+  returned: number;
+  active_reservations: number;
+  active_contracts: number;
+  open_cancellations: number;
+  contracted_value: string | null;
+  currency_id: string | null;
+  mixed_currency: boolean;
+}
+
+export interface SalesRegister {
+  rows: SalesRegisterRow[];
+  totals: SalesRegisterTotals;
+  total: number;
+}

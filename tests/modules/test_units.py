@@ -28,7 +28,7 @@ def test_a_unit_is_created_with_its_four_status_dimensions(
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["commercial_status"] == "unreleased"
-    assert body["legal_status"] == "not_started"
+    assert body["legal_status"] == "no_spa"
     assert body["collection_status"] == "not_started"
     assert body["delivery_status"] == "not_started"
     assert body["pricing_approved"] is False

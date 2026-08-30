@@ -2021,6 +2021,30 @@ def _require_current_basis(session: Session, *, version: UnitPriceVersion) -> No
         raise ConflictError("Unit pricing basis changed. Generate a new price version.")
 
 
+def require_price_basis_current(session: Session, *, version: UnitPriceVersion) -> None:
+    """Refuse to sell on a price version whose unit has changed underneath it.
+
+    The public contract PR-MVP-05 calls, and the smallest one that answers the
+    question it actually has. Sales needs to know whether a *historical* price
+    version still describes the unit as it stands — not whether it is today's
+    list price, which is a different question with a different answer once a
+    reservation has frozen a price under a lock.
+
+    A new public list price is commercial repricing: escalation, a new
+    configuration, a market move. It replaces what the unit is offered at
+    tomorrow and says nothing about what a buyer already agreed yesterday.
+
+    A changed area schedule, a moved unit or a different view is a change of the
+    thing being sold, and a locked price stops describing it. This refuses that,
+    and the caller turns the refusal into a re-quote.
+
+    Reads only. Nothing about pricing's tables crosses this boundary — sales
+    passes a version it already holds a reference to and gets an answer or an
+    error.
+    """
+    _require_current_basis(session, version=version)
+
+
 # --------------------------------------------------------------------------- #
 # Matching a unit against the configured rules
 # --------------------------------------------------------------------------- #

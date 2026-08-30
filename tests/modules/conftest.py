@@ -422,6 +422,7 @@ def configuration_payload(currency_id: str, **overrides: object) -> dict[str, An
         "valid_from": "2026-01-01",
         "maximum_premium_fraction": "0.200000",
         "offer_valid_days": 14,
+        "price_lock_days": 30,
         "reservation_expiry_days": 7,
     }
     payload.update(overrides)
@@ -505,3 +506,247 @@ def priced_unit(
     activated = cfo_client.post(f"{base}/activate")
     assert activated.status_code == 200, activated.text
     return version_id
+
+
+# --------------------------------------------------------------------------- #
+# Sales and legal (PR-MVP-05)
+# --------------------------------------------------------------------------- #
+
+#: Codes the sales domain validates newly assigned values against.
+SALES_REFERENCE_VALUES = (
+    ("sales_channel", "DIRECT", "Direct"),
+    ("sales_channel", "BROKER", "Broker"),
+    ("sales_branch", "AMMAN", "Amman office"),
+    ("client_language", "EN", "English"),
+    ("nationality", "JO", "Jordanian"),
+    ("residency", "JO", "Resident in Jordan"),
+)
+
+
+def sales_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/sales"
+
+
+@pytest.fixture
+def sales_reference_data(admin_client: TestClient, country_pack_id: str) -> None:
+    for category, code, label in SALES_REFERENCE_VALUES:
+        response = admin_client.post(
+            f"{SETTINGS}/reference-values",
+            json={
+                "country_pack_id": country_pack_id,
+                "category": category,
+                "code": code,
+                "label": label,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+
+def add_sale_tax(
+    admin_client: TestClient, country_pack_id: str, *, rate_fraction: str = "0.160000"
+) -> str:
+    """Configure one sale tax for the country, the way an administrator would."""
+    response = admin_client.post(
+        f"{SETTINGS}/country-packs/{country_pack_id}/tax-rules",
+        json={
+            "tax_code": "VAT",
+            "label": "Value added tax",
+            "applies_to": "sale",
+            "calculation_basis": "net_amount",
+            "rate_fraction": rate_fraction,
+            "valid_from": "2026-01-01",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def sales_ops_client(admin_client: TestClient, project_id: str, sales_ops: User) -> TestClient:
+    grant_access(admin_client, project_id, sales_ops)
+    return client_for(sales_ops.email)
+
+
+@pytest.fixture
+def legal_officer(db: Session) -> User:
+    return make_user(db, email="legal@example.com", roles=("legal",))
+
+
+@pytest.fixture
+def legal_client(admin_client: TestClient, project_id: str, legal_officer: User) -> TestClient:
+    grant_access(admin_client, project_id, legal_officer)
+    return client_for(legal_officer.email)
+
+
+@pytest.fixture
+def collections_officer(db: Session) -> User:
+    return make_user(db, email="collections@example.com", roles=("collections",))
+
+
+@pytest.fixture
+def collections_client(
+    admin_client: TestClient, project_id: str, collections_officer: User
+) -> TestClient:
+    grant_access(admin_client, project_id, collections_officer)
+    return client_for(collections_officer.email)
+
+
+@pytest.fixture
+def delivery_client(db: Session, admin_client: TestClient, project_id: str) -> TestClient:
+    """Whoever answers for the building being ready — here, the Project Manager.
+
+    Delivery clearance belongs to the people who built the thing, so it is a
+    different signature from Sales Operations completing the handover.
+    """
+    user = make_user(db, email="delivery@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, user)
+    return client_for(user.email)
+
+
+@pytest.fixture
+def released_unit(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    priced_unit: str,
+) -> str:
+    """A priced unit that has passed every release gate and is on the market.
+
+    Runs the real route in each case: the release controls through inventory's
+    own endpoint, then the commercial transition to ``available``. A unit that
+    arrived at ``available`` by any other path would not prove the sales gates
+    are standing on the release gates.
+    """
+    controls = admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}/release-controls",
+        json={
+            "drawings_approved": True,
+            "legal_sale_eligible": True,
+            "release_date": "2026-01-01",
+        },
+    )
+    assert controls.status_code == 200, controls.text
+    released = admin_client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
+        json={"to_status": "available", "effective_date": "2026-01-02"},
+    )
+    assert released.status_code == 201, released.text
+    return unit_id
+
+
+@pytest.fixture
+def buyer_id(
+    sales_ops_client: TestClient,
+    project_id: str,
+    operational_project: str,
+    sales_reference_data: None,
+) -> str:
+    """A buyer with one purchaser holding the whole unit."""
+    created = sales_ops_client.post(
+        f"{sales_url(project_id)}/clients",
+        json={
+            "display_name": "Rana Haddad",
+            "email": "rana@example.com",
+            "phone": "+962790000000",
+            "preferred_language_code": "EN",
+        },
+    )
+    assert created.status_code == 201, created.text
+    client_id = created.json()["id"]
+    party = sales_ops_client.post(
+        f"{sales_url(project_id)}/clients/{client_id}/parties",
+        json={
+            "name_as_identification": "Rana Haddad",
+            "share_fraction": "1.000000",
+            "nationality_code": "JO",
+            "residency_code": "JO",
+            "identity_document_type": "passport",
+            "identity_document_number": "P1234567",
+            "is_primary": True,
+        },
+    )
+    assert party.status_code == 201, party.text
+    return client_id
+
+
+@pytest.fixture
+def reservation_id(
+    sales_ops_client: TestClient, project_id: str, released_unit: str, buyer_id: str
+) -> str:
+    """A reservation in preparation, quoted from the unit's live price."""
+    created = sales_ops_client.post(
+        f"{sales_url(project_id)}/reservations",
+        json={
+            "unit_id": released_unit,
+            "client_id": buyer_id,
+            "sales_channel_code": "DIRECT",
+            "sales_branch_code": "AMMAN",
+            "deposit_required_amount": "5000.00",
+        },
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["reservation"]["id"]
+
+
+@pytest.fixture
+def active_reservation(sales_ops_client: TestClient, project_id: str, reservation_id: str) -> str:
+    """The same reservation, deposit confirmed and the unit committed."""
+    base = f"{sales_url(project_id)}/reservations/{reservation_id}"
+    confirmed = sales_ops_client.post(
+        f"{base}/confirm-deposit", json={"evidence_reference": "BANK-REF-1"}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    activated = sales_ops_client.post(f"{base}/activate", json={})
+    assert activated.status_code == 200, activated.text
+    return reservation_id
+
+
+@pytest.fixture
+def sale_id(sales_ops_client: TestClient, project_id: str, active_reservation: str) -> str:
+    """A contract drafted on the active reservation, at the price it froze."""
+    created = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts",
+        json={"reservation_id": active_reservation, "spa_number": "SPA-0001"},
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["sale"]["id"]
+
+
+@pytest.fixture
+def submitted_sale(sales_ops_client: TestClient, project_id: str, sale_id: str) -> str:
+    """The contract put forward for signature: the unit is now contract pending."""
+    submitted = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/submit", json={}
+    )
+    assert submitted.status_code == 200, submitted.text
+    return sale_id
+
+
+def record_legal(
+    client: TestClient, project_id: str, sale_id: str, event_type: str, event_date: str
+) -> None:
+    """Put one milestone on a contract's legal timeline, the way Legal would."""
+    response = client.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/legal-events",
+        json={"event_type": event_type, "event_date": event_date},
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.fixture
+def active_sale(
+    sales_ops_client: TestClient, legal_client: TestClient, project_id: str, submitted_sale: str
+) -> str:
+    """A live contract: both signatures recorded, the unit contracted."""
+    for event_type, event_date in (
+        ("spa_drafted", "2026-02-01"),
+        ("spa_issued", "2026-02-02"),
+        ("buyer_signed", "2026-02-03"),
+        ("seller_signed", "2026-02-04"),
+    ):
+        record_legal(legal_client, project_id, submitted_sale, event_type, event_date)
+    activated = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts/{submitted_sale}/activate", json={}
+    )
+    assert activated.status_code == 200, activated.text
+    return submitted_sale

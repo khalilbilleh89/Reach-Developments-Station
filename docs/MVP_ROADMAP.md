@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-04) |     5 |
-| Remaining                             |     7 |
+| Complete (PR-MVP-00 through PR-MVP-05) |     6 |
+| Remaining                             |     6 |
 
 Branch naming follows the roadmap:
 
@@ -142,18 +142,38 @@ tokens, CI, PR template, and Render build/start separation.
 - price waterfall
 - Unit 360 foundation
 
-## PR-MVP-05 — Sales & Legal
+## PR-MVP-05 — Sales & Legal ✅
 
-- clients
-- reservations/EOI
-- reservation lock
-- contract/SPA
-- frozen sale snapshot
-- sales exceptions
-- legal events
-- registration
-- cancellation
-- handover gates
+- clients and buyer parties — project-scoped, with joint purchase as the
+  ordinary case: shares are a column, and they must total exactly 1.000000
+  before a unit can be committed
+- reservations — the first persistent commercial commitment, freezing the quote
+  pricing produced from the unit's live approved price, and holding it for the
+  term of a price lock that a later list price does not void
+- an explicit re-quote for a live reservation whose lock has run out: the same
+  buyer and unit at today's approved price, on the record, with the standing
+  approval withdrawn
+- the commitment is exclusive — one live reservation and one live contract per
+  unit, decided under the unit row lock with partial unique indexes behind it
+- sale contracts — the SPA, its frozen price, its frozen buyer parties and the
+  tax observation it was signed under, none of which a later correction moves
+- sales exceptions — maker/checker against the country's own thresholds, with
+  no approval engine: two role checks and one comparison of identifiers
+- legal events — an append-only registry timeline; a mistake is corrected by
+  another dated event beside it, never by editing or deleting the first
+- cancellation — a controlled process with a money decision and, where the
+  registry is involved, a withdrawal, before the unit comes back as `returned`
+  with its pricing approval withdrawn
+- handover — three clearances owned by three different departments, plus the
+  gates a project configures for itself in six named booleans
+
+> **The deposit and first-payment gates are attestations, not receipts.** They
+> record that a named person saw evidence, and must never be counted as cash
+> collected. PR-MVP-07 introduces the record that can say money arrived.
+
+> **No payment plan, no receipt, no cost and no margin.** A reservation and a
+> contract carry the terms that were agreed; scheduling the money is PR-MVP-06,
+> collecting it is PR-MVP-07, and what the unit cost to build is PR-MVP-08.
 
 ## PR-MVP-06 — Payment Plans
 

@@ -14,6 +14,7 @@ import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel
 import { LandTab } from "@/components/projects/LandTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PricingTab } from "@/components/projects/PricingTab";
+import { SalesTab } from "@/components/projects/SalesTab";
 
 const STATUS_LABELS: Record<string, string> = {
   setup: "Setup",
@@ -112,6 +113,7 @@ export function ProjectWorkspace({
     { key: "land", label: "Land" },
     { key: "inventory", label: "Inventory" },
     { key: "pricing", label: "Pricing" },
+    { key: "sales", label: "Sales" },
     { key: "permits", label: "Permits" },
     { key: "documents", label: "Documents" },
     ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
@@ -325,6 +327,14 @@ export function ProjectWorkspace({
           canPrice={canPrice}
           canApprove={canApprovePricing}
           canSeeInternal={canSeeInternalPrices}
+          onOpenUnit={(unitId) => setPricedUnit(unitId)}
+        />
+      ) : null}
+      {tab === "sales" ? (
+        <SalesTab
+          projectId={projectId}
+          projectStatus={project.status}
+          roles={roles}
           onOpenUnit={(unitId) => setPricedUnit(unitId)}
         />
       ) : null}
