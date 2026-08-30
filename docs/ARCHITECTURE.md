@@ -150,7 +150,7 @@ in advance. No circular imports.
 
 ---
 
-## 7. Current state (through PR-MVP-03)
+## 7. Current state (through PR-MVP-04)
 
 ```text
 app/
@@ -167,6 +167,7 @@ app/
     ├── settings/            currencies, country packs, tax rules, lookups, thresholds
     ├── projects/            projects, project access, land, planning, permits, documents
     ├── inventory/           phases, buildings, floors, units, areas, configurable fields
+    ├── pricing/             pricing policy, price versions, premiums, escalation, benchmarks
     └── audit/               append-only governance history
 ```
 
@@ -204,6 +205,32 @@ app/modules/inventory/
 self-contained problem with its own vocabulary — not because a file grew long.
 Neither is generic: the first handles a fixed list of data types against three
 named entities, and the second parses one documented column set.
+
+`pricing` carries two extra files for the same kind of reason:
+
+```text
+app/modules/pricing/
+├── models.py
+├── schemas.py
+├── permissions.py    who may price, who may approve, who may only look
+├── calculator.py     the pricing arithmetic, with no session and no actor
+├── service.py
+└── api.py
+```
+
+`calculator.py` earns its place by having no database at all. It takes explicit
+`Decimal` inputs and returns a priced result with every component line; it
+cannot query, cannot authorise and cannot write. That is what makes a price
+reproducible: a calculation that could also read a row is a calculation whose
+answer depends on when you asked. It is not a framework — there is no expression
+language, no rule evaluator and no plug-in point, only the fixed set of
+contributions a real estate list price is made of.
+
+`permissions.py` holds the one rule this module adds to the platform: the person
+who prepares a price is not the person who approves it, and a System
+Administrator is not an approver. Phase visibility is imported from inventory
+rather than restated, because a unit's price must be exactly as visible as the
+unit.
 
 ### Inventory integrity
 
@@ -284,19 +311,124 @@ A field may be marked sensitive and given the roles that may see it. That
 filtering happens before serialisation, so a hidden field is absent from the API
 response rather than hidden by the browser.
 
-### Deferred by design
+### Pricing
 
-**`pricing_approved` is not writable in PR-MVP-03.** It gates release, and it
-becomes writable in PR-MVP-04 when a price exists to approve. There is no
-override.
+A **pricing configuration** is a project's governed commercial policy: the
+internal rate, how each area type contributes, the premiums, the escalation
+rules, the premium ceiling and the quote controls. It is versioned and follows
+one lifecycle — draft, submitted, approved, active, superseded — and a partial
+unique index allows exactly one active configuration per project. Approved is
+not live; active is. The two are separate states because sanctioning a policy
+and switching a development onto it are separate decisions.
+
+A **unit price version** is one priced decision about one unit, frozen at the
+moment it was made. It records the configuration, the approved area schedule,
+the raw areas, the features, the sub-asset counts and the configurable values
+the calculation saw. Nothing recalculates it afterwards: inventory keeps moving,
+and the version does not. A price change is a new version; the one it replaces
+is superseded and stays readable for ever. One active price per unit, again by
+partial unique index.
+
+The version's **effective date is a calculation input**, resolved once when the
+price is generated and immutable from then on. It decides which escalations were
+in force, so a date that could be edited afterwards — on the draft, or supplied
+again at activation — would leave a price whose components describe one day and
+whose row claims another. Changing the effective date means generating a new
+version, and that date must fall inside the validity window of the configuration
+that produced it.
+
+What the version freezes is the **pricing basis**: the facts the arithmetic
+reads. It is deliberately the same set inventory withdraws `pricing_approved`
+for, plus the hierarchy premiums match on, the approved measurement, the priced
+sub-assets and the configurable values. The unit's reference, number and asset
+class are labels, kept in a separate descriptive snapshot for the auditor and
+never compared — inventory does not treat renaming A-101 to A1-101 as a change
+of unit, and a fingerprint that disagreed would refuse the very approval
+inventory had just declared valid.
+
+Every price is decomposed into **component lines** — the area, the rate, the
+factor, the basis, what the rules produced and what a person overrode — and the
+lines sum to the stored total exactly. A total that cannot be taken apart is the
+spreadsheet cell this system exists to replace.
+
+**Maker and checker are different people.** Finance, a Project Manager or an
+administrator prepares; only an Approver / CFO approves and activates; and the
+submitter may never approve their own work. A System Administrator deliberately
+does not inherit financial approval: the ability to configure a system is not
+the authority to sanction what it charges, and a role that silently contained
+every other role would make the separation decorative.
+
+**Activation is the only writer of `pricing_approved`.** The gate PR-MVP-03
+created with no writer now has exactly one, and no button, PATCH or override
+anywhere else. Inventory withdraws it again when a priced fact about the unit
+changes — a floor, a feature code, an approved measurement, a linked parking
+bay, a configurable value — so a unit whose basis has moved stops being
+releasable until it is priced again. The historical price is never deleted: it
+is what the unit was offered at.
+
+Inventory does that withdrawal itself, because `pricing_approved` is an
+inventory column. Pricing reads inventory; inventory does not import pricing,
+and the one flag that spans them stays on the side that owns it rather than
+buying a circular dependency.
+
+**Escalation is configured here and activated by a person.** Only a date trigger
+could be evaluated from data this system already holds; absorption, certified
+construction progress and a market index belong to transactions that do not
+exist until later PRs. Rather than fake those sources, an approver activates
+against recorded evidence — and activation never reprices anything on its own.
+It makes the escalation available to the *next* version generated, which is then
+approved and activated like any other.
+
+**Market comparison is one recorded observation, not a feed.** A benchmark is
+entered by a person with a date, a source, an area basis and a tolerance; a unit
+is compared against exactly one of them by a stated precedence (unit type in
+this phase, then unit type, then phase, then project), and a second equally
+specific active benchmark is refused. Currencies must match — there is no FX
+table in this MVP, and a deviation computed across an ungoverned rate would look
+like a fact.
+
+The observation is **frozen into the version** rather than followed by
+reference, and the classification is re-derived from the version's own final
+amount whenever that amount moves — an override included. A "within tolerance"
+chip beside a price a person pushed a third above the benchmark is a false
+signal on the screen an approver decides from; and a benchmark revised next
+quarter must not silently restate what last quarter's approver was shown.
+
+**Configuration cannot silently mean nothing.** Every premium source is checked
+against the same catalogue the units themselves are checked against, so a rule
+naming a view class that was never configured is refused rather than saved and
+never matched. A custom-field premium reads a boolean field or one named option
+of an option field — the only two unambiguous readings — and any other data type
+is refused, because "above three metres" is a comparison and a comparison is an
+expression language. An escalation rule carries the fact its own trigger is
+about and none of the others, in the service and in a CHECK constraint; a
+sales-percentage escalation cannot be activated on evidence below its own
+threshold. And `internal_base` may only name the project's actual internal area,
+with a partial unique index behind the rule, because every "per internal area"
+figure in the system divides by whatever that rule points at.
+
+### Deferred by design
 
 **Company-scoped custom fields wait for a Company entity.** A definition may be
 scoped to a country pack, a project or a unit type. Inventing a Company table to
 satisfy a scope label would be the abstraction-first mistake this rebuild exists
 to avoid.
 
-No pricing, sales, collections, construction or cashflow domain exists. Domains
-arrive on the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
+**Unit cost, margin and profitability wait for PR-MVP-08.** PR-MVP-04 builds the
+complete revenue side and stops. Combining an approved price with a governed
+cost allocation is what produces a margin; doing it before those allocations
+exist would mean inventing the cost, and an invented cost inside a real margin
+is worse than no margin at all.
+
+**The quote preview creates nothing.** No client, no reservation, no sale, no
+stored exception — it is arithmetic on a screen. What it does insist on is the
+distinction a spreadsheet always loses: a *price concession* reduces what the
+buyer contracts to pay, and a *seller cost* does not. A furniture package the
+seller absorbs leaves the contract price where it is and reduces net revenue.
+PR-MVP-05 owns the transaction that freezes any of it.
+
+No sales, collections, construction or cashflow domain exists. Domains arrive on
+the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

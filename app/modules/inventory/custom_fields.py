@@ -1086,6 +1086,19 @@ def write_values(
             row.unique_value = _canonical(definition, stored)
             row.updated_by_user_id = actor.user_id
         _flush(session)
+        if entity_type == "unit":
+            # Conservative on purpose. Working out whether *this* field drives a
+            # premium would mean custom_fields reading the current pricing
+            # configuration — a dependency pointing the wrong way for a
+            # question whose safe answer is already known. A unit whose
+            # configurable data changed is a unit worth pricing again.
+            #
+            # Imported here rather than at module scope for the same reason
+            # ``service`` imports this file inside a function: the two are
+            # mutually useful and neither may own the other at import time.
+            from app.modules.inventory.service import invalidate_pricing
+
+            invalidate_pricing(session, unit=entity)  # type: ignore[arg-type]
         record_event(
             session,
             action="custom_field_value.updated",

@@ -744,6 +744,46 @@ def _validate_unit_codes(
             )
 
 
+#: Unit facts a price is calculated from. Changing any of them means the active
+#: price was computed against a unit that no longer exists in that form, so the
+#: pricing approval it produced no longer describes this unit.
+#:
+#: Inventory owns ``pricing_approved`` and clears it here, which is why this
+#: module still does not import pricing: the dependency runs one way, and
+#: reversing it for one flag would be a circular import bought for a boolean.
+PRICING_RELEVANT_UNIT_FIELDS = frozenset(
+    {
+        "floor_id",
+        "unit_type_code",
+        "furnishing_specification_code",
+        "floor_band_code",
+        "orientation_code",
+        "view_class_code",
+        "is_corner",
+        "pool_access",
+        "accessibility_code",
+        "garden_class_code",
+        "plot_coverage_fraction",
+    }
+)
+
+
+def invalidate_pricing(session: Session, *, unit: Unit | None) -> None:
+    """Withdraw a unit's pricing approval because its priced basis moved.
+
+    Deliberately conservative and deliberately blunt: it clears a flag and
+    nothing else. The active price version stays exactly as it was — it is what
+    the unit was offered at, and erasing it would destroy a commercial fact —
+    but the unit stops being releasable until somebody prices it again and puts
+    that price live. That is the whole point of ``pricing_approved`` being a
+    release gate rather than a label.
+    """
+    if unit is None or not unit.pricing_approved:
+        return
+    unit.pricing_approved = False
+    session.flush()
+
+
 def lock_unit(session: Session, *, project_id: uuid.UUID, unit_id: uuid.UUID) -> Unit:
     """Take the unit row for update and return its committed state.
 
@@ -859,8 +899,14 @@ def update_unit(
     _validate_unit_codes(session, country_pack_id=project.country_pack_id, values=dict(updates))
 
     before = _snapshot(unit, _UNIT_FIELDS)
+    priced_change = any(
+        field in PRICING_RELEVANT_UNIT_FIELDS and updates[field] != getattr(unit, field)
+        for field in updates
+    )
     for field, value in updates.items():
         setattr(unit, field, value)
+    if priced_change:
+        invalidate_pricing(session, unit=unit)
     _flush(session)
     record_event(
         session,
@@ -1530,6 +1576,10 @@ def approve_area_schedule(
     schedule.status = AREA_SCHEDULE_APPROVED
     schedule.approved_by_user_id = actor_user_id
     schedule.approved_at = func.now()
+    # A price is calculated from measured areas. A new approved measurement is
+    # exactly the case where the number on the register describes a unit that
+    # has since been re-measured, so the approval it carried is withdrawn.
+    invalidate_pricing(session, unit=unit)
     _flush(session)
     record_event(
         session,
@@ -1829,6 +1879,11 @@ def _validate_sub_asset_links(
         )
 
 
+#: Sub-asset facts a per-asset premium counts. A note or an area does not move
+#: a price; a link, a type, a subtype or retirement does.
+_PRICED_SUB_ASSET_FIELDS = frozenset({"linked_unit_id", "asset_type", "subtype_code", "is_active"})
+
+
 def create_sub_asset(
     session: Session,
     *,
@@ -1854,6 +1909,14 @@ def create_sub_asset(
     )
     session.add(asset)
     _flush(session)
+    # After the flush, not before: column defaults are applied by the flush, so
+    # `is_active` is still None on the unflushed object and the guard would read
+    # as false for every new row.
+    #
+    # A newly attached bay is a countable thing a per-asset premium prices, so
+    # the unit it attaches to is no longer priced against its own facts.
+    if asset.linked_unit_id is not None and asset.is_active:
+        invalidate_pricing(session, unit=session.get(Unit, asset.linked_unit_id))
     record_event(
         session,
         action="sub_asset.created",
@@ -1888,8 +1951,15 @@ def update_sub_asset(
         updates["asset_reference"] = _normalize_reference(str(updates["asset_reference"]))
 
     before = _snapshot(asset, _SUB_ASSET_FIELDS)
+    previous_unit_id = asset.linked_unit_id
     for field, value in updates.items():
         setattr(asset, field, value)
+    # Both ends of a move. Detaching a bay from one unit and attaching it to
+    # another changes the counted facts of two units, and only invalidating the
+    # destination would leave the source priced for a bay it no longer has.
+    if _PRICED_SUB_ASSET_FIELDS.intersection(updates):
+        for unit_id in {previous_unit_id, asset.linked_unit_id} - {None}:
+            invalidate_pricing(session, unit=session.get(Unit, unit_id))
     _flush(session)
     record_event(
         session,

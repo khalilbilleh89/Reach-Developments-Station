@@ -29,22 +29,31 @@ or rules engines, no microservices. The full forbidden list lives in
 | Scope                    | Status |
 | ------------------------ | -----: |
 | Total planned MVP PRs    |     12 |
-| Completed                |      4 |
-| Remaining                |      8 |
+| Completed                |      5 |
+| Remaining                |      7 |
 
-Current: **PR-MVP-03 — Inventory & Configurable Fields**.
-Next: **PR-MVP-04 — Pricing & Unit 360**.
+Current: **PR-MVP-04 — Pricing & Unit 360**.
+Next: **PR-MVP-05 — Sales & Legal**.
 
 The system has authentication, the fixed role catalogue, country configuration,
 an append-only audit trail, projects with land, planning controls, permits and
-documents, and a full inventory register: phases, buildings, floors, units,
+documents, a full inventory register — phases, buildings, floors, units,
 versioned area schedules, sub-assets, release controls and constrained
-configurable fields.
+configurable fields — and governed pricing: a versioned pricing policy, area
+rules, premiums, escalation, market benchmarks, and effective-dated unit price
+versions with a component-by-component waterfall behind every figure.
 
-There is still **no money in the system**. No pricing, no sales, no reservations,
-no payment plans, no collections and no unit economics. A unit's
-`pricing_approved` release gate exists but cannot be set through any API until
-PR-MVP-04 gives it a price to approve.
+A price is never overwritten. Changing one creates a new version; the one it
+replaces is superseded and stays readable. Finance prepares, an Approver / CFO
+approves and activates, and activating a price is the only thing in the system
+that sets a unit's `pricing_approved` release gate — which inventory withdraws
+again the moment a priced fact about the unit changes.
+
+There is still **no sale in the system**. No clients, no reservations, no
+contracts, no payment plans, no receipts and no collections. There is also no
+unit cost, no margin and no profitability: governed cost allocations arrive in
+PR-MVP-08, and an invented cost inside a real margin would be worse than no
+margin at all.
 
 ---
 
@@ -92,6 +101,7 @@ there is no permission table and no policy language.
 │       ├── settings/           currencies, country packs, tax rules, lookups, thresholds
 │       ├── projects/           projects, access, land, planning, permits, documents
 │       ├── inventory/          phases, buildings, floors, units, areas, custom fields
+│       ├── pricing/            pricing policy, price versions, premiums, benchmarks
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
 │   ├── src/app/                login, projects workspace, settings shell, design tokens

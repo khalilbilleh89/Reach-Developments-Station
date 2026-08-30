@@ -23,6 +23,13 @@ MONEY = Numeric(18, 2)
 #: always ends in ``_rate_fraction`` so the unit can never be misread.
 RATE = Numeric(9, 6)
 
+#: The scale of MONEY, for quantising a money figure back to it. PR-MVP-00 fixed
+#: the platform's monetary scale at two decimals and every money column in the
+#: system carries it, so a derived amount is rounded here rather than to
+#: whatever a currency happens to declare as its minor units: an amount the
+#: column cannot store is an amount that changes when it is read back.
+MONEY_EXPONENT = Decimal("0.01")
+
 #: Physical measures — areas, lengths, heights, densities. Four decimals so a
 #: cadastral or surveyed area survives the round trip exactly as recorded. Here
 #: rather than in one module for the same reason as MONEY and RATE: land,

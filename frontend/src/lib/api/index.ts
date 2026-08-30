@@ -17,9 +17,11 @@ import type {
   CurrentUser,
   CustomValue,
   DocumentReference,
+  EscalationActivation,
   Floor,
   ImportReport,
   LandParcel,
+  MarketBenchmark,
   Page,
   Permit,
   PermitRegister,
@@ -27,14 +29,24 @@ import type {
   Phase,
   PhaseAccess,
   PlanningControl,
+  PriceRegister,
+  PriceVersion,
+  PriceVersionDetail,
+  PricingAreaRule,
+  PricingConfiguration,
+  PricingEscalationRule,
+  PricingOverview,
+  PricingPremiumRule,
   ProjectAccess,
   ProjectDetail,
   ProjectSummary,
+  QuotePreview,
   ReferenceValue,
   Role,
   SubAsset,
   TaxRule,
   Unit,
+  UnitPricing,
   UnitRegister,
   UnitStatusEvent,
 } from "./types";
@@ -318,4 +330,129 @@ export const inventory = {
       `/projects/${projectId}/inventory/import/apply?${new URLSearchParams(query)}`,
       csv,
     ),
+};
+
+/**
+ * Pricing.
+ *
+ * The browser sends inputs and renders what comes back. Every figure on a
+ * pricing screen — a premium, a cap, a deviation, a quote waterfall — is
+ * computed by the backend, because two implementations of one formula is one
+ * implementation that eventually disagrees with the register.
+ */
+export const pricing = {
+  overview: (projectId: string) =>
+    get<PricingOverview>(`/projects/${projectId}/pricing/overview`),
+  register: (projectId: string, query: Record<string, string> = {}) =>
+    get<PriceRegister>(
+      `/projects/${projectId}/pricing/register?${new URLSearchParams(query)}`,
+    ),
+
+  configurations: (projectId: string) =>
+    get<PricingConfiguration[]>(`/projects/${projectId}/pricing/configurations`),
+  createConfiguration: (projectId: string, body: Record<string, unknown>) =>
+    post<PricingConfiguration>(`/projects/${projectId}/pricing/configurations`, body),
+  updateConfiguration: (projectId: string, id: string, body: Record<string, unknown>) =>
+    patch<PricingConfiguration>(`/projects/${projectId}/pricing/configurations/${id}`, body),
+  submitConfiguration: (projectId: string, id: string, reason?: string) =>
+    post<PricingConfiguration>(`/projects/${projectId}/pricing/configurations/${id}/submit`, {
+      ...(reason ? { reason } : {}),
+    }),
+  approveConfiguration: (projectId: string, id: string, reason: string) =>
+    post<PricingConfiguration>(`/projects/${projectId}/pricing/configurations/${id}/approve`, {
+      reason,
+    }),
+  returnConfiguration: (projectId: string, id: string, reason: string) =>
+    post<PricingConfiguration>(`/projects/${projectId}/pricing/configurations/${id}/return`, {
+      reason,
+    }),
+  activateConfiguration: (projectId: string, id: string) =>
+    post<PricingConfiguration>(`/projects/${projectId}/pricing/configurations/${id}/activate`),
+
+  areaRules: (projectId: string, configurationId: string) =>
+    get<PricingAreaRule[]>(
+      `/projects/${projectId}/pricing/configurations/${configurationId}/area-rules`,
+    ),
+  createAreaRule: (projectId: string, configurationId: string, body: Record<string, unknown>) =>
+    post<PricingAreaRule>(
+      `/projects/${projectId}/pricing/configurations/${configurationId}/area-rules`,
+      body,
+    ),
+  premiumRules: (projectId: string, configurationId: string) =>
+    get<PricingPremiumRule[]>(
+      `/projects/${projectId}/pricing/configurations/${configurationId}/premium-rules`,
+    ),
+  createPremiumRule: (projectId: string, configurationId: string, body: Record<string, unknown>) =>
+    post<PricingPremiumRule>(
+      `/projects/${projectId}/pricing/configurations/${configurationId}/premium-rules`,
+      body,
+    ),
+
+  escalationRules: (projectId: string) =>
+    get<PricingEscalationRule[]>(`/projects/${projectId}/pricing/escalation-rules`),
+  createEscalationRule: (
+    projectId: string,
+    configurationId: string,
+    body: Record<string, unknown>,
+  ) =>
+    post<PricingEscalationRule>(
+      `/projects/${projectId}/pricing/configurations/${configurationId}/escalation-rules`,
+      body,
+    ),
+  activations: (projectId: string) =>
+    get<EscalationActivation[]>(`/projects/${projectId}/pricing/escalation-activations`),
+  activateEscalation: (projectId: string, ruleId: string, body: Record<string, unknown>) =>
+    post<EscalationActivation>(
+      `/projects/${projectId}/pricing/escalation-rules/${ruleId}/activate`,
+      body,
+    ),
+  reverseActivation: (projectId: string, activationId: string, reason: string) =>
+    post<EscalationActivation>(
+      `/projects/${projectId}/pricing/escalation-activations/${activationId}/reverse`,
+      { reason },
+    ),
+
+  benchmarks: (projectId: string) =>
+    get<MarketBenchmark[]>(`/projects/${projectId}/pricing/market-benchmarks`),
+  createBenchmark: (projectId: string, body: Record<string, unknown>) =>
+    post<MarketBenchmark>(`/projects/${projectId}/pricing/market-benchmarks`, body),
+
+  unit: (projectId: string, unitId: string) =>
+    get<UnitPricing>(`/projects/${projectId}/pricing/units/${unitId}`),
+  createPriceVersion: (projectId: string, unitId: string, body: Record<string, unknown> = {}) =>
+    post<PriceVersionDetail>(
+      `/projects/${projectId}/pricing/units/${unitId}/price-versions`,
+      body,
+    ),
+  priceVersion: (projectId: string, versionId: string) =>
+    get<PriceVersionDetail>(`/projects/${projectId}/pricing/price-versions/${versionId}`),
+  submitPriceVersion: (projectId: string, versionId: string, reason?: string) =>
+    post<PriceVersion>(`/projects/${projectId}/pricing/price-versions/${versionId}/submit`, {
+      ...(reason ? { reason } : {}),
+    }),
+  approvePriceVersion: (projectId: string, versionId: string, reason: string) =>
+    post<PriceVersion>(`/projects/${projectId}/pricing/price-versions/${versionId}/approve`, {
+      reason,
+    }),
+  activatePriceVersion: (projectId: string, versionId: string) =>
+    post<PriceVersion>(`/projects/${projectId}/pricing/price-versions/${versionId}/activate`),
+
+  generatePrices: (projectId: string, body: Record<string, unknown>) =>
+    post<PriceVersion[]>(`/projects/${projectId}/pricing/price-versions/generate`, body),
+  bulkSubmit: (projectId: string, versionIds: string[]) =>
+    post<PriceVersion[]>(`/projects/${projectId}/pricing/price-versions/submit`, {
+      version_ids: versionIds,
+    }),
+  bulkApprove: (projectId: string, versionIds: string[], reason: string) =>
+    post<PriceVersion[]>(`/projects/${projectId}/pricing/price-versions/approve`, {
+      version_ids: versionIds,
+      reason,
+    }),
+  bulkActivate: (projectId: string, versionIds: string[]) =>
+    post<PriceVersion[]>(`/projects/${projectId}/pricing/price-versions/activate`, {
+      version_ids: versionIds,
+    }),
+
+  quotePreview: (projectId: string, unitId: string, body: Record<string, unknown>) =>
+    post<QuotePreview>(`/projects/${projectId}/pricing/units/${unitId}/quote-preview`, body),
 };
