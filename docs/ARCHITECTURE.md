@@ -148,9 +148,23 @@ collections_service.record_allocation(...)  # a small public contract
 Create that contract **when the cross-domain interaction actually appears**, not
 in advance. No circular imports.
 
+The business domains stack in one direction, and it is never reversed:
+
+```text
+inventory  ↑  pricing  ↑  sales  ↑  payment_plans  ↑  collections (PR-MVP-07)
+```
+
+`payment_plans` reads sales through its public service contract — a completed
+handover, an effective title-transfer event — to resolve the triggers that make
+an instalment due. Sales does not import payment plans, and `sale_contracts`
+carries no column pointing at one: a sale's governing schedule is found through
+`payment_plans.sale_contract_id`, so the upstream domain gains no dependency on
+the downstream one. Where a screen needs both, the frontend composes the two
+responses.
+
 ---
 
-## 7. Current state (through PR-MVP-05)
+## 7. Current state (through PR-MVP-06)
 
 ```text
 app/
@@ -169,6 +183,7 @@ app/
     ├── inventory/           phases, buildings, floors, units, areas, configurable fields
     ├── pricing/             pricing policy, price versions, premiums, escalation, benchmarks
     ├── sales/               clients, reservations, contracts, legal events, cancellation, handover
+    ├── payment_plans/       payment schedules, versions, instalments, triggers
     └── audit/               append-only governance history
 ```
 
@@ -250,6 +265,53 @@ from inventory: a sale must be exactly as visible as the unit it is a sale of.
 Personal data is decided in this file, before serialisation — a caller who may
 not read a buyer's identity documents gets a response on which those fields do
 not exist, which is a different thing from a response that blanks them.
+
+`payment_plans` carries a sixth file, and it is the one that makes the module
+testable:
+
+```text
+app/modules/payment_plans/
+├── models.py
+├── schemas.py
+├── permissions.py    Collections prepares, the CFO sanctions, nobody does both
+├── schedule.py       Decimal allocation, calendar arithmetic, reconciliation
+├── service.py
+└── api.py
+```
+
+`schedule.py` holds pure functions over values — no session, no request, no
+permission check, no audit write. Splitting a contract across twenty
+instalments, adding a calendar month to 31 January, and deciding whether a
+schedule reconciles are arithmetic questions, and keeping them in a module with
+no infrastructure means each one can be tested on its own and each failure names
+the arithmetic rather than a route.
+
+Two disciplines run through it. Every amount is a `Decimal` quantised to the
+platform's monetary scale — a float is a wrong answer about money. And the
+rounding residual from splitting a total is allocated to a named line rather
+than dropped, so the stored rows add up to the contract exactly; a schedule
+whose percentages come to 0.95 allocates 95% and reports the shortfall, and is
+never quietly rounded up until it reconciles.
+
+### The three truths, and why they stay apart
+
+```text
+PR-MVP-05  Contract truth              what was agreed, at what frozen price
+PR-MVP-06  Scheduled receivable truth  what is due, when, and what makes it due
+PR-MVP-07  Cash collection truth       what actually arrived
+```
+
+A signed contract for 220,000 is not a payment plan. A plan scheduling 220,000
+is not 220,000 collected. A milestone forecast is not a certified milestone, and
+a confirmed PR-MVP-05 payment gate is not a receipt.
+
+`payment_plan_installments` therefore carries no `paid_amount`, no
+`balance_due`, no `receipt_id` and no `days_overdue`, and its `trigger_status`
+closed set is `scheduled` / `awaiting_trigger` / `triggered` — states of the
+trigger, never of payment. A construction-milestone instalment cannot hold an
+actual due date while it awaits its trigger, and that is a database CHECK rather
+than a service rule, because the service is one refactor from being bypassed and
+the constraint is not.
 
 ### Inventory integrity
 
