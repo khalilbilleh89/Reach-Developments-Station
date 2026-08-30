@@ -1,3 +1,5 @@
+import type { Tone } from "@/components/ui";
+
 /**
  * How sales and legal vocabulary is written for people.
  *
@@ -153,3 +155,72 @@ export const ADJUSTMENT_TYPES = Object.keys(ADJUSTMENT_LABELS);
 
 /** The two adjustment types stated as a rate rather than an amount. */
 export const RATE_ADJUSTMENTS = new Set(["percentage_discount", "payment_plan_adjustment"]);
+
+/**
+ * The colour each sales and legal word is drawn in.
+ *
+ * Presentation over a word that already says it. Nothing here decides anything:
+ * every status these map came back from the API on this request.
+ */
+function toner(table: Record<string, Tone>) {
+  return (value: string | null): Tone => (value === null ? "muted" : (table[value] ?? "neutral"));
+}
+
+export const reservationTone = toner({
+  draft: "muted",
+  deposit_pending: "warning",
+  active: "success",
+  extended: "success",
+  converted: "accent",
+  expired: "danger",
+  cancelled: "danger",
+});
+
+export const saleTone = toner({
+  draft: "muted",
+  signature_pending: "warning",
+  active: "success",
+  termination_pending: "danger",
+  cancelled: "danger",
+});
+
+export const gateTone = toner({
+  not_required: "muted",
+  pending: "warning",
+  confirmed: "success",
+  waived: "neutral",
+});
+
+export const exceptionTone = toner({
+  not_required: "muted",
+  pending: "warning",
+  submitted: "info",
+  approved: "success",
+  rejected: "danger",
+});
+
+export const handoverTone = toner({
+  preparation: "muted",
+  inspection_pending: "warning",
+  snagging: "warning",
+  ready: "info",
+  handed_over: "success",
+  cancelled: "danger",
+});
+
+export const cancellationTone = toner({
+  notice: "warning",
+  cure: "warning",
+  termination_pending_approval: "warning",
+  withdrawal_pending: "warning",
+  ready_for_unit_return: "info",
+  completed: "neutral",
+  withdrawn: "muted",
+});
+
+export const kycTone = toner({
+  not_started: "muted",
+  in_progress: "warning",
+  cleared: "success",
+  rejected: "danger",
+});

@@ -4,7 +4,23 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
-import { Badge, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  KeyValue,
+  KeyValueGrid,
+  Loading,
+  Notice,
+  PageHeader,
+  Stat,
+  StatRow,
+  SubPanel,
+  TabPanel,
+  Tabs,
+} from "@/components/ui";
+import type { Tone } from "@/components/ui";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -23,6 +39,28 @@ const STATUS_LABELS: Record<string, string> = {
   on_hold: "On hold",
   completed: "Completed",
   cancelled: "Cancelled",
+};
+
+/** Presentation only: the word already carries the meaning. */
+const STATUS_TONES: Record<string, Tone> = {
+  setup: "muted",
+  predevelopment: "info",
+  active: "success",
+  on_hold: "warning",
+  completed: "neutral",
+  cancelled: "danger",
+};
+
+/** What each section is for, said once at the top rather than on every card. */
+const TAB_DESCRIPTIONS: Record<string, string> = {
+  overview: "What this project is, and what is holding it up.",
+  land: "The parcels this development sits on, and what may be built on them.",
+  inventory: "Every unit in this development, and what stops each one being released.",
+  pricing: "What this development is priced at, and what that price is made of.",
+  sales: "Where every unit stands commercially, legally and on delivery.",
+  permits: "The consents this development needs, and which of them are late.",
+  documents: "Links to documents held elsewhere. Nothing is uploaded or stored here.",
+  access: "Who may open this project. Roles decide what they can do once inside.",
 };
 
 /** Roles that may change project identity and the land record. */
@@ -81,7 +119,10 @@ function projectFields(project: ProjectDetail): EditField[] {
  * One cohesive project workspace rather than a separate page per record type.
  *
  * Everything about a development is reached from here, because land, planning
- * and permits are only meaningful inside the project that owns them.
+ * and permits are only meaningful inside the project that owns them. The header
+ * names the project once, at the top, and stays true whichever section is open:
+ * the most expensive mistake this product can allow is recording something
+ * against the wrong development.
  */
 export function ProjectWorkspace({
   projectId,
@@ -141,210 +182,233 @@ export function ProjectWorkspace({
 
   if (error) {
     return (
-      <Panel title="Project">
-        <Notice tone="error">{error}</Notice>
-        <button className="button" type="button" onClick={onBack}>
-          Back to projects
-        </button>
-      </Panel>
+      <>
+        <PageHeader
+          title="Project"
+          actions={<Button onClick={onBack}>All projects</Button>}
+        />
+        <Card>
+          <Notice tone="error">{error}</Notice>
+        </Card>
+      </>
     );
   }
 
   if (project === null) {
-    return <Loading label="Loading project…" />;
+    return (
+      <>
+        <PageHeader title="Loading project…" />
+        <Card>
+          <Loading label="Loading project…" lines={4} />
+        </Card>
+      </>
+    );
   }
 
   return (
     <>
-      <Panel
-        title={`${project.code} — ${project.name}`}
-        description={`${project.developer_entity}${project.city ? ` · ${project.city}` : ""}`}
-        actions={
-          <button className="button button-small" type="button" onClick={onBack}>
-            All projects
-          </button>
+      <PageHeader
+        eyebrow="Project"
+        title={project.name}
+        subtitle={`${project.developer_entity}${project.city ? ` · ${project.city}` : ""}`}
+        actions={<Button onClick={onBack}>All projects</Button>}
+        meta={
+          <>
+            <span className="chip">
+              <span className="chip-label">Code</span>
+              <strong className="mono">{project.code}</strong>
+            </span>
+            <Badge tone={STATUS_TONES[project.status] ?? "neutral"}>
+              {STATUS_LABELS[project.status] ?? project.status}
+            </Badge>
+            {project.country_code ? (
+              <span className="chip">
+                <span className="chip-label">Country</span>
+                <strong>{project.country_code}</strong>
+              </span>
+            ) : null}
+            {project.base_currency_code ? (
+              <span className="chip">
+                <span className="chip-label">Base</span>
+                <strong>{project.base_currency_code}</strong>
+              </span>
+            ) : null}
+            {project.reporting_currency_code &&
+            project.reporting_currency_code !== project.base_currency_code ? (
+              <span className="chip">
+                <span className="chip-label">Reporting</span>
+                <strong>{project.reporting_currency_code}</strong>
+              </span>
+            ) : null}
+          </>
         }
-      >
-        <div className="chip-list">
-          <Badge tone="neutral">{STATUS_LABELS[project.status] ?? project.status}</Badge>
-          {project.country_code ? <span className="chip">{project.country_code}</span> : null}
-          {project.base_currency_code ? (
-            <span className="chip">Base {project.base_currency_code}</span>
-          ) : null}
-          {project.reporting_currency_code &&
-          project.reporting_currency_code !== project.base_currency_code ? (
-            <span className="chip">Reporting {project.reporting_currency_code}</span>
-          ) : null}
-        </div>
-      </Panel>
+      />
 
-      <nav className="tab-row" role="tablist" aria-label="Project sections">
-        {tabs.map((entry) => (
-          <button
-            key={entry.key}
-            role="tab"
-            type="button"
-            aria-selected={tab === entry.key}
-            className={`tab ${tab === entry.key ? "tab-active" : ""}`}
-            onClick={() => setTab(entry.key)}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </nav>
+      <Tabs label="Project sections" tabs={tabs} active={tab} onSelect={setTab} />
 
-      {tab === "overview" ? (
-        <Panel
-          title="Overview"
-          description="What this project is, and what is holding it up."
-          actions={
-            canWriteProject ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setEditing((open) => !open)}
-              >
-                {editing ? "Cancel" : "Edit project"}
-              </button>
-            ) : undefined
-          }
-        >
-          {editing ? (
-            <EditForm
-              fields={projectFields(project)}
-              initial={{
-                name: asValue(project.name),
-                developer_entity: asValue(project.developer_entity),
-                city: asValue(project.city),
-                location: asValue(project.location),
-                latitude: asValue(project.latitude),
-                longitude: asValue(project.longitude),
-                project_type_code: asValue(project.project_type_code),
-                status: asValue(project.status),
-                fiscal_year_start_month: asValue(project.fiscal_year_start_month),
-                planned_start: asValue(project.planned_start),
-                planned_completion: asValue(project.planned_completion),
-              }}
-              onSave={async (changes) => {
-                await projects.update(projectId, changes);
-                await load();
-              }}
-              onCancel={() => setEditing(false)}
+      <TabPanel tab={tab}>
+        {tab === "overview" ? (
+          <>
+            <Card
+              title="Overview"
+              description={TAB_DESCRIPTIONS.overview}
+              actions={
+                canWriteProject ? (
+                  <Button onClick={() => setEditing((open) => !open)}>
+                    {editing ? "Cancel" : "Edit project"}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {editing ? (
+                <SubPanel title="Edit project">
+                  <EditForm
+                    fields={projectFields(project)}
+                    initial={{
+                      name: asValue(project.name),
+                      developer_entity: asValue(project.developer_entity),
+                      city: asValue(project.city),
+                      location: asValue(project.location),
+                      latitude: asValue(project.latitude),
+                      longitude: asValue(project.longitude),
+                      project_type_code: asValue(project.project_type_code),
+                      status: asValue(project.status),
+                      fiscal_year_start_month: asValue(project.fiscal_year_start_month),
+                      planned_start: asValue(project.planned_start),
+                      planned_completion: asValue(project.planned_completion),
+                    }}
+                    onSave={async (changes) => {
+                      await projects.update(projectId, changes);
+                      await load();
+                      setEditing(false);
+                    }}
+                    onCancel={() => setEditing(false)}
+                  />
+                </SubPanel>
+              ) : null}
+
+              <h3 className="section-heading">Identity</h3>
+              <KeyValueGrid columns={3}>
+                <KeyValue label="Developer entity" value={project.developer_entity} />
+                <KeyValue label="Project manager" value={project.project_manager_display_name} />
+                <KeyValue label="Project type" value={project.project_type_code} />
+                <KeyValue label="Location" value={project.location} />
+                <KeyValue
+                  label="Coordinates"
+                  mono
+                  value={
+                    project.latitude && project.longitude
+                      ? `${project.latitude}, ${project.longitude}`
+                      : null
+                  }
+                />
+                <KeyValue
+                  label="Fiscal year starts"
+                  value={`Month ${project.fiscal_year_start_month}`}
+                />
+              </KeyValueGrid>
+
+              <h3 className="section-heading">Programme</h3>
+              <KeyValueGrid columns={3}>
+                <KeyValue label="Planned start" mono value={project.planned_start} />
+                <KeyValue label="Planned completion" mono value={project.planned_completion} />
+                <KeyValue
+                  label="Planned duration"
+                  mono
+                  value={
+                    project.planned_duration_days === null
+                      ? null
+                      : `${project.planned_duration_days} days`
+                  }
+                />
+              </KeyValueGrid>
+            </Card>
+
+            <Card
+              title="Land and consents"
+              description="Counted across this project. Open Permits to see which ones."
+              actions={
+                <Button onClick={() => setTab("permits")}>Open permits</Button>
+              }
+            >
+              <StatRow>
+                <Stat label="Parcels" value={project.parcel_count} />
+                <Stat label="Permits" value={project.permit_count} />
+                <Stat
+                  label="Blocking"
+                  value={project.blocking_permit_count}
+                  note="Stops a unit being released"
+                />
+                <Stat
+                  label="On the critical path"
+                  value={project.critical_path_permit_count}
+                />
+                <Stat
+                  label="Past statutory period"
+                  value={project.overdue_permit_count}
+                />
+              </StatRow>
+              {project.blocking_permit_count > 0 || project.overdue_permit_count > 0 ? (
+                <p className="footnote">
+                  A blocking or overdue consent is a reason a unit cannot be released. The
+                  Permits section names each one.
+                </p>
+              ) : null}
+            </Card>
+          </>
+        ) : null}
+
+        {tab === "land" ? (
+          <LandTab
+            projectId={projectId}
+            canWriteLand={canWriteProject}
+            canWritePlanning={canWriteTechnical}
+          />
+        ) : null}
+        {tab === "inventory" ? (
+          <InventoryTab
+            projectId={projectId}
+            projectStatus={project.status}
+            roles={roles}
+            canWriteStructure={canWriteTechnical}
+            canConfigure={canWriteProject}
+          />
+        ) : null}
+        {tab === "pricing" ? (
+          <PricingTab
+            projectId={projectId}
+            projectStatus={project.status}
+            reportingCurrencyId={project.reporting_currency_id}
+            canPrice={canPrice}
+            canApprove={canApprovePricing}
+            canSeeInternal={canSeeInternalPrices}
+            onOpenUnit={(unitId) => setPricedUnit(unitId)}
+          />
+        ) : null}
+        {tab === "sales" ? (
+          <SalesTab
+            projectId={projectId}
+            projectStatus={project.status}
+            roles={roles}
+            onOpenUnit={(unitId) => setPricedUnit(unitId)}
+          />
+        ) : null}
+        {tab === "permits" ? (
+          <PermitsTab projectId={projectId} canWrite={canWriteTechnical} />
+        ) : null}
+        {tab === "documents" ? (
+          <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} />
+        ) : null}
+        {tab === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
+        {tab === "access" && !isAdmin ? (
+          <Card title="Access">
+            <EmptyState
+              title="Not available to you"
+              hint="Project membership is maintained by an administrator."
             />
-          ) : null}
-          <dl className="reference-list">
-            <div>
-              <dt className="reference-term">Developer entity</dt>
-              <dd className="reference-value">{project.developer_entity}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Location</dt>
-              <dd className="reference-value">{project.location ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Coordinates</dt>
-              <dd className="reference-value mono">
-                {project.latitude && project.longitude
-                  ? `${project.latitude}, ${project.longitude}`
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="reference-term">Project manager</dt>
-              <dd className="reference-value">
-                {project.project_manager_display_name ?? "Not assigned"}
-              </dd>
-            </div>
-            <div>
-              <dt className="reference-term">Project type</dt>
-              <dd className="reference-value">{project.project_type_code ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Fiscal year starts</dt>
-              <dd className="reference-value">Month {project.fiscal_year_start_month}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Planned start</dt>
-              <dd className="reference-value">{project.planned_start ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Planned completion</dt>
-              <dd className="reference-value">{project.planned_completion ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Planned duration</dt>
-              <dd className="reference-value">
-                {project.planned_duration_days === null
-                  ? "—"
-                  : `${project.planned_duration_days} days`}
-              </dd>
-            </div>
-            <div>
-              <dt className="reference-term">Parcels</dt>
-              <dd className="reference-value">{project.parcel_count}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Permits</dt>
-              <dd className="reference-value">{project.permit_count}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Blocking permits</dt>
-              <dd className="reference-value">{project.blocking_permit_count}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">On the critical path</dt>
-              <dd className="reference-value">{project.critical_path_permit_count}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Past their statutory period</dt>
-              <dd className="reference-value">{project.overdue_permit_count}</dd>
-            </div>
-          </dl>
-        </Panel>
-      ) : null}
-
-      {tab === "land" ? (
-        <LandTab
-          projectId={projectId}
-          canWriteLand={canWriteProject}
-          canWritePlanning={canWriteTechnical}
-        />
-      ) : null}
-      {tab === "inventory" ? (
-        <InventoryTab
-          projectId={projectId}
-          projectStatus={project.status}
-          roles={roles}
-          canWriteStructure={canWriteTechnical}
-          canConfigure={canWriteProject}
-        />
-      ) : null}
-      {tab === "pricing" ? (
-        <PricingTab
-          projectId={projectId}
-          projectStatus={project.status}
-          reportingCurrencyId={project.reporting_currency_id}
-          canPrice={canPrice}
-          canApprove={canApprovePricing}
-          canSeeInternal={canSeeInternalPrices}
-          onOpenUnit={(unitId) => setPricedUnit(unitId)}
-        />
-      ) : null}
-      {tab === "sales" ? (
-        <SalesTab
-          projectId={projectId}
-          projectStatus={project.status}
-          roles={roles}
-          onOpenUnit={(unitId) => setPricedUnit(unitId)}
-        />
-      ) : null}
-      {tab === "permits" ? (
-        <PermitsTab projectId={projectId} canWrite={canWriteTechnical} />
-      ) : null}
-      {tab === "documents" ? (
-        <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} />
-      ) : null}
-      {tab === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
+          </Card>
+        ) : null}
+      </TabPanel>
 
       {pricedUnit ? (
         <UnitDetailPanel

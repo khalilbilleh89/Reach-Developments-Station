@@ -4,9 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
 import { useSession } from "@/lib/api/session";
+import { AppShell, SessionScreen } from "@/components/AppShell";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 import { ProjectsRegister } from "@/components/projects/ProjectsRegister";
-import { Loading, Notice } from "@/components/ui";
 
 /**
  * Projects: the register, and the workspace for whichever project is open.
@@ -19,89 +19,38 @@ import { Loading, Notice } from "@/components/ui";
 function ProjectsScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const { state, signOut } = useSession();
+  const { state } = useSession();
   const openProjectId = params.get("project");
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");
   }, [state, router]);
 
-  if (state.status === "loading") {
-    return (
-      <div className="shell shell-centred">
-        <Loading label="Loading…" />
-      </div>
-    );
-  }
-
-  if (state.status === "anonymous") {
-    return (
-      <div className="shell shell-centred">
-        <main className="panel panel-narrow">
-          <Notice tone="info">Your session has ended. Please sign in again.</Notice>
-        </main>
-      </div>
-    );
-  }
+  if (state.status !== "authenticated") return <SessionScreen status={state.status} />;
 
   const { user } = state;
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="app-identity">
-          <p className="eyebrow">Reach Developments Station</p>
-          <h1 className="app-title">Projects</h1>
-        </div>
-        <div className="app-account">
-          <span className="app-user">{user.display_name}</span>
-          <span className="subtle">
-            {user.roles.map((role) => role.label).join(", ") || "No roles"}
-          </span>
-          <button
-            className="button button-small"
-            type="button"
-            onClick={() => router.push("/settings/")}
-          >
-            Settings
-          </button>
-          <button
-            className="button button-small"
-            type="button"
-            onClick={() => void signOut().then(() => router.replace("/login/"))}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <main className="app-main">
-        {openProjectId ? (
-          <ProjectWorkspace
-            projectId={openProjectId}
-            user={user}
-            onBack={() => router.push("/projects/")}
-          />
-        ) : (
-          <ProjectsRegister
-            onOpen={(id) => router.push(`/projects/?project=${encodeURIComponent(id)}`)}
-          />
-        )}
-      </main>
-    </div>
+    <AppShell current="projects" user={user} wide={Boolean(openProjectId)}>
+      {openProjectId ? (
+        <ProjectWorkspace
+          projectId={openProjectId}
+          user={user}
+          onBack={() => router.push("/projects/")}
+        />
+      ) : (
+        <ProjectsRegister
+          onOpen={(id) => router.push(`/projects/?project=${encodeURIComponent(id)}`)}
+        />
+      )}
+    </AppShell>
   );
 }
 
 export default function ProjectsPage() {
   // `useSearchParams` needs a Suspense boundary in the App Router.
   return (
-    <Suspense
-      fallback={
-        <div className="shell shell-centred">
-          <Loading label="Loading…" />
-        </div>
-      }
-    >
+    <Suspense fallback={<SessionScreen status="loading" />}>
       <ProjectsScreen />
     </Suspense>
   );
