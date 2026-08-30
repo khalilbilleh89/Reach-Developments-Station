@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, inventory, pricing } from "@/lib/api";
+import { ApiError, inventory, pricing, sales } from "@/lib/api";
 import type {
   AreaSchedule,
   AreaType,
   CustomValue,
+  Reservation,
+  SaleContract,
+  SaleDetail,
   SubAsset,
   Unit,
   UnitPricing,
@@ -21,6 +24,13 @@ import {
   DIMENSION_LABELS,
   statusLabel,
 } from "@/components/projects/inventory/statusLabels";
+import {
+  gateLabel,
+  handoverLabel,
+  legalEventLabel,
+  reservationLabel,
+  saleLabel,
+} from "@/components/projects/sales/labels";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
 const UNIT_FIELDS: EditField[] = [
@@ -127,6 +137,14 @@ export function UnitDetailPanel({
   const [values, setValues] = useState<CustomValue[]>([]);
   const [history, setHistory] = useState<UnitStatusEvent[]>([]);
   const [unitPricing, setUnitPricing] = useState<UnitPricing | null>(null);
+  // The unit's commercial commitment, if it has one. Loaded separately and
+  // allowed to fail quietly for the same reason pricing is: a reader who may
+  // open a unit is not always entitled to the deal on it, and a 403 there
+  // should not blank the unit they can see.
+  const [commitment, setCommitment] = useState<{
+    reservation: Reservation | null;
+    sale: SaleDetail | null;
+  } | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [pricingBusy, setPricingBusy] = useState(false);
   const [editing, setEditing] = useState<"none" | "unit" | "release" | "fields">("none");
@@ -152,6 +170,22 @@ export function UnitDetailPanel({
         setUnitPricing(await pricing.unit(projectId, unitId));
       } catch {
         setUnitPricing(null);
+      }
+      try {
+        const reservations = await sales.reservations(projectId, { unit_id: unitId });
+        const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
+        const live = contracts.find((entry) =>
+          ["signature_pending", "active", "termination_pending"].includes(entry.status),
+        );
+        setCommitment({
+          reservation:
+            reservations.find((entry) =>
+              ["active", "extended", "converted"].includes(entry.status),
+            ) ?? null,
+          sale: live ? await sales.contract(projectId, live.id) : null,
+        });
+      } catch {
+        setCommitment(null);
       }
       setUnit(detail);
       setSchedules(scheduleList);
@@ -520,6 +554,151 @@ export function UnitDetailPanel({
       {unit.missing_requirements.length > 0 ? (
         <p className="subtle">Outstanding: {unit.missing_requirements.join(", ")}.</p>
       ) : null}
+
+      <h3 className="section-heading">Sale and legal</h3>
+      {commitment === null ? (
+        <p className="subtle">Not available to your role.</p>
+      ) : commitment.reservation === null && commitment.sale === null ? (
+        <p className="subtle">No active commercial commitment.</p>
+      ) : (
+        <>
+          <dl className="reference-list">
+            {commitment.reservation ? (
+              <>
+                <div>
+                  <dt className="reference-term">Reservation</dt>
+                  <dd className="reference-value">
+                    {commitment.reservation.reservation_number} ·{" "}
+                    {reservationLabel(commitment.reservation.status)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="reference-term">Expires</dt>
+                  <dd className="reference-value">{commitment.reservation.expires_on}</dd>
+                </div>
+                <div>
+                  <dt className="reference-term">Deposit</dt>
+                  <dd className="reference-value">
+                    {gateLabel(commitment.reservation.deposit_gate_status)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="reference-term">Quoted price</dt>
+                  <dd className="reference-value mono nowrap">
+                    {commitment.reservation.net_contract_price_ex_tax}
+                  </dd>
+                </div>
+              </>
+            ) : null}
+            {commitment.sale ? (
+              <>
+                <div>
+                  <dt className="reference-term">Contract</dt>
+                  <dd className="reference-value">
+                    {commitment.sale.sale.sale_number} ·{" "}
+                    {saleLabel(commitment.sale.sale.status)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="reference-term">SPA number</dt>
+                  <dd className="reference-value">{commitment.sale.sale.spa_number ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="reference-term">Contract price</dt>
+                  <dd className="reference-value mono nowrap">
+                    {commitment.sale.sale.total_contract_price}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="reference-term">First payment</dt>
+                  <dd className="reference-value">
+                    {gateLabel(commitment.sale.sale.first_payment_gate_status)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="reference-term">Handover</dt>
+                  <dd className="reference-value">
+                    {commitment.sale.handover
+                      ? handoverLabel(commitment.sale.handover.handover.status)
+                      : "Not opened"}
+                  </dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+          {commitment.sale ? (
+            <>
+              <h3 className="section-heading">Buyer parties on the contract</h3>
+              <div className="table-scroll">
+                <table className="table">
+                  <caption className="visually-hidden">Contract parties</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Name as identification</th>
+                      <th scope="col">Share</th>
+                      <th scope="col">Identity document</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {commitment.sale.parties.map((party) => (
+                      <tr key={party.id}>
+                        <th scope="row">{party.name_as_identification}</th>
+                        <td className="mono nowrap">{party.share_fraction}</td>
+                        <td className="mono">
+                          {"identity_document_number" in party ? (
+                            `${party.identity_document_type ?? "—"} ${party.identity_document_number ?? ""}`
+                          ) : (
+                            <span className="subtle">Not shown to your role</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <h3 className="section-heading">Legal timeline</h3>
+              {commitment.sale.legal.events.length === 0 ? (
+                <p className="subtle">Nothing recorded yet.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table className="table">
+                    <caption className="visually-hidden">Legal timeline</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Milestone</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Standing</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commitment.sale.legal.events.map((event) => (
+                        <tr key={event.id}>
+                          <th scope="row">
+                            {legalEventLabel(event.event_type)}
+                            {event.reverses_event_id ? " — withdrawn" : ""}
+                          </th>
+                          <td className="nowrap">{event.event_date}</td>
+                          <td>
+                            {commitment.sale?.legal.effective_event_ids.includes(event.id)
+                              ? "Stands"
+                              : "Superseded"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {commitment.sale.cancellation ? (
+                <Notice tone="info">
+                  A cancellation is running on this contract:{" "}
+                  {commitment.sale.cancellation.reason}
+                </Notice>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
 
       <h3 className="section-heading">Status</h3>
       <div className="chip-list">
