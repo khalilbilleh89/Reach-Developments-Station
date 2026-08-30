@@ -1112,13 +1112,28 @@ def transition_commercial_status(
 #: fall away — back to available while nothing has been signed, or to returned
 #: once something has, because a unit that carried a contract does not quietly
 #: rejoin the price list.
+#:
+#: ``held`` is the landing for a commitment that falls away while the release
+#: gates no longer pass — a unit whose pricing was withdrawn while it was
+#: reserved. It is an inventory state with an inventory route back to the
+#: market, which is the point: sales lets go of the unit, and inventory decides
+#: when it is sellable again.
 SALES_COMMERCIAL_TRANSITIONS: dict[str, frozenset[str]] = {
     COMMERCIAL_STATUS_AVAILABLE: frozenset({COMMERCIAL_STATUS_RESERVED}),
     COMMERCIAL_STATUS_RESERVED: frozenset(
-        {COMMERCIAL_STATUS_CONTRACT_PENDING, COMMERCIAL_STATUS_AVAILABLE}
+        {
+            COMMERCIAL_STATUS_CONTRACT_PENDING,
+            COMMERCIAL_STATUS_AVAILABLE,
+            COMMERCIAL_STATUS_HELD,
+        }
     ),
     COMMERCIAL_STATUS_CONTRACT_PENDING: frozenset(
-        {COMMERCIAL_STATUS_CONTRACTED, COMMERCIAL_STATUS_RETURNED, COMMERCIAL_STATUS_AVAILABLE}
+        {
+            COMMERCIAL_STATUS_CONTRACTED,
+            COMMERCIAL_STATUS_RETURNED,
+            COMMERCIAL_STATUS_AVAILABLE,
+            COMMERCIAL_STATUS_HELD,
+        }
     ),
     COMMERCIAL_STATUS_CONTRACTED: frozenset(
         {COMMERCIAL_STATUS_RETURNED, COMMERCIAL_STATUS_CANCELLED, COMMERCIAL_STATUS_WITHDRAWN}
@@ -1135,6 +1150,7 @@ _SALES_REASON_REQUIRED = frozenset(
         COMMERCIAL_STATUS_CANCELLED,
         COMMERCIAL_STATUS_WITHDRAWN,
         COMMERCIAL_STATUS_AVAILABLE,
+        COMMERCIAL_STATUS_HELD,
     }
 )
 
