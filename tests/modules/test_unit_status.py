@@ -187,7 +187,7 @@ def test_the_other_dimensions_are_untouched_by_a_commercial_move(
     )
 
     unit = db.scalars(select(Unit)).one()
-    assert unit.legal_status == "not_started"
+    assert unit.legal_status == "no_spa"
     assert unit.collection_status == "not_started"
     assert unit.delivery_status == "not_started"
 

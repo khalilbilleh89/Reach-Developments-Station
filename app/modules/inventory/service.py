@@ -48,9 +48,16 @@ from app.modules.inventory.models import (
     CATEGORY_UNIT_TYPE,
     CATEGORY_VIEW_CLASS,
     COMMERCIAL_STATUS_AVAILABLE,
+    COMMERCIAL_STATUS_CANCELLED,
+    COMMERCIAL_STATUS_CONTRACT_PENDING,
+    COMMERCIAL_STATUS_CONTRACTED,
     COMMERCIAL_STATUS_HELD,
+    COMMERCIAL_STATUS_RESERVED,
+    COMMERCIAL_STATUS_RETURNED,
     COMMERCIAL_STATUS_UNRELEASED,
+    COMMERCIAL_STATUS_WITHDRAWN,
     DIMENSION_COMMERCIAL,
+    DIMENSION_LEGAL,
     ENTITY_AREA_SCHEDULE,
     ENTITY_AREA_TYPE,
     ENTITY_BUILDING,
@@ -60,6 +67,7 @@ from app.modules.inventory.models import (
     ENTITY_SUB_ASSET,
     ENTITY_UNIT,
     INVENTORY_COMMERCIAL_STATUSES,
+    LEGAL_STATUSES,
     PHASE_STATUS_PLANNING,
     AreaType,
     Building,
@@ -1092,6 +1100,248 @@ def transition_commercial_status(
     )
     session.commit()
     session.refresh(unit)
+    return unit
+
+
+#: The commercial moves a real sales transaction produces. Inventory owns the
+#: column and the history; it does not own the reason any of these happen, which
+#: is why the map lives here but nothing inside this module can walk it.
+#:
+#: Read it as the commitment ladder and its ways down: a unit is reserved, then
+#: committed to a contract, then contracted; and at each rung the commitment can
+#: fall away — back to available while nothing has been signed, or to returned
+#: once something has, because a unit that carried a contract does not quietly
+#: rejoin the price list.
+SALES_COMMERCIAL_TRANSITIONS: dict[str, frozenset[str]] = {
+    COMMERCIAL_STATUS_AVAILABLE: frozenset({COMMERCIAL_STATUS_RESERVED}),
+    COMMERCIAL_STATUS_RESERVED: frozenset(
+        {COMMERCIAL_STATUS_CONTRACT_PENDING, COMMERCIAL_STATUS_AVAILABLE}
+    ),
+    COMMERCIAL_STATUS_CONTRACT_PENDING: frozenset(
+        {COMMERCIAL_STATUS_CONTRACTED, COMMERCIAL_STATUS_RETURNED, COMMERCIAL_STATUS_AVAILABLE}
+    ),
+    COMMERCIAL_STATUS_CONTRACTED: frozenset(
+        {COMMERCIAL_STATUS_RETURNED, COMMERCIAL_STATUS_CANCELLED, COMMERCIAL_STATUS_WITHDRAWN}
+    ),
+    COMMERCIAL_STATUS_RETURNED: frozenset({COMMERCIAL_STATUS_AVAILABLE}),
+    COMMERCIAL_STATUS_CANCELLED: frozenset({COMMERCIAL_STATUS_RETURNED}),
+}
+
+#: Sales moves that must say why. Every one of them is a commitment coming
+#: undone, and "why" is the first question asked of it afterwards.
+_SALES_REASON_REQUIRED = frozenset(
+    {
+        COMMERCIAL_STATUS_RETURNED,
+        COMMERCIAL_STATUS_CANCELLED,
+        COMMERCIAL_STATUS_WITHDRAWN,
+        COMMERCIAL_STATUS_AVAILABLE,
+    }
+)
+
+
+def apply_sales_commercial_status(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    to_status: str,
+    effective_date: date,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str | None = None,
+    notes: str | None = None,
+    check_release: bool = True,
+) -> Unit:
+    """Move a unit through the commercial states a sale produces. Does not commit.
+
+    The public contract PR-MVP-05 calls instead of assigning
+    ``unit.commercial_status`` itself. Inventory owns this column, its closed
+    set, its transition map and its append-only history; sales owns the business
+    event that justifies a move. Keeping the write here is what stops a second
+    domain inventing a status, skipping the event, or leaving the register
+    showing a state whose history has a hole in it.
+
+    Deliberately does not commit. The status change, the event, the reservation
+    or contract that caused it and the audit entry are one decision, so they are
+    one transaction — the caller's.
+
+    The caller is expected to be holding the unit lock already: every sales
+    invariant that reaches this point ("no second reservation", "no second
+    contract") was decided by reading that locked row. The lock is taken again
+    here rather than assumed, because a re-entrant lock costs nothing and an
+    assumed one is a race.
+    """
+    unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
+    from_status = unit.commercial_status
+
+    if to_status not in SALES_COMMERCIAL_TRANSITIONS.get(from_status, frozenset()):
+        raise ConflictError(
+            f"A unit cannot move from {from_status.replace('_', ' ')} "
+            f"to {to_status.replace('_', ' ')}."
+        )
+    if to_status in _SALES_REASON_REQUIRED and not (reason or "").strip():
+        raise ValidationError("A reason is required for this change.")
+    _require_forward_effective_date(session, unit=unit, effective_date=effective_date)
+
+    # Returning to the market is a release, and a release is exactly the gate
+    # PR-MVP-03 built. A cancelled sale does not restore a price: the unit is
+    # repriced first or it does not go back on the list.
+    if to_status == COMMERCIAL_STATUS_AVAILABLE and check_release:
+        blockers = release_blockers(session, unit=unit, today=effective_date)
+        if blockers:
+            raise ConflictError("This unit cannot be released yet: " + "; ".join(blockers) + ".")
+
+    before = _snapshot(unit, _UNIT_FIELDS)
+    unit.commercial_status = to_status
+    session.add(
+        UnitStatusEvent(
+            unit_id=unit.id,
+            dimension=DIMENSION_COMMERCIAL,
+            from_status=from_status,
+            to_status=to_status,
+            effective_date=effective_date,
+            reason=(reason or "").strip() or None,
+            notes=notes,
+            changed_by_user_id=actor_user_id,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="unit.commercial_status_changed",
+        entity_type=ENTITY_UNIT,
+        entity_id=unit.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(unit, _UNIT_FIELDS),
+    )
+    return unit
+
+
+def latest_legal_effective_date(session: Session, *, unit_id: uuid.UUID) -> date | None:
+    """The effective date of this unit's most recent legal event."""
+    return session.scalars(
+        select(func.max(UnitStatusEvent.effective_date)).where(
+            UnitStatusEvent.unit_id == unit_id,
+            UnitStatusEvent.dimension == DIMENSION_LEGAL,
+        )
+    ).first()
+
+
+def apply_legal_status(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    to_status: str,
+    effective_date: date,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str | None = None,
+    notes: str | None = None,
+) -> Unit:
+    """Set the unit's legal state from a recorded legal event. Does not commit.
+
+    There is no route anywhere that sets this column directly, and this contract
+    is not one: it is called by PR-MVP-05 only after a legal event has been
+    written, so the status a unit displays always has a dated, attributed,
+    evidenced record behind it.
+
+    Which sequences are legal is Sales/Legal's question — a registry's order of
+    business is not inventory's to know — so this validates the closed set, the
+    chronology and nothing else.
+    """
+    unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
+    from_status = unit.legal_status
+    if to_status not in LEGAL_STATUSES:  # pragma: no cover - callers pass constants
+        raise ValidationError("That is not a legal status.")
+    if to_status == from_status:
+        return unit
+
+    latest = latest_legal_effective_date(session, unit_id=unit.id)
+    if latest is not None and effective_date < latest:
+        raise ValidationError(
+            f"This unit's last legal change was effective {latest.isoformat()}. "
+            "A later change cannot be dated before it."
+        )
+
+    before = _snapshot(unit, _UNIT_FIELDS)
+    unit.legal_status = to_status
+    session.add(
+        UnitStatusEvent(
+            unit_id=unit.id,
+            dimension=DIMENSION_LEGAL,
+            from_status=from_status,
+            to_status=to_status,
+            effective_date=effective_date,
+            reason=(reason or "").strip() or None,
+            notes=notes,
+            changed_by_user_id=actor_user_id,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="unit.legal_status_changed",
+        entity_type=ENTITY_UNIT,
+        entity_id=unit.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(unit, _UNIT_FIELDS),
+    )
+    return unit
+
+
+def apply_delivery_status(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    to_status: str,
+    effective_date: date,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str | None = None,
+) -> Unit:
+    """Set the unit's delivery state from a completed handover. Does not commit.
+
+    PR-MVP-05 uses exactly one value of this — ``handed_over``, once every
+    configured clearance has been given. PR-MVP-09 owns the construction states
+    below it.
+    """
+    unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
+    from_status = unit.delivery_status
+    if to_status == from_status:
+        return unit
+    before = _snapshot(unit, _UNIT_FIELDS)
+    unit.delivery_status = to_status
+    session.add(
+        UnitStatusEvent(
+            unit_id=unit.id,
+            dimension="delivery",
+            from_status=from_status,
+            to_status=to_status,
+            effective_date=effective_date,
+            reason=(reason or "").strip() or None,
+            changed_by_user_id=actor_user_id,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="unit.delivery_status_changed",
+        entity_type=ENTITY_UNIT,
+        entity_id=unit.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(unit, _UNIT_FIELDS),
+    )
     return unit
 
 
