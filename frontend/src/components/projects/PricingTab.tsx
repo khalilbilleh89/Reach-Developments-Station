@@ -337,11 +337,17 @@ export function PricingTab({
                       <td>{row.unit_type_code ?? "—"}</td>
                       <td className="num">{row.internal_area_snapshot ?? "—"}</td>
                       <td className="num">{row.weighted_area_snapshot ?? "—"}</td>
+                      {/*
+                        * Denominated by the ROW's own price version, never by
+                        * the active configuration: a frozen price keeps the
+                        * currency it was approved in, whatever the project
+                        * prices in today.
+                        */}
                       <td className="num">
-                        {money(row.reference_price_ex_tax, currencyCodeOf(overview?.currency_id))}
+                        {money(row.reference_price_ex_tax, currencyCodeOf(row.currency_id))}
                       </td>
                       <td className="num">
-                        {money(row.price_per_internal_area, currencyCodeOf(overview?.currency_id))}
+                        {money(row.price_per_internal_area, currencyCodeOf(row.currency_id))}
                       </td>
                       <td className="num">{row.version_number ?? "—"}</td>
                       <td>{row.status ? (STATUS_LABELS[row.status] ?? row.status) : "Not priced"}</td>

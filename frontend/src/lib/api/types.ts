@@ -721,6 +721,7 @@ export interface PriceRegisterRow {
   version_id: string | null;
   version_number: number | null;
   status: string | null;
+  currency_id: string | null;
   reference_price_ex_tax: string | null;
   internal_area_snapshot: string | null;
   weighted_area_snapshot: string | null;
