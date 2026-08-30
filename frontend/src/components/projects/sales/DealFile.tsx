@@ -517,6 +517,11 @@ export function DealFile({
 
   const terms = reservation?.reservation ?? null;
   const preparing = terms !== null && ["draft", "deposit_pending"].includes(terms.status);
+  const live = terms !== null && ["active", "extended"].includes(terms.status);
+  // A live reservation whose price lock has run out cannot proceed to contract
+  // and cannot be edited either. The explicit re-quote is the way out, and the
+  // screen offers it rather than leaving the operator at a dead end.
+  const lockExpired = terms !== null && terms.price_locked_until < today();
   const isRate = RATE_ADJUSTMENTS.has(adjustment.adjustment_type);
 
   return (
@@ -699,7 +704,7 @@ export function DealFile({
           ) : null}
 
           <div className="chip-list">
-            {canPrepare && preparing && terms.exception_approval_status === "pending" ? (
+            {canPrepare && (preparing || live) && terms.exception_approval_status === "pending" ? (
               <button
                 className="button button-small"
                 type="button"
@@ -804,7 +809,25 @@ export function DealFile({
                 Activate reservation
               </button>
             ) : null}
-            {canPrepare && ["active", "extended"].includes(terms.status) ? (
+            {canPrepare && live && lockExpired ? (
+              <button
+                className="button button-small button-primary"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const reason = window.prompt("Why is this reservation being re-quoted?");
+                  if (reason) {
+                    void run(
+                      () => sales.requoteReservation(projectId, terms.id, reason),
+                      "Re-quoted at the unit's current price. Any approval it had is withdrawn.",
+                    );
+                  }
+                }}
+              >
+                Re-quote
+              </button>
+            ) : null}
+            {canPrepare && live ? (
               <button
                 className="button button-small"
                 type="button"
@@ -837,7 +860,7 @@ export function DealFile({
                 Close as expired
               </button>
             ) : null}
-            {canWriteSale && ["active", "extended"].includes(terms.status) && sale === null ? (
+            {canWriteSale && live && !lockExpired && sale === null ? (
               <button
                 className="button button-small button-primary"
                 type="button"

@@ -1120,13 +1120,24 @@ class SaleLegalEvent(Base):
             name="sale",
             ondelete="RESTRICT",
         ),
+        # A reversal must withdraw an event on the *same* contract. Pointing at
+        # the identifier alone proves only that some event exists somewhere, so
+        # the sale and the project travel with it and the database refuses a
+        # correction that reaches across contracts — however the identifiers
+        # are shuffled, and whether or not the service was involved.
         ForeignKeyConstraint(
-            ["reverses_event_id"],
-            ["sale_legal_events.id"],
+            ["reverses_event_id", "sale_contract_id", "project_id"],
+            [
+                "sale_legal_events.id",
+                "sale_legal_events.sale_contract_id",
+                "sale_legal_events.project_id",
+            ],
             name="reverses",
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "project_id", name="legal_event_project"),
+        #: The key the reversal foreign key above points at.
+        UniqueConstraint("id", "sale_contract_id", "project_id", name="legal_event_sale"),
         CheckConstraint(in_list("event_type", LEGAL_EVENT_TYPES), name="type_ok"),
         CheckConstraint("fee_amount IS NULL OR fee_amount >= 0", name="fee_nonneg"),
         CheckConstraint("fee_amount IS NULL OR currency_id IS NOT NULL", name="fee_has_currency"),

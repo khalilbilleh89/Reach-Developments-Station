@@ -17,6 +17,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -30,6 +31,7 @@ from app.modules.sales.models import (
     SaleContract,
     SaleLegalEvent,
 )
+from tests.modules.conftest import sales_url
 
 
 def _reservation(db: Session, reservation_id: str) -> Reservation:
@@ -140,10 +142,8 @@ def test_a_contract_cannot_hold_a_status_outside_the_closed_set(
 
 
 def test_a_clearance_cannot_invent_a_type(
-    project_id: str, active_sale: str, sales_ops_client: object, db: Session
+    project_id: str, active_sale: str, sales_ops_client: TestClient, db: Session
 ) -> None:
-    from tests.modules.conftest import sales_url
-
     handover = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/handover", json={}
     )
@@ -326,6 +326,94 @@ def test_one_event_cannot_be_reversed_twice(project_id: str, active_sale: str, d
         )
 
     _refuses(db, "uq_sale_legal_events_reverses")
+
+
+def _draft_copy(db: Session, sale: SaleContract, *, number: str) -> SaleContract:
+    """A second contract on the same unit, in draft so it holds nothing.
+
+    Draft is outside the committed-status partial index, so the database allows
+    it — which is exactly what makes it a useful second target to point a
+    reversal at.
+    """
+    copy = SaleContract(
+        project_id=sale.project_id,
+        sale_number=number,
+        reservation_id=sale.reservation_id,
+        unit_id=sale.unit_id,
+        client_id=sale.client_id,
+        unit_price_version_id=sale.unit_price_version_id,
+        currency_id=sale.currency_id,
+        contract_date=sale.contract_date,
+        status="draft",
+        reference_price_ex_tax=sale.reference_price_ex_tax,
+        gross_quoted_price_ex_tax=sale.gross_quoted_price_ex_tax,
+        cash_discount_amount=sale.cash_discount_amount,
+        seller_credit_amount=sale.seller_credit_amount,
+        net_contract_price_ex_tax=sale.net_contract_price_ex_tax,
+        seller_cost_total=sale.seller_cost_total,
+        effective_net_revenue_snapshot=sale.effective_net_revenue_snapshot,
+        tax_total=sale.tax_total,
+        buyer_fee_total=sale.buyer_fee_total,
+        total_contract_price=sale.total_contract_price,
+        reservation_quote_snapshot_json={},
+        first_payment_gate_status="not_required",
+        created_by_user_id=sale.created_by_user_id,
+    )
+    db.add(copy)
+    db.flush()
+    return copy
+
+
+def test_a_reversal_cannot_withdraw_another_contracts_event(
+    project_id: str, active_sale: str, db: Session
+) -> None:
+    """The reversal key carries the sale and the project, not just the identifier.
+
+    Pointing at an identifier alone proves that some event exists somewhere. A
+    legal record should not depend on the service alone for something PostgreSQL
+    can express, so a correction that reaches across contracts is refused at the
+    database — however the identifiers are shuffled.
+    """
+    sale = db.scalars(select(SaleContract).where(SaleContract.id == uuid.UUID(active_sale))).one()
+    original = db.scalars(
+        select(SaleLegalEvent).where(SaleLegalEvent.sale_contract_id == sale.id)
+    ).first()
+    assert original is not None
+    other = _draft_copy(db, sale, number="SALE-900001")
+
+    db.add(
+        SaleLegalEvent(
+            project_id=other.project_id,
+            sale_contract_id=other.id,
+            event_type=original.event_type,
+            event_date=original.event_date,
+            reverses_event_id=original.id,
+            reversal_reason="Entered against the wrong contract",
+            entered_by_user_id=original.entered_by_user_id,
+        )
+    )
+
+    _refuses(db, '"reverses"')
+
+
+def test_a_reversal_on_the_same_contract_is_accepted(
+    legal_client: TestClient, project_id: str, active_sale: str
+) -> None:
+    """The same key that refuses a cross-contract correction admits a real one."""
+    timeline = legal_client.get(
+        f"{sales_url(project_id)}/contracts/{active_sale}/legal-events"
+    ).json()
+    latest = timeline["events"][-1]
+
+    response = legal_client.post(
+        f"{sales_url(project_id)}/legal-events/{latest['id']}/reverse",
+        json={"reason": "Signature page was unsigned"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert latest["id"] not in response.json()["effective_event_ids"]
+    # Both rows survive: the original and the correction that withdraws it.
+    assert len(response.json()["events"]) == len(timeline["events"]) + 1
 
 
 def test_a_recorded_fee_cannot_lose_its_currency(

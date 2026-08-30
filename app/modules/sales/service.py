@@ -300,6 +300,30 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _effective(effective_date: date | None) -> date:
+    """The date a transition takes effect, refusing one that has not happened yet.
+
+    Every operation below changes the record's *current* state the moment it
+    runs. A future effective date would produce a unit that is contracted today
+    and whose history says the contract begins next week — two statements about
+    the same fact that cannot both be true, and the sort of thing nobody notices
+    until they are trying to reconstruct a quarter.
+
+    Backdating stays allowed where the chronology rules permit it: recording on
+    Thursday something that happened on Tuesday is ordinary business. This
+    module runs no scheduler and has no pending states, so a date in the future
+    is not a promise it could keep.
+    """
+    today = inventory_fields.business_today()
+    effective = effective_date or today
+    if effective > today:
+        raise ValidationError(
+            f"This takes effect immediately, so it cannot be dated "
+            f"{effective.isoformat()}. Use today or a past date."
+        )
+    return effective
+
+
 def _amount(value: object) -> Decimal:
     """Coerce an incoming amount to the platform's monetary scale."""
     return money(Decimal(str(value)) if value is not None else ZERO)
@@ -1089,6 +1113,33 @@ def _require_preparing(reservation: Reservation) -> None:
         )
 
 
+def _require_open_exception(reservation: Reservation) -> None:
+    """Allow an exception to be worked while it is genuinely outstanding.
+
+    Ordinarily that means the reservation is still in preparation. The one other
+    case is a live reservation that has been re-quoted: activation refuses an
+    unsettled exception, so a committed reservation can only be carrying one
+    because ``requote_reservation`` produced it. That exception has to be
+    approvable, or a re-quote would leave the deal stuck behind a decision
+    nobody could take.
+
+    This widens nothing else. A committed reservation's adjustments, dates and
+    money stay frozen; the explicit re-quote remains the only route to them.
+    """
+    if reservation.status in RESERVATION_PREPARING:
+        return
+    outstanding = reservation.exception_approval_status in {
+        EXCEPTION_PENDING,
+        EXCEPTION_SUBMITTED,
+        EXCEPTION_REJECTED,
+    }
+    if reservation.status in RESERVATION_COMMITTED and outstanding:
+        return
+    raise ConflictError(
+        "This reservation is no longer in preparation. Its commercial terms are frozen."
+    )
+
+
 def create_reservation(
     session: Session,
     *,
@@ -1554,7 +1605,7 @@ def submit_exception(
         session, project=project, reservation_id=reservation_id, actor=actor
     )
     reservation = _lock_reservation(session, project_id=project.id, reservation_id=reservation.id)
-    _require_preparing(reservation)
+    _require_open_exception(reservation)
     if not reservation.exception_approval_required:
         raise ConflictError("This quote is within the approval thresholds.")
     if reservation.exception_approval_status not in {EXCEPTION_PENDING, EXCEPTION_REJECTED}:
@@ -1609,7 +1660,7 @@ def decide_exception(
             f"Only {required_role.replace('_', ' ')} may decide this exception."
         )
     reservation = _lock_reservation(session, project_id=project.id, reservation_id=reservation.id)
-    _require_preparing(reservation)
+    _require_open_exception(reservation)
     if reservation.exception_approval_status != EXCEPTION_SUBMITTED:
         raise ConflictError("There is no submitted exception on this reservation.")
     permissions.require_different_checker(
@@ -1730,22 +1781,22 @@ def waive_deposit(
     return reservation
 
 
-def _require_quote_still_valid(
-    session: Session, *, project: Project, unit: Unit, reservation: Reservation, today: date
+def _require_live_quote(
+    session: Session, *, reservation: Reservation, unit: Unit, today: date
 ) -> None:
-    """Refuse to commit a unit on a quote that no longer describes it.
+    """Refuse to *take* a unit on a quote that is not the price it is offered at.
 
-    Four separate ways a frozen quote can stop being true, checked separately so
-    the operator is told which one happened: the price it was cut from is no
-    longer the live one, the unit's basis moved and pricing was withdrawn, the
-    price lock ran out, or the reservation itself has expired.
+    The rule before a reservation commits anything. Until that moment the buyer
+    has been shown a number and nobody has agreed to it, so the number had
+    better still be the one on the list: a draft prepared last month against a
+    superseded price is not something to hold a unit with.
+
+    Five separate refusals, each with its own message, because "invalid" tells
+    an operator nothing: the reservation has run out, the lock has run out, the
+    unit's pricing was withdrawn, the price it was cut from is no longer live, or
+    there is no frozen quote at all.
     """
-    if reservation.expires_on < today:
-        raise ConflictError("This reservation has expired. Close it and prepare a new one.")
-    if reservation.price_locked_until < today:
-        raise ConflictError(
-            "The price lock on this reservation has expired. Re-quote it before activating."
-        )
+    _require_lock_intact(reservation=reservation, today=today)
     if not unit.pricing_approved:
         raise ConflictError("This unit requires repricing before it can be committed.")
     active = pricing_service.active_price(session, unit_id=unit.id)
@@ -1754,8 +1805,51 @@ def _require_quote_still_valid(
             "The unit's price has changed since this reservation was quoted. "
             "Re-quote it before activating."
         )
+
+
+def _require_lock_intact(*, reservation: Reservation, today: date) -> None:
+    """Refuse to proceed on a reservation that has run out of time."""
+    if reservation.expires_on < today:
+        raise ConflictError("This reservation has expired. Close it and prepare a new one.")
+    if reservation.price_locked_until < today:
+        raise ConflictError(
+            "The price lock on this reservation has expired. Re-quote it before proceeding."
+        )
     if not reservation.quote_snapshot_json:  # pragma: no cover - creation always freezes one
         raise ConflictError("This reservation has no frozen quote.")
+
+
+def _require_locked_quote_still_sellable(
+    session: Session, *, reservation: Reservation, today: date
+) -> None:
+    """Refuse to contract on a locked quote that has stopped describing the unit.
+
+    The rule *after* a reservation has committed, and deliberately a different
+    one. A price lock is a promise: for these thirty days this buyer pays this
+    number. Finance putting a new list price live the following Wednesday is
+    commercial repricing — it changes what the unit is offered at tomorrow and
+    says nothing about what this buyer already agreed. Refusing the sale because
+    the frozen version is no longer today's active price would make the lock
+    mean nothing, which is why this does not ask that question.
+
+    What it does ask is whether the unit is still the unit. Pricing owns the
+    comparison of a version's frozen basis against current inventory, and
+    answers it through one public contract; a locked price is not permission to
+    sell a materially different flat under last month's geometry.
+    """
+    _require_lock_intact(reservation=reservation, today=today)
+    version = pricing_service.get_price_version(
+        session,
+        project_id=reservation.project_id,
+        version_id=reservation.unit_price_version_id,
+    )
+    try:
+        pricing_service.require_price_basis_current(session, version=version)
+    except ConflictError as exc:
+        raise ConflictError(
+            "This unit has changed since the reservation was quoted. Re-quote it "
+            "before drawing up a contract."
+        ) from exc
 
 
 def _require_exception_settled(reservation: Reservation) -> None:
@@ -1800,7 +1894,7 @@ def activate_reservation(
     reservation = _lock_reservation(session, project_id=project.id, reservation_id=reservation.id)
 
     today = inventory_fields.business_today()
-    effective_date = effective_date or today
+    effective_date = _effective(effective_date)
     if reservation.status not in RESERVATION_PREPARING:
         raise ConflictError("Only a reservation in preparation can be activated.")
     if not unit.is_active:
@@ -1816,9 +1910,7 @@ def activate_reservation(
     if not client.is_active:
         raise ConflictError("This client is not active.")
     _require_reconciled_shares(session, client=client)
-    _require_quote_still_valid(
-        session, project=project, unit=unit, reservation=reservation, today=today
-    )
+    _require_live_quote(session, reservation=reservation, unit=unit, today=today)
     _require_exception_settled(reservation)
     if reservation.deposit_gate_status not in GATE_SATISFIED:
         raise ConflictError("The deposit on this reservation has not been confirmed or waived.")
@@ -1900,7 +1992,7 @@ def extend_reservation(
         reservation=reservation,
         from_status=from_status,
         to_status=RESERVATION_EXTENDED,
-        effective_date=effective_date or inventory_fields.business_today(),
+        effective_date=_effective(effective_date),
         actor=actor,
         reason=_require_reason(reason, detail="Say why the reservation is being extended."),
     )
@@ -2067,7 +2159,7 @@ def expire_reservation(
         reservation=reservation,
         actor=actor,
         to_status=RESERVATION_EXPIRED,
-        effective_date=effective_date or today,
+        effective_date=_effective(effective_date),
         reason=f"Reservation expired on {reservation.expires_on.isoformat()}.",
         action="reservation.expired",
     )
@@ -2098,7 +2190,7 @@ def cancel_reservation(
         reservation=reservation,
         actor=actor,
         to_status=RESERVATION_CANCELLED,
-        effective_date=effective_date or inventory_fields.business_today(),
+        effective_date=_effective(effective_date),
         reason=_require_reason(reason, detail="Say why the reservation is being cancelled."),
         action="reservation.cancelled",
     )
@@ -2115,6 +2207,144 @@ def list_reservation_events(
             .order_by(ReservationStatusEvent.effective_date, ReservationStatusEvent.created_at)
         )
     )
+
+
+def _draft_contract_on(session: Session, *, reservation: Reservation) -> SaleContract | None:
+    """The contract drawn up from this reservation and not yet cancelled."""
+    return session.scalars(
+        select(SaleContract).where(
+            SaleContract.reservation_id == reservation.id,
+            SaleContract.status != SALE_CANCELLED,
+        )
+    ).first()
+
+
+def _refresh_draft_terms(session: Session, *, reservation: Reservation, sale: SaleContract) -> None:
+    """Bring a draft contract back into step with the reservation it came from.
+
+    A draft holds nothing and nobody has signed it, so this rewrites no
+    agreement — it copies the reservation's terms across again, exactly as
+    creating the draft did. Without it a re-quote would leave the draft
+    describing a price the reservation no longer says, and the mismatch would
+    surface as a refusal at submission with nothing the operator could do about
+    it.
+    """
+    sale.unit_price_version_id = reservation.unit_price_version_id
+    sale.currency_id = reservation.currency_id
+    sale.reference_price_ex_tax = reservation.reference_price_ex_tax
+    sale.gross_quoted_price_ex_tax = reservation.gross_quoted_price_ex_tax
+    sale.cash_discount_amount = reservation.cash_discount_amount
+    sale.seller_credit_amount = reservation.seller_credit_amount
+    sale.net_contract_price_ex_tax = reservation.net_contract_price_ex_tax
+    sale.seller_cost_total = reservation.seller_cost_total
+    sale.effective_net_revenue_snapshot = reservation.effective_net_revenue_preview
+    sale.tax_total = reservation.tax_total
+    sale.buyer_fee_total = reservation.buyer_fee_total
+    sale.total_contract_price = reservation.total_buyer_payable
+    sale.reservation_quote_snapshot_json = reservation.quote_snapshot_json
+
+
+def requote_reservation(
+    session: Session,
+    *,
+    project: Project,
+    reservation_id: uuid.UUID,
+    actor: ActorContext,
+    reason: str,
+) -> Reservation:
+    """Re-price a live reservation against the unit's current list price.
+
+    The one way a committed reservation's commercial terms may move, and it is
+    deliberately explicit. A price lock that has run out leaves a real and
+    otherwise unresolvable position: the reservation still holds the unit, the
+    buyer has not gone away, and no contract can be drawn up because the price
+    they were promised has expired. Without this the only exits are cancelling a
+    live commitment or silently repricing the buyer at submission, and the second
+    is exactly what the lock exists to prevent.
+
+    So the operator asks for a new quote, on the record, with a reason. The unit
+    stays reserved for the same buyer, the same recorded adjustments are re-run
+    against today's approved price, and the standing approval is withdrawn —
+    because an exception sanctioned against last month's number says nothing
+    about this month's. Where the new quote breaches the country's thresholds,
+    it needs approving again before the sale can proceed.
+
+    Nothing about pricing moves. The public list price is whatever pricing says
+    it is; this reads it, and writes only to sales' own rows.
+    """
+    permissions.require_reservation_writer(actor)
+    permissions.require_operational_project(project)
+    reason = _require_reason(reason, detail="Say why this reservation is being re-quoted.")
+    reservation = get_reservation(
+        session, project=project, reservation_id=reservation_id, actor=actor
+    )
+    client = permissions.require_visible_client(
+        session, project=project, client_id=reservation.client_id, actor=actor
+    )
+
+    project = lock_project(session, project.id)
+    unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=reservation.unit_id)
+    reservation = _lock_reservation(session, project_id=project.id, reservation_id=reservation.id)
+
+    today = inventory_fields.business_today()
+    if reservation.status not in RESERVATION_COMMITTED:
+        raise ConflictError("Only a live reservation can be re-quoted.")
+    if reservation.expires_on < today:
+        raise ConflictError("This reservation has expired. Close it and prepare a new one.")
+    if unit.commercial_status != COMMERCIAL_STATUS_RESERVED:
+        raise ConflictError(
+            f"This unit is {unit.commercial_status.replace('_', ' ')}, not reserved."
+        )
+    committed = _committed_sale(session, unit_id=unit.id)
+    if committed is not None:
+        raise ConflictError(
+            f"Sale contract {committed.sale_number} has taken this reservation over."
+        )
+    if not unit.pricing_approved:
+        raise ConflictError("This unit requires repricing before it can be re-quoted.")
+    active = pricing_service.active_price(session, unit_id=unit.id)
+    if active is None:  # pragma: no cover - quote_preview refuses this first
+        raise ConflictError("This unit has no active price to re-quote against.")
+    _require_reconciled_shares(session, client=client)
+
+    configuration = pricing_service.get_configuration(
+        session, project_id=project.id, configuration_id=active.pricing_configuration_id
+    )
+    if configuration.price_lock_days is None:
+        raise ValidationError(
+            "This project's pricing configuration sets no price-lock period, so a "
+            "re-quote has no term to run for."
+        )
+
+    before = _snapshot(reservation, _RESERVATION_FIELDS)
+    _freeze_quote(
+        session,
+        project=project,
+        unit=unit,
+        reservation=reservation,
+        buyer_fee_total=reservation.buyer_fee_total,
+    )
+    # The lock runs from today, not from the original reservation date: what the
+    # buyer is being promised is this price, from now.
+    reservation.price_locked_until = today + timedelta(days=configuration.price_lock_days)
+    draft = _draft_contract_on(session, reservation=reservation)
+    if draft is not None:
+        _refresh_draft_terms(session, reservation=reservation, sale=draft)
+    _flush(session)
+    record_event(
+        session,
+        action="reservation.requoted",
+        entity_type=ENTITY_RESERVATION,
+        entity_id=reservation.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(reservation, _RESERVATION_FIELDS),
+    )
+    session.commit()
+    session.refresh(reservation)
+    return reservation
 
 
 # --------------------------------------------------------------------------- #
@@ -2244,9 +2474,7 @@ def create_sale(
     if _committed_sale(session, unit_id=unit.id) is not None:
         raise ConflictError("Another contract already holds this unit.")
     _require_reconciled_shares(session, client=client)
-    _require_quote_still_valid(
-        session, project=project, unit=unit, reservation=reservation, today=today
-    )
+    _require_locked_quote_still_sellable(session, reservation=reservation, today=today)
     _require_exception_settled(reservation)
 
     policy = policy_for(session, project=project)
@@ -2471,7 +2699,7 @@ def submit_sale(
     sale = _lock_sale(session, project_id=project.id, sale_id=sale.id)
 
     today = inventory_fields.business_today()
-    effective_date = effective_date or today
+    effective_date = _effective(effective_date)
     if sale.status != SALE_DRAFT:
         raise ConflictError("Only a draft contract can be submitted.")
     if reservation.status not in RESERVATION_COMMITTED:
@@ -2483,9 +2711,7 @@ def submit_sale(
     if _committed_sale(session, unit_id=unit.id) is not None:
         raise ConflictError("Another contract already holds this unit.")
     _require_reconciled_shares(session, client=client)
-    _require_quote_still_valid(
-        session, project=project, unit=unit, reservation=reservation, today=today
-    )
+    _require_locked_quote_still_sellable(session, reservation=reservation, today=today)
     _require_exception_settled(reservation)
     if (
         sale.net_contract_price_ex_tax != reservation.net_contract_price_ex_tax
@@ -2665,7 +2891,7 @@ def activate_sale(
     unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=sale.unit_id)
     sale = _lock_sale(session, project_id=project.id, sale_id=sale.id)
 
-    effective_date = effective_date or inventory_fields.business_today()
+    effective_date = _effective(effective_date)
     if sale.status != SALE_SIGNATURE_PENDING:
         raise ConflictError("Only a contract awaiting signature can be activated.")
     if unit.commercial_status != COMMERCIAL_STATUS_CONTRACT_PENDING:
@@ -3448,7 +3674,7 @@ def complete_cancellation(
     if handover is not None and handover.status == HANDOVER_HANDED_OVER:
         raise ConflictError("This unit has already been handed over to the buyer.")
 
-    effective_date = unit_return_date or inventory_fields.business_today()
+    effective_date = _effective(unit_return_date)
     before = _snapshot(cancellation, _CANCELLATION_FIELDS)
     sale_before = _snapshot(sale, _SALE_FIELDS)
     cancellation.status = CANCELLATION_COMPLETED
@@ -3877,7 +4103,7 @@ def complete_handover(
         project=project_locked,
         unit=unit,
         to_status="handed_over",
-        effective_date=handover.handover_date or inventory_fields.business_today(),
+        effective_date=_effective(handover.handover_date),
         actor_user_id=actor.user_id,
         correlation_id=actor.correlation_id,
         reason=f"Handover completed on contract {sale.sale_number}.",

@@ -570,6 +570,11 @@ export const sales = {
       `/projects/${projectId}/sales/reservations/${reservationId}/waive-deposit`,
       { reason },
     ),
+  requoteReservation: (projectId: string, reservationId: string, reason: string) =>
+    post<ReservationDetail>(
+      `/projects/${projectId}/sales/reservations/${reservationId}/requote`,
+      { reason },
+    ),
   activateReservation: (projectId: string, reservationId: string) =>
     post<ReservationDetail>(
       `/projects/${projectId}/sales/reservations/${reservationId}/activate`,

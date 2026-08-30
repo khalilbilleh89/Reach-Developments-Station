@@ -498,6 +498,28 @@ def update_adjustment(
 
 
 @router.post(
+    "/{project_id}/sales/reservations/{reservation_id}/requote",
+    response_model=ReservationDetailRead,
+    summary="Re-price a live reservation against the unit's current list price",
+)
+def requote_reservation(
+    reservation_id: uuid.UUID,
+    payload: ReasonRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> ReservationDetailRead:
+    reservation = service.requote_reservation(
+        session,
+        project=project,
+        reservation_id=reservation_id,
+        actor=actor,
+        reason=payload.reason,
+    )
+    return _reservation_detail(session, reservation)
+
+
+@router.post(
     "/{project_id}/sales/reservations/{reservation_id}/submit-exception",
     response_model=ReservationDetailRead,
     summary="Put a quote that breaches the thresholds forward for sanction",

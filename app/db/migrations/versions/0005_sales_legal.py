@@ -1117,8 +1117,19 @@ def _create_sales_tables() -> None:
             name=op.f("fk_sale_legal_events_entered_by_user_id_users"),
             ondelete="RESTRICT",
         ),
+        # A reversal must withdraw an event on the same contract. The sale and
+        # the project travel with the identifier, so the database refuses a
+        # correction that reaches across contracts however the identifiers are
+        # shuffled — and whether or not the service was involved.
         sa.ForeignKeyConstraint(
-            ["reverses_event_id"], ["sale_legal_events.id"], name="reverses", ondelete="RESTRICT"
+            ["reverses_event_id", "sale_contract_id", "project_id"],
+            [
+                "sale_legal_events.id",
+                "sale_legal_events.sale_contract_id",
+                "sale_legal_events.project_id",
+            ],
+            name="reverses",
+            ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["sale_contract_id", "project_id"],
@@ -1128,6 +1139,7 @@ def _create_sales_tables() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_sale_legal_events")),
         sa.UniqueConstraint("id", "project_id", name="legal_event_project"),
+        sa.UniqueConstraint("id", "sale_contract_id", "project_id", name="legal_event_sale"),
     )
     op.create_index(
         "ix_sale_legal_events_sale_contract_id_event_date",
