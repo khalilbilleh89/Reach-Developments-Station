@@ -283,7 +283,7 @@ def test_bulk_activation_cannot_change_the_effective_date(
     assert response.status_code == 422
 
 
-def test_activation_keeps_the_date_the_price_was_calculated_for(
+def test_a_future_effective_date_survives_submission_and_approval(
     admin_client: TestClient,
     finance_client: TestClient,
     cfo_client: TestClient,
@@ -292,15 +292,157 @@ def test_activation_keeps_the_date_the_price_was_calculated_for(
     area_types: dict[str, str],
     active_configuration: str,
 ) -> None:
+    """Future-dated pricing is supported: the date is frozen, not refused."""
     approve_areas(admin_client, project_id, unit_id, area_types)
     future = (business_today() + timedelta(days=30)).isoformat()
     version = _draft(finance_client, project_id, unit_id, valid_from=future)
+    base = f"{pricing_url(project_id)}/price-versions/{version['id']}"
 
     assert version["valid_from"] == future
-    _put_live(finance_client, cfo_client, project_id, version["id"])
+    submitted = finance_client.post(f"{base}/submit", json={})
+    approved = cfo_client.post(f"{base}/approve", json={"reason": "Next season"})
 
-    live = finance_client.get(f"{pricing_url(project_id)}/price-versions/{version['id']}").json()
-    assert live["valid_from"] == future
+    assert submitted.status_code == 200, submitted.text
+    assert approved.status_code == 200, approved.text
+    assert submitted.json()["valid_from"] == future
+    assert approved.json()["valid_from"] == future
+
+
+def test_a_future_price_cannot_be_activated_early(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+) -> None:
+    """Active means *the unit's live list price*, so it cannot start early.
+
+    Publishing next month's number today would make every reader — the
+    register, Unit 360, a quote — take the future figure for the current one.
+    The version waits, approved, for a person to activate it on a day it
+    governs. No scheduler: the wait is the control.
+    """
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    effective = business_today() + timedelta(days=30)
+    version = _draft(finance_client, project_id, unit_id, valid_from=effective.isoformat())
+    base = f"{pricing_url(project_id)}/price-versions/{version['id']}"
+    assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Next season"}).status_code == 200
+
+    response = cfo_client.post(f"{base}/activate")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        f"This price does not become effective until {effective.isoformat()}."
+    )
+    assert finance_client.get(base).json()["status"] == "approved"
+
+
+def test_a_price_effective_today_activates_normally(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+) -> None:
+    """The guard is a date comparison, not a ban on stating one."""
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    today = business_today().isoformat()
+    version = _draft(finance_client, project_id, unit_id, valid_from=today)
+    base = f"{pricing_url(project_id)}/price-versions/{version['id']}"
+    assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+
+    response = cfo_client.post(f"{base}/activate")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "active"
+    assert response.json()["valid_from"] == today
+
+
+def test_a_rejected_future_activation_leaves_the_current_price_selling(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    priced_unit: str,
+    area_types: dict[str, str],
+) -> None:
+    """A refused publication must not disturb the price the unit is selling at.
+
+    The check runs before anything is written — before the current version is
+    superseded, before any status moves, before ``pricing_approved`` is touched
+    and before an activation event is recorded — so the failed attempt leaves
+    today's selling price, its release gate and its quote exactly as they were.
+    """
+    future = business_today() + timedelta(days=30)
+    replacement = _draft(finance_client, project_id, unit_id, valid_from=future.isoformat())
+    base = f"{pricing_url(project_id)}/price-versions/{replacement['id']}"
+    assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Next season"}).status_code == 200
+
+    refused = cfo_client.post(f"{base}/activate")
+
+    assert refused.status_code == 409
+    statuses = {
+        item["id"]: item["status"] for item in _versions(finance_client, project_id, unit_id)
+    }
+    assert statuses[priced_unit] == "active"
+    assert statuses[replacement["id"]] == "approved"
+    live = finance_client.get(f"{pricing_url(project_id)}/units/{unit_id}").json()
+    assert live["pricing_approved"] is True
+    assert live["active_price"]["id"] == priced_unit
+    quote = _quote(finance_client, project_id, unit_id)
+    assert quote.status_code == 200, quote.text
+    assert quote.json()["unit_price_version_id"] == priced_unit
+
+
+def test_bulk_activation_refuses_the_whole_batch_for_one_future_price(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    floor_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+) -> None:
+    """All or none: a price list where one unit went live and another did not
+    is a price list nobody can publish."""
+    second = _extra_unit(admin_client, project_id, floor_id, "102")
+    for identifier in (unit_id, second):
+        approve_areas(admin_client, project_id, identifier, area_types)
+    eligible = _draft(finance_client, project_id, unit_id)
+    future = _draft(
+        finance_client,
+        project_id,
+        second,
+        valid_from=(business_today() + timedelta(days=30)).isoformat(),
+    )
+    for version in (eligible, future):
+        base = f"{pricing_url(project_id)}/price-versions/{version['id']}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+
+    response = cfo_client.post(
+        f"{pricing_url(project_id)}/price-versions/activate",
+        json={"version_ids": [eligible["id"], future["id"]]},
+    )
+
+    assert response.status_code == 409
+    for version in (eligible, future):
+        read = finance_client.get(
+            f"{pricing_url(project_id)}/price-versions/{version['id']}"
+        ).json()
+        assert read["status"] == "approved", version["id"]
+    for identifier in (unit_id, second):
+        unit = finance_client.get(f"{pricing_url(project_id)}/units/{identifier}").json()
+        assert unit["pricing_approved"] is False
 
 
 def test_a_date_escalation_is_selected_by_the_frozen_effective_date(

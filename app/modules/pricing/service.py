@@ -3047,6 +3047,23 @@ def activate_price_version(
     session.refresh(version)
     if version.status != STATUS_APPROVED:
         raise ConflictError("Only an approved price version can be activated.")
+    # Active means *the unit's live list price*, so a price cannot become active
+    # before the day it takes effect. Publishing next month's number today would
+    # supersede the price the unit is actually being sold at, and every reader —
+    # the register, Unit 360, a quote — would take the future figure for the
+    # current one.
+    #
+    # Checked before anything is written, so a premature attempt leaves the
+    # current price, its approval and the release gate exactly as they were. The
+    # version simply stays approved until somebody activates it on a day it
+    # governs: the same explicit, dated, human step a future pricing
+    # configuration waits for, and for the same reason — nothing in this module
+    # publishes a price because a clock ticked.
+    today = inventory_fields.business_today()
+    if version.valid_from > today:
+        raise ConflictError(
+            f"This price does not become effective until {version.valid_from.isoformat()}."
+        )
     _validate_submittable(session, version=version)
 
     # The date the version was calculated for, and no other. Activation is
