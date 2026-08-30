@@ -3963,14 +3963,26 @@ def sales_register(
     page = every[offset : offset + limit]
     unit_ids = [unit.id for unit in every]
 
-    reservations = {
-        reservation.unit_id: reservation
-        for reservation in session.scalars(
-            select(Reservation).where(
-                Reservation.unit_id.in_(unit_ids),
-                Reservation.status.in_(RESERVATION_COMMITTED),
-            )
+    # The reservation a unit's line should show: the one holding it if there is
+    # one, and otherwise the newest still being prepared. A reservation awaiting
+    # a deposit or an approval holds nothing, but somebody has to be able to
+    # find it — and the register is where they are looking.
+    reservations: dict[uuid.UUID, Reservation] = {}
+    for reservation in session.scalars(
+        select(Reservation)
+        .where(
+            Reservation.unit_id.in_(unit_ids),
+            Reservation.status.in_(RESERVATION_COMMITTED | RESERVATION_PREPARING),
         )
+        .order_by(Reservation.created_at)
+    ):
+        held = reservations.get(reservation.unit_id)
+        if held is None or reservation.status in RESERVATION_COMMITTED:
+            reservations[reservation.unit_id] = reservation
+    committed_units = {
+        unit_id
+        for unit_id, reservation in reservations.items()
+        if reservation.status in RESERVATION_COMMITTED
     }
     sales = {
         sale.unit_id: sale
@@ -4049,7 +4061,7 @@ def sales_register(
         ),
         "contracted": sum(1 for unit in every if unit.commercial_status == "contracted"),
         "returned": sum(1 for unit in every if unit.commercial_status == "returned"),
-        "active_reservations": sum(1 for unit in every if unit.id in reservations),
+        "active_reservations": sum(1 for unit in every if unit.id in committed_units),
         "active_contracts": sum(1 for sale in contracted if sale.status == SALE_ACTIVE),
         "open_cancellations": session.scalar(
             select(func.count())

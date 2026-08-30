@@ -247,6 +247,17 @@ function HandoverView({
   for (const clearance of detail.clearances) {
     if (clearance.status !== "revoked") current.set(clearance.clearance_type, clearance);
   }
+  // Two of the server's blockers are about the very fields this form supplies,
+  // so they must not disable the button that would supply them. Everything else
+  // is somebody else's sign-off and genuinely blocks. The server checks all of
+  // them again either way — this only decides whether the button is worth
+  // offering.
+  const supplied = ["Handover date not recorded", "Acceptance document reference not recorded"];
+  const outstanding = detail.blockers.filter((blocker) => !supplied.includes(blocker));
+  const ready =
+    outstanding.length === 0 &&
+    form.handover_date !== "" &&
+    form.acceptance_document_reference !== "";
 
   return (
     <>
@@ -325,9 +336,7 @@ function HandoverView({
       </div>
 
       {detail.blockers.length > 0 ? (
-        <Notice tone="info">
-          Still outstanding: {detail.blockers.join("; ")}.
-        </Notice>
+        <Notice tone="info">Still outstanding: {detail.blockers.join("; ")}.</Notice>
       ) : null}
 
       {canRunHandover && detail.handover.status !== "handed_over" ? (
@@ -369,13 +378,7 @@ function HandoverView({
             />
           </Field>
           <div className="form-actions">
-            <button
-              className="button button-primary"
-              type="submit"
-              // Disabled while a gate is open, and the server refuses it anyway:
-              // this button is a courtesy, not the control.
-              disabled={busy || detail.blockers.length > 0}
-            >
+            <button className="button button-primary" type="submit" disabled={busy || !ready}>
               Complete handover
             </button>
           </div>
@@ -419,6 +422,15 @@ export function DealFile({
     authority_reference: "",
     document_reference: "",
   });
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelForm, setCancelForm] = useState({
+    initiated_by_party: "buyer",
+    reason: "",
+    notice_date: "",
+    cure_deadline: "",
+    forfeiture_amount: "",
+    refund_due_amount: "",
+  });
 
   const canPrepare = roles.has("sales_operations") || roles.has("sales_advisor");
   const canWriteSale = roles.has("sales_operations");
@@ -434,12 +446,22 @@ export function DealFile({
 
   const load = useCallback(async () => {
     try {
-      const loadedSale = saleId ? await sales.contract(projectId, saleId) : null;
+      let loadedSale = saleId ? await sales.contract(projectId, saleId) : null;
       const loadedReservation = reservationId
         ? await sales.reservation(projectId, reservationId)
         : loadedSale
           ? await sales.reservation(projectId, loadedSale.sale.reservation_id)
           : null;
+      if (loadedSale === null && loadedReservation !== null) {
+        // A contract drawn up while this panel was open. The deal file was
+        // opened on the reservation and has to follow the deal, not the
+        // identifier it happened to start from.
+        const onUnit = await sales.contracts(projectId, {
+          unit_id: loadedReservation.reservation.unit_id,
+        });
+        const live = onUnit.find((entry) => entry.status !== "cancelled");
+        if (live) loadedSale = await sales.contract(projectId, live.id);
+      }
       const clientId =
         loadedSale?.sale.client_id ?? loadedReservation?.reservation.client_id ?? null;
       setSale(loadedSale);
@@ -977,29 +999,124 @@ export function DealFile({
                 Open handover
               </button>
             ) : null}
-            {canCancel && ["signature_pending", "active"].includes(sale.sale.status) ? (
+            {canCancel &&
+            sale.cancellation === null &&
+            ["signature_pending", "active"].includes(sale.sale.status) ? (
               <button
                 className="button button-small"
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  const reason = window.prompt("Why is the contract being cancelled?");
-                  if (reason) {
-                    void run(
-                      () =>
-                        sales.startCancellation(projectId, sale.sale.id, {
-                          initiated_by_party: "buyer",
-                          reason,
-                        }),
-                      "Cancellation opened. The unit stays committed until it completes.",
-                    );
-                  }
-                }}
+                onClick={() => setCancelling(true)}
               >
                 Start cancellation
               </button>
             ) : null}
           </div>
+
+          {cancelling ? (
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(
+                  () =>
+                    sales.startCancellation(projectId, sale.sale.id, {
+                      initiated_by_party: cancelForm.initiated_by_party,
+                      reason: cancelForm.reason,
+                      ...(cancelForm.notice_date ? { notice_date: cancelForm.notice_date } : {}),
+                      ...(cancelForm.cure_deadline
+                        ? { cure_deadline: cancelForm.cure_deadline }
+                        : {}),
+                      ...(cancelForm.forfeiture_amount
+                        ? { forfeiture_amount: cancelForm.forfeiture_amount }
+                        : {}),
+                      ...(cancelForm.refund_due_amount
+                        ? { refund_due_amount: cancelForm.refund_due_amount }
+                        : {}),
+                    }),
+                  "Cancellation opened. The unit stays committed until it completes.",
+                ).then(() => setCancelling(false))
+              }}
+            >
+              <Field label="Initiated by">
+                <select
+                  className="input"
+                  value={cancelForm.initiated_by_party}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, initiated_by_party: event.target.value })
+                  }
+                >
+                  <option value="buyer">Buyer</option>
+                  <option value="seller">Seller</option>
+                  <option value="mutual">Mutual</option>
+                  <option value="developer_default_process">Developer default process</option>
+                </select>
+              </Field>
+              <Field label="Reason">
+                <input
+                  className="input"
+                  required
+                  value={cancelForm.reason}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, reason: event.target.value })
+                  }
+                />
+              </Field>
+              <Field label="Notice date">
+                <input
+                  className="input"
+                  type="date"
+                  value={cancelForm.notice_date}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, notice_date: event.target.value })
+                  }
+                />
+              </Field>
+              <Field label="Cure deadline">
+                <input
+                  className="input"
+                  type="date"
+                  value={cancelForm.cure_deadline}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, cure_deadline: event.target.value })
+                  }
+                />
+              </Field>
+              <Field label="Forfeiture">
+                <input
+                  className="input"
+                  value={cancelForm.forfeiture_amount}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, forfeiture_amount: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="Refund due"
+                hint="What is owed. Whether it was paid is a payment record this system does not have yet."
+              >
+                <input
+                  className="input"
+                  value={cancelForm.refund_due_amount}
+                  onChange={(event) =>
+                    setCancelForm({ ...cancelForm, refund_due_amount: event.target.value })
+                  }
+                />
+              </Field>
+              <div className="form-actions">
+                <button className="button" type="submit" disabled={busy}>
+                  Open cancellation
+                </button>
+                <button
+                  className="button button-small"
+                  type="button"
+                  onClick={() => setCancelling(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
 
           <h3 className="section-heading">Legal timeline</h3>
           <LegalTimelineView

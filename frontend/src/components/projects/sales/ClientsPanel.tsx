@@ -23,10 +23,12 @@ import { kycLabel } from "@/components/projects/sales/labels";
 export function ClientsPanel({
   projectId,
   canWrite,
+  onChanged,
   onClose,
 }: {
   projectId: string;
   canWrite: boolean;
+  onChanged: () => Promise<void>;
   onClose: () => void;
 }) {
   const [clients, setClients] = useState<SalesClient[] | null>(null);
@@ -90,6 +92,9 @@ export function ClientsPanel({
       setNotice(done);
       await load();
       if (selected) await loadParties(selected);
+      // The register behind this panel offers these buyers when a unit is
+      // reserved, so it has to hear about a new one.
+      await onChanged();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "That did not work.");
     } finally {
