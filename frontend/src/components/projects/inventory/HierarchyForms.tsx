@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { Building, Floor, Phase } from "@/lib/api";
-import { Field, Notice } from "@/components/ui";
+import { Button, Field, FormActions, Notice, Tabs } from "@/components/ui";
 
 type Kind = "phase" | "building" | "floor" | "unit";
 
@@ -93,29 +93,24 @@ export function HierarchyForms({
   };
 
   return (
-    <form className="panel-section" onSubmit={submit}>
+    <form onSubmit={submit}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <div className="tab-row" role="tablist" aria-label="What to create">
-        {KINDS.filter((entry) => entry.key !== "phase" || canConfigure).map((entry) => (
-          <button
-            key={entry.key}
-            role="tab"
-            type="button"
-            aria-selected={kind === entry.key}
-            className={`tab ${kind === entry.key ? "tab-active" : ""}`}
-            onClick={() => {
-              setKind(entry.key);
-              setValues({});
-            }}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="What to create"
+        tabs={KINDS.filter((entry) => entry.key !== "phase" || canConfigure).map((entry) => ({
+          key: entry.key,
+          label: entry.label,
+        }))}
+        active={kind}
+        onSelect={(key) => {
+          setKind(key as Kind);
+          setValues({});
+        }}
+      />
 
-      <div className="form-grid">
+      <div className="form-grid form-grid-3">
         {kind === "phase" ? (
           <>
             <Field label="Phase code" hint="Immutable once issued, e.g. PHASE-1.">
@@ -288,17 +283,17 @@ export function HierarchyForms({
             </Field>
           </>
         ) : null}
-      </div>
 
-      <div className="form-actions">
-        <button className="button button-primary" type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Create"}
-        </button>
-        {kind === "unit" ? (
-          <p className="subtle">
-            Loading a whole development? Use Import inventory rather than this form.
-          </p>
-        ) : null}
+        <FormActions>
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Create"}
+          </Button>
+          {kind === "unit" ? (
+            <p className="subtle">
+              Loading a whole development? Use Import inventory rather than this form.
+            </p>
+          ) : null}
+        </FormActions>
       </div>
     </form>
   );

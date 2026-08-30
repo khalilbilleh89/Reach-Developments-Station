@@ -4,7 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, settings } from "@/lib/api";
 import type { CountryPack, ReferenceValue } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 
 /**
  * Controlled lookup values.
@@ -112,9 +121,9 @@ export function ReferenceDataSection() {
         <Field label="Order">
           <input className="input input-short" name="sort_order" type="number" min={0} defaultValue={0} />
         </Field>
-        <button className="button" type="submit" disabled={busy}>
+        <Button variant="primary" type="submit" disabled={busy}>
           Add
-        </button>
+        </Button>
       </form>
 
       {values.length === 0 ? (
@@ -123,9 +132,7 @@ export function ReferenceDataSection() {
           hint="Add the lookup lists the business actually uses, such as permit types or legal stages."
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Reference values</caption>
+        <TableScroll label="Reference values">
             <thead>
               <tr>
                 <th scope="col">Scope</th>
@@ -151,9 +158,8 @@ export function ReferenceDataSection() {
                     )}
                   </td>
                   <td>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       disabled={busy}
                       onClick={() =>
                         void act(
@@ -166,13 +172,12 @@ export function ReferenceDataSection() {
                       }
                     >
                       {value.is_active ? "Retire" : "Restore"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
     </Panel>
   );

@@ -11,7 +11,7 @@ import type {
   PricingEscalationRule,
   PricingPremiumRule,
 } from "@/lib/api";
-import { Badge, EmptyState, Field, Notice, Panel } from "@/components/ui";
+import { Badge, Button, EmptyState, Field, Notice, Panel, TableScroll } from "@/components/ui";
 
 /**
  * The pricing policy a project prices from, and the governed path it takes.
@@ -191,9 +191,8 @@ export function ConfigurationPanel({
 
           <div className="chip-list">
             {canEditDraft ? (
-              <button
-                className="button button-small"
-                type="button"
+              <Button
+                small
                 disabled={busy}
                 onClick={() =>
                   act(
@@ -203,13 +202,12 @@ export function ConfigurationPanel({
                 }
               >
                 Submit for approval
-              </button>
+              </Button>
             ) : null}
             {canApprove && configuration.status === "submitted" ? (
               <>
-                <button
-                  className="button button-small"
-                  type="button"
+                <Button
+                  small
                   disabled={busy}
                   onClick={() =>
                     act(
@@ -224,10 +222,9 @@ export function ConfigurationPanel({
                   }
                 >
                   Approve
-                </button>
-                <button
-                  className="button button-small"
-                  type="button"
+                </Button>
+                <Button
+                  small
                   disabled={busy}
                   onClick={() =>
                     act(
@@ -242,13 +239,12 @@ export function ConfigurationPanel({
                   }
                 >
                   Return
-                </button>
+                </Button>
               </>
             ) : null}
             {canApprove && configuration.status === "approved" ? (
-              <button
-                className="button button-small"
-                type="button"
+              <Button
+                small
                 disabled={busy}
                 onClick={() =>
                   act(
@@ -258,7 +254,7 @@ export function ConfigurationPanel({
                 }
               >
                 Activate
-              </button>
+              </Button>
             ) : null}
           </div>
 
@@ -277,9 +273,7 @@ export function ConfigurationPanel({
               hint="A policy with no internal area rule prices every unit at nothing."
             />
           ) : (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Area pricing rules</caption>
+            <TableScroll label="Area pricing rules">
                 <thead>
                   <tr>
                     <th scope="col">Area type</th>
@@ -302,8 +296,7 @@ export function ConfigurationPanel({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+</TableScroll>
           )}
 
           <h3 className="section-heading">Premiums</h3>
@@ -317,9 +310,7 @@ export function ConfigurationPanel({
           {premiums.length === 0 ? (
             <EmptyState title="No premiums" hint="Every unit is priced on its areas alone." />
           ) : (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Premium rules</caption>
+            <TableScroll label="Premium rules">
                 <thead>
                   <tr>
                     <th scope="col">Code</th>
@@ -346,8 +337,7 @@ export function ConfigurationPanel({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+</TableScroll>
           )}
 
           <h3 className="section-heading">Escalation</h3>
@@ -365,9 +355,7 @@ export function ConfigurationPanel({
               hint="Prices move only when somebody generates and activates new versions."
             />
           ) : (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Escalation rules</caption>
+            <TableScroll label="Escalation rules">
                 <thead>
                   <tr>
                     <th scope="col">Code</th>
@@ -390,9 +378,8 @@ export function ConfigurationPanel({
                       <td>{rule.cumulative ? "Yes" : "No"}</td>
                       <td>
                         {canApprove && configuration.status === "active" ? (
-                          <button
-                            className="button button-small"
-                            type="button"
+                          <Button
+                            small
                             disabled={busy}
                             onClick={() =>
                               act(
@@ -407,7 +394,7 @@ export function ConfigurationPanel({
                             }
                           >
                             Activate
-                          </button>
+                          </Button>
                         ) : (
                           <span className="subtle">—</span>
                         )}
@@ -415,8 +402,7 @@ export function ConfigurationPanel({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+</TableScroll>
           )}
         </>
       )}
@@ -493,9 +479,9 @@ function NewConfigurationForm({
           onChange={(event) => setForm({ ...form, valid_from: event.target.value })}
         />
       </Field>
-      <button className="button" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy}>
         {busy ? "Creating…" : "New version"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -596,9 +582,9 @@ function AreaRuleForm({
           />
         </Field>
       ) : null}
-      <button className="button" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy}>
         {busy ? "Adding…" : "Add area rule"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -710,9 +696,9 @@ function PremiumRuleForm({
           onChange={(event) => setForm({ ...form, value: event.target.value })}
         />
       </Field>
-      <button className="button" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy}>
         {busy ? "Adding…" : "Add premium"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -846,9 +832,9 @@ function EscalationRuleForm({
           }
         />
       </Field>
-      <button className="button" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy}>
         {busy ? "Adding…" : "Add escalation"}
-      </button>
+      </Button>
     </form>
   );
 }

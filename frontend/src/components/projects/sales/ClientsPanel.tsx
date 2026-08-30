@@ -4,8 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, sales } from "@/lib/api";
 import type { ClientParty, SalesClient } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
-import { kycLabel } from "@/components/projects/sales/labels";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FilterBar,
+  FormActions,
+  Loading,
+  Notice,
+  SubPanel,
+  TableScroll,
+} from "@/components/ui";
+import { kycLabel, kycTone } from "@/components/projects/sales/labels";
 
 /**
  * The project's buyers, and the named parties on each.
@@ -102,23 +114,25 @@ export function ClientsPanel({
     }
   };
 
-  if (clients === null) return <Loading label="Loading buyers…" />;
+  if (clients === null) {
+    return (
+      <Card title="Buyers">
+        <Loading label="Loading buyers…" lines={3} />
+      </Card>
+    );
+  }
 
   return (
-    <Panel
+    <Card
       title="Buyers"
       description="Project-scoped. This is not a portfolio-wide customer master."
-      actions={
-        <button className="button button-small" type="button" onClick={onClose}>
-          Close
-        </button>
-      }
+      actions={<Button onClick={onClose}>Close</Button>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <div className="form-inline">
-        <Field label="Search">
+      <FilterBar>
+        <Field label="Search" grow>
           <input
             className="input"
             value={search}
@@ -126,7 +140,7 @@ export function ClientsPanel({
             onChange={(event) => setSearch(event.target.value)}
           />
         </Field>
-      </div>
+      </FilterBar>
 
       {clients.length === 0 ? (
         <EmptyState
@@ -134,9 +148,7 @@ export function ClientsPanel({
           hint={canWrite ? "Register one below." : "Nobody has been registered on this project."}
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Buyers</caption>
+        <TableScroll label="Buyers">
             <thead>
               <tr>
                 <th scope="col">Client</th>
@@ -154,7 +166,9 @@ export function ClientsPanel({
                     {client.client_number}
                   </th>
                   <td>{client.display_name}</td>
-                  <td>{kycLabel(client.kyc_status)}</td>
+                  <td>
+                    <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
+                  </td>
                   <td>
                     {"email" in client ? (
                       (client.email ?? client.phone ?? "—")
@@ -170,19 +184,17 @@ export function ClientsPanel({
                     )}
                   </td>
                   <td>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       onClick={() => setSelected(selected === client.id ? null : client.id)}
                     >
                       {selected === client.id ? "Hide" : "Open"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </TableScroll>
       )}
 
       {selected ? (
@@ -201,14 +213,14 @@ export function ClientsPanel({
           {parties.length === 0 ? (
             <EmptyState title="No parties recorded" />
           ) : (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Buyer parties</caption>
+            <TableScroll label="Buyer parties">
                 <thead>
                   <tr>
                     <th scope="col">Name as identification</th>
                     <th scope="col">Role</th>
-                    <th scope="col">Share</th>
+                    <th scope="col" className="num">
+                      Share
+                    </th>
                     <th scope="col">Identity document</th>
                     <th scope="col">Active</th>
                   </tr>
@@ -218,7 +230,7 @@ export function ClientsPanel({
                     <tr key={item.id}>
                       <th scope="row">{item.name_as_identification}</th>
                       <td>{item.party_role === "purchaser" ? "Purchaser" : "Joint purchaser"}</td>
-                      <td className="mono nowrap">{item.share_fraction}</td>
+                      <td className="num">{item.share_fraction}</td>
                       <td className="mono">
                         {"identity_document_number" in item ? (
                           `${item.identity_document_type ?? "—"} ${item.identity_document_number ?? ""}`
@@ -230,13 +242,12 @@ export function ClientsPanel({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </TableScroll>
           )}
 
           {canWrite ? (
+            <SubPanel title="Add a named party">
             <form
-              className="form-grid"
               onSubmit={(event) => {
                 event.preventDefault();
                 void run(
@@ -256,6 +267,7 @@ export function ClientsPanel({
                 );
               }}
             >
+              <div className="form-grid">
               <Field label="Name as identification">
                 <input
                   className="input"
@@ -302,21 +314,22 @@ export function ClientsPanel({
                   }
                 />
               </Field>
-              <div className="form-actions">
-                <button className="button" type="submit" disabled={busy}>
-                  Add buyer
-                </button>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  Add party
+                </Button>
+              </FormActions>
               </div>
             </form>
+            </SubPanel>
           ) : null}
         </>
       ) : null}
 
       {canWrite ? (
         <>
-          <h3 className="section-heading">Register a buyer</h3>
+          <SubPanel title="Register a buyer">
           <form
-            className="form-grid"
             onSubmit={(event) => {
               event.preventDefault();
               void run(
@@ -330,6 +343,7 @@ export function ClientsPanel({
               );
             }}
           >
+            <div className="form-grid form-grid-3">
             <Field label="Display name">
               <input
                 className="input"
@@ -353,18 +367,20 @@ export function ClientsPanel({
                 onChange={(event) => setForm({ ...form, phone: event.target.value })}
               />
             </Field>
-            <div className="form-actions">
-              <button className="button" type="submit" disabled={busy}>
+            <FormActions>
+              <Button variant="primary" type="submit" disabled={busy}>
                 Register buyer
-              </button>
+              </Button>
+            </FormActions>
             </div>
           </form>
           <p className="footnote">
             The client number is issued by the server. Identity is the stable identifier behind it,
             never the human reference.
           </p>
+          </SubPanel>
         </>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

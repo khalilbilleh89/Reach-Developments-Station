@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { LandParcel, PlanningControl, ReferenceValue } from "@/lib/api";
-import { EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -262,13 +270,12 @@ export function LandTab({
         description="Parcels under this project."
         actions={
           canWriteLand ? (
-            <button
-              className="button button-small"
-              type="button"
+            <Button
+              small
               onClick={() => setCreating((open) => !open)}
             >
               {creating ? "Cancel" : "New parcel"}
-            </button>
+            </Button>
           ) : undefined
         }
       >
@@ -276,7 +283,7 @@ export function LandTab({
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {creating ? (
-          <form className="panel-section" onSubmit={createParcel}>
+          <form onSubmit={createParcel}>
             <div className="form-grid">
               <Field label="Plot number">
                 <input
@@ -354,9 +361,9 @@ export function LandTab({
               </Field>
             </div>
             <div className="form-actions">
-              <button className="button button-primary" type="submit" disabled={busy}>
+              <Button variant="primary" type="submit" disabled={busy}>
                 {busy ? "Saving…" : "Register parcel"}
-              </button>
+              </Button>
             </div>
           </form>
         ) : null}
@@ -369,9 +376,7 @@ export function LandTab({
             hint="Record the land this development controls."
           />
         ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <caption className="visually-hidden">Land parcels</caption>
+          <TableScroll label="Land parcels">
               <thead>
                 <tr>
                   <th scope="col">Plot</th>
@@ -388,13 +393,12 @@ export function LandTab({
                 {parcels.map((parcel) => (
                   <tr key={parcel.id}>
                     <th scope="row">
-                      <button
-                        className="button button-small"
-                        type="button"
+                      <Button
+                        small
                         onClick={() => void open(parcel)}
                       >
                         {parcel.plot_number}
-                      </button>
+                      </Button>
                     </th>
                     <td>{parcel.title_deed_number ?? "—"}</td>
                     <td className="nowrap">
@@ -414,8 +418,7 @@ export function LandTab({
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+</TableScroll>
         )}
       </Panel>
 
@@ -426,21 +429,19 @@ export function LandTab({
           actions={
             <>
               {canWriteLand ? (
-                <button
-                  className="button button-small"
-                  type="button"
+                <Button
+                  small
                   onClick={() => setEditingParcel((open) => !open)}
                 >
                   {editingParcel ? "Cancel" : "Edit parcel"}
-                </button>
+                </Button>
               ) : null}
-              <button
-                className="button button-small"
-                type="button"
+              <Button
+                small
                 onClick={() => setSelected(null)}
               >
                 Close
-              </button>
+              </Button>
             </>
           }
         >
@@ -633,9 +634,9 @@ export function LandTab({
                 these limits are issued and read as one set.
               </p>
               <div className="form-actions">
-                <button className="button button-primary" type="submit" disabled={busy}>
+                <Button variant="primary" type="submit" disabled={busy}>
                   {busy ? "Saving…" : "Save planning controls"}
-                </button>
+                </Button>
               </div>
             </form>
           ) : planning ? (

@@ -11,12 +11,25 @@ import type {
   UnitRegister,
   UnitSummary,
 } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FilterBar,
+  Loading,
+  Notice,
+  Stat,
+  StatRow,
+  SubPanel,
+  TableScroll,
+} from "@/components/ui";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
 import { HierarchyForms } from "@/components/projects/inventory/HierarchyForms";
 import { ImportPanel } from "@/components/projects/inventory/ImportPanel";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
-import { statusLabel } from "@/components/projects/inventory/statusLabels";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 /**
  * The inventory register, inside the project workspace.
@@ -135,49 +148,36 @@ export function InventoryTab({
   // was validated against them. Saying so beats eleven identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Panel title="Inventory" description="Not yet — the project basis is still open.">
+      <Card title="Inventory" description="Not yet — the project basis is still open.">
         <EmptyState
           title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to
-                Pre-development before loading inventory."
+          hint="Confirm country and currency settings, then move the project to Pre-development before loading inventory."
         />
-      </Panel>
+      </Card>
     );
   }
 
   return (
     <>
-      <Panel
+      <Card
         title="Inventory"
         description="Every unit in this development, and what stops each one being released."
         actions={
           <>
             {canWriteStructure ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "hierarchy" ? "none" : "hierarchy")}
-              >
+              <Button onClick={() => setOpen(open === "hierarchy" ? "none" : "hierarchy")}>
                 {open === "hierarchy" ? "Cancel" : "Add structure"}
-              </button>
+              </Button>
             ) : null}
             {canConfigure ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "areas" ? "none" : "areas")}
-              >
+              <Button onClick={() => setOpen(open === "areas" ? "none" : "areas")}>
                 {open === "areas" ? "Cancel" : "Area types"}
-              </button>
+              </Button>
             ) : null}
             {canWriteStructure ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "import" ? "none" : "import")}
-              >
+              <Button onClick={() => setOpen(open === "import" ? "none" : "import")}>
                 {open === "import" ? "Cancel" : "Import inventory"}
-              </button>
+              </Button>
             ) : null}
           </>
         }
@@ -185,6 +185,7 @@ export function InventoryTab({
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         {open === "hierarchy" ? (
+          <SubPanel title="Add structure">
           <HierarchyForms
             projectId={projectId}
             phases={phases}
@@ -193,15 +194,20 @@ export function InventoryTab({
             canConfigure={canConfigure}
             onChanged={refresh}
           />
+          </SubPanel>
         ) : null}
         {open === "areas" ? (
-          <AreaTypesPanel projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
+          <SubPanel title="Area types">
+            <AreaTypesPanel projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
+          </SubPanel>
         ) : null}
         {open === "import" ? (
-          <ImportPanel projectId={projectId} onApplied={refresh} />
+          <SubPanel title="Import inventory">
+            <ImportPanel projectId={projectId} onApplied={refresh} />
+          </SubPanel>
         ) : null}
 
-        <div className="form-inline">
+        <FilterBar>
           <Field label="Phase">
             <select
               className="input"
@@ -269,7 +275,7 @@ export function InventoryTab({
               ))}
             </select>
           </Field>
-          <Field label="Search">
+          <Field label="Search" grow>
             <input
               className="input"
               value={filters.search}
@@ -277,10 +283,10 @@ export function InventoryTab({
               onChange={(event) => setFilters({ ...filters, search: event.target.value })}
             />
           </Field>
-        </div>
+        </FilterBar>
 
         {register === null ? (
-          <Loading label="Loading inventory…" />
+          <Loading label="Loading inventory…" lines={4} />
         ) : register.units.length === 0 ? (
           <EmptyState
             title="No units match"
@@ -288,26 +294,34 @@ export function InventoryTab({
           />
         ) : (
           <>
-            <div className="chip-list">
-              <span className="chip">{register.total} units</span>
-              <span className="chip">{register.unreleased_count} unreleased</span>
-              <span className="chip">{register.held_count} held</span>
-              <span className="chip">{register.available_count} available</span>
-            </div>
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Unit register</caption>
+            <StatRow>
+              <Stat label="Units" value={register.total} small />
+              <Stat label="Unreleased" value={register.unreleased_count} small />
+              <Stat label="Held" value={register.held_count} small />
+              <Stat label="Available" value={register.available_count} small />
+            </StatRow>
+            <TableScroll label="Unit register" fixedFirst>
                 <thead>
                   <tr>
                     <th scope="col">Unit</th>
                     <th scope="col">Phase</th>
                     <th scope="col">Building / floor</th>
                     <th scope="col">Type</th>
-                    <th scope="col">Beds</th>
-                    <th scope="col">Internal</th>
-                    <th scope="col">Weighted</th>
-                    <th scope="col">Parking</th>
-                    <th scope="col">Storage</th>
+                    <th scope="col" className="num">
+                      Beds
+                    </th>
+                    <th scope="col" className="num">
+                      Internal
+                    </th>
+                    <th scope="col" className="num">
+                      Weighted
+                    </th>
+                    <th scope="col" className="num">
+                      Parking
+                    </th>
+                    <th scope="col" className="num">
+                      Storage
+                    </th>
                     <th scope="col">Commercial</th>
                     <th scope="col">Legal</th>
                     <th scope="col">Collection</th>
@@ -321,7 +335,7 @@ export function InventoryTab({
                     <tr key={unit.id}>
                       <th scope="row">
                         <button
-                          className="button button-small"
+                          className="button-link mono"
                           type="button"
                           onClick={() => setSelected(unit)}
                         >
@@ -333,19 +347,31 @@ export function InventoryTab({
                         {unit.building_code ?? "—"} / {unit.floor_code ?? "—"}
                       </td>
                       <td>{unit.unit_type_code ?? "—"}</td>
-                      <td>{unit.bedrooms ?? "—"}</td>
-                      <td className="mono nowrap">{unit.internal_area ?? "—"}</td>
-                      <td className="mono nowrap">{unit.weighted_saleable_area ?? "—"}</td>
-                      <td>{unit.parking_count}</td>
-                      <td>{unit.storage_count}</td>
+                      <td className="num">{unit.bedrooms ?? "—"}</td>
+                      <td className="num">{unit.internal_area ?? "—"}</td>
+                      <td className="num">{unit.weighted_saleable_area ?? "—"}</td>
+                      <td className="num">{unit.parking_count}</td>
+                      <td className="num">{unit.storage_count}</td>
                       <td>
-                        <Badge tone={unit.commercial_status === "available" ? "success" : "neutral"}>
+                        <Badge tone={statusTone(unit.commercial_status)}>
                           {statusLabel(unit.commercial_status)}
                         </Badge>
                       </td>
-                      <td>{statusLabel(unit.legal_status)}</td>
-                      <td>{statusLabel(unit.collection_status)}</td>
-                      <td>{statusLabel(unit.delivery_status)}</td>
+                      <td>
+                        <Badge tone={statusTone(unit.legal_status)}>
+                          {statusLabel(unit.legal_status)}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Badge tone={statusTone(unit.collection_status)}>
+                          {statusLabel(unit.collection_status)}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Badge tone={statusTone(unit.delivery_status)}>
+                          {statusLabel(unit.delivery_status)}
+                        </Badge>
+                      </td>
                       <td>
                         {unit.is_complete ? (
                           <Badge tone="success">Complete</Badge>
@@ -363,11 +389,10 @@ export function InventoryTab({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </TableScroll>
           </>
         )}
-      </Panel>
+      </Card>
 
       {selected ? (
         <UnitDetailPanel

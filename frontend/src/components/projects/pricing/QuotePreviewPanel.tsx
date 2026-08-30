@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import { ApiError, pricing } from "@/lib/api";
 import type { QuotePreview } from "@/lib/api";
-import { Badge, Field, Notice, Panel } from "@/components/ui";
+import { Badge, Button, Field, Notice, Panel } from "@/components/ui";
+import { money } from "@/lib/format";
 
 /**
  * Model an offer against a unit's live price.
@@ -51,10 +52,13 @@ function Line({ label, value, strong }: { label: string; value: string; strong?:
 export function QuotePreviewPanel({
   projectId,
   unitId,
+  currencyCode,
   onClose,
 }: {
   projectId: string;
   unitId: string;
+  /** The active price version's currency — the quote is computed from it. */
+  currencyCode: string | null;
   onClose: () => void;
 }) {
   const [terms, setTerms] = useState<Record<string, string>>({});
@@ -84,9 +88,9 @@ export function QuotePreviewPanel({
       title="Quote preview"
       description="A calculation, not a reservation. Nothing here is saved."
       actions={
-        <button className="button button-small" type="button" onClick={onClose}>
+        <Button small onClick={onClose}>
           Close
-        </button>
+        </Button>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -134,9 +138,9 @@ export function QuotePreviewPanel({
             />
           </Field>
         </div>
-        <button className="button" type="submit" disabled={busy}>
+        <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Pricing…" : "Preview"}
-        </button>
+        </Button>
       </form>
 
       {quote ? (
@@ -151,29 +155,29 @@ export function QuotePreviewPanel({
           <dl className="reference-list">
             <Line
               label="Approved reference price (ex tax)"
-              value={quote.approved_reference_price_ex_tax}
+              value={money(quote.approved_reference_price_ex_tax, currencyCode)}
             />
-            <Line label="Paid upgrade" value={quote.paid_upgrade_price} />
-            <Line label="Payment plan adjustment" value={quote.payment_plan_price_adjustment} />
-            <Line label="Gross quoted price (ex tax)" value={quote.gross_quoted_price_ex_tax} strong />
-            <Line label="Cash discount" value={quote.cash_discount} />
-            <Line label="Seller credit" value={quote.seller_credit} />
+            <Line label="Paid upgrade" value={money(quote.paid_upgrade_price, currencyCode)} />
+            <Line label="Payment plan adjustment" value={money(quote.payment_plan_price_adjustment, currencyCode)} />
+            <Line label="Gross quoted price (ex tax)" value={money(quote.gross_quoted_price_ex_tax, currencyCode)} strong />
+            <Line label="Cash discount" value={money(quote.cash_discount, currencyCode)} />
+            <Line label="Seller credit" value={money(quote.seller_credit, currencyCode)} />
             <Line
               label="Net contract price (ex tax)"
-              value={quote.net_contract_price_ex_tax}
+              value={money(quote.net_contract_price_ex_tax, currencyCode)}
               strong
             />
           </dl>
           <h3 className="section-heading">Seller costs</h3>
           <dl className="reference-list">
-            <Line label="Package cost" value={quote.seller_package_cost} />
-            <Line label="Upgrade allowance" value={quote.upgrade_allowance_cost} />
-            <Line label="Commission support" value={quote.commission_support} />
-            <Line label="Financing subsidy" value={quote.financing_subsidy} />
-            <Line label="Extended-term NPV cost" value={quote.extended_terms_npv_cost} />
+            <Line label="Package cost" value={money(quote.seller_package_cost, currencyCode)} />
+            <Line label="Upgrade allowance" value={money(quote.upgrade_allowance_cost, currencyCode)} />
+            <Line label="Commission support" value={money(quote.commission_support, currencyCode)} />
+            <Line label="Financing subsidy" value={money(quote.financing_subsidy, currencyCode)} />
+            <Line label="Extended-term NPV cost" value={money(quote.extended_terms_npv_cost, currencyCode)} />
             <Line
               label="Effective net revenue"
-              value={quote.effective_net_revenue_preview}
+              value={money(quote.effective_net_revenue_preview, currencyCode)}
               strong
             />
           </dl>
@@ -186,12 +190,16 @@ export function QuotePreviewPanel({
           ) : null}
           <dl className="reference-list">
             {quote.taxes.map((tax) => (
-              <Line key={tax.tax_code} label={`${tax.label} (${tax.rate_fraction})`} value={tax.amount} />
+              <Line
+                key={tax.tax_code}
+                label={`${tax.label} (${tax.rate_fraction})`}
+                value={money(tax.amount, currencyCode)}
+              />
             ))}
-            <Line label="Buyer-paid fees" value={quote.buyer_paid_fees} />
+            <Line label="Buyer-paid fees" value={money(quote.buyer_paid_fees, currencyCode)} />
             <Line
               label="Total buyer payable"
-              value={quote.total_buyer_payable_preview}
+              value={money(quote.total_buyer_payable_preview, currencyCode)}
               strong
             />
           </dl>

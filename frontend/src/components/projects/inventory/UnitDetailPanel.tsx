@@ -15,22 +15,18 @@ import type {
   UnitPricing,
   UnitStatusEvent,
 } from "@/lib/api";
-import { Badge, Field, Loading, Notice, Panel } from "@/components/ui";
-import { PriceWaterfall } from "@/components/projects/pricing/PriceWaterfall";
+import { Badge, Drawer, Loading, Notice, SubPanel } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import {
-  DIMENSION_LABELS,
-  statusLabel,
-} from "@/components/projects/inventory/statusLabels";
-import {
-  gateLabel,
-  handoverLabel,
-  legalEventLabel,
-  reservationLabel,
-  saleLabel,
-} from "@/components/projects/sales/labels";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
+import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
+import { UnitHistory } from "@/components/projects/inventory/unit/UnitHistory";
+import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPricingSection";
+import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
+import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
 const UNIT_FIELDS: EditField[] = [
@@ -53,65 +49,34 @@ const UNIT_FIELDS: EditField[] = [
   { name: "is_active", label: "Unit is active", kind: "checkbox" },
 ];
 
-/**
- * The gates, each owned by a different role. `pricing_approved` is not here.
- *
- * The roles beside each field mirror the server's own matrix so the form offers
- * a person only what they can actually save. The server decides — this is an
- * affordance, not a permission check, and it holds no rule the API does not.
- */
-const RELEASE_FIELDS: (EditField & { roles: string[] })[] = [
-  {
-    name: "drawings_approved",
-    label: "Drawings approved",
-    kind: "checkbox",
-    roles: ["system_admin", "project_manager", "design_engineering"],
-  },
-  {
-    name: "legal_sale_eligible",
-    label: "Legally saleable",
-    kind: "checkbox",
-    roles: ["system_admin", "project_manager", "legal"],
-  },
-  {
-    name: "release_date",
-    label: "Release date",
-    kind: "date",
-    roles: ["system_admin", "project_manager", "sales_operations"],
-  },
-  {
-    name: "release_batch",
-    label: "Release batch",
-    roles: ["system_admin", "project_manager", "sales_operations"],
-  },
-  {
-    name: "block_reason",
-    label: "Block reason",
-    roles: ["system_admin", "project_manager", "sales_operations"],
-  },
-];
-
-const TRANSITIONS: Record<string, string[]> = {
-  unreleased: ["held", "available"],
-  held: ["unreleased", "available"],
-  available: ["held", "unreleased"],
-};
-
-const REASON_REQUIRED = new Set(["held", "unreleased"]);
-
-const today = () => new Date().toISOString().slice(0, 10);
-
 /** Roles that may prepare a price and put it forward. */
 const PRICING_WRITERS = new Set(["system_admin", "project_manager", "finance"]);
 
 /** The one role that may sanction and release a price. */
 const PRICING_APPROVERS = new Set(["approver_cfo"]);
 
+const SECTIONS = [
+  { key: "summary", label: "Summary" },
+  { key: "detail", label: "Detail" },
+  { key: "release", label: "Release" },
+  { key: "pricing", label: "Pricing" },
+  { key: "commercial", label: "Sale and legal" },
+  { key: "history", label: "History" },
+];
+
 /**
- * One unit, in as much depth as inventory owns.
+ * Unit 360: everything the product knows about one unit, in one place.
  *
- * Not Unit 360: there is no price here, no client and no payment plan, because
- * none of those exist yet. PR-MVP-04 builds the full view on top of this.
+ * It opens over the register rather than under it, because the register is a
+ * thousand rows long and a person comparing units should not lose their place
+ * to look at one. Six sections rather than one long scroll: a design engineer
+ * arrives for the areas, Finance for the price, Legal for the contract, and
+ * none of them should have to read the other three to find their own.
+ *
+ * Nothing here computes anything. Every price, status, blocker and gate came
+ * back from the API on this request — the browser lays them out and offers the
+ * actions the server would accept, and the server refuses regardless of which
+ * button was on screen.
  */
 export function UnitDetailPanel({
   projectId,
@@ -145,13 +110,14 @@ export function UnitDetailPanel({
     reservation: Reservation | null;
     sale: SaleDetail | null;
   } | null>(null);
+  const [section, setSection] = useState("summary");
   const [quoting, setQuoting] = useState(false);
   const [pricingBusy, setPricingBusy] = useState(false);
-  const [editing, setEditing] = useState<"none" | "unit" | "release" | "fields">("none");
-  const [move, setMove] = useState({ to_status: "", effective_date: today(), reason: "" });
+  const [editing, setEditing] = useState<"none" | "unit" | "fields">("none");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const currencyCodeOf = useCurrencyCode();
 
   const load = useCallback(async () => {
     try {
@@ -205,8 +171,11 @@ export function UnitDetailPanel({
     })();
   }, [load]);
 
-  const transition = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const transition = async (move: {
+    to_status: string;
+    effective_date: string;
+    reason: string;
+  }) => {
     setBusy(true);
     setError(null);
     try {
@@ -216,7 +185,6 @@ export function UnitDetailPanel({
         ...(move.reason ? { reason: move.reason } : {}),
       });
       setNotice("Status recorded.");
-      setMove({ to_status: "", effective_date: today(), reason: "" });
       await load();
       await onChanged();
     } catch (caught) {
@@ -233,10 +201,7 @@ export function UnitDetailPanel({
    * replacing it: the API refuses a submitter approving their own price, and an
    * administrator approving anything, whichever button was on screen.
    */
-  const movePrice = async (
-    action: "submit" | "approve" | "activate",
-    versionId: string,
-  ) => {
+  const movePrice = async (action: "submit" | "approve" | "activate", versionId: string) => {
     setPricingBusy(true);
     setError(null);
     try {
@@ -259,7 +224,7 @@ export function UnitDetailPanel({
     }
   };
 
-  const approve = async (scheduleId: string) => {
+  const approveSchedule = async (scheduleId: string) => {
     try {
       await inventory.approveAreaSchedule(projectId, unitId, scheduleId);
       setNotice("Revision approved.");
@@ -272,662 +237,185 @@ export function UnitDetailPanel({
 
   if (error && unit === null) {
     return (
-      <Panel title="Unit">
+      <Drawer title="Unit" onClose={onClose}>
         <Notice tone="error">{error}</Notice>
-        <button className="button" type="button" onClick={onClose}>
-          Close
-        </button>
-      </Panel>
+      </Drawer>
     );
   }
-  if (unit === null) return <Loading label="Loading unit…" />;
+
+  if (unit === null) {
+    return (
+      <Drawer title="Loading unit…" onClose={onClose}>
+        <Loading label="Loading unit…" lines={5} />
+      </Drawer>
+    );
+  }
 
   const editableValues = values.filter((value) => value.is_editable);
   const canPrice = [...roles].some((role) => PRICING_WRITERS.has(role));
   const canApprovePricing = [...roles].some((role) => PRICING_APPROVERS.has(role));
-  // The newest version that is on its way somewhere. An active price has
-  // arrived; a superseded one is history.
-  const pending =
-    unitPricing?.history.find((version) =>
-      ["draft", "submitted", "approved"].includes(version.status),
-    ) ?? null;
-  const releaseFields = RELEASE_FIELDS.filter((field) =>
-    field.roles.some((role) => roles.has(role)),
-  );
 
   return (
-    <Panel
-      title={`${unit.unit_reference}`}
-      description={`${unit.phase_code ?? "—"} · ${unit.building_code ?? "—"} · ${
-        unit.floor_code ?? "—"
-      }`}
-      actions={
+    <Drawer
+      eyebrow="Unit"
+      title={unit.unit_reference}
+      subtitle={`${unit.phase_code ?? "—"} · ${unit.building_code ?? "—"} · ${unit.floor_code ?? "—"}`}
+      meta={
         <>
-          {canWriteStructure ? (
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setEditing(editing === "unit" ? "none" : "unit")}
-            >
-              {editing === "unit" ? "Cancel" : "Edit unit"}
-            </button>
-          ) : null}
-          {releaseFields.length > 0 ? (
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setEditing(editing === "release" ? "none" : "release")}
-            >
-              {editing === "release" ? "Cancel" : "Release controls"}
-            </button>
-          ) : null}
-          {editableValues.length > 0 ? (
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setEditing(editing === "fields" ? "none" : "fields")}
-            >
-              {editing === "fields" ? "Cancel" : "Additional fields"}
-            </button>
-          ) : null}
-          {unitPricing?.active_price ? (
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setQuoting((open) => !open)}
-            >
-              {quoting ? "Cancel" : "Quote preview"}
-            </button>
-          ) : null}
-          <button className="button button-small" type="button" onClick={onClose}>
-            Close
-          </button>
+          <Badge tone={statusTone(unit.commercial_status)}>
+            {statusLabel(unit.commercial_status)}
+          </Badge>
+          <Badge tone={statusTone(unit.legal_status)}>{statusLabel(unit.legal_status)}</Badge>
+          {unit.release_eligible ? (
+            <Badge tone="success">Releasable</Badge>
+          ) : (
+            <Badge tone="muted">Not releasable</Badge>
+          )}
         </>
       }
+      tabs={SECTIONS}
+      activeTab={section}
+      onSelectTab={setSection}
+      onClose={onClose}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
-
-      {editing === "unit" ? (
-        <EditForm
-          fields={UNIT_FIELDS}
-          initial={Object.fromEntries(
-            UNIT_FIELDS.map((field) => [
-              field.name,
-              asValue(unit[field.name as keyof Unit] as never),
-            ]),
-          )}
-          onSave={async (changes) => {
-            await inventory.updateUnit(projectId, unitId, changes);
-            await load();
-            await onChanged();
-            setNotice("Unit updated.");
-          }}
-          onCancel={() => setEditing("none")}
-        />
-      ) : null}
-
-      {editing === "release" ? (
-        <EditForm
-          fields={releaseFields}
-          submitLabel="Save release controls"
-          initial={Object.fromEntries(
-            releaseFields.map((field) => [
-              field.name,
-              asValue(unit[field.name as keyof Unit] as never),
-            ]),
-          )}
-          onSave={async (changes) => {
-            await inventory.releaseControls(projectId, unitId, changes);
-            await load();
-            await onChanged();
-            setNotice("Release controls updated.");
-          }}
-          onCancel={() => setEditing("none")}
-        />
-      ) : null}
-
-      {editing === "fields" ? (
-        <EditForm
-          fields={editableValues.map((value) => ({
-            name: value.field_key,
-            label: value.display_label,
-            hint: value.help_text ?? value.unit_of_measure ?? undefined,
-            kind:
-              value.data_type === "boolean"
-                ? "checkbox"
-                : value.data_type === "date"
-                  ? "date"
-                  : value.data_type === "option"
-                    ? "select"
-                    : value.data_type === "text"
-                      ? "text"
-                      : "number",
-            options:
-              value.data_type === "option"
-                ? value.options.map((option) => ({ value: option.code, label: option.label }))
-                : undefined,
-          }))}
-          submitLabel="Save fields"
-          initial={Object.fromEntries(
-            editableValues.map((value) => [value.field_key, asValue(value.value)]),
-          )}
-          onSave={async (changes) => {
-            await inventory.writeUnitValues(projectId, unitId, changes);
-            await load();
-            await onChanged();
-            setNotice("Fields updated.");
-          }}
-          onCancel={() => setEditing("none")}
-        />
-      ) : null}
-
-      <h3 className="section-heading">Identity</h3>
-      <dl className="reference-list">
-        <div>
-          <dt className="reference-term">Unit number</dt>
-          <dd className="reference-value">{unit.unit_number}</dd>
-        </div>
-        <div>
-          <dt className="reference-term">Type</dt>
-          <dd className="reference-value">
-            {unit.unit_type_code ?? "—"} · {unit.asset_class}
-          </dd>
-        </div>
-        <div>
-          <dt className="reference-term">Bedrooms / bathrooms</dt>
-          <dd className="reference-value">
-            {unit.bedrooms ?? "—"} / {unit.bathrooms ?? "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="reference-term">Orientation / view</dt>
-          <dd className="reference-value">
-            {unit.orientation_code ?? "—"} · {unit.view_class_code ?? "—"}
-          </dd>
-        </div>
-      </dl>
-
-      <h3 className="section-heading">Areas</h3>
-      {unit.area_lines.length === 0 ? (
-        <p className="subtle">No approved measurement yet.</p>
-      ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Approved areas</caption>
-            <thead>
-              <tr>
-                <th scope="col">Area</th>
-                <th scope="col">Measured</th>
-                <th scope="col">Factor</th>
-                <th scope="col">Weighted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {unit.area_lines.map((line) => (
-                <tr key={line.area_type_id}>
-                  <th scope="row">{line.label}</th>
-                  <td className="mono nowrap">
-                    {line.raw_area} {line.unit_of_measure}
-                  </td>
-                  <td className="mono">{line.weight_factor}</td>
-                  <td className="mono nowrap">{line.weighted_area}</td>
-                </tr>
-              ))}
-              <tr>
-                <th scope="row">Weighted saleable</th>
-                <td colSpan={2} />
-                <td className="mono nowrap">
-                  {unit.weighted_saleable_area === null
-                    ? "—"
-                    : `${unit.weighted_saleable_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim()}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-      {schedules.length > 0 ? (
-        <div className="chip-list">
-          {schedules.map((schedule) => (
-            <span key={schedule.id} className="chip">
-              {schedule.revision_code}: {schedule.status}
-              {canConfigure && schedule.status === "draft" ? (
-                <button
-                  className="button button-small"
-                  type="button"
-                  onClick={() => void approve(schedule.id)}
-                >
-                  Approve
-                </button>
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <h3 className="section-heading">Sub-assets</h3>
-      {assets.length === 0 ? (
-        <p className="subtle">No parking or storage linked to this unit.</p>
-      ) : (
-        <ul className="chip-list">
-          {assets.map((asset) => (
-            <li key={asset.id} className="chip">
-              {asset.asset_reference} · {asset.asset_type} · {asset.transfer_mode}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="section-heading">Release</h3>
-      <dl className="reference-list">
-        <div>
-          <dt className="reference-term">Completeness</dt>
-          <dd className="reference-value">
-            {unit.completeness_percent}%{unit.is_complete ? " — complete" : ""}
-          </dd>
-        </div>
-        <div>
-          <dt className="reference-term">Drawings approved</dt>
-          <dd className="reference-value">{unit.drawings_approved ? "Yes" : "No"}</dd>
-        </div>
-        <div>
-          <dt className="reference-term">Legally saleable</dt>
-          <dd className="reference-value">{unit.legal_sale_eligible ? "Yes" : "No"}</dd>
-        </div>
-        <div>
-          <dt className="reference-term">Pricing approved</dt>
-          <dd className="reference-value">
-            {unit.pricing_approved ? "Yes" : "No — set when a price is approved"}
-          </dd>
-        </div>
-        <div>
-          <dt className="reference-term">Release date</dt>
-          <dd className="reference-value">{unit.release_date ?? "—"}</dd>
-        </div>
-      </dl>
-      {unit.release_blockers.length > 0 ? (
-        <Notice tone="info">
-          Not releasable yet: {unit.release_blockers.join("; ")}.
-        </Notice>
-      ) : null}
-      {unit.missing_requirements.length > 0 ? (
-        <p className="subtle">Outstanding: {unit.missing_requirements.join(", ")}.</p>
-      ) : null}
-
-      <h3 className="section-heading">Sale and legal</h3>
-      {commitment === null ? (
-        <p className="subtle">Not available to your role.</p>
-      ) : commitment.reservation === null && commitment.sale === null ? (
-        <p className="subtle">No active commercial commitment.</p>
-      ) : (
-        <>
-          <dl className="reference-list">
-            {commitment.reservation ? (
-              <>
-                <div>
-                  <dt className="reference-term">Reservation</dt>
-                  <dd className="reference-value">
-                    {commitment.reservation.reservation_number} ·{" "}
-                    {reservationLabel(commitment.reservation.status)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="reference-term">Expires</dt>
-                  <dd className="reference-value">{commitment.reservation.expires_on}</dd>
-                </div>
-                <div>
-                  <dt className="reference-term">Deposit</dt>
-                  <dd className="reference-value">
-                    {gateLabel(commitment.reservation.deposit_gate_status)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="reference-term">Quoted price</dt>
-                  <dd className="reference-value mono nowrap">
-                    {commitment.reservation.net_contract_price_ex_tax}
-                  </dd>
-                </div>
-              </>
-            ) : null}
-            {commitment.sale ? (
-              <>
-                <div>
-                  <dt className="reference-term">Contract</dt>
-                  <dd className="reference-value">
-                    {commitment.sale.sale.sale_number} ·{" "}
-                    {saleLabel(commitment.sale.sale.status)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="reference-term">SPA number</dt>
-                  <dd className="reference-value">{commitment.sale.sale.spa_number ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt className="reference-term">Contract price</dt>
-                  <dd className="reference-value mono nowrap">
-                    {commitment.sale.sale.total_contract_price}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="reference-term">First payment</dt>
-                  <dd className="reference-value">
-                    {gateLabel(commitment.sale.sale.first_payment_gate_status)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="reference-term">Handover</dt>
-                  <dd className="reference-value">
-                    {commitment.sale.handover
-                      ? handoverLabel(commitment.sale.handover.handover.status)
-                      : "Not opened"}
-                  </dd>
-                </div>
-              </>
-            ) : null}
-          </dl>
-          {commitment.sale ? (
-            <>
-              <h3 className="section-heading">Buyer parties on the contract</h3>
-              <div className="table-scroll">
-                <table className="table">
-                  <caption className="visually-hidden">Contract parties</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Name as identification</th>
-                      <th scope="col">Share</th>
-                      <th scope="col">Identity document</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {commitment.sale.parties.map((party) => (
-                      <tr key={party.id}>
-                        <th scope="row">{party.name_as_identification}</th>
-                        <td className="mono nowrap">{party.share_fraction}</td>
-                        <td className="mono">
-                          {"identity_document_number" in party ? (
-                            `${party.identity_document_type ?? "—"} ${party.identity_document_number ?? ""}`
-                          ) : (
-                            <span className="subtle">Not shown to your role</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <h3 className="section-heading">Legal timeline</h3>
-              {commitment.sale.legal.events.length === 0 ? (
-                <p className="subtle">Nothing recorded yet.</p>
-              ) : (
-                <div className="table-scroll">
-                  <table className="table">
-                    <caption className="visually-hidden">Legal timeline</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">Milestone</th>
-                        <th scope="col">Date</th>
-                        <th scope="col">Standing</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {commitment.sale.legal.events.map((event) => (
-                        <tr key={event.id}>
-                          <th scope="row">
-                            {legalEventLabel(event.event_type)}
-                            {event.reverses_event_id ? " — withdrawn" : ""}
-                          </th>
-                          <td className="nowrap">{event.event_date}</td>
-                          <td>
-                            {commitment.sale?.legal.effective_event_ids.includes(event.id)
-                              ? "Stands"
-                              : "Superseded"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {commitment.sale.cancellation ? (
-                <Notice tone="info">
-                  A cancellation is running on this contract:{" "}
-                  {commitment.sale.cancellation.reason}
-                </Notice>
-              ) : null}
-            </>
-          ) : null}
-        </>
-      )}
-
-      <h3 className="section-heading">Status</h3>
-      <div className="chip-list">
-        <Badge tone="neutral">Commercial: {statusLabel(unit.commercial_status)}</Badge>
-        <span className="chip">Legal: {statusLabel(unit.legal_status)}</span>
-        <span className="chip">Collection: {statusLabel(unit.collection_status)}</span>
-        <span className="chip">Delivery: {statusLabel(unit.delivery_status)}</span>
-      </div>
-
-      {(TRANSITIONS[unit.commercial_status] ?? []).length > 0 ? (
-        <form className="panel-section" onSubmit={transition}>
-          <h3 className="section-heading">Change commercial status</h3>
-          <div className="form-inline">
-            <Field label="Move to">
-              <select
-                className="input"
-                required
-                value={move.to_status}
-                onChange={(event) => setMove({ ...move, to_status: event.target.value })}
-              >
-                <option value="">Choose…</option>
-                {(TRANSITIONS[unit.commercial_status] ?? []).map((status) => (
-                  <option key={status} value={status}>
-                    {statusLabel(status)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Effective date">
-              <input
-                className="input input-short"
-                type="date"
-                required
-                value={move.effective_date}
-                onChange={(event) => setMove({ ...move, effective_date: event.target.value })}
-              />
-            </Field>
-            <Field
-              label="Reason"
-              hint={REASON_REQUIRED.has(move.to_status) ? "Required for this move." : "Optional."}
-            >
-              <input
-                className="input"
-                required={REASON_REQUIRED.has(move.to_status)}
-                value={move.reason}
-                onChange={(event) => setMove({ ...move, reason: event.target.value })}
-              />
-            </Field>
-          </div>
-          <div className="form-actions">
-            <button className="button button-primary" type="submit" disabled={busy}>
-              {busy ? "Recording…" : "Record status change"}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      <h3 className="section-heading">Commercial history</h3>
-      {history.length === 0 ? (
-        <p className="subtle">Nothing recorded yet.</p>
-      ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Unit status history</caption>
-            <thead>
-              <tr>
-                <th scope="col">Effective</th>
-                <th scope="col">Dimension</th>
-                <th scope="col">From</th>
-                <th scope="col">To</th>
-                <th scope="col">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((event) => (
-                <tr key={event.id}>
-                  <th scope="row" className="nowrap">
-                    {event.effective_date}
-                  </th>
-                  <td>{DIMENSION_LABELS[event.dimension] ?? event.dimension}</td>
-                  <td>{event.from_status ? statusLabel(event.from_status) : "—"}</td>
-                  <td>{statusLabel(event.to_status)}</td>
-                  <td>{event.reason ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {values.length > 0 ? (
-        <>
-          <h3 className="section-heading">Additional fields</h3>
-          <dl className="reference-list">
-            {values.map((value) => (
-              <div key={value.definition_id}>
-                <dt className="reference-term">{value.display_label}</dt>
-                <dd className="reference-value">
-                  {value.value === null || value.value === "" ? "—" : String(value.value)}
-                  {value.unit_of_measure ? ` ${value.unit_of_measure}` : ""}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      ) : null}
-
-      {unitPricing ? (
-        <>
-          <h3 className="section-heading">Pricing</h3>
-          {pending ? (
-            <div className="chip-list">
-              <span className="chip">
-                Version {pending.version_number} is {pending.status}
-              </span>
-              {canPrice && pending.status === "draft" ? (
-                <button
-                  className="button button-small"
-                  type="button"
-                  disabled={pricingBusy}
-                  onClick={() => movePrice("submit", pending.id)}
-                >
-                  Submit for approval
-                </button>
-              ) : null}
-              {canApprovePricing && pending.status === "submitted" ? (
-                <button
-                  className="button button-small"
-                  type="button"
-                  disabled={pricingBusy}
-                  onClick={() => movePrice("approve", pending.id)}
-                >
-                  Approve
-                </button>
-              ) : null}
-              {canApprovePricing && pending.status === "approved" ? (
-                <button
-                  className="button button-small"
-                  type="button"
-                  disabled={pricingBusy}
-                  onClick={() => movePrice("activate", pending.id)}
-                >
-                  Activate
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {unitPricing.repricing_required ? (
-            <Notice tone="error">
-              Repricing required. This unit has changed since its list price was set, so the
-              price below is what it was offered at and no longer describes it. The unit
-              cannot be released until a new price is approved and activated.
-            </Notice>
-          ) : null}
-          {unitPricing.active_price === null ? (
-            <Notice tone="info">
-              {unitPricing.has_active_configuration
-                ? "Not priced. Generate a price from the Pricing tab."
-                : "This project has no active pricing configuration yet."}
-            </Notice>
-          ) : (
-            <>
-              <div className="chip-list">
-                <span className="chip mono">
-                  {unitPricing.active_price.reference_price_ex_tax} ex tax
-                </span>
-                <span className="chip">v{unitPricing.active_price.version_number}</span>
-                <span className="chip">from {unitPricing.active_price.valid_from}</span>
-                <span className="chip mono">
-                  {unitPricing.active_price.price_per_internal_area ?? "—"} per internal unit
-                </span>
-                {unitPricing.pricing_approved ? (
-                  <Badge tone="success">Pricing approved</Badge>
-                ) : (
-                  <Badge tone="muted">Pricing not approved</Badge>
-                )}
-              </div>
-              <PriceWaterfall version={unitPricing.active_price} />
-            </>
-          )}
-
-          {unitPricing.history.length > 1 ? (
-            <>
-              <h3 className="section-heading">Price history</h3>
-              <div className="table-scroll">
-                <table className="table">
-                  <caption className="visually-hidden">Price history</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Version</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">From</th>
-                      <th scope="col">To</th>
-                      <th scope="col">Price</th>
-                      <th scope="col">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {unitPricing.history.map((version) => (
-                      <tr key={version.id}>
-                        <th scope="row">{version.version_number}</th>
-                        <td>{version.status}</td>
-                        <td>{version.valid_from}</td>
-                        <td>{version.valid_to ?? "—"}</td>
-                        <td className="mono nowrap">{version.reference_price_ex_tax}</td>
-                        <td>{version.change_reason ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : null}
-        </>
-      ) : null}
-
-      {quoting && unitPricing?.active_price ? (
-        <QuotePreviewPanel
-          projectId={projectId}
-          unitId={unitId}
-          onClose={() => setQuoting(false)}
-        />
-      ) : null}
 
       {areaTypes.length === 0 ? (
         <Notice tone="info">
           This project has no area types configured yet, so no unit can be measured or released.
         </Notice>
       ) : null}
-    </Panel>
+
+      {section === "summary" ? (
+        <UnitSummary
+          unit={unit}
+          unitPricing={unitPricing}
+          commitment={commitment}
+          onOpenTab={setSection}
+        />
+      ) : null}
+
+      {section === "detail" ? (
+        <>
+          {editing === "unit" ? (
+            <SubPanel title="Edit unit">
+              <EditForm
+                fields={UNIT_FIELDS}
+                initial={Object.fromEntries(
+                  UNIT_FIELDS.map((field) => [
+                    field.name,
+                    asValue(unit[field.name as keyof Unit] as never),
+                  ]),
+                )}
+                onSave={async (changes) => {
+                  await inventory.updateUnit(projectId, unitId, changes);
+                  await load();
+                  await onChanged();
+                  setNotice("Unit updated.");
+                  setEditing("none");
+                }}
+                onCancel={() => setEditing("none")}
+              />
+            </SubPanel>
+          ) : null}
+          {editing === "fields" ? (
+            <SubPanel title="Additional fields">
+              <EditForm
+                fields={editableValues.map((value) => ({
+                  name: value.field_key,
+                  label: value.display_label,
+                  hint: value.help_text ?? value.unit_of_measure ?? undefined,
+                  kind:
+                    value.data_type === "boolean"
+                      ? "checkbox"
+                      : value.data_type === "date"
+                        ? "date"
+                        : value.data_type === "option"
+                          ? "select"
+                          : value.data_type === "text"
+                            ? "text"
+                            : "number",
+                  options:
+                    value.data_type === "option"
+                      ? value.options.map((option) => ({
+                          value: option.code,
+                          label: option.label,
+                        }))
+                      : undefined,
+                }))}
+                submitLabel="Save fields"
+                initial={Object.fromEntries(
+                  editableValues.map((value) => [value.field_key, asValue(value.value)]),
+                )}
+                onSave={async (changes) => {
+                  await inventory.writeUnitValues(projectId, unitId, changes);
+                  await load();
+                  await onChanged();
+                  setNotice("Fields updated.");
+                  setEditing("none");
+                }}
+                onCancel={() => setEditing("none")}
+              />
+            </SubPanel>
+          ) : null}
+          <UnitAreas
+            unit={unit}
+            schedules={schedules}
+            assets={assets}
+            values={values}
+            canApproveSchedule={canConfigure}
+            onApproveSchedule={(scheduleId) => void approveSchedule(scheduleId)}
+            onEditUnit={
+              canWriteStructure
+                ? () => setEditing(editing === "unit" ? "none" : "unit")
+                : undefined
+            }
+            onEditFields={() => setEditing(editing === "fields" ? "none" : "fields")}
+            editableFieldCount={editableValues.length}
+          />
+        </>
+      ) : null}
+
+      {section === "release" ? (
+        <UnitRelease
+          unit={unit}
+          roles={roles}
+          busy={busy}
+          onSaveControls={async (changes) => {
+            await inventory.releaseControls(projectId, unitId, changes);
+            await load();
+            await onChanged();
+            setNotice("Release controls updated.");
+          }}
+          onTransition={(move) => void transition(move)}
+        />
+      ) : null}
+
+      {section === "pricing" ? (
+        <>
+          <UnitPricingSection
+            unitPricing={unitPricing}
+            canPrice={canPrice}
+            canApprove={canApprovePricing}
+            busy={pricingBusy}
+            onMove={(action, versionId) => void movePrice(action, versionId)}
+            onQuote={() => setQuoting((open) => !open)}
+          />
+          {quoting && unitPricing?.active_price ? (
+            <QuotePreviewPanel
+              projectId={projectId}
+              unitId={unitId}
+              currencyCode={currencyCodeOf(unitPricing.active_price.currency_id)}
+              onClose={() => setQuoting(false)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {section === "commercial" ? <UnitCommitment commitment={commitment} /> : null}
+
+      {section === "history" ? <UnitHistory history={history} /> : null}
+    </Drawer>
   );
 }

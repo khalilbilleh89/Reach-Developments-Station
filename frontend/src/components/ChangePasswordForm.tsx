@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { ApiError, auth } from "@/lib/api";
-import { Field, Notice } from "@/components/ui";
+import { Button, Field, Notice } from "@/components/ui";
 
 /**
  * Password change.
@@ -81,9 +81,9 @@ export function ChangePasswordForm({
 
       {error ? <Notice tone="error">{error}</Notice> : null}
 
-      <button className="button button-primary" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy}>
         {busy ? "Saving…" : "Change password"}
-      </button>
+      </Button>
       <p className="footnote">
         Changing your password signs you out everywhere. You will be asked to sign in again.
       </p>

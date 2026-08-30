@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { Phase, PhaseAccess } from "@/lib/api";
-import { Badge, Loading, Notice } from "@/components/ui";
+import { Badge, Button, Loading, Notice, TableScroll } from "@/components/ui";
 
 /**
  * Which phases one member of a project may see.
@@ -87,7 +87,7 @@ export function PhaseAccessEditor({
   const activeCount = granted.filter((row) => row.is_active).length;
 
   return (
-    <div className="panel-section">
+    <div>
       <h3 className="section-heading">Inventory scope — {displayName}</h3>
       {error ? <Notice tone="error">{error}</Notice> : null}
 
@@ -126,9 +126,7 @@ export function PhaseAccessEditor({
       ) : phases.length === 0 ? (
         <p className="subtle">This project has no phases yet.</p>
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Phase access</caption>
+        <TableScroll label="Phase access">
             <thead>
               <tr>
                 <th scope="col">Phase</th>
@@ -153,21 +151,19 @@ export function PhaseAccessEditor({
                       )}
                     </td>
                     <td>
-                      <button
-                        className="button button-small"
-                        type="button"
+                      <Button
+                        small
                         disabled={busy}
                         onClick={() => void toggle(phase.id, !isActive, row !== undefined)}
                       >
                         {isActive ? "Revoke" : "Grant"}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
     </div>
   );

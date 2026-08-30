@@ -117,9 +117,10 @@ there is no permission table and no policy language.
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
 │   ├── src/app/                login, projects workspace, settings shell, design tokens
-│   ├── src/components/         UI pieces, project workspace tabs, settings sections
+│   ├── src/components/ui/      the design system's primitives
+│   ├── src/components/         application shell, project workspace tabs, settings sections
 │   └── src/lib/api/            the only place the browser calls the API
-├── docs/                       architecture, roadmap, engineering rules, deployment
+├── docs/                       architecture, roadmap, engineering rules, deployment, UX system
 ├── scripts/                    Render build and start commands
 ├── tests/                      backend test suite
 └── .github/                    CI workflow and pull request template
@@ -298,3 +299,4 @@ and must declare dependency, contract, migration and security impact.
 | [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) | The twelve MVP pull requests and their contents |
 | [docs/ENGINEERING_RULES.md](docs/ENGINEERING_RULES.md) | Dependency policy, clean-code rules, money/date rules, API and migration conventions, definition of done |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render configuration, build/start separation, verification, rollback |
+| [docs/UX_SYSTEM.md](docs/UX_SYSTEM.md) | Design tokens, UI primitives, status and number presentation, responsive and accessibility rules |

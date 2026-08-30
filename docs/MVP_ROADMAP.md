@@ -22,6 +22,11 @@ mvp/pr-03-inventory
 MVP completion requires the entire core workflow to operate **without
 spreadsheet-side calculations**.
 
+Work that hardens the product across every module at once — the design system,
+accessibility, responsive behaviour — is recorded under
+[Horizontal checkpoints](#horizontal-checkpoints) at the end of this document.
+Those do not carry an MVP number and do not change the count of twelve.
+
 ---
 
 ## PR-MVP-00 — Repository Foundation & Engineering Constitution
@@ -276,3 +281,39 @@ them as simple explicit input cases — never a generic scenario engine.
 - operational documentation
 - cutover checklist
 - launch support
+
+---
+
+## Horizontal checkpoints
+
+These are not functional pull requests and do not renumber anything above. The
+canonical sequence remains twelve, `PR-MVP-00` through `PR-MVP-11`. A
+checkpoint touches every module that exists at the time it lands, adds no
+schema, no migration and no business logic, and is named for what it hardens
+rather than what it builds.
+
+### PR-UX-01 — Product Experience & Design System
+
+Branch `ux/pr-01-product-experience`, taken from `main` after PR-MVP-05 merged.
+
+- one light theme; the `prefers-color-scheme` block removed and
+  `color-scheme: light` declared
+- a full token layer — surfaces, text, intent, spacing, radius, elevation,
+  typography scale, content widths, motion
+- `components/ui.tsx` replaced by `components/ui/`: Button, Badge, Card,
+  SubPanel, PageHeader, SectionHeader, Tabs, TabPanel, Drawer, Field, FilterBar,
+  FormActions, StickyActions, TableScroll, KeyValueGrid, Stat, Notice,
+  EmptyState, Loading, Timeline, Steps, ConfirmDialog, PromptDialog, Icon
+- a sticky application shell with real navigation between Projects and Settings
+- Unit 360 rebuilt as a six-section drawer that opens over the register rather
+  than under it
+- the deal file rebuilt as a five-section drawer, with a labelled reason dialog
+  in place of `window.prompt`
+- registers moved to reported figures, tone-coded status badges and tabular
+  numerics; every wide table scrolls inside itself
+- tab groups given namespaced ids, the selected tab kept in view, and the
+  application bar made to fit a phone
+- `docs/UX_SYSTEM.md` added as the design system's reference
+
+No migration, no schema change, no backend logic, no API contract change, no
+new dependency of any kind, and no financial arithmetic added to the browser.

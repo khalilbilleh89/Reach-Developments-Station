@@ -1,7 +1,9 @@
 "use client";
 
 import type { PriceComponent, PriceVersionDetail } from "@/lib/api";
-import { Badge, EmptyState } from "@/components/ui";
+import { Badge, EmptyState, KeyValue, KeyValueGrid, TableScroll } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
+import { money } from "@/lib/format";
 
 /**
  * The lines a price is made of, in the order they were applied.
@@ -23,9 +25,15 @@ const TYPE_LABELS: Record<string, string> = {
   manual_override: "Override",
 };
 
-function Amount({ value }: { value: string | null }) {
-  if (value === null) return <>—</>;
-  return <span className="mono nowrap">{value}</span>;
+/**
+ * A money cell: grouped, denominated in the version's own currency.
+ *
+ * The Rate and Factor columns stay undecorated — a rate is money PER AREA and
+ * a factor is a multiplier, and labelling either as a plain currency amount
+ * would misstate what it is.
+ */
+function Amount({ value, code }: { value: string | null; code: string | null }) {
+  return <>{money(value, code)}</>;
 }
 
 function overridden(component: PriceComponent): boolean {
@@ -33,33 +41,49 @@ function overridden(component: PriceComponent): boolean {
 }
 
 export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
+  const currencyCodeOf = useCurrencyCode();
+  const code = currencyCodeOf(version.currency_id);
   if (version.components.length === 0) {
     return <EmptyState title="No components" hint="This price has no lines to show." />;
   }
 
   return (
     <>
-      <div className="table-scroll">
-        <table className="table">
-          <caption className="visually-hidden">Price components</caption>
+      <TableScroll label="Price components">
           <thead>
             <tr>
-              <th scope="col">#</th>
+              <th scope="col" className="num">
+                #
+              </th>
               <th scope="col">Source</th>
               <th scope="col">Line</th>
-              <th scope="col">Quantity</th>
-              <th scope="col">Rate</th>
-              <th scope="col">Factor</th>
-              <th scope="col">Basis</th>
-              <th scope="col">Calculated</th>
-              <th scope="col">Override</th>
-              <th scope="col">Final</th>
+              <th scope="col" className="num">
+                Quantity
+              </th>
+              <th scope="col" className="num">
+                Rate
+              </th>
+              <th scope="col" className="num">
+                Factor
+              </th>
+              <th scope="col" className="num">
+                Basis
+              </th>
+              <th scope="col" className="num">
+                Calculated
+              </th>
+              <th scope="col" className="num">
+                Override
+              </th>
+              <th scope="col" className="num">
+                Final
+              </th>
             </tr>
           </thead>
           <tbody>
             {version.components.map((component) => (
               <tr key={component.id}>
-                <td>{component.sequence}</td>
+                <td className="num">{component.sequence}</td>
                 <td>{TYPE_LABELS[component.component_type] ?? component.component_type}</td>
                 <th scope="row">
                   {component.label}
@@ -70,28 +94,26 @@ export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
                     </>
                   ) : null}
                 </th>
-                <td className="mono nowrap">
+                <td className="num">
                   {component.quantity === null
                     ? "—"
                     : `${component.quantity}${
                         component.unit_of_measure ? ` ${component.unit_of_measure}` : ""
                       }`}
                 </td>
-                <td>
-                  <Amount value={component.rate} />
+                <td className="num">{money(component.rate)}</td>
+                <td className="num">{component.factor ?? "—"}</td>
+                <td className="num">
+                  <Amount value={component.basis_amount} code={code} />
                 </td>
-                <td className="mono nowrap">{component.factor ?? "—"}</td>
-                <td>
-                  <Amount value={component.basis_amount} />
+                <td className="num">
+                  <Amount value={component.calculated_amount} code={code} />
                 </td>
-                <td>
-                  <Amount value={component.calculated_amount} />
+                <td className="num">
+                  <Amount value={component.override_amount} code={code} />
                 </td>
-                <td>
-                  <Amount value={component.override_amount} />
-                </td>
-                <td>
-                  <Amount value={component.final_amount} />
+                <td className="num">
+                  <Amount value={component.final_amount} code={code} />
                 </td>
               </tr>
             ))}
@@ -101,20 +123,23 @@ export function PriceWaterfall({ version }: { version: PriceVersionDetail }) {
               <th scope="row" colSpan={9}>
                 Approved reference price (ex tax)
               </th>
-              <td className="mono nowrap">{version.reference_price_ex_tax}</td>
+              <td className="num">{money(version.reference_price_ex_tax, code)}</td>
             </tr>
           </tfoot>
-        </table>
-      </div>
+      </TableScroll>
       {version.components.some(overridden) ? (
-        <dl className="reference-list">
-          {version.components.filter(overridden).map((component) => (
-            <div key={`reason-${component.id}`}>
-              <dt className="reference-term">{component.label}</dt>
-              <dd className="reference-value">{component.override_reason}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          <h4 className="section-heading">Why a line was overridden</h4>
+          <KeyValueGrid columns={2}>
+            {version.components.filter(overridden).map((component) => (
+              <KeyValue
+                key={`reason-${component.id}`}
+                label={component.label}
+                value={component.override_reason}
+              />
+            ))}
+          </KeyValueGrid>
+        </>
       ) : null}
     </>
   );
