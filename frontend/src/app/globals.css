@@ -232,6 +232,7 @@ body {
 
 .app-brand {
   display: inline-flex;
+  flex: none;
   gap: var(--space-2);
   align-items: baseline;
   min-width: 0;
@@ -304,6 +305,7 @@ body {
 
 .app-account {
   display: flex;
+  flex: 0 1 auto;
   gap: var(--space-2);
   align-items: center;
   min-width: 0;
@@ -338,6 +340,30 @@ body {
 
 @media (width < 48rem) {
   .app-user-roles {
+    display: none;
+  }
+}
+
+/*
+ * On a phone the bar keeps only what identifies the place and the way out.
+ * Who you are signed in as is a fact you can get from Settings; a bar whose
+ * three groups overlap is a fact you cannot get past.
+ */
+@media (width < 34rem) {
+  .app-bar-inner {
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+  }
+
+  .app-bar-left {
+    gap: var(--space-2);
+  }
+
+  .app-nav-link {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .app-user {
     display: none;
   }
 }
@@ -1158,6 +1184,11 @@ select.input {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.stat-row:last-child {
+  margin-bottom: 0;
 }
 
 .stat {

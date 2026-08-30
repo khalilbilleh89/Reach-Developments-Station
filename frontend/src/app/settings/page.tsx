@@ -69,7 +69,7 @@ export default function SettingsPage() {
         subtitle={DESCRIPTIONS[tab]}
       />
       <Tabs label="Settings sections" tabs={TABS} active={tab} onSelect={setTab} />
-      <TabPanel tab={tab}>
+      <TabPanel group="Settings sections" tab={tab}>
         {tab === "users" ? <UsersSection /> : null}
         {tab === "country" ? <CountryPacksSection /> : null}
         {tab === "reference" ? <ReferenceDataSection /> : null}

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "./Button";
-import { Tabs } from "./Tabs";
+import { TabPanel, Tabs } from "./Tabs";
 
 /**
  * A record opened over the register that led to it.
@@ -83,7 +83,13 @@ export function Drawer({
             <div className="drawer-header-pad" />
           )}
         </header>
-        <div className="drawer-body stack">{children}</div>
+        {tabs && activeTab ? (
+          <TabPanel group="Record sections" tab={activeTab} className="drawer-body stack">
+            {children}
+          </TabPanel>
+        ) : (
+          <div className="drawer-body stack">{children}</div>
+        )}
       </div>
     </div>
   );

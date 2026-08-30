@@ -5,16 +5,32 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CountryPack, Currency, ProjectSummary, ReferenceValue } from "@/lib/api";
 import {
+  Badge,
   Button,
+  Card,
   EmptyState,
   Field,
+  FilterBar,
+  FormActions,
   Loading,
   Notice,
-  Panel,
+  PageHeader,
+  SubPanel,
   TableScroll,
 } from "@/components/ui";
 
 const STATUSES = ["setup", "predevelopment", "active", "on_hold", "completed", "cancelled"];
+
+/** Presentation only: the word beside it already carries the meaning. */
+const STATUS_TONES: Record<string, "muted" | "info" | "success" | "warning" | "neutral" | "danger"> =
+  {
+    setup: "muted",
+    predevelopment: "info",
+    active: "success",
+    on_hold: "warning",
+    completed: "neutral",
+    cancelled: "danger",
+  };
 
 /** Machine states read badly in a table; these are what a person calls them. */
 const STATUS_LABELS: Record<string, string> = {
@@ -149,23 +165,23 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
   const configurationMissing = packs.length === 0 || currencies.length === 0;
 
   return (
-    <Panel
-      title="Projects"
-      description="Developments you have access to."
-      actions={
-        <Button
-          small
-          onClick={() => setCreating((open) => !open)}
-        >
-          {creating ? "Cancel" : "New project"}
-        </Button>
-      }
-    >
+    <>
+      <PageHeader
+        eyebrow="Portfolio"
+        title="Projects"
+        subtitle="Every development you have been given access to. Open one to work inside it."
+        actions={
+          <Button variant="primary" onClick={() => setCreating((open) => !open)}>
+            {creating ? "Cancel" : "New project"}
+          </Button>
+        }
+      />
+      <Card>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <div className="form-inline">
-        <Field label="Search">
+      <FilterBar>
+        <Field label="Search" grow>
           <input
             className="input"
             value={search}
@@ -187,7 +203,7 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
             ))}
           </select>
         </Field>
-      </div>
+      </FilterBar>
 
       {creating ? (
         configurationMissing ? (
@@ -196,8 +212,9 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
             Settings → Country packs, then come back.
           </Notice>
         ) : (
+          <SubPanel title="New project">
           <form onSubmit={submit}>
-            <div className="form-grid">
+            <div className="form-grid form-grid-3">
               <Field label="Project code" hint="Letters, digits, hyphen or underscore.">
                 <input
                   className="input"
@@ -336,18 +353,19 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
                   }
                 />
               </Field>
-            </div>
-            <div className="form-actions">
-              <Button variant="primary" type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create project"}
-              </Button>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  {busy ? "Creating…" : "Create project"}
+                </Button>
+              </FormActions>
             </div>
           </form>
+          </SubPanel>
         )
       ) : null}
 
       {rows === null ? (
-        <Loading label="Loading projects…" />
+        <Loading label="Loading projects…" lines={4} />
       ) : rows.length === 0 ? (
         <EmptyState
           title="No projects yet"
@@ -362,34 +380,54 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
                 <th scope="col">City</th>
                 <th scope="col">Status</th>
                 <th scope="col">Planned completion</th>
-                <th scope="col">Blocking</th>
-                <th scope="col">Critical path</th>
-                <th scope="col">Overdue</th>
+                <th scope="col" className="num">
+                  Blocking
+                </th>
+                <th scope="col" className="num">
+                  Critical path
+                </th>
+                <th scope="col" className="num">
+                  Overdue
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((project) => (
                 <tr key={project.id}>
                   <th scope="row">
-                    <Button
-                      small
+                    <button
+                      className="button-link mono"
+                      type="button"
                       onClick={() => onOpen(project.id)}
                     >
                       {project.code}
-                    </Button>
+                    </button>
                   </th>
-                  <td>{project.name}</td>
+                  <td>
+                    <button
+                      className="button-link"
+                      type="button"
+                      onClick={() => onOpen(project.id)}
+                    >
+                      {project.name}
+                    </button>
+                  </td>
                   <td>{project.city ?? "—"}</td>
-                  <td>{STATUS_LABELS[project.status] ?? project.status}</td>
-                  <td className="nowrap">{project.planned_completion ?? "—"}</td>
-                  <td>{project.blocking_permit_count}</td>
-                  <td>{project.critical_path_permit_count}</td>
-                  <td>{project.overdue_permit_count}</td>
+                  <td>
+                    <Badge tone={STATUS_TONES[project.status] ?? "neutral"}>
+                      {STATUS_LABELS[project.status] ?? project.status}
+                    </Badge>
+                  </td>
+                  <td className="mono nowrap">{project.planned_completion ?? "—"}</td>
+                  <td className="num">{project.blocking_permit_count}</td>
+                  <td className="num">{project.critical_path_permit_count}</td>
+                  <td className="num">{project.overdue_permit_count}</td>
                 </tr>
               ))}
             </tbody>
-</TableScroll>
+        </TableScroll>
       )}
-    </Panel>
+      </Card>
+    </>
   );
 }

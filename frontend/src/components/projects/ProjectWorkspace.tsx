@@ -246,7 +246,7 @@ export function ProjectWorkspace({
 
       <Tabs label="Project sections" tabs={tabs} active={tab} onSelect={setTab} />
 
-      <TabPanel tab={tab}>
+      <TabPanel group="Project sections" tab={tab}>
         {tab === "overview" ? (
           <>
             <Card

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ApiError, auth } from "@/lib/api";
-import { Field, Notice } from "@/components/ui";
+import { Button, Field, Notice } from "@/components/ui";
 
 /**
  * Sign-in.
@@ -47,7 +47,7 @@ export default function LoginPage() {
       <main className="panel panel-narrow">
         <p className="eyebrow">Reach Developments Station</p>
         <h1 className="title title-compact">Sign in</h1>
-        <p className="tagline">Real Estate Development Tracking &amp; Financial Control</p>
+        <p className="tagline">Real estate development tracking and financial control.</p>
 
         <form onSubmit={submit} noValidate>
           <Field label="Email">
@@ -75,9 +75,9 @@ export default function LoginPage() {
 
           {error ? <Notice tone="error">{error}</Notice> : null}
 
-          <button className="button button-primary button-block" type="submit" disabled={busy}>
+          <Button variant="primary" block type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
-          </button>
+          </Button>
         </form>
 
         <p className="footnote">
