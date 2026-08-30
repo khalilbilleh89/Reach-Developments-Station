@@ -4,7 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, Permit, ReferenceValue } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -148,13 +157,12 @@ export function DocumentsTab({
       description="Links to documents held elsewhere. Nothing is uploaded or stored here."
       actions={
         canWrite ? (
-          <button
-            className="button button-small"
-            type="button"
+          <Button
+            small
             onClick={() => setCreating((open) => !open)}
           >
             {creating ? "Cancel" : "New reference"}
-          </button>
+          </Button>
         ) : undefined
       }
     >
@@ -181,7 +189,7 @@ export function DocumentsTab({
       ) : null}
 
       {creating ? (
-        <form className="panel-section" onSubmit={submit}>
+        <form onSubmit={submit}>
           <div className="form-grid">
             <Field label="Title">
               <input
@@ -247,9 +255,9 @@ export function DocumentsTab({
             </Field>
           </div>
           <div className="form-actions">
-            <button className="button button-primary" type="submit" disabled={busy}>
+            <Button variant="primary" type="submit" disabled={busy}>
               {busy ? "Saving…" : "Record reference"}
-            </button>
+            </Button>
           </div>
         </form>
       ) : null}
@@ -262,9 +270,7 @@ export function DocumentsTab({
           hint="Point at the deeds, drawings and approvals that support this project's records."
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Document references</caption>
+        <TableScroll label="Document references">
             <thead>
               <tr>
                 <th scope="col">Title</th>
@@ -297,27 +303,24 @@ export function DocumentsTab({
                   </td>
                   {canWrite ? (
                     <td className="chip-list">
-                      <button
-                        className="button button-small"
-                        type="button"
+                      <Button
+                        small
                         onClick={() => setEditing(document)}
                       >
                         Edit
-                      </button>
-                      <button
-                        className="button button-small"
-                        type="button"
+                      </Button>
+                      <Button
+                        small
                         onClick={() => void retire(document)}
                       >
                         {document.is_active ? "Supersede" : "Restore"}
-                      </button>
+                      </Button>
                     </td>
                   ) : null}
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
     </Panel>
   );

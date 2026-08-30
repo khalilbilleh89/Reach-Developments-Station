@@ -4,7 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, users } from "@/lib/api";
 import type { AdminUser, ProjectAccess } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 import { PhaseAccessEditor } from "@/components/projects/inventory/PhaseAccessEditor";
 
 /**
@@ -97,9 +106,9 @@ export function AccessTab({ projectId }: { projectId: string }) {
               ))}
           </select>
         </Field>
-        <button className="button button-primary" type="submit" disabled={busy || !chosen}>
+        <Button variant="primary" type="submit" disabled={busy || !chosen}>
           Grant access
-        </button>
+        </Button>
       </form>
 
       {rows === null ? (
@@ -110,9 +119,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
           hint="System Administrators reach every project without a membership row."
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Project membership</caption>
+        <TableScroll label="Project membership">
             <thead>
               <tr>
                 <th scope="col">User</th>
@@ -154,29 +161,26 @@ export function AccessTab({ projectId }: { projectId: string }) {
                   <td className="nowrap">{row.granted_at.slice(0, 10)}</td>
                   <td className="nowrap">{row.revoked_at?.slice(0, 10) ?? "—"}</td>
                   <td className="chip-list">
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       disabled={busy}
                       onClick={() => void act(row.user_id, !row.is_active)}
                     >
                       {row.is_active ? "Revoke" : "Restore"}
-                    </button>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    </Button>
+                    <Button
+                      small
                       onClick={() =>
                         setScopeFor(scopeFor?.user_id === row.user_id ? null : row)
                       }
                     >
                       {scopeFor?.user_id === row.user_id ? "Close phases" : "Phases"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
 
       {scopeFor ? (

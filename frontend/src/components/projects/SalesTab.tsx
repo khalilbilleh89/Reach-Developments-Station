@@ -4,15 +4,32 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory, sales } from "@/lib/api";
 import type { Phase, SalesClient, SalesPolicy, SalesRegister } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
-import { statusLabel } from "@/components/projects/inventory/statusLabels";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FilterBar,
+  FormActions,
+  Loading,
+  Notice,
+  Stat,
+  StatRow,
+  SubPanel,
+  TableScroll,
+} from "@/components/ui";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { DealFile } from "@/components/projects/sales/DealFile";
 import {
   handoverLabel,
+  handoverTone,
   legalEventLabel,
   reservationLabel,
+  reservationTone,
   saleLabel,
+  saleTone,
 } from "@/components/projects/sales/labels";
 
 /**
@@ -22,12 +39,13 @@ import {
  * legally and on delivery — three answers from three teams, side by side and
  * never collapsed into "sold". Opening a line opens the deal file: the buyer,
  * the quote, the contract, the registry, the cancellation and the handover, all
- * on one screen, because they are five records of one transaction.
+ * on one record, because they are five records of one transaction.
  *
  * The totals come from the server and cover the whole authorised filtered set,
  * not the page on screen. Where a project's contracts are denominated in more
  * than one currency the value is withheld rather than added up: a sum of two
- * currencies is not a number.
+ * currencies is not a number, and this screen would rather show nothing than
+ * something confident and wrong.
  */
 
 const POLICY_FIELDS: { name: keyof SalesPolicy; label: string; hint?: string }[] = [
@@ -128,50 +146,47 @@ export function SalesTab({
   // agreed in them. Saying so beats a row of identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Panel title="Sales" description="Not yet — the project basis is still open.">
+      <Card title="Sales" description="Not yet — the project basis is still open.">
         <EmptyState
           title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to
-                Pre-development before recording sales."
+          hint="Confirm country and currency settings, then move the project to Pre-development before recording sales."
         />
-      </Panel>
+      </Card>
     );
   }
 
   if (error && register === null) {
     return (
-      <Panel title="Sales">
+      <Card title="Sales">
         <Notice tone="error">{error}</Notice>
-      </Panel>
+      </Card>
     );
   }
 
-  if (register === null) return <Loading label="Loading sales…" />;
+  if (register === null) {
+    return (
+      <Card title="Sales">
+        <Loading label="Loading sales…" lines={4} />
+      </Card>
+    );
+  }
 
   const totals = register.totals;
 
   return (
     <>
-      <Panel
+      <Card
         title="Sales"
         description="Where every unit stands commercially, legally and on delivery."
         actions={
           <>
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setOpen(open === "clients" ? "none" : "clients")}
-            >
+            <Button onClick={() => setOpen(open === "clients" ? "none" : "clients")}>
               {open === "clients" ? "Close buyers" : "Buyers"}
-            </button>
+            </Button>
             {canSetPolicy ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "policy" ? "none" : "policy")}
-              >
+              <Button onClick={() => setOpen(open === "policy" ? "none" : "policy")}>
                 {open === "policy" ? "Close gates" : "Sales gates"}
-              </button>
+              </Button>
             ) : null}
           </>
         }
@@ -179,49 +194,90 @@ export function SalesTab({
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <dl className="reference-list">
-          <div>
-            <dt className="reference-term">Units</dt>
-            <dd className="reference-value">{totals.units}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Available</dt>
-            <dd className="reference-value">{totals.available}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Live reservations</dt>
-            <dd className="reference-value">{totals.active_reservations}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Contract pending</dt>
-            <dd className="reference-value">{totals.contract_pending}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Contracted</dt>
-            <dd className="reference-value">{totals.contracted}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Returned</dt>
-            <dd className="reference-value">{totals.returned}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Open cancellations</dt>
-            <dd className="reference-value">{totals.open_cancellations}</dd>
-          </div>
-          <div>
-            <dt className="reference-term">Contracted value</dt>
-            <dd className="reference-value mono nowrap">
-              {totals.mixed_currency
-                ? "Mixed currencies — not summed"
-                : (totals.contracted_value ?? "—")}
-            </dd>
-          </div>
-        </dl>
+        <StatRow>
+          <Stat label="Units" value={totals.units} small />
+          <Stat label="Available" value={totals.available} small />
+          <Stat label="Live reservations" value={totals.active_reservations} small />
+          <Stat label="Contract pending" value={totals.contract_pending} small />
+          <Stat label="Contracted" value={totals.contracted} small />
+          <Stat label="Returned" value={totals.returned} small />
+          <Stat label="Open cancellations" value={totals.open_cancellations} small />
+          <Stat
+            label="Contracted value"
+            value={
+              totals.mixed_currency ? "Not summed" : (totals.contracted_value ?? "—")
+            }
+            note={totals.mixed_currency ? "Mixed currencies" : undefined}
+          />
+        </StatRow>
         <p className="footnote">
           Counted over every unit you may see under the current filter, not the page below.
         </p>
+      </Card>
 
-        <div className="form-inline">
+      {open === "clients" ? (
+        <ClientsPanel
+          projectId={projectId}
+          canWrite={canWriteClients}
+          onChanged={load}
+          onClose={() => setOpen("none")}
+        />
+      ) : null}
+
+      {open === "policy" && policy ? (
+        <Card
+          title="Sales gates"
+          description="Six named choices. Not a rules engine, and never becoming one."
+          actions={<Button onClick={() => setOpen("none")}>Close</Button>}
+        >
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              try {
+                setPolicy(
+                  await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>),
+                );
+                setNotice("Gates saved.");
+                setError(null);
+              } catch (caught) {
+                setError(caught instanceof ApiError ? caught.message : "Could not save the gates.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <div className="checkbox-grid">
+              {POLICY_FIELDS.map((entry) => (
+                <label className="checkbox" key={entry.name}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(policy[entry.name])}
+                    onChange={(event) =>
+                      setPolicy({ ...policy, [entry.name]: event.target.checked })
+                    }
+                  />
+                  <span>
+                    {entry.label}
+                    {entry.hint ? <span className="field-hint"> {entry.hint}</span> : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <FormActions>
+              <Button variant="primary" type="submit" disabled={busy}>
+                Save gates
+              </Button>
+            </FormActions>
+          </form>
+        </Card>
+      ) : null}
+
+      <Card
+        title="Sales register"
+        description="One line per unit. Three teams' answers, side by side."
+      >
+        <FilterBar>
           <Field label="Phase">
             <select
               className="input"
@@ -260,7 +316,113 @@ export function SalesTab({
               ))}
             </select>
           </Field>
-        </div>
+        </FilterBar>
+
+        {reserving ? (
+          <SubPanel
+            title={`Reserve ${reserving.reference}`}
+            actions={<Button small onClick={() => setReserving(null)}>Cancel</Button>}
+          >
+            <p className="section-description">
+              Creating a reservation holds nothing. The unit stays on the market until the
+              reservation is activated.
+            </p>
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setBusy(true);
+                setError(null);
+                try {
+                  const created = await sales.createReservation(projectId, {
+                    unit_id: reserving.unitId,
+                    client_id: reservation.client_id,
+                    ...(reservation.sales_channel_code
+                      ? { sales_channel_code: reservation.sales_channel_code }
+                      : {}),
+                    ...(reservation.sales_branch_code
+                      ? { sales_branch_code: reservation.sales_branch_code }
+                      : {}),
+                    ...(reservation.deposit_required_amount
+                      ? { deposit_required_amount: reservation.deposit_required_amount }
+                      : {}),
+                  });
+                  setReserving(null);
+                  setNotice(
+                    `${created.reservation.reservation_number} prepared at the unit's live price.`,
+                  );
+                  setDeal({ reservationId: created.reservation.id, saleId: null });
+                  await load();
+                } catch (caught) {
+                  setError(
+                    caught instanceof ApiError
+                      ? caught.message
+                      : "Could not open the reservation.",
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <div className="form-grid">
+                <Field label="Buyer">
+                  <select
+                    className="input"
+                    required
+                    value={reservation.client_id}
+                    onChange={(event) =>
+                      setReservation({ ...reservation, client_id: event.target.value })
+                    }
+                  >
+                    <option value="">Choose a buyer</option>
+                    {buyers.map((buyer) => (
+                      <option key={buyer.id} value={buyer.id}>
+                        {buyer.client_number} · {buyer.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Sales channel">
+                  <input
+                    className="input"
+                    value={reservation.sales_channel_code}
+                    onChange={(event) =>
+                      setReservation({ ...reservation, sales_channel_code: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="Sales branch">
+                  <input
+                    className="input"
+                    value={reservation.sales_branch_code}
+                    onChange={(event) =>
+                      setReservation({ ...reservation, sales_branch_code: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Deposit required"
+                  hint="The gate amount. Recording evidence against it is not a receipt."
+                >
+                  <input
+                    className="input"
+                    value={reservation.deposit_required_amount}
+                    onChange={(event) =>
+                      setReservation({
+                        ...reservation,
+                        deposit_required_amount: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <FormActions>
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    Open reservation
+                  </Button>
+                </FormActions>
+              </div>
+            </form>
+          </SubPanel>
+        ) : null}
 
         {register.rows.length === 0 ? (
           <EmptyState
@@ -268,270 +430,113 @@ export function SalesTab({
             hint="No unit in this project matches, or none is visible to you."
           />
         ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <caption className="visually-hidden">Sales register</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Unit</th>
-                  <th scope="col">Commercial</th>
-                  <th scope="col">Buyer</th>
-                  <th scope="col">Reservation</th>
-                  <th scope="col">Expires</th>
-                  <th scope="col">SPA</th>
-                  <th scope="col">Contract</th>
-                  <th scope="col">Contract price</th>
-                  <th scope="col">Legal</th>
-                  <th scope="col">Next legal step</th>
-                  <th scope="col">Handover</th>
-                  <th scope="col">Delivery</th>
-                  <th scope="col">Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {register.rows.map((row) => (
-                  <tr key={row.unit_id}>
-                    <th scope="row">
-                      <button
-                        className="button button-small"
-                        type="button"
-                        onClick={() => onOpenUnit(row.unit_id)}
+          <TableScroll label="Sales register" fixedFirst>
+            <thead>
+              <tr>
+                <th scope="col">Unit</th>
+                <th scope="col">Commercial</th>
+                <th scope="col">Buyer</th>
+                <th scope="col">Reservation</th>
+                <th scope="col">Expires</th>
+                <th scope="col">SPA</th>
+                <th scope="col">Contract</th>
+                <th scope="col" className="num">
+                  Contract price
+                </th>
+                <th scope="col">Legal</th>
+                <th scope="col">Next legal step</th>
+                <th scope="col">Handover</th>
+                <th scope="col">Delivery</th>
+                <th scope="col">Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              {register.rows.map((row) => (
+                <tr key={row.unit_id}>
+                  <th scope="row">
+                    <button
+                      className="button-link mono"
+                      type="button"
+                      onClick={() => onOpenUnit(row.unit_id)}
+                    >
+                      {row.unit_reference}
+                    </button>
+                  </th>
+                  <td>
+                    <Badge tone={statusTone(row.commercial_status)}>
+                      {statusLabel(row.commercial_status)}
+                    </Badge>
+                  </td>
+                  <td>{row.client_display_name ?? "—"}</td>
+                  <td className="nowrap">
+                    <span className="mono">{row.reservation_number ?? "—"}</span>{" "}
+                    {row.closure_required ? (
+                      <Badge tone="danger">Closure required</Badge>
+                    ) : row.reservation_status ? (
+                      <Badge tone={reservationTone(row.reservation_status)}>
+                        {reservationLabel(row.reservation_status)}
+                      </Badge>
+                    ) : null}
+                  </td>
+                  <td className="mono nowrap">{row.reservation_expires_on ?? "—"}</td>
+                  <td className="mono">{row.spa_number ?? "—"}</td>
+                  <td>
+                    {row.sale_status ? (
+                      <Badge tone={saleTone(row.sale_status)}>{saleLabel(row.sale_status)}</Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="num">{row.total_contract_price ?? "—"}</td>
+                  <td>
+                    <Badge tone={statusTone(row.legal_status)}>
+                      {statusLabel(row.legal_status)}
+                    </Badge>
+                  </td>
+                  <td>{row.next_legal_step ? legalEventLabel(row.next_legal_step) : "—"}</td>
+                  <td>
+                    {row.handover_status ? (
+                      <Badge tone={handoverTone(row.handover_status)}>
+                        {handoverLabel(row.handover_status)}
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td>
+                    <Badge tone={statusTone(row.delivery_status)}>
+                      {statusLabel(row.delivery_status)}
+                    </Badge>
+                  </td>
+                  <td>
+                    {row.reservation_id || row.sale_id ? (
+                      <Button
+                        small
+                        onClick={() =>
+                          setDeal({ reservationId: row.reservation_id, saleId: row.sale_id })
+                        }
                       >
-                        {row.unit_reference}
-                      </button>
-                    </th>
-                    <td>{statusLabel(row.commercial_status)}</td>
-                    <td>{row.client_display_name ?? "—"}</td>
-                    <td>
-                      {row.reservation_number ?? "—"}
-                      {row.closure_required ? (
-                        <>
-                          {" "}
-                          <Badge tone="muted">Closure required</Badge>
-                        </>
-                      ) : row.reservation_status ? (
-                        <>
-                          {" "}
-                          <span className="subtle">
-                            {reservationLabel(row.reservation_status)}
-                          </span>
-                        </>
-                      ) : null}
-                    </td>
-                    <td className="nowrap">{row.reservation_expires_on ?? "—"}</td>
-                    <td>{row.spa_number ?? "—"}</td>
-                    <td>{row.sale_status ? saleLabel(row.sale_status) : "—"}</td>
-                    <td className="mono nowrap">{row.total_contract_price ?? "—"}</td>
-                    <td>{statusLabel(row.legal_status)}</td>
-                    <td>{row.next_legal_step ? legalEventLabel(row.next_legal_step) : "—"}</td>
-                    <td>{row.handover_status ? handoverLabel(row.handover_status) : "—"}</td>
-                    <td>{statusLabel(row.delivery_status)}</td>
-                    <td>
-                      {row.reservation_id || row.sale_id ? (
-                        <button
-                          className="button button-small"
-                          type="button"
-                          onClick={() =>
-                            setDeal({
-                              reservationId: row.reservation_id,
-                              saleId: row.sale_id,
-                            })
-                          }
-                        >
-                          Deal file
-                        </button>
-                      ) : canWriteClients && row.commercial_status === "available" ? (
-                        <button
-                          className="button button-small"
-                          type="button"
-                          onClick={() =>
-                            setReserving({
-                              unitId: row.unit_id,
-                              reference: row.unit_reference,
-                            })
-                          }
-                        >
-                          Reserve
-                        </button>
-                      ) : (
-                        <span className="subtle">No commitment</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        Deal file
+                      </Button>
+                    ) : canWriteClients && row.commercial_status === "available" ? (
+                      <Button
+                        small
+                        onClick={() =>
+                          setReserving({ unitId: row.unit_id, reference: row.unit_reference })
+                        }
+                      >
+                        Reserve
+                      </Button>
+                    ) : (
+                      <span className="subtle">No commitment</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
         )}
-      </Panel>
-
-      {open === "clients" ? (
-        <ClientsPanel
-          projectId={projectId}
-          canWrite={canWriteClients}
-          onChanged={load}
-          onClose={() => setOpen("none")}
-        />
-      ) : null}
-
-      {open === "policy" && policy ? (
-        <Panel
-          title="Sales gates"
-          description="Six named choices. Not a rules engine, and never becoming one."
-          actions={
-            <button className="button button-small" type="button" onClick={() => setOpen("none")}>
-              Close
-            </button>
-          }
-        >
-          <form
-            className="checkbox-grid"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setBusy(true);
-              try {
-                setPolicy(
-                  await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>),
-                );
-                setNotice("Gates saved.");
-                setError(null);
-              } catch (caught) {
-                setError(
-                  caught instanceof ApiError ? caught.message : "Could not save the gates.",
-                );
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {POLICY_FIELDS.map((entry) => (
-              <label className="checkbox" key={entry.name}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(policy[entry.name])}
-                  onChange={(event) =>
-                    setPolicy({ ...policy, [entry.name]: event.target.checked })
-                  }
-                />
-                <span>
-                  {entry.label}
-                  {entry.hint ? <span className="field-hint"> {entry.hint}</span> : null}
-                </span>
-              </label>
-            ))}
-            <div className="form-actions">
-              <button className="button button-primary" type="submit" disabled={busy}>
-                Save gates
-              </button>
-            </div>
-          </form>
-        </Panel>
-      ) : null}
-
-      {reserving ? (
-        <Panel
-          title={`Reserve ${reserving.reference}`}
-          description="Creating a reservation holds nothing. The unit stays on the market until it is activated."
-          actions={
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setReserving(null)}
-            >
-              Cancel
-            </button>
-          }
-        >
-          <form
-            className="form-grid"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setBusy(true);
-              setError(null);
-              try {
-                const created = await sales.createReservation(projectId, {
-                  unit_id: reserving.unitId,
-                  client_id: reservation.client_id,
-                  ...(reservation.sales_channel_code
-                    ? { sales_channel_code: reservation.sales_channel_code }
-                    : {}),
-                  ...(reservation.sales_branch_code
-                    ? { sales_branch_code: reservation.sales_branch_code }
-                    : {}),
-                  ...(reservation.deposit_required_amount
-                    ? { deposit_required_amount: reservation.deposit_required_amount }
-                    : {}),
-                });
-                setReserving(null);
-                setNotice(
-                  `${created.reservation.reservation_number} prepared at the unit's live price.`,
-                );
-                setDeal({ reservationId: created.reservation.id, saleId: null });
-                await load();
-              } catch (caught) {
-                setError(
-                  caught instanceof ApiError ? caught.message : "Could not open the reservation.",
-                );
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Field label="Buyer">
-              <select
-                className="input"
-                required
-                value={reservation.client_id}
-                onChange={(event) =>
-                  setReservation({ ...reservation, client_id: event.target.value })
-                }
-              >
-                <option value="">Choose a buyer</option>
-                {buyers.map((buyer) => (
-                  <option key={buyer.id} value={buyer.id}>
-                    {buyer.client_number} · {buyer.display_name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Sales channel">
-              <input
-                className="input"
-                value={reservation.sales_channel_code}
-                onChange={(event) =>
-                  setReservation({ ...reservation, sales_channel_code: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="Sales branch">
-              <input
-                className="input"
-                value={reservation.sales_branch_code}
-                onChange={(event) =>
-                  setReservation({ ...reservation, sales_branch_code: event.target.value })
-                }
-              />
-            </Field>
-            <Field
-              label="Deposit required"
-              hint="The gate amount. Recording evidence against it is not a receipt."
-            >
-              <input
-                className="input"
-                value={reservation.deposit_required_amount}
-                onChange={(event) =>
-                  setReservation({ ...reservation, deposit_required_amount: event.target.value })
-                }
-              />
-            </Field>
-            <div className="form-actions">
-              <button className="button button-primary" type="submit" disabled={busy}>
-                Open reservation
-              </button>
-            </div>
-          </form>
-        </Panel>
-      ) : null}
+      </Card>
 
       {deal ? (
         <DealFile

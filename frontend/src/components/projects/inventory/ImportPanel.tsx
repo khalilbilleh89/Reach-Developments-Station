@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { ImportReport } from "@/lib/api";
-import { Field, Notice } from "@/components/ui";
+import { Button, Field, Notice, TableScroll } from "@/components/ui";
 
 /**
  * Bulk inventory load, in the order an operator actually works.
@@ -90,7 +90,7 @@ export function ImportPanel({
   const ready = report !== null && report.error_count === 0 && !report.applied;
 
   return (
-    <div className="panel-section">
+    <div>
       <h3 className="section-heading">Import inventory</h3>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
@@ -120,9 +120,9 @@ export function ImportPanel({
       </div>
 
       <div className="form-actions">
-        <button className="button" type="button" onClick={() => void showTemplate()}>
+        <Button onClick={() => void showTemplate()}>
           Load template
-        </button>
+        </Button>
         <button
           className="button"
           type="button"
@@ -155,9 +155,7 @@ export function ImportPanel({
             <Notice tone="info">Nothing has been written yet. Apply to commit the batch.</Notice>
           ) : null}
           {report.issues.length > 0 ? (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Import issues</caption>
+            <TableScroll label="Import issues">
                 <thead>
                   <tr>
                     <th scope="col">Row</th>
@@ -174,8 +172,7 @@ export function ImportPanel({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+</TableScroll>
           ) : null}
           {report.issues_truncated ? (
             <p className="subtle">

@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CountryPack, Currency, ProjectSummary, ReferenceValue } from "@/lib/api";
-import { EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 
 const STATUSES = ["setup", "predevelopment", "active", "on_hold", "completed", "cancelled"];
 
@@ -145,13 +153,12 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
       title="Projects"
       description="Developments you have access to."
       actions={
-        <button
-          className="button button-small"
-          type="button"
+        <Button
+          small
           onClick={() => setCreating((open) => !open)}
         >
           {creating ? "Cancel" : "New project"}
-        </button>
+        </Button>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -189,7 +196,7 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
             Settings → Country packs, then come back.
           </Notice>
         ) : (
-          <form className="panel-section" onSubmit={submit}>
+          <form onSubmit={submit}>
             <div className="form-grid">
               <Field label="Project code" hint="Letters, digits, hyphen or underscore.">
                 <input
@@ -331,9 +338,9 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
               </Field>
             </div>
             <div className="form-actions">
-              <button className="button button-primary" type="submit" disabled={busy}>
+              <Button variant="primary" type="submit" disabled={busy}>
                 {busy ? "Creating…" : "Create project"}
-              </button>
+              </Button>
             </div>
           </form>
         )
@@ -347,9 +354,7 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
           hint="Projects you are given access to appear here."
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Projects you can access</caption>
+        <TableScroll label="Projects you can access">
             <thead>
               <tr>
                 <th scope="col">Code</th>
@@ -366,13 +371,12 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
               {rows.map((project) => (
                 <tr key={project.id}>
                   <th scope="row">
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       onClick={() => onOpen(project.id)}
                     >
                       {project.code}
-                    </button>
+                    </Button>
                   </th>
                   <td>{project.name}</td>
                   <td>{project.city ?? "—"}</td>
@@ -384,8 +388,7 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
     </Panel>
   );

@@ -17,6 +17,7 @@ export { KeyValue, KeyValueGrid, Stat, StatRow, TableScroll } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
 export { Field, FilterBar, Form, FormActions, StickyActions } from "./Form";
 export { PageHeader, SectionHeader } from "./Headers";
+export { PromptDialog } from "./PromptDialog";
 export { Icon } from "./Icon";
 export type { IconName } from "./Icon";
 export { TabPanel, Tabs } from "./Tabs";

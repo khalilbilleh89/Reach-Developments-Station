@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ApiError, pricing } from "@/lib/api";
 import type { QuotePreview } from "@/lib/api";
-import { Badge, Field, Notice, Panel } from "@/components/ui";
+import { Badge, Button, Field, Notice, Panel } from "@/components/ui";
 
 /**
  * Model an offer against a unit's live price.
@@ -84,9 +84,9 @@ export function QuotePreviewPanel({
       title="Quote preview"
       description="A calculation, not a reservation. Nothing here is saved."
       actions={
-        <button className="button button-small" type="button" onClick={onClose}>
+        <Button small onClick={onClose}>
           Close
-        </button>
+        </Button>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -134,9 +134,9 @@ export function QuotePreviewPanel({
             />
           </Field>
         </div>
-        <button className="button" type="submit" disabled={busy}>
+        <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Pricing…" : "Preview"}
-        </button>
+        </Button>
       </form>
 
       {quote ? (

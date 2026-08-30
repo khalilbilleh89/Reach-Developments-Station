@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, audit } from "@/lib/api";
 import type { AuditEvent } from "@/lib/api";
-import { EmptyState, Loading, Notice, Panel } from "@/components/ui";
+import { Button, EmptyState, Loading, Notice, Panel, TableScroll } from "@/components/ui";
 
 /** Format a before/after snapshot as readable field lines, not raw JSON. */
 function Snapshot({ title, data }: { title: string; data: Record<string, unknown> | null }) {
@@ -66,9 +66,7 @@ export function AuditSection() {
       ) : null}
 
       {events.length > 0 ? (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Audit history</caption>
+        <TableScroll label="Audit history">
             <thead>
               <tr>
                 <th scope="col">Time</th>
@@ -88,14 +86,13 @@ export function AuditSection() {
                   <td>{event.entity_type}</td>
                   <td>{event.reason ?? "—"}</td>
                   <td>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       aria-expanded={open === event.id}
                       onClick={() => setOpen(open === event.id ? null : event.id)}
                     >
                       {open === event.id ? "Hide" : "Show"}
-                    </button>
+                    </Button>
                     {open === event.id ? (
                       <div className="detail">
                         <Snapshot title="Before" data={event.before_data} />
@@ -107,8 +104,7 @@ export function AuditSection() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       ) : null}
     </Panel>
   );

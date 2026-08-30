@@ -11,7 +11,21 @@ import type {
   PricingConfiguration,
   PricingOverview,
 } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FilterBar,
+  FormActions,
+  Loading,
+  Notice,
+  Stat,
+  StatRow,
+  SubPanel,
+  TableScroll,
+} from "@/components/ui";
 import { inventory } from "@/lib/api";
 import { ConfigurationPanel } from "@/components/projects/pricing/ConfigurationPanel";
 
@@ -28,6 +42,14 @@ const MARKET_LABELS: Record<string, string> = {
   above_tolerance: "Above market",
   below_tolerance: "Below market",
   no_benchmark: "No benchmark",
+};
+
+/** Presentation only: the word beside it already carries the meaning. */
+const MARKET_TONES: Record<string, "success" | "warning" | "info" | "muted"> = {
+  within_tolerance: "success",
+  above_tolerance: "warning",
+  below_tolerance: "info",
+  no_benchmark: "muted",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -125,61 +147,47 @@ export function PricingTab({
   // it. Saying so beats a row of identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Panel title="Pricing" description="Not yet — the project basis is still open.">
+      <Card title="Pricing" description="Not yet — the project basis is still open.">
         <EmptyState
           title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to
-                Pre-development before configuring pricing."
+          hint="Confirm country and currency settings, then move the project to Pre-development before configuring pricing."
         />
-      </Panel>
+      </Card>
     );
   }
 
   if (!canSeeInternal) {
     return (
-      <Panel title="Pricing">
+      <Card title="Pricing">
         <EmptyState
           title="Not available to you"
           hint="Live unit prices are on each unit. Pricing configuration belongs to Finance."
         />
-      </Panel>
+      </Card>
     );
   }
 
   return (
     <>
-      <Panel
+      <Card
         title="Pricing"
         description="What this development is priced at, and what that price is made of."
         actions={
           <>
             {canPrice || canApprove ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "configuration" ? "none" : "configuration")}
-              >
+              <Button onClick={() => setOpen(open === "configuration" ? "none" : "configuration")}>
                 {open === "configuration" ? "Cancel" : "Configuration"}
-              </button>
+              </Button>
             ) : null}
             {canPrice ? (
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setOpen(open === "benchmarks" ? "none" : "benchmarks")}
-              >
+              <Button onClick={() => setOpen(open === "benchmarks" ? "none" : "benchmarks")}>
                 {open === "benchmarks" ? "Cancel" : "Market benchmarks"}
-              </button>
+              </Button>
             ) : null}
             {canPrice && overview?.configuration ? (
-              <button
-                className="button button-small"
-                type="button"
-                disabled={busy}
-                onClick={generateAll}
-              >
+              <Button variant="primary" disabled={busy} onClick={generateAll}>
                 {busy ? "Generating…" : "Generate draft prices"}
-              </button>
+              </Button>
             ) : null}
           </>
         }
@@ -188,27 +196,32 @@ export function PricingTab({
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {overview === null ? (
-          <Loading label="Loading pricing…" />
+          <Loading label="Loading pricing…" lines={3} />
         ) : overview.configuration === null ? (
           <EmptyState
             title="No active pricing configuration"
-            hint="Create one, add the area rules and premiums it prices by, then have it
-                  approved and activated. Until then no unit can be priced."
+            hint="Create one, add the area rules and premiums it prices by, then have it approved and activated. Until then no unit can be priced."
           />
         ) : (
-          <div className="chip-list">
-            <Badge tone="success">
-              {overview.configuration.name} · v{overview.configuration.version_number}
-            </Badge>
-            <span className="chip mono">{overview.base_internal_rate} per internal unit</span>
-            <span className="chip">{overview.units_total} units</span>
-            <span className="chip">{overview.units_priced} priced</span>
-            <span className="chip">{overview.units_not_priced} not priced</span>
-            <span className="chip">{overview.units_repricing_required} need repricing</span>
-            <span className="chip">{overview.active_escalations} active escalations</span>
-          </div>
+          <>
+            <ul className="chip-list">
+              <li className="chip">
+                <span className="chip-label">Configuration</span>
+                <strong>{overview.configuration.name}</strong>
+                <Badge tone="success">v{overview.configuration.version_number}</Badge>
+              </li>
+            </ul>
+            <StatRow>
+              <Stat label="Base rate" value={overview.base_internal_rate} note="Per internal unit" />
+              <Stat label="Units" value={overview.units_total} small />
+              <Stat label="Priced" value={overview.units_priced} small />
+              <Stat label="Not priced" value={overview.units_not_priced} small />
+              <Stat label="Need repricing" value={overview.units_repricing_required} small />
+              <Stat label="Active escalations" value={overview.active_escalations} small />
+            </StatRow>
+          </>
         )}
-      </Panel>
+      </Card>
 
       {open === "configuration" ? (
         <ConfigurationPanel
@@ -233,8 +246,8 @@ export function PricingTab({
         />
       ) : null}
 
-      <Panel title="Price register" description="Every unit, and the price it is offered at.">
-        <div className="form-inline">
+      <Card title="Price register" description="Every unit, and the price it is offered at.">
+        <FilterBar>
           <Field label="Phase">
             <select
               className="input"
@@ -263,32 +276,40 @@ export function PricingTab({
               ))}
             </select>
           </Field>
-        </div>
+        </FilterBar>
 
         {register === null ? (
-          <Loading label="Loading the register…" />
+          <Loading label="Loading the register…" lines={4} />
         ) : register.rows.length === 0 ? (
           <EmptyState title="No units match" hint="Adjust the filters, or load inventory first." />
         ) : (
           <>
-            <div className="chip-list">
-              <span className="chip">{register.total} units</span>
-              <span className="chip">{register.priced} priced</span>
-              <span className="chip">{register.not_priced} not priced</span>
-              <span className="chip">{register.repricing_required} need repricing</span>
-            </div>
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Price register</caption>
+            <StatRow>
+              <Stat label="Units" value={register.total} small />
+              <Stat label="Priced" value={register.priced} small />
+              <Stat label="Not priced" value={register.not_priced} small />
+              <Stat label="Need repricing" value={register.repricing_required} small />
+            </StatRow>
+            <TableScroll label="Price register" fixedFirst>
                 <thead>
                   <tr>
                     <th scope="col">Unit</th>
                     <th scope="col">Type</th>
-                    <th scope="col">Internal</th>
-                    <th scope="col">Weighted</th>
-                    <th scope="col">Price</th>
-                    <th scope="col">Per internal</th>
-                    <th scope="col">Version</th>
+                    <th scope="col" className="num">
+                      Internal
+                    </th>
+                    <th scope="col" className="num">
+                      Weighted
+                    </th>
+                    <th scope="col" className="num">
+                      Price
+                    </th>
+                    <th scope="col" className="num">
+                      Per internal
+                    </th>
+                    <th scope="col" className="num">
+                      Version
+                    </th>
                     <th scope="col">Status</th>
                     <th scope="col">Market</th>
                     <th scope="col">Pricing</th>
@@ -299,7 +320,7 @@ export function PricingTab({
                     <tr key={row.unit_id}>
                       <th scope="row">
                         <button
-                          className="button button-small"
+                          className="button-link mono"
                           type="button"
                           onClick={() => onOpenUnit(row.unit_id)}
                         >
@@ -307,17 +328,15 @@ export function PricingTab({
                         </button>
                       </th>
                       <td>{row.unit_type_code ?? "—"}</td>
-                      <td className="mono nowrap">{row.internal_area_snapshot ?? "—"}</td>
-                      <td className="mono nowrap">{row.weighted_area_snapshot ?? "—"}</td>
-                      <td className="mono nowrap">{row.reference_price_ex_tax ?? "—"}</td>
-                      <td className="mono nowrap">{row.price_per_internal_area ?? "—"}</td>
-                      <td>{row.version_number ?? "—"}</td>
+                      <td className="num">{row.internal_area_snapshot ?? "—"}</td>
+                      <td className="num">{row.weighted_area_snapshot ?? "—"}</td>
+                      <td className="num">{row.reference_price_ex_tax ?? "—"}</td>
+                      <td className="num">{row.price_per_internal_area ?? "—"}</td>
+                      <td className="num">{row.version_number ?? "—"}</td>
                       <td>{row.status ? (STATUS_LABELS[row.status] ?? row.status) : "Not priced"}</td>
                       <td>
                         {row.market_flag ? (
-                          <Badge
-                            tone={row.market_flag === "within_tolerance" ? "success" : "muted"}
-                          >
+                          <Badge tone={MARKET_TONES[row.market_flag] ?? "neutral"}>
                             {MARKET_LABELS[row.market_flag] ?? row.market_flag}
                           </Badge>
                         ) : (
@@ -326,7 +345,7 @@ export function PricingTab({
                       </td>
                       <td>
                         {row.repricing_required ? (
-                          <Badge tone="muted">Repricing required</Badge>
+                          <Badge tone="danger">Repricing required</Badge>
                         ) : row.pricing_approved ? (
                           <Badge tone="success">Approved</Badge>
                         ) : (
@@ -336,11 +355,10 @@ export function PricingTab({
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </TableScroll>
           </>
         )}
-      </Panel>
+      </Card>
     </>
   );
 }
@@ -406,9 +424,11 @@ function BenchmarksPanel({
   };
 
   return (
-    <Panel title="Market benchmarks" description="Recorded observations, attributed to a source.">
+    <Card title="Market benchmarks" description="Recorded observations, attributed to a source.">
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <form className="form-inline" onSubmit={submit}>
+      <SubPanel title="Record an observation">
+      <form onSubmit={submit}>
+        <div className="form-grid form-grid-3">
         <Field label="Phase">
           <select
             className="input"
@@ -477,23 +497,29 @@ function BenchmarksPanel({
             onChange={(event) => setForm({ ...form, source_name: event.target.value })}
           />
         </Field>
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Record"}
-        </button>
+        <FormActions>
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Record"}
+          </Button>
+        </FormActions>
+        </div>
       </form>
+      </SubPanel>
 
       {benchmarks.length === 0 ? (
         <EmptyState title="No benchmarks" hint="A unit price is compared only when one exists." />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Market benchmarks</caption>
+        <TableScroll label="Market benchmarks">
             <thead>
               <tr>
                 <th scope="col">Scope</th>
                 <th scope="col">Basis</th>
-                <th scope="col">Price per area</th>
-                <th scope="col">Tolerance</th>
+                <th scope="col" className="num">
+                  Price per area
+                </th>
+                <th scope="col" className="num">
+                  Tolerance
+                </th>
                 <th scope="col">Observed</th>
                 <th scope="col">Source</th>
                 <th scope="col">Active</th>
@@ -508,17 +534,22 @@ function BenchmarksPanel({
                       "Whole project"}
                   </th>
                   <td>{benchmark.area_basis}</td>
-                  <td className="mono nowrap">{benchmark.benchmark_price_per_area}</td>
-                  <td className="mono nowrap">{benchmark.tolerance_fraction}</td>
-                  <td>{benchmark.comparison_date}</td>
+                  <td className="num">{benchmark.benchmark_price_per_area}</td>
+                  <td className="num">{benchmark.tolerance_fraction}</td>
+                  <td className="mono nowrap">{benchmark.comparison_date}</td>
                   <td>{benchmark.source_name}</td>
-                  <td>{benchmark.is_active ? "Yes" : "No"}</td>
+                  <td>
+                    {benchmark.is_active ? (
+                      <Badge tone="success">Active</Badge>
+                    ) : (
+                      <Badge tone="muted">Retired</Badge>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </TableScroll>
       )}
-    </Panel>
+    </Card>
   );
 }

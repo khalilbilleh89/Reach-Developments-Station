@@ -4,7 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, users as usersApi } from "@/lib/api";
 import type { AdminUser, Role } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+} from "@/components/ui";
 
 const EMPTY_DRAFT = { email: "", display_name: "", initial_password: "", role_keys: [] as string[] };
 
@@ -72,9 +81,9 @@ export function UsersSection() {
       title="Users"
       description="People who can sign in, and the roles that decide what they may do."
       actions={
-        <button className="button" type="button" onClick={() => setAdding((open) => !open)}>
+        <Button onClick={() => setAdding((open) => !open)}>
           {adding ? "Cancel" : "Add user"}
-        </button>
+        </Button>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -135,9 +144,9 @@ export function UsersSection() {
             </div>
           </fieldset>
           <div className="form-actions">
-            <button className="button button-primary" type="submit" disabled={busy}>
+            <Button variant="primary" type="submit" disabled={busy}>
               Create user
-            </button>
+            </Button>
           </div>
         </form>
       ) : null}
@@ -148,9 +157,7 @@ export function UsersSection() {
           hint="The first administrator is created from the server shell, then adds the rest here."
         />
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Users and their roles</caption>
+        <TableScroll label="Users and their roles">
             <thead>
               <tr>
                 <th scope="col">Name</th>
@@ -175,9 +182,8 @@ export function UsersSection() {
                     {row.must_change_password ? <Badge tone="neutral">Password due</Badge> : null}
                   </td>
                   <td>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       disabled={busy}
                       onClick={() =>
                         void act(
@@ -187,13 +193,12 @@ export function UsersSection() {
                       }
                     >
                       {row.is_active ? "Deactivate" : "Reactivate"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       )}
     </Panel>
   );

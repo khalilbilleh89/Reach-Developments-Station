@@ -4,7 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, settings } from "@/lib/api";
 import type { ApprovalThresholds, CountryPack, Currency, TaxRule } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  Loading,
+  Notice,
+  Panel,
+  TableScroll,
+  Tabs,
+} from "@/components/ui";
 
 const AREA_UNITS = ["sqm", "sqft"];
 const APPLIES_TO = ["sale", "rental", "service_charge", "construction", "other"];
@@ -131,9 +141,9 @@ export function CountryPacksSection() {
               defaultValue={2}
             />
           </Field>
-          <button className="button" type="submit" disabled={busy}>
+          <Button variant="primary" type="submit" disabled={busy}>
             Add
-          </button>
+          </Button>
         </form>
 
         {currencies.length === 0 ? (
@@ -222,9 +232,9 @@ export function CountryPacksSection() {
               defaultValue={1}
             />
           </Field>
-          <button className="button" type="submit" disabled={busy || currencies.length === 0}>
+          <Button variant="primary" type="submit" disabled={busy || currencies.length === 0}>
             Add
-          </button>
+          </Button>
         </form>
 
         {packs.length === 0 ? (
@@ -233,20 +243,15 @@ export function CountryPacksSection() {
             hint="A country pack holds the configuration every project in that country inherits."
           />
         ) : (
-          <div className="tab-row" role="tablist" aria-label="Country packs">
-            {packs.map((candidate) => (
-              <button
-                key={candidate.id}
-                role="tab"
-                type="button"
-                aria-selected={candidate.id === selected}
-                className={`tab ${candidate.id === selected ? "tab-active" : ""}`}
-                onClick={() => setSelected(candidate.id)}
-              >
-                {candidate.country_code} · {candidate.name}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            label="Country packs"
+            tabs={packs.map((candidate) => ({
+              key: candidate.id,
+              label: `${candidate.country_code} · ${candidate.name}`,
+            }))}
+            active={selected ?? ""}
+            onSelect={setSelected}
+          />
         )}
       </Panel>
 
@@ -315,17 +320,15 @@ export function CountryPacksSection() {
               <Field label="Valid to">
                 <input className="input" name="valid_to" type="date" />
               </Field>
-              <button className="button" type="submit" disabled={busy}>
+              <Button variant="primary" type="submit" disabled={busy}>
                 Add
-              </button>
+              </Button>
             </form>
 
             {taxRules.length === 0 ? (
               <EmptyState title="No tax rules configured" />
             ) : (
-              <div className="table-scroll">
-                <table className="table">
-                  <caption className="visually-hidden">Tax rules</caption>
+              <TableScroll label="Tax rules">
                   <thead>
                     <tr>
                       <th scope="col">Code</th>
@@ -357,8 +360,7 @@ export function CountryPacksSection() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+</TableScroll>
             )}
           </Panel>
 
@@ -465,9 +467,9 @@ export function CountryPacksSection() {
                 </div>
               </fieldset>
               <div className="form-actions">
-                <button className="button button-primary" type="submit" disabled={busy}>
+                <Button variant="primary" type="submit" disabled={busy}>
                   Save thresholds
-                </button>
+                </Button>
               </div>
             </form>
           </Panel>

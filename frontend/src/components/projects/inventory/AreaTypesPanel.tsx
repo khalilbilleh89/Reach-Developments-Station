@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { AreaType } from "@/lib/api";
-import { Badge, Field, Notice } from "@/components/ui";
+import { Badge, Button, Field, Notice, TableScroll } from "@/components/ui";
 
 const ROLES = ["internal", "outdoor", "ancillary", "plot", "gross", "other"];
 
@@ -66,7 +66,7 @@ export function AreaTypesPanel({
   };
 
   return (
-    <div className="panel-section">
+    <div>
       <h3 className="section-heading">Area types</h3>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className="subtle">
@@ -75,9 +75,7 @@ export function AreaTypesPanel({
       </p>
 
       {areaTypes.length > 0 ? (
-        <div className="table-scroll">
-          <table className="table">
-            <caption className="visually-hidden">Configured area types</caption>
+        <TableScroll label="Configured area types">
             <thead>
               <tr>
                 <th scope="col">Code</th>
@@ -113,9 +111,8 @@ export function AreaTypesPanel({
                     )}
                   </td>
                   <td className="chip-list">
-                    <button
-                      className="button button-small"
-                      type="button"
+                    <Button
+                      small
                       onClick={() =>
                         void toggle(areaType, {
                           required_for_release: !areaType.required_for_release,
@@ -123,20 +120,18 @@ export function AreaTypesPanel({
                       }
                     >
                       {areaType.required_for_release ? "Not required" : "Require"}
-                    </button>
-                    <button
-                      className="button button-small"
-                      type="button"
+                    </Button>
+                    <Button
+                      small
                       onClick={() => void toggle(areaType, { is_active: !areaType.is_active })}
                     >
                       {areaType.is_active ? "Retire" : "Restore"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+</TableScroll>
       ) : null}
 
       <form className="form-grid" onSubmit={submit}>
@@ -188,9 +183,9 @@ export function AreaTypesPanel({
           <span>Required before a unit can be released</span>
         </label>
         <div className="form-actions">
-          <button className="button button-primary" type="submit" disabled={busy}>
+          <Button variant="primary" type="submit" disabled={busy}>
             {busy ? "Saving…" : "Add area type"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

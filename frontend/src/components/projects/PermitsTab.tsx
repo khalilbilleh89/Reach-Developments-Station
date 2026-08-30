@@ -4,7 +4,23 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { Permit, PermitRegister, PermitStatusEvent, ReferenceValue } from "@/lib/api";
-import { Badge, EmptyState, Field, Loading, Notice, Panel } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FilterBar,
+  FormActions,
+  KeyValue,
+  KeyValueGrid,
+  Loading,
+  Notice,
+  Stat,
+  StatRow,
+  SubPanel,
+  TableScroll,
+} from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -68,6 +84,31 @@ const STATUS_LABELS: Record<string, string> = {
   on_hold: "On hold",
   withdrawn: "Withdrawn",
 };
+
+/**
+ * The colour each permit status is drawn in.
+ *
+ * Presentation over a word that already says it. A consent that has been
+ * refused, has expired or is on hold is the one a project manager needs to find
+ * in a register of forty, so those carry weight; everything in flight is
+ * neutral, because "submitted" is neither good news nor bad.
+ */
+const STATUS_TONES: Record<string, "neutral" | "muted" | "info" | "success" | "warning" | "danger"> =
+  {
+    not_started: "muted",
+    preparing: "muted",
+    submitted: "info",
+    accepted_for_review: "info",
+    comments_received: "warning",
+    resubmission: "warning",
+    approved_with_conditions: "success",
+    issued: "success",
+    expired: "danger",
+    renewed: "success",
+    rejected: "danger",
+    on_hold: "warning",
+    withdrawn: "muted",
+  };
 
 /** Moves the API requires an explanation for. */
 const REASON_REQUIRED = new Set(["rejected", "on_hold", "withdrawn", "preparing"]);
@@ -251,31 +292,30 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
 
   return (
     <>
-      <Panel
+      <Card
         title="Permits"
-        description={
-          register
-            ? `${register.total} permits · ${register.blocking_count} blocking · ` +
-              `${register.critical_path_count} on the critical path · ` +
-              `${register.sla_overdue_count} past their statutory period`
-            : undefined
-        }
+        description="The consents this development needs, where each one stands, and which of them are holding units back."
         actions={
           canWrite ? (
-            <button
-              className="button button-small"
-              type="button"
-              onClick={() => setCreating((open) => !open)}
-            >
+            <Button onClick={() => setCreating((open) => !open)}>
               {creating ? "Cancel" : "New permit"}
-            </button>
+            </Button>
           ) : undefined
         }
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <div className="form-inline">
+        {register ? (
+          <StatRow>
+            <Stat label="Permits" value={register.total} small />
+            <Stat label="Blocking" value={register.blocking_count} small />
+            <Stat label="Critical path" value={register.critical_path_count} small />
+            <Stat label="Past statutory period" value={register.sla_overdue_count} small />
+          </StatRow>
+        ) : null}
+
+        <FilterBar>
           <Field label="Show">
             <select
               className="input input-short"
@@ -286,10 +326,11 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               <option value="blocking">Blocking only</option>
             </select>
           </Field>
-        </div>
+        </FilterBar>
 
         {creating ? (
-          <form className="panel-section" onSubmit={create}>
+          <SubPanel title="New permit">
+          <form onSubmit={create}>
             <div className="form-grid">
               <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
                 <input
@@ -355,33 +396,34 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                   }
                 />
               </Field>
-            </div>
-            <div className="form-actions">
-              <button className="button button-primary" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Register permit"}
-              </button>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Register permit"}
+                </Button>
+              </FormActions>
             </div>
           </form>
+          </SubPanel>
         ) : null}
 
         {register === null ? (
-          <Loading label="Loading permits…" />
+          <Loading label="Loading permits…" lines={4} />
         ) : register.permits.length === 0 ? (
           <EmptyState
             title="No permits registered"
             hint="Add the approvals this development needs, and track where each one stands."
           />
         ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <caption className="visually-hidden">Permit register</caption>
+          <TableScroll label="Permit register" fixedFirst>
               <thead>
                 <tr>
                   <th scope="col">Code</th>
                   <th scope="col">Type</th>
                   <th scope="col">Authority</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Days in stage</th>
+                  <th scope="col" className="num">
+                    Days in stage
+                  </th>
                   <th scope="col">Statutory period</th>
                   <th scope="col">Next action</th>
                   <th scope="col">Flags</th>
@@ -392,7 +434,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                   <tr key={permit.id}>
                     <th scope="row">
                       <button
-                        className="button button-small"
+                        className="button-link mono"
                         type="button"
                         onClick={() => void open(permit)}
                       >
@@ -401,55 +443,50 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                     </th>
                     <td>{permit.permit_type_code}</td>
                     <td>{permit.authority}</td>
-                    <td>{STATUS_LABELS[permit.status] ?? permit.status}</td>
-                    <td>{permit.days_in_stage}</td>
+                    <td>
+                      <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
+                        {STATUS_LABELS[permit.status] ?? permit.status}
+                      </Badge>
+                    </td>
+                    <td className="num">{permit.days_in_stage}</td>
                     <td className="nowrap">
                       {permit.sla_overdue ? (
-                        <Badge tone="neutral">{slaLabel(permit)}</Badge>
+                        <Badge tone="danger">{slaLabel(permit)}</Badge>
                       ) : (
                         slaLabel(permit)
                       )}
                     </td>
                     <td>{permit.next_action ?? "—"}</td>
-                    <td className="chip-list">
-                      {permit.is_blocking ? <span className="chip">Blocking</span> : null}
-                      {permit.is_critical_path ? (
-                        <span className="chip">Critical path</span>
-                      ) : null}
-                      {!permit.prerequisite_satisfied ? (
-                        <span className="chip">Prerequisite open</span>
-                      ) : null}
+                    <td>
+                      <div className="row-actions">
+                        {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+                        {permit.is_critical_path ? (
+                          <Badge tone="info">Critical path</Badge>
+                        ) : null}
+                        {!permit.prerequisite_satisfied ? (
+                          <Badge tone="muted">Prerequisite open</Badge>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+          </TableScroll>
         )}
-      </Panel>
+      </Card>
 
       {selected ? (
-        <Panel
+        <Card
           title={`${selected.permit_code} — ${STATUS_LABELS[selected.status] ?? selected.status}`}
           description={selected.authority}
           actions={
             <>
               {canWrite ? (
-                <button
-                  className="button button-small"
-                  type="button"
-                  onClick={() => setEditingPermit((open) => !open)}
-                >
+                <Button onClick={() => setEditingPermit((open) => !open)}>
                   {editingPermit ? "Cancel" : "Edit permit"}
-                </button>
+                </Button>
               ) : null}
-              <button
-                className="button button-small"
-                type="button"
-                onClick={() => setSelected(null)}
-              >
-                Close
-              </button>
+              <Button onClick={() => setSelected(null)}>Close</Button>
             </>
           }
         >
@@ -471,55 +508,41 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               onCancel={() => setEditingPermit(false)}
             />
           ) : null}
-          <dl className="reference-list">
-            <div>
-              <dt className="reference-term">Status since</dt>
-              <dd className="reference-value">{selected.status_effective_date}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Submitted</dt>
-              <dd className="reference-value">{selected.actual_submission_date ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Issued</dt>
-              <dd className="reference-value">{selected.issue_date ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Submission variance</dt>
-              <dd className="reference-value">
-                {selected.submission_variance_days === null
-                  ? "—"
-                  : `${selected.submission_variance_days} days`}
-              </dd>
-            </div>
-            <div>
-              <dt className="reference-term">Issue variance</dt>
-              <dd className="reference-value">
-                {selected.issue_variance_days === null
-                  ? "—"
-                  : `${selected.issue_variance_days} days`}
-              </dd>
-            </div>
-            <div>
-              <dt className="reference-term">Consultant</dt>
-              <dd className="reference-value">{selected.consultant ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="reference-term">Conditions</dt>
-              <dd className="reference-value">{selected.conditions ?? "—"}</dd>
-            </div>
+          <KeyValueGrid columns={3}>
+            <KeyValue label="Status since" mono value={selected.status_effective_date} />
+            <KeyValue label="Submitted" mono value={selected.actual_submission_date} />
+            <KeyValue label="Issued" mono value={selected.issue_date} />
+            <KeyValue
+              label="Submission variance"
+              mono
+              value={
+                selected.submission_variance_days === null
+                  ? null
+                  : `${selected.submission_variance_days} days`
+              }
+            />
+            <KeyValue
+              label="Issue variance"
+              mono
+              value={
+                selected.issue_variance_days === null
+                  ? null
+                  : `${selected.issue_variance_days} days`
+              }
+            />
+            <KeyValue label="Consultant" value={selected.consultant} />
+            <KeyValue label="Conditions" value={selected.conditions} />
             {selected.financials_visible ? (
-              <div>
-                <dt className="reference-term">Fee</dt>
-                <dd className="reference-value mono">
-                  {selected.fee_amount ?? "—"} {selected.base_currency_code ?? ""}
-                </dd>
-              </div>
+              <KeyValue
+                label="Fee"
+                mono
+                value={`${selected.fee_amount ?? "—"} ${selected.base_currency_code ?? ""}`.trim()}
+              />
             ) : null}
-          </dl>
+          </KeyValueGrid>
 
           {canWrite && TRANSITIONS[selected.status].length > 0 ? (
-            <form className="panel-section" onSubmit={transition}>
+            <form onSubmit={transition}>
               <h3 className="section-heading">Change status</h3>
               <div className="form-inline">
                 <Field label="Move to">
@@ -564,11 +587,11 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                   />
                 </Field>
               </div>
-              <div className="form-actions">
-                <button className="button button-primary" type="submit" disabled={busy}>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
                   {busy ? "Recording…" : "Record status change"}
-                </button>
-              </div>
+                </Button>
+              </FormActions>
             </form>
           ) : null}
 
@@ -576,9 +599,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
           {history.length === 0 ? (
             <p className="subtle">Nothing recorded yet.</p>
           ) : (
-            <div className="table-scroll">
-              <table className="table">
-                <caption className="visually-hidden">Permit status history</caption>
+            <TableScroll label="Permit status history">
                 <thead>
                   <tr>
                     <th scope="col">Effective</th>
@@ -590,19 +611,22 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                 <tbody>
                   {history.map((event) => (
                     <tr key={event.id}>
-                      <th scope="row" className="nowrap">
+                      <th scope="row" className="mono nowrap">
                         {event.effective_date}
                       </th>
                       <td>{STATUS_LABELS[event.from_status] ?? event.from_status}</td>
-                      <td>{STATUS_LABELS[event.to_status] ?? event.to_status}</td>
+                      <td>
+                        <Badge tone={STATUS_TONES[event.to_status] ?? "neutral"}>
+                          {STATUS_LABELS[event.to_status] ?? event.to_status}
+                        </Badge>
+                      </td>
                       <td>{event.reason ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </TableScroll>
           )}
-        </Panel>
+        </Card>
       ) : null}
     </>
   );

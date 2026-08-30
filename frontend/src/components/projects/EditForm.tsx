@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { ApiError } from "@/lib/api";
-import { Field, Notice } from "@/components/ui";
+import { Button, Field, FormActions, Notice } from "@/components/ui";
 
 /**
  * One field in an edit form, described rather than hand-written each time.
@@ -77,9 +77,9 @@ export function EditForm({
   };
 
   return (
-    <form className="panel-section" onSubmit={submit}>
+    <form onSubmit={submit}>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <div className="form-grid">
+      <div className="form-grid form-grid-3">
         {fields
           .filter((field) => field.visible !== false)
           .map((field) => {
@@ -129,14 +129,14 @@ export function EditForm({
               </Field>
             );
           })}
-      </div>
-      <div className="form-actions">
-        <button className="button button-primary" type="submit" disabled={busy}>
-          {busy ? "Saving…" : submitLabel}
-        </button>
-        <button className="button" type="button" onClick={onCancel} disabled={busy}>
-          Cancel
-        </button>
+        <FormActions>
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : submitLabel}
+          </Button>
+          <Button onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+        </FormActions>
       </div>
     </form>
   );
