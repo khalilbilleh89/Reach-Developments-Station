@@ -890,3 +890,209 @@ def active_plan(
     )
     assert activated.status_code == 200, activated.text
     return plan_id, version_id
+
+
+# --------------------------------------------------------------------------- #
+# A second plan, in a phase of its own
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def other_phase_plan(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    sales_ops_client: TestClient,
+    legal_client: TestClient,
+    collections_client: TestClient,
+    project_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+    sales_reference_data: None,
+) -> dict[str, str]:
+    """A whole second sale and active plan, in a second phase.
+
+    Built through the real routes rather than inserted, because the point of it
+    is to be a genuinely separate branch of the hierarchy: its own phase, unit,
+    buyer, contract and schedule. That is what makes it usable both as the
+    "other plan" whose identifiers must not be accepted under the first plan's
+    path, and as the plan a phase-scoped caller must not be able to reach.
+
+    Its schedule carries a manual instalment with an attestation already
+    submitted, so every nested identifier a caller might try to substitute —
+    version, instalment, trigger event — actually exists.
+    """
+    phase = admin_client.post(
+        f"{inventory_url(project_id)}/phases",
+        json={"code": "PHASE-2", "name": "Phase 2", "sequence": 2},
+    )
+    assert phase.status_code == 201, phase.text
+    phase_id = phase.json()["id"]
+    building = admin_client.post(
+        f"{inventory_url(project_id)}/buildings",
+        json={"phase_id": phase_id, "code": "B2", "name": "Building 2"},
+    )
+    assert building.status_code == 201, building.text
+    floor = admin_client.post(
+        f"{inventory_url(project_id)}/floors",
+        json={"building_id": building.json()["id"], "code": "02", "label": "Second floor"},
+    )
+    assert floor.status_code == 201, floor.text
+    unit = admin_client.post(
+        f"{inventory_url(project_id)}/units",
+        json=unit_payload(floor.json()["id"], unit_number="201", unit_reference="B2-201"),
+    )
+    assert unit.status_code == 201, unit.text
+    unit_id = unit.json()["id"]
+
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    draft = finance_client.post(
+        f"{pricing_url(project_id)}/units/{unit_id}/price-versions", json={}
+    )
+    assert draft.status_code == 201, draft.text
+    price_base = f"{pricing_url(project_id)}/price-versions/{draft.json()['id']}"
+    assert finance_client.post(f"{price_base}/submit", json={}).status_code == 200
+    assert (
+        cfo_client.post(f"{price_base}/approve", json={"reason": "Within feasibility"}).status_code
+        == 200
+    )
+    assert cfo_client.post(f"{price_base}/activate").status_code == 200
+
+    controls = admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}/release-controls",
+        json={
+            "drawings_approved": True,
+            "legal_sale_eligible": True,
+            "release_date": "2026-01-01",
+        },
+    )
+    assert controls.status_code == 200, controls.text
+    released = admin_client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
+        json={"to_status": "available", "effective_date": "2026-01-02"},
+    )
+    assert released.status_code == 201, released.text
+
+    buyer = sales_ops_client.post(
+        f"{sales_url(project_id)}/clients",
+        json={
+            "display_name": "Samer Nasser",
+            "email": "samer@example.com",
+            "phone": "+962790000001",
+            "preferred_language_code": "EN",
+        },
+    )
+    assert buyer.status_code == 201, buyer.text
+    buyer_id = buyer.json()["id"]
+    party = sales_ops_client.post(
+        f"{sales_url(project_id)}/clients/{buyer_id}/parties",
+        json={
+            "name_as_identification": "Samer Nasser",
+            "share_fraction": "1.000000",
+            "nationality_code": "JO",
+            "residency_code": "JO",
+            "identity_document_type": "passport",
+            "identity_document_number": "P7654321",
+            "is_primary": True,
+        },
+    )
+    assert party.status_code == 201, party.text
+
+    reservation = sales_ops_client.post(
+        f"{sales_url(project_id)}/reservations",
+        json={
+            "unit_id": unit_id,
+            "client_id": buyer_id,
+            "sales_channel_code": "DIRECT",
+            "sales_branch_code": "AMMAN",
+            "deposit_required_amount": "5000.00",
+        },
+    )
+    assert reservation.status_code == 201, reservation.text
+    reservation_id = reservation.json()["reservation"]["id"]
+    reservation_base = f"{sales_url(project_id)}/reservations/{reservation_id}"
+    assert (
+        sales_ops_client.post(
+            f"{reservation_base}/confirm-deposit", json={"evidence_reference": "BANK-REF-2"}
+        ).status_code
+        == 200
+    )
+    assert sales_ops_client.post(f"{reservation_base}/activate", json={}).status_code == 200
+
+    contract = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts",
+        json={"reservation_id": reservation_id, "spa_number": "SPA-0002"},
+    )
+    assert contract.status_code == 201, contract.text
+    sale_id = contract.json()["sale"]["id"]
+    assert (
+        sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{sale_id}/submit", json={}
+        ).status_code
+        == 200
+    )
+    for event_type, event_date in (
+        ("spa_drafted", "2026-02-01"),
+        ("spa_issued", "2026-02-02"),
+        ("buyer_signed", "2026-02-03"),
+        ("seller_signed", "2026-02-04"),
+    ):
+        record_legal(legal_client, project_id, sale_id, event_type, event_date)
+    assert (
+        sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{sale_id}/activate", json={}
+        ).status_code
+        == 200
+    )
+
+    created = collections_client.post(
+        plans_url(project_id),
+        json={"sale_contract_id": sale_id, "name": "Phase 2 terms"},
+    )
+    assert created.status_code == 201, created.text
+    plan_id = created.json()["plan"]["id"]
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    schedule = write_schedule(
+        collections_client,
+        project_id,
+        plan_id,
+        version_id,
+        [
+            fixed_row(1, "0.600000", "2026-03-01"),
+            {
+                "sequence": 2,
+                "label": "On lender drawdown",
+                "trigger_type": "manual_approved_event",
+                "trigger_reference": "Lender releases funds",
+                "principal_fraction": "0.400000",
+            },
+        ],
+    )
+    assert schedule.status_code == 200, schedule.text
+    version_base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{version_base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{version_base}/approve", json={"reason": "Agreed"}).status_code == 200
+    assert cfo_client.post(f"{version_base}/activate", json={}).status_code == 200
+
+    rows = plan_detail(collections_client, project_id, plan_id)["current"]["installments"]
+    by_sequence = {row["sequence"]: row for row in rows}
+    attested = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/installments/{by_sequence[2]['id']}/manual-trigger",
+        json={
+            "event_date": "2026-02-20",
+            "evidence_reference": "PHASE2-LENDER-9",
+            "reason": "Drawdown confirmed by the lender",
+        },
+    )
+    assert attested.status_code == 201, attested.text
+
+    return {
+        "phase_id": phase_id,
+        "unit_id": unit_id,
+        "sale_id": sale_id,
+        "plan_id": plan_id,
+        "version_id": version_id,
+        "dated_installment_id": by_sequence[1]["id"],
+        "manual_installment_id": by_sequence[2]["id"],
+        "event_id": attested.json()["id"],
+    }

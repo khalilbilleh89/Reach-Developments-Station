@@ -19,7 +19,7 @@ import {
   TableScroll,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
+import { businessDate, money, todayISO } from "@/lib/format";
 import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
 import { ReconciliationBadge } from "@/components/projects/payments/ReconciliationStrip";
 import { versionLabel, versionTone } from "@/components/projects/payments/labels";
@@ -51,6 +51,8 @@ export function PaymentPlansTab({
     sale_contract_id: "",
     name: "Payment plan",
     reservation_treatment: "reference_only",
+    effective_date: todayISO(),
+    source_version_id: "",
   });
   const [openPlan, setOpenPlan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +124,14 @@ export function PaymentPlansTab({
   const unscheduled = schedulable.filter(
     (sale) => !register.rows.some((row) => row.sale_id === sale.id),
   );
+  // Only schedules somebody has already agreed to are worth copying, and only
+  // the ones this caller can see — the register is already narrowed to those,
+  // so the selector inherits the narrowing rather than restating it.
+  const copyable = register.rows.filter(
+    (row) =>
+      row.version_id !== null &&
+      ["approved", "active", "superseded"].includes(row.version_status ?? ""),
+  );
 
   return (
     <>
@@ -152,8 +162,9 @@ export function PaymentPlansTab({
           />
         </StatRow>
         <p className="footnote">
-          A schedule says what the buyer agreed to pay and when. What has actually been
-          collected is not recorded yet — that arrives with Collections.
+          A schedule says what the buyer agreed to pay and when. What has actually been paid is
+          not recorded yet — that arrives with Collections — so &ldquo;next scheduled&rdquo; is
+          the next date still to come on the schedule, and never a statement about arrears.
         </p>
 
         {opening && canPrepare ? (
@@ -168,6 +179,13 @@ export function PaymentPlansTab({
                     sale_contract_id: form.sale_contract_id,
                     name: form.name,
                     reservation_treatment: form.reservation_treatment,
+                    effective_date: form.effective_date,
+                    ...(form.source_version_id
+                      ? {
+                          origin_type: "copied_plan",
+                          source_version_id: form.source_version_id,
+                        }
+                      : {}),
                   });
                   setOpening(false);
                   setNotice(`${created.plan.plan_number} opened. Build its schedule next.`);
@@ -209,6 +227,39 @@ export function PaymentPlansTab({
                     required
                     value={form.name}
                     onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  />
+                </Field>
+                <Field
+                  label="Start from"
+                  hint="Copying brings the shape across. Every amount is re-derived against this contract."
+                >
+                  <select
+                    className="input"
+                    value={form.source_version_id}
+                    onChange={(event) =>
+                      setForm({ ...form, source_version_id: event.target.value })
+                    }
+                  >
+                    <option value="">A blank schedule</option>
+                    {copyable.map((row) => (
+                      <option key={row.version_id ?? row.plan_id} value={row.version_id ?? ""}>
+                        {row.plan_number} · {row.unit_reference} · v{row.version_number}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Takes effect"
+                  hint="When these terms start governing. Defaults to today."
+                >
+                  <input
+                    className="input input-short"
+                    type="date"
+                    required
+                    value={form.effective_date}
+                    onChange={(event) =>
+                      setForm({ ...form, effective_date: event.target.value })
+                    }
                   />
                 </Field>
                 <Field
@@ -264,7 +315,7 @@ export function PaymentPlansTab({
                   Instalments
                 </th>
                 <th scope="col">Schedule</th>
-                <th scope="col">Next due</th>
+                <th scope="col">Next scheduled</th>
                 <th scope="col" className="num">
                   Awaiting
                 </th>
@@ -304,13 +355,19 @@ export function PaymentPlansTab({
                     <ReconciliationBadge reconciled={row.is_reconciled} />
                   </td>
                   <td className="mono nowrap">
-                    {businessDate(row.next_actual_due_date ?? row.next_forecast_due_date)}
-                    {row.next_actual_due_date === null && row.next_forecast_due_date ? (
+                    {row.next_scheduled_date === null && row.next_forecast_date === null ? (
+                      <span className="subtle">No future date</span>
+                    ) : (
                       <>
-                        {" "}
-                        <span className="subtle">forecast</span>
+                        {businessDate(row.next_scheduled_date ?? row.next_forecast_date)}
+                        {row.next_scheduled_date === null ? (
+                          <>
+                            {" "}
+                            <span className="subtle">forecast</span>
+                          </>
+                        ) : null}
                       </>
-                    ) : null}
+                    )}
                   </td>
                   <td className="num">{row.awaiting_trigger_count}</td>
                   <td>

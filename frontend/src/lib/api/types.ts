@@ -1227,6 +1227,22 @@ export interface PaymentPlanVersion {
   superseded_at: string | null;
 }
 
+export interface InstallmentTriggerEvent {
+  id: string;
+  installment_id: string;
+  event_date: string;
+  evidence_reference: string;
+  reason: string;
+  status: "submitted" | "approved" | "reversed";
+  submitted_by_user_id: string;
+  submitted_at: string;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  reversed_by_user_id: string | null;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+}
+
 export interface PlanInstallment {
   id: string;
   payment_plan_version_id: string;
@@ -1250,6 +1266,12 @@ export interface PlanInstallment {
   total_scheduled_amount: string;
   trigger_status: TriggerStatus;
   owner_user_id: string | null;
+  /**
+   * Every attestation ever made about this instalment, newest first. Carried on
+   * the row so an approver opening a hundred-row schedule makes one request,
+   * not a hundred.
+   */
+  trigger_events: InstallmentTriggerEvent[];
 }
 
 /** Server-derived. The browser renders this and never sums a column itself. */
@@ -1307,13 +1329,19 @@ export interface PlanRegisterRow {
   version_id: string | null;
   version_number: number | null;
   version_status: PlanVersionStatus | null;
+  effective_date: string | null;
   currency_id: string;
   contract_value_covered: string;
   installment_count: number;
   scheduled_principal_total: string | null;
   is_reconciled: boolean;
-  next_actual_due_date: string | null;
-  next_forecast_due_date: string | null;
+  /**
+   * The soonest scheduled date still to come, and the soonest forecast date
+   * still to come. Both look forward only: PR-MVP-06 cannot say whether a date
+   * already past was paid, so surfacing one would read as arrears.
+   */
+  next_scheduled_date: string | null;
+  next_forecast_date: string | null;
   awaiting_trigger_count: number;
   approved_by_user_id: string | null;
 }
@@ -1331,22 +1359,6 @@ export interface SeriesRow {
 
 export interface SeriesPreview {
   rows: SeriesRow[];
-}
-
-export interface InstallmentTriggerEvent {
-  id: string;
-  installment_id: string;
-  event_date: string;
-  evidence_reference: string;
-  reason: string;
-  status: "submitted" | "approved" | "reversed";
-  submitted_by_user_id: string;
-  submitted_at: string;
-  approved_by_user_id: string | null;
-  approved_at: string | null;
-  reversed_by_user_id: string | null;
-  reversed_at: string | null;
-  reversal_reason: string | null;
 }
 
 export interface TriggerRefreshResult {

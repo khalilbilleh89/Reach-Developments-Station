@@ -95,6 +95,13 @@ _PLAN_PREFIX = "PLN"
 
 _NOT_DRAFT = "Only a draft schedule can be changed. Create a new version to alter the terms."
 
+#: One refusal each for a nested resource that is missing, hidden, or claimed by
+#: the wrong parent. Deliberately identical in all three cases.
+_NO_VERSION = "Payment plan version not found."
+_NO_INSTALLMENT = "Instalment not found."
+_NO_EVENT = "Trigger event not found."
+_NO_COPY_SOURCE = "The plan being copied was not found in this project."
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -136,10 +143,28 @@ def _lock_version(
     return version
 
 
-def _visible_plan(
+def _lock_trigger_event(
+    session: Session, *, project_id: uuid.UUID, event_id: uuid.UUID
+) -> InstallmentTriggerEvent:
+    """Take the attestation row for update and return its committed state."""
+    event = session.scalars(
+        select(InstallmentTriggerEvent)
+        .where(
+            InstallmentTriggerEvent.id == event_id,
+            InstallmentTriggerEvent.project_id == project_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+    if event is None:
+        raise NotFoundError(_NO_EVENT)
+    return event
+
+
+def _visible_plan_or_none(
     session: Session, *, project: Project, plan_id: uuid.UUID, actor: ActorContext
-) -> PaymentPlan:
-    """Load a plan the caller may see, or raise 404.
+) -> PaymentPlan | None:
+    """The plan if this caller may see it, otherwise nothing.
 
     Narrowed through the sale, so a plan on a unit in a phase the caller was
     never granted answers exactly as a plan that does not exist.
@@ -150,44 +175,118 @@ def _visible_plan(
     allowed = permissions.visible_sale_ids(session, project_id=project.id, actor=actor)
     if allowed is not None:
         statement = statement.where(PaymentPlan.sale_contract_id.in_(allowed))
-    plan = session.scalars(statement).first()
+    return session.scalars(statement).first()
+
+
+def _visible_plan(
+    session: Session, *, project: Project, plan_id: uuid.UUID, actor: ActorContext
+) -> PaymentPlan:
+    """Load a plan the caller may see, or raise 404."""
+    plan = _visible_plan_or_none(session, project=project, plan_id=plan_id, actor=actor)
     if plan is None:
         raise permissions.plan_not_found()
     return plan
 
 
-def _visible_version(
-    session: Session, *, project: Project, version_id: uuid.UUID, actor: ActorContext
+# --------------------------------------------------------------------------- #
+# Nested resources
+#
+# A nested path is a claim about parentage: ``/plan-A/versions/version-B``
+# asserts that B is one of A's versions, and ``/plan-A/installments/row-C``
+# that C is scheduled by one of them. Every loader below proves the whole chain
+#
+#     project -> plan -> version -> instalment -> attestation
+#
+# before returning anything, rather than validating each identifier on its own
+# and trusting that the caller paired them honestly. Two independently valid
+# identifiers are not a valid pair.
+#
+# The refusal is always the same 404, and never says "belongs to another plan":
+# that phrasing confirms the hidden identifier exists, which is exactly what a
+# caller guessing at identifiers is trying to learn.
+# --------------------------------------------------------------------------- #
+
+
+def _visible_version_for_plan(
+    session: Session,
+    *,
+    project: Project,
+    plan_id: uuid.UUID,
+    version_id: uuid.UUID,
+    actor: ActorContext,
 ) -> tuple[PaymentPlanVersion, PaymentPlan]:
-    """Load a version and its plan, both scoped to what the caller may see."""
+    """Load a version proved to belong to ``plan_id``, or raise 404."""
+    plan = _visible_plan(session, project=project, plan_id=plan_id, actor=actor)
     version = session.scalars(
         select(PaymentPlanVersion).where(
             PaymentPlanVersion.id == version_id,
             PaymentPlanVersion.project_id == project.id,
+            PaymentPlanVersion.payment_plan_id == plan.id,
         )
     ).first()
     if version is None:
-        raise NotFoundError("Payment plan version not found.")
-    plan = _visible_plan(session, project=project, plan_id=version.payment_plan_id, actor=actor)
+        raise NotFoundError(_NO_VERSION)
     return version, plan
 
 
-def _visible_installment(
-    session: Session, *, project: Project, installment_id: uuid.UUID, actor: ActorContext
+def _visible_installment_for_plan(
+    session: Session,
+    *,
+    project: Project,
+    plan_id: uuid.UUID,
+    installment_id: uuid.UUID,
+    actor: ActorContext,
 ) -> tuple[PaymentPlanInstallment, PaymentPlanVersion, PaymentPlan]:
-    """Load an instalment with its version and plan, scoped to the caller."""
-    installment = session.scalars(
-        select(PaymentPlanInstallment).where(
+    """Load an instalment proved to be scheduled by ``plan_id``, or raise 404."""
+    plan = _visible_plan(session, project=project, plan_id=plan_id, actor=actor)
+    found = session.execute(
+        select(PaymentPlanInstallment, PaymentPlanVersion)
+        .join(
+            PaymentPlanVersion,
+            PaymentPlanVersion.id == PaymentPlanInstallment.payment_plan_version_id,
+        )
+        .where(
             PaymentPlanInstallment.id == installment_id,
             PaymentPlanInstallment.project_id == project.id,
+            PaymentPlanVersion.payment_plan_id == plan.id,
         )
     ).first()
-    if installment is None:
-        raise NotFoundError("Instalment not found.")
-    version, plan = _visible_version(
-        session, project=project, version_id=installment.payment_plan_version_id, actor=actor
-    )
+    if found is None:
+        raise NotFoundError(_NO_INSTALLMENT)
+    installment, version = found
     return installment, version, plan
+
+
+def _visible_trigger_event_for_plan(
+    session: Session,
+    *,
+    project: Project,
+    plan_id: uuid.UUID,
+    event_id: uuid.UUID,
+    actor: ActorContext,
+) -> tuple[InstallmentTriggerEvent, PaymentPlanInstallment, PaymentPlanVersion, PaymentPlan]:
+    """Load an attestation proved to belong to ``plan_id``, or raise 404."""
+    plan = _visible_plan(session, project=project, plan_id=plan_id, actor=actor)
+    found = session.execute(
+        select(InstallmentTriggerEvent, PaymentPlanInstallment, PaymentPlanVersion)
+        .join(
+            PaymentPlanInstallment,
+            PaymentPlanInstallment.id == InstallmentTriggerEvent.installment_id,
+        )
+        .join(
+            PaymentPlanVersion,
+            PaymentPlanVersion.id == PaymentPlanInstallment.payment_plan_version_id,
+        )
+        .where(
+            InstallmentTriggerEvent.id == event_id,
+            InstallmentTriggerEvent.project_id == project.id,
+            PaymentPlanVersion.payment_plan_id == plan.id,
+        )
+    ).first()
+    if found is None:
+        raise NotFoundError(_NO_EVENT)
+    event, installment, version = found
+    return event, installment, version, plan
 
 
 def installments_of(session: Session, *, version_id: uuid.UUID) -> list[PaymentPlanInstallment]:
@@ -238,16 +337,41 @@ def current_version(session: Session, *, plan_id: uuid.UUID) -> PaymentPlanVersi
     The open one if a revision is being prepared, otherwise the standing one,
     otherwise the most recent history. A plan always shows something.
     """
-    return (
-        open_version(session, plan_id=plan_id)
-        or active_version(session, plan_id=plan_id)
-        or next(iter(versions_of(session, plan_id=plan_id)), None)
-    )
+    return _current_version_of(versions_of(session, plan_id=plan_id))
 
 
 # --------------------------------------------------------------------------- #
 # Reconciliation
 # --------------------------------------------------------------------------- #
+
+
+def reconcile_rows(
+    version: PaymentPlanVersion, rows: list[PaymentPlanInstallment]
+) -> schedule.Reconciliation:
+    """Total instalments already in hand against their version's frozen basis.
+
+    Separated from the loading so a caller that has read a schedule for another
+    reason — the register reads every plan's rows in one query — can total it
+    without reading it again, and still get the answer from the same function
+    the plan screen uses. Two totalling routines are two answers waiting to
+    disagree.
+    """
+    lines = [
+        schedule.Line(
+            principal_amount=row.principal_amount,
+            principal_fraction=row.principal_fraction,
+            tax_amount=row.tax_amount,
+            fee_amount=row.fee_amount,
+        )
+        for row in rows
+    ]
+    return schedule.reconcile(
+        lines,
+        contract_value_covered=version.contract_value_covered,
+        tax_total_snapshot=version.tax_total_snapshot,
+        buyer_fee_total_snapshot=version.buyer_fee_total_snapshot,
+        total_buyer_payable_snapshot=version.total_buyer_payable_snapshot,
+    )
 
 
 def reconcile_version(session: Session, *, version: PaymentPlanVersion) -> schedule.Reconciliation:
@@ -257,22 +381,7 @@ def reconcile_version(session: Session, *, version: PaymentPlanVersion) -> sched
     stored total is a second source of truth that drifts the first time
     somebody writes a row without updating it.
     """
-    lines = [
-        schedule.Line(
-            principal_amount=row.principal_amount,
-            principal_fraction=row.principal_fraction,
-            tax_amount=row.tax_amount,
-            fee_amount=row.fee_amount,
-        )
-        for row in installments_of(session, version_id=version.id)
-    ]
-    return schedule.reconcile(
-        lines,
-        contract_value_covered=version.contract_value_covered,
-        tax_total_snapshot=version.tax_total_snapshot,
-        buyer_fee_total_snapshot=version.buyer_fee_total_snapshot,
-        total_buyer_payable_snapshot=version.total_buyer_payable_snapshot,
-    )
+    return reconcile_rows(version, installments_of(session, version_id=version.id))
 
 
 def _require_reconciled(session: Session, *, version: PaymentPlanVersion) -> None:
@@ -349,6 +458,7 @@ def create_plan(
     reservation_treatment: str,
     origin_type: str,
     source_version_id: uuid.UUID | None,
+    effective_date: date | None,
     notes: str | None,
     correlation_id: uuid.UUID,
 ) -> tuple[PaymentPlan, PaymentPlanVersion]:
@@ -370,7 +480,11 @@ def create_plan(
     # version that contradicts the origin, or one nobody has agreed to, is
     # wrong however many plans the sale already has.
     source = _resolve_copy_source(
-        session, project=project, origin_type=origin_type, source_version_id=source_version_id
+        session,
+        project=project,
+        actor=actor,
+        origin_type=origin_type,
+        source_version_id=source_version_id,
     )
 
     existing = session.scalars(
@@ -403,6 +517,7 @@ def create_plan(
         origin_type=origin_type,
         source=source,
         change_reason=None,
+        effective_date=effective_date,
     )
     record_event(
         session,
@@ -418,6 +533,7 @@ def create_plan(
             "reservation_treatment": reservation_treatment,
             "origin_type": origin_type,
             "source_version_id": source.id if source else None,
+            "effective_date": version.effective_date,
         },
     )
     return plan, version
@@ -427,6 +543,7 @@ def _resolve_copy_source(
     session: Session,
     *,
     project: Project,
+    actor: ActorContext,
     origin_type: str,
     source_version_id: uuid.UUID | None,
 ) -> PaymentPlanVersion | None:
@@ -435,6 +552,14 @@ def _resolve_copy_source(
     Only a settled schedule of the same project may be copied. A draft is not a
     pattern anybody has agreed to, and a rejected one is a pattern somebody
     explicitly refused.
+
+    Copying reads: the fractions, the trigger definitions, the labels and the
+    timing of somebody else's negotiated schedule all cross over. So the source
+    must pass exactly the visibility a plan read passes. Otherwise a
+    phase-scoped preparer who guessed a version identifier could lift the
+    commercial shape of a deal in a phase they were never granted — and would
+    not even have to read the plan to do it, because the copy hands them the
+    structure directly.
     """
     if origin_type != ORIGIN_COPIED:
         if source_version_id is not None:
@@ -451,7 +576,14 @@ def _resolve_copy_source(
         )
     ).first()
     if source is None:
-        raise NotFoundError("The plan being copied was not found in this project.")
+        raise NotFoundError(_NO_COPY_SOURCE)
+    # Same refusal for a source that is not there and one the caller may not
+    # see, so a hidden phase is not confirmed by the difference.
+    visible = _visible_plan_or_none(
+        session, project=project, plan_id=source.payment_plan_id, actor=actor
+    )
+    if visible is None:
+        raise NotFoundError(_NO_COPY_SOURCE)
     if source.status not in VERSION_COPYABLE:
         raise ConflictError(
             "Only an approved, active or superseded schedule can be copied. "
@@ -476,14 +608,23 @@ def _new_version(
     origin_type: str,
     source: PaymentPlanVersion | None,
     change_reason: str | None,
+    effective_date: date | None,
 ) -> PaymentPlanVersion:
-    """Create a draft version on the sale's frozen basis, copying rows if asked."""
+    """Create a draft version on the sale's frozen basis, copying rows if asked.
+
+    ``effective_date`` is the contractual date the schedule starts governing
+    from, not the date it was typed. Omitted means today; supplied means the
+    parties agreed a date, and it is taken as given. A future one is honoured
+    by refusing activation until it arrives — the control already in
+    :func:`activate_version` — which is what makes an approved-but-not-yet-in-
+    force schedule expressible at all.
+    """
     version = PaymentPlanVersion(
         project_id=plan.project_id,
         payment_plan_id=plan.id,
         version_number=version_number,
         status=VERSION_DRAFT,
-        effective_date=business_today(),
+        effective_date=effective_date or business_today(),
         currency_id=sale.currency_id,
         contract_value_covered=sale.net_contract_price_ex_tax,
         tax_total_snapshot=sale.tax_total,
@@ -575,6 +716,7 @@ def create_version(
     plan_id: uuid.UUID,
     change_reason: str,
     reservation_treatment: str | None,
+    effective_date: date | None,
     correlation_id: uuid.UUID,
 ) -> PaymentPlanVersion:
     """Open a revision, copying the standing schedule as its starting point.
@@ -617,6 +759,7 @@ def create_version(
         origin_type=ORIGIN_COPIED if standing else ORIGIN_CUSTOM,
         source=standing,
         change_reason=change_reason,
+        effective_date=effective_date,
     )
     record_event(
         session,
@@ -630,17 +773,25 @@ def create_version(
             "plan_number": plan.plan_number,
             "version_number": version.version_number,
             "copied_from": standing.id if standing else None,
+            "effective_date": version.effective_date,
         },
     )
     return version
 
 
 def get_version(
-    session: Session, *, project: Project, version_id: uuid.UUID, actor: ActorContext
+    session: Session,
+    *,
+    project: Project,
+    plan_id: uuid.UUID,
+    version_id: uuid.UUID,
+    actor: ActorContext,
 ) -> tuple[PaymentPlanVersion, PaymentPlan]:
-    """One version the caller may see, with its plan."""
+    """One version of one plan the caller may see."""
     permissions.require_plan_reader(actor)
-    return _visible_version(session, project=project, version_id=version_id, actor=actor)
+    return _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -733,6 +884,7 @@ def replace_schedule(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     version_id: uuid.UUID,
     rows: list[InstallmentDraft],
     allocation_mode: str,
@@ -751,7 +903,9 @@ def replace_schedule(
     """
     permissions.require_plan_writer(actor)
     project = lock_project(session, project.id)
-    version, plan = _visible_version(session, project=project, version_id=version_id, actor=actor)
+    version, plan = _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
     _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
     if version.status != VERSION_DRAFT:
@@ -930,13 +1084,16 @@ def submit_version(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     version_id: uuid.UUID,
     correlation_id: uuid.UUID,
 ) -> PaymentPlanVersion:
     """Put a reconciled draft forward for sanction."""
     permissions.require_plan_writer(actor)
     project = lock_project(session, project.id)
-    version, plan = _visible_version(session, project=project, version_id=version_id, actor=actor)
+    version, plan = _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
     _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
     if version.status != VERSION_DRAFT:
@@ -964,6 +1121,7 @@ def approve_version(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     version_id: uuid.UUID,
     reason: str,
     correlation_id: uuid.UUID,
@@ -977,7 +1135,9 @@ def approve_version(
     """
     permissions.require_plan_approver(actor)
     project = lock_project(session, project.id)
-    version, plan = _visible_version(session, project=project, version_id=version_id, actor=actor)
+    version, plan = _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
     _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
     if version.status != VERSION_SUBMITTED:
@@ -1010,6 +1170,7 @@ def reject_version(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     version_id: uuid.UUID,
     reason: str,
     correlation_id: uuid.UUID,
@@ -1017,7 +1178,9 @@ def reject_version(
     """Refuse a submitted schedule. It stays readable; the revision is new."""
     permissions.require_plan_approver(actor)
     project = lock_project(session, project.id)
-    version, plan = _visible_version(session, project=project, version_id=version_id, actor=actor)
+    version, plan = _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
     _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
     if version.status != VERSION_SUBMITTED:
@@ -1084,6 +1247,7 @@ def activate_version(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     version_id: uuid.UUID,
     correlation_id: uuid.UUID,
 ) -> PaymentPlanVersion:
@@ -1100,7 +1264,9 @@ def activate_version(
     """
     permissions.require_plan_approver(actor)
     project = lock_project(session, project.id)
-    version, plan = _visible_version(session, project=project, version_id=version_id, actor=actor)
+    version, plan = _visible_version_for_plan(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
+    )
     _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
     if version.status != VERSION_APPROVED:
@@ -1288,6 +1454,7 @@ def submit_manual_trigger(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     installment_id: uuid.UUID,
     event_date: date,
     evidence_reference: str,
@@ -1300,11 +1467,25 @@ def submit_manual_trigger(
     attested this way: certifying construction is PR-MVP-09's job, and letting
     an operator type one here would manufacture a certification this system has
     no basis for.
+
+    The attestation is of something that *has happened*, so its date cannot be
+    in the future. A future date is not an early attestation, it is a forecast,
+    and instalments already carry a forecast date for exactly that. Accepting
+    one here would make money contractually due for an event nobody has
+    witnessed — and would need a scheduler to later decide it had occurred,
+    which this module does not have and should not grow.
     """
     permissions.require_plan_operator(actor)
+    today = business_today()
+    if event_date > today:
+        raise ValidationError(
+            f"An attestation records an event that has happened, so it cannot be dated "
+            f"{event_date.isoformat()}, which is after {today.isoformat()}. "
+            "Use the forecast date for an event still expected."
+        )
     project = lock_project(session, project.id)
-    installment, version, plan = _visible_installment(
-        session, project=project, installment_id=installment_id, actor=actor
+    installment, version, plan = _visible_installment_for_plan(
+        session, project=project, plan_id=plan_id, installment_id=installment_id, actor=actor
     )
     if version.status != VERSION_ACTIVE:
         raise ConflictError("Only an instalment on the active schedule can be triggered.")
@@ -1363,6 +1544,7 @@ def approve_manual_trigger(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     event_id: uuid.UUID,
     correlation_id: uuid.UUID,
 ) -> InstallmentTriggerEvent:
@@ -1371,25 +1553,29 @@ def approve_manual_trigger(
     Maker and checker are different people. The System Administrator is not a
     checker: administering a platform is not authority to declare that a
     contractual event occurred.
+
+    The version is re-read under lock and re-required to be active, because
+    submission and approval are separated in time and a revision can be
+    activated between them. Approving against a schedule that has since been
+    superseded would make an instalment due on terms the sale no longer runs
+    on — a date written into a schedule nobody is being held to.
     """
     permissions.require_plan_approver(actor)
     project = lock_project(session, project.id)
-    event = session.scalars(
-        select(InstallmentTriggerEvent)
-        .where(
-            InstallmentTriggerEvent.id == event_id,
-            InstallmentTriggerEvent.project_id == project.id,
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).first()
-    if event is None:
-        raise NotFoundError("Trigger event not found.")
-    installment, version, plan = _visible_installment(
-        session, project=project, installment_id=event.installment_id, actor=actor
+    event, installment, version, plan = _visible_trigger_event_for_plan(
+        session, project=project, plan_id=plan_id, event_id=event_id, actor=actor
     )
+    _lock_plan(session, project_id=project.id, plan_id=plan.id)
+    version = _lock_version(session, project_id=project.id, version_id=version.id)
+    event = _lock_trigger_event(session, project_id=project.id, event_id=event.id)
+    installment = _relock_installment(session, installment_id=installment.id)
     if event.status != TRIGGER_EVENT_SUBMITTED:
         raise ConflictError("Only a submitted attestation can be approved.")
+    if version.status != VERSION_ACTIVE:
+        raise ConflictError(
+            "This attestation belongs to a superseded payment-plan version and can no "
+            "longer be approved."
+        )
     permissions.require_different_checker(actor, maker_user_id=event.submitted_by_user_id)
 
     event.status = TRIGGER_EVENT_APPROVED
@@ -1420,6 +1606,7 @@ def reverse_manual_trigger(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     event_id: uuid.UUID,
     reason: str,
     correlation_id: uuid.UUID,
@@ -1433,20 +1620,13 @@ def reverse_manual_trigger(
     """
     permissions.require_plan_approver(actor)
     project = lock_project(session, project.id)
-    event = session.scalars(
-        select(InstallmentTriggerEvent)
-        .where(
-            InstallmentTriggerEvent.id == event_id,
-            InstallmentTriggerEvent.project_id == project.id,
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).first()
-    if event is None:
-        raise NotFoundError("Trigger event not found.")
-    installment, _version, plan = _visible_installment(
-        session, project=project, installment_id=event.installment_id, actor=actor
+    event, installment, version, plan = _visible_trigger_event_for_plan(
+        session, project=project, plan_id=plan_id, event_id=event_id, actor=actor
     )
+    _lock_plan(session, project_id=project.id, plan_id=plan.id)
+    _lock_version(session, project_id=project.id, version_id=version.id)
+    event = _lock_trigger_event(session, project_id=project.id, event_id=event.id)
+    installment = _relock_installment(session, installment_id=installment.id)
     if event.status != TRIGGER_EVENT_APPROVED:
         raise ConflictError("Only an approved attestation can be withdrawn.")
 
@@ -1470,10 +1650,26 @@ def reverse_manual_trigger(
     return event
 
 
+def _relock_installment(session: Session, *, installment_id: uuid.UUID) -> PaymentPlanInstallment:
+    """Re-read an instalment's committed state under the version lock already held."""
+    row = session.scalars(
+        select(PaymentPlanInstallment)
+        .where(PaymentPlanInstallment.id == installment_id)
+        .execution_options(populate_existing=True)
+    ).first()
+    if row is None:
+        raise NotFoundError(_NO_INSTALLMENT)
+    return row
+
+
 def trigger_events_of(
     session: Session, *, installment_id: uuid.UUID
 ) -> list[InstallmentTriggerEvent]:
-    """Every attestation ever made about one instalment, newest first."""
+    """Every attestation ever made about one instalment, newest first.
+
+    Takes no actor: callers reach it only through a loader that has already
+    proved the instalment belongs to a plan this caller may see.
+    """
     return list(
         session.scalars(
             select(InstallmentTriggerEvent)
@@ -1481,6 +1677,51 @@ def trigger_events_of(
             .order_by(InstallmentTriggerEvent.submitted_at.desc())
         )
     )
+
+
+def trigger_events_by_installment(
+    session: Session, *, version_id: uuid.UUID
+) -> dict[uuid.UUID, list[InstallmentTriggerEvent]]:
+    """Every attestation on a version's schedule, grouped by instalment.
+
+    One query for the whole version rather than one per manual instalment. A
+    hundred-row schedule drawn a request at a time is a screen that gets slower
+    the more there is to decide on, which is exactly backwards: the plans with
+    the most pending attestations are the ones an approver opens most.
+    """
+    grouped: dict[uuid.UUID, list[InstallmentTriggerEvent]] = {}
+    for event in session.scalars(
+        select(InstallmentTriggerEvent)
+        .join(
+            PaymentPlanInstallment,
+            PaymentPlanInstallment.id == InstallmentTriggerEvent.installment_id,
+        )
+        .where(PaymentPlanInstallment.payment_plan_version_id == version_id)
+        .order_by(InstallmentTriggerEvent.submitted_at.desc())
+    ):
+        grouped.setdefault(event.installment_id, []).append(event)
+    return grouped
+
+
+def trigger_events_for_installment(
+    session: Session,
+    *,
+    project: Project,
+    plan_id: uuid.UUID,
+    installment_id: uuid.UUID,
+    actor: ActorContext,
+) -> list[InstallmentTriggerEvent]:
+    """One instalment's attestation history, once its parentage is proved.
+
+    The instalment is resolved *through* the plan in the path rather than by
+    its own identifier, so pairing a visible plan with someone else's
+    instalment identifier reads nothing.
+    """
+    permissions.require_plan_reader(actor)
+    installment, _version, _plan = _visible_installment_for_plan(
+        session, project=project, plan_id=plan_id, installment_id=installment_id, actor=actor
+    )
+    return trigger_events_of(session, installment_id=installment.id)
 
 
 # --------------------------------------------------------------------------- #
@@ -1493,6 +1734,7 @@ def set_forecast(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     installment_id: uuid.UUID,
     forecast_due_date: date | None,
     reason: str,
@@ -1506,8 +1748,8 @@ def set_forecast(
     """
     permissions.require_plan_operator(actor)
     project = lock_project(session, project.id)
-    installment, version, plan = _visible_installment(
-        session, project=project, installment_id=installment_id, actor=actor
+    installment, version, plan = _visible_installment_for_plan(
+        session, project=project, plan_id=plan_id, installment_id=installment_id, actor=actor
     )
     if version.status != VERSION_ACTIVE:
         raise ConflictError("Only the active schedule's forecast can be maintained.")
@@ -1541,6 +1783,7 @@ def set_owner(
     *,
     project: Project,
     actor: ActorContext,
+    plan_id: uuid.UUID,
     installment_id: uuid.UUID,
     owner_user_id: uuid.UUID | None,
     correlation_id: uuid.UUID,
@@ -1548,8 +1791,8 @@ def set_owner(
     """Assign who chases an instalment. Operational, not contractual."""
     permissions.require_plan_operator(actor)
     project = lock_project(session, project.id)
-    installment, version, plan = _visible_installment(
-        session, project=project, installment_id=installment_id, actor=actor
+    installment, version, plan = _visible_installment_for_plan(
+        session, project=project, plan_id=plan_id, installment_id=installment_id, actor=actor
     )
     if version.status != VERSION_ACTIVE:
         raise ConflictError("Only the active schedule's assignments can be maintained.")
@@ -1594,10 +1837,11 @@ class RegisterRow:
         "client_display_name",
         "contract_value_covered",
         "currency_id",
+        "effective_date",
         "installment_count",
         "is_reconciled",
-        "next_actual_due_date",
-        "next_forecast_due_date",
+        "next_forecast_date",
+        "next_scheduled_date",
         "plan_id",
         "plan_number",
         "sale_id",
@@ -1616,8 +1860,51 @@ class RegisterRow:
             setattr(self, name, values.get(name))
 
 
+def _current_version_of(versions: list[PaymentPlanVersion]) -> PaymentPlanVersion | None:
+    """The version a reader is shown, chosen from rows already in memory.
+
+    Exactly the precedence :func:`current_version` applies in SQL — the open
+    one, else the standing one, else the most recent history — restated over a
+    list so the register can decide for five hundred plans without asking the
+    database five hundred times. The two must agree, so the ordering rule lives
+    here once and :func:`current_version` defers to it.
+    """
+    ordered = sorted(versions, key=lambda version: version.version_number, reverse=True)
+    open_one = next((version for version in ordered if version.status in VERSION_OPEN), None)
+    if open_one is not None:
+        return open_one
+    standing = next((version for version in ordered if version.status == VERSION_ACTIVE), None)
+    if standing is not None:
+        return standing
+    return next(iter(ordered), None)
+
+
+def _next_on_or_after(dates: list[date], today: date) -> date | None:
+    """The soonest of these dates that has not already passed.
+
+    "Next" means next, so a date in the past is not it. PR-MVP-06 cannot say
+    whether a past instalment was paid, and answering with the oldest date in
+    the schedule would read as an arrears figure — which is precisely the
+    inference this module must not invite.
+    """
+    upcoming = [value for value in dates if value >= today]
+    return min(upcoming) if upcoming else None
+
+
 def plan_register(session: Session, *, project: Project, actor: ActorContext) -> list[RegisterRow]:
     """Every payment plan this caller may see, with its standing schedule.
+
+    Read in a fixed handful of queries rather than a few per plan. The obvious
+    shape — loop the plans, ask each for its current version, then its
+    reconciliation, then its rows — costs about five round trips per plan and
+    loads every schedule twice, because reconciling reads the same instalments
+    the caller then reads again. At the few hundred to few thousand sales this
+    roadmap expects, that is thousands of queries to draw one screen.
+
+    So: plans in one query, their versions in a second, the chosen versions'
+    instalments in a third, and the grouping and totalling done in memory with
+    the same pure function the plan screen uses. Three statements whether the
+    project has one plan or five hundred, and each schedule read once.
 
     Deliberately carries no collected, outstanding or overdue figure. Those are
     PR-MVP-07's to state, and a column of zeroes labelled "paid" would be read
@@ -1634,20 +1921,36 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
     allowed = permissions.visible_sale_ids(session, project_id=project.id, actor=actor)
     if allowed is not None:
         statement = statement.where(PaymentPlan.sale_contract_id.in_(allowed))
+    listed = list(session.execute(statement.order_by(PaymentPlan.plan_number.desc())))
+    if not listed:
+        return []
 
-    rows: list[RegisterRow] = []
-    for plan, sale, unit, client in session.execute(
-        statement.order_by(PaymentPlan.plan_number.desc())
+    plan_ids = [plan.id for plan, _sale, _unit, _client in listed]
+    by_plan: dict[uuid.UUID, list[PaymentPlanVersion]] = {plan_id: [] for plan_id in plan_ids}
+    for version in session.scalars(
+        select(PaymentPlanVersion).where(PaymentPlanVersion.payment_plan_id.in_(plan_ids))
     ):
-        version = current_version(session, plan_id=plan.id)
-        reconciliation = (
-            reconcile_version(session, version=version) if version is not None else None
-        )
-        installments = (
-            installments_of(session, version_id=version.id) if version is not None else []
-        )
-        actual_dates = [row.actual_due_date for row in installments if row.actual_due_date]
-        forecast_dates = [row.forecast_due_date for row in installments if row.forecast_due_date]
+        by_plan[version.payment_plan_id].append(version)
+
+    chosen = {plan_id: _current_version_of(versions) for plan_id, versions in by_plan.items()}
+    version_ids = [version.id for version in chosen.values() if version is not None]
+    by_version: dict[uuid.UUID, list[PaymentPlanInstallment]] = {
+        version_id: [] for version_id in version_ids
+    }
+    if version_ids:
+        for row in session.scalars(
+            select(PaymentPlanInstallment)
+            .where(PaymentPlanInstallment.payment_plan_version_id.in_(version_ids))
+            .order_by(PaymentPlanInstallment.sequence)
+        ):
+            by_version[row.payment_plan_version_id].append(row)
+
+    today = business_today()
+    rows: list[RegisterRow] = []
+    for plan, sale, unit, client in listed:
+        version = chosen.get(plan.id)
+        installments = by_version.get(version.id, []) if version is not None else []
+        reconciliation = reconcile_rows(version, installments) if version is not None else None
         rows.append(
             RegisterRow(
                 plan_id=plan.id,
@@ -1661,6 +1964,7 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
                 version_id=version.id if version else None,
                 version_number=version.version_number if version else None,
                 version_status=version.status if version else None,
+                effective_date=version.effective_date if version else None,
                 currency_id=version.currency_id if version else sale.currency_id,
                 contract_value_covered=(
                     version.contract_value_covered if version else sale.net_contract_price_ex_tax
@@ -1670,8 +1974,12 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
                     reconciliation.scheduled_principal_total if reconciliation else None
                 ),
                 is_reconciled=reconciliation.is_reconciled if reconciliation else False,
-                next_actual_due_date=min(actual_dates) if actual_dates else None,
-                next_forecast_due_date=min(forecast_dates) if forecast_dates else None,
+                next_scheduled_date=_next_on_or_after(
+                    [row.actual_due_date for row in installments if row.actual_due_date], today
+                ),
+                next_forecast_date=_next_on_or_after(
+                    [row.forecast_due_date for row in installments if row.forecast_due_date], today
+                ),
                 awaiting_trigger_count=sum(
                     1 for row in installments if row.trigger_status == TRIGGER_AWAITING
                 ),

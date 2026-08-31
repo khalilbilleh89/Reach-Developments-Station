@@ -1662,11 +1662,70 @@ select.input {
   font-size: var(--text-base);
 }
 
+/* A dialog that asks for several things rather than one still has to fit a
+   phone, so it grows only as far as the viewport allows. */
+.dialog-wide {
+  max-width: 34rem;
+}
+
+.dialog-description {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.dialog .field + .field {
+  margin-top: var(--space-3);
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+/* --------------------------------------------------------------------------
+ * Attestations on a contingent instalment
+ * ------------------------------------------------------------------------ */
+
+.attestation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background-color: var(--surface-sunken);
+}
+
+.attestation + .attestation {
+  margin-top: var(--space-2);
+}
+
+.attestation-reason {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.contingent-row {
+  padding: var(--space-3) 0;
+}
+
+.contingent-row + .contingent-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.contingent-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-2);
 }
 
 /* --------------------------------------------------------------------------

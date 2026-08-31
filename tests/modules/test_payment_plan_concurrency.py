@@ -108,6 +108,7 @@ def test_two_revisions_cannot_take_the_same_version_number(
             plan_id=uuid.UUID(plan_id),
             change_reason="Concurrent revision",
             reservation_treatment=None,
+            effective_date=None,
             correlation_id=uuid.uuid4(),
         )
         session.commit()
@@ -170,6 +171,7 @@ def test_only_one_version_survives_a_race_to_activate(
             session,
             project=_project(session, project_id),
             actor=actor,
+            plan_id=uuid.UUID(plan_id),
             version_id=uuid.UUID(second_version),
             correlation_id=uuid.uuid4(),
         )
@@ -246,7 +248,7 @@ def test_a_schedule_replacement_and_a_submission_cannot_interleave(
     when it proceeds it reconciles the committed schedule — so it either sees
     the whole replacement or the whole original.
     """
-    _plan_id, version_id = reconciled_plan
+    plan_id, version_id = reconciled_plan
     actor = _actor(collections_officer)
 
     def submit(session: Session) -> object:
@@ -254,6 +256,7 @@ def test_a_schedule_replacement_and_a_submission_cannot_interleave(
             session,
             project=_project(session, project_id),
             actor=actor,
+            plan_id=uuid.UUID(plan_id),
             version_id=uuid.UUID(version_id),
             correlation_id=uuid.uuid4(),
         )

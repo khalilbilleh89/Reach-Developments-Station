@@ -600,3 +600,125 @@ def test_only_one_attestation_may_stand_at_a_time(
     )
     assert second.status_code == 409
     assert "already outstanding" in second.json()["detail"]
+
+
+# --------------------------------------------------------------------------- #
+# When an attestation may be made, and how long it stays good for
+# --------------------------------------------------------------------------- #
+
+
+def test_an_attestation_cannot_be_dated_in_the_future(
+    collections_client: TestClient, cfo_client: TestClient, project_id: str, plan_id: str
+) -> None:
+    """An attestation says an event happened. Tomorrow it has not.
+
+    Accepting a future date would make an instalment contractually due for
+    something nobody has witnessed, and would leave the system needing a
+    scheduler to later decide the day had come. Instalments already carry a
+    forecast date for an event still expected; that is the field for this.
+    """
+    installment_id = _manual_plan(collections_client, cfo_client, project_id, plan_id)
+    tomorrow = date.today() + timedelta(days=1)
+    refused = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/installments/{installment_id}/manual-trigger",
+        json={
+            "event_date": tomorrow.isoformat(),
+            "evidence_reference": "LENDER-FUTURE",
+            "reason": "Expected drawdown",
+        },
+    )
+    assert refused.status_code == 422
+    assert tomorrow.isoformat() in refused.json()["detail"]
+
+    # Nothing was written: no attestation, and the instalment still waits.
+    history = collections_client.get(
+        f"{plans_url(project_id)}/{plan_id}/installments/{installment_id}/trigger-events"
+    )
+    assert history.json() == []
+    row = _rows_by_sequence(plan_detail(collections_client, project_id, plan_id))[2]
+    assert row["trigger_status"] == "awaiting_trigger"
+    assert row["actual_due_date"] is None
+
+
+def test_an_attestation_may_be_dated_today_or_backdated(
+    collections_client: TestClient, cfo_client: TestClient, project_id: str, plan_id: str
+) -> None:
+    """Events are often recorded a few days after they happen, and the date
+    that matters is the day it happened."""
+    installment_id = _manual_plan(collections_client, cfo_client, project_id, plan_id)
+    yesterday = date.today() - timedelta(days=1)
+    submitted = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/installments/{installment_id}/manual-trigger",
+        json={
+            "event_date": yesterday.isoformat(),
+            "evidence_reference": "LENDER-88",
+            "reason": "Drawdown confirmation received",
+        },
+    )
+    assert submitted.status_code == 201, submitted.text
+    assert submitted.json()["event_date"] == yesterday.isoformat()
+
+    approved = cfo_client.post(
+        f"{plans_url(project_id)}/{plan_id}/trigger-events/{submitted.json()['id']}/approve",
+        json={},
+    )
+    assert approved.status_code == 200, approved.text
+    row = _rows_by_sequence(plan_detail(collections_client, project_id, plan_id))[2]
+    assert row["actual_due_date"] == yesterday.isoformat()
+
+
+def test_an_attestation_cannot_be_approved_after_its_version_is_superseded(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    plan_id: str,
+) -> None:
+    """Submission and approval are separated in time, and a revision can be
+    activated in between.
+
+    Approving then would make an instalment due on a schedule the sale is no
+    longer running on: a date written into terms nobody is being held to, on a
+    version whose whole point is that it has been replaced. Submission already
+    required the active version; approval has to require it again, because by
+    then it may be a different one.
+    """
+    installment_id = _manual_plan(collections_client, cfo_client, project_id, plan_id)
+    event_id = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/installments/{installment_id}/manual-trigger",
+        json={
+            "event_date": "2026-02-20",
+            "evidence_reference": "LENDER-88",
+            "reason": "Drawdown confirmed",
+        },
+    ).json()["id"]
+
+    # A revision overtakes it before the CFO gets to the attestation.
+    revised = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Renegotiated timing"},
+    )
+    assert revised.status_code == 201, revised.text
+    second = revised.json()["version"]["id"]
+    _activate(collections_client, cfo_client, project_id, plan_id, second)
+
+    refused = cfo_client.post(
+        f"{plans_url(project_id)}/{plan_id}/trigger-events/{event_id}/approve", json={}
+    )
+    assert refused.status_code == 409
+    assert "superseded" in refused.json()["detail"]
+
+    # The attestation stands unchanged, and made nothing due.
+    history = collections_client.get(
+        f"{plans_url(project_id)}/{plan_id}/installments/{installment_id}/trigger-events"
+    ).json()
+    assert [event["status"] for event in history] == ["submitted"]
+    assert history[0]["approved_by_user_id"] is None
+    assert history[0]["approved_at"] is None
+
+    superseded = collections_client.get(
+        f"{plans_url(project_id)}/{plan_id}/versions/"
+        f"{collections_client.get(f'{plans_url(project_id)}/{plan_id}').json()['versions'][1]['id']}"
+    ).json()
+    old_row = {row["sequence"]: row for row in superseded["installments"]}[2]
+    assert old_row["trigger_status"] == "awaiting_trigger"
+    assert old_row["actual_due_date"] is None

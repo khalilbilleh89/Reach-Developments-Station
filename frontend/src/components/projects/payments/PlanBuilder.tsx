@@ -12,6 +12,7 @@ import {
   EmptyState,
   Field,
   FormActions,
+  FormDialog,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -22,7 +23,7 @@ import {
   SubPanel,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
+import { businessDate, money, todayISO } from "@/lib/format";
 import { ReconciliationStrip } from "@/components/projects/payments/ReconciliationStrip";
 import {
   ScheduleEditor,
@@ -41,6 +42,26 @@ import {
   versionLabel,
   versionTone,
 } from "@/components/projects/payments/labels";
+
+/** Triggers the calendar settles on its own; everything else waits on an event. */
+const DATE_TRIGGERS = new Set([
+  "fixed_date",
+  "days_after_spa",
+  "recurring_monthly",
+  "recurring_quarterly",
+]);
+
+/** What each attestation state is called in front of somebody deciding on it. */
+const ATTESTATION_LABELS: Record<string, string> = {
+  submitted: "Awaiting approval",
+  approved: "Approved",
+  reversed: "Withdrawn",
+};
+
+/** A blank attestation. The date is left to the person who witnessed the event. */
+function emptyAttestation() {
+  return { event_date: "", evidence_reference: "", reason: "" };
+}
 
 type Ask = {
   title: string;
@@ -90,6 +111,10 @@ export function PlanBuilder({
   });
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [ask, setAsk] = useState<Ask | null>(null);
+  const [attesting, setAttesting] = useState<PlanInstallment | null>(null);
+  const [attestation, setAttestation] = useState(emptyAttestation());
+  const [revising, setRevising] = useState(false);
+  const [revision, setRevision] = useState({ change_reason: "", effective_date: "" });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -541,21 +566,10 @@ export function PlanBuilder({
                 <>
                   <Button
                     disabled={busy}
-                    onClick={() =>
-                      askThen(
-                        {
-                          title: "Revise this plan",
-                          label: "Why are the terms changing?",
-                          hint: "The standing schedule keeps governing until the revision is activated.",
-                          confirmLabel: "Open a revision",
-                        },
-                        (reason) =>
-                          paymentPlans.createVersion(projectId, planId, {
-                            change_reason: reason,
-                          }),
-                        "Revision opened. The current schedule still governs the sale.",
-                      )
-                    }
+                    onClick={() => {
+                      setRevision({ change_reason: "", effective_date: todayISO() });
+                      setRevising(true);
+                    }}
                   >
                     Revise
                   </Button>
@@ -585,13 +599,32 @@ export function PlanBuilder({
 
           {version.status === "active" ? (
             <ContingentSection
-              projectId={projectId}
-              planId={planId}
               installments={current.installments}
               canPrepare={canPrepare}
               canApprove={canApprove}
               busy={busy}
-              onAsk={askThen}
+              onAttest={(row) => {
+                setAttestation(emptyAttestation());
+                setAttesting(row);
+              }}
+              onApprove={(eventId) =>
+                void run(
+                  () => paymentPlans.approveManualTrigger(projectId, planId, eventId),
+                  "Attestation approved. The instalment is now due.",
+                )
+              }
+              onReverse={(eventId) =>
+                askThen(
+                  {
+                    title: "Withdraw this attestation",
+                    label: "Why is it being withdrawn?",
+                    hint: "The attestation stays on the record. The instalment goes back to waiting.",
+                    confirmLabel: "Withdraw",
+                  },
+                  (reason) => paymentPlans.reverseManualTrigger(projectId, planId, eventId, reason),
+                  "Withdrawn. The instalment is waiting on its trigger again.",
+                )
+              }
             />
           ) : null}
         </>
@@ -653,6 +686,117 @@ export function PlanBuilder({
         </section>
       ) : null}
 
+      {attesting ? (
+        <FormDialog
+          title={`Attest that ${attesting.label} occurred`}
+          description="This records an event that has already happened. An Approver / CFO must sanction it before the amount falls due."
+          confirmLabel="Submit attestation"
+          busy={busy}
+          disabled={
+            !attestation.event_date ||
+            !attestation.evidence_reference.trim() ||
+            !attestation.reason.trim()
+          }
+          onCancel={() => setAttesting(null)}
+          onSubmit={() => {
+            const row = attesting;
+            const entered = attestation;
+            setAttesting(null);
+            void run(
+              () =>
+                paymentPlans.submitManualTrigger(projectId, planId, row.id, {
+                  event_date: entered.event_date,
+                  evidence_reference: entered.evidence_reference.trim(),
+                  reason: entered.reason.trim(),
+                }),
+              "Attestation submitted for approval.",
+            );
+          }}
+        >
+          <Field
+            label="Event date"
+            hint="The day it actually happened. It cannot be in the future."
+          >
+            <input
+              className="input"
+              type="date"
+              required
+              max={todayISO()}
+              value={attestation.event_date}
+              onChange={(event) =>
+                setAttestation({ ...attestation, event_date: event.target.value })
+              }
+            />
+          </Field>
+          <Field label="Evidence reference" hint="The document or record that proves it.">
+            <input
+              className="input"
+              required
+              value={attestation.evidence_reference}
+              onChange={(event) =>
+                setAttestation({ ...attestation, evidence_reference: event.target.value })
+              }
+            />
+          </Field>
+          <Field label="Reason" hint="What an approver needs to know to sanction this.">
+            <input
+              className="input"
+              required
+              value={attestation.reason}
+              onChange={(event) => setAttestation({ ...attestation, reason: event.target.value })}
+            />
+          </Field>
+        </FormDialog>
+      ) : null}
+
+      {revising ? (
+        <FormDialog
+          title="Revise this plan"
+          description="The standing schedule keeps governing the sale until the revision is approved and activated."
+          confirmLabel="Open a revision"
+          busy={busy}
+          disabled={!revision.change_reason.trim() || !revision.effective_date}
+          onCancel={() => setRevising(false)}
+          onSubmit={() => {
+            const entered = revision;
+            setRevising(false);
+            void run(
+              () =>
+                paymentPlans.createVersion(projectId, planId, {
+                  change_reason: entered.change_reason.trim(),
+                  effective_date: entered.effective_date,
+                }),
+              "Revision opened. The current schedule still governs the sale.",
+            );
+          }}
+        >
+          <Field label="Why are the terms changing?">
+            <input
+              className="input"
+              required
+              value={revision.change_reason}
+              onChange={(event) =>
+                setRevision({ ...revision, change_reason: event.target.value })
+              }
+            />
+          </Field>
+          <Field
+            label="Takes effect"
+            hint="A future date can be approved now and activated when it arrives."
+          >
+            <input
+              className="input"
+              type="date"
+              required
+              value={revision.effective_date}
+              onChange={(event) =>
+                setRevision({ ...revision, effective_date: event.target.value })
+              }
+            />
+          </Field>
+        </FormDialog>
+      ) : null}
+
       {ask ? (
         <PromptDialog
           title={ask.title}
@@ -669,90 +813,137 @@ export function PlanBuilder({
 }
 
 /**
- * The instalments still waiting on something, and what can be done about them.
+ * The contingent instalments, and the attestations made about them.
  *
  * A construction milestone is listed but has no action: PR-MVP-09 certifies
  * those, and offering a button that claimed to would be the system inventing a
  * certificate.
+ *
+ * The attestations arrive on the instalment rows themselves, from the same
+ * response that drew the schedule. That is the only reason an approver can see
+ * a whole plan's pending decisions at once without the screen making a request
+ * per instalment — which on a hundred-row schedule would make the plans with
+ * the most to decide the slowest to open.
  */
 function ContingentSection({
-  projectId,
-  planId,
   installments,
   canPrepare,
   canApprove,
   busy,
-  onAsk,
+  onAttest,
+  onApprove,
+  onReverse,
 }: {
-  projectId: string;
-  planId: string;
   installments: PlanInstallment[];
   canPrepare: boolean;
   canApprove: boolean;
   busy: boolean;
-  onAsk: (
-    prompt: Omit<Ask, "run">,
-    action: (value: string) => Promise<unknown>,
-    done: string,
-  ) => void;
+  onAttest: (row: PlanInstallment) => void;
+  onApprove: (eventId: string) => void;
+  onReverse: (eventId: string) => void;
 }) {
-  const waiting = installments.filter((row) => row.trigger_status === "awaiting_trigger");
-  if (waiting.length === 0) return null;
+  const contingent = installments.filter(
+    (row) => !DATE_TRIGGERS.has(row.trigger_type) || row.trigger_events.length > 0,
+  );
+  if (contingent.length === 0) return null;
 
   return (
     <section>
       <SectionHeader
-        title="Awaiting a trigger"
-        description="These amounts are contracted but not yet due. A forecast date does not make one due."
+        title="Waiting on an event"
+        description="These amounts are contracted. What makes each one due has not happened yet, and a forecast date is not the event."
       />
-      <ul className="chip-list">
-        {waiting.map((row) => (
-          <li key={row.id} className="chip">
-            <span className="chip-label">#{row.sequence}</span>
-            <strong>{row.label}</strong>
-            <span className="chip-label">{triggerLabel(row.trigger_type)}</span>
-            {row.trigger_type === "manual_approved_event" && canPrepare ? (
-              <Button
-                small
-                variant="quiet"
-                disabled={busy}
-                onClick={() =>
-                  onAsk(
-                    {
-                      title: `Attest that ${row.label} occurred`,
-                      label: "Reference for the evidence",
-                      hint: "An Approver / CFO must sanction it before the amount falls due.",
-                      confirmLabel: "Submit attestation",
-                    },
-                    (reference) =>
-                      paymentPlans.submitManualTrigger(projectId, planId, row.id, {
-                        event_date: new Date().toISOString().slice(0, 10),
-                        evidence_reference: reference,
-                        reason: `Attested for ${row.label}`,
-                      }),
-                    "Attestation submitted for approval.",
-                  )
-                }
-              >
-                Attest
-              </Button>
+      {contingent.map((row) => {
+        const standing = row.trigger_events.find((event) => event.status === "submitted");
+        return (
+          <div key={row.id} className="contingent-row">
+            <div className="contingent-head">
+              <span className="chip-label">#{row.sequence}</span>
+              <strong>{row.label}</strong>
+              <span className="chip-label">{triggerLabel(row.trigger_type)}</span>
+              {row.trigger_status === "triggered" ? (
+                <Badge tone="success">Due {businessDate(row.actual_due_date)}</Badge>
+              ) : (
+                <Badge tone="warning">Awaiting its trigger</Badge>
+              )}
+              {row.trigger_type === "construction_milestone" ? (
+                <span className="chip-label">Awaiting certification</span>
+              ) : null}
+              {row.trigger_type === "manual_approved_event" &&
+              canPrepare &&
+              !standing &&
+              row.trigger_status !== "triggered" ? (
+                <Button small variant="quiet" disabled={busy} onClick={() => onAttest(row)}>
+                  Attest
+                </Button>
+              ) : null}
+            </div>
+
+            {row.trigger_events.map((event) => (
+              <div key={event.id} className="attestation">
+                <Badge
+                  tone={
+                    event.status === "approved"
+                      ? "success"
+                      : event.status === "reversed"
+                        ? "neutral"
+                        : "warning"
+                  }
+                >
+                  {ATTESTATION_LABELS[event.status] ?? event.status}
+                </Badge>
+                <span className="chip-label">Occurred</span>
+                <strong className="mono nowrap">{businessDate(event.event_date)}</strong>
+                <span className="chip-label">Evidence</span>
+                <strong className="mono">{event.evidence_reference}</strong>
+                <p className="attestation-reason">{event.reason}</p>
+                {event.status === "reversed" && event.reversal_reason ? (
+                  <p className="attestation-reason">Withdrawn: {event.reversal_reason}</p>
+                ) : null}
+                {canApprove && event.status === "submitted" ? (
+                  <Button
+                    small
+                    variant="primary"
+                    disabled={busy}
+                    onClick={() => onApprove(event.id)}
+                  >
+                    Approve trigger
+                  </Button>
+                ) : null}
+                {canApprove && event.status === "approved" ? (
+                  <Button
+                    small
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => onReverse(event.id)}
+                  >
+                    Reverse
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+
+            {row.trigger_type === "manual_approved_event" &&
+            row.trigger_events.length === 0 &&
+            !canPrepare ? (
+              <p className="footnote">
+                Collections attests that this event occurred; an Approver / CFO sanctions it.
+              </p>
             ) : null}
-            {row.trigger_type === "construction_milestone" ? (
-              <span className="chip-label">Awaiting certification</span>
+            {standing && !canApprove ? (
+              <p className="footnote">
+                Submitted, and waiting on an Approver / CFO. Nothing is due until they sanction
+                it.
+              </p>
             ) : null}
-          </li>
-        ))}
-      </ul>
+          </div>
+        );
+      })}
       <p className="footnote">
         A construction milestone becomes due when construction certifies it, which this system
         does not yet record. Handover and title transfer resolve from the sale itself — use
         Refresh triggers once the event has happened.
       </p>
-      {canApprove ? (
-        <p className="footnote">
-          Attestations awaiting your decision appear on the instalment they belong to.
-        </p>
-      ) : null}
     </section>
   );
 }

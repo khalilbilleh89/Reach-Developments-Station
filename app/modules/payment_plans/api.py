@@ -16,6 +16,11 @@ and every one of those keeps the record of what was previously believed.
 Triggers are resolved only when somebody asks. There is no scheduler, no
 background worker and no GET that quietly writes: money falling due is an event
 an operator must be able to point at in an audit trail.
+
+Every nested route passes its ``plan_id`` down to the service rather than
+letting the child identifier stand on its own. ``/plan-A/installments/row-B``
+is a claim that B belongs to A, and the service refuses the pair — with the
+same 404 it gives for a row that does not exist — when it does not.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.inventory.models import Unit
 from app.modules.payment_plans import service
 from app.modules.payment_plans.models import (
+    InstallmentTriggerEvent,
     PaymentPlanInstallment,
     PaymentPlanVersion,
 )
@@ -62,7 +68,10 @@ from app.modules.sales.models import Client, SaleContract
 router = APIRouter(prefix="/projects/{project_id}/payment-plans", tags=["payment plans"])
 
 
-def _installment_read(row: PaymentPlanInstallment) -> InstallmentRead:
+def _installment_read(
+    row: PaymentPlanInstallment,
+    events: list[InstallmentTriggerEvent] | None = None,
+) -> InstallmentRead:
     """Serialise one instalment, with its buyer total derived on the server."""
     return InstallmentRead(
         id=row.id,
@@ -84,6 +93,7 @@ def _installment_read(row: PaymentPlanInstallment) -> InstallmentRead:
         total_scheduled_amount=row.principal_amount + row.tax_amount + row.fee_amount,
         trigger_status=row.trigger_status,
         owner_user_id=row.owner_user_id,
+        trigger_events=[TriggerEventRead.model_validate(event) for event in events or []],
     )
 
 
@@ -110,13 +120,19 @@ def _reconciliation_read(reconciliation: Reconciliation) -> ReconciliationRead:
 
 
 def _version_detail(session: DbSession, version: PaymentPlanVersion) -> VersionDetailRead:
+    """One version with its schedule, its attestations and its reconciliation.
+
+    The attestations arrive grouped from a single query rather than a request
+    per manual instalment: an approver opens this screen precisely because
+    there is something on it to decide, and a schedule should not get slower
+    the more of those it has.
+    """
+    rows = service.installments_of(session, version_id=version.id)
+    events = service.trigger_events_by_installment(session, version_id=version.id)
     return VersionDetailRead(
         version=VersionRead.model_validate(version),
-        installments=[
-            _installment_read(row)
-            for row in service.installments_of(session, version_id=version.id)
-        ],
-        reconciliation=_reconciliation_read(service.reconcile_version(session, version=version)),
+        installments=[_installment_read(row, events.get(row.id)) for row in rows],
+        reconciliation=_reconciliation_read(service.reconcile_rows(version, rows)),
     )
 
 
@@ -157,6 +173,7 @@ def create_plan(
         reservation_treatment=body.reservation_treatment,
         origin_type=body.origin_type,
         source_version_id=body.source_version_id,
+        effective_date=body.effective_date,
         notes=body.notes,
         correlation_id=actor.correlation_id,
     )
@@ -292,6 +309,7 @@ def create_version(
         plan_id=plan_id,
         change_reason=body.change_reason,
         reservation_treatment=body.reservation_treatment,
+        effective_date=body.effective_date,
         correlation_id=actor.correlation_id,
     )
     session.commit()
@@ -311,11 +329,9 @@ def read_version(
     session: DbSession,
     actor: ActiveActor,
 ) -> VersionDetailRead:
-    version, plan = service.get_version(
-        session, project=project, version_id=version_id, actor=actor
+    version, _plan = service.get_version(
+        session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
     )
-    if plan.id != plan_id:
-        raise NotFoundError("Payment plan version not found.")
     return _version_detail(session, version)
 
 
@@ -355,6 +371,7 @@ def write_schedule(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         version_id=version_id,
         rows=rows,
         allocation_mode=body.allocation_mode,
@@ -382,6 +399,7 @@ def submit_version(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         version_id=version_id,
         correlation_id=actor.correlation_id,
     )
@@ -407,6 +425,7 @@ def approve_version(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         version_id=version_id,
         reason=body.reason,
         correlation_id=actor.correlation_id,
@@ -433,6 +452,7 @@ def reject_version(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         version_id=version_id,
         reason=body.reason,
         correlation_id=actor.correlation_id,
@@ -458,6 +478,7 @@ def activate_version(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         version_id=version_id,
         correlation_id=actor.correlation_id,
     )
@@ -519,6 +540,7 @@ def set_forecast(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         installment_id=installment_id,
         forecast_due_date=body.forecast_due_date,
         reason=body.reason,
@@ -546,6 +568,7 @@ def set_owner(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         installment_id=installment_id,
         owner_user_id=body.owner_user_id,
         correlation_id=actor.correlation_id,
@@ -567,11 +590,15 @@ def list_trigger_events(
     session: DbSession,
     actor: ActiveActor,
 ) -> list[TriggerEventRead]:
-    service.permissions.require_plan_reader(actor)
-    service.get_plan(session, project=project, plan_id=plan_id, actor=actor)
     return [
         TriggerEventRead.model_validate(event)
-        for event in service.trigger_events_of(session, installment_id=installment_id)
+        for event in service.trigger_events_for_installment(
+            session,
+            project=project,
+            plan_id=plan_id,
+            installment_id=installment_id,
+            actor=actor,
+        )
     ]
 
 
@@ -593,6 +620,7 @@ def submit_manual_trigger(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         installment_id=installment_id,
         event_date=body.event_date,
         evidence_reference=body.evidence_reference,
@@ -620,6 +648,7 @@ def approve_manual_trigger(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         event_id=event_id,
         correlation_id=actor.correlation_id,
     )
@@ -645,6 +674,7 @@ def reverse_manual_trigger(
         session,
         project=project,
         actor=actor,
+        plan_id=plan_id,
         event_id=event_id,
         reason=body.reason,
         correlation_id=actor.correlation_id,

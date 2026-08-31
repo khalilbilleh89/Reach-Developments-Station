@@ -75,6 +75,10 @@ class PlanCreateRequest(StrictRequest):
     #: The approved, active or superseded version this schedule is copied from.
     #: Its shape travels; its amounts are re-derived against this sale.
     source_version_id: uuid.UUID | None = None
+    #: The contractual date this schedule starts governing from. Omitted means
+    #: today; a future date produces an approved schedule that cannot be
+    #: activated until it arrives.
+    effective_date: date | None = None
     notes: Annotated[str, Field(max_length=2000)] | None = None
 
 
@@ -102,6 +106,8 @@ class VersionCreateRequest(StrictRequest):
 
     change_reason: Annotated[str, Field(min_length=1, max_length=500)]
     reservation_treatment: ReservationTreatment | None = None
+    #: When the revised terms take effect. Omitted means today.
+    effective_date: date | None = None
 
 
 class VersionRead(BaseModel):
@@ -192,6 +198,24 @@ class ScheduleWriteRequest(StrictRequest):
     installments: Annotated[list[InstallmentWrite], Field(min_length=1, max_length=600)]
 
 
+class TriggerEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    installment_id: uuid.UUID
+    event_date: date
+    evidence_reference: str
+    reason: str
+    status: TriggerEventStatus
+    submitted_by_user_id: uuid.UUID
+    submitted_at: datetime
+    approved_by_user_id: uuid.UUID | None
+    approved_at: datetime | None
+    reversed_by_user_id: uuid.UUID | None
+    reversed_at: datetime | None
+    reversal_reason: str | None
+
+
 class InstallmentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -218,6 +242,10 @@ class InstallmentRead(BaseModel):
     total_scheduled_amount: DecimalStr
     trigger_status: TriggerStatus
     owner_user_id: uuid.UUID | None
+    #: Every attestation ever made about this instalment, newest first. Carried
+    #: on the row rather than fetched per instalment, so an approver opening a
+    #: hundred-row schedule makes one request and not a hundred.
+    trigger_events: list[TriggerEventRead] = []
 
 
 class ForecastRequest(StrictRequest):
@@ -341,24 +369,6 @@ class ReversalRequest(StrictRequest):
     reason: Annotated[str, Field(min_length=1, max_length=500)]
 
 
-class TriggerEventRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    installment_id: uuid.UUID
-    event_date: date
-    evidence_reference: str
-    reason: str
-    status: TriggerEventStatus
-    submitted_by_user_id: uuid.UUID
-    submitted_at: datetime
-    approved_by_user_id: uuid.UUID | None
-    approved_at: datetime | None
-    reversed_by_user_id: uuid.UUID | None
-    reversed_at: datetime | None
-    reversal_reason: str | None
-
-
 class RefreshResultRead(BaseModel):
     """What an explicit trigger refresh resolved, and what is still waiting."""
 
@@ -376,7 +386,9 @@ class RegisterRowRead(BaseModel):
 
     Carries no collected, outstanding or overdue figure: those are PR-MVP-07's
     to state, and a column of zeroes labelled "paid" reads as a fact about
-    money rather than the absence of one.
+    money rather than the absence of one. For the same reason the forward-
+    looking dates are named for the schedule rather than for collection: what
+    is scheduled next, not what is owed next.
     """
 
     plan_id: uuid.UUID
@@ -390,13 +402,17 @@ class RegisterRowRead(BaseModel):
     version_id: uuid.UUID | None
     version_number: int | None
     version_status: VersionStatus | None
+    effective_date: date | None
     currency_id: uuid.UUID
     contract_value_covered: DecimalStr
     installment_count: int
     scheduled_principal_total: DecimalStr | None
     is_reconciled: bool
-    next_actual_due_date: date | None
-    next_forecast_due_date: date | None
+    #: The soonest scheduled date still to come, and the soonest forecast date
+    #: still to come. Both look forward only: PR-MVP-06 cannot say whether a
+    #: date already past was paid, so surfacing one would read as arrears.
+    next_scheduled_date: date | None
+    next_forecast_date: date | None
     awaiting_trigger_count: int
     approved_by_user_id: uuid.UUID | None
 

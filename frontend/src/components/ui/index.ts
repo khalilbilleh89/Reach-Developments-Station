@@ -16,6 +16,7 @@ export { Drawer } from "./Drawer";
 export { KeyValue, KeyValueGrid, Stat, StatRow, TableScroll } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
 export { Field, FilterBar, Form, FormActions, StickyActions } from "./Form";
+export { FormDialog } from "./FormDialog";
 export { PageHeader, SectionHeader } from "./Headers";
 export { PromptDialog } from "./PromptDialog";
 export { Icon } from "./Icon";
