@@ -9,6 +9,13 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Complete (PR-MVP-00 through PR-MVP-06) |     7 |
 | Remaining                             |     5 |
 
+Engineering PRs are counted separately and never renumber the functional
+sequence:
+
+| Engineering                | State |
+| -------------------------- | ----- |
+| PR-ENG-01 — Two-Speed CI   | ⚙️    |
+
 Branch naming follows the roadmap:
 
 ```text
@@ -210,6 +217,27 @@ tokens, CI, PR template, and Render build/start separation.
 >
 > PR-MVP-05's deposit and first-payment gates are attestations that evidence
 > exists. They are never subtracted from a schedule and never read as a receipt.
+
+## PR-ENG-01 — Two-Speed CI ⚙️
+
+Horizontal engineering hardening. **Does not change the functional MVP count.**
+
+- draft pull requests run `Backend Fast`: structural checks plus the tests the
+  change can plausibly break
+- pull requests marked ready for review run `Backend`: the entire suite, on the
+  exact merge candidate
+- explicit domain map with downstream closure, in one standard-library file
+- unknown module, shared fixture, `app/core/` or access-layer change falls back
+  to the full suite and says why
+- selector regression tests, including a guard that no test file is unclaimed
+- no migration, no dependency, no runtime behaviour change
+
+> **Why it sits here.** At roughly fifteen hundred backend tests the full suite
+> takes about forty-five minutes, and running it on every push made a one-line
+> correction cost the same as a whole feature. Merge safety is unchanged: the
+> full suite is still mandatory before merge, and any commit pushed after a
+> pull request is marked ready re-runs it, so the green tick always belongs to
+> the exact commit somebody would merge.
 
 ## PR-MVP-07 — Collections
 
