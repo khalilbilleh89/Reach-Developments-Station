@@ -114,6 +114,7 @@ there is no permission table and no policy language.
 │       ├── inventory/          phases, buildings, floors, units, areas, custom fields
 │       ├── pricing/            pricing policy, price versions, premiums, benchmarks
 │       ├── sales/              clients, reservations, contracts, legal, cancellation, handover
+│       ├── payment_plans/      schedules, versions, instalments, triggers
 │       └── audit/              append-only governance history
 ├── frontend/                   Next.js static export
 │   ├── src/app/                login, projects workspace, settings shell, design tokens

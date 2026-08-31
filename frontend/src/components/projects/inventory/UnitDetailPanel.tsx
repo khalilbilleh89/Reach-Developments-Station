@@ -413,7 +413,9 @@ export function UnitDetailPanel({
         </>
       ) : null}
 
-      {section === "commercial" ? <UnitCommitment commitment={commitment} /> : null}
+      {section === "commercial" ? (
+        <UnitCommitment projectId={projectId} commitment={commitment} />
+      ) : null}
 
       {section === "history" ? <UnitHistory history={history} /> : null}
     </Drawer>

@@ -98,6 +98,10 @@ def postgres() -> None:
 #: is reference data, not test state.
 _DATA_TABLES = (
     "audit_events",
+    "installment_trigger_events",
+    "payment_plan_installments",
+    "payment_plan_versions",
+    "payment_plans",
     "user_sessions",
     "user_roles",
     "unit_custom_field_values",

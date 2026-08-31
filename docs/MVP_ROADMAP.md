@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-05) |     6 |
-| Remaining                             |     6 |
+| Complete (PR-MVP-00 through PR-MVP-06) |     7 |
+| Remaining                             |     5 |
 
 Branch naming follows the roadmap:
 
@@ -180,18 +180,36 @@ tokens, CI, PR template, and Render build/start separation.
 > contract carry the terms that were agreed; scheduling the money is PR-MVP-06,
 > collecting it is PR-MVP-07, and what the unit cost to build is PR-MVP-08.
 
-## PR-MVP-06 — Payment Plans
+## PR-MVP-06 — Payment Plans ✅
 
-- payment-plan header
+- payment-plan header, one per sale contract
+- plan versions, one governing at a time
 - unlimited installment rows
-- plan versions
 - fixed-date triggers
-- relative-date triggers
-- recurring triggers
-- milestone triggers
-- handover/title triggers
-- total % / amount reconciliation
-- plan approval
+- days-after-SPA triggers
+- recurring monthly and quarterly triggers
+- construction-milestone trigger definitions
+- handover and title-transfer triggers
+- manually approved trigger events, maker/checker
+- exact principal, percentage, tax, buyer-fee and buyer-total reconciliation
+- plan approval and activation
+- payment plan builder, project register, deal file and Unit 360 integration
+
+> **Where the boundary sits.** PR-MVP-06 records what the buyer is contractually
+> scheduled to pay, how much, when, and which event makes each amount due. It
+> records nothing about money arriving: there is no receipt, no allocation, no
+> paid or outstanding balance and no aging anywhere in the schema, because that
+> is PR-MVP-07's truth to state.
+>
+> Three distinctions this PR exists to keep, and that later work must not
+> collapse. A signed contract for 220,000 is not a payment plan. A plan
+> scheduling 220,000 is not 220,000 collected. And a milestone **forecast** is
+> not a certified milestone — a construction-milestone installment stays
+> awaiting its trigger however long its forecast date has passed, enforced by a
+> database CHECK as well as by the service, until PR-MVP-09 can certify it.
+>
+> PR-MVP-05's deposit and first-payment gates are attestations that evidence
+> exists. They are never subtracted from a schedule and never read as a receipt.
 
 ## PR-MVP-07 — Collections
 

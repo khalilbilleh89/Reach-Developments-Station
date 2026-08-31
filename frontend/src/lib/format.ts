@@ -89,3 +89,22 @@ export function percent(fraction: string | null | undefined): string {
   const rest = padded.slice(point).replace(/0+$/, "");
   return `${sign}${whole}${rest ? `.${rest}` : ""}%`;
 }
+
+/**
+ * Today, as the calendar date the person in front of the screen would name.
+ *
+ * `new Date().toISOString().slice(0, 10)` is the obvious way to do this and it
+ * is wrong: `toISOString` converts to UTC first, so anyone east of Greenwich
+ * late in the evening — or west of it early in the morning — gets yesterday or
+ * tomorrow. For a business date that difference is not cosmetic; it is the
+ * wrong day written onto a contractual record.
+ *
+ * The local components are read straight off the Date and padded, so the
+ * result is the date on the wall behind the user.
+ */
+export function todayISO(): string {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}

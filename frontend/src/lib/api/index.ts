@@ -23,6 +23,9 @@ import type {
   LandParcel,
   MarketBenchmark,
   Page,
+  PaymentPlanDetail,
+  PlanRegister,
+  PlanVersionDetail,
   Permit,
   PermitRegister,
   PermitStatusEvent,
@@ -56,8 +59,11 @@ import type {
   LegalTimeline,
   SalesPolicy,
   SalesRegister,
+  InstallmentTriggerEvent,
+  SeriesPreview,
   ShareReconciliation,
   SubAsset,
+  TriggerRefreshResult,
   TaxRule,
   Unit,
   UnitPricing,
@@ -687,4 +693,106 @@ export const sales = {
     ),
   completeHandover: (projectId: string, handoverId: string, body: Record<string, unknown>) =>
     post<HandoverDetail>(`/projects/${projectId}/sales/handovers/${handoverId}/complete`, body),
+};
+
+/**
+ * Payment plans: the contractual schedule behind a sale.
+ *
+ * Every figure these return was computed by the server. The builder sends
+ * inputs and renders the reconciliation that comes back; it never totals a
+ * column, derives an amount from a percentage, or decides whether a schedule
+ * adds up.
+ */
+export const paymentPlans = {
+  register: (projectId: string) =>
+    get<PlanRegister>(`/projects/${projectId}/payment-plans`),
+  read: (projectId: string, planId: string) =>
+    get<PaymentPlanDetail>(`/projects/${projectId}/payment-plans/${planId}`),
+  /** The plan governing one sale, or null when it has not been scheduled yet. */
+  forSale: (projectId: string, saleId: string) =>
+    get<PaymentPlanDetail | null>(`/projects/${projectId}/payment-plans/for-sale/${saleId}`),
+  create: (projectId: string, body: Record<string, unknown>) =>
+    post<PaymentPlanDetail>(`/projects/${projectId}/payment-plans`, body),
+  createVersion: (projectId: string, planId: string, body: Record<string, unknown>) =>
+    post<PlanVersionDetail>(`/projects/${projectId}/payment-plans/${planId}/versions`, body),
+  version: (projectId: string, planId: string, versionId: string) =>
+    get<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}`,
+    ),
+  writeSchedule: (
+    projectId: string,
+    planId: string,
+    versionId: string,
+    body: Record<string, unknown>,
+  ) =>
+    put<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}/installments`,
+      body,
+    ),
+  submitVersion: (projectId: string, planId: string, versionId: string) =>
+    post<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}/submit`,
+      {},
+    ),
+  approveVersion: (projectId: string, planId: string, versionId: string, reason: string) =>
+    post<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}/approve`,
+      { reason },
+    ),
+  rejectVersion: (projectId: string, planId: string, versionId: string, reason: string) =>
+    post<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}/reject`,
+      { reason },
+    ),
+  activateVersion: (projectId: string, planId: string, versionId: string) =>
+    post<PlanVersionDetail>(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}/activate`,
+      {},
+    ),
+  seriesPreview: (projectId: string, body: Record<string, unknown>) =>
+    post<SeriesPreview>(`/projects/${projectId}/payment-plans/series-preview`, body),
+  refreshTriggers: (projectId: string, planId: string) =>
+    post<TriggerRefreshResult>(
+      `/projects/${projectId}/payment-plans/${planId}/refresh-triggers`,
+      {},
+    ),
+  setForecast: (
+    projectId: string,
+    planId: string,
+    installmentId: string,
+    body: Record<string, unknown>,
+  ) =>
+    patch<unknown>(
+      `/projects/${projectId}/payment-plans/${planId}/installments/${installmentId}/forecast`,
+      body,
+    ),
+  setOwner: (projectId: string, planId: string, installmentId: string, ownerUserId: string | null) =>
+    patch<unknown>(
+      `/projects/${projectId}/payment-plans/${planId}/installments/${installmentId}/owner`,
+      { owner_user_id: ownerUserId },
+    ),
+  triggerEvents: (projectId: string, planId: string, installmentId: string) =>
+    get<InstallmentTriggerEvent[]>(
+      `/projects/${projectId}/payment-plans/${planId}/installments/${installmentId}/trigger-events`,
+    ),
+  submitManualTrigger: (
+    projectId: string,
+    planId: string,
+    installmentId: string,
+    body: Record<string, unknown>,
+  ) =>
+    post<InstallmentTriggerEvent>(
+      `/projects/${projectId}/payment-plans/${planId}/installments/${installmentId}/manual-trigger`,
+      body,
+    ),
+  approveManualTrigger: (projectId: string, planId: string, eventId: string) =>
+    post<InstallmentTriggerEvent>(
+      `/projects/${projectId}/payment-plans/${planId}/trigger-events/${eventId}/approve`,
+      {},
+    ),
+  reverseManualTrigger: (projectId: string, planId: string, eventId: string, reason: string) =>
+    post<InstallmentTriggerEvent>(
+      `/projects/${projectId}/payment-plans/${planId}/trigger-events/${eventId}/reverse`,
+      { reason },
+    ),
 };

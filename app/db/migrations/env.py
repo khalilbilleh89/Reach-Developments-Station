@@ -27,6 +27,7 @@ if config.config_file_name is not None:
 from app.modules.access import models as access_models  # noqa: E402,F401
 from app.modules.audit import models as audit_models  # noqa: E402,F401
 from app.modules.inventory import models as inventory_models  # noqa: E402,F401
+from app.modules.payment_plans import models as payment_plan_models  # noqa: E402,F401
 from app.modules.pricing import models as pricing_models  # noqa: E402,F401
 from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.sales import models as sales_models  # noqa: E402,F401
