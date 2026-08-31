@@ -1373,6 +1373,14 @@ export interface PlanRegisterRow {
   copy_source_version_id: string | null;
   copy_source_version_number: number | null;
   copy_source_status: PlanVersionStatus | null;
+  /**
+   * A revision being prepared alongside the version this row describes. Named,
+   * not costed: it governs nothing, so it contributes no figure to the row and
+   * none of the project's operational counts.
+   */
+  revision_version_id: string | null;
+  revision_version_number: number | null;
+  revision_status: PlanVersionStatus | null;
 }
 
 export interface PlanRegister {

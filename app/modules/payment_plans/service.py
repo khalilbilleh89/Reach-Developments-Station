@@ -1829,6 +1829,11 @@ class RegisterRow:
     is computed by exactly the same function as the one shown on the plan — a
     register that totalled its own way would eventually disagree with the
     screen an operator opens to fix it.
+
+    Every figure describes the version named by ``version_id``: the governing
+    one where a sale has one, and otherwise the one in preparation. A revision
+    being drafted alongside is named by ``revision_*`` and contributes no
+    figures, because it governs nothing.
     """
 
     __slots__ = (
@@ -1847,6 +1852,9 @@ class RegisterRow:
         "next_scheduled_date",
         "plan_id",
         "plan_number",
+        "revision_status",
+        "revision_version_id",
+        "revision_version_number",
         "sale_id",
         "sale_number",
         "scheduled_principal_total",
@@ -1894,6 +1902,17 @@ def _next_on_or_after(dates: list[date], today: date) -> date | None:
     return min(upcoming) if upcoming else None
 
 
+def open_version_of(versions: list[PaymentPlanVersion]) -> PaymentPlanVersion | None:
+    """The version being prepared, if one is. The in-memory form of the SQL rule."""
+    ordered = sorted(versions, key=lambda version: version.version_number, reverse=True)
+    return next((version for version in ordered if version.status in VERSION_OPEN), None)
+
+
+def governing_version_of(versions: list[PaymentPlanVersion]) -> PaymentPlanVersion | None:
+    """The version the sale is actually running on, if any has been activated."""
+    return next((version for version in versions if version.status == VERSION_ACTIVE), None)
+
+
 def settled_source_of(versions: list[PaymentPlanVersion]) -> PaymentPlanVersion | None:
     """The best version of this plan that somebody has actually agreed to.
 
@@ -1932,16 +1951,29 @@ def forward_dates(rows: list[PaymentPlanInstallment]) -> tuple[date | None, date
 
 
 def plan_register(session: Session, *, project: Project, actor: ActorContext) -> list[RegisterRow]:
-    """Every payment plan this caller may see, with its standing schedule.
+    """Every payment plan this caller may see, described by what governs it.
+
+    The register is an operational overview, and the question it answers is
+    "what is each sale actually running on". So the figures on a row come from
+    the *governing* version whenever there is one — not from whatever somebody
+    happens to be drafting. The plan builder is where a revision is inspected;
+    here it is named beside the row and nothing more.
+
+    That distinction is the whole point of this function choosing its own
+    version rather than reusing :func:`current_version`, which deliberately
+    prefers the version in preparation because that is the one being edited.
+    Applied to a register it produced management nonsense: opening a draft
+    revision dropped a live plan out of the project's active count and replaced
+    a reconciled twenty-instalment schedule with an empty draft's figures.
 
     Read in a fixed handful of queries rather than a few per plan. The obvious
-    shape — loop the plans, ask each for its current version, then its
-    reconciliation, then its rows — costs about five round trips per plan and
-    loads every schedule twice, because reconciling reads the same instalments
-    the caller then reads again. At the few hundred to few thousand sales this
-    roadmap expects, that is thousands of queries to draw one screen.
+    shape — loop the plans, ask each for its version, then its reconciliation,
+    then its rows — costs about five round trips per plan and loads every
+    schedule twice, because reconciling reads the same instalments the caller
+    then reads again. At the few hundred to few thousand sales this roadmap
+    expects, that is thousands of queries to draw one screen.
 
-    So: plans in one query, their versions in a second, the chosen versions'
+    So: plans in one query, their versions in a second, the primary versions'
     instalments in a third, and the grouping and totalling done in memory with
     the same pure function the plan screen uses. Three statements whether the
     project has one plan or five hundred, and each schedule read once.
@@ -1972,7 +2004,25 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
     ):
         by_plan[version.payment_plan_id].append(version)
 
-    chosen = {plan_id: _current_version_of(versions) for plan_id, versions in by_plan.items()}
+    # What governs, and — separately — what is being prepared. Before the first
+    # activation nothing governs, and the version in preparation is all there is
+    # to show; its status says plainly that it does not yet govern anything.
+    governing = {plan_id: governing_version_of(rows) for plan_id, rows in by_plan.items()}
+    preparing = {plan_id: open_version_of(rows) for plan_id, rows in by_plan.items()}
+    chosen = {
+        plan_id: governing[plan_id] or preparing[plan_id] or _current_version_of(rows)
+        for plan_id, rows in by_plan.items()
+    }
+    revisions = {
+        plan_id: (
+            version
+            if (version := preparing[plan_id]) is not None
+            and chosen[plan_id] is not None
+            and version.id != chosen[plan_id].id
+            else None
+        )
+        for plan_id in by_plan
+    }
     version_ids = [version.id for version in chosen.values() if version is not None]
     by_version: dict[uuid.UUID, list[PaymentPlanInstallment]] = {
         version_id: [] for version_id in version_ids
@@ -1994,6 +2044,7 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
         # The settled schedule comes from the versions already in memory, so
         # naming a copy source costs no additional query.
         source = settled_source_of(by_plan.get(plan.id, []))
+        revision = revisions.get(plan.id)
         rows.append(
             RegisterRow(
                 plan_id=plan.id,
@@ -2022,6 +2073,9 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
                 copy_source_version_id=source.id if source else None,
                 copy_source_version_number=source.version_number if source else None,
                 copy_source_status=source.status if source else None,
+                revision_version_id=revision.id if revision else None,
+                revision_version_number=revision.version_number if revision else None,
+                revision_status=revision.status if revision else None,
                 awaiting_trigger_count=sum(
                     1 for row in installments if row.trigger_status == TRIGGER_AWAITING
                 ),

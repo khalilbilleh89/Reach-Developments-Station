@@ -27,6 +27,12 @@ import { versionLabel, versionTone } from "@/components/projects/payments/labels
 /**
  * The project's payment plans: one line per scheduled sale.
  *
+ * Every figure on a row describes the schedule the sale is actually running on.
+ * A revision somebody is drafting is named beside it and costs nothing: opening
+ * a draft is the start of a conversation, not a change to what the buyer owes,
+ * and a register that swapped in the draft's figures would drop a live plan out
+ * of the project's active count on the day work began on its successor.
+ *
  * Deliberately carries no collected, outstanding, overdue or aged figure. Those
  * are PR-MVP-07's to state; a column of zeroes labelled "paid" would be read as
  * a fact about money rather than the absence of one, and the first person to
@@ -117,10 +123,13 @@ export function PaymentPlansTab({
     );
   }
 
+  // Every count below is over the governing schedules the server named, so a
+  // revision in preparation moves none of them.
   const scheduled = register.rows.length;
   const reconciled = register.rows.filter((row) => row.is_reconciled).length;
   const active = register.rows.filter((row) => row.version_status === "active").length;
   const awaiting = register.rows.reduce((total, row) => total + row.awaiting_trigger_count, 0);
+  const revising = register.rows.filter((row) => row.revision_version_id !== null).length;
   const unscheduled = schedulable.filter(
     (sale) => !register.rows.some((row) => row.sale_id === sale.id),
   );
@@ -154,6 +163,12 @@ export function PaymentPlansTab({
           <Stat label="Plans" value={scheduled} small />
           <Stat label="Active" value={active} small />
           <Stat label="Reconciled" value={reconciled} small />
+          <Stat
+            label="Being revised"
+            value={revising}
+            note="Standing terms unchanged"
+            small
+          />
           <Stat label="Contracts not yet scheduled" value={unscheduled.length} small />
           <Stat
             label="Instalments awaiting a trigger"
@@ -163,6 +178,8 @@ export function PaymentPlansTab({
           />
         </StatRow>
         <p className="footnote">
+          Each row describes the schedule currently governing its sale; a revision being
+          prepared is named beside it and changes none of these figures until it is activated.
           A schedule says what the buyer agreed to pay and when. What has actually been paid is
           not recorded yet — that arrives with Collections — so &ldquo;next scheduled&rdquo; is
           the next date still to come on the schedule, and never a statement about arrears.
@@ -348,6 +365,14 @@ export function PaymentPlansTab({
                     ) : (
                       "—"
                     )}
+                    {row.revision_status ? (
+                      <>
+                        {" "}
+                        <span className="subtle nowrap">
+                          v{row.revision_version_number} {versionLabel(row.revision_status)}
+                        </span>
+                      </>
+                    ) : null}
                   </td>
                   <td className="num">
                     {money(row.contract_value_covered, currencyCodeOf(row.currency_id))}

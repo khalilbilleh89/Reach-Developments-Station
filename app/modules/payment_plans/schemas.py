@@ -399,6 +399,10 @@ class RefreshResultRead(BaseModel):
 class RegisterRowRead(BaseModel):
     """One line of the project's payment plan register.
 
+    Every figure here describes the version named by ``version_id`` — the one
+    governing the sale where there is one, otherwise the one in preparation.
+    A revision being drafted alongside appears only as ``revision_*``.
+
     Carries no collected, outstanding or overdue figure: those are PR-MVP-07's
     to state, and a column of zeroes labelled "paid" reads as a fact about
     money rather than the absence of one. For the same reason the forward-
@@ -437,6 +441,12 @@ class RegisterRowRead(BaseModel):
     copy_source_version_id: uuid.UUID | None
     copy_source_version_number: int | None
     copy_source_status: VersionStatus | None
+    #: A revision being prepared alongside the version this row describes.
+    #: Named, not costed: it governs nothing, so it contributes no figure to
+    #: the register and none of the project's operational counts.
+    revision_version_id: uuid.UUID | None
+    revision_version_number: int | None
+    revision_status: VersionStatus | None
 
 
 class PlanRegisterRead(BaseModel):

@@ -334,9 +334,12 @@ def test_a_refresh_resolves_the_standing_schedule_and_not_the_revision(
 def test_an_open_revision_does_not_withdraw_the_plan_as_a_copy_source(
     collections_client: TestClient, project_id: str, active_plan: tuple[str, str]
 ) -> None:
-    """The register row describes the version being prepared. The schedule
-    somebody agreed to is still the one worth copying, so it is named
-    separately rather than inferred from the row's own status."""
+    """Governing version, copy source and revision answer three questions.
+
+    They coincide often enough to be conflated and must not be: the copy source
+    is the best *settled* schedule, which outlives an activation into
+    supersession, while the governing one does not.
+    """
     plan_id, standing = active_plan
     register = collections_client.get(plans_url(project_id)).json()
     row = next(row for row in register["rows"] if row["plan_id"] == plan_id)
@@ -347,7 +350,8 @@ def test_an_open_revision_does_not_withdraw_the_plan_as_a_copy_source(
 
     register = collections_client.get(plans_url(project_id)).json()
     row = next(row for row in register["rows"] if row["plan_id"] == plan_id)
-    assert row["version_status"] == "draft", "the row still describes what is being prepared"
+    assert row["version_status"] == "active", "the row still describes what governs"
+    assert row["revision_status"] == "draft", "and names the revision separately"
     assert row["copy_source_version_id"] == standing, "and still names the settled source"
     assert row["copy_source_status"] == "active"
     assert row["copy_source_version_number"] == 1
@@ -447,3 +451,135 @@ def test_a_schedule_entirely_in_the_past_reports_no_future_date(
     serialised = str(detail)
     for absent in ("paid", "outstanding", "overdue", "settled", "arrears"):
         assert absent not in serialised.lower()
+
+
+# --------------------------------------------------------------------------- #
+# The register describes what governs, not what is being drafted
+# --------------------------------------------------------------------------- #
+
+
+def _register_row(client: TestClient, project_id: str, plan_id: str) -> dict:
+    body = client.get(plans_url(project_id)).json()
+    return next(row for row in body["rows"] if row["plan_id"] == plan_id)
+
+
+def test_opening_a_revision_does_not_change_what_the_register_reports(
+    collections_client: TestClient, project_id: str, active_plan: tuple[str, str]
+) -> None:
+    """A project register is a management overview, and this is the whole of it.
+
+    Opening a draft is the beginning of a conversation. It is not a change to
+    what the sale runs on, so it must not drop a live plan out of the project's
+    active count or replace a reconciled twenty-instalment schedule with an
+    empty draft's figures.
+    """
+    plan_id, standing = active_plan
+    before = _register_row(collections_client, project_id, plan_id)
+    assert before["version_id"] == standing
+    assert before["version_status"] == "active"
+    assert before["revision_version_id"] is None
+
+    _revise(collections_client, project_id, plan_id, "Renegotiating timing")
+
+    after = _register_row(collections_client, project_id, plan_id)
+    for field in (
+        "version_id",
+        "version_number",
+        "version_status",
+        "effective_date",
+        "currency_id",
+        "contract_value_covered",
+        "installment_count",
+        "scheduled_principal_total",
+        "is_reconciled",
+        "next_scheduled_date",
+        "next_forecast_date",
+        "awaiting_trigger_count",
+        "approved_by_user_id",
+    ):
+        assert after[field] == before[field], f"{field} changed when a revision was opened"
+
+    assert after["revision_version_number"] == 2
+    assert after["revision_status"] == "draft"
+    assert after["revision_version_id"] != standing
+
+
+def test_a_submitted_revision_is_named_but_does_not_take_the_row_over(
+    collections_client: TestClient, project_id: str, active_plan: tuple[str, str]
+) -> None:
+    plan_id, standing = active_plan
+    revision = _revise(collections_client, project_id, plan_id, "Renegotiating timing")
+    _submit(collections_client, project_id, plan_id, revision)
+
+    row = _register_row(collections_client, project_id, plan_id)
+    assert row["version_id"] == standing
+    assert row["version_status"] == "active"
+    assert row["revision_status"] == "submitted"
+
+
+def test_an_approved_future_revision_is_named_but_does_not_take_the_row_over(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    """Approved and not yet in force is the longest window of all, and the one
+    where a register that reported it as the plan would be most misleading."""
+    plan_id, standing = active_plan
+    start = date.today() + timedelta(days=45)
+    opened = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Effective next quarter", "effective_date": start.isoformat()},
+    )
+    assert opened.status_code == 201, opened.text
+    revision = opened.json()["version"]["id"]
+    _submit(collections_client, project_id, plan_id, revision)
+    _approve(cfo_client, project_id, plan_id, revision)
+
+    row = _register_row(collections_client, project_id, plan_id)
+    assert row["version_id"] == standing
+    assert row["version_status"] == "active"
+    assert row["effective_date"] != start.isoformat()
+    assert row["revision_status"] == "approved"
+    assert row["revision_version_id"] == revision
+
+
+def test_activating_the_revision_hands_the_row_over_to_it(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    plan_id, standing = active_plan
+    revision = _revise(collections_client, project_id, plan_id, "Renegotiating timing")
+    _submit(collections_client, project_id, plan_id, revision)
+    _approve(cfo_client, project_id, plan_id, revision)
+    assert (
+        cfo_client.post(
+            f"{plans_url(project_id)}/{plan_id}/versions/{revision}/activate", json={}
+        ).status_code
+        == 200
+    )
+
+    row = _register_row(collections_client, project_id, plan_id)
+    assert row["version_id"] == revision
+    assert row["version_id"] != standing
+    assert row["version_status"] == "active"
+    assert row["version_number"] == 2
+    assert row["revision_version_id"] is None
+    assert row["revision_status"] is None
+
+
+def test_a_plan_before_its_first_activation_shows_its_draft_and_governs_nothing(
+    collections_client: TestClient, project_id: str, plan_id: str
+) -> None:
+    """There is nothing else to show, and the status says it governs nothing.
+
+    No revision metadata either: a draft is not a revision *of* anything until
+    something is standing for it to revise.
+    """
+    row = _register_row(collections_client, project_id, plan_id)
+    assert row["version_status"] == "draft"
+    assert row["version_number"] == 1
+    assert row["revision_version_id"] is None
+    assert row["revision_status"] is None
