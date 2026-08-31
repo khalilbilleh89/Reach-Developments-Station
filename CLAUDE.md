@@ -41,10 +41,12 @@ never recommend merging on a green run whose head SHA is not the current one.
 ## Adding a domain to the fast selector
 
 When a new module lands, `scripts/ci_backend_tests.py` needs two lines — an
-entry in `DOMAIN_TEST_PREFIXES` and, if anything consumes it, an edge in
-`DOWNSTREAM`. Until then an unknown module falls back to the full suite, which
-is the intended behaviour, not a bug. A guard test fails if any test file in
-the repository belongs to no domain.
+entry in `DOMAIN_TEST_PREFIXES` and, if anything consumes it, **one** edge in
+`DOWNSTREAM`. Only one: the closure is transitive, so adding
+`payment_plans -> collections` is enough for a pricing change to reach
+collections. Until a module is mapped it falls back to the full suite, which is
+the intended behaviour, not a bug. Guard tests fail if any test file belongs to
+no domain, or if the dependency graph gains a cycle.
 
 ## Things that are never acceptable
 

@@ -94,20 +94,27 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "payment_plans": ("payment_plan", "migration_payment_plans"),
 }
 
-#: What each domain feeds. Read strictly downstream: a change here can break
-#: these, so their tests run too. The reverse does not hold, which is the whole
-#: point — collections leaning on sales does not make a collections edit a
-#: reason to re-prove sales.
+#: What each domain feeds **directly**. Read strictly downstream: a change here
+#: can break these, so their tests run too. The reverse does not hold, which is
+#: the whole point — collections leaning on sales does not make a collections
+#: edit a reason to re-prove sales.
 #:
-#: ``projects`` and ``settings`` are foundational rather than part of the
-#: business stack: every record is project-scoped and every project is
-#: configured from a country pack, so a change to either genuinely reaches the
-#: whole chain. Their closure is wide because the truth is.
+#: These are edges, not reachability. :func:`closure` walks them, so adding a
+#: domain means adding one edge and nothing else. Spelling out every descendant
+#: here instead would mean that giving payment plans a downstream neighbour
+#: required editing pricing, inventory, projects and settings too — and the
+#: first person to forget one would get a targeted run that silently skipped
+#: the new domain.
+#:
+#: ``projects`` and ``settings`` sit above the business stack rather than in it:
+#: every record is project-scoped and every project is configured from a country
+#: pack, so a change to either does reach the whole chain — by traversal now,
+#: not by being written out.
 DOWNSTREAM: dict[str, tuple[str, ...]] = {
-    "settings": ("projects", "inventory", "pricing", "sales", "payment_plans"),
-    "projects": ("inventory", "pricing", "sales", "payment_plans"),
-    "inventory": ("pricing", "sales", "payment_plans"),
-    "pricing": ("sales", "payment_plans"),
+    "settings": ("projects",),
+    "projects": ("inventory",),
+    "inventory": ("pricing",),
+    "pricing": ("sales",),
     "sales": ("payment_plans",),
     "payment_plans": (),
     "audit": (),
@@ -149,10 +156,17 @@ MIGRATION_VERSIONS_PREFIX = "app/db/migrations/versions/"
 
 #: Paths that cannot break a backend test on their own. They still run the
 #: always-run set, because "cannot" is a claim worth checking cheaply.
+#:
+#: This list is deliberately short and explicit. Anything not named here and
+#: not classified above is treated as unknown infrastructure and runs the full
+#: suite — see :func:`select`. A generous allowlist would be the same mistake
+#: as a generous default, made once instead of continuously.
 INERT_PREFIXES = ("frontend/", "docs/", ".github/", ".vscode/")
 INERT_SUFFIXES = (".md",)
+INERT_FILES = (".gitignore", ".gitattributes", "LICENSE", "LICENSE.md", "LICENSE.txt")
 
-#: The selector's own tests, run whenever the selector changes.
+#: The one script that decides which tests run, and the tests that prove it.
+SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
 SELECTOR_TESTS = "tests/test_ci_selector.py"
 
 
@@ -214,12 +228,67 @@ def domain_of_migration(path: str) -> str | None:
     return None
 
 
-def closure(domains: set[str]) -> list[str]:
-    """The changed domains plus everything downstream of them, sorted."""
-    reached = set(domains)
-    for domain in domains:
-        reached.update(DOWNSTREAM.get(domain, ()))
+def closure(domains: set[str], graph: dict[str, tuple[str, ...]] | None = None) -> list[str]:
+    """The changed domains plus everything reachable downstream of them.
+
+    Transitive, by walking the edges. A change to pricing reaches sales, and
+    through sales reaches payment plans, and through payment plans will reach
+    collections the moment PR-MVP-07 adds that one edge — without anybody
+    having to remember to widen pricing's own entry.
+
+    The visited set makes this terminate even on a malformed graph. A cycle is
+    still a bug, and :func:`find_cycle` is what fails the build over it; this
+    function's job is to answer, not to hang.
+    """
+    edges = DOWNSTREAM if graph is None else graph
+    reached: set[str] = set()
+    pending = list(domains)
+    while pending:
+        domain = pending.pop()
+        if domain in reached:
+            continue
+        reached.add(domain)
+        pending.extend(edges.get(domain, ()))
     return sorted(reached)
+
+
+def find_cycle(graph: dict[str, tuple[str, ...]] | None = None) -> list[str] | None:
+    """The first dependency cycle in the graph, as a path, or ``None``.
+
+    Downstream has to be a direction. A cycle of any length — not merely two
+    domains naming each other — would make every change inside it select every
+    other, quietly turning targeted mode back into the full suite while still
+    reporting itself as targeted.
+
+    Depth-first with three colours: unvisited, on the current path, finished.
+    Meeting a domain that is on the current path is the cycle.
+    """
+    edges = DOWNSTREAM if graph is None else graph
+    unvisited, on_path, done = 0, 1, 2
+    colour: dict[str, int] = {}
+    path: list[str] = []
+
+    def walk(domain: str) -> list[str] | None:
+        colour[domain] = on_path
+        path.append(domain)
+        for target in edges.get(domain, ()):
+            state = colour.get(target, unvisited)
+            if state == on_path:
+                return [*path[path.index(target) :], target]
+            if state == unvisited:
+                found = walk(target)
+                if found is not None:
+                    return found
+        colour[domain] = done
+        path.pop()
+        return None
+
+    for domain in edges:
+        if colour.get(domain, unvisited) == unvisited:
+            found = walk(domain)
+            if found is not None:
+                return found
+    return None
 
 
 def tests_for_domain(domain: str, available: list[str]) -> list[str]:
@@ -294,11 +363,20 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is shared test support")
             continue
 
-        if path.startswith("scripts/"):
+        if path == SELECTOR_SCRIPT:
             if SELECTOR_TESTS in available_set:
                 direct.add(SELECTOR_TESTS)
             continue
+        if path.startswith("scripts/"):
+            # Everything else under scripts/ builds or starts the deployed
+            # application — render-build.sh and render-start.sh today. Treating
+            # those as harmless CI tooling because of where they live is exactly
+            # the kind of shortcut that ships a broken start command.
+            reasons.append(f"{path} is operational infrastructure")
+            continue
 
+        if path in INERT_FILES:
+            continue
         if path.startswith(INERT_PREFIXES) or path.endswith(INERT_SUFFIXES):
             continue
 
@@ -319,8 +397,12 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is application code no domain claims")
             continue
 
-        # Anything left is repository furniture: .gitignore, LICENSE, a lock
-        # file for a tool we do not run in CI. The always-run set covers it.
+        # Anything left is unrecognised. alembic.ini, a Dockerfile, a Procfile,
+        # render.yaml, a tool configuration nobody has classified yet — each can
+        # change how the application is built, migrated or started. The stated
+        # principle is known-harmless targeted, unknown full, so this is where
+        # it is applied rather than quietly excepted.
+        reasons.append(f"{path} is unclassified repository infrastructure")
 
     if reasons:
         return Selection(full=True, paths=["tests"], domains=[], reasons=reasons)

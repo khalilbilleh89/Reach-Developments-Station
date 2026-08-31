@@ -421,13 +421,16 @@ rules and nothing more:
 
 - **A domain owns a family of test files.** The map was built by reading the
   real names in `tests/`, not inferred.
-- **A change flows downstream, never up.** Sales sits on pricing, so a pricing
-  change runs sales; a sales change does not re-run pricing. Sales' own tests
-  already prove its use of pricing's public contract. This asymmetry is where
-  the time is saved.
+- **A change flows downstream, never up, and reachability is transitive.**
+  `DOWNSTREAM` holds direct edges only and the closure walks them, so a pricing
+  change reaches sales and, through sales, payment plans. A sales change does
+  not re-run pricing: sales' own tests already prove its use of pricing's
+  public contract. This asymmetry is where the time is saved.
 - **Anything unrecognised runs everything.** A new module, a shared fixture,
-  `app/core/`, the access layer, a migration no domain claims — all fall back
-  to the full suite and print the reason. The selector fails safe, never open.
+  `app/core/`, the access layer, a migration no domain claims, an operational
+  script, an unclassified root file — all fall back to the full suite and print
+  the reason. Known-harmless is targeted; unknown is full. The selector fails
+  safe, never open.
 
 A changed or newly added test file always runs, whatever else was selected. A
 small always-run backbone — configuration, health, migrations, static export,
@@ -436,8 +439,10 @@ tests — runs on every fast build, about a hundred and twenty tests in eighty
 seconds.
 
 Adding a domain is two lines: a `DOMAIN_TEST_PREFIXES` entry and, if anything
-consumes it, a `DOWNSTREAM` edge. A guard test fails if any test file in the
-repository belongs to no domain, so the map cannot rot quietly.
+consumes it, one `DOWNSTREAM` edge — not an edge from every ancestor, because
+the closure is transitive. Guard tests fail if any test file in the repository
+belongs to no domain, or if the dependency graph acquires a cycle of any
+length, so the map cannot rot quietly.
 
 ### The workflow this implies
 

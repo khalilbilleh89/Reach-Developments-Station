@@ -376,17 +376,155 @@ def test_every_downstream_target_is_a_known_domain() -> None:
             )
 
 
-def test_the_dependency_map_has_no_cycles() -> None:
+def test_the_real_dependency_map_has_no_cycle_of_any_length() -> None:
     """Downstream must be a direction, not a loop.
 
-    A cycle would make every change in it select every other, quietly turning
-    targeted mode back into the full suite.
+    A cycle would make every change inside it select every other, quietly
+    turning targeted mode back into the full suite while still calling itself
+    targeted. Two domains naming each other is the obvious case; three is just
+    as broken and considerably easier to introduce by accident.
     """
-    for domain in selector.DOWNSTREAM:
-        for target in selector.DOWNSTREAM.get(domain, ()):
-            assert domain not in selector.DOWNSTREAM.get(target, ()), (
-                f"{domain} and {target} feed each other"
-            )
+    assert selector.find_cycle() is None
+
+
+# --------------------------------------------------------------------------- #
+# The dependency graph, on synthetic shapes
+# --------------------------------------------------------------------------- #
+
+CHAIN = {"a": ("b",), "b": ("c",), "c": ()}
+LOOP = {"a": ("b",), "b": ("c",), "c": ("a",)}
+LONG_LOOP = {"a": ("b",), "b": ("c",), "c": ("d",), "d": ("b",)}
+DIAMOND = {"a": ("b", "c"), "b": ("d",), "c": ("d",), "d": ()}
+
+
+def test_closure_follows_the_chain_all_the_way_down() -> None:
+    """Transitive, not one level. This is what stops the map needing every
+    descendant written out by hand."""
+    assert selector.closure({"a"}, CHAIN) == ["a", "b", "c"]
+    assert selector.closure({"b"}, CHAIN) == ["b", "c"]
+    assert selector.closure({"c"}, CHAIN) == ["c"]
+
+
+def test_closure_visits_a_shared_descendant_once() -> None:
+    assert selector.closure({"a"}, DIAMOND) == ["a", "b", "c", "d"]
+
+
+def test_closure_terminates_on_a_malformed_graph() -> None:
+    """A cycle is a bug the tests catch, not a reason for CI to hang."""
+    assert selector.closure({"a"}, LOOP) == ["a", "b", "c"]
+
+
+def test_a_three_node_cycle_is_detected() -> None:
+    cycle = selector.find_cycle(LOOP)
+    assert cycle is not None
+    assert cycle[0] == cycle[-1], "a cycle is reported as a closed path"
+    assert set(cycle) == {"a", "b", "c"}
+
+
+def test_a_cycle_that_does_not_include_the_entry_point_is_detected() -> None:
+    """b → c → d → b, reached from a. Depth-first has to notice on the way."""
+    cycle = selector.find_cycle(LONG_LOOP)
+    assert cycle is not None
+    assert set(cycle) == {"b", "c", "d"}
+
+
+def test_an_acyclic_graph_reports_no_cycle() -> None:
+    assert selector.find_cycle(CHAIN) is None
+    assert selector.find_cycle(DIAMOND) is None
+
+
+def test_adding_collections_reaches_it_from_pricing_without_touching_pricing() -> None:
+    """The PR-MVP-07 shape, proved before PR-MVP-07 exists.
+
+    Collections is not in the real map yet because it has no tests to select.
+    When it lands, the whole change should be one entry in
+    DOMAIN_TEST_PREFIXES and one edge from payment_plans — and a pricing change
+    must then reach it, without anybody having to remember to widen pricing,
+    inventory, projects and settings as well.
+    """
+    future = dict(selector.DOWNSTREAM)
+    future["payment_plans"] = ("collections",)
+    future["collections"] = ()
+
+    assert selector.closure({"pricing"}, future) == [
+        "collections",
+        "payment_plans",
+        "pricing",
+        "sales",
+    ]
+    assert selector.closure({"sales"}, future) == ["collections", "payment_plans", "sales"]
+    # And still downstream only: collections does not drag sales back in.
+    assert selector.closure({"collections"}, future) == ["collections"]
+    assert selector.find_cycle(future) is None
+
+
+# --------------------------------------------------------------------------- #
+# Scripts are not all the same kind of thing
+# --------------------------------------------------------------------------- #
+
+
+def test_changing_the_selector_script_runs_the_selector_tests_only() -> None:
+    result = chosen(selector.SELECTOR_SCRIPT)
+    assert result.full is False
+    assert selector.SELECTOR_TESTS in result.paths
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/render-start.sh",
+        "scripts/render-build.sh",
+        "scripts/some_future_operational_script.py",
+    ],
+)
+def test_operational_scripts_fall_back_to_the_full_suite(path: str) -> None:
+    """These build and start the deployed application.
+
+    Treating them as harmless CI tooling because of the directory they share
+    with the selector is how a broken start command reaches production behind a
+    green tick.
+    """
+    result = chosen(path)
+    assert result.full is True
+    assert any("operational infrastructure" in reason for reason in result.reasons)
+
+
+# --------------------------------------------------------------------------- #
+# Unknown is not the same as harmless
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "render.yaml",
+        "Dockerfile",
+        "Procfile",
+        "alembic.ini",
+        "deployment.toml",
+        "some_new_tool_config",
+    ],
+)
+def test_unclassified_infrastructure_falls_back_to_the_full_suite(path: str) -> None:
+    """Known harmless is targeted; unknown is everything.
+
+    A file nobody has classified may change how the application is built,
+    migrated or started, and the cost of being wrong in the safe direction is
+    minutes.
+    """
+    result = chosen(path)
+    assert result.full is True
+    assert any("unclassified repository infrastructure" in reason for reason in result.reasons)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [".gitignore", ".gitattributes", "LICENSE", "LICENSE.md"],
+)
+def test_named_inert_files_stay_targeted(path: str) -> None:
+    result = chosen(path)
+    assert result.full is False
+    assert result.paths == SMOKE
 
 
 def test_closure_is_stable_when_applied_twice() -> None:
