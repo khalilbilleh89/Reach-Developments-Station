@@ -1300,6 +1300,14 @@ export interface PlanVersionDetail {
   version: PaymentPlanVersion;
   installments: PlanInstallment[];
   reconciliation: PlanReconciliation;
+  /**
+   * The soonest scheduled and forecast dates still to come on this version,
+   * derived on the server. Every surface that summarises a schedule reads
+   * these rather than sorting the dates itself, so none of them can present a
+   * date already past as what falls due next.
+   */
+  next_scheduled_date: string | null;
+  next_forecast_date: string | null;
 }
 
 export interface PaymentPlanDetail {
@@ -1312,7 +1320,19 @@ export interface PaymentPlanDetail {
   unit_reference: string;
   client_display_name: string;
   currency_id: string;
+  /**
+   * The version being worked on: the one in preparation if there is one,
+   * otherwise the standing one. This is the editing workspace, and it is not
+   * a claim about what governs the sale.
+   */
   current: PlanVersionDetail | null;
+  /**
+   * The version actually governing the sale, or null before the first
+   * activation. A revision can be in preparation for weeks while this
+   * schedule keeps falling due, so anything that reports what the buyer owes
+   * reads this one.
+   */
+  active: PlanVersionDetail | null;
   active_version_id: string | null;
   versions: PaymentPlanVersion[];
 }
@@ -1344,6 +1364,15 @@ export interface PlanRegisterRow {
   next_forecast_date: string | null;
   awaiting_trigger_count: number;
   approved_by_user_id: string | null;
+  /**
+   * The best settled version of this plan — standing, else approved, else the
+   * most recent superseded one. Named separately because opening a draft
+   * revision must not withdraw an agreed schedule from the plans worth
+   * copying.
+   */
+  copy_source_version_id: string | null;
+  copy_source_version_number: number | null;
+  copy_source_status: PlanVersionStatus | null;
 }
 
 export interface PlanRegister {

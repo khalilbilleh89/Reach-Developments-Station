@@ -19,6 +19,19 @@ import { versionLabel, versionTone } from "@/components/projects/payments/labels
  * which version governs, how many instalments, what is next, and how many are
  * still waiting on something.
  *
+ * What it reports is the schedule that actually governs the sale, not the one
+ * somebody happens to be drafting. Those are the same version most of the
+ * time and emphatically not during a revision, which can run for weeks: a
+ * deal file that swapped in a half-written draft's figures the moment
+ * Collections opened one would be telling the reader the buyer owes something
+ * nobody has agreed to. Where no version governs yet, the plan in preparation
+ * is shown and labelled as such.
+ *
+ * The next dates come from the server, already filtered to what is still to
+ * come. Sorting the dates here and taking the first would surface a date from
+ * last March under a heading like "next", which reads as arrears — and
+ * PR-MVP-06 cannot know whether anything is in arrears.
+ *
  * No collected or outstanding figure appears, because none exists. PR-MVP-07
  * will add that here, and until it does the absence is the honest answer.
  */
@@ -64,18 +77,18 @@ export function PlanSummary({
     );
   }
 
-  const version = detail.current?.version ?? null;
-  const reconciliation = detail.current?.reconciliation ?? null;
-  const installments = detail.current?.installments ?? [];
+  // The governing schedule if there is one; otherwise the one being prepared,
+  // which is then labelled so nobody reads it as binding.
+  const shown = detail.active ?? detail.current;
+  const governs = detail.active !== null;
+  const revision =
+    detail.active && detail.current && detail.current.version.id !== detail.active.version.id
+      ? detail.current.version
+      : null;
+  const version = shown?.version ?? null;
+  const reconciliation = shown?.reconciliation ?? null;
+  const installments = shown?.installments ?? [];
   const code = currencyCodeOf(detail.currency_id);
-  const nextActual = installments
-    .map((row) => row.actual_due_date)
-    .filter((value): value is string => Boolean(value))
-    .sort()[0];
-  const nextForecast = installments
-    .map((row) => row.forecast_due_date)
-    .filter((value): value is string => Boolean(value))
-    .sort()[0];
   const awaiting = installments.filter((row) => row.trigger_status === "awaiting_trigger").length;
 
   return (
@@ -89,6 +102,16 @@ export function PlanSummary({
           <li className="chip">
             <span className="chip-label">v{version.version_number}</span>
             <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>
+            <span className="chip-label">
+              {governs ? "Governing schedule" : "Not yet governing"}
+            </span>
+          </li>
+        ) : null}
+        {revision ? (
+          <li className="chip">
+            <span className="chip-label">In preparation</span>
+            <strong>v{revision.version_number}</strong>
+            <Badge tone={versionTone(revision.status)}>{versionLabel(revision.status)}</Badge>
           </li>
         ) : null}
         {reconciliation ? (
@@ -105,16 +128,24 @@ export function PlanSummary({
         />
         <KeyValue label="Instalments" value={reconciliation?.installment_count ?? 0} />
         <KeyValue
-          label="Next contractual date"
+          label="Next scheduled"
           mono
-          value={businessDate(nextActual ?? null)}
+          value={
+            shown?.next_scheduled_date
+              ? businessDate(shown.next_scheduled_date)
+              : "No future date"
+          }
         />
         {compact ? null : (
           <>
             <KeyValue
-              label="Next forecast date"
+              label="Next forecast"
               mono
-              value={businessDate(nextForecast ?? null)}
+              value={
+                shown?.next_forecast_date
+                  ? businessDate(shown.next_forecast_date)
+                  : "No future date"
+              }
             />
             <KeyValue
               label="Buyer total scheduled"
@@ -130,8 +161,12 @@ export function PlanSummary({
         />
       </KeyValueGrid>
       <p className="footnote">
-        Scheduled, not collected. What has actually been received is recorded from PR-MVP-07
-        onwards.
+        {governs
+          ? "Scheduled, not collected. These are the terms currently governing the sale; what has actually been received is recorded from PR-MVP-07 onwards."
+          : "This plan is still being prepared and does not govern the sale yet. Scheduled, not collected."}
+        {revision
+          ? ` Revision v${revision.version_number} is being prepared and does not govern anything until it is activated.`
+          : ""}
       </p>
     </>
   );

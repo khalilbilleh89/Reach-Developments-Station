@@ -127,11 +127,12 @@ export function PaymentPlansTab({
   // Only schedules somebody has already agreed to are worth copying, and only
   // the ones this caller can see — the register is already narrowed to those,
   // so the selector inherits the narrowing rather than restating it.
-  const copyable = register.rows.filter(
-    (row) =>
-      row.version_id !== null &&
-      ["approved", "active", "superseded"].includes(row.version_status ?? ""),
-  );
+  //
+  // The settled version is named on the row by the server rather than inferred
+  // from the row's own status: a row describes the version being prepared, so
+  // reading the status here would drop a perfectly good standing schedule from
+  // the list the moment somebody opened a draft revision of it.
+  const copyable = register.rows.filter((row) => row.copy_source_version_id !== null);
 
   return (
     <>
@@ -242,8 +243,9 @@ export function PaymentPlansTab({
                   >
                     <option value="">A blank schedule</option>
                     {copyable.map((row) => (
-                      <option key={row.version_id ?? row.plan_id} value={row.version_id ?? ""}>
-                        {row.plan_number} · {row.unit_reference} · v{row.version_number}
+                      <option key={row.plan_id} value={row.copy_source_version_id ?? ""}>
+                        {row.plan_number} · {row.unit_reference} · v
+                        {row.copy_source_version_number}
                       </option>
                     ))}
                   </select>

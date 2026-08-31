@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, paymentPlans } from "@/lib/api";
-import type { PaymentPlanDetail, PlanInstallment } from "@/lib/api";
+import type { PaymentPlanDetail, PlanInstallment, PlanVersionDetail } from "@/lib/api";
 import {
   Badge,
   Button,
@@ -115,6 +115,11 @@ export function PlanBuilder({
   const [attestation, setAttestation] = useState(emptyAttestation());
   const [revising, setRevising] = useState(false);
   const [revision, setRevision] = useState({ change_reason: "", effective_date: "" });
+  // Which version the drawer is showing. Null means the one being prepared;
+  // any other id selects a version to read. Selecting one changes nothing on
+  // the server — it is a choice of which immutable record to look at.
+  const [showing, setShowing] = useState<string | null>(null);
+  const [historical, setHistorical] = useState<PlanVersionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -144,6 +149,21 @@ export function PlanBuilder({
     })();
   }, [load]);
 
+  // A version that is neither in preparation nor governing is read on demand.
+  // The plan response already carries those two in full, so the only request
+  // ever made here is for history somebody deliberately opened.
+  useEffect(() => {
+    if (showing === null || detail === null) return;
+    if (showing === detail.current?.version.id || showing === detail.active?.version.id) return;
+    void (async () => {
+      try {
+        setHistorical(await paymentPlans.version(projectId, planId, showing));
+      } catch (caught) {
+        setError(caught instanceof ApiError ? caught.message : "Could not load that version.");
+      }
+    })();
+  }, [showing, detail, projectId, planId]);
+
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setError(null);
@@ -151,6 +171,7 @@ export function PlanBuilder({
     try {
       await action();
       setNotice(done);
+      setShowing(null);
       await load();
       await onChanged();
     } catch (caught) {
@@ -263,8 +284,28 @@ export function PlanBuilder({
   }
 
   const current = detail.current;
-  const version = current?.version ?? null;
-  const isDraft = version?.status === "draft";
+  const active = detail.active;
+  // Two versions can be true at once: the one being prepared and the one the
+  // buyer is actually being held to. They are the same most of the time, and
+  // during a revision — which can run for weeks — they are not.
+  const revisionOpen = Boolean(current && active && current.version.id !== active.version.id);
+  // A previously fetched version is only used when it is the one asked for,
+  // so no stale schedule can be shown while the next one is on its way — which
+  // is also why the effect above never has to clear it.
+  const shownDetail =
+    showing === null || showing === current?.version.id
+      ? current
+      : showing === active?.version.id
+        ? active
+        : historical?.version.id === showing
+          ? historical
+          : null;
+  const version = shownDetail?.version ?? null;
+  const isCurrent = Boolean(version && current && version.id === current.version.id);
+  const isActive = Boolean(version && active && version.id === active.version.id);
+  const isHistory = Boolean(version && !isCurrent && !isActive);
+  // Only the version in preparation is editable, and only while it is a draft.
+  const isDraft = isCurrent && version?.status === "draft";
   const code = currencyCodeOf(detail.currency_id);
   const sections = [
     { key: "schedule", label: "Schedule" },
@@ -290,8 +331,10 @@ export function PlanBuilder({
               {money(version?.contract_value_covered ?? null, code)}
             </strong>
           </span>
-          {detail.active_version_id && detail.active_version_id !== version?.id ? (
-            <Badge tone="success">A different version is active</Badge>
+          {active && version && active.version.id !== version.id ? (
+            <Badge tone="success">
+              v{active.version.version_number} governs this sale
+            </Badge>
           ) : null}
         </>
       }
@@ -303,10 +346,64 @@ export function PlanBuilder({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      {section === "schedule" && current && version ? (
+      {section === "schedule" && shownDetail && version ? (
         <>
+          {revisionOpen && current && active ? (
+            <section>
+              <SectionHeader
+                title="Two schedules"
+                description="One is being prepared. The other is the one this buyer is being held to until the revision is activated."
+              />
+              <div className="version-switch" role="group" aria-label="Which version to show">
+                <Button
+                  variant={isCurrent ? "primary" : "quiet"}
+                  aria-pressed={isCurrent}
+                  onClick={() => setShowing(current.version.id)}
+                >
+                  In preparation · v{current.version.version_number} ·{" "}
+                  {versionLabel(current.version.status)}
+                </Button>
+                <Button
+                  variant={isActive ? "primary" : "quiet"}
+                  aria-pressed={isActive}
+                  onClick={() => setShowing(active.version.id)}
+                >
+                  Standing schedule · v{active.version.version_number} · Governs this sale
+                </Button>
+              </div>
+              <p className="footnote">
+                Opening a revision does not change what the buyer owes. Instalments on the
+                standing schedule keep falling due, and attestations against it can still be
+                made and decided, until the revision is activated.
+              </p>
+            </section>
+          ) : null}
+
+          {isHistory ? (
+            <Notice tone="info">
+              Reading version {version.version_number} as it stands. Nothing here can be
+              changed — a superseded schedule is the record of what governed, and it is kept
+              exactly as it was.{" "}
+              <button
+                className="button-link"
+                type="button"
+                onClick={() => setShowing(null)}
+              >
+                Back to the current version
+              </button>
+            </Notice>
+          ) : null}
+
           <section>
-            <SectionHeader title="Where this version stands" />
+            <SectionHeader
+              title={
+                isActive && revisionOpen
+                  ? "The standing schedule"
+                  : isHistory
+                    ? "Where this version ended"
+                    : "Where this version stands"
+              }
+            />
             <Steps
               label="Payment plan lifecycle"
               steps={VERSION_SEQUENCE.map((key) => ({
@@ -338,7 +435,7 @@ export function PlanBuilder({
               description="Computed by the server from the stored schedule. Nothing here is totalled in the browser."
             />
             <ReconciliationStrip
-              reconciliation={current.reconciliation}
+              reconciliation={shownDetail.reconciliation}
               currencyId={detail.currency_id}
             />
           </section>
@@ -481,11 +578,11 @@ export function PlanBuilder({
                   </Button>
                 </FormActions>
               </>
-            ) : current.installments.length === 0 ? (
+            ) : shownDetail.installments.length === 0 ? (
               <EmptyState title="No instalments" hint="This version has no schedule." />
             ) : (
               <ScheduleTable
-                installments={current.installments}
+                installments={shownDetail.installments}
                 currencyId={detail.currency_id}
               />
             )}
@@ -494,10 +591,10 @@ export function PlanBuilder({
           <section>
             <SectionHeader title="What happens next" />
             <ButtonRow>
-              {canPrepare && isDraft ? (
+              {canPrepare && isCurrent && isDraft ? (
                 <Button
                   variant="primary"
-                  disabled={busy || !current.reconciliation.is_reconciled}
+                  disabled={busy || !shownDetail.reconciliation.is_reconciled}
                   onClick={() =>
                     void run(
                       () => paymentPlans.submitVersion(projectId, planId, version.id),
@@ -508,7 +605,7 @@ export function PlanBuilder({
                   Submit for approval
                 </Button>
               ) : null}
-              {canApprove && version.status === "submitted" ? (
+              {canApprove && isCurrent && version.status === "submitted" ? (
                 <>
                   <Button
                     variant="primary"
@@ -548,7 +645,7 @@ export function PlanBuilder({
                   </Button>
                 </>
               ) : null}
-              {canApprove && version.status === "approved" ? (
+              {canApprove && isCurrent && version.status === "approved" ? (
                 <Button
                   variant="primary"
                   disabled={busy}
@@ -562,17 +659,19 @@ export function PlanBuilder({
                   Activate
                 </Button>
               ) : null}
-              {canPrepare && version.status === "active" ? (
+              {canPrepare && isActive ? (
                 <>
-                  <Button
-                    disabled={busy}
-                    onClick={() => {
-                      setRevision({ change_reason: "", effective_date: todayISO() });
-                      setRevising(true);
-                    }}
-                  >
-                    Revise
-                  </Button>
+                  {revisionOpen ? null : (
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        setRevision({ change_reason: "", effective_date: todayISO() });
+                        setRevising(true);
+                      }}
+                    >
+                      Revise
+                    </Button>
+                  )}
                   <Button
                     disabled={busy}
                     onClick={() =>
@@ -590,18 +689,19 @@ export function PlanBuilder({
                 </>
               ) : null}
             </ButtonRow>
-            {isDraft && !current.reconciliation.is_reconciled ? (
+            {isDraft && !shownDetail.reconciliation.is_reconciled ? (
               <p className="footnote">
                 A schedule can only be put forward once it covers the contract exactly.
               </p>
             ) : null}
           </section>
 
-          {version.status === "active" ? (
+          {!isDraft ? (
             <ContingentSection
-              installments={current.installments}
-              canPrepare={canPrepare}
-              canApprove={canApprove}
+              installments={shownDetail.installments}
+              governing={isActive}
+              canPrepare={canPrepare && isActive}
+              canApprove={canApprove && isActive}
               busy={busy}
               onAttest={(row) => {
                 setAttestation(emptyAttestation());
@@ -630,8 +730,12 @@ export function PlanBuilder({
         </>
       ) : null}
 
-      {section === "schedule" && !current ? (
-        <EmptyState title="No version" hint="This plan has no schedule yet." />
+      {section === "schedule" && !shownDetail ? (
+        showing === null ? (
+          <EmptyState title="No version" hint="This plan has no schedule yet." />
+        ) : (
+          <Loading label="Loading that version…" lines={4} />
+        )
       ) : null}
 
       {section === "terms" && version ? (
@@ -670,18 +774,37 @@ export function PlanBuilder({
 
       {section === "history" ? (
         <section>
-          <SectionHeader title="Versions" />
-          <ul className="chip-list">
+          <SectionHeader
+            title="Versions"
+            description="Every schedule this plan has had. Open one to read it exactly as it stood."
+          />
+          <ul className="version-list">
             {detail.versions.map((entry) => (
-              <li key={entry.id} className="chip">
+              <li key={entry.id} className="version-entry">
                 <span className="chip-label">v{entry.version_number}</span>
                 <Badge tone={versionTone(entry.status)}>{versionLabel(entry.status)}</Badge>
-                <span className="chip-label">{businessDate(entry.effective_date)}</span>
+                <span className="chip-label mono nowrap">
+                  {businessDate(entry.effective_date)}
+                </span>
+                {entry.id === detail.active?.version.id ? (
+                  <span className="chip-label">Governs this sale</span>
+                ) : null}
+                <Button
+                  small
+                  variant="quiet"
+                  onClick={() => {
+                    setShowing(entry.id);
+                    setSection("schedule");
+                  }}
+                >
+                  View
+                </Button>
               </li>
             ))}
           </ul>
           <p className="footnote">
-            Nothing is overwritten. A superseded schedule stays readable exactly as it governed.
+            Nothing is overwritten. A superseded schedule stays readable exactly as it governed,
+            and opening one changes nothing about which schedule the sale runs on.
           </p>
         </section>
       ) : null}
@@ -827,6 +950,7 @@ export function PlanBuilder({
  */
 function ContingentSection({
   installments,
+  governing,
   canPrepare,
   canApprove,
   busy,
@@ -835,6 +959,8 @@ function ContingentSection({
   onReverse,
 }: {
   installments: PlanInstallment[];
+  /** Whether this is the schedule the sale actually runs on. */
+  governing: boolean;
   canPrepare: boolean;
   canApprove: boolean;
   busy: boolean;
@@ -850,8 +976,12 @@ function ContingentSection({
   return (
     <section>
       <SectionHeader
-        title="Waiting on an event"
-        description="These amounts are contracted. What makes each one due has not happened yet, and a forecast date is not the event."
+        title={governing ? "Waiting on an event" : "Events and attestations"}
+        description={
+          governing
+            ? "These amounts are contracted. What makes each one due has not happened yet, and a forecast date is not the event."
+            : "What each contingent instalment waited on, and every attestation ever made about it. This version does not govern the sale, so there is nothing to decide here."
+        }
       />
       {contingent.map((row) => {
         const standing = row.trigger_events.find((event) => event.status === "submitted");
@@ -923,14 +1053,15 @@ function ContingentSection({
               </div>
             ))}
 
-            {row.trigger_type === "manual_approved_event" &&
+            {governing &&
+            row.trigger_type === "manual_approved_event" &&
             row.trigger_events.length === 0 &&
             !canPrepare ? (
               <p className="footnote">
                 Collections attests that this event occurred; an Approver / CFO sanctions it.
               </p>
             ) : null}
-            {standing && !canApprove ? (
+            {governing && standing && !canApprove ? (
               <p className="footnote">
                 Submitted, and waiting on an Approver / CFO. Nothing is due until they sanction
                 it.
@@ -939,11 +1070,13 @@ function ContingentSection({
           </div>
         );
       })}
-      <p className="footnote">
-        A construction milestone becomes due when construction certifies it, which this system
-        does not yet record. Handover and title transfer resolve from the sale itself — use
-        Refresh triggers once the event has happened.
-      </p>
+      {governing ? (
+        <p className="footnote">
+          A construction milestone becomes due when construction certifies it, which this system
+          does not yet record. Handover and title transfer resolve from the sale itself — use
+          Refresh triggers once the event has happened.
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -1836,6 +1836,9 @@ class RegisterRow:
         "awaiting_trigger_count",
         "client_display_name",
         "contract_value_covered",
+        "copy_source_status",
+        "copy_source_version_id",
+        "copy_source_version_number",
         "currency_id",
         "effective_date",
         "installment_count",
@@ -1889,6 +1892,43 @@ def _next_on_or_after(dates: list[date], today: date) -> date | None:
     """
     upcoming = [value for value in dates if value >= today]
     return min(upcoming) if upcoming else None
+
+
+def settled_source_of(versions: list[PaymentPlanVersion]) -> PaymentPlanVersion | None:
+    """The best version of this plan that somebody has actually agreed to.
+
+    A schedule is worth copying once it has been sanctioned; a draft is a
+    proposal and a rejected one is a proposal that was refused. The standing
+    version first, then one approved but not yet in force, then the most
+    recent one it replaced.
+
+    Chosen separately from :func:`_current_version_of` because the two answer
+    different questions. Opening a draft revision changes which version is
+    being *prepared*; it does not un-agree the schedule the parties signed,
+    and a copy selector that lost the plan the moment somebody started
+    revising it would be answering the wrong one.
+    """
+    ordered = sorted(versions, key=lambda version: version.version_number, reverse=True)
+    for wanted in (VERSION_ACTIVE, VERSION_APPROVED, VERSION_SUPERSEDED):
+        found = next((version for version in ordered if version.status == wanted), None)
+        if found is not None:
+            return found
+    return None
+
+
+def forward_dates(rows: list[PaymentPlanInstallment]) -> tuple[date | None, date | None]:
+    """The soonest scheduled and forecast dates still to come, in that order.
+
+    Forward-only, and the same answer on every surface. PR-MVP-06 cannot say
+    whether a date already past was paid, so offering the oldest date in the
+    schedule under a heading like "next" would read as arrears — a claim about
+    money this module has no basis for.
+    """
+    today = business_today()
+    return (
+        _next_on_or_after([row.actual_due_date for row in rows if row.actual_due_date], today),
+        _next_on_or_after([row.forecast_due_date for row in rows if row.forecast_due_date], today),
+    )
 
 
 def plan_register(session: Session, *, project: Project, actor: ActorContext) -> list[RegisterRow]:
@@ -1945,12 +1985,15 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
         ):
             by_version[row.payment_plan_version_id].append(row)
 
-    today = business_today()
     rows: list[RegisterRow] = []
     for plan, sale, unit, client in listed:
         version = chosen.get(plan.id)
         installments = by_version.get(version.id, []) if version is not None else []
         reconciliation = reconcile_rows(version, installments) if version is not None else None
+        next_scheduled, next_forecast = forward_dates(installments)
+        # The settled schedule comes from the versions already in memory, so
+        # naming a copy source costs no additional query.
+        source = settled_source_of(by_plan.get(plan.id, []))
         rows.append(
             RegisterRow(
                 plan_id=plan.id,
@@ -1974,12 +2017,11 @@ def plan_register(session: Session, *, project: Project, actor: ActorContext) ->
                     reconciliation.scheduled_principal_total if reconciliation else None
                 ),
                 is_reconciled=reconciliation.is_reconciled if reconciliation else False,
-                next_scheduled_date=_next_on_or_after(
-                    [row.actual_due_date for row in installments if row.actual_due_date], today
-                ),
-                next_forecast_date=_next_on_or_after(
-                    [row.forecast_due_date for row in installments if row.forecast_due_date], today
-                ),
+                next_scheduled_date=next_scheduled,
+                next_forecast_date=next_forecast,
+                copy_source_version_id=source.id if source else None,
+                copy_source_version_number=source.version_number if source else None,
+                copy_source_status=source.status if source else None,
                 awaiting_trigger_count=sum(
                     1 for row in installments if row.trigger_status == TRIGGER_AWAITING
                 ),

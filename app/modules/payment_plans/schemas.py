@@ -307,6 +307,12 @@ class VersionDetailRead(BaseModel):
     version: VersionRead
     installments: list[InstallmentRead]
     reconciliation: ReconciliationRead
+    #: The soonest scheduled and forecast dates still to come on this version.
+    #: Derived on the server so every surface that summarises a schedule gives
+    #: the same answer, and so no screen has to decide for itself what "next"
+    #: means over a list of dates that includes the past.
+    next_scheduled_date: date | None
+    next_forecast_date: date | None
 
 
 class PlanDetailRead(BaseModel):
@@ -321,7 +327,16 @@ class PlanDetailRead(BaseModel):
     unit_reference: str
     client_display_name: str
     currency_id: uuid.UUID
+    #: The version being worked on: the one in preparation if there is one,
+    #: otherwise the standing one, otherwise the most recent history. This is
+    #: the editing workspace, and it is not a claim about what governs.
     current: VersionDetailRead | None
+    #: The version actually governing the sale, or nothing before the first
+    #: activation. Carried in full rather than as an identifier because a
+    #: revision can be in preparation for weeks while this schedule keeps
+    #: falling due, and every surface that needs to say what the buyer owes
+    #: needs its rows, not its id.
+    active: VersionDetailRead | None
     active_version_id: uuid.UUID | None
     versions: list[VersionRead]
 
@@ -415,6 +430,13 @@ class RegisterRowRead(BaseModel):
     next_forecast_date: date | None
     awaiting_trigger_count: int
     approved_by_user_id: uuid.UUID | None
+    #: The best settled version of this plan — standing, else approved, else
+    #: the most recent superseded one. Named separately from the version the
+    #: row describes because opening a draft revision must not withdraw the
+    #: schedule the parties agreed from the list of plans worth copying.
+    copy_source_version_id: uuid.UUID | None
+    copy_source_version_number: int | None
+    copy_source_status: VersionStatus | None
 
 
 class PlanRegisterRead(BaseModel):

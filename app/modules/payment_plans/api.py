@@ -129,10 +129,13 @@ def _version_detail(session: DbSession, version: PaymentPlanVersion) -> VersionD
     """
     rows = service.installments_of(session, version_id=version.id)
     events = service.trigger_events_by_installment(session, version_id=version.id)
+    next_scheduled, next_forecast = service.forward_dates(rows)
     return VersionDetailRead(
         version=VersionRead.model_validate(version),
         installments=[_installment_read(row, events.get(row.id)) for row in rows],
         reconciliation=_reconciliation_read(service.reconcile_rows(version, rows)),
+        next_scheduled_date=next_scheduled,
+        next_forecast_date=next_forecast,
     )
 
 
@@ -220,8 +223,21 @@ def _plan_detail(
         raise NotFoundError("Sale contract not found.")
     unit = session.get(Unit, sale.unit_id)
     client = session.get(Client, sale.client_id)
+    # Two questions, two answers. Which version is being prepared, and which
+    # one the buyer is actually being held to — these are the same version
+    # most of the time and emphatically not the same during a revision, which
+    # can run for weeks while the standing schedule keeps falling due.
     current = service.current_version(session, plan_id=plan.id)
     active = service.active_version(session, plan_id=plan.id)
+    current_detail = _version_detail(session, current) if current else None
+    if active is None:
+        active_detail = None
+    elif current is not None and active.id == current.id:
+        # The ordinary case. Serialised twice, read once: no second pass over
+        # the same instalments, attestations or arithmetic.
+        active_detail = current_detail
+    else:
+        active_detail = _version_detail(session, active)
     return PlanDetailRead(
         plan=PlanRead.model_validate(plan),
         sale_id=sale.id,
@@ -234,7 +250,8 @@ def _plan_detail(
         # passport number, so this module never asks for one.
         client_display_name=client.display_name if client else "",
         currency_id=sale.currency_id,
-        current=_version_detail(session, current) if current else None,
+        current=current_detail,
+        active=active_detail,
         active_version_id=active.id if active else None,
         versions=[
             VersionRead.model_validate(version)

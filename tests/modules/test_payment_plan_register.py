@@ -62,8 +62,15 @@ def statements() -> Iterator[list[str]]:
         event.remove(Engine, "before_cursor_execute", record)
 
 
-def _touching(seen: list[str], table: str) -> list[str]:
-    return [statement for statement in seen if table in statement]
+def _reading(seen: list[str], table: str) -> list[str]:
+    """Statements that read *from* a table, not ones that merely join it.
+
+    A trigger-event query names payment_plan_installments in its join, so
+    substring matching would count it as an instalment read and quietly turn a
+    duplicate-work test into one that passes for the wrong reason. The select
+    list names the driving table first, so that is what is matched.
+    """
+    return [statement for statement in seen if f"SELECT {table}.id" in statement]
 
 
 def _copy(row: object, **overrides: object) -> dict[str, object]:
@@ -176,8 +183,8 @@ def test_the_register_reads_the_same_number_of_statements_at_any_size(
     assert len(many_plans) == len(one_plan), (
         f"{len(one_plan)} statements for one plan, {len(many_plans)} for {BULK_PLANS + 1}"
     )
-    assert len(_touching(many_plans, "payment_plan_installments")) == 1
-    assert len(_touching(many_plans, "payment_plan_versions")) == 1
+    assert len(_reading(many_plans, "payment_plan_installments")) == 1
+    assert len(_reading(many_plans, "payment_plan_versions")) == 1
 
 
 def test_the_register_totals_are_right_at_fifty_plans(
@@ -239,3 +246,46 @@ def test_the_register_looks_forward_only_and_never_implies_collection(
         "next_actual_due_date",
     ):
         assert absent not in row, f"{absent} has no business in a PR-MVP-06 register"
+
+
+def test_a_plan_with_no_revision_reads_its_schedule_once(
+    collections_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    """The plan response carries the same version twice and reads it once.
+
+    Ordinarily the version being prepared and the version governing are the
+    same one. Serialising it under both keys is right; loading its instalments,
+    its attestations and its reconciliation twice to do so would not be.
+    """
+    plan_id, _version_id = active_plan
+    with statements() as seen:
+        response = collections_client.get(f"{plans_url(project_id)}/{plan_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["current"]["version"]["id"] == body["active"]["version"]["id"]
+    assert len(_reading(seen, "payment_plan_installments")) == 1
+    assert len(_reading(seen, "installment_trigger_events")) == 1
+
+
+def test_a_plan_with_a_revision_reads_each_schedule_once(
+    collections_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    """Two genuinely different versions cost two reads, and not four."""
+    plan_id, _version_id = active_plan
+    opened = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Renegotiating timing"},
+    )
+    assert opened.status_code == 201, opened.text
+
+    with statements() as seen:
+        response = collections_client.get(f"{plans_url(project_id)}/{plan_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["current"]["version"]["id"] != body["active"]["version"]["id"]
+    assert len(_reading(seen, "payment_plan_installments")) == 2
+    assert len(_reading(seen, "installment_trigger_events")) == 2
