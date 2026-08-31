@@ -378,6 +378,104 @@ Tests protect business behaviour, not implementation trivia.
 
 ---
 
+## 10a. Two-speed CI
+
+Continuous integration runs at two speeds, and GitHub's own draft state is the
+switch. Nothing else selects it: no label, no slash command, no bot, no comment
+parser.
+
+```text
+Draft               Backend Fast   structural checks, then the tests this
+                                   change can plausibly break
+Ready for review    Backend        structural checks, then every test
+```
+
+The reason is arithmetic. At roughly fifteen hundred backend tests the full
+suite takes around forty-five minutes, and running it on every push turned a
+one-line correction into a forty-five-minute wait. A wait long enough to walk
+away from is a wait that stops being read, which is how a team ends up merging
+on a stale green tick.
+
+**Fast CI is not weaker CI.** It answers a narrower question — *did I break the
+area this change can reasonably affect?* — and the broad question is still
+asked, in full, before anything merges. What changed is *when* the exhaustive
+proof happens, never *whether*.
+
+### What each speed runs
+
+Both keep every structural check, because they are cheap and catch a great
+deal: `pip check`, `ruff check .`, `ruff format --check .`,
+`python -m compileall app`, `alembic upgrade head`, `alembic check`. Both run
+against a real `postgres:16`. Fast means fewer relevant tests; it never means a
+different database, because row locks, partial unique indexes and `NUMERIC`
+are the behaviour under test.
+
+Only the pytest scope differs. `Backend Fast` runs what
+`scripts/ci_backend_tests.py` selects. `Backend` runs `pytest -q` — no
+selection, no `--maxfail`, no markers, no excluded concurrency tests.
+
+### How the fast selection is made
+
+The selector is explicit and lives in one small standard-library file. Three
+rules and nothing more:
+
+- **A domain owns a family of test files.** The map was built by reading the
+  real names in `tests/`, not inferred.
+- **A change flows downstream, never up, and reachability is transitive.**
+  `DOWNSTREAM` holds direct edges only and the closure walks them, so a pricing
+  change reaches sales and, through sales, payment plans. A sales change does
+  not re-run pricing: sales' own tests already prove its use of pricing's
+  public contract. This asymmetry is where the time is saved.
+- **Anything unrecognised runs everything.** A new module, a shared fixture,
+  `app/core/`, the access layer, a migration no domain claims, an operational
+  script, an unclassified root file — all fall back to the full suite and print
+  the reason. Known-harmless is targeted; unknown is full. The selector fails
+  safe, never open.
+
+A changed or newly added test file always runs, whatever else was selected. A
+small always-run backbone — configuration, health, migrations, static export,
+UX copy, authentication, authorization, audit, API shape and the selector's own
+tests — runs on every fast build, about a hundred and twenty tests in eighty
+seconds.
+
+Adding a domain is two lines: a `DOMAIN_TEST_PREFIXES` entry and, if anything
+consumes it, one `DOWNSTREAM` edge — not an edge from every ancestor, because
+the closure is transitive. Guard tests fail if any test file in the repository
+belongs to no domain, or if the dependency graph acquires a cycle of any
+length, so the map cannot rot quietly.
+
+### The workflow this implies
+
+```text
+open the pull request as a draft
+  ↓
+Backend Fast + Frontend            minutes, not tens of minutes
+  ↓
+independent review, fixes, repeat
+  ↓
+mark ready for review
+  ↓
+Backend (full) + Frontend          on the exact merge candidate
+  ↓
+merge
+```
+
+- **A draft is an iteration state and is never a merge candidate.** It does not
+  run the full suite and must not be merged.
+- **Ready for review is a merge-candidate state.** The full suite is mandatory.
+- **Any commit pushed after a pull request is ready re-runs the full job.** The
+  green tick therefore belongs to the exact commit somebody would merge, never
+  to an older one. Never merge on a full run whose head SHA is not the PR's
+  current head.
+- If substantial iteration resumes, convert back to draft to get the fast cycle
+  again.
+
+Locally the same idea applies: run the affected domain's tests and the linters
+while implementing, and the full suite once before declaring the work final.
+The authoritative proof is the exact-head `Backend` run on GitHub.
+
+---
+
 ## 11. Pull request discipline
 
 ```text
@@ -398,7 +496,11 @@ delete PR branch
 - No direct development on `main`. Never rewrite or force-push `main`.
 - No long-lived `develop` branch. No environment branches.
 - Squash merge normal feature PRs. Delete merged branches.
-- Branch naming: `mvp/pr-NN-short-slug`.
+- Branch naming: `mvp/pr-NN-short-slug` for roadmap PRs, `eng/pr-NN-short-slug`
+  for horizontal engineering work that adds no functional scope.
+- **Open the pull request as a draft.** Draft is the iteration state and runs
+  `Backend Fast`; marking it ready for review is what asks for the full
+  regression. See §10a.
 
 ### Size discipline
 
@@ -415,6 +517,8 @@ delete PR branch
 A PR is done when all of the following hold:
 
 - [ ] Scope matches its roadmap entry; nothing extra was smuggled in.
+- [ ] The pull request is marked ready for review, and the `Backend` full
+      suite is green **on its current head SHA** — not on an earlier commit.
 - [ ] `ruff check .` and `ruff format --check .` pass.
 - [ ] `python -m compileall app` passes.
 - [ ] `pip check` reports no broken requirements.

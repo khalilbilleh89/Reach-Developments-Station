@@ -8,6 +8,19 @@ Delete sections that genuinely do not apply. Do not delete a section merely
 because filling it in is inconvenient.
 -->
 
+## CI phase
+
+<!--
+Draft  = iteration. Runs `Backend Fast`. NEVER merge from this state.
+Ready  = merge candidate. Runs the full `Backend` suite on the exact head.
+
+Any commit pushed after the PR is marked ready re-runs the full suite, so the
+green tick always belongs to the current head. Never merge on an older SHA.
+-->
+
+- [ ] Draft — focused CI while iterating
+- [ ] Ready for review — full exact-head regression
+
 ## Context
 
 <!-- Why does this PR exist? Which roadmap PR is it? -->

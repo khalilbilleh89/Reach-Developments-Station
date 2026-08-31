@@ -2,12 +2,33 @@
 #
 # Intentionally lightweight: lint, compile, migrate, test, build. Nothing here
 # deploys. Render remains solely responsible for deployment.
+#
+# CI runs at two speeds, and GitHub's own draft state is the switch.
+#
+#   Draft               Backend Fast  — structural checks, then the tests the
+#                                       change can plausibly break
+#   Ready for review    Backend       — structural checks, then every test
+#
+# A draft cannot be merged, so a draft does not need the whole suite; a pull
+# request marked ready is a merge candidate, so it gets all of it. Every push
+# after a pull request is marked ready re-runs the full job, which is what keeps
+# the green tick attached to the exact commit somebody would merge rather than
+# to an older one.
+#
+# Only one backend job ever runs for a given pull request state. Fast is not a
+# preview of Full; it is the other half of the same decision.
 
 name: CI
 
 on:
   pull_request:
     branches: [main]
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
 
 permissions:
   contents: read
@@ -17,9 +38,96 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend_fast:
+    name: Backend Fast
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == true
+
+    services:
+      postgres:
+        # A throwaway CI database. Never point this at Render PostgreSQL.
+        # Fast means fewer relevant tests, never a different database: row
+        # locks, partial unique indexes and NUMERIC are the behaviour under
+        # test, and SQLite has opinions about all three.
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Full history: the selection is made against the merge base, because
+          # a pull request is five commits as often as one and a run that only
+          # understood the last patch would miss what the first four changed.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      # Everything from here to the migration drift check is identical to the
+      # full job. These are cheap and catch a great deal, so they run on every
+      # push whatever the pull request's state. Only the pytest scope differs.
+
+      - name: Verify dependency tree
+        run: pip check
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Compile
+        run: python -m compileall app
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Check for model and schema drift
+        run: alembic check
+
+      # The base commit comes from the event payload rather than a branch name,
+      # so the answer does not change if main moves while the job is queued.
+      - name: Choose the tests this change needs
+        run: |
+          python scripts/ci_backend_tests.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --out selected-tests.txt
+
+      - name: Test (targeted)
+        run: pytest -q $(tr '\n' ' ' < selected-tests.txt)
+
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
 
     services:
       postgres:
@@ -83,8 +191,11 @@ jobs:
       - name: Check for model and schema drift
         run: alembic check
 
+      # The whole suite, unfiltered. No selection, no --maxfail, no markers,
+      # no excluded concurrency tests. This is the result a merge is allowed to
+      # rely on, and it is only trustworthy if it is genuinely everything.
       - name: Test
-        run: pytest -q
+        run: pytest -q --durations=20
 
   frontend:
     name: Frontend
@@ -111,5 +222,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `next build` type-checks the whole project, so a separate tsc pass would
+      # be the same work twice. It runs on every push in both states because it
+      # finishes in well under a minute.
       - name: Production build
         run: npm run build
