@@ -108,3 +108,26 @@ export function todayISO(): string {
   const day = `${now.getDate()}`.padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
 }
+
+/**
+ * Is this server decimal greater than zero?
+ *
+ * Needed because the browser has to decide whether to *offer* an action —
+ * whether an instalment still has room, whether a receipt has cash left — and
+ * `Number(value) > 0` would put a float in the path of a monetary decision.
+ * The sign and the digits are read as text instead, so a value the server sent
+ * exactly is judged exactly.
+ *
+ * This is a presentational predicate, not arithmetic. Whether the action then
+ * succeeds is still the server's to decide, against the same figures under
+ * lock; a stale screen offering a button is expected, and is refused with a
+ * message that says what is actually left.
+ */
+export function isPositive(value: string | null | undefined): boolean {
+  if (value === null || value === undefined || value === "") return false;
+  const match = DECIMAL.exec(value);
+  if (!match) return false;
+  const [, sign, integer, fraction] = match;
+  if (sign === "-") return false;
+  return /[1-9]/.test(integer) || /[1-9]/.test(fraction ?? "");
+}

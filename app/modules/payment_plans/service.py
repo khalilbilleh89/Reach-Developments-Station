@@ -1267,8 +1267,73 @@ def activate_version(
     version, plan = _visible_version_for_plan(
         session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
     )
-    _lock_plan(session, project_id=project.id, plan_id=plan.id)
+    plan = _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
+    _require_no_collection_activity(plan, version=version)
+    return _activate_locked(
+        session,
+        project=project,
+        actor=actor,
+        plan=plan,
+        version=version,
+        correlation_id=correlation_id,
+    )
+
+
+def _require_no_collection_activity(plan: PaymentPlan, *, version: PaymentPlanVersion) -> None:
+    """Refuse the ordinary activation path once cash has arrived on this plan.
+
+    Not bureaucracy, and not a rule about who may decide. Activating a
+    replacement version swaps in instalments with new identifiers, and every
+    receipt allocation already made points at the old ones — so a schedule that
+    was half collected would come back on screen reading as entirely unpaid,
+    with the cash still in the ledger and no longer visible against anything.
+
+    The refusal names the way through, because there is one: PR-MVP-07's
+    restructure carries the allocations across in the same transaction as the
+    activation, and refuses outright if a single unit of cash cannot be placed.
+
+    Activating the *first* version is untouched — there is nothing to carry.
+    """
+    if plan.collections_started_at is None:
+        return
+    if active_version_id_of(version) is None:
+        return
+    raise ConflictError(
+        "This plan has confirmed collection activity. Activate the revision through "
+        "a Collections restructure, so the cash already received is carried onto the "
+        "new schedule in the same transaction."
+    )
+
+
+def active_version_id_of(version: PaymentPlanVersion) -> uuid.UUID | None:
+    """The version this one would replace, read from the row being activated.
+
+    A separate function only so the guard above reads as one sentence: a first
+    activation has no predecessor and nothing to carry, and the value that says
+    so is the source version the revision was copied from.
+    """
+    return version.source_version_id
+
+
+def _activate_locked(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    plan: PaymentPlan,
+    version: PaymentPlanVersion,
+    correlation_id: uuid.UUID,
+) -> PaymentPlanVersion:
+    """Activate a version whose plan and version rows are already locked.
+
+    Extracted so PR-MVP-07's restructure can reach exactly these checks — the
+    sale is still active, the frozen basis still matches, the schedule still
+    reconciles, the predecessor is superseded in the same transaction — without
+    a second copy of them drifting out of step with this one. The only thing it
+    does not apply is the collections guard, which is the whole reason the
+    restructure exists.
+    """
     if version.status != VERSION_APPROVED:
         raise ConflictError("Only an approved schedule can be activated.")
 
@@ -2099,3 +2164,100 @@ def plan_for_sale(
     return session.scalars(
         select(PaymentPlan).where(PaymentPlan.sale_contract_id == sale.id)
     ).first()
+
+
+# --------------------------------------------------------------------------- #
+# The collections boundary
+#
+# Two contracts, and neither is an HTTP route. PR-MVP-07 owns receipts and
+# allocations; this module owns the contractual schedule and the rule that a
+# schedule with cash against it cannot be swapped out from underneath it.
+#
+# The dependency points one way. Collections imports payment plans; payment
+# plans imports nothing from collections and never will, because the moment it
+# does the two modules can no longer be reasoned about — or tested — apart.
+# There is no plugin registry, no event bus and no hook here: two named
+# functions are enough for the one interaction that actually exists.
+# --------------------------------------------------------------------------- #
+
+
+def lock_plan(session: Session, *, project_id: uuid.UUID, plan_id: uuid.UUID) -> PaymentPlan:
+    """Take a plan's row for update, for a caller in another domain.
+
+    Collections needs this lock before it reads which version is governing, so
+    that a restructure cannot activate a replacement between the read and the
+    write. Public rather than reaching into the private helper, because the
+    lock order is a property of the system and not of this module.
+    """
+    return _lock_plan(session, project_id=project_id, plan_id=plan_id)
+
+
+def lock_version(
+    session: Session, *, project_id: uuid.UUID, version_id: uuid.UUID
+) -> PaymentPlanVersion:
+    """Take a version's row for update, for a caller in another domain.
+
+    Needed by the collections restructure, which must hold both the version it
+    is replacing and the one replacing it while it moves the cash between their
+    instalments.
+    """
+    return _lock_version(session, project_id=project_id, version_id=version_id)
+
+
+def mark_collections_started(
+    session: Session, *, project_id: uuid.UUID, plan_id: uuid.UUID
+) -> PaymentPlan:
+    """Record that cash has now been confirmed against this plan. Idempotent.
+
+    Called by collections inside the transaction that confirms the first
+    receipt, so the marker and the money it refers to commit together. The
+    caller is expected to hold the project and plan locks already; the row is
+    taken for update again here regardless, because a contract that quietly
+    depends on its caller having remembered a lock is a contract that fails on
+    the day somebody adds a second caller.
+
+    Set once and never cleared. Reversing the last receipt does not undo it:
+    the schedule has still been collected against, the allocations are still on
+    the record, and the restructure path is still the honest way to replace it.
+    """
+    plan = _lock_plan(session, project_id=project_id, plan_id=plan_id)
+    if plan.collections_started_at is None:
+        plan.collections_started_at = _now()
+        session.flush()
+    return plan
+
+
+def activate_restructured_version(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    plan: PaymentPlan,
+    version: PaymentPlanVersion,
+    correlation_id: uuid.UUID,
+) -> PaymentPlanVersion:
+    """Activate a replacement schedule on behalf of a collections restructure.
+
+    Every check the ordinary path makes still runs — approved, effective today
+    or earlier, sale still active, frozen basis still matching, schedule still
+    reconciling, predecessor superseded in the same transaction. The single
+    difference is that the collections guard does not apply, because the caller
+    is the mechanism that guard exists to point at.
+
+    Deliberately not exposed as a route. Reaching this without having carried
+    the allocations forward first would produce exactly the silent loss the
+    guard prevents, so the only way in is through
+    ``collections.service.apply_restructure``, which does that carry-forward in
+    the same transaction and refuses if a single unit of cash cannot be placed.
+
+    The caller holds the project, plan and version locks. It also owns the
+    transaction: nothing here commits.
+    """
+    return _activate_locked(
+        session,
+        project=project,
+        actor=actor,
+        plan=plan,
+        version=version,
+        correlation_id=correlation_id,
+    )

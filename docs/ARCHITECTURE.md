@@ -151,7 +151,7 @@ in advance. No circular imports.
 The business domains stack in one direction, and it is never reversed:
 
 ```text
-inventory  ↑  pricing  ↑  sales  ↑  payment_plans  ↑  collections (PR-MVP-07)
+inventory  ↑  pricing  ↑  sales  ↑  payment_plans  ↑  collections
 ```
 
 `payment_plans` reads sales through its public service contract — a completed
@@ -162,9 +162,33 @@ carries no column pointing at one: a sale's governing schedule is found through
 the downstream one. Where a screen needs both, the frontend composes the two
 responses.
 
+`collections` sits at the end of the chain and writes into three domains above
+it, always through a named contract and never into a column:
+
+```text
+collections → inventory.apply_collection_status              the unit's collection dimension
+collections → sales.apply_collection_clearance               the handover gate
+collections → sales.revoke_collection_clearance              when the ledger reopens
+collections → payment_plans.mark_collections_started         the boundary marker
+collections → payment_plans.activate_restructured_version    the carried-forward schedule
+```
+
+None of the three imports collections. The one column any of them gained is
+`payment_plans.collections_started_at`, and it lives there rather than in a
+collections table because the rule it guards is one payment plans enforces:
+once cash has been confirmed against a schedule, the ordinary activation path
+refuses to swap its instalments out, because the allocations already made point
+at the rows being replaced. `activate_restructured_version` is the single way
+past that guard, it is deliberately not an HTTP route, and the only caller is
+the restructure — which carries every allocation across in the same transaction
+or refuses outright.
+
+Reading another domain's rows is ordinary and done directly. Writing them is
+not, and there is no path in collections that does.
+
 ---
 
-## 7. Current state (through PR-MVP-06)
+## 7. Current state (through PR-MVP-07)
 
 ```text
 app/
@@ -184,6 +208,7 @@ app/
     ├── pricing/             pricing policy, price versions, premiums, escalation, benchmarks
     ├── sales/               clients, reservations, contracts, legal events, cancellation, handover
     ├── payment_plans/       payment schedules, versions, instalments, triggers
+    ├── collections/         receipts, allocations, aging, disputes, waivers, restructures, refunds
     └── audit/               append-only governance history
 ```
 
@@ -312,6 +337,46 @@ trigger, never of payment. A construction-milestone instalment cannot hold an
 actual due date while it awaits its trigger, and that is a database CHECK rather
 than a service rule, because the service is one refactor from being bypassed and
 the constraint is not.
+
+`collections` carries the same sixth file for the same reason:
+
+```text
+app/modules/collections/
+├── models.py
+├── schemas.py
+├── permissions.py    Collections records, Finance confirms, never the same person
+├── ledger.py         aging arithmetic, derived status, restructure carry-forward
+├── service.py
+└── api.py
+```
+
+`ledger.py` takes `as_of` as a parameter and never reaches for today, which is
+what makes "what was the aging on 31 August?" an answerable question rather than
+a report somebody has to have snapshotted in advance. It has no branch that
+reads `forecast_due_date` at all — a construction milestone whose expected date
+passed three months ago is awaiting its trigger, not ninety days overdue, and
+the absence of the branch is a stronger guarantee than a branch that declines to
+take it.
+
+PR-MVP-07 adds a fourth truth to the three above:
+
+```text
+PR-MVP-07  Cash truth                  what arrived, where it went, what is left
+```
+
+and keeps it apart from the others with the same discipline. A *recorded*
+receipt is a claim and moves no balance; only a Finance-confirmed one is cash. A
+receipt is not an allocation, so cash that has arrived and not been applied is
+reported as unapplied rather than absorbed. A refund is money leaving and has
+its own table — never a negative receipt, because a signed amount would make
+every `SUM` over receipts ambiguous and would misstate PR-MVP-10's cashflow the
+day it is written.
+
+Nothing in the module stores a balance. There is no `outstanding_amount`, no
+`unapplied_amount` and no `project_total_overdue`: outstanding, unapplied, days
+overdue, aging bucket and collection status are all computed from rows at read
+time, because a stored total becomes the wrong one the first time a write path
+forgets it.
 
 ### Inventory integrity
 

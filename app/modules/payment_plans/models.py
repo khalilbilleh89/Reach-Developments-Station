@@ -187,6 +187,21 @@ class PaymentPlan(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
+    #: When the first receipt against this plan was confirmed. Set once, by
+    #: PR-MVP-07 through :func:`~app.modules.payment_plans.service.
+    #: mark_collections_started`, and never cleared.
+    #:
+    #: It lives here rather than in collections because it guards a rule this
+    #: module enforces: once cash has been received against a schedule, the
+    #: ordinary activation path must refuse to swap the instalments underneath
+    #: it, because the replacement rows have new identifiers and the money
+    #: already allocated would drop out of the current view. The dependency
+    #: points one way — collections calls payment plans, never the reverse — so
+    #: the column that carries the fact belongs to the module that reads it.
+    collections_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

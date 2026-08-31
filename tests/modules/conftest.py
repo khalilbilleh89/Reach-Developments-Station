@@ -1096,3 +1096,137 @@ def other_phase_plan(
         "manual_installment_id": by_sequence[2]["id"],
         "event_id": attested.json()["id"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Collections (PR-MVP-07)
+# --------------------------------------------------------------------------- #
+
+
+def collections_url(project_id: str) -> str:
+    return f"/api/v1/projects/{project_id}/collections"
+
+
+@pytest.fixture
+def second_collections_officer(db: Session) -> User:
+    """A second collections officer, for the cases where the first is the maker."""
+    return make_user(db, email="collections2@example.com", roles=("collections",))
+
+
+@pytest.fixture
+def second_collections_client(
+    admin_client: TestClient, project_id: str, second_collections_officer: User
+) -> TestClient:
+    grant_access(admin_client, project_id, second_collections_officer)
+    return client_for(second_collections_officer.email)
+
+
+@pytest.fixture
+def collections_and_finance(db: Session) -> User:
+    """One person holding both roles.
+
+    The point of this fixture is that holding both must not make somebody a
+    complete maker/checker pair on their own: the separation is enforced by
+    user identifier, not by role, so this user can record a receipt or confirm
+    somebody else's but never both halves of the same one.
+    """
+    return make_user(db, email="both@example.com", roles=("collections", "finance"))
+
+
+@pytest.fixture
+def both_roles_client(
+    admin_client: TestClient, project_id: str, collections_and_finance: User
+) -> TestClient:
+    grant_access(admin_client, project_id, collections_and_finance)
+    return client_for(collections_and_finance.email)
+
+
+@pytest.fixture
+def second_finance(db: Session) -> User:
+    return make_user(db, email="finance2@example.com", roles=("finance",))
+
+
+@pytest.fixture
+def second_finance_client(
+    admin_client: TestClient, project_id: str, second_finance: User
+) -> TestClient:
+    grant_access(admin_client, project_id, second_finance)
+    return client_for(second_finance.email)
+
+
+def collection_account(
+    client: TestClient, project_id: str, sale_id: str, **params: object
+) -> dict[str, Any]:
+    """One sale's collections account, as the API reports it."""
+    response = client.get(f"{collections_url(project_id)}/sales/{sale_id}", params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def governing_installments(
+    client: TestClient, project_id: str, sale_id: str
+) -> list[dict[str, Any]]:
+    """The instalments of the schedule currently governing the sale."""
+    return collection_account(client, project_id, sale_id)["installments"]
+
+
+def record_receipt(
+    client: TestClient,
+    project_id: str,
+    sale_id: str,
+    amount: str,
+    receipt_date: str = "2026-01-15",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {"amount": amount, "receipt_date": receipt_date}
+    body.update(overrides)
+    return client.post(f"{collections_url(project_id)}/sales/{sale_id}/receipts", json=body)
+
+
+def confirm_receipt(client: TestClient, project_id: str, receipt_id: str) -> Response:
+    return client.post(f"{collections_url(project_id)}/receipts/{receipt_id}/confirm", json={})
+
+
+def allocate(
+    client: TestClient,
+    project_id: str,
+    receipt_id: str,
+    installment_id: str,
+    amount: str,
+) -> Response:
+    return client.post(
+        f"{collections_url(project_id)}/receipts/{receipt_id}/allocations",
+        json={"installment_id": installment_id, "amount": amount},
+    )
+
+
+@pytest.fixture
+def collecting_sale(
+    collections_client: TestClient,
+    project_id: str,
+    active_sale: str,
+    active_plan: tuple[str, str],
+) -> str:
+    """A live contract with a governing schedule, ready to receive cash.
+
+    The schedule is the 20 / 30 / 50 one from ``reconciled_plan``, activated.
+    Every collections test that needs a receivable starts here.
+    """
+    del collections_client, active_plan
+    return active_sale
+
+
+@pytest.fixture
+def recorded_receipt(collections_client: TestClient, project_id: str, collecting_sale: str) -> str:
+    """Cash claimed but not yet accepted by Finance. Counts as nothing."""
+    response = record_receipt(collections_client, project_id, collecting_sale, "10000.00")
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def confirmed_receipt(finance_client: TestClient, project_id: str, recorded_receipt: str) -> str:
+    """Cash Finance has accepted. This is the first real money in the system."""
+    response = confirm_receipt(finance_client, project_id, recorded_receipt)
+    assert response.status_code == 200, response.text
+    return recorded_receipt

@@ -36,6 +36,7 @@ from app.core.errors import (
 from app.modules.access.api import admin_router, auth_router
 from app.modules.access.dependencies import SESSION_COOKIE_NAME
 from app.modules.audit.api import router as audit_router
+from app.modules.collections.api import router as collections_router
 from app.modules.inventory.api import router as inventory_router
 from app.modules.payment_plans.api import router as payment_plans_router
 from app.modules.pricing.api import router as pricing_router
@@ -229,6 +230,7 @@ def create_app() -> FastAPI:
         pricing_router,
         sales_router,
         payment_plans_router,
+        collections_router,
         audit_router,
     ):
         app.include_router(router, prefix=settings.API_V1_PREFIX)

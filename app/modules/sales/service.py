@@ -3893,6 +3893,165 @@ def _current_clearance(
     ).first()
 
 
+def _refuse_manual_collection_clearance(clearance_type: str) -> None:
+    """Close the generic route for the one clearance that now has a ledger.
+
+    Until PR-MVP-07 there was nothing to check a collection clearance against,
+    so it was an attestation like the other two: somebody in Collections said
+    the account was clear and the system took their word for it. There is a
+    ledger now, and a signature that can contradict it is not a gate.
+
+    Legal and delivery are untouched. Their concerns are judgements this system
+    holds no arithmetic for, and an attestation remains the honest shape.
+    """
+    if clearance_type == CLEARANCE_COLLECTION:
+        raise ConflictError(
+            "The collection clearance is granted from the Collections account, where it "
+            "is checked against the receivable. Clear the ledger and sign it off there."
+        )
+
+
+def _clearance_for_sale(
+    session: Session, *, sale_id: uuid.UUID
+) -> tuple[HandoverRecord, HandoverClearance | None] | None:
+    """This sale's handover and its live collection clearance, if there is one."""
+    handover = session.scalars(
+        select(HandoverRecord).where(HandoverRecord.sale_contract_id == sale_id)
+    ).first()
+    if handover is None:
+        return None
+    return handover, _current_clearance(
+        session, handover_id=handover.id, clearance_type=CLEARANCE_COLLECTION
+    )
+
+
+def apply_collection_clearance(
+    session: Session,
+    *,
+    project: Project,
+    sale_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    evidence_reference: str,
+) -> HandoverClearance:
+    """Record Collections' sign-off, on Collections' say-so. Does not commit.
+
+    Sales keeps owning :class:`HandoverClearance` — the rows, the partial index
+    that permits one live clearance per type, and the handover gate that reads
+    them. What it no longer owns is the decision, because the facts the decision
+    rests on live in a ledger this module cannot see and should not learn to.
+
+    The caller has already proved the account is clear. This writes the row.
+    """
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        raise ConflictError(
+            "This sale has no handover record yet, so there is no collection clearance "
+            "to give. Start the handover first."
+        )
+    handover, clearance = found
+    if handover.status == HANDOVER_HANDED_OVER:
+        raise ConflictError("This unit has already been handed over.")
+    if clearance is None:
+        clearance = HandoverClearance(
+            project_id=project.id,
+            handover_id=handover.id,
+            clearance_type=CLEARANCE_COLLECTION,
+            status=CLEARANCE_PENDING,
+        )
+        session.add(clearance)
+    if clearance.status == CLEARANCE_CLEARED:
+        raise ConflictError("This clearance has already been given.")
+
+    before = _snapshot(clearance, _CLEARANCE_FIELDS)
+    clearance.status = CLEARANCE_CLEARED
+    clearance.evidence_reference = evidence_reference
+    clearance.cleared_by_user_id = actor_user_id
+    clearance.cleared_at = _now()
+    _flush(session)
+    record_event(
+        session,
+        action="handover.clearance_granted",
+        entity_type=ENTITY_CLEARANCE,
+        entity_id=clearance.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        before=before,
+        after=_snapshot(clearance, _CLEARANCE_FIELDS),
+    )
+    return clearance
+
+
+def revoke_collection_clearance(
+    session: Session,
+    *,
+    project: Project,
+    sale_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str,
+) -> HandoverClearance | None:
+    """Withdraw the collection clearance when the ledger reopens. Does not commit.
+
+    Returns ``None`` when there was nothing to withdraw, because the common case
+    is exactly that: most receipt reversals happen on accounts nobody ever
+    cleared, and a caller that had to distinguish "no handover yet" from "no
+    clearance yet" from "already revoked" before every reversal would grow three
+    branches for one outcome.
+
+    A revoked row stays and a fresh pending one replaces it, so the handover is
+    blocked again and the record still shows that somebody cleared it and the
+    ledger later disagreed.
+    """
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        return None
+    handover, clearance = found
+    if clearance is None or clearance.status != CLEARANCE_CLEARED:
+        return None
+    if handover.status == HANDOVER_HANDED_OVER:
+        # The keys are already with the buyer. Withdrawing the gate now would
+        # claim to un-hand-over a unit, which this system cannot do and must
+        # not pretend to; the reopened balance is visible on the account.
+        return None
+
+    before = _snapshot(clearance, _CLEARANCE_FIELDS)
+    clearance.status = CLEARANCE_REVOKED
+    clearance.revoked_by_user_id = actor_user_id
+    clearance.revoked_at = _now()
+    clearance.revocation_reason = reason
+    session.add(
+        HandoverClearance(
+            project_id=project.id,
+            handover_id=handover.id,
+            clearance_type=CLEARANCE_COLLECTION,
+            status=CLEARANCE_PENDING,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="handover.clearance_revoked",
+        entity_type=ENTITY_CLEARANCE,
+        entity_id=clearance.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(clearance, _CLEARANCE_FIELDS),
+    )
+    return clearance
+
+
+def collection_clearance_status(session: Session, *, sale_id: uuid.UUID) -> str | None:
+    """The live collection clearance's status, for the collections account view."""
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        return None
+    _, clearance = found
+    return clearance.status if clearance is not None else None
+
+
 def grant_clearance(
     session: Session,
     *,
@@ -3911,6 +4070,7 @@ def grant_clearance(
     """
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
+    _refuse_manual_collection_clearance(clearance_type)
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
 
     project_locked = lock_project(session, project.id)
@@ -3971,6 +4131,7 @@ def revoke_clearance(
     """
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
+    _refuse_manual_collection_clearance(clearance_type)
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
 
     project_locked = lock_project(session, project.id)

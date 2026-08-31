@@ -1169,6 +1169,14 @@ export interface PaymentPlan {
   plan_number: string;
   name: string;
   notes: string | null;
+  /**
+   * When the first receipt against this plan was confirmed, or null.
+   *
+   * Once it is set, the ordinary activation of a replacement schedule refuses:
+   * the allocations already made point at the instalments being replaced. The
+   * builder reads this to say so rather than showing a dead button.
+   */
+  collections_started_at: string | null;
   created_by_user_id: string;
   created_at: string;
   updated_at: string;
@@ -1401,4 +1409,298 @@ export interface SeriesPreview {
 export interface TriggerRefreshResult {
   triggered: PlanInstallment[];
   still_awaiting: PlanInstallment[];
+}
+
+/* --------------------------------------------------------------------------
+ * Collections — PR-MVP-07
+ *
+ * Every money field is a string, because the API sends Decimals as JSON
+ * strings and a JavaScript number cannot hold a buyer's balance without
+ * eventually losing a cent. Nothing here is computed in the browser:
+ * `outstanding`, `overdue_days`, `bucket`, `unapplied_amount` and
+ * `derived_collection_status` all arrive already decided.
+ * ----------------------------------------------------------------------- */
+
+export type ReceiptStatus = "recorded" | "confirmed" | "reversed";
+export type AllocationStatus = "active" | "superseded" | "reversed";
+export type DisputeStatus = "open" | "resolved" | "withdrawn";
+export type WaiverType = "collection_hold" | "grace_extension";
+export type WaiverStatus = "submitted" | "approved" | "rejected" | "revoked";
+export type RestructureStatus = "open" | "applied" | "abandoned";
+export type RefundStatus = "recorded" | "confirmed" | "reversed";
+
+export type AgingBucket =
+  | "awaiting_trigger"
+  | "current"
+  | "1_30"
+  | "31_60"
+  | "61_90"
+  | "91_plus";
+
+export type InstallmentCollectionStatus =
+  | "awaiting_trigger"
+  | "scheduled"
+  | "due"
+  | "partially_paid"
+  | "paid"
+  | "overdue"
+  | "disputed"
+  | "cancelled";
+
+export type CollectionActionType =
+  | "call"
+  | "email"
+  | "meeting"
+  | "reminder"
+  | "formal_notice"
+  | "promise_to_pay"
+  | "legal_referral"
+  | "follow_up"
+  | "other";
+
+export interface ReceiptAllocation {
+  id: string;
+  receipt_id: string;
+  installment_id: string;
+  payment_plan_version_id: string;
+  amount: string;
+  status: AllocationStatus;
+  created_at: string;
+  reversal_reason: string | null;
+  superseded_by_restructure_id: string | null;
+}
+
+export interface Receipt {
+  id: string;
+  sale_contract_id: string;
+  receipt_number: string;
+  currency_id: string;
+  amount: string;
+  receipt_date: string;
+  status: ReceiptStatus;
+  bank_reference: string | null;
+  external_reference: string | null;
+  notes: string | null;
+  recorded_at: string;
+  recorded_by_user_id: string;
+  confirmed_at: string | null;
+  confirmed_by_user_id: string | null;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+  /** `amount` less every active allocation. Derived server-side. */
+  unapplied_amount: string;
+  /** Only a confirmed receipt is cash. A recorded one moves no balance. */
+  counts_as_cash: boolean;
+  allocations: ReceiptAllocation[];
+}
+
+export interface SuggestedAllocation {
+  installment_id: string;
+  sequence: number;
+  label: string;
+  due_date: string | null;
+  outstanding: string;
+  amount: string;
+}
+
+export interface CollectionInstallmentRow {
+  installment_id: string;
+  sequence: number;
+  label: string;
+  trigger_type: string;
+  trigger_status: string;
+  due_date: string | null;
+  grace_days: number;
+  scheduled: string;
+  paid: string;
+  outstanding: string;
+  overdue_days: number;
+  bucket: AgingBucket;
+  status: InstallmentCollectionStatus;
+  /** A flag, never a replacement for the numbers beside it. */
+  is_disputed: boolean;
+  has_active_waiver: boolean;
+  waived_until: string | null;
+  owner_user_id: string | null;
+}
+
+export interface CollectionSaleSummary {
+  sale_id: string;
+  currency_id: string;
+  as_of: string;
+  active_payment_plan_id: string | null;
+  active_payment_plan_version_id: string | null;
+  scheduled_total: string;
+  confirmed_receipts_total: string;
+  allocated_total: string;
+  unapplied_cash: string;
+  outstanding_total: string;
+  due_total: string;
+  overdue_total: string;
+  oldest_overdue_days: number;
+  installments_total: number;
+  installments_paid: number;
+  installments_partial: number;
+  installments_overdue: number;
+  installments_awaiting_trigger: number;
+  open_disputes: number;
+  active_waivers: number;
+  next_action_date: string | null;
+  derived_collection_status: string;
+  /** Due and paid, side by side. Never netted into one figure. */
+  refund_due_total: string;
+  refund_confirmed_total: string;
+  refund_outstanding: string;
+  collection_clearance_status: string | null;
+  clearance_blockers: string[];
+  installments: CollectionInstallmentRow[];
+}
+
+export interface CollectionRegisterRow {
+  sale_id: string;
+  sale_number: string;
+  spa_number: string | null;
+  unit_id: string;
+  unit_number: string;
+  client_display_name: string;
+  currency_id: string;
+  summary: CollectionSaleSummary;
+}
+
+export interface AgingRow {
+  sale_id: string;
+  sale_number: string;
+  unit_number: string;
+  client_display_name: string;
+  currency_id: string;
+  installment: CollectionInstallmentRow;
+}
+
+export interface CollectionProjectSummary {
+  as_of: string;
+  accounts: number;
+  outstanding_total: string;
+  due_total: string;
+  overdue_total: string;
+  unapplied_cash: string;
+  /** Lifetime, and named so: never subtract it from an outstanding balance. */
+  confirmed_receipts_total: string;
+  accounts_overdue: number;
+  accounts_disputed: number;
+  accounts_cleared: number;
+  buckets: Record<string, string>;
+}
+
+export interface CollectionAction {
+  id: string;
+  sale_contract_id: string;
+  installment_id: string | null;
+  action_type: CollectionActionType;
+  action_at: string;
+  notes: string;
+  /** A promise is not cash and is never added to a collected total. */
+  promised_amount: string | null;
+  promised_date: string | null;
+  next_action_date: string | null;
+  created_at: string;
+  created_by_user_id: string;
+}
+
+export interface CollectionDispute {
+  id: string;
+  sale_contract_id: string;
+  installment_id: string;
+  status: DisputeStatus;
+  reason: string;
+  opened_at: string;
+  opened_by_user_id: string;
+  resolved_at: string | null;
+  resolved_by_user_id: string | null;
+  resolution: string | null;
+}
+
+export interface CollectionWaiver {
+  id: string;
+  sale_contract_id: string;
+  installment_id: string;
+  waiver_type: WaiverType;
+  waived_until: string;
+  reason: string;
+  status: WaiverStatus;
+  submitted_at: string;
+  submitted_by_user_id: string;
+  approved_at: string | null;
+  approved_by_user_id: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+}
+
+export interface CollectionRestructure {
+  id: string;
+  sale_contract_id: string;
+  payment_plan_id: string;
+  restructure_number: string;
+  source_version_id: string;
+  replacement_version_id: string;
+  status: RestructureStatus;
+  reason: string;
+  requested_at: string;
+  requested_by_user_id: string;
+  applied_at: string | null;
+  applied_by_user_id: string | null;
+  abandoned_at: string | null;
+  abandonment_reason: string | null;
+}
+
+export interface CarryLine {
+  receipt_id: string;
+  installment_id: string;
+  amount: string;
+}
+
+export interface RestructurePreview {
+  restructure_id: string;
+  source_version_id: string;
+  replacement_version_id: string;
+  replacement_status: string;
+  ready_to_apply: boolean;
+  blockers: string[];
+  /** Must equal the cash currently allocated. Shown so conservation is visible. */
+  carried_total: string;
+  unapplied_total: string;
+  confirmed_receipts_total: string;
+  superseding: number;
+  lines: CarryLine[];
+}
+
+export interface RestructureApplyResult {
+  restructure: CollectionRestructure;
+  summary: CollectionSaleSummary;
+}
+
+export interface CollectionRefund {
+  id: string;
+  sale_contract_id: string;
+  cancellation_id: string;
+  refund_number: string;
+  currency_id: string;
+  amount: string;
+  refund_date: string;
+  status: RefundStatus;
+  bank_reference: string | null;
+  notes: string | null;
+  recorded_at: string;
+  recorded_by_user_id: string;
+  confirmed_at: string | null;
+  confirmed_by_user_id: string | null;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+}
+
+export interface CollectionClearance {
+  sale_id: string;
+  status: string | null;
+  blockers: string[];
 }

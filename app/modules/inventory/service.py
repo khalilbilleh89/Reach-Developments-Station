@@ -47,6 +47,7 @@ from app.modules.inventory.models import (
     CATEGORY_SUB_ASSET_SUBTYPE,
     CATEGORY_UNIT_TYPE,
     CATEGORY_VIEW_CLASS,
+    COLLECTION_STATUSES,
     COMMERCIAL_STATUS_AVAILABLE,
     COMMERCIAL_STATUS_CANCELLED,
     COMMERCIAL_STATUS_CONTRACT_PENDING,
@@ -56,6 +57,7 @@ from app.modules.inventory.models import (
     COMMERCIAL_STATUS_RETURNED,
     COMMERCIAL_STATUS_UNRELEASED,
     COMMERCIAL_STATUS_WITHDRAWN,
+    DIMENSION_COLLECTION,
     DIMENSION_COMMERCIAL,
     DIMENSION_LEGAL,
     ENTITY_AREA_SCHEDULE,
@@ -1350,6 +1352,75 @@ def apply_delivery_status(
     record_event(
         session,
         action="unit.delivery_status_changed",
+        entity_type=ENTITY_UNIT,
+        entity_id=unit.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(unit, _UNIT_FIELDS),
+    )
+    return unit
+
+
+def apply_collection_status(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    to_status: str,
+    effective_date: date,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str | None = None,
+) -> Unit:
+    """Set the unit's collection state from PR-MVP-07's ledger. Does not commit.
+
+    The third of the four status dimensions to get an owner, and the same shape
+    as the other two: collections decides *which* value follows from receipts,
+    allocations, disputes and cancellations — none of which inventory knows
+    anything about — and inventory owns the column, the closed set and the
+    append-only event behind it.
+
+    There is no route that writes ``unit.collection_status`` and this is not
+    one. It exists so the status a unit displays always has a ledger position
+    behind it rather than somebody's opinion, and so the history of how an
+    account moved from current to overdue to cleared is readable on the unit.
+
+    Unchanged is a no-op, deliberately. Collections recalculates after every
+    write that could matter, which is most of them, and an event per receipt
+    saying ``current -> current`` would bury the transitions that mean
+    something under the ones that do not.
+
+    No chronology check, unlike the legal dimension. A collection position is
+    derived from the whole ledger as it stands rather than asserted as of a
+    date, so a reversal genuinely can move the unit backwards — that is the
+    correct behaviour, not a mis-dated event.
+    """
+    unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
+    from_status = unit.collection_status
+    if to_status not in COLLECTION_STATUSES:  # pragma: no cover - callers pass constants
+        raise ValidationError("That is not a collection status.")
+    if to_status == from_status:
+        return unit
+
+    before = _snapshot(unit, _UNIT_FIELDS)
+    unit.collection_status = to_status
+    session.add(
+        UnitStatusEvent(
+            unit_id=unit.id,
+            dimension=DIMENSION_COLLECTION,
+            from_status=from_status,
+            to_status=to_status,
+            effective_date=effective_date,
+            reason=(reason or "").strip() or None,
+            changed_by_user_id=actor_user_id,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="unit.collection_status_changed",
         entity_type=ENTITY_UNIT,
         entity_id=unit.id,
         correlation_id=correlation_id,

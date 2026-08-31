@@ -897,6 +897,20 @@ select.input {
   accent-color: var(--accent);
 }
 
+/* Several toggles side by side inside one filter bar field. They wrap on a
+   narrow screen rather than pushing the bar into a horizontal scroll. */
+.filter-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: 0.35rem;
+}
+
+.filter-checks .checkbox {
+  white-space: nowrap;
+}
+
 .form-grid {
   display: grid;
   gap: 0 var(--space-4);

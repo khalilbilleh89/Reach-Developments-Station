@@ -35,6 +35,7 @@ import {
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
+import { DealCollections } from "@/components/projects/collections/DealCollections";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import {
   ADJUSTMENT_TYPES,
@@ -1171,6 +1172,14 @@ export function DealFile({
               description="What the buyer agreed to pay, and when. Not what has been collected."
             />
             <PlanSummary projectId={projectId} saleId={sale.sale.id} />
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Collections"
+              description="What actually arrived, where it was applied, and what is still owed."
+            />
+            <DealCollections projectId={projectId} saleId={sale.sale.id} />
           </section>
 
           {sale.tax_lines.length > 0 ? (
