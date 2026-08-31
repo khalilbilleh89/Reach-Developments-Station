@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.modules.audit.models import AuditEvent
 from app.modules.inventory.models import Unit, UnitStatusEvent
 from app.modules.sales.models import Reservation, ReservationStatusEvent, SaleContract
-from tests.modules.conftest import record_legal, sales_url
+from tests.modules.conftest import record_legal, sales_url, settle_and_clear_collections
 
 
 def _tomorrow() -> str:
@@ -255,25 +255,26 @@ def test_a_handover_cannot_be_completed_on_a_future_date(
     sales_ops_client: TestClient,
     legal_client: TestClient,
     collections_client: TestClient,
+    finance_client: TestClient,
     delivery_client: TestClient,
     project_id: str,
     active_sale: str,
+    active_plan: tuple[str, str],
     released_unit: str,
     db: Session,
 ) -> None:
+    """Every other gate is open, so the only thing left to refuse is the date."""
     handover = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/handover", json={}
     )
     handover_id = handover.json()["handover"]["id"]
-    for client, clearance_type in (
-        (legal_client, "legal"),
-        (collections_client, "collection"),
-        (delivery_client, "delivery"),
-    ):
-        client.post(
+    for client, clearance_type in ((legal_client, "legal"), (delivery_client, "delivery")):
+        given = client.post(
             f"{sales_url(project_id)}/handovers/{handover_id}/clearances/{clearance_type}",
             json={"evidence_reference": "OK"},
         )
+        assert given.status_code == 200, given.text
+    settle_and_clear_collections(collections_client, finance_client, project_id, active_sale)
     before = _counts(db)
 
     response = sales_ops_client.post(
