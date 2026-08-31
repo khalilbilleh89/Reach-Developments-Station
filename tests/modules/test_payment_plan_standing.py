@@ -23,6 +23,7 @@ from tests.modules.conftest import (
     plan_detail,
     plans_url,
     sales_url,
+    settle_and_clear_collections,
     write_schedule,
 )
 
@@ -253,6 +254,7 @@ def test_a_refresh_resolves_the_standing_schedule_and_not_the_revision(
     sales_ops_client: TestClient,
     legal_client: TestClient,
     delivery_client: TestClient,
+    finance_client: TestClient,
     project_id: str,
     plan_id: str,
 ) -> None:
@@ -293,16 +295,15 @@ def test_a_refresh_resolves_the_standing_schedule_and_not_the_revision(
     )
     assert opened.status_code == 201, opened.text
     handover_id = opened.json()["handover"]["id"]
-    for client, clearance in (
-        (legal_client, "legal"),
-        (collections_client, "collection"),
-        (delivery_client, "delivery"),
-    ):
+    for client, clearance in ((legal_client, "legal"), (delivery_client, "delivery")):
         given = client.post(
             f"{sales_url(project_id)}/handovers/{handover_id}/clearances/{clearance}",
             json={"evidence_reference": f"{clearance.upper()}-OK"},
         )
         assert given.status_code == 200, given.text
+    # From PR-MVP-07 the collection clearance is checked against the receivables
+    # ledger rather than attested, so the schedule has to be settled first.
+    settle_and_clear_collections(collections_client, finance_client, project_id, sale_id)
     completed = sales_ops_client.post(
         f"{sales_url(project_id)}/handovers/{handover_id}/complete",
         json={

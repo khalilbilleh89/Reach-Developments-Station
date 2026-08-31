@@ -4070,8 +4070,8 @@ def grant_clearance(
     """
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
-    _refuse_manual_collection_clearance(clearance_type)
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
+    _refuse_manual_collection_clearance(clearance_type)
 
     project_locked = lock_project(session, project.id)
     handover = _lock_handover(session, project_id=project_locked.id, handover_id=handover_id)
@@ -4131,8 +4131,8 @@ def revoke_clearance(
     """
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
-    _refuse_manual_collection_clearance(clearance_type)
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
+    _refuse_manual_collection_clearance(clearance_type)
 
     project_locked = lock_project(session, project.id)
     handover = _lock_handover(session, project_id=project_locked.id, handover_id=handover_id)

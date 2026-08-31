@@ -1230,3 +1230,38 @@ def confirmed_receipt(finance_client: TestClient, project_id: str, recorded_rece
     response = confirm_receipt(finance_client, project_id, recorded_receipt)
     assert response.status_code == 200, response.text
     return recorded_receipt
+
+
+def settle_and_clear_collections(
+    collections_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    sale_id: str,
+) -> None:
+    """Pay a sale off in full and sign off its collection clearance.
+
+    From PR-MVP-07 the collection clearance is no longer an attestation: it is
+    checked against the receivables ledger, so a handover test that needs the
+    gate open has to give the ledger something to be clear about. This is the
+    shortest honest way to do that — a receipt per instalment, confirmed and
+    applied exactly, leaving nothing outstanding and nothing unapplied.
+    """
+    rows = governing_installments(collections_client, project_id, sale_id)
+    assert rows, "the sale needs an active payment schedule before it can be cleared"
+    for row in rows:
+        if row["outstanding"] == "0.00":
+            continue
+        recorded = record_receipt(collections_client, project_id, sale_id, row["outstanding"])
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        applied = allocate(
+            collections_client, project_id, receipt_id, row["installment_id"], row["outstanding"]
+        )
+        assert applied.status_code == 201, applied.text
+
+    granted = collections_client.post(
+        f"{collections_url(project_id)}/sales/{sale_id}/collection-clearance",
+        json={"evidence_reference": "LEDGER-CLEAR"},
+    )
+    assert granted.status_code == 200, granted.text

@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.modules.conftest import inventory_url, record_legal, sales_url
+from tests.modules.conftest import (
+    collections_url,
+    inventory_url,
+    record_legal,
+    sales_url,
+    settle_and_clear_collections,
+)
 
 
 def _handover(client: TestClient, project_id: str, sale_id: str) -> dict:
@@ -30,20 +36,27 @@ def _open(client: TestClient, project_id: str, sale_id: str) -> str:
 def _clear_all(
     legal_client: TestClient,
     collections_client: TestClient,
+    finance_client: TestClient,
     delivery_client: TestClient,
     project_id: str,
+    sale_id: str,
     handover_id: str,
 ) -> None:
-    for client, clearance_type in (
-        (legal_client, "legal"),
-        (collections_client, "collection"),
-        (delivery_client, "delivery"),
-    ):
+    """Open all three gates.
+
+    Legal and delivery are still attestations and go through the generic route:
+    their concerns are judgements this system holds no arithmetic for. The
+    collection clearance is no longer one — from PR-MVP-07 it is checked against
+    the receivables ledger — so it is granted from the Collections account,
+    against a ledger that has actually been settled.
+    """
+    for client, clearance_type in ((legal_client, "legal"), (delivery_client, "delivery")):
         response = client.post(
             f"{sales_url(project_id)}/handovers/{handover_id}/clearances/{clearance_type}",
             json={"evidence_reference": f"{clearance_type.upper()}-OK"},
         )
         assert response.status_code == 200, response.text
+    settle_and_clear_collections(collections_client, finance_client, project_id, sale_id)
 
 
 def test_a_handover_starts_with_three_ungiven_clearances(
@@ -145,9 +158,19 @@ def test_a_completed_handover_moves_the_units_delivery_status(
     project_id: str,
     active_sale: str,
     released_unit: str,
+    finance_client: TestClient,
+    active_plan: tuple[str, str],
 ) -> None:
     handover_id = _open(sales_ops_client, project_id, active_sale)
-    _clear_all(legal_client, collections_client, delivery_client, project_id, handover_id)
+    _clear_all(
+        legal_client,
+        collections_client,
+        finance_client,
+        delivery_client,
+        project_id,
+        active_sale,
+        handover_id,
+    )
 
     response = sales_ops_client.post(
         f"{sales_url(project_id)}/handovers/{handover_id}/complete",
@@ -173,15 +196,32 @@ def test_revoking_a_clearance_blocks_the_handover_and_keeps_the_history(
     delivery_client: TestClient,
     project_id: str,
     active_sale: str,
+    finance_client: TestClient,
+    active_plan: tuple[str, str],
 ) -> None:
     handover_id = _open(sales_ops_client, project_id, active_sale)
-    _clear_all(legal_client, collections_client, delivery_client, project_id, handover_id)
+    _clear_all(
+        legal_client,
+        collections_client,
+        finance_client,
+        delivery_client,
+        project_id,
+        active_sale,
+        handover_id,
+    )
 
-    revoked = collections_client.post(
-        f"{sales_url(project_id)}/handovers/{handover_id}/clearances/collection/revoke",
+    # Nobody withdraws this clearance by hand any more. From PR-MVP-07 the
+    # ledger withdraws it: reversing a confirmed receipt reopens the receivable,
+    # and a gate that stayed open over a reopened balance is the contradiction
+    # the integration exists to prevent.
+    receipts = collections_client.get(
+        f"{collections_url(project_id)}/sales/{active_sale}/receipts"
+    ).json()
+    reversed_ = finance_client.post(
+        f"{collections_url(project_id)}/receipts/{receipts[0]['id']}/reverse",
         json={"reason": "Cheque returned unpaid"},
     )
-    assert revoked.status_code == 200, revoked.text
+    assert reversed_.status_code == 200, reversed_.text
 
     body = _handover(sales_ops_client, project_id, active_sale)
     statuses = [
@@ -238,6 +278,8 @@ def test_a_project_may_require_title_transfer_before_handover(
     delivery_client: TestClient,
     project_id: str,
     active_sale: str,
+    finance_client: TestClient,
+    active_plan: tuple[str, str],
 ) -> None:
     policy = admin_client.put(
         f"{sales_url(project_id)}/policy",
@@ -252,7 +294,15 @@ def test_a_project_may_require_title_transfer_before_handover(
     )
     assert policy.status_code == 200, policy.text
     handover_id = _open(sales_ops_client, project_id, active_sale)
-    _clear_all(legal_client, collections_client, delivery_client, project_id, handover_id)
+    _clear_all(
+        legal_client,
+        collections_client,
+        finance_client,
+        delivery_client,
+        project_id,
+        active_sale,
+        handover_id,
+    )
 
     blocked = sales_ops_client.post(
         f"{sales_url(project_id)}/handovers/{handover_id}/complete",
@@ -282,9 +332,19 @@ def test_an_open_cancellation_blocks_a_handover(
     delivery_client: TestClient,
     project_id: str,
     active_sale: str,
+    finance_client: TestClient,
+    active_plan: tuple[str, str],
 ) -> None:
     handover_id = _open(sales_ops_client, project_id, active_sale)
-    _clear_all(legal_client, collections_client, delivery_client, project_id, handover_id)
+    _clear_all(
+        legal_client,
+        collections_client,
+        finance_client,
+        delivery_client,
+        project_id,
+        active_sale,
+        handover_id,
+    )
     opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/cancellation",
         json={"initiated_by_party": "buyer", "reason": "Buyer could not complete"},
@@ -307,9 +367,19 @@ def test_a_handed_over_unit_cannot_then_be_taken_back_by_a_cancellation(
     delivery_client: TestClient,
     project_id: str,
     active_sale: str,
+    finance_client: TestClient,
+    active_plan: tuple[str, str],
 ) -> None:
     handover_id = _open(sales_ops_client, project_id, active_sale)
-    _clear_all(legal_client, collections_client, delivery_client, project_id, handover_id)
+    _clear_all(
+        legal_client,
+        collections_client,
+        finance_client,
+        delivery_client,
+        project_id,
+        active_sale,
+        handover_id,
+    )
     sales_ops_client.post(
         f"{sales_url(project_id)}/handovers/{handover_id}/complete",
         json={"handover_date": "2026-06-01", "acceptance_document_reference": "ACC-1"},
