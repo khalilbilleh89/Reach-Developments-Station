@@ -1308,6 +1308,7 @@ def backdate(db: Session, *, table: str, row_id: str, **stamps: datetime | None)
     is simulated is the passage of time, never a figure.
     """
     assert table in _HISTORICAL_TABLES, f"{table} is not a lifecycle table"
+    assert stamps, "backdate needs at least one timestamp; an empty SET is invalid SQL"
     assignments = ", ".join(f"{column} = :{column}" for column in stamps)
     db.execute(
         text(f"UPDATE {table} SET {assignments} WHERE id = :row_id"),

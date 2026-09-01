@@ -102,8 +102,14 @@ export function CollectionsTab({
   const loadAging = useCallback(async () => {
     try {
       setAging(await collections.aging(projectId, { asOf, overdueOnly }));
-    } catch {
-      setAging([]);
+      setError(null);
+    } catch (caught) {
+      // An empty aging list and a failed request look identical on screen, and
+      // "Nothing aged" is the more reassuring of the two. Say which it was.
+      setAging(null);
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not load the aging report.",
+      );
     }
   }, [projectId, asOf, overdueOnly]);
 
@@ -329,7 +335,9 @@ export function CollectionsTab({
           </Card>
         )
       ) : aging === null ? (
-        <Loading label="Loading the aging" />
+        // A failed load clears the rows and sets `error`, which is shown above.
+        // Without this the screen would spin for ever on a 403 or a 500.
+        error ? null : <Loading label="Loading the aging" />
       ) : aging.length === 0 ? (
         <EmptyState
           title="Nothing aged"

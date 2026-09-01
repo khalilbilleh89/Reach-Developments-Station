@@ -3894,7 +3894,12 @@ def _current_clearance(
 
 
 def _refuse_manual_collection_clearance(clearance_type: str) -> None:
-    """Close the generic route for the one clearance that now has a ledger.
+    """Close the generic routes — both of them — for the clearance with a ledger.
+
+    Guards granting *and* revoking, so the message names both. A caller told
+    only how to grant it, while being refused a revocation, would reasonably
+    conclude the withdrawal was somebody else's job rather than something the
+    ledger already does on its own.
 
     Until PR-MVP-07 there was nothing to check a collection clearance against,
     so it was an attestation like the other two: somebody in Collections said
@@ -3906,8 +3911,9 @@ def _refuse_manual_collection_clearance(clearance_type: str) -> None:
     """
     if clearance_type == CLEARANCE_COLLECTION:
         raise ConflictError(
-            "The collection clearance is granted from the Collections account, where it "
-            "is checked against the receivable. Clear the ledger and sign it off there."
+            "The collection clearance is given and withdrawn from the Collections "
+            "account, where it is checked against the receivable. Sign it off there — "
+            "and it is withdrawn there too, automatically, whenever the ledger reopens."
         )
 
 

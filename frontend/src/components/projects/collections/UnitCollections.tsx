@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Badge, Button, Notice, SectionHeader, Stat, StatRow } from "@/components/ui";
-import { collections } from "@/lib/api";
+import { ApiError, collections } from "@/lib/api";
 import type { CollectionSaleSummary } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { isPositive, money } from "@/lib/format";
@@ -34,7 +34,7 @@ export function UnitCollections({
   onOpenCollections?: () => void;
 }) {
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
-  const [denied, setDenied] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const currencyCodeOf = useCurrencyCode();
 
   useEffect(() => {
@@ -45,12 +45,21 @@ export function UnitCollections({
         const value = await collections.account(projectId, saleId);
         if (live) {
           setSummary(value);
-          setDenied(false);
+          setProblem(null);
         }
-      } catch {
+      } catch (caught) {
+        // A 403 is a fact about this reader; anything else is a fault, and
+        // telling somebody their role is wrong when the server returned a 500
+        // sends them to an administrator instead of to the logs.
         if (live) {
           setSummary(null);
-          setDenied(true);
+          setProblem(
+            caught instanceof ApiError && caught.isForbidden
+              ? "Collections is not available to your role."
+              : caught instanceof ApiError
+                ? caught.message
+                : "Could not load the collections position.",
+          );
         }
       }
     })();
@@ -77,8 +86,8 @@ export function UnitCollections({
           ) : undefined
         }
       />
-      {denied ? (
-        <p className="subtle">Collections is not available to your role.</p>
+      {problem !== null ? (
+        <p className="subtle">{problem}</p>
       ) : summary === null ? (
         <p className="subtle">Loading the collections position.</p>
       ) : (

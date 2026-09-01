@@ -452,6 +452,36 @@ class TestTheClearance:
         if response.status_code == 409:
             assert "Collections account" in response.json()["detail"]
 
+    def test_the_generic_route_can_no_longer_revoke_it_either_and_says_so(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+    ) -> None:
+        """The refusal covers both directions, and the message names both.
+
+        A caller told only how to *grant* it, while being refused a revocation,
+        would reasonably conclude the withdrawal was somebody else's job —
+        rather than something the ledger already does on its own the moment a
+        receipt is reversed.
+        """
+        handover = sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{collecting_sale}/handover", json={}
+        )
+        assert handover.status_code in (200, 201), handover.text
+        handover_id = handover.json()["handover"]["id"]
+
+        response = collections_client.post(
+            f"{sales_url(project_id)}/handovers/{handover_id}/clearances/collection/revoke",
+            json={"reason": "Changed my mind"},
+        )
+        assert response.status_code in (404, 409), response.text
+        if response.status_code == 409:
+            detail = response.json()["detail"]
+            assert "withdrawn" in detail
+            assert "Collections account" in detail
+
     @pytest.mark.parametrize("client_name", ["legal_client", "sales_ops_client", "admin_client"])
     def test_nobody_else_may_grant_the_collection_clearance(
         self,

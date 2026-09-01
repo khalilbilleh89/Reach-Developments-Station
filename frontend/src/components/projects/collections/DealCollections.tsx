@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Badge, Notice, Stat, StatRow, TableScroll } from "@/components/ui";
-import { collections } from "@/lib/api";
+import { ApiError, collections } from "@/lib/api";
 import type { CollectionSaleSummary, Receipt } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money } from "@/lib/format";
@@ -42,7 +42,7 @@ export function DealCollections({
 }) {
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [denied, setDenied] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const currencyCodeOf = useCurrencyCode();
 
   useEffect(() => {
@@ -56,11 +56,20 @@ export function DealCollections({
         if (!live) return;
         setSummary(position);
         setReceipts(rows);
-        setDenied(false);
-      } catch {
+        setProblem(null);
+      } catch (caught) {
+        // A 403 is a fact about this reader; anything else is a fault, and
+        // telling somebody their role is wrong when the server returned a 500
+        // sends them to an administrator instead of to the logs.
         if (live) {
           setSummary(null);
-          setDenied(true);
+          setProblem(
+            caught instanceof ApiError && caught.isForbidden
+              ? "Collections is not available to your role."
+              : caught instanceof ApiError
+                ? caught.message
+                : "Could not load the collections position.",
+          );
         }
       }
     })();
@@ -69,8 +78,8 @@ export function DealCollections({
     };
   }, [projectId, saleId]);
 
-  if (denied) {
-    return <p className="subtle">Collections is not available to your role.</p>;
+  if (problem !== null) {
+    return <p className="subtle">{problem}</p>;
   }
   if (summary === null) {
     return <p className="subtle">Loading the collections position.</p>;
