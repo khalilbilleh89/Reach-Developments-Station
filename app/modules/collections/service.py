@@ -109,8 +109,8 @@ from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.sales import service as sales_service
 from app.modules.sales.models import (
+    CANCELLATION_COMPLETED,
     SALE_ACTIVE,
-    SALE_CANCELLED,
     Client,
     SaleCancellation,
     SaleContract,
@@ -251,6 +251,89 @@ def _waiver_live_on(as_of: date) -> ColumnElement[bool]:
         & (CollectionWaiver.revoked_at.is_(None) | (CollectionWaiver.revoked_at >= bound))
         & (CollectionWaiver.rejected_at.is_(None) | (CollectionWaiver.rejected_at >= bound))
     )
+
+
+def _refund_effective_on(as_of: date) -> ColumnElement[bool]:
+    """Cash that had actually left the company by ``as_of``.
+
+    The same shape as :func:`_receipt_effective_on`, and deliberately so: a
+    refund is cash moving the other way, and money out obeys the rules money in
+    obeys. A refund confirmed in July is not a payment made in June, and one
+    reversed in September was still a payment made in August.
+    """
+    bound = _bound(as_of)
+    return (
+        (CollectionRefund.refund_date <= as_of)
+        & CollectionRefund.confirmed_at.is_not(None)
+        & (CollectionRefund.confirmed_at < bound)
+        & (CollectionRefund.reversed_at.is_(None) | (CollectionRefund.reversed_at >= bound))
+    )
+
+
+def _refund_due_on(as_of: date) -> ColumnElement[bool]:
+    """A cancellation whose refund had been *sanctioned* by ``as_of``.
+
+    ``refund_due_amount`` is captured when the cancellation case is opened,
+    which is a proposal rather than a debt: PR-MVP-05 makes the money on the way
+    out something a financial approver has to sign, and until they have, nothing
+    is owed. So the amount counts from the moment of approval, and a refund
+    approved in June is not a liability the March account was carrying.
+
+    This is a single rule applied at every date, today included — which is the
+    point of one ``as_of``. It does change one of today's answers: a cancellation
+    with a proposed refund still awaiting its approver now reports zero due
+    rather than the proposal. That is the more honest of the two figures, and it
+    is the one the historical read has to give anyway.
+    """
+    bound = _bound(as_of)
+    return SaleCancellation.financial_approved_at.is_not(None) & (
+        SaleCancellation.financial_approved_at < bound
+    )
+
+
+def _cancelled_on(as_of: date) -> ColumnElement[bool]:
+    """A completed cancellation whose unit return had taken effect by ``as_of``.
+
+    ``sale.status`` is today's answer and only today's. The date the unwind
+    became effective is ``unit_return_date`` — the operator's statement of when
+    the unit actually came back — and completion is the only route to
+    ``cancelled``, so the two agree on the current date and disagree only where
+    they should: before the cancellation happened.
+    """
+    return (SaleCancellation.status == CANCELLATION_COMPLETED) & (
+        SaleCancellation.unit_return_date.is_not(None)
+        & (SaleCancellation.unit_return_date <= as_of)
+    )
+
+
+def _action_recorded_on(as_of: date) -> ColumnElement[bool]:
+    """A follow-up that had been written down by ``as_of``.
+
+    A chase logged in June was not on the March account, and an operator
+    reconstructing March to ask why nobody had called should not find a call
+    they had not yet made.
+    """
+    return CollectionAction.created_at < _bound(as_of)
+
+
+def sale_cancelled_as_of(session: Session, *, sale: SaleContract, as_of: date) -> bool:
+    """Was this contract cancelled, as at ``as_of``? One answer, used twice.
+
+    The instalment rows and the unit's collection status both need it, and they
+    must not each work it out: two derivations of the same fact is how a row
+    reading ``cancelled`` ends up beside an account that is not.
+    """
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(SaleCancellation)
+            .where(
+                SaleCancellation.sale_contract_id == sale.id,
+                _cancelled_on(as_of),
+            )
+        )
+        or 0
+    ) > 0
 
 
 def _version_governing_on(as_of: date) -> ColumnElement[bool]:
@@ -549,6 +632,11 @@ class SaleLedger:
 
     sale: SaleContract
     as_of: date
+    #: Whether the contract was cancelled *on* ``as_of``, not whether it is now.
+    #: Worked out once and read by both the instalment rows and the unit status,
+    #: because two derivations of one fact is how a row reading "cancelled" ends
+    #: up beside an account that is not.
+    sale_cancelled: bool
     plan: PaymentPlan | None
     version: PaymentPlanVersion | None
     installments: list[PaymentPlanInstallment]
@@ -583,6 +671,7 @@ def load_ledger(session: Session, *, sale: SaleContract, as_of: date | None = No
     colouring the position of a schedule it was never about.
     """
     as_of = as_of or business_today()
+    cancelled = sale_cancelled_as_of(session, sale=sale, as_of=as_of)
     plan = _plan_of(session, sale_id=sale.id)
     version = (
         session.scalars(
@@ -639,6 +728,7 @@ def load_ledger(session: Session, *, sale: SaleContract, as_of: date | None = No
     return SaleLedger(
         sale=sale,
         as_of=as_of,
+        sale_cancelled=cancelled,
         plan=plan,
         version=version,
         installments=installments,
@@ -711,7 +801,7 @@ def _installment_views(position: SaleLedger, *, as_of: date) -> list[ledger.Inst
         current = waived.get(waiver.installment_id)
         if current is None or waiver.waived_until > current:
             waived[waiver.installment_id] = waiver.waived_until
-    cancelled = position.sale.status == SALE_CANCELLED
+    cancelled = position.sale_cancelled
 
     return [
         ledger.installment_view(
@@ -745,21 +835,30 @@ def _next_action_date(session: Session, *, sale_id: uuid.UUID, as_of: date) -> d
         select(func.min(CollectionAction.next_action_date)).where(
             CollectionAction.sale_contract_id == sale_id,
             CollectionAction.next_action_date >= as_of,
+            _action_recorded_on(as_of),
         )
     )
 
 
-def _refund_position(session: Session, *, sale_id: uuid.UUID) -> tuple[Decimal, Decimal]:
-    """What this contract's cancellations say is due, and what has actually left."""
+def _refund_position(
+    session: Session, *, sale_id: uuid.UUID, as_of: date
+) -> tuple[Decimal, Decimal]:
+    """What this contract's cancellations had made due by ``as_of``, and what had left.
+
+    Both sides obey the same cutoff as the receivable beside them, because a
+    March balance shown next to a June refund is two reporting dates in one
+    answer — and the reader has no way of telling which figure belongs to which.
+    """
     due = session.scalar(
         select(func.coalesce(func.sum(SaleCancellation.refund_due_amount), 0)).where(
-            SaleCancellation.sale_contract_id == sale_id
+            SaleCancellation.sale_contract_id == sale_id,
+            _refund_due_on(as_of),
         )
     )
     paid = session.scalar(
         select(func.coalesce(func.sum(CollectionRefund.amount), 0)).where(
             CollectionRefund.sale_contract_id == sale_id,
-            CollectionRefund.status == REFUND_CONFIRMED,
+            _refund_effective_on(as_of),
         )
     )
     return _money(due), _money(paid)
@@ -797,13 +896,13 @@ def summarise(
     """
     as_of = as_of or position.as_of
     if extras is None:
-        refund_due, refund_paid = _refund_position(session, sale_id=position.sale.id)
+        refund_due, refund_paid = _refund_position(session, sale_id=position.sale.id, as_of=as_of)
         extras = SaleExtras(
             next_action_date=_next_action_date(session, sale_id=position.sale.id, as_of=as_of),
             refund_due_total=refund_due,
             refund_confirmed_total=refund_paid,
-            collection_clearance_status=sales_service.collection_clearance_status(
-                session, sale_id=position.sale.id
+            collection_clearance_status=sales_service.collection_clearance_status_as_of(
+                session, sale_id=position.sale.id, as_of=as_of
             ),
         )
     rows = _installment_views(position, as_of=as_of)
@@ -819,7 +918,7 @@ def summarise(
     oldest = max((r.overdue_days for r in rows), default=0)
 
     status = ledger.unit_collection_status(
-        sale_cancelled=position.sale.status == SALE_CANCELLED,
+        sale_cancelled=position.sale_cancelled,
         has_active_schedule=position.version is not None,
         rows=rows,
         unapplied_cash=unapplied,
@@ -2974,12 +3073,17 @@ def collection_register(
 ) -> list[RegisterRow]:
     """Every account this caller may see, with its whole collections position.
 
-    Ten queries, whatever the number of sales. Each answers one question for
-    every row at once — which sales, which plans, which governing schedules,
-    which instalments, which confirmed receipts, which live allocations, which
-    open disputes, which waivers in force, which follow-ups are planned, and how
-    the refunds stand — and the rows are then assembled without touching the
-    database again.
+    Eleven queries, whatever the number of sales. Each answers one question for
+    every row at once — which sales, which plans, which schedules were governing
+    on the date, which instalments, which receipts counted as cash then, which
+    allocations were live then, which disputes were open, which waivers were in
+    force, which follow-ups had been written down, which contracts had been
+    unwound, and how the refunds stood — and the rows are then assembled without
+    touching the database again.
+
+    Every one of those is asked *as at* ``as_of``. A register that reconstructed
+    the receivable historically and then read today's cancellations beside it
+    would be two reporting dates in one table, and no column would say which.
     """
     permissions.require_collection_reader(actor)
     as_of = resolve_as_of(as_of)
@@ -3074,6 +3178,7 @@ def collection_register(
             .where(
                 CollectionAction.sale_contract_id.in_(sale_ids),
                 CollectionAction.next_action_date >= as_of,
+                _action_recorded_on(as_of),
             )
             .group_by(CollectionAction.sale_contract_id)
         ).all()
@@ -3086,7 +3191,10 @@ def collection_register(
                 SaleCancellation.sale_contract_id,
                 func.coalesce(func.sum(SaleCancellation.refund_due_amount), 0),
             )
-            .where(SaleCancellation.sale_contract_id.in_(sale_ids))
+            .where(
+                SaleCancellation.sale_contract_id.in_(sale_ids),
+                _refund_due_on(as_of),
+            )
             .group_by(SaleCancellation.sale_contract_id)
         ).all()
     }
@@ -3099,11 +3207,24 @@ def collection_register(
             )
             .where(
                 CollectionRefund.sale_contract_id.in_(sale_ids),
-                CollectionRefund.status == REFUND_CONFIRMED,
+                _refund_effective_on(as_of),
             )
             .group_by(CollectionRefund.sale_contract_id)
         ).all()
     }
+
+    # Which of these contracts had actually been unwound by the cutoff. One
+    # query for the whole register, because "was this cancelled in March?" is a
+    # question about a date and answering it per sale would put the register
+    # back to a query per row — the thing its budget test exists to prevent.
+    cancelled_ids = set(
+        session.scalars(
+            select(SaleCancellation.sale_contract_id).where(
+                SaleCancellation.sale_contract_id.in_(sale_ids),
+                _cancelled_on(as_of),
+            )
+        )
+    )
 
     register: list[RegisterRow] = []
     for sale, unit, client in visible:
@@ -3114,6 +3235,7 @@ def collection_register(
         position = SaleLedger(
             sale=sale,
             as_of=as_of,
+            sale_cancelled=sale.id in cancelled_ids,
             plan=plan,
             version=version,
             installments=schedule,

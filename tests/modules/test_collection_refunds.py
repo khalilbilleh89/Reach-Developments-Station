@@ -49,7 +49,19 @@ def cancelled_sale(
         },
     )
     assert opened.status_code == 201, opened.text
-    return collecting_sale, opened.json()["id"]
+    cancellation_id = opened.json()["id"]
+
+    # The docstring above always claimed the amount "carries its own approval".
+    # It did not: the case was opened and never signed. A proposed refund is not
+    # a debt until a financial approver sanctions it, so without this the
+    # fixture was asserting against a figure production would not have shown.
+    approved = cfo_client.post(
+        f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+        json={"reason": "Terms reviewed against the contract"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["financial_approved_at"] is not None
+    return collecting_sale, cancellation_id
 
 
 def _record_refund(

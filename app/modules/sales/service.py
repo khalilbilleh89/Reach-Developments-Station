@@ -40,7 +40,7 @@ precondition list, which is longer to write and possible to audit.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -3917,6 +3917,16 @@ def _refuse_manual_collection_clearance(clearance_type: str) -> None:
         )
 
 
+def _as_of_bound(as_of: date) -> datetime:
+    """The first instant after ``as_of``.
+
+    The same boundary Collections uses, restated here rather than imported: the
+    dependency runs collections → sales and must not be turned around for one
+    two-line function.
+    """
+    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
+
+
 def _clearance_for_sale(
     session: Session, *, sale_id: uuid.UUID
 ) -> tuple[HandoverRecord, HandoverClearance | None] | None:
@@ -4063,6 +4073,63 @@ def collection_clearance_status(session: Session, *, sale_id: uuid.UUID) -> str 
         return None
     _, clearance = found
     return clearance.status if clearance is not None else None
+
+
+def collection_clearance_status_as_of(
+    session: Session, *, sale_id: uuid.UUID, as_of: date
+) -> str | None:
+    """What the collection clearance was, as at ``as_of``.
+
+    Sales still owns :class:`HandoverClearance` — the rows, the partial index
+    and the gate. This reads them at a date instead of now, so a Collections
+    account reconstructed for March does not carry a sign-off given in June.
+
+    Every row records when it was created, when it was cleared and when it was
+    revoked, which is enough to answer without a second table and without
+    storing anything: take the rows that existed by the cutoff, and if any of
+    them was cleared and not yet revoked then, the clearance was given. A row
+    revoked after the cutoff was still standing at it — that is the same rule
+    the receipts obey, and for the same reason.
+
+    Returns ``None`` where there was no handover record or no clearance row yet,
+    which is what the live reader already returns for a sale nobody has started
+    handing over.
+    """
+    bound = _as_of_bound(as_of)
+    handover = session.scalars(
+        select(HandoverRecord).where(HandoverRecord.sale_contract_id == sale_id)
+    ).first()
+    if handover is None or handover.created_at >= bound:
+        return None
+
+    rows = list(
+        session.scalars(
+            select(HandoverClearance)
+            .where(
+                HandoverClearance.handover_id == handover.id,
+                HandoverClearance.clearance_type == CLEARANCE_COLLECTION,
+                HandoverClearance.created_at < bound,
+            )
+            .order_by(HandoverClearance.created_at)
+        )
+    )
+    if not rows:
+        return None
+
+    def status_then(row: HandoverClearance) -> str:
+        if row.revoked_at is not None and row.revoked_at < bound:
+            return CLEARANCE_REVOKED
+        if row.cleared_at is not None and row.cleared_at < bound:
+            return CLEARANCE_CLEARED
+        return CLEARANCE_PENDING
+
+    states = [status_then(row) for row in rows]
+    # The gate was open if any row that existed then was standing and cleared.
+    # Otherwise the latest row speaks, which is the one the live reader would
+    # have picked on that day.
+    if CLEARANCE_CLEARED in states:
+        return CLEARANCE_CLEARED
+    return states[-1]
 
 
 def grant_clearance(
