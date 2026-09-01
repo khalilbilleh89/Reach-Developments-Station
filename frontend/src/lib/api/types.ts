@@ -1576,8 +1576,9 @@ export interface AgingRow {
   installment: CollectionInstallmentRow;
 }
 
-export interface CollectionProjectSummary {
-  as_of: string;
+/** Every money figure for one denomination. Nothing here crosses currencies. */
+export interface CollectionCurrencyTotals {
+  currency_id: string;
   accounts: number;
   outstanding_total: string;
   due_total: string;
@@ -1585,10 +1586,25 @@ export interface CollectionProjectSummary {
   unapplied_cash: string;
   /** Lifetime, and named so: never subtract it from an outstanding balance. */
   confirmed_receipts_total: string;
+  buckets: Record<string, string>;
+}
+
+/**
+ * The project strip.
+ *
+ * There is deliberately no project-wide money field. A project can sell in more
+ * than one currency, and one "outstanding" figure for such a project could only
+ * be produced by adding unlike numbers — wrong by the exchange rate, on a strip
+ * an executive reads at a glance. The counts stay project-wide, because a count
+ * of accounts is not money.
+ */
+export interface CollectionProjectSummary {
+  as_of: string;
+  accounts: number;
   accounts_overdue: number;
   accounts_disputed: number;
   accounts_cleared: number;
-  buckets: Record<string, string>;
+  currencies: CollectionCurrencyTotals[];
 }
 
 export interface CollectionAction {

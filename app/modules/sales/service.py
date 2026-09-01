@@ -3999,9 +3999,19 @@ def revoke_collection_clearance(
     clearance yet" from "already revoked" before every reversal would grow three
     branches for one outcome.
 
-    A revoked row stays and a fresh pending one replaces it, so the handover is
-    blocked again and the record still shows that somebody cleared it and the
-    ledger later disagreed.
+    A revoked row stays and, before handover, a fresh pending one replaces it,
+    so the gate is closed again and the record still shows that somebody cleared
+    it and the ledger later disagreed.
+
+    **After handover the clearance is still revoked.** The physical handover is
+    untouched — the keys are with the buyer and no part of this system claims
+    otherwise — but the financial sign-off is a statement about the ledger, and
+    the ledger has reopened. Leaving it reading ``cleared`` beside an account
+    that is owed money again is the one outcome that would let a reversed
+    receipt disappear from every screen that matters. What is *not* done is
+    queue a new pending clearance: a pending gate on a completed handover would
+    be a gate on nothing, and would read as though the unit were waiting to be
+    handed over a second time.
     """
     found = _clearance_for_sale(session, sale_id=sale_id)
     if found is None:
@@ -4009,25 +4019,22 @@ def revoke_collection_clearance(
     handover, clearance = found
     if clearance is None or clearance.status != CLEARANCE_CLEARED:
         return None
-    if handover.status == HANDOVER_HANDED_OVER:
-        # The keys are already with the buyer. Withdrawing the gate now would
-        # claim to un-hand-over a unit, which this system cannot do and must
-        # not pretend to; the reopened balance is visible on the account.
-        return None
+    handed_over = handover.status == HANDOVER_HANDED_OVER
 
     before = _snapshot(clearance, _CLEARANCE_FIELDS)
     clearance.status = CLEARANCE_REVOKED
     clearance.revoked_by_user_id = actor_user_id
     clearance.revoked_at = _now()
     clearance.revocation_reason = reason
-    session.add(
-        HandoverClearance(
-            project_id=project.id,
-            handover_id=handover.id,
-            clearance_type=CLEARANCE_COLLECTION,
-            status=CLEARANCE_PENDING,
+    if not handed_over:
+        session.add(
+            HandoverClearance(
+                project_id=project.id,
+                handover_id=handover.id,
+                clearance_type=CLEARANCE_COLLECTION,
+                status=CLEARANCE_PENDING,
+            )
         )
-    )
     _flush(session)
     record_event(
         session,

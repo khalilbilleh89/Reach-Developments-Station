@@ -51,11 +51,12 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.db.base import MONEY_EXPONENT
@@ -99,7 +100,6 @@ from app.modules.payment_plans import service as payment_plans_service
 from app.modules.payment_plans.models import (
     TRIGGER_DATE_BASED,
     TRIGGER_TRIGGERED,
-    VERSION_ACTIVE,
     VERSION_APPROVED,
     PaymentPlan,
     PaymentPlanInstallment,
@@ -153,6 +153,138 @@ def _money(value: object) -> Decimal:
     come back unscaled is quantised here.
     """
     return Decimal(value or 0).quantize(MONEY_EXPONENT)
+
+
+# --------------------------------------------------------------------------- #
+# Reading a position as it stood on a date
+# --------------------------------------------------------------------------- #
+#
+# Every collections figure is derived, so "what did this account look like on
+# 31 March?" is answerable without a single stored snapshot — but only if the
+# read reconstructs the *cash* as well as the arithmetic. Aging an as-of-March
+# schedule against the receipts confirmed in June is worse than not offering
+# the question at all, because the answer looks authoritative and is wrong.
+#
+# Every row Collections owns is append-only and carries the moments it changed
+# state, so the reconstruction is a filter rather than a replay. There is no
+# event log here and none is needed.
+#
+# What this reconstructs is the *business-effective* position: what was true of
+# the account on that date, judged by when things actually happened. It is not
+# a claim about what a screen showed somebody at the time — a receipt confirmed
+# on the 2nd of April for cash that arrived on the 30th of March moves the
+# March position, and no report printed on the 31st could have known it. That
+# is the right answer for month-end and for an auditor, and the wrong one for
+# "what did I see?", which would need event sourcing this MVP deliberately does
+# not have.
+
+
+def _bound(as_of: date) -> datetime:
+    """The first instant after ``as_of``.
+
+    A single exclusive upper bound, compared against the ``timestamptz`` columns
+    that record when each row changed state. Exclusive rather than end-of-day
+    inclusive so there is no last-microsecond gap to argue about, and one
+    function so the same boundary is used by the sale-level read and the
+    project-level register.
+
+    Asked for today, every clause below collapses to exactly the status filter
+    it replaces — a confirmed receipt is one confirmed before tomorrow and not
+    yet reversed — so the ordinary path keeps its behaviour and its query count,
+    and the historical path is the same code with a different bound.
+    """
+    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
+
+
+def _receipt_effective_on(as_of: date) -> ColumnElement[bool]:
+    """Cash that had arrived, been confirmed, and not been reversed, by ``as_of``.
+
+    ``receipt_date`` is the day the money arrived and ``confirmed_at`` the
+    moment Finance accepted it; both must be behind us. A receipt confirmed
+    today for cash that arrives tomorrow cannot exist — recording refuses a
+    future receipt date — so the two clauses never contradict each other.
+    """
+    bound = _bound(as_of)
+    return (
+        (CollectionReceipt.receipt_date <= as_of)
+        & CollectionReceipt.confirmed_at.is_not(None)
+        & (CollectionReceipt.confirmed_at < bound)
+        & (CollectionReceipt.reversed_at.is_(None) | (CollectionReceipt.reversed_at >= bound))
+    )
+
+
+def _allocation_effective_on(as_of: date) -> ColumnElement[bool]:
+    """Cash that was sitting on an instalment on ``as_of``.
+
+    Superseded counts the same as reversed here: a restructure that moved this
+    allocation onto a replacement schedule in June did not move it in March, so
+    the March position is the one it had then.
+    """
+    bound = _bound(as_of)
+    return (
+        (CollectionReceiptAllocation.created_at < bound)
+        & (
+            CollectionReceiptAllocation.reversed_at.is_(None)
+            | (CollectionReceiptAllocation.reversed_at >= bound)
+        )
+        & (
+            CollectionReceiptAllocation.superseded_at.is_(None)
+            | (CollectionReceiptAllocation.superseded_at >= bound)
+        )
+    )
+
+
+def _dispute_open_on(as_of: date) -> ColumnElement[bool]:
+    """A dispute that had been raised and not yet closed on ``as_of``."""
+    bound = _bound(as_of)
+    return (CollectionDispute.opened_at < bound) & (
+        CollectionDispute.resolved_at.is_(None) | (CollectionDispute.resolved_at >= bound)
+    )
+
+
+def _waiver_live_on(as_of: date) -> ColumnElement[bool]:
+    """A waiver that had been approved and not withdrawn on ``as_of``."""
+    bound = _bound(as_of)
+    return (
+        CollectionWaiver.approved_at.is_not(None)
+        & (CollectionWaiver.approved_at < bound)
+        & (CollectionWaiver.revoked_at.is_(None) | (CollectionWaiver.revoked_at >= bound))
+        & (CollectionWaiver.rejected_at.is_(None) | (CollectionWaiver.rejected_at >= bound))
+    )
+
+
+def _version_governing_on(as_of: date) -> ColumnElement[bool]:
+    """The schedule that was governing the sale on ``as_of``.
+
+    A version governs from the moment it is activated until the moment it is
+    superseded. Reading a March position against the schedule a June
+    restructure put in place would report instalments the buyer had never been
+    given, so the version is reconstructed exactly like the cash.
+    """
+    bound = _bound(as_of)
+    return (
+        PaymentPlanVersion.activated_at.is_not(None)
+        & (PaymentPlanVersion.activated_at < bound)
+        & (PaymentPlanVersion.superseded_at.is_(None) | (PaymentPlanVersion.superseded_at >= bound))
+    )
+
+
+def resolve_as_of(as_of: date | None) -> date:
+    """The date a read is answered for, refused if it is in the future.
+
+    PR-MVP-10 owns forecasting. A collections read asked for next quarter would
+    have to invent either receipts or the absence of them, and either invention
+    would be reported in the same shape as fact.
+    """
+    today = business_today()
+    if as_of is None:
+        return today
+    if as_of > today:
+        raise ValidationError(
+            "Collections reports what has happened, not what is expected. "
+            f"The latest date this can be read for is {today.isoformat()}."
+        )
+    return as_of
 
 
 def _require_text(value: str | None, *, detail: str) -> str:
@@ -372,6 +504,35 @@ def _next_number(
     return f"{prefix}-{number:06d}"
 
 
+def _require_governing_installment(
+    session: Session, *, plan: PaymentPlan, installment: PaymentPlanInstallment
+) -> None:
+    """Refuse to raise a new operational decision against a schedule nobody is on.
+
+    A dispute or a waiver is a statement about what the buyer is being asked for
+    *now*. Attached to an instalment of a draft, a submitted, an approved-but-
+    inactive or a superseded version, it would describe a demand that was never
+    made or is no longer being made — and it would sit there invisible, because
+    every screen reads the governing schedule.
+
+    Reading is untouched: the historical rows stay on the account, and
+    :func:`disputes_of_sale` and :func:`waivers_of_sale` still return them. This
+    is only about creating new ones.
+    """
+    governing = payment_plans_service.active_version(session, plan_id=plan.id)
+    if governing is not None and installment.payment_plan_version_id == governing.id:
+        return
+    if governing is None:
+        raise ConflictError(
+            "This sale has no active payment plan schedule. Activate one before "
+            "raising a dispute or a waiver against its instalments."
+        )
+    raise ConflictError(
+        "This instalment does not belong to the schedule currently governing the "
+        "sale. Raise it against the active schedule instead."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # The ledger position of one sale
 # --------------------------------------------------------------------------- #
@@ -387,6 +548,7 @@ class SaleLedger:
     """
 
     sale: SaleContract
+    as_of: date
     plan: PaymentPlan | None
     version: PaymentPlanVersion | None
     installments: list[PaymentPlanInstallment]
@@ -402,26 +564,46 @@ def _plan_of(session: Session, *, sale_id: uuid.UUID) -> PaymentPlan | None:
     ).first()
 
 
-def load_ledger(session: Session, *, sale: SaleContract) -> SaleLedger:
-    """Read one sale's whole collections position.
+def load_ledger(session: Session, *, sale: SaleContract, as_of: date | None = None) -> SaleLedger:
+    """Read one sale's whole collections position, as it stood on ``as_of``.
 
-    The governing version is the *active* one, never the one being prepared. A
-    revision under construction changes nothing about what the buyer currently
+    The governing version is the one that was *active* then, never the one being
+    prepared. A revision under construction changes nothing about what the buyer
     owes, and a receivables report that switched to the draft the moment
     somebody opened it would be reporting a negotiation as though it were a
     contract.
+
+    Every clause is a lifecycle clause rather than a status one, so the same
+    code answers today and answers March — see :func:`_bound`. Asked for today
+    the two are identical, which is why there is one path and not two.
+
+    Disputes and waivers are narrowed to the governing schedule's own
+    instalments. One raised against a schedule a restructure has since replaced
+    is history, readable through :func:`disputes_of_sale`, and has no business
+    colouring the position of a schedule it was never about.
     """
+    as_of = as_of or business_today()
     plan = _plan_of(session, sale_id=sale.id)
-    version = payment_plans_service.active_version(session, plan_id=plan.id) if plan else None
+    version = (
+        session.scalars(
+            select(PaymentPlanVersion).where(
+                PaymentPlanVersion.payment_plan_id == plan.id,
+                _version_governing_on(as_of),
+            )
+        ).first()
+        if plan
+        else None
+    )
     installments = (
         payment_plans_service.installments_of(session, version_id=version.id) if version else []
     )
+    governing_ids = {row.id for row in installments}
     confirmed = list(
         session.scalars(
             select(CollectionReceipt)
             .where(
                 CollectionReceipt.sale_contract_id == sale.id,
-                CollectionReceipt.status == RECEIPT_CONFIRMED,
+                _receipt_effective_on(as_of),
             )
             .order_by(CollectionReceipt.receipt_date, CollectionReceipt.receipt_number)
         )
@@ -430,28 +612,33 @@ def load_ledger(session: Session, *, sale: SaleContract) -> SaleLedger:
         session.scalars(
             select(CollectionReceiptAllocation).where(
                 CollectionReceiptAllocation.sale_contract_id == sale.id,
-                CollectionReceiptAllocation.status == ALLOCATION_ACTIVE,
+                _allocation_effective_on(as_of),
             )
         )
     )
-    disputes = list(
-        session.scalars(
+    disputes = [
+        row
+        for row in session.scalars(
             select(CollectionDispute).where(
                 CollectionDispute.sale_contract_id == sale.id,
-                CollectionDispute.status == DISPUTE_OPEN,
+                _dispute_open_on(as_of),
             )
         )
-    )
-    waivers = list(
-        session.scalars(
+        if row.installment_id in governing_ids
+    ]
+    waivers = [
+        row
+        for row in session.scalars(
             select(CollectionWaiver).where(
                 CollectionWaiver.sale_contract_id == sale.id,
-                CollectionWaiver.status == WAIVER_APPROVED,
+                _waiver_live_on(as_of),
             )
         )
-    )
+        if row.installment_id in governing_ids
+    ]
     return SaleLedger(
         sale=sale,
+        as_of=as_of,
         plan=plan,
         version=version,
         installments=installments,
@@ -600,7 +787,7 @@ def summarise(
     session: Session,
     *,
     position: SaleLedger,
-    as_of: date,
+    as_of: date | None = None,
     extras: SaleExtras | None = None,
 ) -> SaleSummary:
     """The whole read model for one sale, from one already-loaded position.
@@ -608,6 +795,7 @@ def summarise(
     Every screen that shows a collections figure calls this, and so does the
     register — batched, through ``extras``. One totalling routine, one answer.
     """
+    as_of = as_of or position.as_of
     if extras is None:
         refund_due, refund_paid = _refund_position(session, sale_id=position.sale.id)
         extras = SaleExtras(
@@ -636,6 +824,7 @@ def summarise(
         rows=rows,
         unapplied_cash=unapplied,
         allocated_cash=allocated_total,
+        confirmed_cash=confirmed_total,
         open_disputes=len(position.open_disputes),
     )
     return SaleSummary(
@@ -679,9 +868,10 @@ def sale_summary(
 ) -> SaleSummary:
     """One sale's collections account, for the workspace and the deal file."""
     permissions.require_collection_reader(actor)
+    as_of = resolve_as_of(as_of)
     sale = _visible_sale(session, project=project, sale_id=sale_id, actor=actor)
-    position = load_ledger(session, sale=sale)
-    return summarise(session, position=position, as_of=as_of or business_today())
+    position = load_ledger(session, sale=sale, as_of=as_of)
+    return summarise(session, position=position, as_of=as_of)
 
 
 # --------------------------------------------------------------------------- #
@@ -1495,10 +1685,11 @@ def open_dispute(
     permissions.require_collection_writer(actor)
     reason = _require_text(reason, detail="Say what is being disputed.")
     project = lock_project(session, project.id)
-    installment, _, sale = _visible_installment(
+    installment, plan, sale = _visible_installment(
         session, project=project, installment_id=installment_id, actor=actor
     )
     _lock_installment(session, project_id=project.id, installment_id=installment.id)
+    _require_governing_installment(session, plan=plan, installment=installment)
 
     standing = session.scalars(
         select(CollectionDispute).where(
@@ -1682,10 +1873,11 @@ def submit_waiver(
     permissions.require_collection_writer(actor)
     reason = _require_text(reason, detail="Say why collection should be paused.")
     project = lock_project(session, project.id)
-    installment, _, sale = _visible_installment(
+    installment, plan, sale = _visible_installment(
         session, project=project, installment_id=installment_id, actor=actor
     )
     _lock_installment(session, project_id=project.id, installment_id=installment.id)
+    _require_governing_installment(session, plan=plan, installment=installment)
 
     if waived_until <= business_today():
         raise ValidationError(
@@ -2144,6 +2336,58 @@ def preview_restructure(
     )
 
 
+def _require_no_unresolved_exceptions(
+    session: Session, *, sale_id: uuid.UUID, version_id: uuid.UUID
+) -> None:
+    """Refuse the restructure while the schedule it replaces is still contested.
+
+    An open dispute and a live waiver are decisions somebody took about specific
+    instalments of a specific schedule. The replacement's instalments are new
+    rows with new identifiers, new amounts and new dates, so there is no honest
+    automatic answer to "which of the new ones is the disputed one?" — the
+    amount may have been split across three, or folded into one, or moved past
+    the date the hold ran to.
+
+    Migrating them anyway would be the system inventing a commercial decision
+    nobody made. So it refuses and names what to close first. Cash is carried
+    forward because a unit of cash is a unit of cash whatever schedule it lands
+    on; a judgement is not.
+    """
+    installment_ids = select(PaymentPlanInstallment.id).where(
+        PaymentPlanInstallment.payment_plan_version_id == version_id
+    )
+    disputes = session.scalar(
+        select(func.count())
+        .select_from(CollectionDispute)
+        .where(
+            CollectionDispute.sale_contract_id == sale_id,
+            CollectionDispute.status == DISPUTE_OPEN,
+            CollectionDispute.installment_id.in_(installment_ids),
+        )
+    )
+    if disputes:
+        raise ConflictError(
+            "This schedule still has an open dispute. Resolve or withdraw it before "
+            "restructuring, so the outcome is recorded against the instalment it was "
+            "actually about."
+        )
+    waivers = session.scalar(
+        select(func.count())
+        .select_from(CollectionWaiver)
+        .where(
+            CollectionWaiver.sale_contract_id == sale_id,
+            CollectionWaiver.status.in_(tuple(WAIVER_LIVE)),
+            CollectionWaiver.installment_id.in_(installment_ids),
+        )
+    )
+    if waivers:
+        raise ConflictError(
+            "This schedule still has a waiver awaiting a decision or in force. Decide "
+            "or revoke it before restructuring — a hold on an instalment that is about "
+            "to be replaced cannot be carried to a schedule it was never granted for."
+        )
+
+
 def apply_restructure(
     session: Session,
     *,
@@ -2195,6 +2439,7 @@ def apply_restructure(
             "The replacement schedule has not been approved. The CFO sanctions it in the "
             "payment plan, and the restructure applies it here."
         )
+    _require_no_unresolved_exceptions(session, sale_id=sale.id, version_id=source.id)
 
     sources, existing = _carry_sources(session, version_id=source.id)
     targets = _carry_targets(session, version_id=replacement.id)
@@ -2737,7 +2982,7 @@ def collection_register(
     database again.
     """
     permissions.require_collection_reader(actor)
-    as_of = as_of or business_today()
+    as_of = resolve_as_of(as_of)
     visible = _visible_sales_for_register(session, project=project, actor=actor)
     if not visible:
         return []
@@ -2755,7 +3000,7 @@ def collection_register(
             session.scalars(
                 select(PaymentPlanVersion).where(
                     PaymentPlanVersion.payment_plan_id.in_(plan_ids),
-                    PaymentPlanVersion.status == VERSION_ACTIVE,
+                    _version_governing_on(as_of),
                 )
             )
         )
@@ -2783,7 +3028,7 @@ def collection_register(
             select(CollectionReceipt)
             .where(
                 CollectionReceipt.sale_contract_id.in_(sale_ids),
-                CollectionReceipt.status == RECEIPT_CONFIRMED,
+                _receipt_effective_on(as_of),
             )
             .order_by(CollectionReceipt.receipt_date, CollectionReceipt.receipt_number)
         )
@@ -2794,7 +3039,7 @@ def collection_register(
         session.scalars(
             select(CollectionReceiptAllocation).where(
                 CollectionReceiptAllocation.sale_contract_id.in_(sale_ids),
-                CollectionReceiptAllocation.status == ALLOCATION_ACTIVE,
+                _allocation_effective_on(as_of),
             )
         )
     )
@@ -2804,7 +3049,7 @@ def collection_register(
         session.scalars(
             select(CollectionDispute).where(
                 CollectionDispute.sale_contract_id.in_(sale_ids),
-                CollectionDispute.status == DISPUTE_OPEN,
+                _dispute_open_on(as_of),
             )
         )
     )
@@ -2814,7 +3059,7 @@ def collection_register(
         session.scalars(
             select(CollectionWaiver).where(
                 CollectionWaiver.sale_contract_id.in_(sale_ids),
-                CollectionWaiver.status == WAIVER_APPROVED,
+                _waiver_live_on(as_of),
             )
         )
     )
@@ -2864,15 +3109,26 @@ def collection_register(
     for sale, unit, client in visible:
         plan = plan_by_sale.get(sale.id)
         version = version_by_plan.get(plan.id) if plan else None
+        schedule = rows_by_version.get(version.id, []) if version else []
+        governing_ids = {row.id for row in schedule}
         position = SaleLedger(
             sale=sale,
+            as_of=as_of,
             plan=plan,
             version=version,
-            installments=rows_by_version.get(version.id, []) if version else [],
+            installments=schedule,
             confirmed_receipts=receipts_by_sale.get(sale.id, []),
             allocations=allocations_by_sale.get(sale.id, []),
-            open_disputes=disputes_by_sale.get(sale.id, []),
-            live_waivers=waivers_by_sale.get(sale.id, []),
+            open_disputes=[
+                row
+                for row in disputes_by_sale.get(sale.id, [])
+                if row.installment_id in governing_ids
+            ],
+            live_waivers=[
+                row
+                for row in waivers_by_sale.get(sale.id, [])
+                if row.installment_id in governing_ids
+            ],
         )
         extras = SaleExtras(
             next_action_date=next_actions.get(sale.id),
@@ -2926,6 +3182,7 @@ def aging_report(
     is answerable here because nothing is stored — there are no nightly
     snapshots to have missed a day, only rows and arithmetic.
     """
+    as_of = resolve_as_of(as_of)
     rows: list[AgingRow] = []
     for entry in collection_register(session, project=project, actor=actor, as_of=as_of):
         for view in entry.summary.rows:
@@ -2946,20 +3203,46 @@ def aging_report(
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectSummary:
-    """The collections strip at the top of the workspace. Every figure derived."""
+class CurrencyTotals:
+    """Every money figure for one denomination. Nothing here crosses currencies."""
 
-    as_of: date
+    currency_id: uuid.UUID
     accounts: int
     outstanding_total: Decimal
     due_total: Decimal
     overdue_total: Decimal
     unapplied_cash: Decimal
     confirmed_receipts_total: Decimal
+    buckets: dict[str, Decimal]
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectSummary:
+    """The collections strip at the top of the workspace. Every figure derived.
+
+    **There is no project-wide money total, and that is the design.** A project
+    can sell in more than one currency, and 100 dinars plus 50 dollars is not
+    150 of anything. A single ``outstanding_total`` could only be produced by
+    adding unlike numbers and then labelling the result with whichever currency
+    happened to come first, which is a figure that looks authoritative, appears
+    on an executive screen, and is wrong by however much the exchange rate is.
+
+    Converting to a reporting currency instead would need an FX model — rates,
+    as-at dates, which rate for a receivable and which for cash received — and
+    PR-MVP-07 is deliberately not the place that gets invented. So the money is
+    grouped by ``currency_id`` and the screen shows each denomination on its own
+    line.
+
+    The counts are project-wide, because a count of accounts is not money: four
+    overdue accounts are four overdue accounts whatever they are billed in.
+    """
+
+    as_of: date
+    accounts: int
     accounts_overdue: int
     accounts_disputed: int
     accounts_cleared: int
-    buckets: dict[str, Decimal]
+    currencies: list[CurrencyTotals]
 
 
 def project_summary(
@@ -2974,25 +3257,46 @@ def project_summary(
     ``confirmed_receipts_total`` is lifetime and says so in its name, because an
     unlabelled "collected" beside a current outstanding invites exactly the
     wrong subtraction.
+
+    Grouped by currency — see :class:`ProjectSummary`. Currencies come back in a
+    stable order so the strip does not reshuffle itself between reads.
     """
-    as_of = as_of or business_today()
+    as_of = resolve_as_of(as_of)
     rows = collection_register(session, project=project, actor=actor, as_of=as_of)
-    buckets: dict[str, Decimal] = dict.fromkeys(ledger.AGING_BUCKETS, ZERO)
+
+    grouped: dict[uuid.UUID, list[RegisterRow]] = {}
     for entry in rows:
-        for view in entry.summary.rows:
-            buckets[view.bucket] = buckets[view.bucket] + view.outstanding
+        grouped.setdefault(entry.currency_id, []).append(entry)
+
+    currencies: list[CurrencyTotals] = []
+    for currency_id in sorted(grouped, key=str):
+        entries = grouped[currency_id]
+        buckets: dict[str, Decimal] = dict.fromkeys(ledger.AGING_BUCKETS, ZERO)
+        for entry in entries:
+            for view in entry.summary.rows:
+                buckets[view.bucket] = buckets[view.bucket] + view.outstanding
+        currencies.append(
+            CurrencyTotals(
+                currency_id=currency_id,
+                accounts=len(entries),
+                outstanding_total=sum((r.summary.outstanding_total for r in entries), ZERO),
+                due_total=sum((r.summary.due_total for r in entries), ZERO),
+                overdue_total=sum((r.summary.overdue_total for r in entries), ZERO),
+                unapplied_cash=sum((r.summary.unapplied_cash for r in entries), ZERO),
+                confirmed_receipts_total=sum(
+                    (r.summary.confirmed_receipts_total for r in entries), ZERO
+                ),
+                buckets=buckets,
+            )
+        )
+
     return ProjectSummary(
         as_of=as_of,
         accounts=len(rows),
-        outstanding_total=sum((r.summary.outstanding_total for r in rows), ZERO),
-        due_total=sum((r.summary.due_total for r in rows), ZERO),
-        overdue_total=sum((r.summary.overdue_total for r in rows), ZERO),
-        unapplied_cash=sum((r.summary.unapplied_cash for r in rows), ZERO),
-        confirmed_receipts_total=sum((r.summary.confirmed_receipts_total for r in rows), ZERO),
         accounts_overdue=sum(1 for r in rows if r.summary.overdue_total > ZERO),
         accounts_disputed=sum(1 for r in rows if r.summary.open_disputes > 0),
         accounts_cleared=sum(
             1 for r in rows if r.summary.derived_collection_status == ledger.UNIT_CLEARED
         ),
-        buckets=buckets,
+        currencies=currencies,
     )

@@ -15,11 +15,17 @@ overdue and the outstanding balance stay on the row beside it.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
+    at,
+    backdate,
     collection_account,
     collections_url,
+    fixed_row,
     governing_installments,
+    plans_url,
+    write_schedule,
 )
 
 
@@ -60,11 +66,28 @@ class TestDisputes:
         assert disputed["due_date"] == row["due_date"]
 
     def test_a_dispute_does_not_erase_aging(
-        self, collections_client: TestClient, project_id: str, collecting_sale: str
+        self,
+        collections_client: TestClient,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        historical_schedule: str,
     ) -> None:
-        """Disputed and forty-seven days late are both true at once."""
+        """Disputed and forty-seven days late are both true at once.
+
+        Read as at 17 April, so the dispute is stamped as having been raised
+        before then — a dispute opened today says nothing about April, and the
+        account correctly declines to pretend otherwise.
+        """
+        del historical_schedule
         row = _first(collections_client, project_id, collecting_sale)
-        _open_dispute(collections_client, project_id, row["installment_id"])
+        dispute = _open_dispute(collections_client, project_id, row["installment_id"])
+        backdate(
+            db,
+            table="collection_disputes",
+            row_id=dispute.json()["id"],
+            opened_at=at("2026-03-20"),
+        )
 
         account = collection_account(
             collections_client, project_id, collecting_sale, as_of="2026-04-17"
@@ -179,9 +202,7 @@ class TestWaivers:
         project_id: str,
         collecting_sale: str,
     ) -> None:
-        before = collection_account(
-            collections_client, project_id, collecting_sale, as_of="2026-04-17"
-        )
+        before = collection_account(collections_client, project_id, collecting_sale)
         row = before["installments"][0]
 
         waiver = self._submit(collections_client, project_id, row["installment_id"]).json()
@@ -190,9 +211,7 @@ class TestWaivers:
         )
         assert approved.status_code == 200, approved.text
 
-        after = collection_account(
-            collections_client, project_id, collecting_sale, as_of="2026-04-17"
-        )
+        after = collection_account(collections_client, project_id, collecting_sale)
         assert after["scheduled_total"] == before["scheduled_total"]
         assert after["outstanding_total"] == before["outstanding_total"]
         assert after["overdue_total"] == before["overdue_total"]
@@ -289,9 +308,7 @@ class TestWaivers:
         assert revoked.status_code == 200, revoked.text
         assert revoked.json()["status"] == "revoked"
 
-        account = collection_account(
-            collections_client, project_id, collecting_sale, as_of="2026-04-17"
-        )
+        account = collection_account(collections_client, project_id, collecting_sale)
         assert account["installments"][0]["has_active_waiver"] is False
 
     def test_a_submitted_waiver_cannot_be_revoked(
@@ -401,3 +418,112 @@ class TestActions:
         self, finance_client: TestClient, project_id: str, collecting_sale: str
     ) -> None:
         assert self._record(finance_client, project_id, collecting_sale).status_code == 403
+
+
+class TestExceptionsTargetTheGoverningSchedule:
+    """Given a revision in preparation, when somebody raises an exception on it.
+
+    A dispute and a waiver are statements about what the buyer is being asked
+    for *now*. Attached to an instalment of a schedule that is not governing
+    the sale, they would describe a demand that was never made — and they would
+    sit there invisible, because every screen reads the governing schedule.
+
+    Reading is untouched. The historical rows stay on the account and the
+    listings still return them; this is only about raising new ones.
+    """
+
+    def _draft_rows(
+        self,
+        client: TestClient,
+        project_id: str,
+        plan_id: str,
+    ) -> list[dict]:
+        """A revision in draft, with a schedule of its own."""
+        revision = client.post(
+            f"{plans_url(project_id)}/{plan_id}/versions",
+            json={"change_reason": "Renegotiating timing"},
+        )
+        assert revision.status_code == 201, revision.text
+        version_id = revision.json()["version"]["id"]
+        written = write_schedule(
+            client,
+            project_id,
+            plan_id,
+            version_id,
+            [
+                fixed_row(1, "0.250000", "2026-04-01"),
+                fixed_row(2, "0.250000", "2026-07-01"),
+                fixed_row(3, "0.500000", "2026-10-01"),
+            ],
+        )
+        assert written.status_code == 200, written.text
+        detail = client.get(f"{plans_url(project_id)}/{plan_id}/versions/{version_id}")
+        assert detail.status_code == 200, detail.text
+        return detail.json()["installments"]
+
+    def test_a_dispute_cannot_be_opened_on_a_draft_revision(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        del collecting_sale
+        plan_id, _ = active_plan
+        rows = self._draft_rows(collections_client, project_id, plan_id)
+        refused = _open_dispute(collections_client, project_id, rows[0]["id"])
+        assert refused.status_code == 409, refused.text
+        assert "governing" in refused.json()["detail"]
+
+    def test_a_waiver_cannot_be_submitted_on_a_draft_revision(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        del collecting_sale
+        plan_id, _ = active_plan
+        rows = self._draft_rows(collections_client, project_id, plan_id)
+        refused = collections_client.post(
+            f"{collections_url(project_id)}/installments/{rows[0]['id']}/waivers",
+            json={
+                "waiver_type": "collection_hold",
+                "waived_until": "2099-01-01",
+                "reason": "Buyer hospitalised; agreed pause",
+            },
+        )
+        assert refused.status_code == 409, refused.text
+        assert "governing" in refused.json()["detail"]
+
+    def test_an_approved_but_inactive_revision_is_refused_too(
+        self,
+        collections_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        """Sanctioned is not the same as standing."""
+        del collecting_sale
+        plan_id, _ = active_plan
+        rows = self._draft_rows(collections_client, project_id, plan_id)
+        version_id = rows[0]["payment_plan_version_id"]
+        base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+        assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Fine"}).status_code == 200
+
+        refused = _open_dispute(collections_client, project_id, rows[0]["id"])
+        assert refused.status_code == 409, refused.text
+
+    def test_the_governing_schedule_is_of_course_still_accepted(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        del active_plan
+        row = _first(collections_client, project_id, collecting_sale)
+        opened = _open_dispute(collections_client, project_id, row["installment_id"])
+        assert opened.status_code == 201, opened.text

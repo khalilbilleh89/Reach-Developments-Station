@@ -8,11 +8,13 @@ tests should fail if that stops being true.
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
@@ -1265,3 +1267,110 @@ def settle_and_clear_collections(
         json={"evidence_reference": "LEDGER-CLEAR"},
     )
     assert granted.status_code == 200, granted.text
+
+
+# --------------------------------------------------------------------------- #
+# Giving a test a past to read
+# --------------------------------------------------------------------------- #
+
+#: The tables whose lifecycle timestamps a test may move. Named explicitly
+#: rather than accepting any string, because the point of the helper is to
+#: simulate elapsed time on append-only rows, not to be a general back door
+#: into the schema.
+_HISTORICAL_TABLES = frozenset(
+    {
+        "payment_plan_versions",
+        "collection_receipts",
+        "collection_receipt_allocations",
+        "collection_disputes",
+        "collection_waivers",
+    }
+)
+
+
+def at(day: str | date, hour: int = 12) -> datetime:
+    """Midday UTC on a given day, for stamping a lifecycle column."""
+    when = date.fromisoformat(day) if isinstance(day, str) else day
+    return datetime.combine(when, time(hour=hour), tzinfo=UTC)
+
+
+def backdate(db: Session, *, table: str, row_id: str, **stamps: datetime | None) -> None:
+    """Move one row's lifecycle timestamps, so the test has a history to read.
+
+    Collections derives every historical figure from when things actually
+    happened — a plan activated, a receipt confirmed, an allocation superseded.
+    A test that wants to ask "what did March look like?" therefore needs rows
+    that were stamped in March, and no amount of driving the API can produce
+    them: activation stamps ``now`` and refuses a receipt dated in the future.
+
+    So the arrangement is done here, against the same PostgreSQL the code
+    reads, and every assertion afterwards goes through the ordinary route. What
+    is simulated is the passage of time, never a figure.
+    """
+    assert table in _HISTORICAL_TABLES, f"{table} is not a lifecycle table"
+    assignments = ", ".join(f"{column} = :{column}" for column in stamps)
+    db.execute(
+        text(f"UPDATE {table} SET {assignments} WHERE id = :row_id"),
+        {**stamps, "row_id": row_id},
+    )
+    db.commit()
+
+
+@pytest.fixture
+def historical_schedule(
+    collections_client: TestClient,
+    db: Session,
+    project_id: str,
+    collecting_sale: str,
+    plan_id: str,
+) -> str:
+    """The fixture schedule, as though it had been activated on 5 January 2026.
+
+    The 20 / 30 / 50 schedule falls due on 1 March, 1 June and 1 September, so
+    every test that wants to age it on a named date needs it to have been
+    governing the sale on that date. It really was activated today, and
+    Collections reconstructs the governing version from when it was activated,
+    so without this the honest answer to "what did March look like?" is "this
+    sale had no schedule then".
+    """
+    del collecting_sale
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    backdate(db, table="payment_plan_versions", row_id=version_id, activated_at=at("2026-01-05"))
+    return version_id
+
+
+@pytest.fixture
+def relative_plan(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    plan_id: str,
+) -> dict[str, Any]:
+    """A governing schedule anchored to today rather than to a fixed calendar.
+
+    Three instalments, one of each shape the "due now" rule has to separate:
+    one long past its date, one whose date has passed but is still inside its
+    grace period, and one falling due three months from now. The dates move
+    with the clock, so the assertions below stay true whenever the suite runs —
+    a fixture pinned to named dates would quietly change meaning as those dates
+    slid into the past.
+    """
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    today = date.today()
+    response = write_schedule(
+        collections_client,
+        project_id,
+        plan_id,
+        version_id,
+        [
+            fixed_row(1, "0.200000", (today - timedelta(days=120)).isoformat()),
+            fixed_row(2, "0.300000", (today - timedelta(days=3)).isoformat(), grace_days=10),
+            fixed_row(3, "0.500000", (today + timedelta(days=90)).isoformat()),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Terms agreed"}).status_code == 200
+    assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+    return {"plan_id": plan_id, "version_id": version_id}

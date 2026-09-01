@@ -243,20 +243,35 @@ class AgingRowRead(BaseModel):
     installment: CollectionInstallmentRow
 
 
-class CollectionProjectSummary(BaseModel):
-    """The project strip. ``confirmed_receipts_total`` is lifetime and says so."""
+class CollectionCurrencyTotals(BaseModel):
+    """Every money figure for one denomination. Nothing here crosses currencies."""
 
-    as_of: date
+    currency_id: uuid.UUID
     accounts: int
     outstanding_total: Money
     due_total: Money
     overdue_total: Money
     unapplied_cash: Money
     confirmed_receipts_total: Money
+    buckets: dict[str, Money]
+
+
+class CollectionProjectSummary(BaseModel):
+    """The project strip. ``confirmed_receipts_total`` is lifetime and says so.
+
+    Money is grouped by currency and there is deliberately no project-wide
+    total: a project selling in two currencies has no single outstanding
+    figure, and one produced by adding them would be wrong by the exchange
+    rate while looking exactly like a fact. The counts are project-wide,
+    because a count of accounts is not money.
+    """
+
+    as_of: date
+    accounts: int
     accounts_overdue: int
     accounts_disputed: int
     accounts_cleared: int
-    buckets: dict[str, Money]
+    currencies: list[CollectionCurrencyTotals]
 
 
 # --------------------------------------------------------------------------- #

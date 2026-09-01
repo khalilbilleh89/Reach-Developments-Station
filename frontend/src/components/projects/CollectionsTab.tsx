@@ -226,10 +226,7 @@ export function CollectionsTab({
         </FilterBar>
 
         {summary ? (
-          <CollectionsSummary
-            summary={summary}
-            currencyCode={rows && rows.length > 0 ? currencyFor(rows[0]) : null}
-          />
+          <CollectionsSummary summary={summary} currencyCodeOf={currencyCodeOf} />
         ) : null}
       </Card>
 

@@ -26,6 +26,7 @@ from tests.modules.conftest import (
     collection_account,
     collections_url,
     confirm_receipt,
+    current_version_id,
     governing_installments,
     plans_url,
     record_receipt,
@@ -670,3 +671,386 @@ class TestAbandoning:
         after = collection_account(collections_client, project_id, collecting_sale)
         assert after["allocated_total"] == before["allocated_total"]
         assert after["active_payment_plan_version_id"] == before["active_payment_plan_version_id"]
+
+
+class TestFirstActivationAfterCash:
+    """Given cash confirmed before any schedule, when the first one is activated.
+
+    The refusal above exists to stop a *replacement* schedule swapping
+    instalments out from under allocations that point at the old ones. A first
+    activation has no old ones — there is no standing schedule, so there is
+    nothing to carry and nothing to strand.
+
+    Whether it is a replacement is decided by reading the plan's standing
+    version, not by looking at ``source_version_id``. A first version drafted
+    with "Copy Approved Plan" carries the id of a version belonging to a
+    *different* plan, so reading that would refuse the very first activation of
+    a copied plan on which a deposit had been taken, and tell the operator to
+    restructure a schedule that does not exist.
+    """
+
+    def _deposit(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        sale_id: str,
+        amount: str = "5000.00",
+    ) -> str:
+        """Confirmed cash against a sale that has no governing schedule yet."""
+        recorded = record_receipt(collections_client, project_id, sale_id, amount)
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        return receipt_id
+
+    def _activate_first(
+        self,
+        collections_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        plan_id: str,
+        version_id: str,
+    ) -> object:
+        assert (
+            write_schedule(
+                collections_client,
+                project_id,
+                plan_id,
+                version_id,
+                [
+                    _row(1, "0.200000", "2026-03-01"),
+                    _row(2, "0.300000", "2026-06-01"),
+                    _row(3, "0.500000", "2026-09-01"),
+                ],
+            ).status_code
+            == 200
+        )
+        base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+        assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Agreed"}).status_code == 200
+        return cfo_client.post(f"{base}/activate", json={})
+
+    def test_the_deposit_marks_the_plan_even_before_it_has_a_schedule(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> None:
+        """The marker is about cash, so it is set whether or not one is standing."""
+        self._deposit(collections_client, finance_client, project_id, active_sale)
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["confirmed_receipts_total"] == "5000.00"
+        assert account["active_payment_plan_version_id"] is None
+        del plan_id
+
+    def test_a_first_custom_version_still_activates_after_cash(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> None:
+        """Nothing is standing, so there is nothing to carry forward."""
+        self._deposit(collections_client, finance_client, project_id, active_sale)
+        version_id = current_version_id(collections_client, project_id, plan_id)
+        activated = self._activate_first(
+            collections_client, cfo_client, project_id, plan_id, version_id
+        )
+        assert activated.status_code == 200, activated.text
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["active_payment_plan_version_id"] == version_id
+        assert account["unapplied_cash"] == "5000.00"
+
+    def test_a_first_copied_plan_still_activates_after_cash(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        other_phase_plan: dict[str, str],
+    ) -> None:
+        """The case ``source_version_id`` got wrong.
+
+        "Copy Approved Plan" opens the plan with its first version already
+        pointing at another unit's schedule, so ``source_version_id`` is set
+        and belongs to a different plan entirely. That is not a replacement of
+        anything on this plan, and with a deposit already confirmed the
+        activation must still go through — otherwise the operator is told to
+        restructure a schedule that has never existed.
+        """
+        self._deposit(collections_client, finance_client, project_id, active_sale)
+        created = collections_client.post(
+            plans_url(project_id),
+            json={
+                "sale_contract_id": active_sale,
+                "name": "Same terms as the other unit",
+                "origin_type": "copied_plan",
+                "source_version_id": other_phase_plan["version_id"],
+            },
+        )
+        assert created.status_code == 201, created.text
+        plan_id = created.json()["plan"]["id"]
+        version = created.json()["current"]["version"]
+        assert version["origin_type"] == "copied_plan"
+        assert version["source_version_id"] == other_phase_plan["version_id"]
+
+        activated = self._activate_first(
+            collections_client, cfo_client, project_id, plan_id, version["id"]
+        )
+        assert activated.status_code == 200, activated.text
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["active_payment_plan_version_id"] == version["id"]
+        assert account["unapplied_cash"] == "5000.00"
+
+    def test_the_second_version_is_still_refused_after_cash(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> None:
+        """The guard still does its job once something is genuinely standing."""
+        self._deposit(collections_client, finance_client, project_id, active_sale)
+        first = current_version_id(collections_client, project_id, plan_id)
+        assert (
+            self._activate_first(
+                collections_client, cfo_client, project_id, plan_id, first
+            ).status_code
+            == 200
+        )
+
+        revision = collections_client.post(
+            f"{plans_url(project_id)}/{plan_id}/versions",
+            json={"change_reason": "Renegotiated"},
+        )
+        assert revision.status_code == 201, revision.text
+        second = revision.json()["version"]["id"]
+        refused = self._activate_first(collections_client, cfo_client, project_id, plan_id, second)
+        assert refused.status_code == 409, refused.text
+        assert "Collections restructure" in refused.json()["detail"]
+
+
+class TestUnresolvedExceptionsBlockTheRestructure:
+    """Given a contested schedule, when somebody tries to replace it.
+
+    Cash is carried forward because a unit of cash is a unit of cash whatever
+    schedule it lands on. A dispute and a waiver are not: they are judgements
+    somebody made about a specific instalment, with a specific amount and a
+    specific date, and the replacement's rows are new ones that may have split
+    that amount across three or folded it into one or moved it past the date
+    the hold ran to.
+
+    There is no honest automatic answer to "which of the new instalments is the
+    disputed one?", so the system refuses and names what to close first rather
+    than inventing a commercial decision nobody took.
+    """
+
+    def _cash_and_replacement(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        sale_id: str,
+        plan_id: str,
+    ) -> dict:
+        """Confirmed and applied cash, plus an approved replacement waiting."""
+        rows = governing_installments(collections_client, project_id, sale_id)
+        receipt = record_receipt(collections_client, project_id, sale_id, "6000.00").json()
+        assert confirm_receipt(finance_client, project_id, receipt["id"]).status_code == 200
+        assert (
+            allocate(
+                collections_client,
+                project_id,
+                receipt["id"],
+                rows[0]["installment_id"],
+                "6000.00",
+            ).status_code
+            == 201
+        )
+        restructure = _open_restructure(collections_client, project_id, sale_id).json()
+        assert (
+            write_schedule(
+                collections_client,
+                project_id,
+                plan_id,
+                restructure["replacement_version_id"],
+                [
+                    _row(1, "0.100000", "2026-03-01"),
+                    _row(2, "0.150000", "2026-06-01"),
+                    _row(3, "0.250000", "2026-09-01"),
+                    _row(4, "0.500000", "2026-12-01"),
+                ],
+            ).status_code
+            == 200
+        )
+        base = f"{plans_url(project_id)}/{plan_id}/versions/{restructure['replacement_version_id']}"
+        assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Sanctioned"}).status_code == 200
+        return {"restructure": restructure, "rows": rows}
+
+    def _apply(self, client: TestClient, project_id: str, restructure_id: str) -> object:
+        return client.post(
+            f"{collections_url(project_id)}/restructures/{restructure_id}/apply", json={}
+        )
+
+    def test_an_open_dispute_stops_it(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        plan_id, _ = active_plan
+        arranged = self._cash_and_replacement(
+            collections_client, finance_client, cfo_client, project_id, collecting_sale, plan_id
+        )
+        opened = collections_client.post(
+            f"{collections_url(project_id)}/installments/"
+            f"{arranged['rows'][1]['installment_id']}/disputes",
+            json={"reason": "Buyer contests the balcony area"},
+        )
+        assert opened.status_code == 201, opened.text
+
+        refused = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert refused.status_code == 409, refused.text
+        assert "dispute" in refused.json()["detail"]
+
+        # And nothing moved: the old schedule is still the governing one.
+        account = collection_account(collections_client, project_id, collecting_sale)
+        assert account["installments_total"] == 3
+        assert account["allocated_total"] == "6000.00"
+
+    def test_resolving_the_dispute_lets_it_through(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        """The refusal names a way through, and it works."""
+        plan_id, _ = active_plan
+        arranged = self._cash_and_replacement(
+            collections_client, finance_client, cfo_client, project_id, collecting_sale, plan_id
+        )
+        opened = collections_client.post(
+            f"{collections_url(project_id)}/installments/"
+            f"{arranged['rows'][1]['installment_id']}/disputes",
+            json={"reason": "Buyer contests the balcony area"},
+        ).json()
+        resolved = collections_client.post(
+            f"{collections_url(project_id)}/disputes/{opened['id']}/resolve",
+            json={"resolution": "Area confirmed against the survey; buyer accepts"},
+        )
+        assert resolved.status_code == 200, resolved.text
+
+        applied = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert applied.status_code == 200, applied.text
+        account = collection_account(collections_client, project_id, collecting_sale)
+        assert account["installments_total"] == 4
+        assert account["allocated_total"] == "6000.00"
+
+    def test_a_submitted_waiver_stops_it_too(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        """Awaiting a decision counts: the CFO has not answered yet."""
+        plan_id, _ = active_plan
+        arranged = self._cash_and_replacement(
+            collections_client, finance_client, cfo_client, project_id, collecting_sale, plan_id
+        )
+        submitted = collections_client.post(
+            f"{collections_url(project_id)}/installments/"
+            f"{arranged['rows'][1]['installment_id']}/waivers",
+            json={
+                "waiver_type": "collection_hold",
+                "waived_until": "2099-01-01",
+                "reason": "Buyer hospitalised; agreed pause",
+            },
+        )
+        assert submitted.status_code == 201, submitted.text
+
+        refused = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert refused.status_code == 409, refused.text
+        assert "waiver" in refused.json()["detail"]
+
+    def test_an_approved_waiver_stops_it_and_revoking_releases_it(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        plan_id, _ = active_plan
+        arranged = self._cash_and_replacement(
+            collections_client, finance_client, cfo_client, project_id, collecting_sale, plan_id
+        )
+        waiver = collections_client.post(
+            f"{collections_url(project_id)}/installments/"
+            f"{arranged['rows'][1]['installment_id']}/waivers",
+            json={
+                "waiver_type": "collection_hold",
+                "waived_until": "2099-01-01",
+                "reason": "Buyer hospitalised; agreed pause",
+            },
+        ).json()
+        assert (
+            cfo_client.post(
+                f"{collections_url(project_id)}/waivers/{waiver['id']}/approve", json={}
+            ).status_code
+            == 200
+        )
+        refused = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert refused.status_code == 409, refused.text
+
+        revoked = cfo_client.post(
+            f"{collections_url(project_id)}/waivers/{waiver['id']}/revoke",
+            json={"reason": "Superseded by the restructure the buyer agreed"},
+        )
+        assert revoked.status_code == 200, revoked.text
+        applied = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert applied.status_code == 200, applied.text
+
+    def test_a_superseded_instalment_can_no_longer_take_a_new_dispute(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        active_plan: tuple[str, str],
+    ) -> None:
+        """After the replacement lands, the old rows are history and stay so."""
+        plan_id, _ = active_plan
+        arranged = self._cash_and_replacement(
+            collections_client, finance_client, cfo_client, project_id, collecting_sale, plan_id
+        )
+        applied = self._apply(collections_client, project_id, arranged["restructure"]["id"])
+        assert applied.status_code == 200, applied.text
+
+        refused = collections_client.post(
+            f"{collections_url(project_id)}/installments/"
+            f"{arranged['rows'][0]['installment_id']}/disputes",
+            json={"reason": "Late thought about the old schedule"},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "governing" in refused.json()["detail"]

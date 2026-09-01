@@ -81,18 +81,21 @@ class TestApplyingCash:
         expected = f"{float(first['scheduled']) - 4000.0:.2f}"
         assert row["outstanding"] == expected
 
-        # Read before the instalment falls due, the primary status is the part
-        # payment. Read today it is ``overdue``, because delinquency is the more
-        # urgent fact — and ``paid`` and ``outstanding`` are unchanged either
-        # way, which is the point of keeping the numbers beside the badge.
-        early = collection_account(
-            collections_client, project_id, collecting_sale, as_of="2026-01-15"
-        )["installments"][0]
-        assert early["status"] == "partially_paid"
-        assert early["paid"] == "4000.00"
-        assert early["outstanding"] == expected
+        # Today the badge is ``overdue``, because delinquency is the more urgent
+        # fact — and ``paid`` and ``outstanding`` are unchanged beside it, which
+        # is the point of keeping the numbers next to the badge.
         assert row["status"] == "overdue"
         assert row["overdue_days"] > 0
+
+        # Read as at a date before this schedule was ever activated, the account
+        # honestly reports no governing schedule rather than back-dating today's
+        # instalments into a month they did not exist in. The part payment is
+        # still there in the cash figures.
+        early = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-01-15"
+        )
+        assert early["installments"] == []
+        assert early["active_payment_plan_version_id"] is None
 
     def test_one_receipt_splits_across_several_instalments(
         self,

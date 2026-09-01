@@ -20,14 +20,27 @@ edge of every bucket is stated rather than assumed.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.modules.collections import ledger
-from tests.modules.conftest import collection_account, collections_url
+from tests.modules.conftest import (
+    allocate,
+    at,
+    backdate,
+    collection_account,
+    collections_url,
+    confirm_receipt,
+    current_version_id,
+    fixed_row,
+    plans_url,
+    record_receipt,
+    write_schedule,
+)
 
 FIVE_K = Decimal("5000.00")
 ZERO = Decimal("0.00")
@@ -229,16 +242,27 @@ class TestStatusKeepsTheFacts:
 
 
 class TestAsOfIsReal:
-    """Given the ledger, when somebody asks what it looked like on a past date."""
+    """Given the ledger, when somebody asks what it looked like on a past date.
+
+    Nothing is snapshotted, so the answer has to be reconstructed — and the
+    reconstruction has to cover the *cash* as well as the arithmetic. Aging a
+    March schedule against the receipts confirmed in June is worse than
+    refusing the question, because the answer looks authoritative and is wrong
+    by however much arrived in between.
+
+    Every row Collections owns records when it changed state, so these tests
+    arrange a real history with :func:`backdate` and then read it through the
+    ordinary route.
+    """
 
     def test_the_aging_report_answers_for_a_supplied_date(
-        self, collections_client: TestClient, project_id: str, collecting_sale: str
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        historical_schedule: str,
     ) -> None:
-        """Nothing is snapshotted, so any date can be asked and re-asked.
-
-        The fixture schedule falls due on 1 March, 1 June and 1 September 2026.
-        """
-        del collecting_sale
+        """The fixture schedule falls due on 1 March, 1 June and 1 September."""
+        del historical_schedule
         before = collections_client.get(
             f"{collections_url(project_id)}/aging", params={"as_of": "2026-02-01"}
         )
@@ -264,17 +288,25 @@ class TestAsOfIsReal:
         assert first.json() == second.json()
 
     def test_overdue_only_narrows_the_report_without_changing_the_figures(
-        self, collections_client: TestClient, project_id: str, collecting_sale: str
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        historical_schedule: str,
     ) -> None:
-        del collecting_sale
+        del historical_schedule
         params = {"as_of": "2026-06-15", "overdue_only": True}
         rows = collections_client.get(f"{collections_url(project_id)}/aging", params=params).json()
         assert rows
         assert all(row["installment"]["overdue_days"] > 0 for row in rows)
 
     def test_the_account_ages_on_the_supplied_date_too(
-        self, collections_client: TestClient, project_id: str, collecting_sale: str
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        historical_schedule: str,
     ) -> None:
+        del historical_schedule
         account = collection_account(
             collections_client, project_id, collecting_sale, as_of="2026-03-15"
         )
@@ -282,3 +314,350 @@ class TestAsOfIsReal:
         assert account["oldest_overdue_days"] == 14
         assert account["installments_overdue"] == 1
         assert account["overdue_total"] == account["installments"][0]["scheduled"]
+
+    def test_a_schedule_activated_later_does_not_govern_an_earlier_date(
+        self, collections_client: TestClient, project_id: str, collecting_sale: str
+    ) -> None:
+        """The plan really was activated today, so January had no schedule.
+
+        Back-dating today's instalments into a month they did not exist in
+        would invent a demand the buyer was never given.
+        """
+        account = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-01-15"
+        )
+        assert account["installments"] == []
+        assert account["active_payment_plan_version_id"] is None
+        assert account["outstanding_total"] == "0.00"
+
+
+class TestHistoricalCash:
+    """Given a receipt, when the account is read for a date before it arrived."""
+
+    @pytest.fixture
+    def settled_in_june(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        plan_id: str,
+    ) -> dict[str, str]:
+        """January schedule, first instalment settled by cash confirmed in June."""
+        version_id = current_version_id(collections_client, project_id, plan_id)
+        backdate(
+            db,
+            table="payment_plan_versions",
+            row_id=version_id,
+            activated_at=at("2026-01-05"),
+        )
+        rows = collection_account(collections_client, project_id, collecting_sale)["installments"]
+        first = rows[0]
+        recorded = record_receipt(
+            collections_client,
+            project_id,
+            collecting_sale,
+            first["scheduled"],
+            receipt_date="2026-06-02",
+        )
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        allocation = allocate(
+            collections_client,
+            project_id,
+            receipt_id,
+            first["installment_id"],
+            first["scheduled"],
+        )
+        assert allocation.status_code == 201, allocation.text
+        allocation_id = allocation.json()["id"]
+
+        backdate(
+            db,
+            table="collection_receipts",
+            row_id=receipt_id,
+            confirmed_at=at("2026-06-03"),
+        )
+        backdate(
+            db,
+            table="collection_receipt_allocations",
+            row_id=allocation_id,
+            created_at=at("2026-06-03"),
+        )
+        return {
+            "receipt_id": receipt_id,
+            "allocation_id": allocation_id,
+            "installment_id": first["installment_id"],
+            "scheduled": first["scheduled"],
+        }
+
+    def test_a_june_receipt_does_not_reduce_the_march_balance(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        settled_in_june: dict[str, str],
+    ) -> None:
+        """The March position is what was true in March, not what we know now."""
+        march = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-03-15"
+        )
+        assert march["confirmed_receipts_total"] == "0.00"
+        assert march["allocated_total"] == "0.00"
+        assert march["installments"][0]["paid"] == "0.00"
+        assert march["installments"][0]["outstanding"] == settled_in_june["scheduled"]
+        assert march["installments"][0]["overdue_days"] == 14
+
+    def test_the_receipt_appears_from_the_date_it_was_confirmed(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        settled_in_june: dict[str, str],
+    ) -> None:
+        """Before its effective point it is absent; after it, it is counted."""
+        just_before = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-02"
+        )
+        assert just_before["confirmed_receipts_total"] == "0.00"
+
+        just_after = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-03"
+        )
+        assert just_after["confirmed_receipts_total"] == settled_in_june["scheduled"]
+        assert just_after["allocated_total"] == settled_in_june["scheduled"]
+        assert just_after["installments"][0]["status"] == "paid"
+
+    def test_a_later_reversal_does_not_rewrite_the_earlier_position(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        settled_in_june: dict[str, str],
+    ) -> None:
+        """Reversing today says nothing about what was true in June.
+
+        This is the difference between a ledger and a mutable balance. The
+        instalment was settled in June; it is outstanding again now; both are
+        facts and the account reports whichever one was asked for.
+        """
+        reversal = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{settled_in_june['receipt_id']}/reverse",
+            json={"reason": "Bank returned the transfer"},
+        )
+        assert reversal.status_code == 200, reversal.text
+
+        june = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-30"
+        )
+        assert june["confirmed_receipts_total"] == settled_in_june["scheduled"]
+        assert june["installments"][0]["status"] == "paid"
+
+        now = collection_account(collections_client, project_id, collecting_sale)
+        assert now["confirmed_receipts_total"] == "0.00"
+        assert now["installments"][0]["outstanding"] == settled_in_june["scheduled"]
+
+    def test_a_future_as_of_is_refused(
+        self, collections_client: TestClient, project_id: str, collecting_sale: str
+    ) -> None:
+        """Collections reports what happened. PR-MVP-10 owns what is expected."""
+        ahead = (date.today() + timedelta(days=1)).isoformat()
+        for path, params in (
+            (f"{collections_url(project_id)}/sales/{collecting_sale}", {"as_of": ahead}),
+            (f"{collections_url(project_id)}/aging", {"as_of": ahead}),
+            (f"{collections_url(project_id)}/summary", {"as_of": ahead}),
+            (f"{collections_url(project_id)}/receivables", {"as_of": ahead}),
+        ):
+            response = collections_client.get(path, params=params)
+            assert response.status_code == 422, (path, response.status_code, response.text)
+            assert "latest date" in response.text
+
+    def test_today_is_still_allowed(
+        self, collections_client: TestClient, project_id: str, collecting_sale: str
+    ) -> None:
+        response = collections_client.get(
+            f"{collections_url(project_id)}/sales/{collecting_sale}",
+            params={"as_of": date.today().isoformat()},
+        )
+        assert response.status_code == 200, response.text
+
+
+class TestDueNow:
+    """Given a schedule, when the workspace asks what is payable today.
+
+    ``Due now`` is the number an operator acts on: it is what they will chase
+    this morning. So it has to mean *the buyer has been asked for this and has
+    not paid it*, and nothing else.
+
+    Three things it must not be. It is not the whole schedule — an instalment
+    falling due in three months is a commitment, and counting it turns plan
+    activation into an invoice for the full contract value. It is not reduced
+    by grace — a payment inside its grace period has been asked for, it is
+    simply not yet late. And it is not the scheduled amount once something has
+    been paid against it; only the remainder is still being asked for.
+    """
+
+    def _rows(self, client: TestClient, project_id: str, sale_id: str) -> tuple[dict, list[dict]]:
+        account = collection_account(client, project_id, sale_id)
+        return account, account["installments"]
+
+    def test_a_future_instalment_is_not_due_now(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        relative_plan: dict,
+    ) -> None:
+        del relative_plan
+        account, rows = self._rows(collections_client, project_id, active_sale)
+        ahead = rows[2]
+        assert ahead["due_date"] > date.today().isoformat()
+        assert ahead["status"] == "scheduled"
+        assert ahead["outstanding"] == ahead["scheduled"]
+        # The one row that has not been asked for is the one excluded.
+        expected = Decimal(rows[0]["outstanding"]) + Decimal(rows[1]["outstanding"])
+        assert Decimal(account["due_total"]) == expected
+        assert Decimal(account["outstanding_total"]) == expected + Decimal(ahead["outstanding"])
+
+    def test_an_instalment_due_today_is_due_now(
+        self,
+        collections_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> None:
+        """The boundary day itself counts. Due means due."""
+        version_id = current_version_id(collections_client, project_id, plan_id)
+        today = date.today()
+        written = write_schedule(
+            collections_client,
+            project_id,
+            plan_id,
+            version_id,
+            [
+                fixed_row(1, "1.000000", today.isoformat()),
+            ],
+        )
+        assert written.status_code == 200, written.text
+        base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+        assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Agreed"}).status_code == 200
+        assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+
+        account, rows = self._rows(collections_client, project_id, active_sale)
+        assert rows[0]["due_date"] == today.isoformat()
+        assert rows[0]["status"] == "due"
+        assert account["due_total"] == rows[0]["outstanding"]
+
+    def test_inside_grace_is_due_but_not_overdue(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        relative_plan: dict,
+    ) -> None:
+        """Grace moves the overdue line, never the due line.
+
+        The buyer has been asked for this money. They are simply not yet late
+        with it, which is a statement about chasing, not about owing.
+        """
+        del relative_plan
+        _, rows = self._rows(collections_client, project_id, active_sale)
+        in_grace = rows[1]
+        assert in_grace["due_date"] < date.today().isoformat()
+        assert in_grace["overdue_days"] == 0
+        assert in_grace["bucket"] == "current"
+        assert in_grace["status"] == "due"
+
+    def test_beyond_grace_is_due_and_overdue(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        relative_plan: dict,
+    ) -> None:
+        del relative_plan
+        account, rows = self._rows(collections_client, project_id, active_sale)
+        late = rows[0]
+        assert late["overdue_days"] > 0
+        assert late["status"] == "overdue"
+        assert Decimal(account["overdue_total"]) == Decimal(late["outstanding"])
+        # Overdue is a subset of due, never a separate pile beside it.
+        assert Decimal(account["due_total"]) >= Decimal(account["overdue_total"])
+
+    def test_only_the_remainder_of_a_part_paid_instalment_is_due(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        relative_plan: dict,
+    ) -> None:
+        del relative_plan
+        _, rows = self._rows(collections_client, project_id, active_sale)
+        late = rows[0]
+        before = Decimal(late["outstanding"])
+
+        recorded = record_receipt(collections_client, project_id, active_sale, "1000.00")
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        assert (
+            allocate(
+                collections_client, project_id, receipt_id, late["installment_id"], "1000.00"
+            ).status_code
+            == 201
+        )
+
+        account, rows = self._rows(collections_client, project_id, active_sale)
+        assert Decimal(rows[0]["outstanding"]) == before - Decimal("1000.00")
+        assert Decimal(account["due_total"]) == Decimal(rows[0]["outstanding"]) + Decimal(
+            rows[1]["outstanding"]
+        )
+
+    def test_an_instalment_awaiting_its_trigger_is_never_due(
+        self,
+        collections_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> None:
+        """A forecast is not a demand, whatever date it carries."""
+        version_id = current_version_id(collections_client, project_id, plan_id)
+        written = write_schedule(
+            collections_client,
+            project_id,
+            plan_id,
+            version_id,
+            [
+                fixed_row(1, "0.400000", (date.today() - timedelta(days=30)).isoformat()),
+                {
+                    "sequence": 2,
+                    "label": "On completion",
+                    "trigger_type": "construction_milestone",
+                    "trigger_reference": "SLAB-L3",
+                    "forecast_due_date": (date.today() - timedelta(days=200)).isoformat(),
+                    "principal_fraction": "0.600000",
+                },
+            ],
+        )
+        assert written.status_code == 200, written.text
+        base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+        assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Agreed"}).status_code == 200
+        assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+
+        account, rows = self._rows(collections_client, project_id, active_sale)
+        awaiting = rows[1]
+        assert awaiting["due_date"] is None
+        assert awaiting["status"] == "awaiting_trigger"
+        assert awaiting["bucket"] == "awaiting_trigger"
+        assert awaiting["overdue_days"] == 0
+        # Its forecast date is two hundred days behind us and moves nothing.
+        assert Decimal(account["due_total"]) == Decimal(rows[0]["outstanding"])
+        assert Decimal(account["overdue_total"]) == Decimal(rows[0]["outstanding"])

@@ -111,7 +111,7 @@ class TestTheDerivation:
         base.update(overrides)
         return [ledger.installment_view(**base)]  # type: ignore[arg-type]
 
-    def test_no_schedule_means_collections_have_not_started(self) -> None:
+    def test_no_schedule_and_no_cash_means_collections_have_not_started(self) -> None:
         assert (
             ledger.unit_collection_status(
                 sale_cancelled=False,
@@ -119,9 +119,32 @@ class TestTheDerivation:
                 rows=[],
                 unapplied_cash=ZERO,
                 allocated_cash=ZERO,
+                confirmed_cash=ZERO,
                 open_disputes=0,
             )
             == ledger.UNIT_NOT_STARTED
+        )
+
+    def test_no_schedule_but_confirmed_cash_is_not_not_started(self) -> None:
+        """A deposit taken before the plan was activated is money we are holding.
+
+        There is no schedule to age it against, so nothing can call it current
+        or overdue — but ``not_started`` beside a confirmed receipt is the one
+        reading that could persuade somebody the buyer has paid nothing.
+        ``partially_paid`` is one of inventory's existing seven, not an eighth
+        invented for this case.
+        """
+        assert (
+            ledger.unit_collection_status(
+                sale_cancelled=False,
+                has_active_schedule=False,
+                rows=[],
+                unapplied_cash=Decimal("25000.00"),
+                allocated_cash=ZERO,
+                confirmed_cash=Decimal("25000.00"),
+                open_disputes=0,
+            )
+            == ledger.UNIT_PARTIALLY_PAID
         )
 
     def test_a_clean_live_schedule_is_current(self) -> None:
@@ -132,6 +155,7 @@ class TestTheDerivation:
                 rows=self._rows(),
                 unapplied_cash=ZERO,
                 allocated_cash=ZERO,
+                confirmed_cash=ZERO,
                 open_disputes=0,
             )
             == ledger.UNIT_CURRENT
@@ -145,6 +169,7 @@ class TestTheDerivation:
                 rows=self._rows(paid=Decimal("1000.00")),
                 unapplied_cash=ZERO,
                 allocated_cash=Decimal("1000.00"),
+                confirmed_cash=Decimal("1000.00"),
                 open_disputes=0,
             )
             == ledger.UNIT_PARTIALLY_PAID
@@ -160,6 +185,7 @@ class TestTheDerivation:
                 rows=self._rows(paid=Decimal("1000.00"), as_of=date(2026, 7, 1)),
                 unapplied_cash=ZERO,
                 allocated_cash=Decimal("1000.00"),
+                confirmed_cash=Decimal("1000.00"),
                 open_disputes=0,
             )
             == ledger.UNIT_OVERDUE
@@ -175,6 +201,7 @@ class TestTheDerivation:
                 rows=self._rows(as_of=date(2026, 7, 1), disputed=True),
                 unapplied_cash=ZERO,
                 allocated_cash=ZERO,
+                confirmed_cash=ZERO,
                 open_disputes=1,
             )
             == ledger.UNIT_DISPUTED
@@ -190,6 +217,7 @@ class TestTheDerivation:
                 rows=self._rows(as_of=date(2026, 7, 1), disputed=True, sale_cancelled=True),
                 unapplied_cash=Decimal("999.00"),
                 allocated_cash=ZERO,
+                confirmed_cash=Decimal("999.00"),
                 open_disputes=1,
             )
             == ledger.UNIT_CANCELLED
@@ -203,6 +231,7 @@ class TestTheDerivation:
                 rows=self._rows(paid=Decimal("5000.00")),
                 unapplied_cash=ZERO,
                 allocated_cash=Decimal("5000.00"),
+                confirmed_cash=Decimal("5000.00"),
                 open_disputes=0,
             )
             == ledger.UNIT_CLEARED
@@ -221,6 +250,7 @@ class TestTheDerivation:
                 rows=self._rows(paid=Decimal("5000.00")),
                 unapplied_cash=Decimal("5000.00"),
                 allocated_cash=Decimal("5000.00"),
+                confirmed_cash=Decimal("5000.00") + Decimal("5000.00"),
                 open_disputes=0,
             )
             == ledger.UNIT_PARTIALLY_PAID
@@ -543,3 +573,108 @@ class TestClearanceRevocation:
         # itself enough to stop the account being clear.
         assert account["confirmed_receipts_total"] != "0.00"
         assert account["unapplied_cash"] != "0.00"
+
+
+class TestCashBeforeAnySchedule:
+    """Given a deposit taken before the plan was activated, when the unit is read.
+
+    Developers take money before the schedule is agreed — that is what a
+    reservation deposit is. Until a plan is activated there is nothing to age
+    the cash against, so no honest reading calls the account current or overdue.
+
+    But ``not_started`` beside a confirmed receipt is worse than either. It is
+    the one screen that could persuade somebody the buyer has paid nothing, and
+    it would be sitting on the unit record where the sales team looks first.
+    """
+
+    def _deposit(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        sale_id: str,
+        amount: str = "25000.00",
+    ) -> str:
+        recorded = record_receipt(collections_client, project_id, sale_id, amount)
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        return receipt_id
+
+    def test_a_sale_with_no_plan_and_no_cash_reads_not_started(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        unit_id: str,
+        db: Session,
+    ) -> None:
+        """The genuine case, and still the default."""
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["confirmed_receipts_total"] == "0.00"
+        assert account["derived_collection_status"] == "not_started"
+        db.expire_all()
+        assert _unit_status(db, unit_id) == "not_started"
+
+    def test_a_confirmed_deposit_before_the_first_plan_is_not_not_started(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        unit_id: str,
+        db: Session,
+    ) -> None:
+        """Cash is being held, so the unit says so."""
+        self._deposit(collections_client, finance_client, project_id, active_sale)
+
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["active_payment_plan_version_id"] is None
+        assert account["confirmed_receipts_total"] == "25000.00"
+        assert account["unapplied_cash"] == "25000.00"
+        assert account["allocated_total"] == "0.00"
+        assert account["derived_collection_status"] == "partially_paid"
+
+        db.expire_all()
+        assert _unit_status(db, unit_id) == "partially_paid"
+
+    def test_a_recorded_but_unconfirmed_deposit_leaves_it_not_started(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        unit_id: str,
+        db: Session,
+    ) -> None:
+        """A receipt in Finance's queue is not cash, here as everywhere else."""
+        recorded = record_receipt(collections_client, project_id, active_sale, "25000.00")
+        assert recorded.status_code == 201, recorded.text
+
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["confirmed_receipts_total"] == "0.00"
+        assert account["derived_collection_status"] == "not_started"
+        db.expire_all()
+        assert _unit_status(db, unit_id) == "not_started"
+
+    def test_reversing_the_deposit_puts_it_back_to_not_started(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        unit_id: str,
+        db: Session,
+    ) -> None:
+        """The column follows the cash in both directions."""
+        receipt_id = self._deposit(collections_client, finance_client, project_id, active_sale)
+        reversed_receipt = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{receipt_id}/reverse",
+            json={"reason": "Bank returned the transfer"},
+        )
+        assert reversed_receipt.status_code == 200, reversed_receipt.text
+
+        account = collection_account(collections_client, project_id, active_sale)
+        assert account["confirmed_receipts_total"] == "0.00"
+        assert account["derived_collection_status"] == "not_started"
+        db.expire_all()
+        assert _unit_status(db, unit_id) == "not_started"

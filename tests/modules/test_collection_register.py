@@ -181,8 +181,15 @@ class TestTheRegisterAgreesWithTheAccount:
         collections_client: TestClient,
         project_id: str,
         two_accounts: tuple[str, str],
+        historical_schedule: str,
     ) -> None:
-        del two_accounts
+        """Per currency, and only ever within one.
+
+        The strip has no project-wide money field to compare against, which is
+        the point: every figure belongs to a denomination, so the check is that
+        each denomination totals the register rows billed in it.
+        """
+        del two_accounts, historical_schedule
         params = {"as_of": "2026-04-01"}
         register = collections_client.get(
             f"{collections_url(project_id)}/receivables", params=params
@@ -192,28 +199,37 @@ class TestTheRegisterAgreesWithTheAccount:
         ).json()
 
         assert strip["accounts"] == len(register)
-        for field in ("outstanding_total", "overdue_total", "unapplied_cash"):
-            expected = sum(Decimal(r["summary"][field]) for r in register)
-            assert Decimal(strip[field]) == expected, field
+        assert strip["currencies"]
+        for totals in strip["currencies"]:
+            rows = [r for r in register if r["currency_id"] == totals["currency_id"]]
+            assert totals["accounts"] == len(rows)
+            for field in ("outstanding_total", "overdue_total", "unapplied_cash"):
+                expected = sum(Decimal(r["summary"][field]) for r in rows)
+                assert Decimal(totals[field]) == expected, field
 
     def test_the_aging_buckets_reconcile_to_outstanding(
         self,
         collections_client: TestClient,
         project_id: str,
         two_accounts: tuple[str, str],
+        historical_schedule: str,
     ) -> None:
         """The bands are a partition of the outstanding balance, not a summary.
 
         If they stopped adding up, an aging report would be showing a different
-        total from the receivables register beside it.
+        total from the receivables register beside it. Checked inside each
+        denomination, because a band that mixed currencies would be adding
+        unlike numbers exactly where nobody would look for it.
         """
-        del two_accounts
+        del two_accounts, historical_schedule
         params = {"as_of": "2026-04-01"}
         strip = collections_client.get(
             f"{collections_url(project_id)}/summary", params=params
         ).json()
-        banded = sum(Decimal(v) for v in strip["buckets"].values())
-        assert banded == Decimal(strip["outstanding_total"])
+        assert strip["currencies"]
+        for totals in strip["currencies"]:
+            banded = sum(Decimal(v) for v in totals["buckets"].values())
+            assert banded == Decimal(totals["outstanding_total"])
 
 
 class TestRegisterContent:
@@ -258,5 +274,5 @@ class TestRegisterContent:
 
         strip = admin_client.get(f"{collections_url(empty)}/summary").json()
         assert strip["accounts"] == 0
-        assert strip["outstanding_total"] == "0.00"
+        assert strip["currencies"] == []
         del collections_client

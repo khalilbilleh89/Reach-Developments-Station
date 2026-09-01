@@ -1269,7 +1269,7 @@ def activate_version(
     )
     plan = _lock_plan(session, project_id=project.id, plan_id=plan.id)
     version = _lock_version(session, project_id=project.id, version_id=version.id)
-    _require_no_collection_activity(plan, version=version)
+    _require_no_collection_activity(session, plan=plan, version=version)
     return _activate_locked(
         session,
         project=project,
@@ -1280,11 +1280,13 @@ def activate_version(
     )
 
 
-def _require_no_collection_activity(plan: PaymentPlan, *, version: PaymentPlanVersion) -> None:
+def _require_no_collection_activity(
+    session: Session, *, plan: PaymentPlan, version: PaymentPlanVersion
+) -> None:
     """Refuse the ordinary activation path once cash has arrived on this plan.
 
     Not bureaucracy, and not a rule about who may decide. Activating a
-    replacement version swaps in instalments with new identifiers, and every
+    *replacement* version swaps in instalments with new identifiers, and every
     receipt allocation already made points at the old ones — so a schedule that
     was half collected would come back on screen reading as entirely unpaid,
     with the cash still in the ledger and no longer visible against anything.
@@ -1293,27 +1295,27 @@ def _require_no_collection_activity(plan: PaymentPlan, *, version: PaymentPlanVe
     restructure carries the allocations across in the same transaction as the
     activation, and refuses outright if a single unit of cash cannot be placed.
 
-    Activating the *first* version is untouched — there is nothing to carry.
+    What makes an activation a replacement is whether this plan already has a
+    schedule standing — read here, under the plan lock the caller took. Not
+    ``source_version_id``: a first version built with "Copy Approved Plan"
+    carries the id of a version belonging to a *different* plan, so reading
+    that would refuse the very first activation of a copied plan on which a
+    deposit had already been confirmed, and the operator would be told to run a
+    restructure of a schedule that does not exist. There is nothing to carry
+    forward when nothing is standing, however the version was drafted.
     """
     if plan.collections_started_at is None:
         return
-    if active_version_id_of(version) is None:
+    standing = active_version(session, plan_id=plan.id)
+    if standing is None:
+        return
+    if standing.id == version.id:
         return
     raise ConflictError(
         "This plan has confirmed collection activity. Activate the revision through "
         "a Collections restructure, so the cash already received is carried onto the "
         "new schedule in the same transaction."
     )
-
-
-def active_version_id_of(version: PaymentPlanVersion) -> uuid.UUID | None:
-    """The version this one would replace, read from the row being activated.
-
-    A separate function only so the guard above reads as one sentence: a first
-    activation has no predecessor and nothing to carry, and the value that says
-    so is the source version the revision was copied from.
-    """
-    return version.source_version_id
 
 
 def _activate_locked(

@@ -10,7 +10,7 @@ no ORM, no clock — ``as_of`` is always passed in, because "what did this look
 like on 31 August?" is a question month-end reporting and an auditor both ask,
 and a function that reaches for today cannot answer it.
 
-Three rules are worth stating before the code.
+Four rules are worth stating before the code.
 
 **A forecast never makes money due.** :func:`effective_due_date` returns the
 contractual date for a dated instalment and the *actual* date for a contingent
@@ -23,6 +23,13 @@ overdue.
 ``as_of`` is strictly past ``due date + grace days`` — not on the boundary. The
 off-by-one here is a financial reporting error, so the boundary is tested
 explicitly rather than assumed.
+
+**Due and late are different questions.** :attr:`InstallmentView.due_amount`
+counts an instalment only once its due date has arrived; a payment falling due
+next March is a commitment and not a demand. :attr:`InstallmentView.overdue_amount`
+counts it only once the grace boundary is behind us. So an amount inside its
+grace period is due and not overdue, which is the state most of a healthy book
+is in on any given morning.
 
 **A label never destroys a fact.** :func:`installment_view` returns a primary
 status *and* the flags beside it, so an instalment can be disputed, forty-seven
@@ -195,6 +202,7 @@ class InstallmentView:
     trigger_status: str
     due_date: date | None
     grace_days: int
+    as_of: date
     scheduled: Decimal
     paid: Decimal
     outstanding: Decimal
@@ -213,8 +221,23 @@ class InstallmentView:
 
     @property
     def due_amount(self) -> Decimal:
-        """What is payable now — reached its date, still outstanding."""
-        return self.outstanding if self.due_date is not None else ZERO
+        """What the buyer is being asked for as at ``as_of``, and nothing more.
+
+        Three conditions, all of them necessary. The instalment must have a due
+        date at all — a contingent one still awaiting its trigger asks for
+        nothing. That date must have arrived: an instalment falling due next
+        March is a commitment, not a demand, and putting it in "due now" turns
+        the whole schedule into an invoice on the day the plan is activated.
+        And something must actually remain: a settled instalment is not still
+        being asked for.
+
+        Grace does not appear here, deliberately. A payment inside its grace
+        period is due — that is why the buyer has been asked for it — and it is
+        simply not yet *late*. Grace moves :attr:`overdue_amount`, never this.
+        """
+        if self.due_date is None or self.due_date > self.as_of:
+            return ZERO
+        return self.outstanding if self.outstanding > ZERO else ZERO
 
 
 def installment_view(
@@ -287,6 +310,7 @@ def installment_view(
         trigger_status=trigger_status,
         due_date=due,
         grace_days=grace_days,
+        as_of=as_of,
         scheduled=scheduled,
         paid=paid,
         outstanding=outstanding,
@@ -307,11 +331,22 @@ def unit_collection_status(
     rows: list[InstallmentView],
     unapplied_cash: Decimal,
     allocated_cash: Decimal,
+    confirmed_cash: Decimal,
     open_disputes: int,
 ) -> str:
     """Which of inventory's seven collection values this account is in.
 
     Read top to bottom; the first true one wins.
+
+    ``not_started`` means exactly what it says, and cash decides it rather than
+    the schedule alone. A deposit taken and confirmed before the payment plan
+    was ever activated is money the developer is holding, and a unit reading
+    "not started" beside it is the one screen that could persuade somebody the
+    buyer has paid nothing. With no schedule to age it against there is nothing
+    to call it overdue or current, so it reads as ``partially_paid`` — one of
+    the seven values inventory already has, not an eighth invented here — and
+    the account explains that the cash is unapplied because no schedule
+    currently governs the sale.
 
     ``cleared`` is the strict one, and deliberately. A buyer who owes nothing
     but has an unresolved five-thousand overpayment sitting unapplied is not a
@@ -321,7 +356,7 @@ def unit_collection_status(
     if sale_cancelled:
         return UNIT_CANCELLED
     if not has_active_schedule:
-        return UNIT_NOT_STARTED
+        return UNIT_PARTIALLY_PAID if confirmed_cash > ZERO else UNIT_NOT_STARTED
     if open_disputes > 0:
         return UNIT_DISPUTED
     if any(row.overdue_days > 0 for row in rows):

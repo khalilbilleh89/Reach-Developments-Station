@@ -256,7 +256,17 @@ class TestPhaseScope:
         narrow = advisor_client.get(f"{collections_url(project_id)}/summary").json()
         wide = collections_client.get(f"{collections_url(project_id)}/summary").json()
         assert narrow["accounts"] < wide["accounts"]
-        assert float(narrow["confirmed_receipts_total"]) < float(wide["confirmed_receipts_total"])
+
+        def cash(strip: dict) -> float:
+            """Lifetime confirmed receipts, summed within each denomination.
+
+            Summing across currencies would be exactly the mistake the strip
+            refuses to make; here it is only ever used to show that the narrow
+            caller sees strictly less, and both callers are on one currency.
+            """
+            return sum(float(c["confirmed_receipts_total"]) for c in strip["currencies"])
+
+        assert cash(narrow) < cash(wide)
 
 
 class TestRoleGates:
