@@ -27,6 +27,7 @@ project is produced by an omission.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -38,6 +39,7 @@ from app.modules.access.models import User
 from tests.factories import client_for, make_user
 from tests.modules.conftest import (
     PROJECTS,
+    SETTINGS,
     add_pool,
     approve_areas,
     cover_required_pools,
@@ -1120,3 +1122,366 @@ class TestPhaseScopedGovernanceAccess:
         del priced_pair
         version_id = create_version(finance_client, project_id)
         assert finance_client.get(version_url(project_id, version_id)).status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# 8. Two denominations never make one number
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def second_currency(admin_client: TestClient) -> str:
+    """A second real currency, so a re-basing can actually happen."""
+    response = admin_client.post(
+        f"{SETTINGS}/currencies", json={"code": "USD", "name": "United States dollar"}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def rebase_project(
+    admin_client: TestClient, db: Session, project_id: str, currency_id: str
+) -> None:
+    """Re-denominate the project, and record why it is done in the database.
+
+    Projects allows a base currency change only while a project is still in
+    ``setup``, and it refuses one once land or permit money exists. Unit
+    economics needs approved prices, which need a project past setup. So *today*
+    these two states cannot both be reached through the API, and the refusal
+    below is proved against a state the database can hold but the current
+    routes will not produce.
+
+    That is deliberate rather than a shortcut. The unit cost table stores its
+    own ``currency_id`` with no constraint tying it to the version's, so the
+    mixture is one schema change or one new re-basing route away — and the read
+    has to refuse it on its own terms, not because another domain happens to be
+    guarding the door.
+    """
+    refused = admin_client.patch(f"{PROJECTS}/{project_id}", json={"base_currency_id": currency_id})
+    assert refused.status_code == 409, refused.text
+    assert "still in setup" in refused.json()["detail"]
+    _stamp(db, "projects", project_id, "base_currency_id", currency_id)
+
+
+class TestMixedUnitCostCurrencies:
+    """Given unit costs recorded either side of a re-basing."""
+
+    def test_they_are_never_added_together(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        admin_client: TestClient,
+        db: Session,
+        project_id: str,
+        priced_pair: tuple[str, str],
+        second_currency: str,
+    ) -> None:
+        """1,000 JOD and 500 USD do not make 1,500 of anything.
+
+        A unit cost carries its own denomination. Aggregating without it
+        produces a number in no currency, and every layer above would then treat
+        that number as money — a margin, a project total, a board figure.
+        """
+        first, _second = priced_pair
+        version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
+        cover_required_pools(finance_client, project_id, version_id, hard="100.00")
+        assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+
+        before = finance_client.post(
+            f"{economics_url(project_id)}/units/{first}/costs",
+            json={
+                "cost_type": "finishes",
+                "basis": "forecast",
+                "amount": "1000.00",
+                "effective_date": "2026-02-01",
+            },
+        )
+        assert before.status_code == 201, before.text
+        assert unit_economics(finance_client, project_id, first)["direct_cost"] == "1000.00"
+
+        rebase_project(admin_client, db, project_id, second_currency)
+
+        after = finance_client.post(
+            f"{economics_url(project_id)}/units/{first}/costs",
+            json={
+                "cost_type": "finishes",
+                "basis": "forecast",
+                "amount": "500.00",
+                "effective_date": "2026-03-01",
+            },
+        )
+        assert after.status_code == 201, after.text
+
+        row = unit_economics(finance_client, project_id, first)
+        assert row["profitability_status"] == "currency_mismatch"
+        assert row["profit_after_finance"] is None
+        assert row["margin_fraction"] is None
+        assert row["return_on_cost_fraction"] is None
+
+    def test_the_rows_themselves_stay_visible_with_their_own_currencies(
+        self,
+        finance_client: TestClient,
+        admin_client: TestClient,
+        db: Session,
+        project_id: str,
+        priced_pair: tuple[str, str],
+        second_currency: str,
+    ) -> None:
+        """Refusing the total is not refusing the evidence.
+
+        Finance has to be able to see which row caused it, so the rows keep
+        their own ``currency_id`` and are still returned.
+        """
+        first, _second = priced_pair
+        firstly = finance_client.post(
+            f"{economics_url(project_id)}/units/{first}/costs",
+            json={
+                "cost_type": "finishes",
+                "basis": "forecast",
+                "amount": "1000.00",
+                "effective_date": "2026-02-01",
+            },
+        )
+        assert firstly.status_code == 201, firstly.text
+        rebase_project(admin_client, db, project_id, second_currency)
+
+        second = finance_client.post(
+            f"{economics_url(project_id)}/units/{first}/costs",
+            json={
+                "cost_type": "finishes",
+                "basis": "forecast",
+                "amount": "500.00",
+                "effective_date": "2026-03-01",
+            },
+        )
+        assert second.status_code == 201, second.text
+
+        detail = finance_client.get(f"{economics_url(project_id)}/units/{first}")
+        assert detail.status_code == 200, detail.text
+        currencies = {cost["currency_id"] for cost in detail.json()["unit_costs"]}
+        assert len(currencies) == 2, currencies
+
+
+class TestProjectTotalsAcrossCurrencies:
+    """Given a project re-based after its economics were recorded."""
+
+    def test_a_historical_currency_is_excluded_rather_than_converted(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        admin_client: TestClient,
+        db: Session,
+        project_id: str,
+        priced_pair: tuple[str, str],
+        second_currency: str,
+    ) -> None:
+        """A JOD profit plus a USD profit is not a project total.
+
+        Both rows are internally valid, and that is exactly what makes this
+        dangerous: nothing is broken, so nothing refuses — the totals just add
+        two denominations and report the answer as money.
+        """
+        del priced_pair
+        version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
+        cover_required_pools(finance_client, project_id, version_id, hard="1000.00")
+        assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+
+        summary = finance_client.get(f"{economics_url(project_id)}/summary").json()
+        assert summary["comparable_unit_count"] == 2
+        assert summary["currency_mismatch_count"] == 0
+
+        rebase_project(admin_client, db, project_id, second_currency)
+
+        after = finance_client.get(f"{economics_url(project_id)}/summary").json()
+        assert after["currency_id"] == second_currency
+        assert after["comparable_unit_count"] == 0
+        assert after["currency_mismatch_count"] == 2
+        assert after["unit_count"] == 2
+        assert after["revenue_total"] == "0.00"
+        assert after["profit_total"] == "0.00"
+        assert after["margin_fraction"] is None
+
+
+# --------------------------------------------------------------------------- #
+# 9. The drill-down explains the total it sits under
+# --------------------------------------------------------------------------- #
+
+
+class TestSaleDrillDownReconciles:
+    """Given a sold unit whose costs were incurred across two deals and none."""
+
+    def test_the_rows_shown_are_the_rows_counted(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        sales_ops_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        priced_pair: tuple[str, str],
+    ) -> None:
+        """6,700 of direct cost above a list showing 5,200 is not a drill-down.
+
+        The detail used to filter to the current contract while the arithmetic
+        read the unit's costs as well, so a pre-sale rectification counted
+        towards the total and appeared nowhere beneath it.
+        """
+        del priced_pair
+        sale = sales_ops_client.get(f"{sales_url(project_id)}/contracts/{active_sale}").json()
+        unit_id = sale["sale"]["unit_id"]
+
+        version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
+        cover_required_pools(finance_client, project_id, version_id, hard="120000.00")
+        assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+
+        for body in (
+            {
+                "cost_type": "rectification",
+                "basis": "actual",
+                "amount": "1500.00",
+                "effective_date": "2026-02-01",
+            },
+            {
+                "cost_type": "unit_upgrade",
+                "basis": "actual",
+                "amount": "5200.00",
+                "effective_date": "2026-03-01",
+                "sale_contract_id": active_sale,
+            },
+            {
+                "cost_type": "sales_commission",
+                "basis": "actual",
+                "amount": "800.00",
+                "effective_date": "2026-03-02",
+                "sale_contract_id": active_sale,
+            },
+        ):
+            response = finance_client.post(
+                f"{economics_url(project_id)}/units/{unit_id}/costs", json=body
+            )
+            assert response.status_code == 201, response.text
+
+        detail = finance_client.get(f"{economics_url(project_id)}/sales/{active_sale}")
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        economics = payload["economics"]
+        assert economics["direct_cost"] == "6700.00"
+        assert economics["variable_selling_cost"] == "800.00"
+
+        amounts = {cost["amount"] for cost in payload["unit_costs"]}
+        assert amounts == {"1500.00", "5200.00", "800.00"}
+
+        # And the rows add up to the figures above them, by cost class.
+        direct = sum(
+            Decimal(cost["amount"])
+            for cost in payload["unit_costs"]
+            if cost["cost_type"] in {"rectification", "unit_upgrade"} and cost["status"] == "active"
+        )
+        assert direct == Decimal("6700.00")
+
+    def test_another_deals_commission_is_neither_shown_nor_counted(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        sales_ops_client: TestClient,
+        admin_client: TestClient,
+        db: Session,
+        project_id: str,
+        active_sale: str,
+        priced_pair: tuple[str, str],
+        buyer_id: str,
+    ) -> None:
+        """A commission earned winning a different buyer belongs to that deal.
+
+        A real second contract is created on the other unit, because the whole
+        point of the foreign key is that a cost names a contract that exists.
+        The row is then re-pointed at it in the database: recording it there
+        through the API is refused, since that contract is not this unit's —
+        which is precisely why this state is only reachable through an older,
+        cancelled deal on the same unit.
+        """
+        _first, second_unit = priced_pair
+        sale = sales_ops_client.get(f"{sales_url(project_id)}/contracts/{active_sale}").json()
+        unit_id = sale["sale"]["unit_id"]
+
+        other_sale = _draft_second_contract(
+            admin_client, sales_ops_client, project_id, second_unit, buyer_id
+        )
+
+        version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
+        cover_required_pools(finance_client, project_id, version_id, hard="100.00")
+        assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+
+        recorded = finance_client.post(
+            f"{economics_url(project_id)}/units/{unit_id}/costs",
+            json={
+                "cost_type": "sales_commission",
+                "basis": "actual",
+                "amount": "900.00",
+                "effective_date": "2026-03-05",
+                "sale_contract_id": active_sale,
+            },
+        )
+        assert recorded.status_code == 201, recorded.text
+        _stamp(
+            db,
+            "unit_economics_unit_costs",
+            recorded.json()["id"],
+            "sale_contract_id",
+            other_sale,
+        )
+
+        detail = finance_client.get(f"{economics_url(project_id)}/sales/{active_sale}")
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        assert payload["economics"]["variable_selling_cost"] == "0.00"
+        assert "900.00" not in {cost["amount"] for cost in payload["unit_costs"]}
+
+
+def _draft_second_contract(
+    admin_client: TestClient,
+    sales_ops_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    buyer_id: str,
+) -> str:
+    """A real, drafted contract on another unit of the same project."""
+    controls = admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}/release-controls",
+        json={
+            "drawings_approved": True,
+            "legal_sale_eligible": True,
+            "release_date": "2026-01-01",
+        },
+    )
+    assert controls.status_code == 200, controls.text
+    released = admin_client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
+        json={"to_status": "available", "effective_date": "2026-01-02"},
+    )
+    assert released.status_code == 201, released.text
+
+    reservation = sales_ops_client.post(
+        f"{sales_url(project_id)}/reservations",
+        json={
+            "unit_id": unit_id,
+            "client_id": buyer_id,
+            "sales_channel_code": "DIRECT",
+            "sales_branch_code": "AMMAN",
+            "deposit_required_amount": "5000.00",
+        },
+    )
+    assert reservation.status_code == 201, reservation.text
+    reservation_id = reservation.json()["reservation"]["id"]
+    base = f"{sales_url(project_id)}/reservations/{reservation_id}"
+    confirmed = sales_ops_client.post(
+        f"{base}/confirm-deposit", json={"evidence_reference": "BANK-REF-2"}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert sales_ops_client.post(f"{base}/activate", json={}).status_code == 200
+
+    contract = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts",
+        json={"reservation_id": reservation_id, "spa_number": "SPA-0002"},
+    )
+    assert contract.status_code == 201, contract.text
+    return str(contract.json()["sale"]["id"])

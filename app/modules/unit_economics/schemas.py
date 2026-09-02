@@ -57,7 +57,15 @@ PositiveMoney = Annotated[DecimalStr, Field(gt=0, max_digits=18, decimal_places=
 #: Profit is money that may legitimately be negative. A loss is a fact.
 SignedMoney = Annotated[DecimalStr, Field(max_digits=18, decimal_places=2)]
 #: A fraction of one: 0.184000 means 18.4%. Signed, because margins go negative.
+#: Mirrors the RATE column, and is used only where the value came from one.
 Fraction = Annotated[DecimalStr, Field(max_digits=9, decimal_places=6)]
+#: A ratio computed at read time and stored nowhere — margin, return on cost.
+#: Deliberately *not* the RATE column's bound: nothing here is going into that
+#: column, and three integer digits is a limit these can genuinely exceed. A
+#: cost basis holding a placeholder amount produces a return on cost in the
+#: thousands, which is a number worth showing somebody; answering it with a 500
+#: because the response model would not carry it is the worst of both.
+DerivedRatio = Annotated[DecimalStr, Field(max_digits=18, decimal_places=6)]
 #: A driver value: an area, a count, a revenue or a surveyor's factor.
 Driver = Annotated[DecimalStr, Field(ge=0, max_digits=18, decimal_places=4)]
 
@@ -384,12 +392,12 @@ class UnitEconomicsRead(BaseModel):
     finance_cost: Money | None
     total_cost: Money | None
     gross_profit: SignedMoney | None
-    gross_margin_fraction: Fraction | None
+    gross_margin_fraction: DerivedRatio | None
     contribution_profit: SignedMoney | None
-    contribution_margin_fraction: Fraction | None
+    contribution_margin_fraction: DerivedRatio | None
     profit_after_finance: SignedMoney | None
-    margin_fraction: Fraction | None
-    return_on_cost_fraction: Fraction | None
+    margin_fraction: DerivedRatio | None
+    return_on_cost_fraction: DerivedRatio | None
 
     profitability_status: ProfitabilityStatus
     below_margin_threshold: bool | None
@@ -436,7 +444,7 @@ class ProjectEconomicsRead(BaseModel):
     gross_profit_total: SignedMoney
     contribution_profit_total: SignedMoney
     profit_total: SignedMoney
-    margin_fraction: Fraction | None
-    return_on_cost_fraction: Fraction | None
+    margin_fraction: DerivedRatio | None
+    return_on_cost_fraction: DerivedRatio | None
 
     active_version: AllocationVersionRead | None

@@ -25,9 +25,11 @@ something still derivable.
 
 **A sold unit keeps the basis that governed when it was sold.** Not by a foreign
 key from the sale — sales does not know this module exists and must not learn —
-but by effective dating: the version whose window contains the contract date is
-the sale's basis, permanently. Activating a new version tomorrow moves unsold
-economics and leaves sold ones exactly where they were. It is the same
+but by effective dating: the version whose window contains the sale's economic
+contract date, the date its two binding signatures completed, is its basis
+permanently. The drafting date is not that date and never selects a basis.
+Activating a new version tomorrow moves unsold economics and leaves sold ones
+exactly where they were. It is the same
 mechanism as an effective-dated price, for the same reason.
 
 **Money leaves through reversal, never deletion.** A unit cost that was wrong is

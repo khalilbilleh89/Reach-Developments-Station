@@ -3,9 +3,10 @@
 Four new tables and not one column on an existing one. That is the point worth
 reading twice: a sold unit remembers which cost basis governed it, and it does
 so without ``sale_contracts`` gaining a foreign key into this module. The link
-is the sale's own contract date matched against a version's effective window,
-which is why sales, pricing, inventory and projects are untouched here and none
-of them imports unit economics.
+is the sale's own economic contract date — the binding-signature date sales
+answers for, not the drafting date — matched against a version's effective
+window, which is why sales, pricing, inventory and projects are untouched here
+and none of them imports unit economics.
 
 Nothing stores a profit. There is no ``units.total_cost``, no ``units.margin``
 and no project totals table, because every one of those is derivable and a

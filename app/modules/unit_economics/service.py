@@ -14,9 +14,12 @@ frozen sale — because a stored margin is a number that stops agreeing with its
 own inputs the first time one of them moves.
 
 The join between them is effective dating. An unsold unit is analysed on the
-active version; a sold one on whichever version's window contains its contract
-date, permanently. That is the whole reason versions exist, and it is why
-nothing in Sales points at this module: the sale's own date is the key.
+active version; a sold one on whichever version's window contains its **economic
+contract date** — the date the contract became binding on both parties, which
+sales answers — permanently. Not the drafting date: a contract drafted in
+February and signed in June belongs to whichever basis was governing in June.
+That is the whole reason versions exist, and it is why nothing in Sales points
+at this module: the sale's own date is the key.
 
 Source freshness is checked twice — before submission and again before
 activation — because the interesting failure is the one in between. An approved
@@ -205,10 +208,14 @@ def version_governing_on(
 ) -> AllocationVersion | None:
     """The basis whose effective window contains ``on``.
 
-    Effective dating, not a foreign key. A sale signed in February is priced on
-    whatever basis was governing in February for ever, and this query is the
-    whole mechanism — which is why activating a new version tomorrow cannot
-    reach backwards and restate it.
+    Effective dating, not a foreign key. A sale that became binding in February
+    is analysed on whatever basis was governing in February for ever, and this
+    query is the whole mechanism — which is why activating a new version
+    tomorrow cannot reach backwards and restate it.
+
+    ``on`` is the caller's business date. For a sold unit it is always the
+    binding-signature date from ``sales.economic_contract_date``, never the
+    contract's drafting date.
     """
     return session.scalars(
         select(AllocationVersion)
@@ -1943,10 +1950,18 @@ class UnitEconomics:
 
 @dataclass(frozen=True, slots=True)
 class _Costs:
-    """The unit-level cost rows that apply to one unit on one basis."""
+    """The unit-level cost rows that apply to one unit on one basis.
+
+    ``currencies`` is what the two totals were added up from. A unit cost
+    carries its own ``currency_id``, and dropping it during aggregation is how
+    1,000 JOD and 500 USD become 1,500 of nothing — a number with no
+    denomination that every layer above would then treat as money. Keeping the
+    set costs one column and lets the read refuse instead of guessing.
+    """
 
     direct: Decimal
     selling: Decimal
+    currencies: frozenset[uuid.UUID]
 
 
 @dataclass(frozen=True, slots=True)
@@ -2004,12 +2019,15 @@ class _CostIndex:
     __slots__ = ("_direct", "_selling")
 
     def __init__(self) -> None:
-        # (unit_id, basis, sale_id | None) -> amount, for each class separately.
-        self._direct: dict[tuple[uuid.UUID, str, uuid.UUID | None], Decimal] = defaultdict(
-            lambda: ZERO
+        # (unit_id, basis, sale_id | None) -> {currency_id: amount}, per class.
+        # Grouped by currency and not merely summed, because two rows in
+        # different denominations have no total and the read has to be able to
+        # say so rather than produce one.
+        self._direct: dict[tuple[uuid.UUID, str, uuid.UUID | None], dict[uuid.UUID, Decimal]] = (
+            defaultdict(dict)
         )
-        self._selling: dict[tuple[uuid.UUID, str, uuid.UUID | None], Decimal] = defaultdict(
-            lambda: ZERO
+        self._selling: dict[tuple[uuid.UUID, str, uuid.UUID | None], dict[uuid.UUID, Decimal]] = (
+            defaultdict(dict)
         )
 
     def add(
@@ -2018,26 +2036,68 @@ class _CostIndex:
         unit_id: uuid.UUID,
         basis: str,
         sale_id: uuid.UUID | None,
+        currency_id: uuid.UUID,
         cost_type: str,
         amount: Decimal,
     ) -> None:
         bucket = self._direct if UNIT_COST_CLASS_OF[cost_type] == CLASS_DIRECT else self._selling
-        bucket[(unit_id, basis, sale_id)] += amount
+        by_currency = bucket[(unit_id, basis, sale_id)]
+        by_currency[currency_id] = by_currency.get(currency_id, ZERO) + amount
 
     def for_unit(self, *, unit_id: uuid.UUID, sale_id: uuid.UUID | None) -> _Costs:
         """What this unit costs on the basis its commercial state calls for."""
         if sale_id is None:
-            return _Costs(
-                direct=self._direct[(unit_id, BASIS_FORECAST, None)],
-                selling=self._selling[(unit_id, BASIS_FORECAST, None)],
-            )
+            direct = [self._direct.get((unit_id, BASIS_FORECAST, None), {})]
+            selling = [self._selling.get((unit_id, BASIS_FORECAST, None), {})]
+        else:
+            direct = [
+                self._direct.get((unit_id, BASIS_ACTUAL, None), {}),
+                self._direct.get((unit_id, BASIS_ACTUAL, sale_id), {}),
+            ]
+            selling = [self._selling.get((unit_id, BASIS_ACTUAL, sale_id), {})]
+        currencies = {currency for group in (*direct, *selling) for currency in group}
         return _Costs(
-            direct=(
-                self._direct[(unit_id, BASIS_ACTUAL, None)]
-                + self._direct[(unit_id, BASIS_ACTUAL, sale_id)]
-            ),
-            selling=self._selling[(unit_id, BASIS_ACTUAL, sale_id)],
+            direct=sum((amount for group in direct for amount in group.values()), ZERO),
+            selling=sum((amount for group in selling for amount in group.values()), ZERO),
+            currencies=frozenset(currencies),
         )
+
+
+def sale_cost_rows(session: Session, *, sale: SaleContract) -> list[UnitCost]:
+    """The unit cost rows one sale's economics is computed from.
+
+    The drill-down and the arithmetic have to select the same rows, or the
+    detail cannot explain the total it sits under. Filtering the detail to
+    ``sale_contract_id == sale.id`` — which is what it used to do — drops every
+    direct cost incurred before the buyer existed, so a sold unit could report
+    6,700 of direct cost above a list showing only 5,200 and no way to find the
+    other 1,500.
+
+    So the predicate is the one :class:`_CostIndex` applies, stated once:
+    actual direct costs belonging to the unit or to this deal, and actual
+    selling costs belonging to this deal alone. Forecasts are excluded because
+    a sold unit is judged on what happened, and another sale's selling cost is
+    excluded because it was incurred to win a different buyer.
+
+    Reversed rows are returned so the withdrawal stays visible on the timeline.
+    They carry their status and are not part of any total: the arithmetic reads
+    active rows only.
+    """
+    candidates = session.scalars(
+        select(UnitCost)
+        .where(
+            UnitCost.project_id == sale.project_id,
+            UnitCost.unit_id == sale.unit_id,
+            UnitCost.basis == BASIS_ACTUAL,
+            (UnitCost.sale_contract_id.is_(None)) | (UnitCost.sale_contract_id == sale.id),
+        )
+        .order_by(UnitCost.effective_date, UnitCost.created_at)
+    )
+    return [
+        cost
+        for cost in candidates
+        if UNIT_COST_CLASS_OF[cost.cost_type] == CLASS_DIRECT or cost.sale_contract_id == sale.id
+    ]
 
 
 def _cost_index(
@@ -2052,6 +2112,7 @@ def _cost_index(
             UnitCost.unit_id,
             UnitCost.basis,
             UnitCost.sale_contract_id,
+            UnitCost.currency_id,
             UnitCost.cost_type,
             func.sum(UnitCost.amount),
         )
@@ -2060,13 +2121,20 @@ def _cost_index(
             UnitCost.unit_id.in_(unit_ids),
             UnitCost.status == COST_ACTIVE,
         )
-        .group_by(UnitCost.unit_id, UnitCost.basis, UnitCost.sale_contract_id, UnitCost.cost_type)
+        .group_by(
+            UnitCost.unit_id,
+            UnitCost.basis,
+            UnitCost.sale_contract_id,
+            UnitCost.currency_id,
+            UnitCost.cost_type,
+        )
     ).all()
-    for unit_id, basis, sale_id, cost_type, total in rows:
+    for unit_id, basis, sale_id, currency_id, cost_type, total in rows:
         index.add(
             unit_id=unit_id,
             basis=basis,
             sale_id=sale_id,
+            currency_id=currency_id,
             cost_type=cost_type,
             amount=money(Decimal(total)),
         )
@@ -2188,6 +2256,11 @@ def _economics_for(
     elif version is None:
         status = PROFIT_MISSING_COST_BASIS
     elif revenue_currency != cost_currency:
+        status = PROFIT_CURRENCY_MISMATCH
+    elif costs.currencies - {cost_currency}:
+        # A unit cost in another denomination cannot be added to this basis, and
+        # summing it anyway would produce a total in no currency at all. There
+        # is no exchange rate here to make it one.
         status = PROFIT_CURRENCY_MISMATCH
     elif not reconciled or (seller_costs is not None and not seller_costs.reconciled):
         status = PROFIT_UNRECONCILED
@@ -2468,21 +2541,35 @@ def project_economics(
     governed then; unsold units use today's approved price and today's basis.
     That mixture is what a developer actually manages — revaluing sold units to
     today's list price would produce a profit nobody can collect.
+
+    The summary is denominated in the project's *current* base currency, and
+    only units whose own economics are in that currency are added into it. A
+    historically valid unit analysed in a currency the project no longer
+    accounts in is excluded rather than converted: adding a JOD profit to a USD
+    profit is arithmetic across denominations, and the answer is in no currency
+    at all. Nothing is dropped silently — every excluded unit is counted in
+    ``currency_mismatch_count``, which is what that count means to a reader:
+    units this total could not include for a currency reason.
     """
     rows = unit_register(session, project=project, actor=actor)
-    ready = [row.profit for row in rows if row.profit is not None]
-    totals = calculator.portfolio(ready)
+    summary_currency = project.base_currency_id
+    comparable = [
+        row for row in rows if row.profit is not None and row.cost_currency_id == summary_currency
+    ]
+    totals = calculator.portfolio([row.profit for row in comparable if row.profit is not None])
     return (
         ProjectEconomics(
-            currency_id=project.base_currency_id,
+            currency_id=summary_currency,
             totals=totals,
             unit_count=len(rows),
             sold_count=sum(1 for row in rows if row.basis == BASIS_SOLD),
             unsold_count=sum(1 for row in rows if row.basis == BASIS_FORECAST),
             negative_profit_count=sum(
-                1 for row in rows if row.profit is not None and row.profit.profit_after_finance < 0
+                1
+                for row in comparable
+                if row.profit is not None and row.profit.profit_after_finance < 0
             ),
-            below_threshold_count=sum(1 for row in rows if row.below_margin_threshold),
+            below_threshold_count=sum(1 for row in comparable if row.below_margin_threshold),
             incomplete_count=sum(
                 1
                 for row in rows
@@ -2490,7 +2577,10 @@ def project_economics(
                 in {PROFIT_MISSING_REVENUE, PROFIT_MISSING_COST_BASIS, PROFIT_UNRECONCILED}
             ),
             currency_mismatch_count=sum(
-                1 for row in rows if row.profitability_status == PROFIT_CURRENCY_MISMATCH
+                1
+                for row in rows
+                if row.profitability_status == PROFIT_CURRENCY_MISMATCH
+                or (row.profit is not None and row.cost_currency_id != summary_currency)
             ),
             threshold_fraction=_threshold_fraction(session, project=project),
             active_version=active_version(session, project_id=project.id),

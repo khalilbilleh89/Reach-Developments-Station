@@ -290,20 +290,21 @@ def read_sale(
     return UnitEconomicsDetail(
         economics=_economics_read(row),
         waterfall=[WaterfallStep(**step) for step in service.waterfall(row)],
-        unit_costs=[
-            _unit_cost_read(cost)
-            for cost in _unit_costs(session, unit_id=sale.unit_id, sale_id=sale.id)
-        ],
+        # The same selection the arithmetic used, not a second one: these rows
+        # have to add up to the figures above them.
+        unit_costs=[_unit_cost_read(cost) for cost in service.sale_cost_rows(session, sale=sale)],
     )
 
 
-def _unit_costs(
-    session: Session, *, unit_id: uuid.UUID, sale_id: uuid.UUID | None = None
-) -> list[UnitCost]:
-    statement = select(UnitCost).where(UnitCost.unit_id == unit_id)
-    if sale_id is not None:
-        statement = statement.where(UnitCost.sale_contract_id == sale_id)
-    return list(session.scalars(statement.order_by(UnitCost.effective_date, UnitCost.created_at)))
+def _unit_costs(session: Session, *, unit_id: uuid.UUID) -> list[UnitCost]:
+    """Every cost ever recorded against one unit, for the unit's own timeline."""
+    return list(
+        session.scalars(
+            select(UnitCost)
+            .where(UnitCost.unit_id == unit_id)
+            .order_by(UnitCost.effective_date, UnitCost.created_at)
+        )
+    )
 
 
 @router.get(
