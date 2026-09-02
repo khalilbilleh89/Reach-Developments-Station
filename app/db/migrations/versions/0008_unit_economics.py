@@ -154,6 +154,15 @@ def upgrade() -> None:
         sa.UniqueConstraint("id", "project_id", name="ue_version_project"),
         sa.UniqueConstraint("project_id", "version_number", name="uq_ue_version_number"),
     )
+    # Added after the table exists because it points back at the same table.
+    op.create_foreign_key(
+        "source_version",
+        "unit_economics_allocation_versions",
+        "unit_economics_allocation_versions",
+        ["source_version_id", "project_id"],
+        ["id", "project_id"],
+        ondelete="RESTRICT",
+    )
     op.create_index(
         "ix_ue_versions_project_effective",
         "unit_economics_allocation_versions",
@@ -236,6 +245,14 @@ def upgrade() -> None:
             name=op.f("ck_unit_economics_cost_pools_land_source_shape"),
         ),
         sa.CheckConstraint(
+            "category <> 'land' OR source_kind = 'project_land'",
+            name=op.f("ck_unit_economics_cost_pools_land_is_canonical"),
+        ),
+        sa.CheckConstraint(
+            "source_kind <> 'project_land' OR scope_kind = 'project'",
+            name=op.f("ck_unit_economics_cost_pools_land_is_project_wide"),
+        ),
+        sa.CheckConstraint(
             "source_kind IN ('project_land', 'manual')",
             name=op.f("ck_unit_economics_cost_pools_source_ok"),
         ),
@@ -279,9 +296,22 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_unit_economics_cost_pools")),
         sa.UniqueConstraint("allocation_version_id", "pool_number", name="uq_ue_pool_number"),
         sa.UniqueConstraint("id", "project_id", name="ue_pool_project"),
+        sa.UniqueConstraint(
+            "id", "allocation_version_id", "project_id", name="ue_pool_version_project"
+        ),
     )
     op.create_index(
         "ix_ue_pools_version", "unit_economics_cost_pools", ["allocation_version_id"], unique=False
+    )
+    # One canonical land pool per version. Two of them each draw the whole
+    # project land total, so the land cost doubles and every pool still
+    # reconciles — the failure mode nothing downstream can detect.
+    op.create_index(
+        "uq_ue_pools_one_project_land",
+        "unit_economics_cost_pools",
+        ["allocation_version_id"],
+        unique=True,
+        postgresql_where=sa.text("source_kind = 'project_land'"),
     )
     op.create_table(
         "unit_economics_allocations",
@@ -318,8 +348,12 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["cost_pool_id", "project_id"],
-            ["unit_economics_cost_pools.id", "unit_economics_cost_pools.project_id"],
+            ["cost_pool_id", "allocation_version_id", "project_id"],
+            [
+                "unit_economics_cost_pools.id",
+                "unit_economics_cost_pools.allocation_version_id",
+                "unit_economics_cost_pools.project_id",
+            ],
             name="pool",
             ondelete="CASCADE",
         ),
@@ -454,8 +488,11 @@ def downgrade() -> None:
     op.drop_index("ix_ue_allocations_version_unit", table_name="unit_economics_allocations")
     op.drop_index("ix_ue_allocations_pool", table_name="unit_economics_allocations")
     op.drop_table("unit_economics_allocations")
+    op.drop_index("uq_ue_pools_one_project_land", table_name="unit_economics_cost_pools")
     op.drop_index("ix_ue_pools_version", table_name="unit_economics_cost_pools")
     op.drop_table("unit_economics_cost_pools")
+    # The self-referencing foreign key goes before the table it points at.
+    op.drop_constraint("source_version", "unit_economics_allocation_versions", type_="foreignkey")
     op.drop_index(
         "uq_ue_versions_one_active",
         table_name="unit_economics_allocation_versions",

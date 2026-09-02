@@ -227,6 +227,21 @@ def version_governing_on(
 # --------------------------------------------------------------------------- #
 
 
+def _governing_from(versions: list[AllocationVersion], *, on: date) -> AllocationVersion | None:
+    """The version whose window contains ``on``, from an already-loaded list.
+
+    The in-memory twin of :func:`version_governing_on`, for the register, which
+    loads every governing version once rather than asking per unit. The window
+    test lives here alone so the two cannot drift apart.
+    """
+    for version in versions:
+        if version.effective_from <= on and (
+            version.effective_to is None or on < version.effective_to
+        ):
+            return version
+    return None
+
+
 def _eligible_units_statement(pool: CostPool) -> Select[tuple[uuid.UUID]]:
     """The units one pool reaches, from its scope and nothing else.
 
@@ -510,18 +525,27 @@ def _require_effective_from_allowed(
 
     The first version on a project may be back-dated: PR-MVP-08 arrives after
     sales exist, and without an opening baseline those contracts have no cost
-    basis at all. Every later one must start after the current basis started —
-    otherwise Finance could slide version four into version one's window and
-    silently restate what a unit sold two years ago cost.
+    basis at all. That is the only exception, and it exists once per project.
+
+    Every later one must take effect today or later. "After the version it
+    replaces started" is not sufficient and was the original error here: a
+    project whose first basis began in January could still accept a replacement
+    dated June, and activating it would close January's window in June and hand
+    every unit signed in July a different cost basis than the one that governed
+    when it was signed. The rule that actually protects history is that a
+    replacement may not reach into the past at all — not into a *shorter* past.
     """
     standing = active_version(session, project_id=project_id)
     if standing is None:
         return
-    if effective_from <= standing.effective_from:
+    today = business_today()
+    if effective_from < today:
         raise ConflictError(
-            "A cost basis cannot start on or before the one it replaces "
-            f"({standing.effective_from.isoformat()}). Back-dating into a period "
-            "that has already been governed would restate units already sold."
+            "A replacement cost basis cannot take effect in the past "
+            f"({effective_from.isoformat()}). The period up to {today.isoformat()} "
+            "has already been governed by version "
+            f"{standing.version_number}, and units signed in it were analysed on "
+            "that basis. Take effect today or later."
         )
 
 
@@ -694,6 +718,64 @@ def _require_scope_shape(
         raise NotFoundError("Building not found.")
 
 
+def _require_canonical_land_shape(
+    session: Session,
+    *,
+    version_id: uuid.UUID,
+    category: str,
+    source_kind: str,
+    scope_kind: str,
+    excluding_pool_id: uuid.UUID | None = None,
+) -> None:
+    """Land cost comes from the land register, once, for the whole project.
+
+    Three refusals, each closing a way the canonical figure could be replaced by
+    a typed one.
+
+    **A land pool is never manual.** The whole point of reading
+    ``land_parcels`` is that the acquisition cost has one owner. A pool called
+    LAND-01 holding a retyped 500,000 is the spreadsheet this module exists to
+    delete, except now it reconciles and looks official.
+
+    **There is one of them per version.** Two ``project_land`` pools each draw
+    the *entire* project land total, so a project that paid 840,000 reports
+    1,680,000 — and every pool reconciles perfectly, which is what makes it
+    dangerous. Nothing downstream can detect it.
+
+    **It is project-wide.** The land register records parcels, not a governed
+    parcel-to-phase attribution. Scoping the whole acquisition cost onto one
+    phase or building would assert an allocation nobody decided; doing that
+    properly needs a real parcel-to-development design, and faking it here
+    would put a number in front of a finance director that looks derived.
+    """
+    if category == CATEGORY_LAND and source_kind != SOURCE_PROJECT_LAND:
+        raise ValidationError(
+            "Land cost comes from the project's land register, not from a typed "
+            "amount. Correct the land record if the total is wrong."
+        )
+    if source_kind != SOURCE_PROJECT_LAND:
+        return
+    if scope_kind != SCOPE_PROJECT:
+        raise ValidationError(
+            "The land pool covers the whole project. There is no governed "
+            "parcel-to-phase attribution to scope it by, and assigning the "
+            "project's entire land cost to one phase or building would assert "
+            "one that nobody decided."
+        )
+    statement = select(CostPool.id).where(
+        CostPool.allocation_version_id == version_id,
+        CostPool.source_kind == SOURCE_PROJECT_LAND,
+    )
+    if excluding_pool_id is not None:
+        statement = statement.where(CostPool.id != excluding_pool_id)
+    if session.scalars(statement).first() is not None:
+        raise ConflictError(
+            "This cost basis already draws the project's land register. A second "
+            "land pool would allocate the same acquisition cost twice, and both "
+            "would reconcile."
+        )
+
+
 def _resolve_pool_amount(
     session: Session, *, project_id: uuid.UUID, source_kind: str, amount: Decimal | None
 ) -> Decimal:
@@ -741,6 +823,13 @@ def add_pool(
         raise ValidationError("That is not an allocation method.")
     if source_kind == SOURCE_PROJECT_LAND and category != CATEGORY_LAND:
         raise ValidationError("Only a land pool can be sourced from the land register.")
+    _require_canonical_land_shape(
+        session,
+        version_id=version.id,
+        category=category,
+        source_kind=source_kind,
+        scope_kind=scope_kind,
+    )
     if category == CATEGORY_FINANCE and version.finance_treatment == FINANCE_EXCLUDED:
         raise ConflictError(
             "This cost basis records finance cost as excluded, so it cannot carry "
@@ -863,6 +952,14 @@ def update_pool(
             scope_kind=pool.scope_kind,
             phase_id=pool.phase_id,
             building_id=pool.building_id,
+        )
+        _require_canonical_land_shape(
+            session,
+            version_id=version.id,
+            category=pool.category,
+            source_kind=pool.source_kind,
+            scope_kind=pool.scope_kind,
+            excluding_pool_id=pool.id,
         )
 
     _invalidate(session, version=version, pool_id=pool.id)
@@ -1249,12 +1346,109 @@ def stale_sources(session: Session, *, version: AllocationVersion) -> list[str]:
         drifted = [pool.pool_number for pool in land_pools if money(pool.amount) != current_land]
         if drifted:
             problems.append("the land register total changed under " + ", ".join(sorted(drifted)))
+
+    problems.extend(_population_drift(session, version=version))
+    return problems
+
+
+def _population_drift(session: Session, *, version: AllocationVersion) -> list[str]:
+    """Pools whose eligible units are no longer the units they were divided among.
+
+    The other three checks all start from an allocation row and ask whether its
+    source moved. That can only ever see units the version already knows about,
+    which is exactly the blind spot: a unit created after the calculation has no
+    allocation row, so nothing about it is stale — it is simply absent. The
+    version still reconciles, still activates, and the new unit then reads as
+    carrying no share of any shared cost, which is a zero somebody will believe.
+
+    So the comparison here is between sets, not between snapshots: the units the
+    pool would divide among today against the units it actually did. It applies
+    to every method, including ``unit_count`` and ``custom_driver``, which carry
+    no source snapshot at all and were therefore previously unchecked for this.
+    """
+    if version.calculated_at is None:
+        # Nothing has been divided yet, so nothing can have drifted. The
+        # submission gate refuses an uncalculated version on its own terms.
+        return []
+    pools = list(
+        session.scalars(
+            select(CostPool)
+            .where(CostPool.allocation_version_id == version.id)
+            .order_by(CostPool.pool_number)
+        )
+    )
+    if not pools:
+        return []
+    allocated: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    for pool_id, unit_id in session.execute(
+        select(Allocation.cost_pool_id, Allocation.unit_id).where(
+            Allocation.allocation_version_id == version.id
+        )
+    ).all():
+        allocated[pool_id].add(unit_id)
+
+    problems: list[str] = []
+    for pool in pools:
+        eligible = set(_eligible_unit_ids(session, pool=pool))
+        divided = allocated.get(pool.id, set())
+        if eligible == divided:
+            continue
+        added = sorted(eligible - divided)
+        removed = sorted(divided - eligible)
+        parts = []
+        if added:
+            parts.append("gained " + _named(session, added))
+        if removed:
+            parts.append("no longer covers " + _named(session, removed))
+        problems.append(f"{pool.pool_number} " + " and ".join(parts))
     return problems
 
 
 # --------------------------------------------------------------------------- #
 # Lifecycle
 # --------------------------------------------------------------------------- #
+
+
+def _coverage_gaps(session: Session, *, version: AllocationVersion) -> list[str]:
+    """Units this version leaves without a required category, named by category.
+
+    The version-level check above proves the basis contains *a* land pool, *a*
+    hard pool and *a* soft pool. That is not the same as every unit having one,
+    because a pool can be scoped to a phase or a building: a basis with a
+    project-wide land pool, a Phase A hard pool and a project-wide soft pool
+    passes the version-level check while every unit in Phase B carries no hard
+    cost at all. Their margins would then be the highest in the project,
+    produced by an omission rather than by a decision.
+
+    Omission must not mean zero. Where a population genuinely carries none of a
+    category, the answer is a scoped pool of 0.00, which allocates an explicit
+    zero row and says so.
+    """
+    required = _required_categories(version)
+    units = session.execute(
+        select(Unit.id, Unit.unit_reference).where(
+            Unit.project_id == version.project_id, Unit.is_active.is_(True)
+        )
+    ).all()
+    if not units:
+        return []
+    covered: dict[uuid.UUID, set[str]] = defaultdict(set)
+    for unit_id, category in session.execute(
+        select(Allocation.unit_id, CostPool.category)
+        .join(CostPool, CostPool.id == Allocation.cost_pool_id)
+        .where(Allocation.allocation_version_id == version.id)
+    ).all():
+        covered[unit_id].add(category)
+
+    missing: dict[str, list[uuid.UUID]] = defaultdict(list)
+    for unit_id, _reference in units:
+        for name in required - covered.get(unit_id, set()):
+            missing[name].append(unit_id)
+    return [
+        f"no {name} cost reaches {_named(session, missing[name])}"
+        for name in POOL_CATEGORIES
+        if name in missing
+    ]
 
 
 def _require_ready_to_submit(session: Session, *, version: AllocationVersion) -> None:
@@ -1289,6 +1483,15 @@ def _require_ready_to_submit(session: Session, *, version: AllocationVersion) ->
         raise ConflictError(
             "This cost basis does not reconcile. These pools do not equal the sum "
             "of their allocations: " + ", ".join(summary.unreconciled_pools) + "."
+        )
+    gaps = _coverage_gaps(session, version=version)
+    if gaps:
+        raise ConflictError(
+            "Some units are not covered for every required cost category. A unit "
+            "the basis does not address has no margin, not a zero one. "
+            + "; ".join(gaps)
+            + ". Add a scoped pool for them — a zero pool where the cost is "
+            "genuinely nil — rather than leaving them out."
         )
     problems = stale_sources(session, version=version)
     if problems:
@@ -1436,11 +1639,38 @@ def activate_version(
     if version.status != VERSION_APPROVED:
         raise ConflictError("Only an approved cost basis can be activated.")
 
+    standing = session.scalars(
+        select(AllocationVersion)
+        .where(
+            AllocationVersion.project_id == project.id,
+            AllocationVersion.status == VERSION_ACTIVE,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+
     today = business_today()
     if version.effective_from > today:
         raise ConflictError(
             "This cost basis takes effect on "
             f"{version.effective_from.isoformat()} and cannot be made current before then."
+        )
+    if standing is not None and version.effective_from != today:
+        # A replacement takes effect the day it is made current, and only that
+        # day. An approved basis whose date has slipped past would, on
+        # activation, close the standing version's window on a date that has
+        # already been lived: every contract signed in between would silently
+        # move to a basis that did not exist when it was signed. There is no
+        # safe way to backfill that period, so the answer is to refuse and let
+        # Finance clone the version for today rather than to quietly rewrite
+        # history.
+        raise ConflictError(
+            "This cost basis was prepared to take effect on "
+            f"{version.effective_from.isoformat()}, which has passed. Activating it "
+            f"today would restate the period from {version.effective_from.isoformat()} "
+            f"to {today.isoformat()}, which version {standing.version_number} has "
+            "already governed and units have already been signed under. Clone it "
+            "for today's date instead."
         )
 
     summary = reconcile(session, version=version)
@@ -1458,15 +1688,6 @@ def activate_version(
             + ". Clone it, recalculate and have it approved again."
         )
 
-    standing = session.scalars(
-        select(AllocationVersion)
-        .where(
-            AllocationVersion.project_id == project.id,
-            AllocationVersion.status == VERSION_ACTIVE,
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).first()
     if standing is not None:
         if version.effective_from <= standing.effective_from:
             raise ConflictError(
@@ -1543,10 +1764,23 @@ def record_unit_cost(
 ) -> UnitCost:
     """Record a cost that belongs to one unit without dividing anything.
 
-    An actual cost must name the contract it was incurred on where the unit has
-    one. A commission is earned on a specific deal, and a commission with no
-    deal on it is a commission that will still be counted against the unit after
-    the buyer walks away.
+    Which contract a cost may name follows from its class, not from whether the
+    unit happens to be sold today.
+
+    An **actual variable selling cost** — a commission, a payment fee,
+    seller-paid legal — was incurred to win one buyer, so it must name that
+    contract. Without one it would be counted against the unit forever, against
+    a second buyer who cost nothing to find.
+
+    An **actual direct cost** may name a contract or not, and both are real.
+    Fitting an upgrade the buyer chose belongs to their deal; rectifying a floor
+    before anyone reserved the unit belongs to the unit, and forcing it onto
+    whichever contract exists later would attribute it to a buyer who had
+    nothing to do with it.
+
+    A **forecast** never names a contract at all. It is what the unit is
+    expected to cost while it is still unsold; once a deal exists the actuals
+    are what the deal is judged on.
     """
     permissions.require_economics_writer(actor)
     if cost_type not in UNIT_COST_TYPES:
@@ -1558,6 +1792,20 @@ def record_unit_cost(
     if basis == BASIS_ACTUAL and effective_date > business_today():
         raise ValidationError(
             "An actual cost records something that happened. It cannot be dated in the future."
+        )
+
+    cost_class = UNIT_COST_CLASS_OF[cost_type]
+    if basis == BASIS_FORECAST and sale_contract_id is not None:
+        raise ValidationError(
+            "A forecast cost is what the unit is expected to cost, not what a "
+            "particular deal cost. Record it without a contract, or record it as "
+            "actual against that contract."
+        )
+    if basis == BASIS_ACTUAL and cost_class != CLASS_DIRECT and sale_contract_id is None:
+        raise ValidationError(
+            "An actual selling cost was incurred to win one buyer, so it must say "
+            "which contract. Without one it would be charged to the unit again "
+            "after that buyer walks away."
         )
 
     project = lock_project(session, project.id)
@@ -1572,13 +1820,6 @@ def record_unit_cost(
         ).first()
         if sale is None:
             raise NotFoundError("Sale contract not found.")
-    elif basis == BASIS_ACTUAL:
-        live = _live_sale(session, unit_id=unit.id)
-        if live is not None:
-            raise ValidationError(
-                "This unit has a live contract, so an actual cost must say which "
-                "sale it was incurred on."
-            )
 
     cost = UnitCost(
         project_id=project.id,
@@ -1708,17 +1949,104 @@ class _Costs:
     selling: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class _Allocated:
+    """What a version allocated to one unit, and which categories it addressed.
+
+    ``covered`` is the load-bearing half. ``amounts`` reports zero for a
+    category with no allocation row, which is the same number a category with an
+    explicit 0.00 row reports — and those two facts are not the same fact. One
+    says the version decided this unit carries no hard cost; the other says the
+    version never considered it. Reporting a margin on the second invents the
+    most attractive number in the system out of an omission.
+    """
+
+    amounts: dict[str, Decimal]
+    covered: frozenset[str]
+
+
+#: A unit no version reaches. Distinct from a version that allocated it zero.
+_NOTHING_ALLOCATED = _Allocated(amounts=dict.fromkeys(POOL_CATEGORIES, ZERO), covered=frozenset())
+
+
+def _required_categories(version: AllocationVersion) -> frozenset[str]:
+    """The categories a version must have addressed before a unit's margin is real."""
+    required = set(REQUIRED_CATEGORIES)
+    if version.finance_treatment == FINANCE_ALLOCATED:
+        required.add(CATEGORY_FINANCE)
+    return frozenset(required)
+
+
+class _CostIndex:
+    """Every active unit cost, arranged so a read can ask the right question.
+
+    The two classes of unit cost belong to different things, and the difference
+    only becomes visible when a unit is sold more than once.
+
+    **A direct cost belongs to the unit.** Rectifying a floor, fitting an
+    upgrade, replacing an appliance — the money left the business and the
+    building changed, whether or not a buyer existed at the time. A rectification
+    recorded in March, before anybody reserved the unit, is still part of what
+    that unit cost when it sells in June. Reading only costs tagged with the
+    current contract silently drops it, and the sold margin comes out too high
+    by exactly the amount somebody actually spent.
+
+    **A variable selling cost belongs to the deal.** A commission, a payment
+    fee, seller-paid legal: these were incurred to win one buyer. If that
+    contract is cancelled and the unit sells again, the first agent's commission
+    is not a cost of the second deal, and carrying it across would make the
+    second buyer look unprofitable for a reason that has nothing to do with them.
+
+    So direct costs are read as "this unit's, plus this deal's", and selling
+    costs strictly as "this deal's".
+    """
+
+    __slots__ = ("_direct", "_selling")
+
+    def __init__(self) -> None:
+        # (unit_id, basis, sale_id | None) -> amount, for each class separately.
+        self._direct: dict[tuple[uuid.UUID, str, uuid.UUID | None], Decimal] = defaultdict(
+            lambda: ZERO
+        )
+        self._selling: dict[tuple[uuid.UUID, str, uuid.UUID | None], Decimal] = defaultdict(
+            lambda: ZERO
+        )
+
+    def add(
+        self,
+        *,
+        unit_id: uuid.UUID,
+        basis: str,
+        sale_id: uuid.UUID | None,
+        cost_type: str,
+        amount: Decimal,
+    ) -> None:
+        bucket = self._direct if UNIT_COST_CLASS_OF[cost_type] == CLASS_DIRECT else self._selling
+        bucket[(unit_id, basis, sale_id)] += amount
+
+    def for_unit(self, *, unit_id: uuid.UUID, sale_id: uuid.UUID | None) -> _Costs:
+        """What this unit costs on the basis its commercial state calls for."""
+        if sale_id is None:
+            return _Costs(
+                direct=self._direct[(unit_id, BASIS_FORECAST, None)],
+                selling=self._selling[(unit_id, BASIS_FORECAST, None)],
+            )
+        return _Costs(
+            direct=(
+                self._direct[(unit_id, BASIS_ACTUAL, None)]
+                + self._direct[(unit_id, BASIS_ACTUAL, sale_id)]
+            ),
+            selling=self._selling[(unit_id, BASIS_ACTUAL, sale_id)],
+        )
+
+
 def _cost_index(
     session: Session, *, project_id: uuid.UUID, unit_ids: list[uuid.UUID]
-) -> dict[tuple[uuid.UUID, str, uuid.UUID | None], _Costs]:
-    """Every active unit cost, grouped by unit, basis and contract. One query.
-
-    Keyed by contract as well as basis because a sold unit's economics counts
-    the costs of *its* deal. A commission recorded against a contract that was
-    later cancelled must not follow the unit into the next sale.
-    """
+) -> _CostIndex:
+    """Every active unit cost for these units, in one query."""
+    index = _CostIndex()
     if not unit_ids:
-        return {}
+        return index
     rows = session.execute(
         select(
             UnitCost.unit_id,
@@ -1734,18 +2062,20 @@ def _cost_index(
         )
         .group_by(UnitCost.unit_id, UnitCost.basis, UnitCost.sale_contract_id, UnitCost.cost_type)
     ).all()
-    index: dict[tuple[uuid.UUID, str, uuid.UUID | None], list[Decimal]] = defaultdict(
-        lambda: [ZERO, ZERO]
-    )
     for unit_id, basis, sale_id, cost_type, total in rows:
-        slot = 0 if UNIT_COST_CLASS_OF[cost_type] == CLASS_DIRECT else 1
-        index[(unit_id, basis, sale_id)][slot] += money(Decimal(total))
-    return {key: _Costs(direct=value[0], selling=value[1]) for key, value in index.items()}
+        index.add(
+            unit_id=unit_id,
+            basis=basis,
+            sale_id=sale_id,
+            cost_type=cost_type,
+            amount=money(Decimal(total)),
+        )
+    return index
 
 
 def _allocation_index(
     session: Session, *, version_ids: set[uuid.UUID], unit_ids: list[uuid.UUID]
-) -> dict[tuple[uuid.UUID, uuid.UUID], dict[str, Decimal]]:
+) -> dict[tuple[uuid.UUID, uuid.UUID], _Allocated]:
     """Allocated cost per unit per version, split by category. One query.
 
     Never one query per unit: a register of eight hundred units asking four
@@ -1768,12 +2098,17 @@ def _allocation_index(
         )
         .group_by(Allocation.allocation_version_id, Allocation.unit_id, CostPool.category)
     ).all()
-    index: dict[tuple[uuid.UUID, uuid.UUID], dict[str, Decimal]] = defaultdict(
+    amounts: dict[tuple[uuid.UUID, uuid.UUID], dict[str, Decimal]] = defaultdict(
         lambda: dict.fromkeys(POOL_CATEGORIES, ZERO)
     )
+    covered: dict[tuple[uuid.UUID, uuid.UUID], set[str]] = defaultdict(set)
     for version_id, unit_id, category, total in rows:
-        index[(version_id, unit_id)][category] = money(Decimal(total))
-    return index
+        amounts[(version_id, unit_id)][category] = money(Decimal(total))
+        covered[(version_id, unit_id)].add(category)
+    return {
+        key: _Allocated(amounts=value, covered=frozenset(covered[key]))
+        for key, value in amounts.items()
+    }
 
 
 def _threshold_fraction(session: Session, *, project: Project) -> Decimal | None:
@@ -1797,7 +2132,7 @@ def _economics_for(
     sale: SaleContract | None,
     price: UnitPriceVersion | None,
     version: AllocationVersion | None,
-    allocated: dict[str, Decimal],
+    allocated: _Allocated,
     costs: _Costs,
     seller_costs: sales_service.FrozenSellerCosts | None,
     reconciled: bool,
@@ -1814,16 +2149,22 @@ def _economics_for(
     """
     sold = sale is not None
     basis = BASIS_SOLD if sold else BASIS_FORECAST
-    land = allocated.get(CATEGORY_LAND, ZERO)
-    hard = allocated.get(CATEGORY_HARD, ZERO)
-    soft = allocated.get(CATEGORY_SOFT, ZERO)
+    land = allocated.amounts.get(CATEGORY_LAND, ZERO)
+    hard = allocated.amounts.get(CATEGORY_HARD, ZERO)
+    soft = allocated.amounts.get(CATEGORY_SOFT, ZERO)
     allocated_finance = (
-        allocated.get(CATEGORY_FINANCE, ZERO)
+        allocated.amounts.get(CATEGORY_FINANCE, ZERO)
         if version is not None and version.finance_treatment == FINANCE_ALLOCATED
         else ZERO
     )
     seller_commercial = seller_costs.commercial if seller_costs is not None else ZERO
     seller_finance = seller_costs.finance if seller_costs is not None else ZERO
+    # The version's own denomination, not the project's current one. The two are
+    # the same until a project is re-based, and after that the snapshot is the
+    # only record of what an old allocation was denominated in. Reading the
+    # project's base currency instead would relabel every historical figure
+    # overnight, which is a currency conversion performed by omission.
+    cost_currency = version.currency_id if version is not None else project.base_currency_id
 
     if sold and sale is not None:
         revenue: Decimal | None = money(sale.net_contract_price_ex_tax)
@@ -1846,9 +2187,16 @@ def _economics_for(
         status = PROFIT_MISSING_REVENUE
     elif version is None:
         status = PROFIT_MISSING_COST_BASIS
-    elif revenue_currency != project.base_currency_id:
+    elif revenue_currency != cost_currency:
         status = PROFIT_CURRENCY_MISMATCH
     elif not reconciled or (seller_costs is not None and not seller_costs.reconciled):
+        status = PROFIT_UNRECONCILED
+    elif not _required_categories(version) <= allocated.covered:
+        # A unit the version never allocated is not a unit that costs nothing.
+        # This is the case a unit created after activation lands in: the version
+        # exists and reconciles, but it divided its pools among a population
+        # this unit was not part of, so every category reads zero and the margin
+        # would read as the best in the project.
         status = PROFIT_UNRECONCILED
 
     profit: calculator.Profitability | None = None
@@ -1876,7 +2224,7 @@ def _economics_for(
         revenue_source=revenue_source,
         revenue_source_id=revenue_source_id,
         revenue_currency_id=revenue_currency,
-        cost_currency_id=project.base_currency_id,
+        cost_currency_id=cost_currency,
         version=version,
         land_cost=land,
         hard_cost=hard,
@@ -1965,17 +2313,20 @@ def unit_register(
         )
     )
     by_id = {version.id: version for version in governing}
+    # One batched question to sales, not one per unit: which of these contracts
+    # became binding, and when.
+    economic_dates = sales_service.economic_contract_dates(
+        session, sale_ids=[sale.id for sale in sales.values()]
+    )
 
     def version_for(unit_id: uuid.UUID) -> AllocationVersion | None:
         sale = sales.get(unit_id)
         if sale is None:
             return standing
-        for version in governing:
-            if version.effective_from <= sale.contract_date and (
-                version.effective_to is None or sale.contract_date < version.effective_to
-            ):
-                return version
-        return None
+        on = economic_dates.get(sale.id)
+        if on is None:
+            return None
+        return _governing_from(governing, on=on)
 
     chosen = {unit_id: version_for(unit_id) for unit_id in unit_ids}
     version_ids = {version.id for version in chosen.values() if version is not None}
@@ -1988,11 +2339,6 @@ def unit_register(
     for unit in units:
         sale = sales.get(unit.id)
         version = chosen.get(unit.id)
-        key = (
-            (unit.id, BASIS_ACTUAL, sale.id)
-            if sale is not None
-            else (unit.id, BASIS_FORECAST, None)
-        )
         rows.append(
             _economics_for(
                 project=project,
@@ -2000,11 +2346,14 @@ def unit_register(
                 sale=sale,
                 price=prices.get(unit.id),
                 version=version,
-                allocated=allocations.get(
-                    (version.id, unit.id) if version is not None else (unit.id, unit.id),
-                    {},
+                allocated=(
+                    allocations.get((version.id, unit.id), _NOTHING_ALLOCATED)
+                    if version is not None
+                    else _NOTHING_ALLOCATED
                 ),
-                costs=costs.get(key, _Costs(direct=ZERO, selling=ZERO)),
+                costs=costs.for_unit(
+                    unit_id=unit.id, sale_id=sale.id if sale is not None else None
+                ),
                 seller_costs=(
                     sales_service.frozen_seller_costs(sale) if sale is not None else None
                 ),
@@ -2022,11 +2371,15 @@ def unit_economics(
     """One unit's economics, on whichever basis its commercial state calls for."""
     permissions.require_economics_reader(actor)
     sale = _live_sale(session, unit_id=unit.id)
-    version = (
-        version_governing_on(session, project_id=project.id, on=sale.contract_date)
-        if sale is not None
-        else active_version(session, project_id=project.id)
-    )
+    if sale is None:
+        version = active_version(session, project_id=project.id)
+    else:
+        on = sales_service.economic_contract_date(session, sale=sale)
+        # A live contract that somehow carries no binding signature has no
+        # economic date, and the draft date is not a substitute for one.
+        version = (
+            version_governing_on(session, project_id=project.id, on=on) if on is not None else None
+        )
     return _one(session, project=project, unit=unit, sale=sale, version=version)
 
 
@@ -2044,7 +2397,16 @@ def sale_economics(
     unit = session.get(Unit, sale.unit_id)
     if unit is None:  # pragma: no cover - a sale cannot outlive its unit
         raise NotFoundError("Unit not found.")
-    version = version_governing_on(session, project_id=project.id, on=sale.contract_date)
+    on = sales_service.economic_contract_date(session, sale=sale)
+    if on is None:
+        # A proposal is not a deal. Reporting a frozen sold margin for a
+        # contract nobody has signed invents a sale, and dating its cost basis
+        # from the drafting date invents the basis too.
+        raise ConflictError(
+            "This contract has not been signed by both parties, so it has no "
+            "sold economics. A draft has no contractual effect and no cost basis."
+        )
+    version = version_governing_on(session, project_id=project.id, on=on)
     return _one(session, project=project, unit=unit, sale=sale, version=version)
 
 
@@ -2060,7 +2422,6 @@ def _one(
     version_ids = {version.id} if version is not None else set()
     allocations = _allocation_index(session, version_ids=version_ids, unit_ids=[unit.id])
     costs = _cost_index(session, project_id=project.id, unit_ids=[unit.id])
-    key = (unit.id, BASIS_ACTUAL, sale.id) if sale is not None else (unit.id, BASIS_FORECAST, None)
     prices = _active_prices(session, unit_ids=[unit.id])
     reconciled = _reconciled_versions(session, version_ids=version_ids)
     return _economics_for(
@@ -2069,8 +2430,12 @@ def _one(
         sale=sale,
         price=prices.get(unit.id),
         version=version,
-        allocated=allocations.get((version.id, unit.id), {}) if version is not None else {},
-        costs=costs.get(key, _Costs(direct=ZERO, selling=ZERO)),
+        allocated=(
+            allocations.get((version.id, unit.id), _NOTHING_ALLOCATED)
+            if version is not None
+            else _NOTHING_ALLOCATED
+        ),
+        costs=costs.for_unit(unit_id=unit.id, sale_id=sale.id if sale is not None else None),
         seller_costs=sales_service.frozen_seller_costs(sale) if sale is not None else None,
         reconciled=reconciled.get(version.id, True) if version is not None else True,
         threshold=_threshold_fraction(session, project=project),

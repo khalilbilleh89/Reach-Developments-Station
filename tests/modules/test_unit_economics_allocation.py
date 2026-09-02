@@ -28,6 +28,7 @@ from tests.modules.conftest import (
     inventory_url,
     parcel_payload,
     pricing_url,
+    today,
     unit_payload,
 )
 
@@ -293,14 +294,16 @@ class TestReconciliation:
     """Given a calculated basis, when its pools are added back up."""
 
     def test_every_pool_equals_the_sum_of_its_allocations(
-        self, finance_client: TestClient, project_id: str, priced_pair: tuple[str, str]
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        priced_pair: tuple[str, str],
+        land_cost: str,
     ) -> None:
-        """Land 100, hard 300, soft 50, finance 25. Source 475, allocated 475."""
-        del priced_pair
+        """Land 840,000 from the register, hard 300, soft 50, finance 25."""
+        del priced_pair, land_cost
         version_id = create_version(finance_client, project_id, finance_treatment="allocated")
-        cover_required_pools(
-            finance_client, project_id, version_id, land="100.00", hard="300.00", soft="50.00"
-        )
+        cover_required_pools(finance_client, project_id, version_id, hard="300.00", soft="50.00")
         assert (
             add_pool(
                 finance_client,
@@ -313,8 +316,10 @@ class TestReconciliation:
             == 201
         )
         preview = calculate(finance_client, project_id, version_id)
-        assert preview["source_cost_total"] == "475.00"
-        assert preview["allocated_cost_total"] == "475.00"
+        # 800,000 purchase + 40,000 acquisition fees, and not a figure anybody
+        # typed: the land pool has no amount of its own to type.
+        assert preview["source_cost_total"] == "840375.00"
+        assert preview["allocated_cost_total"] == "840375.00"
         assert preview["variance"] == "0.00"
         assert preview["reconciled"] is True
 
@@ -589,7 +594,8 @@ class TestSubmissionGates:
                 version_id,
                 pool_number="LAND-01",
                 category="land",
-                amount="100.00",
+                source_kind="project_land",
+                amount=None,
             ).status_code
             == 201
         )
@@ -757,7 +763,7 @@ class TestApprovalAndActivation:
         assert govern(finance_client, cfo_client, project_id, first).status_code == 200
 
         second = create_version(
-            finance_client, project_id, effective_from="2026-06-01", reason="Revised hard cost"
+            finance_client, project_id, effective_from=today(), reason="Revised hard cost"
         )
         cover_required_pools(finance_client, project_id, second, hard="200.00")
         assert govern(finance_client, cfo_client, project_id, second).status_code == 200
@@ -765,7 +771,7 @@ class TestApprovalAndActivation:
         versions = finance_client.get(f"{economics_url(project_id)}/allocation-versions").json()
         by_number = {row["version_number"]: row for row in versions}
         assert by_number[1]["status"] == "superseded"
-        assert by_number[1]["effective_to"] == "2026-06-01"
+        assert by_number[1]["effective_to"] == today()
         assert by_number[2]["status"] == "active"
         assert by_number[2]["effective_to"] is None
 
@@ -844,7 +850,7 @@ class TestCloning:
 
         response = finance_client.post(
             f"{version_url(project_id, original)}/clone",
-            json={"effective_from": "2026-07-01", "change_reason": "Hard cost forecast raised"},
+            json={"effective_from": today(), "change_reason": "Hard cost forecast raised"},
         )
         assert response.status_code == 201, response.text
         clone = response.json()

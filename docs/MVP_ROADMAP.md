@@ -282,11 +282,13 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 - governed allocation versions, one current basis per project
 - cost pools by category — land, hard, soft, finance — scoped to project, phase
   or building
-- land cost derived from the land register, never retyped
+- land cost derived from the land register, never retyped — one canonical,
+  project-wide land pool per version, enforced in the database
 - five allocation methods: weighted area, raw area, unit count, revenue value
   and a per-unit custom driver
 - exact Decimal allocation with a deterministic rounding residual
-- stale-source detection at submission and again at activation
+- stale-source detection at submission and again at activation, including the
+  set of units a pool divides among
 - direct unit costs and variable selling costs, recorded and reversed
 - explicit finance-cost treatment: allocated or excluded, never assumed nil
 - sold vs unsold unit economics on their own bases
@@ -306,8 +308,16 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 >
 > That freeze is achieved by effective dating, not by a foreign key: nothing in
 > sales, pricing, inventory or projects gained a column, and none of them
-> imports this module. The sale's own contract date, matched against a version's
-> window, is the whole mechanism.
+> imports this module. The date the contract became **binding** — the later of
+> its two signatures, answered by sales — matched against a version's window, is
+> the whole mechanism. Not the contract's draft date: a contract drafted in
+> February and signed in June belongs to whichever basis was governing in June.
+>
+> The write side is constrained to match. A project's first cost basis may be
+> back-dated, because this module arrived after sales existed. Every replacement
+> takes effect today, because one dated into the past would close the standing
+> version's window on a period already lived and move every contract signed in
+> the overlap onto a basis that did not exist when it was signed.
 >
 > Three refusals define the module. Every cost pool must reconcile to its
 > allocations **exactly** — not within a cent — with the rounding residual going
@@ -316,7 +326,10 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > no margin, and the project summary counts it out loud rather than dropping it.
 > And an incomplete input never produces a number: a missing price, a missing
 > cost basis or a stale allocation returns a status saying so, because a
-> fabricated margin is worse than an absent one.
+> fabricated margin is worse than an absent one. A unit the basis never
+> allocated to is one of those cases and not a zero-cost unit — otherwise a unit
+> created after activation would report the best margin in the project, produced
+> by an omission.
 >
 > Allocations are the one derived-looking thing this platform stores, and the
 > reason is that they are not derivable twice. A version has to preserve which

@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import NotFoundError, PermissionDeniedError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession
 from app.modules.inventory.models import Unit
+from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import require_project_access
 from app.modules.sales.models import SaleContract
@@ -194,6 +195,36 @@ def unit_cost_not_found() -> NotFoundError:
     return NotFoundError(_NO_COST)
 
 
+def require_whole_project_scope(
+    session: Session, *, project_id: uuid.UUID, actor: ActorContext
+) -> None:
+    """Gate the version governance screens on access to the whole project.
+
+    A cost basis is a project-level financial instrument. Its pools carry phase
+    and building amounts, its reconciliation is a project total, and its stale
+    sources name units across all of it — so a caller narrowed to Phase A who
+    could open a version would read Phase B's cost through the pool list, even
+    though their unit register correctly shows them nothing of Phase B. A
+    partial unit scope must not become a route to the whole project's costs.
+
+    The alternative — filtering the version down to the caller's units and
+    presenting what is left — is worse, because a subset does not reconcile to a
+    full pool. It would put a number labelled "reconciled" in front of somebody
+    that is not the pool's total and is not their phase's share either. PR-MVP-07
+    already refused a summary of an unstated subset, and this is the same
+    refusal.
+
+    Unit-level economics and the register stay phase-scoped as they are. This
+    gates only the governance detail.
+    """
+    if visible_phase_ids(session, project_id=project_id, actor=actor) is not None:
+        raise PermissionDeniedError(
+            "A cost basis covers the whole project, including phases outside your "
+            "access. Your role can read the economics of the units you are "
+            "scoped to, but not the project's allocation versions."
+        )
+
+
 def accessible_project_for_economics(
     project_id: Annotated[uuid.UUID, Path()],
     session: DbSession,
@@ -204,3 +235,20 @@ def accessible_project_for_economics(
 
 
 EconomicsProject = Annotated[Project, Depends(accessible_project_for_economics)]
+
+
+def project_for_version_governance(
+    project_id: Annotated[uuid.UUID, Path()],
+    session: DbSession,
+    actor: ActiveActor,
+) -> Project:
+    """Resolve ``{project_id}`` for a route that exposes a whole cost basis."""
+    project = require_project_access(session, project_id=project_id, actor=actor)
+    require_whole_project_scope(session, project_id=project.id, actor=actor)
+    return project
+
+
+#: For every route under ``/allocation-versions``. A dependency rather than a
+#: line in each handler, because the failure mode of the alternative is one
+#: route somebody forgot, and that route leaks the whole project's costs.
+GovernedProject = Annotated[Project, Depends(project_for_version_governance)]

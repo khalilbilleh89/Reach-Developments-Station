@@ -67,6 +67,7 @@ AVAILABLE = [
     "tests/modules/test_unit_economics_profitability.py",
     "tests/modules/test_unit_economics_security.py",
     "tests/modules/test_unit_economics_concurrency.py",
+    "tests/modules/test_unit_economics_history.py",
     "tests/modules/test_migration_unit_economics.py",
 ]
 

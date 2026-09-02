@@ -1481,6 +1481,18 @@ def priced_pair(
     return unit_id, second_unit
 
 
+def today() -> str:
+    """The only date a replacement cost basis may take effect on.
+
+    A project's *first* basis may be back-dated — PR-MVP-08 arrives after sales
+    exist and those contracts need a baseline. Every later one takes effect
+    today, because a replacement dated in the past would restate a period units
+    were already signed under. Tests that create a second version therefore have
+    to use the real current date, not a fixed one.
+    """
+    return date.today().isoformat()
+
+
 def create_version(
     client: TestClient,
     project_id: str,
@@ -1533,7 +1545,6 @@ def cover_required_pools(
     project_id: str,
     version_id: str,
     *,
-    land: str = "0.00",
     hard: str = "0.00",
     soft: str = "0.00",
 ) -> None:
@@ -1541,12 +1552,23 @@ def cover_required_pools(
 
     Zero is allowed and explicit; omission is not. A basis that simply left soft
     cost out would report a margin that silently assumed there was none.
+
+    The land pool is never given an amount: land cost is whatever the project's
+    land register says, which is zero on a project that has bought none. A test
+    that wants a real land cost buys a parcel through the ``land_cost`` fixture,
+    because there is no other way to put one here.
     """
-    for number, category, amount in (
-        ("LAND-01", "land", land),
-        ("HARD-01", "hard", hard),
-        ("SOFT-01", "soft", soft),
-    ):
+    land = add_pool(
+        client,
+        project_id,
+        version_id,
+        pool_number="LAND-01",
+        category="land",
+        source_kind="project_land",
+        amount=None,
+    )
+    assert land.status_code == 201, land.text
+    for number, category, amount in (("HARD-01", "hard", hard), ("SOFT-01", "soft", soft)):
         response = add_pool(
             client,
             project_id,

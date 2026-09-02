@@ -40,6 +40,8 @@ precondition list, which is longer to write and possible to audit.
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
@@ -902,6 +904,68 @@ def frozen_seller_costs(sale: SaleContract) -> FrozenSellerCosts:
         finance=money(finance),
         reconciled=money(commercial + finance) == money(sale.seller_cost_total),
     )
+
+
+#: The signatures that make a contract binding on both sides. ``activate_sale``
+#: refuses without both of them, so this is the same milestone the lifecycle
+#: already treats as the moment the deal became real — not a second opinion
+#: about it.
+_BINDING_SIGNATURES = (EVENT_BUYER_SIGNED, EVENT_SELLER_SIGNED)
+
+
+def economic_contract_dates(
+    session: Session, *, sale_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, date]:
+    """When each of these contracts became binding on both parties. One query.
+
+    ``contract_date`` is stamped when the contract is *drafted*, and a draft is
+    not a deal. Between drafting and signature a project's cost basis can be
+    replaced, its price list re-approved, its land register corrected — so a
+    reader that treats the draft date as the economic date can freeze a sold
+    unit onto a basis that was already superseded when the parties signed.
+
+    The economic date is the later of the two binding signatures, because a
+    contract signed by one side is not yet a contract. Reversed events are
+    excluded through the same reading of the timeline that the unit's legal
+    status derives from: an entry withdrawn by a correction never happened.
+
+    A sale with fewer than both signatures is absent from the result. That is
+    the honest answer — not today, and not the draft date.
+    """
+    if not sale_ids:
+        return {}
+    events = list(
+        session.scalars(
+            select(SaleLegalEvent).where(SaleLegalEvent.sale_contract_id.in_(list(sale_ids)))
+        )
+    )
+    reversed_ids = {event.reverses_event_id for event in events if event.reverses_event_id}
+    signed: dict[uuid.UUID, dict[str, date]] = defaultdict(dict)
+    for event in events:
+        if event.reverses_event_id is not None or event.id in reversed_ids:
+            continue
+        if event.event_type not in _BINDING_SIGNATURES:
+            continue
+        # An event type recorded twice keeps the later date: the contract was
+        # not binding until the last of the required signatures existed.
+        current = signed[event.sale_contract_id].get(event.event_type)
+        if current is None or event.event_date > current:
+            signed[event.sale_contract_id][event.event_type] = event.event_date
+    return {
+        sale_id: max(dates.values())
+        for sale_id, dates in signed.items()
+        if all(name in dates for name in _BINDING_SIGNATURES)
+    }
+
+
+def economic_contract_date(session: Session, *, sale: SaleContract) -> date | None:
+    """When this contract became binding on both parties, or ``None`` if it has not.
+
+    The single-sale form of :func:`economic_contract_dates`. ``None`` means the
+    contract has not reached contractual effect, and a caller must not
+    substitute the draft date, today, or anything else for it.
+    """
+    return economic_contract_dates(session, sale_ids=[sale.id]).get(sale.id)
 
 
 def _quote_inputs(

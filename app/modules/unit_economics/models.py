@@ -321,6 +321,19 @@ class AllocationVersion(Base):
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
+        # A clone says which version it was taken from, and the database proves
+        # that version exists and belongs to the same project. Without this the
+        # column is a note: a lineage pointing at a deleted version, or at
+        # another developer's project, reads back as provenance and is not.
+        ForeignKeyConstraint(
+            ["source_version_id", "project_id"],
+            [
+                "unit_economics_allocation_versions.id",
+                "unit_economics_allocation_versions.project_id",
+            ],
+            name="source_version",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("project_id", "version_number", name="uq_ue_version_number"),
         UniqueConstraint("id", "project_id", name="ue_version_project"),
         CheckConstraint(in_list("status", VERSION_STATUSES), name="status_ok"),
@@ -428,6 +441,22 @@ class CostPool(Base):
         ),
         UniqueConstraint("allocation_version_id", "pool_number", name="uq_ue_pool_number"),
         UniqueConstraint("id", "project_id", name="ue_pool_project"),
+        #: The key an allocation's three-column parentage points at, so that a
+        #: row cannot name a pool from one version and a version from another.
+        UniqueConstraint(
+            "id", "allocation_version_id", "project_id", name="ue_pool_version_project"
+        ),
+        # Land comes from the land register, project-wide, or it is not a land
+        # pool. Service refusals give the operator a sentence; this is what
+        # holds when the service is not the one writing.
+        CheckConstraint(
+            "category <> 'land' OR source_kind = 'project_land'",
+            name="land_is_canonical",
+        ),
+        CheckConstraint(
+            "source_kind <> 'project_land' OR scope_kind = 'project'",
+            name="land_is_project_wide",
+        ),
         CheckConstraint(in_list("category", POOL_CATEGORIES), name="category_ok"),
         CheckConstraint(in_list("source_kind", POOL_SOURCE_KINDS), name="source_ok"),
         CheckConstraint(in_list("scope_kind", POOL_SCOPES), name="scope_ok"),
@@ -450,6 +479,15 @@ class CostPool(Base):
         # Only land may claim to come from the land register.
         CheckConstraint(
             "source_kind <> 'project_land' OR category = 'land'", name="land_source_shape"
+        ),
+        # One canonical land pool per version. Two of them each draw the whole
+        # project land total, so the land cost doubles while every pool still
+        # reconciles exactly — a false result nothing downstream can detect.
+        Index(
+            "uq_ue_pools_one_project_land",
+            "allocation_version_id",
+            unique=True,
+            postgresql_where=text("source_kind = 'project_land'"),
         ),
         Index("ix_ue_pools_version", "allocation_version_id"),
     )
@@ -497,9 +535,19 @@ class Allocation(Base):
     )
 
     __table_args__ = (
+        # Three columns, not two. With separate pool and version keys both
+        # foreign keys pass while the allocation claims version two and its pool
+        # belongs to version one — and the row then reconciles against the wrong
+        # pool, drills down into the wrong basis, and prices a sold unit on a
+        # version it was never governed by. Service discipline is not enough for
+        # an invariant that decides what a unit cost.
         ForeignKeyConstraint(
-            ["cost_pool_id", "project_id"],
-            ["unit_economics_cost_pools.id", "unit_economics_cost_pools.project_id"],
+            ["cost_pool_id", "allocation_version_id", "project_id"],
+            [
+                "unit_economics_cost_pools.id",
+                "unit_economics_cost_pools.allocation_version_id",
+                "unit_economics_cost_pools.project_id",
+            ],
             name="pool",
             ondelete="CASCADE",
         ),

@@ -98,6 +98,12 @@ export function UnitEconomicsTab({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
+  // Separate from `denied`, because these are two different answers. A reader
+  // scoped to selected phases may see their units' economics and may not see
+  // the project's allocation versions — a cost basis carries every phase's
+  // pool amounts, so opening one would hand them the costs of phases they were
+  // never granted.
+  const [governanceDenied, setGovernanceDenied] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const canWrite = roles.has("finance");
@@ -105,16 +111,27 @@ export function UnitEconomicsTab({
 
   const load = useCallback(async () => {
     try {
-      const [nextSummary, nextRows, nextVersions, nextCosts] = await Promise.all([
+      const [nextSummary, nextRows, nextCosts] = await Promise.all([
         unitEconomics.summary(projectId),
         unitEconomics.units(projectId),
-        unitEconomics.versions(projectId),
         unitEconomics.unitCosts(projectId),
       ]);
       setSummary(nextSummary);
       setRows(nextRows);
-      setVersions(nextVersions);
       setCosts(nextCosts);
+      // Loaded apart from the rest so that one refusal does not read as the
+      // reader having no access to economics at all.
+      try {
+        setVersions(await unitEconomics.versions(projectId));
+        setGovernanceDenied(false);
+      } catch (governance) {
+        if (governance instanceof ApiError && governance.isForbidden) {
+          setVersions([]);
+          setGovernanceDenied(true);
+        } else {
+          throw governance;
+        }
+      }
       setError(null);
       setDenied(false);
     } catch (caught) {
@@ -182,15 +199,22 @@ export function UnitEconomicsTab({
         ) : null}
         {tab === "units" ? <UnitsRegister rows={rows} code={code} /> : null}
         {tab === "versions" ? (
-          <Versions
-            projectId={projectId}
-            versions={versions}
-            code={code}
-            canWrite={canWrite}
-            canApprove={canApprove}
-            busy={busy}
-            onAct={act}
-          />
+          governanceDenied ? (
+            <EmptyState
+              title="Not available at your phase scope"
+              hint="A cost basis covers the whole project, including phases outside your access. Your units' economics above stay available."
+            />
+          ) : (
+            <Versions
+              projectId={projectId}
+              versions={versions}
+              code={code}
+              canWrite={canWrite}
+              canApprove={canApprove}
+              busy={busy}
+              onAct={act}
+            />
+          )
         ) : null}
         {tab === "costs" ? (
           <UnitCosts
@@ -1167,8 +1191,20 @@ function RecordCostDialog({
   const [effectiveDate, setEffectiveDate] = useState(todayISO());
   const [reference, setReference] = useState("");
 
+  const [chargeToDeal, setChargeToDeal] = useState(true);
+
   const chosen = rows.find((row) => row.unit_id === unitId);
   const saleId = chosen?.revenue_source === "sale_contract" ? chosen.revenue_source_id : null;
+  const isSelling = SELLING_COST_TYPES.includes(costType);
+
+  // Which contract a cost may name follows from its class, not from whether the
+  // unit happens to be sold. A commission was incurred to win one buyer and must
+  // name them, or it would be charged to the unit again after they walk away. A
+  // rectification belongs to the building and may predate every buyer, so it may
+  // be recorded with no contract at all — and forcing it onto whichever contract
+  // exists later would attribute it to somebody who had nothing to do with it.
+  const attachSale = basis === "actual" && saleId !== null && (isSelling || chargeToDeal);
+  const sellingNeedsASale = basis === "actual" && isSelling && saleId === null;
 
   return (
     <FormDialog
@@ -1176,7 +1212,7 @@ function RecordCostDialog({
       description="The cost type decides whether this sits above or below gross profit. That is policy, not a choice on this form."
       confirmLabel="Record"
       busy={busy}
-      disabled={unitId === "" || amount.trim() === ""}
+      disabled={unitId === "" || amount.trim() === "" || sellingNeedsASale}
       onCancel={onCancel}
       onSubmit={() =>
         onSubmit(unitId, {
@@ -1184,7 +1220,7 @@ function RecordCostDialog({
           basis,
           amount: amount.trim(),
           effective_date: effectiveDate,
-          ...(basis === "actual" && saleId ? { sale_contract_id: saleId } : {}),
+          ...(attachSale ? { sale_contract_id: saleId } : {}),
           ...(reference.trim() ? { reference: reference.trim() } : {}),
         })
       }
@@ -1223,7 +1259,7 @@ function RecordCostDialog({
         label="Basis"
         hint={
           saleId
-            ? "An actual cost on this unit is recorded against its live contract."
+            ? "A forecast is what the unit is expected to cost. Once it is sold, its actuals are what the deal is judged on."
             : "An unsold unit is analysed on forecast costs."
         }
       >
@@ -1232,6 +1268,26 @@ function RecordCostDialog({
           <option value="actual">Actual</option>
         </select>
       </Field>
+      {sellingNeedsASale ? (
+        <Notice tone="warning">
+          A selling cost is incurred to win one buyer, so it needs a live contract to
+          record against. This unit has none.
+        </Notice>
+      ) : null}
+      {basis === "actual" && saleId !== null && !isSelling ? (
+        <Field
+          label="Belongs to"
+          hint="A cost incurred before this buyer arrived stays with the unit and follows it into any later sale."
+        >
+          <select
+            value={chargeToDeal ? "deal" : "unit"}
+            onChange={(event) => setChargeToDeal(event.target.value === "deal")}
+          >
+            <option value="deal">This deal</option>
+            <option value="unit">The unit itself</option>
+          </select>
+        </Field>
+      ) : null}
       <Field label="Amount">
         <input
           inputMode="decimal"

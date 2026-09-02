@@ -190,24 +190,51 @@ or refuses outright.
 unit_economics → projects        the land register, for the land cost pool
 unit_economics → inventory       units, scope, and the approved area schedule
 unit_economics → pricing         the current approved price, as revenue and as a driver
-unit_economics → sales           frozen contract terms and frozen seller costs
+unit_economics → sales           frozen contract terms, frozen seller costs and
+                                 the date the contract became binding
 ```
 
 The interesting part is what is *not* there. A sold unit must keep the cost
 allocation basis that governed when its contract was signed, and the obvious way
 to arrange that — a `sale_contracts.unit_economics_version_id` — would make sales
 depend on a module that arrived four PRs later. So the link is effective dating
-instead: an allocation version carries a window, and the sale's own
-`contract_date` selects the version whose window contains it, permanently. No
-upstream table gained a column, nothing calls back into sales, and there is no
-event or plugin mechanism doing it quietly. It is the same principle as an
-effective-dated price, applied to cost.
+instead: an allocation version carries a window, and the sale's own economic date
+selects the version whose window contains it, permanently. No upstream table
+gained a column, nothing calls back into sales, and there is no event or plugin
+mechanism doing it quietly. It is the same principle as an effective-dated price,
+applied to cost.
 
-The one contract sales gained is a reader, `frozen_seller_costs`, which splits a
-contract's frozen seller costs into their commercial and finance halves. It lives
-in sales because sales owns the quote snapshot those figures come from, and a
-second domain learning the shape of somebody else's JSON is a dependency nobody
-declared.
+That date is **not** `contract_date`, which is stamped when the contract is
+*drafted*. Between drafting and signature a project's cost basis can be replaced,
+and freezing on the draft date would hand a deal a basis that had already been
+superseded by the time the parties signed. Sales owns the lifecycle, so sales
+owns the answer.
+
+Two contracts sales gained, both readers:
+
+```text
+frozen_seller_costs(sale)          the commercial / finance split of the seller
+                                   costs the contract froze
+economic_contract_date(session,    the date the contract became binding on both
+                       sale)       parties — the later of the two signatures
+                                   that `activate_sale` already insists on, or
+                                   None where the contract is not yet signed
+```
+
+Both live in sales because sales owns what they read: the quote snapshot for the
+first, the legal timeline for the second. A second domain learning the shape of
+somebody else's JSON, or deciding for itself which milestone makes a contract
+binding, is a dependency nobody declared.
+
+A sale that returns `None` has no sold economics at all — not today's basis, and
+not the draft date's. A proposal is not a deal.
+
+Effective dating cuts both ways, so the write side is constrained to match. The
+*first* version on a project may be back-dated, because PR-MVP-08 arrived after
+sales existed and those contracts need a baseline. Every later one takes effect
+today: a replacement dated in the past would, on activation, close the standing
+version's window on a date already lived, and every contract signed in the
+overlap would silently change cost basis.
 
 Reading another domain's rows is ordinary and done directly. Writing them is
 not, and there is no path in collections or unit economics that does.

@@ -283,6 +283,56 @@ class TestPoolConstraints:
             self._insert_pool(db, seeded, category="soft", source_kind="project_land")
         db.rollback()
 
+    def test_a_land_pool_cannot_be_manual(self, db: Session, seeded: dict[str, str]) -> None:
+        """The service refuses this with a sentence. The database refuses it full stop.
+
+        A land pool holding a hand-typed amount is the spreadsheet figure this
+        module exists to replace, and it would reconcile perfectly.
+        """
+        with pytest.raises(IntegrityError):
+            self._insert_pool(db, seeded, category="land", source_kind="manual")
+        db.rollback()
+
+    def test_the_canonical_land_pool_cannot_be_scoped_to_a_phase(
+        self, db: Session, seeded: dict[str, str], phase_id: str
+    ) -> None:
+        """There is no governed parcel-to-phase attribution to justify it."""
+        with pytest.raises(IntegrityError):
+            self._insert_pool(
+                db,
+                seeded,
+                category="land",
+                source_kind="project_land",
+                scope_kind="phase",
+                phase_id=phase_id,
+            )
+        db.rollback()
+
+    def test_the_canonical_land_pool_cannot_be_scoped_to_a_building(
+        self, db: Session, seeded: dict[str, str], building_id: str
+    ) -> None:
+        with pytest.raises(IntegrityError):
+            self._insert_pool(
+                db,
+                seeded,
+                category="land",
+                source_kind="project_land",
+                scope_kind="building",
+                building_id=building_id,
+            )
+        db.rollback()
+
+    def test_one_version_cannot_draw_the_land_register_twice(
+        self, db: Session, seeded: dict[str, str]
+    ) -> None:
+        """The failure that reconciles: 840,000 of land counted as 1,680,000."""
+        self._insert_pool(db, seeded, number="LAND-01", category="land", source_kind="project_land")
+        with pytest.raises(IntegrityError):
+            self._insert_pool(
+                db, seeded, number="LAND-02", category="land", source_kind="project_land"
+            )
+        db.rollback()
+
     def test_two_pools_cannot_share_a_number_in_one_version(
         self, db: Session, seeded: dict[str, str]
     ) -> None:
@@ -408,6 +458,150 @@ class TestProjectParentage:
                     "id": str(uuid.uuid4()),
                     "other": other_project,
                     "version_id": seeded["version_id"],
+                    "actor": seeded["actor"],
+                },
+            )
+        db.rollback()
+
+    def test_an_allocation_cannot_name_a_pool_from_a_different_version(
+        self, db: Session, seeded: dict[str, str], unit_id: str
+    ) -> None:
+        """Two separate foreign keys both passed while the row was incoherent.
+
+        With a pool key and a version key checked independently, an allocation
+        could claim version two while its pool belonged to version one. The row
+        then reconciles against the wrong pool, drills down into the wrong
+        basis, and prices a sold unit on a version that never governed it. Three
+        columns in one key is what makes that impossible rather than merely
+        unlikely.
+        """
+        currency = db.execute(
+            text("SELECT base_currency_id FROM projects WHERE id = :id"),
+            {"id": seeded["project_id"]},
+        ).scalar_one()
+        pool_id = str(uuid.uuid4())
+        db.execute(
+            text(
+                """
+                INSERT INTO unit_economics_cost_pools (
+                    id, project_id, allocation_version_id, pool_number, name,
+                    category, source_kind, amount, scope_kind,
+                    allocation_method, created_by_user_id
+                ) VALUES (
+                    :id, :project_id, :version_id, 'P-01', 'Version one pool', 'hard',
+                    'manual', '100.00', 'project', 'unit_count', :actor
+                )
+                """
+            ),
+            {
+                "id": pool_id,
+                "project_id": seeded["project_id"],
+                "version_id": seeded["version_id"],
+                "actor": seeded["actor"],
+            },
+        )
+        other_version = str(uuid.uuid4())
+        db.execute(
+            text(
+                """
+                INSERT INTO unit_economics_allocation_versions (
+                    id, project_id, version_number, currency_id, status,
+                    finance_treatment, effective_from, change_reason, created_by_user_id
+                ) VALUES (
+                    :id, :project_id, 2, :currency_id, 'draft', 'excluded',
+                    DATE '2026-02-01', 'Second basis', :actor
+                )
+                """
+            ),
+            {
+                "id": other_version,
+                "project_id": seeded["project_id"],
+                "currency_id": currency,
+                "actor": seeded["actor"],
+            },
+        )
+        db.flush()
+        with pytest.raises(IntegrityError):
+            db.execute(
+                text(
+                    """
+                    INSERT INTO unit_economics_allocations (
+                        id, project_id, allocation_version_id, cost_pool_id, unit_id,
+                        driver_value, driver_share, allocated_amount, is_rounding_recipient
+                    ) VALUES (
+                        :id, :project_id, :version_id, :pool_id, :unit_id,
+                        '1.0000', '1.000000', '100.00', TRUE
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "project_id": seeded["project_id"],
+                    "version_id": other_version,
+                    "pool_id": pool_id,
+                    "unit_id": unit_id,
+                },
+            )
+        db.rollback()
+
+    def test_a_clone_cannot_point_at_a_version_that_does_not_exist(
+        self, db: Session, seeded: dict[str, str]
+    ) -> None:
+        """``source_version_id`` was a note. It is now provenance."""
+        currency = db.execute(
+            text("SELECT base_currency_id FROM projects WHERE id = :id"),
+            {"id": seeded["project_id"]},
+        ).scalar_one()
+        with pytest.raises(IntegrityError):
+            db.execute(
+                text(
+                    """
+                    INSERT INTO unit_economics_allocation_versions (
+                        id, project_id, version_number, currency_id, status,
+                        finance_treatment, effective_from, change_reason,
+                        source_version_id, created_by_user_id
+                    ) VALUES (
+                        :id, :project_id, 3, :currency_id, 'draft', 'excluded',
+                        DATE '2026-03-01', 'Clone of nothing', :ghost, :actor
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "project_id": seeded["project_id"],
+                    "currency_id": currency,
+                    "ghost": str(uuid.uuid4()),
+                    "actor": seeded["actor"],
+                },
+            )
+        db.rollback()
+
+    def test_a_clone_cannot_point_at_another_projects_version(
+        self, db: Session, seeded: dict[str, str], other_project: str
+    ) -> None:
+        currency = db.execute(
+            text("SELECT base_currency_id FROM projects WHERE id = :id"),
+            {"id": other_project},
+        ).scalar_one()
+        with pytest.raises(IntegrityError):
+            db.execute(
+                text(
+                    """
+                    INSERT INTO unit_economics_allocation_versions (
+                        id, project_id, version_number, currency_id, status,
+                        finance_treatment, effective_from, change_reason,
+                        source_version_id, created_by_user_id
+                    ) VALUES (
+                        :id, :other, 1, :currency_id, 'draft', 'excluded',
+                        DATE '2026-03-01', 'Reaching across projects', :source, :actor
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "other": other_project,
+                    "currency_id": currency,
+                    "source": seeded["version_id"],
                     "actor": seeded["actor"],
                 },
             )

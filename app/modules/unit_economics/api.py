@@ -42,7 +42,7 @@ from app.modules.unit_economics.models import (
     CostPool,
     UnitCost,
 )
-from app.modules.unit_economics.permissions import EconomicsProject
+from app.modules.unit_economics.permissions import EconomicsProject, GovernedProject
 from app.modules.unit_economics.schemas import (
     AllocationRead,
     AllocationVersionRead,
@@ -343,7 +343,7 @@ def list_unit_costs(
     summary="Every cost basis this project has had",
 )
 def list_versions(
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> list[AllocationVersionRead]:
@@ -365,7 +365,7 @@ def list_versions(
 )
 def read_version(
     version_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> VersionDetail:
@@ -391,7 +391,7 @@ def read_version(
 )
 def read_allocations(
     version_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
     pool_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -434,7 +434,7 @@ def read_allocations(
 )
 def create_version(
     payload: VersionCreate,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:
@@ -461,7 +461,7 @@ def create_version(
 def clone_version(
     version_id: uuid.UUID,
     payload: VersionClone,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:
@@ -493,7 +493,7 @@ def clone_version(
 def add_pool(
     version_id: uuid.UUID,
     payload: PoolCreate,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> CostPoolRead:
@@ -529,7 +529,7 @@ def update_pool(
     version_id: uuid.UUID,
     pool_id: uuid.UUID,
     payload: PoolUpdate,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> CostPoolRead:
@@ -555,7 +555,7 @@ def update_pool(
 def remove_pool(
     version_id: uuid.UUID,
     pool_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> None:
@@ -579,7 +579,7 @@ def set_drivers(
     version_id: uuid.UUID,
     pool_id: uuid.UUID,
     payload: DriverSet,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> CostPoolRead:
@@ -612,7 +612,7 @@ def set_drivers(
 )
 def calculate_version(
     version_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> CalculationPreview:
@@ -646,7 +646,7 @@ def calculate_version(
 )
 def submit_version(
     version_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:
@@ -670,7 +670,7 @@ def submit_version(
 def approve_version(
     version_id: uuid.UUID,
     payload: VersionDecision,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:
@@ -695,7 +695,7 @@ def approve_version(
 def reject_version(
     version_id: uuid.UUID,
     payload: VersionRejection,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:
@@ -719,7 +719,7 @@ def reject_version(
 )
 def activate_version(
     version_id: uuid.UUID,
-    project: EconomicsProject,
+    project: GovernedProject,
     session: DbSession,
     actor: ActiveActor,
 ) -> AllocationVersionRead:

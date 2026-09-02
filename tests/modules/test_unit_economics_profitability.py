@@ -31,6 +31,7 @@ from tests.modules.conftest import (
     govern,
     pricing_url,
     sales_url,
+    today,
     unit_economics,
 )
 
@@ -207,23 +208,25 @@ class TestTheAllocationFreeze:
         self,
         finance_client: TestClient,
         cfo_client: TestClient,
-        db: Session,
         project_id: str,
         active_sale: str,
         priced_pair: tuple[str, str],
     ) -> tuple[str, str]:
-        """V1 from January at 100,000; the sale in February; V2 from June at 200,000."""
+        """V1 from January at 100,000; the sale signed in February; V2 today at 200,000.
+
+        The sale's dates are the ``active_sale`` fixture's own: buyer signed
+        3 February, seller 4 February. Nothing here stamps ``contract_date``,
+        because that is not the date the freeze turns on.
+        """
         del priced_pair
         first = create_version(finance_client, project_id, effective_from="2026-01-01")
         cover_required_pools(finance_client, project_id, first, hard="100000.00")
         assert govern(finance_client, cfo_client, project_id, first).status_code == 200
 
-        _stamp(db, "sale_contracts", active_sale, "contract_date", "2026-02-01")
-
         second = create_version(
             finance_client,
             project_id,
-            effective_from="2026-06-01",
+            effective_from=today(),
             reason="Construction forecast raised",
         )
         cover_required_pools(finance_client, project_id, second, hard="200000.00")
@@ -257,7 +260,7 @@ class TestTheAllocationFreeze:
         _one, unsold = priced_pair
         row = unit_economics(finance_client, project_id, unsold)
         assert row["allocation_version_id"] == second
-        assert row["allocation_effective_from"] == "2026-06-01"
+        assert row["allocation_effective_from"] == today()
         assert row["hard_cost"] == "100000.00"
 
     def test_the_two_units_therefore_disagree_and_should(
@@ -291,10 +294,13 @@ class TestMissingCostBasis:
         active_sale: str,
         priced_pair: tuple[str, str],
     ) -> None:
-        """A February basis is not what a January contract was signed against."""
-        del priced_pair
-        _stamp(db, "sale_contracts", active_sale, "contract_date", "2026-01-01")
-        version_id = create_version(finance_client, project_id, effective_from="2026-02-01")
+        """A basis starting after the signatures is not what the contract was signed against.
+
+        The ``active_sale`` fixture signs on 3 and 4 February, so a basis
+        effective 1 March covers no part of this deal's life.
+        """
+        del priced_pair, db
+        version_id = create_version(finance_client, project_id, effective_from="2026-03-01")
         cover_required_pools(finance_client, project_id, version_id, hard="100000.00")
         assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
 
@@ -316,8 +322,7 @@ class TestMissingCostBasis:
         priced_pair: tuple[str, str],
     ) -> None:
         """The reason the first version may be back-dated at all."""
-        del priced_pair
-        _stamp(db, "sale_contracts", active_sale, "contract_date", "2026-01-01")
+        del priced_pair, db
         version_id = create_version(
             finance_client,
             project_id,
@@ -482,7 +487,7 @@ class TestUnitCosts:
             },
         )
         assert response.status_code == 422
-        assert "which sale" in response.json()["detail"]
+        assert "which contract" in response.json()["detail"]
 
     def test_a_sold_unit_counts_its_actual_costs_and_ignores_the_forecast(
         self,

@@ -45,6 +45,7 @@ from tests.modules.conftest import (
     cover_required_pools,
     create_version,
     economics_url,
+    today,
 )
 
 
@@ -109,10 +110,13 @@ def two_approved_bases(
 ) -> tuple[str, str]:
     """Two rival cost bases for the same period, both approved, neither activated.
 
-    Both start on 1 January deliberately. Two candidates for *different* periods
-    are not a race at all — the later one legitimately supersedes the earlier —
-    so a fixture that dated them apart would prove the supersede path and call
-    it a conflict test.
+    Both start today deliberately, and on the same day. Two candidates for
+    *different* periods are not a race at all — the later one legitimately
+    supersedes the earlier — so a fixture that dated them apart would prove the
+    supersede path and call it a conflict test. Today rather than a fixed date
+    because a replacement may only ever take effect today; a past date would be
+    refused before the race could happen, and the test would pass for the wrong
+    reason.
     """
     del priced_pair
     approved: list[str] = []
@@ -120,7 +124,7 @@ def two_approved_bases(
         version_id = create_version(
             finance_client,
             project_id,
-            effective_from="2026-01-01",
+            effective_from=today(),
             reason=f"Candidate {index}",
         )
         cover_required_pools(finance_client, project_id, version_id, hard=hard)
