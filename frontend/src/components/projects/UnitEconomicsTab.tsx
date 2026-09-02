@@ -21,12 +21,15 @@ import {
   TabPanel,
   TableScroll,
 } from "@/components/ui";
-import { ApiError, unitEconomics } from "@/lib/api";
+import { ApiError, inventory, unitEconomics } from "@/lib/api";
 import type {
   AllocationMethod,
   AllocationVersion,
   AllocationVersionDetail,
+  AreaType,
+  Building,
   CalculationPreview,
+  Phase,
   PoolCategory,
   PoolScope,
   ProjectEconomics,
@@ -831,6 +834,7 @@ function Versions({
 
       {addingPool && detail ? (
         <NewPoolDialog
+          projectId={projectId}
           busy={busy}
           onCancel={() => setAddingPool(false)}
           onSubmit={(body) => {
@@ -926,10 +930,12 @@ function NewVersionDialog({
 }
 
 function NewPoolDialog({
+  projectId,
   busy,
   onCancel,
   onSubmit,
 }: {
+  projectId: string;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
@@ -937,12 +943,43 @@ function NewPoolDialog({
   const [poolNumber, setPoolNumber] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<PoolCategory>("hard");
-  const [fromLandRegister, setFromLandRegister] = useState(false);
   const [amount, setAmount] = useState("0.00");
   const [scope, setScope] = useState<PoolScope>("project");
+  const [phaseId, setPhaseId] = useState("");
+  const [buildingId, setBuildingId] = useState("");
   const [method, setMethod] = useState<AllocationMethod>("unit_count");
+  const [areaTypeId, setAreaTypeId] = useState("");
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
 
-  const derived = category === "land" && fromLandRegister;
+  // A scoped pool is the only way to close a coverage gap — a phase carrying
+  // none of a category needs an explicit zero pool of its own — so the shapes
+  // this form can express have to be the shapes the server accepts.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [nextPhases, nextBuildings, nextAreaTypes] = await Promise.all([
+          inventory.phases(projectId),
+          inventory.buildings(projectId),
+          inventory.areaTypes(projectId),
+        ]);
+        setPhases(nextPhases);
+        setBuildings(nextBuildings);
+        setAreaTypes(nextAreaTypes);
+      } catch {
+        // The pickers stay empty and the scope stays project-wide. A failed
+        // lookup must not stop somebody adding an ordinary pool.
+      }
+    })();
+  }, [projectId]);
+
+  // Land is the register's figure, always. There is no second land number to
+  // type, and a project-wide scope is the only defensible one without a
+  // governed parcel-to-phase attribution.
+  const derived = category === "land";
+  const scopeKind = derived ? "project" : scope;
+  const needsArea = method === "raw_area";
 
   return (
     <FormDialog
@@ -950,7 +987,13 @@ function NewPoolDialog({
       description="One shared amount and the rule for dividing it. Manual amounts are a current forecast allocation input, not a construction ledger."
       confirmLabel="Add pool"
       busy={busy}
-      disabled={poolNumber.trim().length === 0 || name.trim().length === 0}
+      disabled={
+        poolNumber.trim().length === 0 ||
+        name.trim().length === 0 ||
+        (scopeKind === "phase" && phaseId === "") ||
+        (scopeKind === "building" && buildingId === "") ||
+        (needsArea && areaTypeId === "")
+      }
       onCancel={onCancel}
       onSubmit={() =>
         onSubmit({
@@ -959,8 +1002,11 @@ function NewPoolDialog({
           category,
           source_kind: derived ? "project_land" : "manual",
           ...(derived ? {} : { amount }),
-          scope_kind: scope,
+          scope_kind: scopeKind,
+          ...(scopeKind === "phase" ? { phase_id: phaseId } : {}),
+          ...(scopeKind === "building" ? { building_id: buildingId } : {}),
           allocation_method: method,
+          ...(needsArea ? { area_type_id: areaTypeId } : {}),
         })
       }
     >
@@ -987,19 +1033,12 @@ function NewPoolDialog({
           ))}
         </select>
       </Field>
-      {category === "land" ? (
-        <Field
-          label="Source"
-          hint="Derived from the parcels' purchase price and acquisition fees, and re-derived when the basis is made current."
-        >
-          <select
-            value={fromLandRegister ? "register" : "manual"}
-            onChange={(event) => setFromLandRegister(event.target.value === "register")}
-          >
-            <option value="manual">Enter an amount</option>
-            <option value="register">From the land register</option>
-          </select>
-        </Field>
+      {derived ? (
+        <Notice tone="info">
+          Land cost comes from this project&apos;s land register — the parcels&apos; purchase
+          price and acquisition fees — and is re-derived when the basis is made current.
+          There is no amount to enter, and one cost basis draws it once.
+        </Notice>
       ) : null}
       {derived ? null : (
         <Field label="Amount">
@@ -1011,18 +1050,48 @@ function NewPoolDialog({
           />
         </Field>
       )}
-      <Field label="Scope">
-        <select
-          value={scope}
-          onChange={(event) => setScope(event.target.value as PoolScope)}
+      {derived ? null : (
+        <Field
+          label="Scope"
+          hint="A pool reaches the units in its scope and no others. A phase carrying none of this category still needs a pool of its own, for zero."
         >
-          {POOL_SCOPES.filter((value) => value === "project").map((value) => (
-            <option key={value} value={value}>
-              {scopeLabel(value)}
-            </option>
-          ))}
-        </select>
-      </Field>
+          <select value={scope} onChange={(event) => setScope(event.target.value as PoolScope)}>
+            {POOL_SCOPES.map((value) => (
+              <option key={value} value={value}>
+                {scopeLabel(value)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {scopeKind === "phase" ? (
+        <Field label="Phase">
+          <select value={phaseId} onChange={(event) => setPhaseId(event.target.value)} required>
+            <option value="">Choose a phase</option>
+            {phases.map((phase) => (
+              <option key={phase.id} value={phase.id}>
+                {phase.code} — {phase.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {scopeKind === "building" ? (
+        <Field label="Building">
+          <select
+            value={buildingId}
+            onChange={(event) => setBuildingId(event.target.value)}
+            required
+          >
+            <option value="">Choose a building</option>
+            {buildings.map((building) => (
+              <option key={building.id} value={building.id}>
+                {building.code} — {building.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <Field
         label="Allocation method"
         hint="Weighted and raw area read the approved area schedule; revenue value reads the current approved price."
@@ -1031,13 +1100,32 @@ function NewPoolDialog({
           value={method}
           onChange={(event) => setMethod(event.target.value as AllocationMethod)}
         >
-          {ALLOCATION_METHODS.filter((value) => value !== "raw_area").map((value) => (
+          {ALLOCATION_METHODS.map((value) => (
             <option key={value} value={value}>
               {methodLabel(value)}
             </option>
           ))}
         </select>
       </Field>
+      {needsArea ? (
+        <Field
+          label="Area type"
+          hint="Raw area divides by one measured area exactly as recorded, without the weighting the price uses."
+        >
+          <select
+            value={areaTypeId}
+            onChange={(event) => setAreaTypeId(event.target.value)}
+            required
+          >
+            <option value="">Choose an area type</option>
+            {areaTypes.map((areaType) => (
+              <option key={areaType.id} value={areaType.id}>
+                {areaType.code} — {areaType.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
     </FormDialog>
   );
 }

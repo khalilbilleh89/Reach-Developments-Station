@@ -105,7 +105,7 @@ const PROFIT_LABELS: Record<ProfitabilityStatus, string> = {
   ready: "Calculated",
   missing_revenue: "No approved price",
   missing_cost_basis: "No cost basis",
-  unreconciled_cost_basis: "Cost basis does not reconcile",
+  unreconciled_cost_basis: "Cost basis incomplete",
   currency_mismatch: "Currencies differ",
 };
 
@@ -133,7 +133,11 @@ export const PROFIT_EXPLANATIONS: Record<ProfitabilityStatus, string> = {
   missing_cost_basis:
     "No approved allocation version covered this sale's date, so its cost basis is unknown.",
   unreconciled_cost_basis:
-    "The allocation version behind this unit does not add up to its cost pools.",
+    "This unit's cost basis cannot be used. Either the allocation version does not " +
+    "add up to its cost pools, or it never allocated to this unit — a unit created " +
+    "after a version was made current carries no share of its shared costs until a " +
+    "new version includes it. Either way the zeros below are missing figures, not " +
+    "a cost of nothing.",
   currency_mismatch:
     "Revenue and allocated cost use different currencies. Profitability is not " +
     "calculated without an approved exchange basis.",
