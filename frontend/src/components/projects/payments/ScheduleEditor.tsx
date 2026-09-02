@@ -1,9 +1,9 @@
 "use client";
 
 import type { PlanInstallment } from "@/lib/api";
-import { Badge, Button, TableScroll } from "@/components/ui";
+import { Badge, Button, MoneyInput, RateInput, TableScroll } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
+import { businessDate, money, percent, percentInput } from "@/lib/format";
 import {
   DATE_BASED_TRIGGERS,
   REFERENCE_TRIGGERS,
@@ -60,7 +60,7 @@ export function rowFrom(installment: PlanInstallment): DraftRow {
     contractual_due_date: installment.contractual_due_date ?? "",
     forecast_due_date: installment.forecast_due_date ?? "",
     grace_days: String(installment.grace_days),
-    principal_fraction: installment.principal_fraction,
+    principal_fraction: percentInput(installment.principal_fraction),
     principal_amount: installment.principal_amount,
     tax_amount: installment.tax_amount,
     fee_amount: installment.fee_amount,
@@ -112,7 +112,7 @@ export function ScheduleEditor({
             <th scope="col">Trigger</th>
             <th scope="col">Trigger detail</th>
             <th scope="col" className="num">
-              {byPercentage ? "Percentage" : "Principal"}
+              {byPercentage ? "Share" : "Principal"}
             </th>
             {manualCharges ? (
               <>
@@ -163,47 +163,38 @@ export function ScheduleEditor({
               </td>
               <td className="num">
                 {byPercentage ? (
-                  <input
-                    className="input"
-                    inputMode="decimal"
-                    aria-label={`Percentage for instalment ${row.sequence}`}
-                    placeholder="0.250000"
+                  <RateInput
+                    aria-label={`Share for instalment ${row.sequence}`}
+                    placeholder="25"
                     value={row.principal_fraction}
-                    onChange={(event) =>
-                      onChange(row.key, "principal_fraction", event.target.value)
-                    }
+                    onChange={(value) => onChange(row.key, "principal_fraction", value)}
                   />
                 ) : (
-                  <input
-                    className="input"
-                    inputMode="decimal"
+                  <MoneyInput
+                    code={code}
                     aria-label={`Principal for instalment ${row.sequence}`}
                     placeholder="0.00"
                     value={row.principal_amount}
-                    onChange={(event) =>
-                      onChange(row.key, "principal_amount", event.target.value)
-                    }
+                    onChange={(value) => onChange(row.key, "principal_amount", value)}
                   />
                 )}
               </td>
               {manualCharges ? (
                 <>
                   <td className="num">
-                    <input
-                      className="input"
-                      inputMode="decimal"
+                    <MoneyInput
+                      code={code}
                       aria-label={`Tax for instalment ${row.sequence}`}
                       value={row.tax_amount}
-                      onChange={(event) => onChange(row.key, "tax_amount", event.target.value)}
+                      onChange={(value) => onChange(row.key, "tax_amount", value)}
                     />
                   </td>
                   <td className="num">
-                    <input
-                      className="input"
-                      inputMode="decimal"
+                    <MoneyInput
+                      code={code}
                       aria-label={`Buyer fee for instalment ${row.sequence}`}
                       value={row.fee_amount}
-                      onChange={(event) => onChange(row.key, "fee_amount", event.target.value)}
+                      onChange={(value) => onChange(row.key, "fee_amount", value)}
                     />
                   </td>
                 </>
@@ -233,8 +224,9 @@ export function ScheduleEditor({
       </table>
       {code ? (
         <p className="footnote">
-          Amounts are denominated in {code}, taken from the contract. The server derives{" "}
-          {byPercentage ? "each amount from its percentage" : "each percentage from its amount"}
+          Amounts are denominated in {code}, taken from the contract. Shares are typed as
+          percentages and sent as fractions of one. The server derives{" "}
+          {byPercentage ? "each amount from its share" : "each share from its amount"}
           {manualCharges ? "" : ", and spreads tax and buyer fees pro rata"}.
         </p>
       ) : null}
@@ -316,7 +308,7 @@ export function ScheduleTable({
   const code = currencyCodeOf(currencyId);
 
   return (
-    <TableScroll label="Instalment schedule" fixedFirst>
+    <TableScroll label="Instalment schedule" fixedFirst compact>
       <thead>
         <tr>
           <th scope="col" className="num">
@@ -328,7 +320,7 @@ export function ScheduleTable({
           <th scope="col">Forecast</th>
           <th scope="col">Due</th>
           <th scope="col" className="num">
-            %
+            Share
           </th>
           <th scope="col" className="num">
             Principal
@@ -367,10 +359,10 @@ export function ScheduleTable({
                 </>
               ) : null}
             </td>
-            <td className="mono nowrap">{businessDate(row.contractual_due_date)}</td>
-            <td className="mono nowrap">{businessDate(row.forecast_due_date)}</td>
-            <td className="mono nowrap">{businessDate(row.actual_due_date)}</td>
-            <td className="num">{row.principal_fraction}</td>
+            <td className="figure">{businessDate(row.contractual_due_date)}</td>
+            <td className="figure">{businessDate(row.forecast_due_date)}</td>
+            <td className="figure">{businessDate(row.actual_due_date)}</td>
+            <td className="num">{percent(row.principal_fraction)}</td>
             <td className="num">{money(row.principal_amount, code)}</td>
             <td className="num">{money(row.tax_amount, code)}</td>
             <td className="num">{money(row.fee_amount, code)}</td>

@@ -11,6 +11,7 @@ import {
   Drawer,
   EmptyState,
   Field,
+  FieldRow,
   FormActions,
   FormDialog,
   KeyValue,
@@ -21,9 +22,11 @@ import {
   SectionHeader,
   Steps,
   SubPanel,
+  TableScroll,
 } from "@/components/ui";
+import type { DrawerFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money, todayISO } from "@/lib/format";
+import { businessDate, fractionFromPercent, money, todayISO } from "@/lib/format";
 import { ReconciliationStrip } from "@/components/projects/payments/ReconciliationStrip";
 import {
   ScheduleEditor,
@@ -257,7 +260,7 @@ export function PlanBuilder({
             ...(row.forecast_due_date ? { forecast_due_date: row.forecast_due_date } : {}),
             grace_days: Number(row.grace_days || "0"),
             ...(allocationMode === "percentage"
-              ? { principal_fraction: row.principal_fraction }
+              ? { principal_fraction: fractionFromPercent(row.principal_fraction) }
               : { principal_amount: row.principal_amount }),
             ...(chargeMode === "manual"
               ? { tax_amount: row.tax_amount || "0.00", fee_amount: row.fee_amount || "0.00" }
@@ -270,15 +273,15 @@ export function PlanBuilder({
 
   if (error && detail === null) {
     return (
-      <Drawer title="Payment plan" onClose={onClose}>
+      <Drawer eyebrow="Payment plan" title="Payment plan" onClose={onClose}>
         <Notice tone="error">{error}</Notice>
       </Drawer>
     );
   }
   if (detail === null) {
     return (
-      <Drawer title="Loading the payment plan…" onClose={onClose}>
-        <Loading label="Loading the payment plan…" lines={5} />
+      <Drawer eyebrow="Payment plan" title="Loading the payment plan…" onClose={onClose}>
+        <Loading label="Loading the payment plan…" shape="page" />
       </Drawer>
     );
   }
@@ -328,6 +331,23 @@ export function PlanBuilder({
    */
   const collectionsStarted = detail.plan.collections_started_at !== null;
 
+  // The figures every reader opens a plan for. All four are the version's own
+  // frozen basis and the server's reconciliation of the schedule against it.
+  const facts: DrawerFact[] = [
+    { label: "Contract principal", value: money(version?.contract_value_covered ?? null, code) },
+    { label: "Total buyer payable", value: money(version?.total_buyer_payable_snapshot ?? null, code) },
+    {
+      label: "Instalments",
+      value: shownDetail ? shownDetail.reconciliation.installment_count : "—",
+      note: shownDetail
+        ? shownDetail.reconciliation.is_reconciled
+          ? "Reconciled"
+          : "Does not reconcile"
+        : undefined,
+    },
+    { label: "Takes effect", value: businessDate(version?.effective_date) },
+  ];
+
   return (
     <Drawer
       eyebrow="Payment plan"
@@ -340,19 +360,15 @@ export function PlanBuilder({
               v{version.version_number} · {versionLabel(version.status)}
             </Badge>
           ) : null}
-          <span className="chip">
-            <span className="chip-label">Contract</span>
-            <strong className="mono">
-              {money(version?.contract_value_covered ?? null, code)}
-            </strong>
-          </span>
           {active && version && active.version.id !== version.id ? (
             <Badge tone="success">
               v{active.version.version_number} governs this sale
             </Badge>
           ) : null}
+          {collectionsStarted ? <Badge tone="info">Collections started</Badge> : null}
         </>
       }
+      facts={facts}
       tabs={sections}
       activeTab={section}
       onSelectTab={setSection}
@@ -483,7 +499,7 @@ export function PlanBuilder({
                   Proposes the dates only. What each instalment is worth stays with the
                   allocation mode below.
                 </p>
-                <div className="form-grid form-grid-3">
+                <FieldRow columns={4}>
                   <Field label="Frequency">
                     <select
                       className="input"
@@ -508,7 +524,7 @@ export function PlanBuilder({
                   </Field>
                   <Field label="How many" hint="A four-year plan is 48.">
                     <input
-                      className="input input-short"
+                      className="input"
                       inputMode="numeric"
                       value={series.count}
                       onChange={(event) => setSeries({ ...series, count: event.target.value })}
@@ -523,22 +539,22 @@ export function PlanBuilder({
                       }
                     />
                   </Field>
-                  <FormActions>
-                    <Button
-                      variant="primary"
-                      disabled={busy || !series.first_due_date}
-                      onClick={() => void addSeries()}
-                    >
-                      Add these dates
-                    </Button>
-                  </FormActions>
-                </div>
+                </FieldRow>
+                <FormActions>
+                  <Button
+                    variant="primary"
+                    disabled={busy || !series.first_due_date}
+                    onClick={() => void addSeries()}
+                  >
+                    Add these dates
+                  </Button>
+                </FormActions>
               </SubPanel>
             ) : null}
 
             {isDraft && canPrepare ? (
               <>
-                <div className="form-inline">
+                <FieldRow columns={2}>
                   <Field
                     label="Allocation"
                     hint="Whichever you choose, the server derives the other."
@@ -562,7 +578,7 @@ export function PlanBuilder({
                       <option value="manual">{chargeLabel("manual")}</option>
                     </select>
                   </Field>
-                </div>
+                </FieldRow>
                 {rows.length === 0 ? (
                   <EmptyState
                     title="No instalments yet"
@@ -756,7 +772,7 @@ export function PlanBuilder({
         showing === null ? (
           <EmptyState title="No version" hint="This plan has no schedule yet." />
         ) : (
-          <Loading label="Loading that version…" lines={4} />
+          <Loading label="Loading that version…" shape="rows" rows={4} />
         )
       ) : null}
 
@@ -800,30 +816,51 @@ export function PlanBuilder({
             title="Versions"
             description="Every schedule this plan has had. Open one to read it exactly as it stood."
           />
-          <ul className="version-list">
-            {detail.versions.map((entry) => (
-              <li key={entry.id} className="version-entry">
-                <span className="chip-label">v{entry.version_number}</span>
-                <Badge tone={versionTone(entry.status)}>{versionLabel(entry.status)}</Badge>
-                <span className="chip-label mono nowrap">
-                  {businessDate(entry.effective_date)}
-                </span>
-                {entry.id === detail.active?.version.id ? (
-                  <span className="chip-label">Governs this sale</span>
-                ) : null}
-                <Button
-                  small
-                  variant="quiet"
-                  onClick={() => {
-                    setShowing(entry.id);
-                    setSection("schedule");
-                  }}
-                >
-                  View
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <TableScroll label="Plan versions" compact>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col">Takes effect</th>
+                <th scope="col">Standing</th>
+                <th scope="col">
+                  <span className="visually-hidden">Open</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.versions.map((entry) => (
+                <tr key={entry.id}>
+                  <th scope="row" className="mono">
+                    v{entry.version_number}
+                  </th>
+                  <td>
+                    <Badge tone={versionTone(entry.status)}>{versionLabel(entry.status)}</Badge>
+                  </td>
+                  <td className="figure">{businessDate(entry.effective_date)}</td>
+                  <td>
+                    {entry.id === detail.active?.version.id
+                      ? "Governs this sale"
+                      : entry.id === detail.current?.version.id
+                        ? "In preparation"
+                        : "—"}
+                  </td>
+                  <td>
+                    <Button
+                      small
+                      variant="quiet"
+                      onClick={() => {
+                        setShowing(entry.id);
+                        setSection("schedule");
+                      }}
+                    >
+                      View
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
           <p className="footnote">
             Nothing is overwritten. A superseded schedule stays readable exactly as it governed,
             and opening one changes nothing about which schedule the sale runs on.

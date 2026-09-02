@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { paymentPlans } from "@/lib/api";
 import type { PaymentPlanDetail } from "@/lib/api";
-import { Badge, EmptyState, KeyValue, KeyValueGrid, Loading } from "@/components/ui";
+import { Badge, EmptyState, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { ReconciliationBadge } from "@/components/projects/payments/ReconciliationStrip";
@@ -67,7 +67,7 @@ export function PlanSummary({
   }, [load]);
 
   if (denied) return <p className="subtle">Not available to your role.</p>;
-  if (detail === null) return <Loading label="Loading the payment plan…" />;
+  if (detail === null) return <Loading label="Loading the payment plan…" shape="rows" rows={3} />;
   if (detail === "none") {
     return (
       <EmptyState
@@ -93,33 +93,28 @@ export function PlanSummary({
 
   return (
     <>
-      <ul className="chip-list">
-        <li className="chip">
-          <span className="chip-label">Plan</span>
-          <strong className="mono">{detail.plan.plan_number}</strong>
-        </li>
+      <InlineMeta>
+        <InlineMetaItem label="Plan">
+          <span className="mono">{detail.plan.plan_number}</span>
+        </InlineMetaItem>
         {version ? (
-          <li className="chip">
-            <span className="chip-label">v{version.version_number}</span>
-            <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>
-            <span className="chip-label">
-              {governs ? "Governing schedule" : "Not yet governing"}
-            </span>
-          </li>
+          <InlineMetaItem label={`v${version.version_number}`}>
+            <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>{" "}
+            {governs ? "Governing schedule" : "Not yet governing"}
+          </InlineMetaItem>
         ) : null}
         {revision ? (
-          <li className="chip">
-            <span className="chip-label">In preparation</span>
-            <strong>v{revision.version_number}</strong>
+          <InlineMetaItem label="In preparation">
+            v{revision.version_number}{" "}
             <Badge tone={versionTone(revision.status)}>{versionLabel(revision.status)}</Badge>
-          </li>
+          </InlineMetaItem>
         ) : null}
         {reconciliation ? (
-          <li>
+          <InlineMetaItem label="Reconciliation">
             <ReconciliationBadge reconciled={reconciliation.is_reconciled} />
-          </li>
+          </InlineMetaItem>
         ) : null}
-      </ul>
+      </InlineMeta>
       <KeyValueGrid columns={3}>
         <KeyValue
           label="Scheduled principal"

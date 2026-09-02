@@ -8,8 +8,10 @@ import {
   ButtonRow,
   EmptyState,
   Field,
+  FieldRow,
   Form,
   FormActions,
+  MoneyInput,
   Notice,
   PromptDialog,
   SubPanel,
@@ -161,34 +163,36 @@ export function ReceiptPanel({
                 });
               }}
             >
-              <Field
-                label={`Amount${currencyCode ? ` (${currencyCode})` : ""}`}
-                hint="In the contract's currency. This MVP does not convert."
-              >
-                <input
-                  value={form.amount}
-                  onChange={(event) => setForm({ ...form, amount: event.target.value })}
-                  inputMode="decimal"
-                  required
-                />
-              </Field>
-              <Field label="Date received" hint="The day the money arrived. Not a future date.">
-                <input
-                  type="date"
-                  value={form.receipt_date}
-                  max={todayISO()}
-                  onChange={(event) => setForm({ ...form, receipt_date: event.target.value })}
-                  required
-                />
-              </Field>
-              <Field label="Bank reference">
-                <input
-                  value={form.bank_reference}
-                  onChange={(event) => setForm({ ...form, bank_reference: event.target.value })}
-                />
-              </Field>
+              <FieldRow columns={3}>
+                <Field label="Amount" hint="In the contract's currency. Nothing is converted.">
+                  <MoneyInput
+                    code={currencyCode}
+                    value={form.amount}
+                    onChange={(value) => setForm({ ...form, amount: value })}
+                    required
+                  />
+                </Field>
+                <Field label="Date received" hint="The day the money arrived. Not a future date.">
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.receipt_date}
+                    max={todayISO()}
+                    onChange={(event) => setForm({ ...form, receipt_date: event.target.value })}
+                    required
+                  />
+                </Field>
+                <Field label="Bank reference" optional>
+                  <input
+                    className="input"
+                    value={form.bank_reference}
+                    onChange={(event) => setForm({ ...form, bank_reference: event.target.value })}
+                  />
+                </Field>
+              </FieldRow>
               <Field label="Notes">
                 <textarea
+                  className="input"
                   value={form.notes}
                   rows={2}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
@@ -240,8 +244,8 @@ export function ReceiptPanel({
                     {receipt.receipt_number}
                   </th>
                   <td>{businessDate(receipt.receipt_date)}</td>
-                  <td className="num mono">{money(receipt.amount, currencyCode)}</td>
-                  <td className="num mono">
+                  <td className="num">{money(receipt.amount, currencyCode)}</td>
+                  <td className="num">
                     {money(receipt.unapplied_amount, currencyCode)}
                   </td>
                   <td>
@@ -320,7 +324,7 @@ export function ReceiptPanel({
                       <td>
                         {target ? `${target.sequence}. ${target.label}` : "Superseded schedule"}
                       </td>
-                      <td className="num mono">{money(row.amount, currencyCode)}</td>
+                      <td className="num">{money(row.amount, currencyCode)}</td>
                       <td>
                         <Badge tone={allocationTone(row.status)}>
                           {allocationStatusLabel(row.status)}
@@ -382,8 +386,8 @@ export function ReceiptPanel({
                         {row.sequence}. {row.label}
                       </th>
                       <td>{businessDate(row.due_date)}</td>
-                      <td className="num mono">{money(row.outstanding, currencyCode)}</td>
-                      <td className="num mono">{money(row.amount, currencyCode)}</td>
+                      <td className="num">{money(row.outstanding, currencyCode)}</td>
+                      <td className="num">{money(row.amount, currencyCode)}</td>
                       <td>
                         <Button
                           onClick={() =>
@@ -420,6 +424,7 @@ export function ReceiptPanel({
           >
             <Field label="Instalment">
               <select
+                className="input"
                 value={allocation.installment_id}
                 onChange={(event) =>
                   setAllocation({ ...allocation, installment_id: event.target.value })
@@ -437,14 +442,11 @@ export function ReceiptPanel({
                   ))}
               </select>
             </Field>
-            <Field
-              label={`Amount${currencyCode ? ` (${currencyCode})` : ""}`}
-              hint="Anything left over stays unapplied and visible."
-            >
-              <input
+            <Field label="Amount" hint="Anything left over stays unapplied and visible.">
+              <MoneyInput
+                code={currencyCode}
                 value={allocation.amount}
-                onChange={(event) => setAllocation({ ...allocation, amount: event.target.value })}
-                inputMode="decimal"
+                onChange={(value) => setAllocation({ ...allocation, amount: value })}
                 required
               />
             </Field>
