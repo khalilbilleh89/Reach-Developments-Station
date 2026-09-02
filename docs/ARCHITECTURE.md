@@ -152,6 +152,7 @@ The business domains stack in one direction, and it is never reversed:
 
 ```text
 inventory  ↑  pricing  ↑  sales  ↑  payment_plans  ↑  collections
+                               ↑  unit_economics
 ```
 
 `payment_plans` reads sales through its public service contract — a completed
@@ -183,12 +184,37 @@ past that guard, it is deliberately not an HTTP route, and the only caller is
 the restructure — which carries every allocation across in the same transaction
 or refuses outright.
 
+`unit_economics` reads four domains and writes into none of them:
+
+```text
+unit_economics → projects        the land register, for the land cost pool
+unit_economics → inventory       units, scope, and the approved area schedule
+unit_economics → pricing         the current approved price, as revenue and as a driver
+unit_economics → sales           frozen contract terms and frozen seller costs
+```
+
+The interesting part is what is *not* there. A sold unit must keep the cost
+allocation basis that governed when its contract was signed, and the obvious way
+to arrange that — a `sale_contracts.unit_economics_version_id` — would make sales
+depend on a module that arrived four PRs later. So the link is effective dating
+instead: an allocation version carries a window, and the sale's own
+`contract_date` selects the version whose window contains it, permanently. No
+upstream table gained a column, nothing calls back into sales, and there is no
+event or plugin mechanism doing it quietly. It is the same principle as an
+effective-dated price, applied to cost.
+
+The one contract sales gained is a reader, `frozen_seller_costs`, which splits a
+contract's frozen seller costs into their commercial and finance halves. It lives
+in sales because sales owns the quote snapshot those figures come from, and a
+second domain learning the shape of somebody else's JSON is a dependency nobody
+declared.
+
 Reading another domain's rows is ordinary and done directly. Writing them is
-not, and there is no path in collections that does.
+not, and there is no path in collections or unit economics that does.
 
 ---
 
-## 7. Current state (through PR-MVP-07)
+## 7. Current state (through PR-MVP-08)
 
 ```text
 app/
@@ -209,6 +235,7 @@ app/
     ├── sales/               clients, reservations, contracts, legal events, cancellation, handover
     ├── payment_plans/       payment schedules, versions, instalments, triggers
     ├── collections/         receipts, allocations, aging, disputes, waivers, restructures, refunds
+    ├── unit_economics/      cost pools, allocation versions, unit costs, profitability
     └── audit/               append-only governance history
 ```
 
@@ -357,6 +384,35 @@ reads `forecast_due_date` at all — a construction milestone whose expected dat
 passed three months ago is awaiting its trigger, not ninety days overdue, and
 the absence of the branch is a stronger guarantee than a branch that declines to
 take it.
+
+`unit_economics` carries a sixth file for the third time, and the pattern is now
+the rule rather than a coincidence:
+
+```text
+app/modules/unit_economics/
+├── models.py
+├── schemas.py
+├── permissions.py    Finance proposes, a second person approves, never the same one
+├── calculator.py     allocation arithmetic, reconciliation, the profit layers
+├── service.py
+└── api.py
+```
+
+`calculator.py` has no session and no actor. It divides a pool across a set of
+drivers so the parts sum to the whole **exactly** at the money column's scale —
+with the rounding residual going to one deterministic recipient rather than being
+spread, dropped or absorbed by whichever line came last — and it applies the
+profit layers in one fixed order. A ratio whose denominator is not positive comes
+back as nothing, never as zero: an undefined margin and a zero margin are
+different facts, and only one of them is a number to act on.
+
+Two things about that module are worth stating because they look like exceptions
+and are not. **Allocations are stored** while every other total in this platform
+is derived, because an allocation is not derivable twice: reproducing a
+historical one would need the areas and prices as they were, and today's would
+answer a different question. **Profit is not stored** — no `units.margin`, no
+project totals table — because it is derivable from rows that are, and a stored
+margin stops agreeing with its own inputs the first time one of them moves.
 
 PR-MVP-07 adds a fourth truth to the three above:
 
@@ -696,8 +752,11 @@ money is PR-MVP-06, collecting it is PR-MVP-07, and a refund actually paid is a
 payment transaction that belongs there — which is why a cancellation records a
 refund *due* and has no field in which to claim one was made.
 
-No collections, construction or cashflow domain exists. Domains arrive on the
-schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
+No construction or cashflow domain exists. PR-MVP-08's hard-cost pool is an
+economic forecast allocation input and says so on screen; the budget baseline,
+cost codes, contracts, certificates and payments are PR-MVP-09's, and when they
+arrive they may supply a *new* allocation version rather than rewriting an old
+one. Domains arrive on the schedule in [MVP_ROADMAP.md](MVP_ROADMAP.md).
 
 ---
 

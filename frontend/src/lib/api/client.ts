@@ -108,6 +108,19 @@ export function put<T>(path: string, body: Json): Promise<T> {
 }
 
 /**
+ * DELETE a resource that has one.
+ *
+ * Rare on purpose: financial and legal records are reversed, superseded or
+ * withdrawn, and every one of those keeps what was previously believed on the
+ * record. The only route that answers this verb removes a cost pool from an
+ * unsubmitted draft, which nobody has approved and nothing has been sold
+ * against.
+ */
+export function remove(path: string): Promise<void> {
+  return request<void>(path, { method: "DELETE" });
+}
+
+/**
  * POST a CSV file's text as the request body.
  *
  * Raw `text/csv` rather than multipart: the browser reads the file itself with

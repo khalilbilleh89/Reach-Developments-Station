@@ -4,7 +4,7 @@
  * Every network call the application makes goes through one of these.
  */
 
-import { get, patch, post, postCsv, put } from "./client";
+import { get, patch, post, postCsv, put, remove } from "./client";
 import type {
   AdminUser,
   ApprovalThresholds,
@@ -84,6 +84,15 @@ import type {
   UnitPricing,
   UnitRegister,
   UnitStatusEvent,
+  AllocationVersion,
+  AllocationVersionDetail,
+  CalculationPreview,
+  CostPool,
+  ProjectEconomics,
+  UnitAllocation,
+  UnitCost,
+  UnitEconomics as UnitEconomicsRow,
+  UnitEconomicsDetail,
 } from "./types";
 
 export { ApiError } from "./client";
@@ -961,4 +970,110 @@ export const collections = {
       `/projects/${projectId}/collections/sales/${saleId}/collection-clearance`,
       { evidence_reference: evidenceReference },
     ),
+};
+
+/**
+ * Unit economics: what a unit costs, and the governed basis that decided it.
+ *
+ * Every figure these calls return is computed server-side. Nothing here is
+ * recomputed in the browser — not an allocation, not a reconciliation, not a
+ * margin — because the backend is the one place the arithmetic is tested.
+ */
+export const unitEconomics = {
+  summary: (projectId: string) =>
+    get<ProjectEconomics>(`/projects/${projectId}/unit-economics/summary`),
+  units: (projectId: string) =>
+    get<UnitEconomicsRow[]>(`/projects/${projectId}/unit-economics/units`),
+  unit: (projectId: string, unitId: string) =>
+    get<UnitEconomicsDetail>(`/projects/${projectId}/unit-economics/units/${unitId}`),
+  sale: (projectId: string, saleId: string) =>
+    get<UnitEconomicsDetail>(`/projects/${projectId}/unit-economics/sales/${saleId}`),
+  unitCosts: (projectId: string, unitId?: string) =>
+    get<UnitCost[]>(
+      `/projects/${projectId}/unit-economics/unit-costs${unitId ? `?unit_id=${unitId}` : ""}`,
+    ),
+
+  versions: (projectId: string) =>
+    get<AllocationVersion[]>(`/projects/${projectId}/unit-economics/allocation-versions`),
+  version: (projectId: string, versionId: string) =>
+    get<AllocationVersionDetail>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}`,
+    ),
+  allocations: (projectId: string, versionId: string, poolId?: string) =>
+    get<UnitAllocation[]>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/allocations` +
+        (poolId ? `?pool_id=${poolId}` : ""),
+    ),
+
+  createVersion: (projectId: string, body: Record<string, unknown>) =>
+    post<AllocationVersion>(`/projects/${projectId}/unit-economics/allocation-versions`, body),
+  cloneVersion: (projectId: string, versionId: string, body: Record<string, unknown>) =>
+    post<AllocationVersion>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/clone`,
+      body,
+    ),
+
+  addPool: (projectId: string, versionId: string, body: Record<string, unknown>) =>
+    post<CostPool>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/pools`,
+      body,
+    ),
+  updatePool: (
+    projectId: string,
+    versionId: string,
+    poolId: string,
+    body: Record<string, unknown>,
+  ) =>
+    patch<CostPool>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/pools/${poolId}`,
+      body,
+    ),
+  removePool: (projectId: string, versionId: string, poolId: string) =>
+    remove(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/pools/${poolId}`,
+    ),
+  setDrivers: (
+    projectId: string,
+    versionId: string,
+    poolId: string,
+    drivers: { unit_id: string; driver_value: string }[],
+  ) =>
+    put<CostPool>(
+      `/projects/${projectId}/unit-economics/allocation-versions/` +
+        `${versionId}/pools/${poolId}/drivers`,
+      { drivers },
+    ),
+
+  calculate: (projectId: string, versionId: string) =>
+    post<CalculationPreview>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/calculate`,
+      {},
+    ),
+  submitVersion: (projectId: string, versionId: string) =>
+    post<AllocationVersion>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/submit`,
+      {},
+    ),
+  approveVersion: (projectId: string, versionId: string, reason?: string) =>
+    post<AllocationVersion>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/approve`,
+      { reason: reason ?? null },
+    ),
+  rejectVersion: (projectId: string, versionId: string, reason: string) =>
+    post<AllocationVersion>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/reject`,
+      { reason },
+    ),
+  activateVersion: (projectId: string, versionId: string) =>
+    post<AllocationVersion>(
+      `/projects/${projectId}/unit-economics/allocation-versions/${versionId}/activate`,
+      {},
+    ),
+
+  recordUnitCost: (projectId: string, unitId: string, body: Record<string, unknown>) =>
+    post<UnitCost>(`/projects/${projectId}/unit-economics/units/${unitId}/costs`, body),
+  reverseUnitCost: (projectId: string, costId: string, reason: string) =>
+    post<UnitCost>(`/projects/${projectId}/unit-economics/unit-costs/${costId}/reverse`, {
+      reason,
+    }),
 };

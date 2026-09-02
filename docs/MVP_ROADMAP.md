@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-07) |     8 |
-| Remaining                             |     4 |
+| Complete (PR-MVP-00 through PR-MVP-08) |     9 |
+| Remaining                             |     3 |
 
 Engineering PRs are counted separately and never renumber the functional
 sequence:
@@ -277,22 +277,57 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > allocations across in the same transaction — or refuses outright if a single
 > unit of cash cannot be placed.
 
-## PR-MVP-08 — Unit Economics
+## PR-MVP-08 — Unit Economics ✅
 
-- direct unit costs
-- cost pools
-- allocation versions
-- land allocation
-- hard-cost allocation
-- soft-cost allocation
-- variable selling cost
-- finance-cost treatment
-- sold vs unsold unit economics
-- gross profit
-- contribution profit
-- margin
-- return on cost
-- project reconciliation
+- governed allocation versions, one current basis per project
+- cost pools by category — land, hard, soft, finance — scoped to project, phase
+  or building
+- land cost derived from the land register, never retyped
+- five allocation methods: weighted area, raw area, unit count, revenue value
+  and a per-unit custom driver
+- exact Decimal allocation with a deterministic rounding residual
+- stale-source detection at submission and again at activation
+- direct unit costs and variable selling costs, recorded and reversed
+- explicit finance-cost treatment: allocated or excluded, never assumed nil
+- sold vs unsold unit economics on their own bases
+- gross profit, contribution profit, profit after finance
+- margin and return on cost, weighted at project level
+- pool, version and project reconciliation
+- Unit 360 integration and a sale-specific economic read
+
+> **Where the boundary sits.** PR-MVP-04 says what a unit can be sold for and
+> PR-MVP-05 what was actually agreed. PR-MVP-08 says what it costs, and keeps
+> two answers apart rather than blending them: an **unsold** unit is analysed on
+> today's approved price and today's active cost basis, and a **sold** one on
+> the frozen contract terms and the allocation version that was governing when
+> the contract was signed. Activating a new basis tomorrow moves the first and
+> leaves the second exactly where it is, which is why a version has an effective
+> window at all.
+>
+> That freeze is achieved by effective dating, not by a foreign key: nothing in
+> sales, pricing, inventory or projects gained a column, and none of them
+> imports this module. The sale's own contract date, matched against a version's
+> window, is the whole mechanism.
+>
+> Three refusals define the module. Every cost pool must reconcile to its
+> allocations **exactly** — not within a cent — with the rounding residual going
+> to one deterministic recipient. Unlike currencies are never combined: a unit
+> whose revenue is not in the project's cost currency reports both figures and
+> no margin, and the project summary counts it out loud rather than dropping it.
+> And an incomplete input never produces a number: a missing price, a missing
+> cost basis or a stale allocation returns a status saying so, because a
+> fabricated margin is worse than an absent one.
+>
+> Allocations are the one derived-looking thing this platform stores, and the
+> reason is that they are not derivable twice. A version has to preserve which
+> units were eligible, what driver each carried, which approved area schedule and
+> which price version supplied it, and where the residual landed. Profit itself
+> is still computed at read time and stored nowhere.
+>
+> **Not here:** no construction ledger — PR-MVP-09 owns cost codes, contracts,
+> certificates and payments; no cashflow, IRR or NPV — PR-MVP-10 owns those; no
+> FX; no corporate tax. A hard-cost pool is an economic forecast allocation
+> input, and the screens say so.
 
 ## PR-MVP-09 — Construction Control
 

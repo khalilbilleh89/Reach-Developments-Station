@@ -40,6 +40,7 @@ precondition list, which is longer to write and possible to audit.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
@@ -823,6 +824,84 @@ def _jsonable(value: object) -> object:
     if isinstance(value, list):
         return [_jsonable(item) for item in value]
     return value
+
+
+#: The seller-cost components a quote freezes, split by what they really are.
+#:
+#: A subsidised interest rate and an extended-payment NPV cost are the price of
+#: *financing* the deal; a furniture package and a commission top-up are the
+#: price of *doing* it. Both reduce what the developer keeps and they belong on
+#: different lines of an appraisal, so the split is stated once, here, beside
+#: the mapping that decides which adjustments are seller costs at all.
+_COMMERCIAL_SELLER_COST_KEYS = (
+    "seller_package_cost",
+    "upgrade_allowance_cost",
+    "commission_support",
+)
+_FINANCE_SELLER_COST_KEYS = (
+    "financing_subsidy",
+    "extended_terms_npv_cost",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenSellerCosts:
+    """What a signed contract's seller costs were, split commercial from finance.
+
+    ``reconciled`` is false when the two halves do not add up to the contract's
+    own ``seller_cost_total``. A caller must not treat an unreconciled split as
+    a cost breakdown — the honest answer is that this contract's snapshot cannot
+    be decomposed, not a set of figures that nearly add up.
+    """
+
+    commercial: Decimal
+    finance: Decimal
+    reconciled: bool
+
+
+def frozen_seller_costs(sale: SaleContract) -> FrozenSellerCosts:
+    """The seller costs this contract froze, as commercial and finance halves.
+
+    Sales owns the quote snapshot: its keys, its string-encoded decimals and the
+    policy that decides which adjustment type is a seller cost. So Sales owns
+    this reader too, and other domains ask for a typed answer rather than
+    learning the shape of somebody else's JSON.
+
+    The snapshot is read rather than the reservation's adjustment rows because
+    the snapshot is what the contract froze. Adjustments belong to a reservation
+    that has since been converted, and "what the parties signed" must not depend
+    on a row that lives under a different lifecycle.
+
+    Note for anyone computing profit from this: ``effective_net_revenue_snapshot``
+    has *already* subtracted both halves. Use ``net_contract_price_ex_tax`` as
+    revenue and subtract these once, or use the effective figure and subtract
+    nothing — never both.
+    """
+    snapshot = sale.reservation_quote_snapshot_json or {}
+
+    def total(keys: tuple[str, ...]) -> Decimal:
+        found = Decimal("0")
+        for key in keys:
+            raw = snapshot.get(key)
+            if raw is None:
+                continue
+            try:
+                found += Decimal(str(raw))
+            except (ArithmeticError, ValueError):
+                return Decimal("-1")
+        return found
+
+    commercial = total(_COMMERCIAL_SELLER_COST_KEYS)
+    finance = total(_FINANCE_SELLER_COST_KEYS)
+    if commercial < 0 or finance < 0:
+        return FrozenSellerCosts(
+            commercial=Decimal("0.00"), finance=Decimal("0.00"), reconciled=False
+        )
+    return FrozenSellerCosts(
+        commercial=money(commercial),
+        finance=money(finance),
+        reconciled=money(commercial + finance) == money(sale.seller_cost_total),
+    )
 
 
 def _quote_inputs(

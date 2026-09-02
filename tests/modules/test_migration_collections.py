@@ -63,12 +63,20 @@ class TestTheRevision:
             assert forbidden not in columns
 
     def test_there_is_exactly_one_head(self) -> None:
+        """One head, and 0007 is still on the path to it.
+
+        The head itself moves with every migration PR — 0008 owns it now — so
+        pinning the name here would make this file fail on somebody else's
+        change. What 0007 has to keep proving is that it is still reachable in
+        the one linear history, not that it is still last.
+        """
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         assert len(script.get_heads()) == 1
-        assert script.get_current_head() == "0007_collections"
+        history = {revision.revision for revision in script.walk_revisions()}
+        assert "0007_collections" in history
 
     def test_the_revision_sits_directly_on_payment_plans(self) -> None:
         from alembic.config import Config

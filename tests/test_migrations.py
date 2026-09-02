@@ -19,7 +19,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0007_collections"
+HEAD_REVISION = "0008_unit_economics"
 
 
 def _alembic_config() -> Config:
