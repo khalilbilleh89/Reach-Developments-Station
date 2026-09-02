@@ -15,6 +15,7 @@ import {
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { UnitCollections } from "@/components/projects/collections/UnitCollections";
 import {
   gateLabel,
   gateTone,
@@ -110,6 +111,11 @@ export function UnitSummary({
           <p className="footnote">Outstanding: {unit.missing_requirements.join(", ")}.</p>
         ) : null}
       </section>
+
+      <UnitCollections
+        projectId={unit.project_id}
+        saleId={commitment?.sale?.sale?.id ?? null}
+      />
 
       <section>
         <SectionHeader

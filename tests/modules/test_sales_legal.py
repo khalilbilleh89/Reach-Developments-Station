@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.modules.conftest import inventory_url, record_legal, sales_url
+from tests.modules.conftest import (
+    inventory_url,
+    record_legal,
+    sales_url,
+    settle_and_clear_collections,
+)
 
 
 def _timeline(client: TestClient, project_id: str, sale_id: str) -> dict:
@@ -187,10 +192,16 @@ def test_title_transfer_waits_for_the_collection_clearance_the_project_requires(
     legal_client: TestClient,
     sales_ops_client: TestClient,
     collections_client: TestClient,
+    finance_client: TestClient,
     project_id: str,
     active_sale: str,
+    active_plan: tuple[str, str],
 ) -> None:
-    """The default policy requires collections to be clear before title moves."""
+    """The default policy requires collections to be clear before title moves.
+
+    From PR-MVP-07 that clearance is checked against the receivables ledger
+    rather than attested, so the gate only opens once the money is actually in.
+    """
     for event_type, event_date in (
         ("land_registry_lodged", "2026-02-10"),
         ("registered", "2026-02-20"),
@@ -208,12 +219,8 @@ def test_title_transfer_waits_for_the_collection_clearance_the_project_requires(
         f"{sales_url(project_id)}/contracts/{active_sale}/handover", json={}
     )
     assert handover.status_code == 201, handover.text
-    handover_id = handover.json()["handover"]["id"]
-    cleared = collections_client.post(
-        f"{sales_url(project_id)}/handovers/{handover_id}/clearances/collection",
-        json={"evidence_reference": "STATEMENT-2026-03"},
-    )
-    assert cleared.status_code == 200, cleared.text
+    assert handover.json()["handover"]["id"]
+    settle_and_clear_collections(collections_client, finance_client, project_id, active_sale)
 
     allowed = legal_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/legal-events",

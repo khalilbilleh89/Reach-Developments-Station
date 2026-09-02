@@ -8,11 +8,13 @@ tests should fail if that stops being true.
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
@@ -1096,3 +1098,280 @@ def other_phase_plan(
         "manual_installment_id": by_sequence[2]["id"],
         "event_id": attested.json()["id"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Collections (PR-MVP-07)
+# --------------------------------------------------------------------------- #
+
+
+def collections_url(project_id: str) -> str:
+    return f"/api/v1/projects/{project_id}/collections"
+
+
+@pytest.fixture
+def second_collections_officer(db: Session) -> User:
+    """A second collections officer, for the cases where the first is the maker."""
+    return make_user(db, email="collections2@example.com", roles=("collections",))
+
+
+@pytest.fixture
+def second_collections_client(
+    admin_client: TestClient, project_id: str, second_collections_officer: User
+) -> TestClient:
+    grant_access(admin_client, project_id, second_collections_officer)
+    return client_for(second_collections_officer.email)
+
+
+@pytest.fixture
+def collections_and_finance(db: Session) -> User:
+    """One person holding both roles.
+
+    The point of this fixture is that holding both must not make somebody a
+    complete maker/checker pair on their own: the separation is enforced by
+    user identifier, not by role, so this user can record a receipt or confirm
+    somebody else's but never both halves of the same one.
+    """
+    return make_user(db, email="both@example.com", roles=("collections", "finance"))
+
+
+@pytest.fixture
+def both_roles_client(
+    admin_client: TestClient, project_id: str, collections_and_finance: User
+) -> TestClient:
+    grant_access(admin_client, project_id, collections_and_finance)
+    return client_for(collections_and_finance.email)
+
+
+@pytest.fixture
+def second_finance(db: Session) -> User:
+    return make_user(db, email="finance2@example.com", roles=("finance",))
+
+
+@pytest.fixture
+def second_finance_client(
+    admin_client: TestClient, project_id: str, second_finance: User
+) -> TestClient:
+    grant_access(admin_client, project_id, second_finance)
+    return client_for(second_finance.email)
+
+
+def collection_account(
+    client: TestClient, project_id: str, sale_id: str, **params: object
+) -> dict[str, Any]:
+    """One sale's collections account, as the API reports it."""
+    response = client.get(f"{collections_url(project_id)}/sales/{sale_id}", params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def governing_installments(
+    client: TestClient, project_id: str, sale_id: str
+) -> list[dict[str, Any]]:
+    """The instalments of the schedule currently governing the sale."""
+    return collection_account(client, project_id, sale_id)["installments"]
+
+
+def record_receipt(
+    client: TestClient,
+    project_id: str,
+    sale_id: str,
+    amount: str,
+    receipt_date: str = "2026-01-15",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {"amount": amount, "receipt_date": receipt_date}
+    body.update(overrides)
+    return client.post(f"{collections_url(project_id)}/sales/{sale_id}/receipts", json=body)
+
+
+def confirm_receipt(client: TestClient, project_id: str, receipt_id: str) -> Response:
+    return client.post(f"{collections_url(project_id)}/receipts/{receipt_id}/confirm", json={})
+
+
+def allocate(
+    client: TestClient,
+    project_id: str,
+    receipt_id: str,
+    installment_id: str,
+    amount: str,
+) -> Response:
+    return client.post(
+        f"{collections_url(project_id)}/receipts/{receipt_id}/allocations",
+        json={"installment_id": installment_id, "amount": amount},
+    )
+
+
+@pytest.fixture
+def collecting_sale(
+    collections_client: TestClient,
+    project_id: str,
+    active_sale: str,
+    active_plan: tuple[str, str],
+) -> str:
+    """A live contract with a governing schedule, ready to receive cash.
+
+    The schedule is the 20 / 30 / 50 one from ``reconciled_plan``, activated.
+    Every collections test that needs a receivable starts here.
+    """
+    del collections_client, active_plan
+    return active_sale
+
+
+@pytest.fixture
+def recorded_receipt(collections_client: TestClient, project_id: str, collecting_sale: str) -> str:
+    """Cash claimed but not yet accepted by Finance. Counts as nothing."""
+    response = record_receipt(collections_client, project_id, collecting_sale, "10000.00")
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def confirmed_receipt(finance_client: TestClient, project_id: str, recorded_receipt: str) -> str:
+    """Cash Finance has accepted. This is the first real money in the system."""
+    response = confirm_receipt(finance_client, project_id, recorded_receipt)
+    assert response.status_code == 200, response.text
+    return recorded_receipt
+
+
+def settle_and_clear_collections(
+    collections_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    sale_id: str,
+) -> None:
+    """Pay a sale off in full and sign off its collection clearance.
+
+    From PR-MVP-07 the collection clearance is no longer an attestation: it is
+    checked against the receivables ledger, so a handover test that needs the
+    gate open has to give the ledger something to be clear about. This is the
+    shortest honest way to do that — a receipt per instalment, confirmed and
+    applied exactly, leaving nothing outstanding and nothing unapplied.
+    """
+    rows = governing_installments(collections_client, project_id, sale_id)
+    assert rows, "the sale needs an active payment schedule before it can be cleared"
+    for row in rows:
+        if row["outstanding"] == "0.00":
+            continue
+        recorded = record_receipt(collections_client, project_id, sale_id, row["outstanding"])
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        applied = allocate(
+            collections_client, project_id, receipt_id, row["installment_id"], row["outstanding"]
+        )
+        assert applied.status_code == 201, applied.text
+
+    granted = collections_client.post(
+        f"{collections_url(project_id)}/sales/{sale_id}/collection-clearance",
+        json={"evidence_reference": "LEDGER-CLEAR"},
+    )
+    assert granted.status_code == 200, granted.text
+
+
+# --------------------------------------------------------------------------- #
+# Giving a test a past to read
+# --------------------------------------------------------------------------- #
+
+#: The tables whose lifecycle timestamps a test may move. Named explicitly
+#: rather than accepting any string, because the point of the helper is to
+#: simulate elapsed time on append-only rows, not to be a general back door
+#: into the schema.
+_HISTORICAL_TABLES = frozenset(
+    {
+        "payment_plan_versions",
+        "collection_receipts",
+        "collection_receipt_allocations",
+        "collection_disputes",
+        "collection_waivers",
+    }
+)
+
+
+def at(day: str | date, hour: int = 12) -> datetime:
+    """Midday UTC on a given day, for stamping a lifecycle column."""
+    when = date.fromisoformat(day) if isinstance(day, str) else day
+    return datetime.combine(when, time(hour=hour), tzinfo=UTC)
+
+
+def backdate(db: Session, *, table: str, row_id: str, **stamps: datetime | None) -> None:
+    """Move one row's lifecycle timestamps, so the test has a history to read.
+
+    Collections derives every historical figure from when things actually
+    happened — a plan activated, a receipt confirmed, an allocation superseded.
+    A test that wants to ask "what did March look like?" therefore needs rows
+    that were stamped in March, and no amount of driving the API can produce
+    them: activation stamps ``now`` and refuses a receipt dated in the future.
+
+    So the arrangement is done here, against the same PostgreSQL the code
+    reads, and every assertion afterwards goes through the ordinary route. What
+    is simulated is the passage of time, never a figure.
+    """
+    assert table in _HISTORICAL_TABLES, f"{table} is not a lifecycle table"
+    assert stamps, "backdate needs at least one timestamp; an empty SET is invalid SQL"
+    assignments = ", ".join(f"{column} = :{column}" for column in stamps)
+    db.execute(
+        text(f"UPDATE {table} SET {assignments} WHERE id = :row_id"),
+        {**stamps, "row_id": row_id},
+    )
+    db.commit()
+
+
+@pytest.fixture
+def historical_schedule(
+    collections_client: TestClient,
+    db: Session,
+    project_id: str,
+    collecting_sale: str,
+    plan_id: str,
+) -> str:
+    """The fixture schedule, as though it had been activated on 5 January 2026.
+
+    The 20 / 30 / 50 schedule falls due on 1 March, 1 June and 1 September, so
+    every test that wants to age it on a named date needs it to have been
+    governing the sale on that date. It really was activated today, and
+    Collections reconstructs the governing version from when it was activated,
+    so without this the honest answer to "what did March look like?" is "this
+    sale had no schedule then".
+    """
+    del collecting_sale
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    backdate(db, table="payment_plan_versions", row_id=version_id, activated_at=at("2026-01-05"))
+    return version_id
+
+
+@pytest.fixture
+def relative_plan(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    plan_id: str,
+) -> dict[str, Any]:
+    """A governing schedule anchored to today rather than to a fixed calendar.
+
+    Three instalments, one of each shape the "due now" rule has to separate:
+    one long past its date, one whose date has passed but is still inside its
+    grace period, and one falling due three months from now. The dates move
+    with the clock, so the assertions below stay true whenever the suite runs —
+    a fixture pinned to named dates would quietly change meaning as those dates
+    slid into the past.
+    """
+    version_id = current_version_id(collections_client, project_id, plan_id)
+    today = date.today()
+    response = write_schedule(
+        collections_client,
+        project_id,
+        plan_id,
+        version_id,
+        [
+            fixed_row(1, "0.200000", (today - timedelta(days=120)).isoformat()),
+            fixed_row(2, "0.300000", (today - timedelta(days=3)).isoformat(), grace_days=10),
+            fixed_row(3, "0.500000", (today + timedelta(days=90)).isoformat()),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Terms agreed"}).status_code == 200
+    assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+    return {"plan_id": plan_id, "version_id": version_id}

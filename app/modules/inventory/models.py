@@ -153,6 +153,7 @@ STATUS_NOT_STARTED = "not_started"
 STATUS_DIMENSIONS = ("commercial", "legal", "collection", "delivery")
 DIMENSION_COMMERCIAL = "commercial"
 DIMENSION_LEGAL = "legal"
+DIMENSION_COLLECTION = "collection"
 
 #: What an area measures. ``internal`` is the legal saleable interior and a
 #: project may configure at most one active one — see the partial index below.

@@ -10,8 +10,18 @@ import type {
   ApprovalThresholds,
   AreaSchedule,
   AreaType,
+  AgingRow,
   AuditEvent,
   Building,
+  CollectionAction,
+  CollectionClearance,
+  CollectionDispute,
+  CollectionProjectSummary,
+  CollectionRefund,
+  CollectionRegisterRow,
+  CollectionRestructure,
+  CollectionSaleSummary,
+  CollectionWaiver,
   CountryPack,
   Currency,
   CurrentUser,
@@ -34,6 +44,11 @@ import type {
   PlanningControl,
   PriceRegister,
   PriceVersion,
+  Receipt,
+  ReceiptAllocation as ReceiptAllocationResponse,
+  RestructureApplyResult,
+  RestructurePreview,
+  SuggestedAllocation,
   PriceVersionDetail,
   PricingAreaRule,
   PricingConfiguration,
@@ -794,5 +809,156 @@ export const paymentPlans = {
     post<InstallmentTriggerEvent>(
       `/projects/${projectId}/payment-plans/${planId}/trigger-events/${eventId}/reverse`,
       { reason },
+    ),
+};
+
+
+/**
+ * Collections — the ledger of what actually arrived.
+ *
+ * Every figure these return is derived on the server. Nothing in the browser
+ * works out an outstanding balance, a day count, an aging bucket or whether an
+ * account may be cleared: those are financial truths, and two implementations
+ * of a financial truth is one implementation too many.
+ */
+export const collections = {
+  summary: (projectId: string, asOf?: string) =>
+    get<CollectionProjectSummary>(
+      `/projects/${projectId}/collections/summary${asOf ? `?as_of=${asOf}` : ""}`,
+    ),
+  receivables: (projectId: string, asOf?: string) =>
+    get<CollectionRegisterRow[]>(
+      `/projects/${projectId}/collections/receivables${asOf ? `?as_of=${asOf}` : ""}`,
+    ),
+  aging: (projectId: string, params: { asOf?: string; overdueOnly?: boolean } = {}) => {
+    const query = new URLSearchParams();
+    if (params.asOf) query.set("as_of", params.asOf);
+    if (params.overdueOnly) query.set("overdue_only", "true");
+    const suffix = query.toString();
+    return get<AgingRow[]>(
+      `/projects/${projectId}/collections/aging${suffix ? `?${suffix}` : ""}`,
+    );
+  },
+
+  account: (projectId: string, saleId: string, asOf?: string) =>
+    get<CollectionSaleSummary>(
+      `/projects/${projectId}/collections/sales/${saleId}${asOf ? `?as_of=${asOf}` : ""}`,
+    ),
+  receipts: (projectId: string, saleId: string) =>
+    get<Receipt[]>(`/projects/${projectId}/collections/sales/${saleId}/receipts`),
+  actions: (projectId: string, saleId: string) =>
+    get<CollectionAction[]>(`/projects/${projectId}/collections/sales/${saleId}/actions`),
+  disputes: (projectId: string, saleId: string) =>
+    get<CollectionDispute[]>(`/projects/${projectId}/collections/sales/${saleId}/disputes`),
+  waivers: (projectId: string, saleId: string) =>
+    get<CollectionWaiver[]>(`/projects/${projectId}/collections/sales/${saleId}/waivers`),
+  restructures: (projectId: string, saleId: string) =>
+    get<CollectionRestructure[]>(
+      `/projects/${projectId}/collections/sales/${saleId}/restructures`,
+    ),
+  refunds: (projectId: string, saleId: string) =>
+    get<CollectionRefund[]>(`/projects/${projectId}/collections/sales/${saleId}/refunds`),
+  clearance: (projectId: string, saleId: string) =>
+    get<CollectionClearance>(
+      `/projects/${projectId}/collections/sales/${saleId}/collection-clearance`,
+    ),
+
+  recordReceipt: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<Receipt>(`/projects/${projectId}/collections/sales/${saleId}/receipts`, body),
+  receipt: (projectId: string, receiptId: string) =>
+    get<Receipt>(`/projects/${projectId}/collections/receipts/${receiptId}`),
+  suggestions: (projectId: string, receiptId: string) =>
+    get<SuggestedAllocation[]>(
+      `/projects/${projectId}/collections/receipts/${receiptId}/suggested-allocations`,
+    ),
+  confirmReceipt: (projectId: string, receiptId: string) =>
+    post<Receipt>(`/projects/${projectId}/collections/receipts/${receiptId}/confirm`, {}),
+  reverseReceipt: (projectId: string, receiptId: string, reason: string) =>
+    post<Receipt>(`/projects/${projectId}/collections/receipts/${receiptId}/reverse`, {
+      reason,
+    }),
+
+  allocate: (projectId: string, receiptId: string, body: Record<string, unknown>) =>
+    post<ReceiptAllocationResponse>(
+      `/projects/${projectId}/collections/receipts/${receiptId}/allocations`,
+      body,
+    ),
+  reverseAllocation: (projectId: string, allocationId: string, reason: string) =>
+    post<ReceiptAllocationResponse>(
+      `/projects/${projectId}/collections/allocations/${allocationId}/reverse`,
+      { reason },
+    ),
+
+  recordAction: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<CollectionAction>(
+      `/projects/${projectId}/collections/sales/${saleId}/actions`,
+      body,
+    ),
+
+  openDispute: (projectId: string, installmentId: string, reason: string) =>
+    post<CollectionDispute>(
+      `/projects/${projectId}/collections/installments/${installmentId}/disputes`,
+      { reason },
+    ),
+  resolveDispute: (projectId: string, disputeId: string, resolution: string) =>
+    post<CollectionDispute>(
+      `/projects/${projectId}/collections/disputes/${disputeId}/resolve`,
+      { resolution },
+    ),
+  withdrawDispute: (projectId: string, disputeId: string, resolution: string) =>
+    post<CollectionDispute>(
+      `/projects/${projectId}/collections/disputes/${disputeId}/withdraw`,
+      { resolution },
+    ),
+
+  submitWaiver: (projectId: string, installmentId: string, body: Record<string, unknown>) =>
+    post<CollectionWaiver>(
+      `/projects/${projectId}/collections/installments/${installmentId}/waivers`,
+      body,
+    ),
+  approveWaiver: (projectId: string, waiverId: string) =>
+    post<CollectionWaiver>(`/projects/${projectId}/collections/waivers/${waiverId}/approve`, {}),
+  rejectWaiver: (projectId: string, waiverId: string, reason: string) =>
+    post<CollectionWaiver>(`/projects/${projectId}/collections/waivers/${waiverId}/reject`, {
+      reason,
+    }),
+  revokeWaiver: (projectId: string, waiverId: string, reason: string) =>
+    post<CollectionWaiver>(`/projects/${projectId}/collections/waivers/${waiverId}/revoke`, {
+      reason,
+    }),
+
+  createRestructure: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<CollectionRestructure>(
+      `/projects/${projectId}/collections/sales/${saleId}/restructures`,
+      body,
+    ),
+  previewRestructure: (projectId: string, restructureId: string) =>
+    get<RestructurePreview>(
+      `/projects/${projectId}/collections/restructures/${restructureId}/preview`,
+    ),
+  applyRestructure: (projectId: string, restructureId: string) =>
+    post<RestructureApplyResult>(
+      `/projects/${projectId}/collections/restructures/${restructureId}/apply`,
+      {},
+    ),
+  abandonRestructure: (projectId: string, restructureId: string, reason: string) =>
+    post<CollectionRestructure>(
+      `/projects/${projectId}/collections/restructures/${restructureId}/abandon`,
+      { reason },
+    ),
+
+  recordRefund: (projectId: string, saleId: string, body: Record<string, unknown>) =>
+    post<CollectionRefund>(`/projects/${projectId}/collections/sales/${saleId}/refunds`, body),
+  confirmRefund: (projectId: string, refundId: string) =>
+    post<CollectionRefund>(`/projects/${projectId}/collections/refunds/${refundId}/confirm`, {}),
+  reverseRefund: (projectId: string, refundId: string, reason: string) =>
+    post<CollectionRefund>(`/projects/${projectId}/collections/refunds/${refundId}/reverse`, {
+      reason,
+    }),
+
+  grantClearance: (projectId: string, saleId: string, evidenceReference: string) =>
+    post<CollectionClearance>(
+      `/projects/${projectId}/collections/sales/${saleId}/collection-clearance`,
+      { evidence_reference: evidenceReference },
     ),
 };

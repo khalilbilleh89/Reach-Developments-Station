@@ -40,12 +40,13 @@ precondition list, which is longer to write and possible to audit.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, exists, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import (
     ConflictError,
@@ -55,6 +56,7 @@ from app.core.errors import (
 )
 from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import User
+from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import record_event
 from app.modules.inventory import custom_fields as inventory_fields
 from app.modules.inventory import service as inventory_service
@@ -3404,6 +3406,45 @@ def _open_cancellation(session: Session, *, sale_id: uuid.UUID) -> SaleCancellat
     ).first()
 
 
+#: The one audit action that records a cancellation moving between states, and
+#: therefore the only place the moment of a withdrawal is written down.
+_CANCELLATION_ADVANCED = "sale_cancellation.advanced"
+
+
+def cancellation_withdrawn_on(as_of: date) -> ColumnElement[bool]:
+    """Had this cancellation been withdrawn by ``as_of``? A correlated predicate.
+
+    A withdrawn case is one the parties dropped: the contract goes back to
+    live, and what the case proposed to pay out is not owed. Collections has to
+    know that at a date and not only now — a refund sanctioned in March and the
+    case dropped in June was a real liability in April — and the row itself
+    keeps only today's answer, in ``status``.
+
+    ``updated_at`` is not the withdrawal moment and must not be read as one: it
+    moves for any write, and :func:`approve_cancellation_terms` will still sign
+    financial terms on a case that has already been dropped. The moment is
+    written down exactly once, by :func:`advance_cancellation`, in the audit
+    trail — append-only by construction and committed in the same transaction
+    as the status change, so neither can exist without the other. That makes it
+    a lifecycle fact rather than a log about one, and reading it is why this
+    needs no new column and no migration.
+
+    Sales owns the event name and the snapshot shape, so Sales owns this
+    predicate and Collections composes it into one batched query instead of
+    learning either. On the current date it agrees exactly with
+    ``status == 'withdrawn'``, because one function writes both.
+    """
+    return exists(
+        select(AuditEvent.id).where(
+            AuditEvent.entity_type == ENTITY_CANCELLATION,
+            AuditEvent.entity_id == SaleCancellation.id,
+            AuditEvent.action == _CANCELLATION_ADVANCED,
+            AuditEvent.after_data["status"].astext == CANCELLATION_WITHDRAWN,
+            AuditEvent.occurred_at < _as_of_bound(as_of),
+        )
+    )
+
+
 def start_cancellation(
     session: Session,
     *,
@@ -3607,7 +3648,7 @@ def advance_cancellation(
     _flush(session)
     record_event(
         session,
-        action="sale_cancellation.advanced",
+        action=_CANCELLATION_ADVANCED,
         entity_type=ENTITY_CANCELLATION,
         entity_id=cancellation.id,
         correlation_id=actor.correlation_id,
@@ -3893,6 +3934,245 @@ def _current_clearance(
     ).first()
 
 
+def _refuse_manual_collection_clearance(clearance_type: str) -> None:
+    """Close the generic routes — both of them — for the clearance with a ledger.
+
+    Guards granting *and* revoking, so the message names both. A caller told
+    only how to grant it, while being refused a revocation, would reasonably
+    conclude the withdrawal was somebody else's job rather than something the
+    ledger already does on its own.
+
+    Until PR-MVP-07 there was nothing to check a collection clearance against,
+    so it was an attestation like the other two: somebody in Collections said
+    the account was clear and the system took their word for it. There is a
+    ledger now, and a signature that can contradict it is not a gate.
+
+    Legal and delivery are untouched. Their concerns are judgements this system
+    holds no arithmetic for, and an attestation remains the honest shape.
+    """
+    if clearance_type == CLEARANCE_COLLECTION:
+        raise ConflictError(
+            "The collection clearance is given and withdrawn from the Collections "
+            "account, where it is checked against the receivable. Sign it off there — "
+            "and it is withdrawn there too, automatically, whenever the ledger reopens."
+        )
+
+
+def _as_of_bound(as_of: date) -> datetime:
+    """The first instant after ``as_of``.
+
+    The same boundary Collections uses, restated here rather than imported: the
+    dependency runs collections → sales and must not be turned around for one
+    two-line function.
+    """
+    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
+
+
+def _clearance_for_sale(
+    session: Session, *, sale_id: uuid.UUID
+) -> tuple[HandoverRecord, HandoverClearance | None] | None:
+    """This sale's handover and its live collection clearance, if there is one."""
+    handover = session.scalars(
+        select(HandoverRecord).where(HandoverRecord.sale_contract_id == sale_id)
+    ).first()
+    if handover is None:
+        return None
+    return handover, _current_clearance(
+        session, handover_id=handover.id, clearance_type=CLEARANCE_COLLECTION
+    )
+
+
+def apply_collection_clearance(
+    session: Session,
+    *,
+    project: Project,
+    sale_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    evidence_reference: str,
+) -> HandoverClearance:
+    """Record Collections' sign-off, on Collections' say-so. Does not commit.
+
+    Sales keeps owning :class:`HandoverClearance` — the rows, the partial index
+    that permits one live clearance per type, and the handover gate that reads
+    them. What it no longer owns is the decision, because the facts the decision
+    rests on live in a ledger this module cannot see and should not learn to.
+
+    The caller has already proved the account is clear. This writes the row.
+    """
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        raise ConflictError(
+            "This sale has no handover record yet, so there is no collection clearance "
+            "to give. Start the handover first."
+        )
+    handover, clearance = found
+    if handover.status == HANDOVER_HANDED_OVER:
+        raise ConflictError("This unit has already been handed over.")
+    if clearance is None:
+        clearance = HandoverClearance(
+            project_id=project.id,
+            handover_id=handover.id,
+            clearance_type=CLEARANCE_COLLECTION,
+            status=CLEARANCE_PENDING,
+        )
+        session.add(clearance)
+    if clearance.status == CLEARANCE_CLEARED:
+        raise ConflictError("This clearance has already been given.")
+
+    before = _snapshot(clearance, _CLEARANCE_FIELDS)
+    clearance.status = CLEARANCE_CLEARED
+    clearance.evidence_reference = evidence_reference
+    clearance.cleared_by_user_id = actor_user_id
+    clearance.cleared_at = _now()
+    _flush(session)
+    record_event(
+        session,
+        action="handover.clearance_granted",
+        entity_type=ENTITY_CLEARANCE,
+        entity_id=clearance.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        before=before,
+        after=_snapshot(clearance, _CLEARANCE_FIELDS),
+    )
+    return clearance
+
+
+def revoke_collection_clearance(
+    session: Session,
+    *,
+    project: Project,
+    sale_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    reason: str,
+) -> HandoverClearance | None:
+    """Withdraw the collection clearance when the ledger reopens. Does not commit.
+
+    Returns ``None`` when there was nothing to withdraw, because the common case
+    is exactly that: most receipt reversals happen on accounts nobody ever
+    cleared, and a caller that had to distinguish "no handover yet" from "no
+    clearance yet" from "already revoked" before every reversal would grow three
+    branches for one outcome.
+
+    A revoked row stays and, before handover, a fresh pending one replaces it,
+    so the gate is closed again and the record still shows that somebody cleared
+    it and the ledger later disagreed.
+
+    **After handover the clearance is still revoked.** The physical handover is
+    untouched — the keys are with the buyer and no part of this system claims
+    otherwise — but the financial sign-off is a statement about the ledger, and
+    the ledger has reopened. Leaving it reading ``cleared`` beside an account
+    that is owed money again is the one outcome that would let a reversed
+    receipt disappear from every screen that matters. What is *not* done is
+    queue a new pending clearance: a pending gate on a completed handover would
+    be a gate on nothing, and would read as though the unit were waiting to be
+    handed over a second time.
+    """
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        return None
+    handover, clearance = found
+    if clearance is None or clearance.status != CLEARANCE_CLEARED:
+        return None
+    handed_over = handover.status == HANDOVER_HANDED_OVER
+
+    before = _snapshot(clearance, _CLEARANCE_FIELDS)
+    clearance.status = CLEARANCE_REVOKED
+    clearance.revoked_by_user_id = actor_user_id
+    clearance.revoked_at = _now()
+    clearance.revocation_reason = reason
+    if not handed_over:
+        session.add(
+            HandoverClearance(
+                project_id=project.id,
+                handover_id=handover.id,
+                clearance_type=CLEARANCE_COLLECTION,
+                status=CLEARANCE_PENDING,
+            )
+        )
+    _flush(session)
+    record_event(
+        session,
+        action="handover.clearance_revoked",
+        entity_type=ENTITY_CLEARANCE,
+        entity_id=clearance.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(clearance, _CLEARANCE_FIELDS),
+    )
+    return clearance
+
+
+def collection_clearance_status(session: Session, *, sale_id: uuid.UUID) -> str | None:
+    """The live collection clearance's status, for the collections account view."""
+    found = _clearance_for_sale(session, sale_id=sale_id)
+    if found is None:
+        return None
+    _, clearance = found
+    return clearance.status if clearance is not None else None
+
+
+def collection_clearance_status_as_of(
+    session: Session, *, sale_id: uuid.UUID, as_of: date
+) -> str | None:
+    """What the collection clearance was, as at ``as_of``.
+
+    Sales still owns :class:`HandoverClearance` — the rows, the partial index
+    and the gate. This reads them at a date instead of now, so a Collections
+    account reconstructed for March does not carry a sign-off given in June.
+
+    Every row records when it was created, when it was cleared and when it was
+    revoked, which is enough to answer without a second table and without
+    storing anything: take the rows that existed by the cutoff, and if any of
+    them was cleared and not yet revoked then, the clearance was given. A row
+    revoked after the cutoff was still standing at it — that is the same rule
+    the receipts obey, and for the same reason.
+
+    Returns ``None`` where there was no handover record or no clearance row yet,
+    which is what the live reader already returns for a sale nobody has started
+    handing over.
+    """
+    bound = _as_of_bound(as_of)
+    handover = session.scalars(
+        select(HandoverRecord).where(HandoverRecord.sale_contract_id == sale_id)
+    ).first()
+    if handover is None or handover.created_at >= bound:
+        return None
+
+    rows = list(
+        session.scalars(
+            select(HandoverClearance)
+            .where(
+                HandoverClearance.handover_id == handover.id,
+                HandoverClearance.clearance_type == CLEARANCE_COLLECTION,
+                HandoverClearance.created_at < bound,
+            )
+            .order_by(HandoverClearance.created_at)
+        )
+    )
+    if not rows:
+        return None
+
+    def status_then(row: HandoverClearance) -> str:
+        if row.revoked_at is not None and row.revoked_at < bound:
+            return CLEARANCE_REVOKED
+        if row.cleared_at is not None and row.cleared_at < bound:
+            return CLEARANCE_CLEARED
+        return CLEARANCE_PENDING
+
+    states = [status_then(row) for row in rows]
+    # The gate was open if any row that existed then was standing and cleared.
+    # Otherwise the latest row speaks, which is the one the live reader would
+    # have picked on that day.
+    if CLEARANCE_CLEARED in states:
+        return CLEARANCE_CLEARED
+    return states[-1]
+
+
 def grant_clearance(
     session: Session,
     *,
@@ -3912,6 +4192,7 @@ def grant_clearance(
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
+    _refuse_manual_collection_clearance(clearance_type)
 
     project_locked = lock_project(session, project.id)
     handover = _lock_handover(session, project_id=project_locked.id, handover_id=handover_id)
@@ -3972,6 +4253,7 @@ def revoke_clearance(
     if clearance_type not in CLEARANCE_TYPES:
         raise ValidationError("That is not a clearance type.")
     permissions.require_clearance_owner(actor, clearance_type=clearance_type)
+    _refuse_manual_collection_clearance(clearance_type)
 
     project_locked = lock_project(session, project.id)
     handover = _lock_handover(session, project_id=project_locked.id, handover_id=handover_id)

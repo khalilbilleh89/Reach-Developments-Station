@@ -91,6 +91,14 @@ class PlanRead(BaseModel):
     plan_number: str
     name: str
     notes: str | None
+    #: When the first receipt against this plan was confirmed, or ``None``.
+    #:
+    #: Exposed because it changes what the plan screen may offer: once cash has
+    #: arrived, the ordinary activation of a replacement schedule refuses, and a
+    #: disabled button with no explanation is worse than no button. The builder
+    #: reads this to say *why* — the revision has to go through a Collections
+    #: restructure so the allocations are carried across.
+    collections_started_at: datetime | None = None
     created_by_user_id: uuid.UUID
     created_at: datetime
     updated_at: datetime

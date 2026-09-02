@@ -56,6 +56,12 @@ AVAILABLE = [
     "tests/modules/test_payment_plans.py",
     "tests/modules/test_payment_plan_register.py",
     "tests/modules/test_migration_payment_plans.py",
+    "tests/modules/test_collection_receipts.py",
+    "tests/modules/test_collection_allocations.py",
+    "tests/modules/test_collection_aging.py",
+    "tests/modules/test_collection_status.py",
+    "tests/modules/test_collection_restructures.py",
+    "tests/modules/test_migration_collections.py",
 ]
 
 SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
@@ -71,11 +77,16 @@ def chosen(*changed: str) -> object:
 
 
 def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
-    """The case this exists for: a surgical change to the newest domain."""
+    """The case this exists for: a surgical change and its downstream consumer.
+
+    Payment plans feeds collections, so collections comes with it. Nothing
+    upstream does — sales, pricing, inventory and land are all unreachable
+    from here, which is where the time is saved.
+    """
     result = chosen("app/modules/payment_plans/service.py")
 
     assert result.full is False
-    assert result.domains == ["payment_plans"]
+    assert result.domains == ["collections", "payment_plans"]
     assert "tests/modules/test_payment_plans.py" in result.paths
     assert "tests/modules/test_payment_plan_register.py" in result.paths
     assert "tests/modules/test_migration_payment_plans.py" in result.paths
@@ -96,7 +107,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
     result = chosen("app/modules/sales/service.py")
 
     assert result.full is False
-    assert result.domains == ["payment_plans", "sales"]
+    assert result.domains == ["collections", "payment_plans", "sales"]
     assert "tests/modules/test_sales_legal.py" in result.paths
     assert "tests/modules/test_payment_plans.py" in result.paths
     assert "tests/modules/test_pricing_calculator.py" not in result.paths
@@ -106,7 +117,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
 def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
     result = chosen("app/modules/pricing/service.py")
 
-    assert result.domains == ["payment_plans", "pricing", "sales"]
+    assert result.domains == ["collections", "payment_plans", "pricing", "sales"]
     assert "tests/modules/test_pricing_calculator.py" in result.paths
     assert "tests/modules/test_sale_contracts.py" in result.paths
     assert "tests/modules/test_payment_plans.py" in result.paths
@@ -116,7 +127,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
 def test_an_inventory_change_reaches_everything_it_feeds() -> None:
     result = chosen("app/modules/inventory/models.py")
 
-    assert result.domains == ["inventory", "payment_plans", "pricing", "sales"]
+    assert result.domains == ["collections", "inventory", "payment_plans", "pricing", "sales"]
     assert "tests/modules/test_units.py" in result.paths
     assert "tests/modules/test_payment_plans.py" in result.paths
     # Projects sits above inventory, so it is not re-proved by this change.
@@ -128,7 +139,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "app/modules/sales/api.py",
         "app/modules/inventory/api.py",
     )
-    assert result.domains == ["inventory", "payment_plans", "pricing", "sales"]
+    assert result.domains == ["collections", "inventory", "payment_plans", "pricing", "sales"]
 
 
 # --------------------------------------------------------------------------- #
@@ -211,11 +222,15 @@ def test_cross_cutting_infrastructure_falls_back_to_the_full_suite(path: str) ->
 
 
 def test_an_unknown_backend_domain_falls_back_and_says_which() -> None:
-    """Fail safe, not fail open: a new module runs everything until it is mapped."""
-    result = chosen("app/modules/collections/service.py")
+    """Fail safe, not fail open: a new module runs everything until it is mapped.
+
+    ``collections`` used to be the example here and is now a real domain, which
+    is the point: the guard applies to whatever is next, not to a name.
+    """
+    result = chosen("app/modules/unit_economics/service.py")
 
     assert result.full is True
-    assert any("collections" in reason for reason in result.reasons)
+    assert any("unit_economics" in reason for reason in result.reasons)
 
 
 def test_a_mapped_domain_with_no_test_family_falls_back() -> None:
@@ -261,13 +276,13 @@ def test_adding_a_domains_own_migration_does_not_force_the_full_suite() -> None:
     full run, no functional pull request would ever get a fast cycle.
     """
     result = chosen(
-        "app/modules/payment_plans/models.py",
-        "app/db/migrations/versions/0006_payment_plans.py",
+        "app/modules/collections/models.py",
+        "app/db/migrations/versions/0007_collections.py",
         "app/db/migrations/env.py",
         "app/main.py",
     )
     assert result.full is False
-    assert result.domains == ["payment_plans"]
+    assert result.domains == ["collections"]
 
 
 def test_a_migration_no_domain_claims_falls_back() -> None:
@@ -433,29 +448,74 @@ def test_an_acyclic_graph_reports_no_cycle() -> None:
     assert selector.find_cycle(DIAMOND) is None
 
 
-def test_adding_collections_reaches_it_from_pricing_without_touching_pricing() -> None:
-    """The PR-MVP-07 shape, proved before PR-MVP-07 exists.
+def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
+    """PR-ENG-01 predicted this shape; PR-MVP-07 is it, against the real map.
 
-    Collections is not in the real map yet because it has no tests to select.
-    When it lands, the whole change should be one entry in
-    DOMAIN_TEST_PREFIXES and one edge from payment_plans — and a pricing change
-    must then reach it, without anybody having to remember to widen pricing,
-    inventory, projects and settings as well.
+    Adding collections was two lines — one entry in DOMAIN_TEST_PREFIXES and
+    one edge, ``payment_plans -> collections``. Nobody had to widen pricing,
+    inventory, projects or settings, because the closure is transitive. That
+    was the whole point of the fail-safe patch, and this is the case that
+    proves it on the map the build actually uses.
     """
-    future = dict(selector.DOWNSTREAM)
-    future["payment_plans"] = ("collections",)
-    future["collections"] = ()
-
-    assert selector.closure({"pricing"}, future) == [
+    assert selector.closure({"pricing"}) == [
         "collections",
         "payment_plans",
         "pricing",
         "sales",
     ]
-    assert selector.closure({"sales"}, future) == ["collections", "payment_plans", "sales"]
+    assert selector.closure({"sales"}) == ["collections", "payment_plans", "sales"]
+    assert selector.closure({"payment_plans"}) == ["collections", "payment_plans"]
     # And still downstream only: collections does not drag sales back in.
-    assert selector.closure({"collections"}, future) == ["collections"]
-    assert selector.find_cycle(future) is None
+    assert selector.closure({"collections"}) == ["collections"]
+    assert selector.find_cycle() is None
+
+
+def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
+    """The case PR-MVP-07 lives in, and the fastest one the selector has.
+
+    Nothing is downstream of collections yet, so an ordinary change to it
+    selects its own family and the always-run backbone — and none of pricing,
+    sales or payment plans, whose own tests already prove the public contracts
+    collections consumes.
+    """
+    result = chosen("app/modules/collections/service.py")
+
+    assert result.full is False
+    assert result.domains == ["collections"]
+    assert "tests/modules/test_collection_receipts.py" in result.paths
+    assert "tests/modules/test_collection_allocations.py" in result.paths
+    assert "tests/modules/test_collection_restructures.py" in result.paths
+    assert "tests/modules/test_migration_collections.py" in result.paths
+    assert "tests/modules/test_payment_plans.py" not in result.paths
+    assert "tests/modules/test_sales_legal.py" not in result.paths
+    assert "tests/modules/test_pricing_calculator.py" not in result.paths
+
+
+def test_a_payment_plan_change_now_reaches_collections() -> None:
+    """One new edge, and the schedule's downstream consumer comes with it."""
+    result = chosen("app/modules/payment_plans/service.py")
+
+    assert result.domains == ["collections", "payment_plans"]
+    assert "tests/modules/test_collection_restructures.py" in result.paths
+    assert "tests/modules/test_payment_plans.py" in result.paths
+    assert "tests/modules/test_sales_legal.py" not in result.paths
+
+
+def test_a_sales_change_reaches_collections_transitively() -> None:
+    """Two hops, no edge from sales to collections anywhere in the map."""
+    result = chosen("app/modules/sales/service.py")
+
+    assert result.domains == ["collections", "payment_plans", "sales"]
+    assert "tests/modules/test_collection_status.py" in result.paths
+    assert "tests/modules/test_pricing_calculator.py" not in result.paths
+
+
+def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
+    result = chosen("app/modules/pricing/service.py")
+
+    assert result.domains == ["collections", "payment_plans", "pricing", "sales"]
+    assert "tests/modules/test_collection_aging.py" in result.paths
+    assert "tests/modules/test_units.py" not in result.paths
 
 
 # --------------------------------------------------------------------------- #

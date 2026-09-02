@@ -224,6 +224,32 @@ never collapsed into one `status`, and never derived from one another: a unit ca
 be contracted, registered, overdue and under construction at the same time, and
 each of those facts belongs to a different team.
 
+Each dimension has exactly one owner, and the owner is the module that can
+answer for it. Inventory owns the four columns and the append-only events behind
+them; the domain that knows the facts decides the value and asks inventory to
+apply it, through a named contract and never by writing the column. From
+PR-MVP-07 the collection dimension is driven by the receipts ledger, so a unit
+can no longer read `cleared` beside a balance that is outstanding.
+
+### Cash is not a schedule, and a claim is not cash
+
+Three records, three meanings, and merging any two of them loses a fact
+somebody is accountable for:
+
+- a **contract** says what was agreed;
+- a **schedule** says what is due and when;
+- a **receipt** says money arrived — and only once somebody independent of the
+  person who recorded it has confirmed that it did.
+
+Money leaving is its own record, never a negative row in the record for money
+arriving: a signed amount makes every total over that table ambiguous.
+
+Applying cash to an obligation is a separate decision from receiving it, made by
+a person and reversible. Cash that has arrived and has not been applied is
+reported, not absorbed — an unapplied balance is somebody's money sitting in the
+company's account, and the system that hides it is the system that discovers it
+years later when the buyer asks.
+
 Status changes are recorded as append-only events with actor, timestamp and —
 where the transition is a reversal or a cancellation — a reason.
 

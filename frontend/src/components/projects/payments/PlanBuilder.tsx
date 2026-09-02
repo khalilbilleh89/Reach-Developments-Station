@@ -313,6 +313,21 @@ export function PlanBuilder({
     { key: "history", label: "History" },
   ];
 
+  /**
+   * Whether cash has been confirmed against this plan.
+   *
+   * Once it has, PR-MVP-07 refuses the ordinary activation of a replacement
+   * schedule: the new instalments have new identifiers, and every allocation
+   * already made points at the old ones, so activating here would make
+   * collected money vanish from the current view. The restructure carries them
+   * across in the same transaction, which is why the way through is there and
+   * not here.
+   *
+   * The button is hidden rather than disabled and the reason is written out.
+   * A disabled control with no explanation is the thing this replaces.
+   */
+  const collectionsStarted = detail.plan.collections_started_at !== null;
+
   return (
     <Drawer
       eyebrow="Payment plan"
@@ -645,7 +660,7 @@ export function PlanBuilder({
                   </Button>
                 </>
               ) : null}
-              {canApprove && isCurrent && version.status === "approved" ? (
+              {canApprove && isCurrent && version.status === "approved" && !collectionsStarted ? (
                 <Button
                   variant="primary"
                   disabled={busy}
@@ -658,6 +673,13 @@ export function PlanBuilder({
                 >
                   Activate
                 </Button>
+              ) : null}
+              {isCurrent && version.status === "approved" && collectionsStarted ? (
+                <Notice tone="info">
+                  This plan has confirmed collection activity, so the schedule cannot be swapped
+                  out from here. Apply it through a Collections restructure, which carries the
+                  cash already received onto the new instalments in the same transaction.
+                </Notice>
               ) : null}
               {canPrepare && isActive ? (
                 <>

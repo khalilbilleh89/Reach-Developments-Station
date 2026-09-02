@@ -92,6 +92,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "pricing": ("pricing_", "price_versions", "migration_pricing"),
     "sales": ("sales_", "sale_contracts", "reservations", "migration_sales"),
     "payment_plans": ("payment_plan", "migration_payment_plans"),
+    "collections": ("collection", "migration_collections"),
 }
 
 #: What each domain feeds **directly**. Read strictly downstream: a change here
@@ -116,7 +117,8 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "inventory": ("pricing",),
     "pricing": ("sales",),
     "sales": ("payment_plans",),
-    "payment_plans": (),
+    "payment_plans": ("collections",),
+    "collections": (),
     "audit": (),
     "access": (),
 }

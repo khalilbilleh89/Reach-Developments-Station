@@ -6,15 +6,15 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-06) |     7 |
-| Remaining                             |     5 |
+| Complete (PR-MVP-00 through PR-MVP-07) |     8 |
+| Remaining                             |     4 |
 
 Engineering PRs are counted separately and never renumber the functional
 sequence:
 
 | Engineering                | State |
 | -------------------------- | ----- |
-| PR-ENG-01 — Two-Speed CI   | ⚙️    |
+| PR-ENG-01 — Two-Speed CI   | ✅    |
 
 Branch naming follows the roadmap:
 
@@ -218,7 +218,7 @@ tokens, CI, PR template, and Render build/start separation.
 > PR-MVP-05's deposit and first-payment gates are attestations that evidence
 > exists. They are never subtracted from a schedule and never read as a receipt.
 
-## PR-ENG-01 — Two-Speed CI ⚙️
+## PR-ENG-01 — Two-Speed CI ✅
 
 Horizontal engineering hardening. **Does not change the functional MVP count.**
 
@@ -239,19 +239,43 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > pull request is marked ready re-runs it, so the green tick always belongs to
 > the exact commit somebody would merge.
 
-## PR-MVP-07 — Collections
+## PR-MVP-07 — Collections ✅
 
-- receipts
-- receipt confirmation
-- receipt-to-installment allocations
-- partial payments
-- unapplied cash
-- installment status logic
-- aging
-- collection actions
-- disputes/waivers
-- restructures
-- refunds
+- receipt ledger, recorded and confirmed as separate facts
+- receipt confirmation by Finance, maker/checker by user identifier
+- receipt-to-installment allocations, split and partial
+- unapplied cash, derived and reported, never absorbed
+- receipt and allocation reversal
+- derived installment collection status and aging, for any as-of date
+- collection actions, promises kept separate from cash
+- disputes and approved operational waivers
+- collection restructures, carrying confirmed cash onto the replacement schedule
+- refunds against a cancellation's approved amount due
+- Unit collection status, collection clearance, deal file and Unit 360 integration
+
+> **Where the boundary sits.** PR-MVP-06 records what the buyer is scheduled to
+> pay. PR-MVP-07 records what actually arrived, where it was applied, what
+> remains outstanding and what Collections is doing about it. The two are joined
+> by allocations and by nothing else: there is no `paid_amount` on an instalment
+> and no balance column anywhere in this PR, because every figure — outstanding,
+> unapplied, days overdue, aging bucket, collection status — is computed from
+> rows at read time.
+>
+> Five distinctions this PR exists to keep. A *recorded* receipt is a claim and
+> moves no balance; only a confirmed one is cash. A receipt is not an
+> allocation, and cash that has arrived but not been applied is reported as
+> unapplied rather than quietly absorbed. A refund is money leaving and has its
+> own table, never a negative receipt. A dispute never reduces a receivable, and
+> an operational waiver never reduces principal, tax or buyer fees. And
+> PR-MVP-05's deposit and first-payment attestations remain attestations — they
+> are not converted into receipts and not subtracted from anything.
+>
+> The dangerous operation is the restructure. Replacing a schedule that already
+> has cash against it would leave every allocation pointing at instalments that
+> no longer govern the sale, so the ordinary payment-plan activation path
+> refuses once cash has been confirmed, and the restructure carries the
+> allocations across in the same transaction — or refuses outright if a single
+> unit of cash cannot be placed.
 
 ## PR-MVP-08 — Unit Economics
 

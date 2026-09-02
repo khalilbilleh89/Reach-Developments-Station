@@ -24,6 +24,7 @@ import type { Tone } from "@/components/ui";
 import { CurrencyProvider } from "@/lib/currency";
 import { businessDate } from "@/lib/format";
 import { AccessTab } from "@/components/projects/AccessTab";
+import { CollectionsTab } from "@/components/projects/CollectionsTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
@@ -165,6 +166,7 @@ export function ProjectWorkspace({
     { key: "pricing", label: "Pricing" },
     { key: "sales", label: "Sales" },
     { key: "payments", label: "Payment plans" },
+    { key: "collections", label: "Collections" },
     { key: "permits", label: "Permits" },
     { key: "documents", label: "Documents" },
     ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
@@ -433,6 +435,9 @@ export function ProjectWorkspace({
             projectStatus={project.status}
             roles={roles}
           />
+        ) : null}
+        {tab === "collections" ? (
+          <CollectionsTab projectId={projectId} roles={roles} />
         ) : null}
         {tab === "permits" ? (
           <PermitsTab projectId={projectId} canWrite={canWriteTechnical} />
