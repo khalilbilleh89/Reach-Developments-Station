@@ -1,11 +1,13 @@
 "use client";
 
 import type { Reservation, SaleDetail } from "@/lib/api";
+import type { Answer } from "@/lib/answer";
 import {
   Badge,
   EmptyState,
   KeyValue,
   KeyValueGrid,
+  Loading,
   Notice,
   SectionHeader,
   TableScroll,
@@ -45,20 +47,24 @@ export type Commitment = { reservation: Reservation | null; sale: SaleDetail | n
  * Buyer identity is shown only where the API returned it. A field the server
  * withheld is reported as withheld rather than blanked, because "not shown to
  * your role" and "not recorded" are different facts.
+ *
+ * The answer is the unit file's. A refusal, a failure, a unit nobody has
+ * committed to, and a commitment this advisor may not see are four different
+ * facts, and each is said as itself.
  */
 export function UnitCommitment({
   projectId,
   commercialStatus,
-  commitment,
+  answer,
 }: {
   projectId: string;
   /** The unit's own commercial status, so a withheld record is not reported as no record. */
   commercialStatus: string;
-  commitment: Commitment | null;
+  answer: Answer<Commitment>;
 }) {
   const currencyCodeOf = useCurrencyCode();
 
-  if (commitment === null) {
+  if (answer.status === "off" || answer.status === "denied") {
     return (
       <EmptyState
         title="Not available to your role"
@@ -66,6 +72,18 @@ export function UnitCommitment({
       />
     );
   }
+  if (answer.status === "loading") {
+    return <Loading label="Loading the commercial record" shape="rows" rows={3} />;
+  }
+  if (answer.status === "failed") {
+    return (
+      <Notice tone="error">
+        The commercial record could not be loaded. {answer.message} Whether this unit is reserved
+        or contracted is not known until it can be.
+      </Notice>
+    );
+  }
+  const commitment = answer.data;
 
   if (commitment.reservation === null && commitment.sale === null) {
     if (["reserved", "contract_pending", "contracted"].includes(commercialStatus)) {

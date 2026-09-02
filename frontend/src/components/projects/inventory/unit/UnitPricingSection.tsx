@@ -1,11 +1,13 @@
 "use client";
 
 import type { UnitPricing } from "@/lib/api";
+import type { Answer } from "@/lib/answer";
 import {
   Badge,
   Button,
   ButtonRow,
   EmptyState,
+  Loading,
   Metric,
   MetricGroup,
   Notice,
@@ -42,9 +44,14 @@ const VERSION_TONES: Record<string, "muted" | "warning" | "info" | "success" | "
  * `canSeeInternal` mirrors the server's own narrowing: for a role that may see
  * only the live list price the history it returned holds nothing that is not
  * live, and the section says so rather than leaving an unexplained gap.
+ *
+ * The answer is the unit file's, made once for the header and this section
+ * alike. A refusal, a failure and "not priced" are three different facts and
+ * are drawn as three: a failed request is never reported as a role problem,
+ * and never as a unit without a price.
  */
 export function UnitPricingSection({
-  unitPricing,
+  answer,
   canPrice,
   canApprove,
   canSeeInternal,
@@ -52,7 +59,7 @@ export function UnitPricingSection({
   onMove,
   onQuote,
 }: {
-  unitPricing: UnitPricing | null;
+  answer: Answer<UnitPricing>;
   canPrice: boolean;
   canApprove: boolean;
   canSeeInternal: boolean;
@@ -62,14 +69,26 @@ export function UnitPricingSection({
 }) {
   const currencyCodeOf = useCurrencyCode();
 
-  if (unitPricing === null) {
+  if (answer.status === "off" || answer.status === "denied") {
     return (
       <EmptyState
         title="Not available to your role"
-        hint="The live list price is shown on the unit summary. Price composition belongs to Finance."
+        hint="The list price and its composition are shown to the roles that read pricing."
       />
     );
   }
+  if (answer.status === "loading") {
+    return <Loading label="Loading the unit's pricing" shape="metrics" />;
+  }
+  if (answer.status === "failed") {
+    return (
+      <Notice tone="error">
+        Pricing could not be loaded. {answer.message} Nothing about this unit&rsquo;s price is
+        known until it can be.
+      </Notice>
+    );
+  }
+  const unitPricing = answer.data;
 
   // The newest version that is on its way somewhere. An active price has
   // arrived; a superseded one is history.

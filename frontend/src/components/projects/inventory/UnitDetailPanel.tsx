@@ -111,8 +111,12 @@ export function UnitDetailPanel({
   const [assets, setAssets] = useState<SubAsset[]>([]);
   const [values, setValues] = useState<CustomValue[]>([]);
   const [history, setHistory] = useState<UnitStatusEvent[]>([]);
-  const [unitPricing, setUnitPricing] = useState<UnitPricing | null>(null);
-  const [commitment, setCommitment] = useState<Commitment | null>(null);
+  // One answer per module, made once here and shared by the header facts and
+  // the sections. Each is asked for only on behalf of a role the server
+  // answers; a refusal it still returns is "denied" and a fault is "failed",
+  // and neither is ever drawn as a unit with no price or no commitment.
+  const [pricingAnswer, setPricingAnswer] = useState<Answer<UnitPricing>>({ status: "off" });
+  const [commitmentAnswer, setCommitmentAnswer] = useState<Answer<Commitment>>({ status: "off" });
   const [economics, setEconomics] = useState<Answer<UnitEconomicsDetail>>({ status: "off" });
   const [collection, setCollection] = useState<Answer<CollectionSaleSummary>>({ status: "off" });
   const [section, setSection] = useState("summary");
@@ -142,51 +146,64 @@ export function UnitDetailPanel({
         inventory.unitValues(projectId, unitId),
         inventory.unitHistory(projectId, unitId),
       ]);
-      // The list price is asked for only on behalf of a role the server
-      // answers — Legal and Collections are refused it, so their unit file
-      // never requests it — and a refusal it still returns must not blank
-      // the unit they can see.
-      if (seesListPrice) {
-        try {
-          setUnitPricing(await pricing.unit(projectId, unitId));
-        } catch {
-          setUnitPricing(null);
-        }
-      } else {
-        setUnitPricing(null);
+      setUnit(detail);
+      setSchedules(scheduleList);
+      setAreaTypes(typeList);
+      setAssets(assetList);
+      setValues(valueList);
+      setHistory(events);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not load the unit.");
+      return;
+    }
+
+    // The modules, each one answer, each requested only for a role the server
+    // answers, and each loading on its own so the unit is on screen while
+    // they arrive. The list price is refused to Legal and Collections, so
+    // their unit file never asks for it.
+    const loadPricing = async () => {
+      if (!seesListPrice) {
+        setPricingAnswer({ status: "off" });
+        return;
       }
-      // The commercial commitment is asked for only on behalf of a role that
-      // reads sales at all.
+      setPricingAnswer({ status: "loading" });
+      try {
+        setPricingAnswer({ status: "ready", data: await pricing.unit(projectId, unitId) });
+      } catch (caught) {
+        setPricingAnswer(toAnswer(caught));
+      }
+    };
+
+    // The commercial commitment, and behind it the collections position,
+    // which needs the sale's identifier and so waits for a successful read.
+    const loadCommercial = async () => {
+      if (!seesSales) {
+        setCommitmentAnswer({ status: "off" });
+        setCollection({ status: "off" });
+        return;
+      }
+      setCommitmentAnswer({ status: "loading" });
       let sale: SaleDetail | null = null;
-      if (seesSales) {
-        try {
-          const reservations = await sales.reservations(projectId, { unit_id: unitId });
-          const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
-          const live = contracts.find((entry) =>
-            ["signature_pending", "active", "termination_pending"].includes(entry.status),
-          );
-          sale = live ? await sales.contract(projectId, live.id) : null;
-          setCommitment({
+      try {
+        const reservations = await sales.reservations(projectId, { unit_id: unitId });
+        const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
+        const live = contracts.find((entry) =>
+          ["signature_pending", "active", "termination_pending"].includes(entry.status),
+        );
+        sale = live ? await sales.contract(projectId, live.id) : null;
+        setCommitmentAnswer({
+          status: "ready",
+          data: {
             reservation:
               reservations.find((entry) => ["active", "extended", "converted"].includes(entry.status)) ?? null,
             sale,
-          });
-        } catch {
-          setCommitment(null);
-        }
-      } else {
-        setCommitment(null);
-      }
-      // Economics and collections are requested once, here, and only for the
-      // roles the server answers. The header facts and the sections below
-      // share the same answer, so nothing is fetched twice.
-      if (seesEconomics) {
-        setEconomics({ status: "loading" });
-        try {
-          setEconomics({ status: "ready", data: await unitEconomics.unit(projectId, unitId) });
-        } catch (caught) {
-          setEconomics(toAnswer(caught));
-        }
+          },
+        });
+      } catch (caught) {
+        setCommitmentAnswer(toAnswer(caught));
+        setCollection({ status: "off" });
+        return;
       }
       if (seesCollections && sale) {
         setCollection({ status: "loading" });
@@ -198,16 +215,22 @@ export function UnitDetailPanel({
       } else {
         setCollection({ status: "off" });
       }
-      setUnit(detail);
-      setSchedules(scheduleList);
-      setAreaTypes(typeList);
-      setAssets(assetList);
-      setValues(valueList);
-      setHistory(events);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load the unit.");
-    }
+    };
+
+    const loadEconomics = async () => {
+      if (!seesEconomics) {
+        setEconomics({ status: "off" });
+        return;
+      }
+      setEconomics({ status: "loading" });
+      try {
+        setEconomics({ status: "ready", data: await unitEconomics.unit(projectId, unitId) });
+      } catch (caught) {
+        setEconomics(toAnswer(caught));
+      }
+    };
+
+    await Promise.all([loadPricing(), loadCommercial(), loadEconomics()]);
   }, [projectId, unitId, seesSales, seesEconomics, seesCollections, seesListPrice]);
 
   useEffect(() => {
@@ -293,9 +316,10 @@ export function UnitDetailPanel({
   }
 
   const editableValues = values.filter((value) => value.is_editable);
+  const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;
   const price = unitPricing?.active_price ?? null;
   const priceCode = currencyCodeOf(price?.currency_id);
-  const hasSale = commitment?.sale !== null && commitment?.sale !== undefined;
+  const hasSale = commitmentAnswer.status === "ready" && commitmentAnswer.data.sale !== null;
 
   const sections = [
     { key: "summary", label: "Overview" },
@@ -309,6 +333,11 @@ export function UnitDetailPanel({
   ];
   const activeSection = sections.some((entry) => entry.key === section) ? section : "summary";
 
+  // Each fact follows its module's answer: shown when the module answered,
+  // shown as unavailable when the request failed, and absent while loading,
+  // when refused, or when never asked. A failure is never drawn as "not
+  // priced", "no margin" or a cleared balance.
+  const unavailable = (label: string): DrawerFact => ({ label, value: "Unavailable", note: "Could not be loaded" });
   const facts: DrawerFact[] = [
     ...(unitPricing
       ? [
@@ -318,7 +347,9 @@ export function UnitDetailPanel({
             note: price ? (unitPricing.repricing_required ? "Repricing required" : `v${price.version_number} · ex tax`) : undefined,
           },
         ]
-      : []),
+      : pricingAnswer.status === "failed"
+        ? [unavailable("List price")]
+        : []),
     ...(economics.status === "ready"
       ? [
           {
@@ -333,7 +364,9 @@ export function UnitDetailPanel({
                 : undefined,
           },
         ]
-      : []),
+      : economics.status === "failed"
+        ? [unavailable("Margin")]
+        : []),
     ...(collection.status === "ready"
       ? [
           {
@@ -342,7 +375,9 @@ export function UnitDetailPanel({
             note: unitCollectionLabel(collection.data.derived_collection_status),
           },
         ]
-      : []),
+      : collection.status === "failed"
+        ? [unavailable("Outstanding")]
+        : []),
     {
       label: "Weighted area",
       value:
@@ -393,8 +428,8 @@ export function UnitDetailPanel({
       {activeSection === "summary" ? (
         <UnitSummary
           unit={unit}
-          unitPricing={unitPricing}
-          commitment={seesSales ? commitment : undefined}
+          pricing={pricingAnswer}
+          commitment={commitmentAnswer}
           economics={economics}
           collection={collection}
           onOpenTab={setSection}
@@ -491,7 +526,7 @@ export function UnitDetailPanel({
       {activeSection === "pricing" ? (
         <>
           <UnitPricingSection
-            unitPricing={unitPricing}
+            answer={pricingAnswer}
             canPrice={canPrice}
             canApprove={canApprovePricing}
             canSeeInternal={seesInternalPrices}
@@ -510,7 +545,9 @@ export function UnitDetailPanel({
         </>
       ) : null}
 
-      {activeSection === "commercial" ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} commitment={commitment} /> : null}
+      {activeSection === "commercial" ? (
+        <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} />
+      ) : null}
 
       {activeSection === "collections" ? <UnitCollections answer={collection} /> : null}
 
