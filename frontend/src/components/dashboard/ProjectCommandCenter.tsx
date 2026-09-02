@@ -219,17 +219,24 @@ export function ProjectCommandCenter({
       : []),
   ];
 
-  const problems = [
+  // Every request this page makes, so a failure anywhere is said in words
+  // rather than leaving a figure quietly missing. A request that was never
+  // enabled for this reader is "off" and is not a failure. When the pricing
+  // overview and its register both fail, one sentence covers pricing.
+  const sources: [string, Answer<unknown>][] = [
+    ["Inventory", units],
     ["Pricing", prices],
+    ...(prices.status === "failed" ? [] : [["Pricing register", register] as [string, Answer<unknown>]]),
     ["Sales", deals],
+    ["Payment plans", plans],
     ["Collections", cash],
     ["Unit economics", economics],
-    ["Inventory", units],
-  ]
-    .filter(([, answer]) => (answer as Answer<unknown>).status === "failed")
-    .map(([name]) => `${name} could not be loaded, so nothing from it is shown here.`);
+  ];
+  const problems = sources
+    .filter(([, answer]) => answer.status === "failed")
+    .map(([name]) => `${name} could not be loaded, so nothing from ${name === "Inventory" || name === "Sales" || name === "Collections" || name === "Pricing" ? "it" : "them"} is shown here.`);
 
-  const loading = [units, prices, deals, cash, economics].some((answer) => answer.status === "loading");
+  const loading = sources.some(([, answer]) => answer.status === "loading");
 
   const baseCode = project.base_currency_code;
 
