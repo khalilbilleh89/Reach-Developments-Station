@@ -7,7 +7,12 @@ import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { Icon } from "@/components/ui";
 import { useOverlay } from "@/components/ui/overlay";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { projectHref, settingsHref } from "./navigation";
+import {
+  isProjectSection,
+  isSettingsSection,
+  projectHref,
+  settingsHref,
+} from "./navigation";
 import type { NavGroup } from "./navigation";
 import type { ShellArea } from "./AppShell";
 
@@ -28,8 +33,9 @@ function initials(name: string): string {
 }
 
 function sectionHref(area: ShellArea, projectId: string | undefined, key: string): string {
-  if (area === "settings") return settingsHref(key as never);
-  return projectId ? projectHref(projectId, key as never) : "/projects/";
+  if (area === "settings") return isSettingsSection(key) ? settingsHref(key) : settingsHref();
+  if (projectId && isProjectSection(key)) return projectHref(projectId, key);
+  return "/projects/";
 }
 
 /**
