@@ -501,6 +501,7 @@ class TestRefundRace:
         db: Session,
         collections_client: TestClient,
         sales_ops_client: TestClient,
+        cfo_client: TestClient,
         project_id: str,
         collecting_sale: str,
         finance: User,
@@ -517,6 +518,15 @@ class TestRefundRace:
         )
         assert cancellation.status_code == 201, cancellation.text
         cancellation_id = cancellation.json()["id"]
+
+        # A proposed refund is not a debt until a financial approver signs it,
+        # and money does not leave on an unsigned one. Without this the race
+        # being tested could not happen in production at all.
+        approved = cfo_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+            json={"reason": "Terms reviewed against the contract"},
+        )
+        assert approved.status_code == 200, approved.text
 
         refunds = []
         for _ in range(2):

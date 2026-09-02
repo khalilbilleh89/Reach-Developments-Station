@@ -375,3 +375,218 @@ class TestARefundIsNotAReceipt:
             record_receipt(collections_client, project_id, collecting_sale, "-5000.00").status_code
             == 422
         )
+
+
+def _withdraw(
+    client: TestClient, project_id: str, cancellation_id: str, reason: str = "The parties settled"
+) -> None:
+    """Drop the cancellation case. The contract goes back to live."""
+    response = client.post(
+        f"{sales_url(project_id)}/cancellations/{cancellation_id}/advance",
+        json={"to_status": "withdrawn", "reason": reason},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "withdrawn"
+
+
+@pytest.fixture
+def unapproved_cancellation(
+    sales_ops_client: TestClient, project_id: str, collecting_sale: str
+) -> tuple[str, str]:
+    """A cancellation proposing 12,000 back that nobody has signed."""
+    opened = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
+        json={
+            "initiated_by_party": "buyer",
+            "initiation_date": "2026-05-01",
+            "reason": "Buyer withdrew after failing to secure finance",
+            "refund_due_amount": "12000.00",
+            "forfeiture_amount": "0.00",
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    assert opened.json()["financial_approved_at"] is None
+    return collecting_sale, opened.json()["id"]
+
+
+class TestRefundAuthority:
+    """What makes a payout sanctioned, asked the same way twice.
+
+    Recording a refund and confirming one are the two moments money can be
+    committed on the way out, and both ask one question: is this cancellation
+    still standing, and did somebody sign it? One rule, one function, called
+    from both — because a rule enforced in only one of the two places is a rule
+    that is enforced on Monday and not on Friday.
+    """
+
+    def test_a_refund_may_not_be_recorded_before_the_terms_are_approved(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        unapproved_cancellation: tuple[str, str],
+    ) -> None:
+        """A proposal is not a debt. Money does not leave on an unsigned one."""
+        sale_id, cancellation_id = unapproved_cancellation
+        response = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        )
+        assert response.status_code == 409
+        assert "have not been approved" in response.json()["detail"]
+
+    def test_a_refund_may_not_be_recorded_against_a_withdrawn_case(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> None:
+        """The case was dropped. There is no cancellation left to repay."""
+        sale_id, cancellation_id = cancelled_sale
+        _withdraw(sales_ops_client, project_id, cancellation_id)
+        response = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        )
+        assert response.status_code == 409
+        assert "withdrawn" in response.json()["detail"]
+
+    def test_a_refund_recorded_first_may_not_be_confirmed_after_the_withdrawal(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> None:
+        """The case worth catching: keyed in Monday, dropped Wednesday, signed Friday.
+
+        Confirmation re-asks against the locked cancellation rather than
+        trusting the answer recording got, so the money never leaves.
+        """
+        sale_id, cancellation_id = cancelled_sale
+        refund = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        ).json()
+        _withdraw(sales_ops_client, project_id, cancellation_id)
+
+        response = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+        )
+        assert response.status_code == 409
+        assert "withdrawn" in response.json()["detail"]
+
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_confirmed_total"] == "0.00"
+
+    def test_a_withdrawn_case_owes_nothing(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> None:
+        """Approved and then dropped is not owed. The account says zero, not 12,000."""
+        sale_id, cancellation_id = cancelled_sale
+        before = collection_account(collections_client, project_id, sale_id)
+        assert before["refund_due_total"] == "12000.00"
+
+        _withdraw(sales_ops_client, project_id, cancellation_id)
+
+        after = collection_account(collections_client, project_id, sale_id)
+        assert after["refund_due_total"] == "0.00"
+        assert after["refund_outstanding"] == "0.00"
+
+    def test_an_approved_case_that_stands_is_untouched(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> None:
+        """The ordinary path still works exactly as it did."""
+        sale_id, cancellation_id = cancelled_sale
+        refund = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        ).json()
+        confirmed = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+        )
+        assert confirmed.status_code == 200, confirmed.text
+
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_due_total"] == "12000.00"
+        assert account["refund_confirmed_total"] == "5000.00"
+        assert account["refund_outstanding"] == "7000.00"
+
+
+class TestCashThatAlreadyLeft:
+    """Withdrawing a case ends the debt. It does not un-send the money.
+
+    A refund confirmed before the parties settled is a real payment out of a
+    real bank account. Deleting it, reversing it or netting it into a negative
+    liability would each make the system disagree with the statement — so the
+    debt goes to zero, the payment stays, and getting the money back is an
+    ordinary correction somebody makes on purpose.
+    """
+
+    @pytest.fixture
+    def paid_then_withdrawn(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        sales_ops_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> tuple[str, str]:
+        sale_id, cancellation_id = cancelled_sale
+        refund = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        ).json()
+        confirmed = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        _withdraw(sales_ops_client, project_id, cancellation_id)
+        return sale_id, refund["id"]
+
+    def test_the_outstanding_figure_ends_at_zero_and_never_goes_negative(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        paid_then_withdrawn: tuple[str, str],
+    ) -> None:
+        """Nothing owed, five thousand paid, nothing still to pay."""
+        sale_id, _ = paid_then_withdrawn
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_due_total"] == "0.00"
+        assert account["refund_confirmed_total"] == "5000.00"
+        assert account["refund_outstanding"] == "0.00"
+        assert not account["refund_outstanding"].startswith("-")
+
+    def test_the_payment_is_neither_deleted_nor_reversed(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        paid_then_withdrawn: tuple[str, str],
+    ) -> None:
+        """That money really left. The row stays exactly as Finance left it."""
+        sale_id, refund_id = paid_then_withdrawn
+        refunds = collections_client.get(
+            f"{collections_url(project_id)}/sales/{sale_id}/refunds"
+        ).json()
+        assert [r["id"] for r in refunds] == [refund_id]
+        assert refunds[0]["status"] == "confirmed"
+        assert refunds[0]["reversal_reason"] is None
+
+    def test_the_register_gives_the_same_answer_as_the_account(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        paid_then_withdrawn: tuple[str, str],
+    ) -> None:
+        """One totalling routine. The register reads the same rule, batched."""
+        sale_id, _ = paid_then_withdrawn
+        account = collection_account(collections_client, project_id, sale_id)
+        rows = collections_client.get(f"{collections_url(project_id)}/receivables").json()
+        row = next(r for r in rows if r["sale_id"] == sale_id)
+        for field in ("refund_due_total", "refund_confirmed_total", "refund_outstanding"):
+            assert row["summary"][field] == account[field]

@@ -26,7 +26,8 @@ simulated is the passage of time, never a figure.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,6 +54,26 @@ def _stamp(db: Session, table: str, row_id: str, column: str, value: object) -> 
     db.execute(
         text(f"UPDATE {table} SET {column} = :value WHERE id = :row_id"),
         {"value": value, "row_id": row_id},
+    )
+    db.commit()
+
+
+def _stamp_withdrawal(db: Session, cancellation_id: str, when: datetime) -> None:
+    """Move the moment a cancellation was dropped.
+
+    The cancellation row keeps only today's answer, in ``status``. When the case
+    was dropped is written down once, by the transition itself, in the audit
+    trail — append-only and committed in the same transaction as the status
+    change — so that is the row a test has to move to give the withdrawal a
+    date, exactly as it moves ``confirmed_at`` to give a receipt one.
+    """
+    db.execute(
+        text(
+            "UPDATE audit_events SET occurred_at = :when "
+            "WHERE entity_id = :row_id AND action = 'sale_cancellation.advanced' "
+            "AND after_data->>'status' = 'withdrawn'"
+        ),
+        {"when": when, "row_id": cancellation_id},
     )
     db.commit()
 
@@ -419,6 +440,244 @@ class TestRefundCashOut:
             assert row["summary"]["refund_confirmed_total"] == account["refund_confirmed_total"], (
                 as_of
             )
+
+
+class TestACaseDroppedLater:
+    """Given a cancellation sanctioned in March and dropped in June.
+
+    Withdrawal is the parties settling: the contract goes back to live and the
+    payout stops being owed. But it stopped being owed *in June*. April really
+    was carrying a twelve-thousand liability, and an April account that denied
+    it would be rewriting the month rather than reporting it — the same mistake
+    as showing a June approval on a March account, made in the other direction.
+    """
+
+    @pytest.fixture
+    def sanctioned_then_dropped(
+        self,
+        sales_ops_client: TestClient,
+        cfo_client: TestClient,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        january_schedule: str,
+    ) -> str:
+        """12,000 signed on 10 March, the case dropped on 20 June."""
+        del january_schedule
+        opened = sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
+            json={
+                "initiated_by_party": "buyer",
+                "initiation_date": "2026-03-01",
+                "reason": "Buyer withdrew",
+                "refund_due_amount": "12000.00",
+                "forfeiture_amount": "0.00",
+            },
+        )
+        assert opened.status_code == 201, opened.text
+        cancellation_id = opened.json()["id"]
+        approved = cfo_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+            json={"reason": "Terms reviewed"},
+        )
+        assert approved.status_code == 200, approved.text
+        _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-03-10"))
+
+        dropped = sales_ops_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/advance",
+            json={"to_status": "withdrawn", "reason": "The parties settled"},
+        )
+        assert dropped.status_code == 200, dropped.text
+        _stamp_withdrawal(db, cancellation_id, at("2026-06-20"))
+        return cancellation_id
+
+    def test_april_was_carrying_the_liability_and_says_so(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        sanctioned_then_dropped: str,
+    ) -> None:
+        del sanctioned_then_dropped
+        april = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-04-30"
+        )
+        assert april["refund_due_total"] == "12000.00"
+        assert april["refund_outstanding"] == "12000.00"
+
+    def test_the_liability_ends_on_the_day_the_case_was_dropped(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        sanctioned_then_dropped: str,
+    ) -> None:
+        """One day either side of it, and the figure changes exactly once."""
+        del sanctioned_then_dropped
+        before = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-19"
+        )
+        assert before["refund_due_total"] == "12000.00"
+
+        after = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-20"
+        )
+        assert after["refund_due_total"] == "0.00"
+
+    def test_today_owes_nothing(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        sanctioned_then_dropped: str,
+    ) -> None:
+        """The current read is the same rule at the current date, not a second one."""
+        del sanctioned_then_dropped
+        today = collection_account(collections_client, project_id, collecting_sale)
+        assert today["refund_due_total"] == "0.00"
+        assert today["refund_outstanding"] == "0.00"
+
+    def test_the_register_agrees_at_every_date(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        sanctioned_then_dropped: str,
+    ) -> None:
+        """The batched read applies the same rule the account screen does."""
+        del sanctioned_then_dropped
+        for as_of in ("2026-04-30", "2026-06-19", "2026-06-20", "2026-08-31"):
+            rows = collections_client.get(
+                f"{collections_url(project_id)}/receivables", params={"as_of": as_of}
+            ).json()
+            row = next(r for r in rows if r["sale_id"] == collecting_sale)
+            account = collection_account(
+                collections_client, project_id, collecting_sale, as_of=as_of
+            )
+            assert row["summary"]["refund_due_total"] == account["refund_due_total"], as_of
+
+
+class TestCashPaidBeforeTheCaseWasDropped:
+    """Given 5,000 actually paid in April and the case dropped in June.
+
+    Two facts with two dates. The debt ends in June; the payment does not, and
+    it never becomes a negative debt in the months after it.
+    """
+
+    @pytest.fixture
+    def paid_then_dropped(
+        self,
+        sales_ops_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        january_schedule: str,
+    ) -> str:
+        del january_schedule
+        opened = sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
+            json={
+                "initiated_by_party": "buyer",
+                "initiation_date": "2026-03-01",
+                "reason": "Buyer withdrew",
+                "refund_due_amount": "12000.00",
+                "forfeiture_amount": "0.00",
+            },
+        )
+        assert opened.status_code == 201, opened.text
+        cancellation_id = opened.json()["id"]
+        approved = cfo_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+            json={"reason": "Terms reviewed"},
+        )
+        assert approved.status_code == 200, approved.text
+        _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-03-10"))
+
+        recorded = collections_client.post(
+            f"{collections_url(project_id)}/sales/{collecting_sale}/refunds",
+            json={
+                "cancellation_id": cancellation_id,
+                "amount": "5000.00",
+                "refund_date": "2026-04-05",
+            },
+        )
+        assert recorded.status_code == 201, recorded.text
+        refund_id = recorded.json()["id"]
+        confirmed = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={}
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        db.execute(
+            text("UPDATE collection_refunds SET confirmed_at = :c WHERE id = :r"),
+            {"c": at("2026-04-06"), "r": refund_id},
+        )
+        db.commit()
+
+        dropped = sales_ops_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/advance",
+            json={"to_status": "withdrawn", "reason": "The parties settled"},
+        )
+        assert dropped.status_code == 200, dropped.text
+        _stamp_withdrawal(db, cancellation_id, at("2026-06-20"))
+        return refund_id
+
+    def test_may_shows_the_debt_and_the_payment_against_it(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_dropped: str,
+    ) -> None:
+        del paid_then_dropped
+        may = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-05-31"
+        )
+        assert may["refund_due_total"] == "12000.00"
+        assert may["refund_confirmed_total"] == "5000.00"
+        assert may["refund_outstanding"] == "7000.00"
+
+    def test_july_keeps_the_payment_and_drops_the_debt(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_dropped: str,
+    ) -> None:
+        """Nothing owed, five thousand paid, and no negative liability anywhere."""
+        del paid_then_dropped
+        july = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-07-31"
+        )
+        assert july["refund_due_total"] == "0.00"
+        assert july["refund_confirmed_total"] == "5000.00"
+        assert july["refund_outstanding"] == "0.00"
+
+    def test_no_date_reports_a_negative_amount_still_to_pay(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_dropped: str,
+    ) -> None:
+        """Walk the whole life of the case. The floor holds at every cutoff."""
+        del paid_then_dropped
+        for as_of in (
+            "2026-03-09",
+            "2026-03-10",
+            "2026-04-05",
+            "2026-04-06",
+            "2026-06-19",
+            "2026-06-20",
+            "2026-08-31",
+        ):
+            account = collection_account(
+                collections_client, project_id, collecting_sale, as_of=as_of
+            )
+            assert not account["refund_outstanding"].startswith("-"), as_of
+            assert Decimal(account["refund_outstanding"]) >= 0, as_of
 
 
 class TestClearanceHistory:

@@ -220,7 +220,8 @@ export function DealCollections({
         </TableScroll>
       ) : null}
 
-      {isPositive(summary.refund_due_total) ? (
+      {isPositive(summary.refund_due_total) ||
+      isPositive(summary.refund_confirmed_total) ? (
         <StatRow>
           <Stat
             label="Refund due"

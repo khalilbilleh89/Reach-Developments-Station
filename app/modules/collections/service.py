@@ -110,6 +110,7 @@ from app.modules.projects.service import lock_project
 from app.modules.sales import service as sales_service
 from app.modules.sales.models import (
     CANCELLATION_COMPLETED,
+    CANCELLATION_WITHDRAWN,
     SALE_ACTIVE,
     Client,
     SaleCancellation,
@@ -271,7 +272,7 @@ def _refund_effective_on(as_of: date) -> ColumnElement[bool]:
 
 
 def _refund_due_on(as_of: date) -> ColumnElement[bool]:
-    """A cancellation whose refund had been *sanctioned* by ``as_of``.
+    """A cancellation that was *owing* a refund at ``as_of``. Two conditions.
 
     ``refund_due_amount`` is captured when the cancellation case is opened,
     which is a proposal rather than a debt: PR-MVP-05 makes the money on the way
@@ -279,15 +280,21 @@ def _refund_due_on(as_of: date) -> ColumnElement[bool]:
     is owed. So the amount counts from the moment of approval, and a refund
     approved in June is not a liability the March account was carrying.
 
-    This is a single rule applied at every date, today included — which is the
-    point of one ``as_of``. It does change one of today's answers: a cancellation
-    with a proposed refund still awaiting its approver now reports zero due
-    rather than the proposal. That is the more honest of the two figures, and it
-    is the one the historical read has to give anyway.
+    An approval is not permanent, either. Withdrawing a cancellation is the
+    parties settling: the contract goes back to live and the payout the case
+    proposed stops being owed, signature or no signature. A withdrawn case that
+    still reported its refund as due would put a liability on the account that
+    nobody may pay — and Collections would go on offering to pay it.
+
+    Both halves obey the same cutoff, so the sanction counts from the day it was
+    given and the withdrawal from the day it happened. On the current date this
+    is exactly "approved, and not dropped", which is what today's reader means.
     """
     bound = _bound(as_of)
-    return SaleCancellation.financial_approved_at.is_not(None) & (
-        SaleCancellation.financial_approved_at < bound
+    return (
+        SaleCancellation.financial_approved_at.is_not(None)
+        & (SaleCancellation.financial_approved_at < bound)
+        & ~sales_service.cancellation_withdrawn_on(as_of)
     )
 
 
@@ -787,6 +794,12 @@ class SaleSummary:
     rows: list[ledger.InstallmentView]
     refund_due_total: Decimal
     refund_confirmed_total: Decimal
+    #: What is still owed back, floored at zero. The two totals above are
+    #: reported side by side and never netted into a single signed number, and
+    #: the floor is what keeps that true when a cancellation is withdrawn after
+    #: money has already gone out: the debt ends at zero, the payment stays on
+    #: the record, and the overpayment is a correction somebody makes on
+    #: purpose — not a negative liability quietly reported as an asset.
     refund_outstanding: Decimal
     collection_clearance_status: str | None
 
@@ -952,7 +965,7 @@ def summarise(
         rows=rows,
         refund_due_total=extras.refund_due_total,
         refund_confirmed_total=extras.refund_confirmed_total,
-        refund_outstanding=extras.refund_due_total - extras.refund_confirmed_total,
+        refund_outstanding=max(extras.refund_due_total - extras.refund_confirmed_total, ZERO),
         collection_clearance_status=extras.collection_clearance_status,
     )
 
@@ -2706,6 +2719,37 @@ def _confirmed_refund_total(session: Session, *, cancellation_id: uuid.UUID) -> 
     return _money(total)
 
 
+def require_refund_authority(cancellation: SaleCancellation) -> None:
+    """The single rule that says a refund may be paid against this cancellation.
+
+    Recording a refund and confirming one ask the same question — is this payout
+    sanctioned? — so there is one function and both call it. Confirmation asks
+    again, against the locked row rather than trusting the answer recording got,
+    because the case worth catching is exactly the one where the cancellation
+    was dropped in between: a payout keyed in on Monday and signed on Friday
+    must not go out on a case that was withdrawn on Wednesday.
+
+    Three things make a payout sanctioned, and none of them is re-decided here:
+    the cancellation proposed money changing hands, a financial approver signed
+    it, and the case has not since been withdrawn. *How much* is owed is a
+    different question and stays with :func:`_require_refund_headroom`.
+    """
+    if cancellation.status == CANCELLATION_WITHDRAWN:
+        raise ConflictError(
+            "This cancellation was withdrawn. The contract is live again and "
+            "nothing is owed back on it, so no refund can be paid against it."
+        )
+    if not cancellation.financial_approval_required:
+        raise ConflictError(
+            "This cancellation has no financial terms, so there is nothing to pay back."
+        )
+    if cancellation.financial_approved_at is None:
+        raise ConflictError(
+            "This cancellation's financial terms have not been approved. Money "
+            "cannot leave on a refund nobody has signed."
+        )
+
+
 def _require_refund_headroom(
     session: Session,
     *,
@@ -2776,6 +2820,7 @@ def record_refund(
         )
     if currency_id is not None and currency_id != sale.currency_id:
         raise ValidationError("A refund must be in the contract's currency.")
+    require_refund_authority(cancellation)
     _require_refund_headroom(session, cancellation=cancellation, adding=amount)
 
     refund = CollectionRefund(
@@ -2860,6 +2905,7 @@ def confirm_refund(
     if refund.status == REFUND_REVERSED:
         raise ConflictError("This refund has been reversed and cannot be confirmed.")
     permissions.require_different_confirmer(actor, recorded_by_user_id=refund.recorded_by_user_id)
+    require_refund_authority(cancellation)
     _require_refund_headroom(session, cancellation=cancellation, adding=refund.amount)
 
     refund.status = REFUND_CONFIRMED

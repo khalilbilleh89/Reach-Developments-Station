@@ -1288,7 +1288,13 @@ function RefundsTab({
   const after = (run: () => Promise<unknown>, done: string) =>
     void onAct(run, done).then(() => void load());
 
-  if (!isPositive(summary.refund_due_total)) {
+  // Money that has already gone out stays on the file after the debt ends. A
+  // withdrawn cancellation takes the amount due back to zero, and hiding the
+  // panel on that alone would take a confirmed payment off the screen with it.
+  const hasRefundHistory =
+    isPositive(summary.refund_due_total) || isPositive(summary.refund_confirmed_total);
+
+  if (!hasRefundHistory) {
     return (
       <EmptyState
         title="No refund due"

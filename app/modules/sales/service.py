@@ -44,8 +44,9 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, exists, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import (
     ConflictError,
@@ -55,6 +56,7 @@ from app.core.errors import (
 )
 from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import User
+from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import record_event
 from app.modules.inventory import custom_fields as inventory_fields
 from app.modules.inventory import service as inventory_service
@@ -3404,6 +3406,45 @@ def _open_cancellation(session: Session, *, sale_id: uuid.UUID) -> SaleCancellat
     ).first()
 
 
+#: The one audit action that records a cancellation moving between states, and
+#: therefore the only place the moment of a withdrawal is written down.
+_CANCELLATION_ADVANCED = "sale_cancellation.advanced"
+
+
+def cancellation_withdrawn_on(as_of: date) -> ColumnElement[bool]:
+    """Had this cancellation been withdrawn by ``as_of``? A correlated predicate.
+
+    A withdrawn case is one the parties dropped: the contract goes back to
+    live, and what the case proposed to pay out is not owed. Collections has to
+    know that at a date and not only now — a refund sanctioned in March and the
+    case dropped in June was a real liability in April — and the row itself
+    keeps only today's answer, in ``status``.
+
+    ``updated_at`` is not the withdrawal moment and must not be read as one: it
+    moves for any write, and :func:`approve_cancellation_terms` will still sign
+    financial terms on a case that has already been dropped. The moment is
+    written down exactly once, by :func:`advance_cancellation`, in the audit
+    trail — append-only by construction and committed in the same transaction
+    as the status change, so neither can exist without the other. That makes it
+    a lifecycle fact rather than a log about one, and reading it is why this
+    needs no new column and no migration.
+
+    Sales owns the event name and the snapshot shape, so Sales owns this
+    predicate and Collections composes it into one batched query instead of
+    learning either. On the current date it agrees exactly with
+    ``status == 'withdrawn'``, because one function writes both.
+    """
+    return exists(
+        select(AuditEvent.id).where(
+            AuditEvent.entity_type == ENTITY_CANCELLATION,
+            AuditEvent.entity_id == SaleCancellation.id,
+            AuditEvent.action == _CANCELLATION_ADVANCED,
+            AuditEvent.after_data["status"].astext == CANCELLATION_WITHDRAWN,
+            AuditEvent.occurred_at < _as_of_bound(as_of),
+        )
+    )
+
+
 def start_cancellation(
     session: Session,
     *,
@@ -3607,7 +3648,7 @@ def advance_cancellation(
     _flush(session)
     record_event(
         session,
-        action="sale_cancellation.advanced",
+        action=_CANCELLATION_ADVANCED,
         entity_type=ENTITY_CANCELLATION,
         entity_id=cancellation.id,
         correlation_id=actor.correlation_id,
