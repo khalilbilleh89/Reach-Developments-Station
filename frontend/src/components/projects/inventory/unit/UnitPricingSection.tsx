@@ -6,10 +6,10 @@ import {
   Button,
   ButtonRow,
   EmptyState,
+  Metric,
+  MetricGroup,
   Notice,
   SectionHeader,
-  Stat,
-  StatRow,
   TableScroll,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
@@ -38,11 +38,16 @@ const VERSION_TONES: Record<string, "muted" | "warning" | "info" | "success" | "
  * The buttons a caller is offered mirror the server's rule rather than replacing
  * it: the API refuses a submitter approving their own price, and an
  * administrator approving anything, whichever button was on screen.
+ *
+ * `canSeeInternal` mirrors the server's own narrowing: for a role that may see
+ * only the live list price the history it returned holds nothing that is not
+ * live, and the section says so rather than leaving an unexplained gap.
  */
 export function UnitPricingSection({
   unitPricing,
   canPrice,
   canApprove,
+  canSeeInternal,
   busy,
   onMove,
   onQuote,
@@ -50,6 +55,7 @@ export function UnitPricingSection({
   unitPricing: UnitPricing | null;
   canPrice: boolean;
   canApprove: boolean;
+  canSeeInternal: boolean;
   busy: boolean;
   onMove: (action: "submit" | "approve" | "activate", versionId: string) => void;
   onQuote: () => void;
@@ -67,10 +73,11 @@ export function UnitPricingSection({
 
   // The newest version that is on its way somewhere. An active price has
   // arrived; a superseded one is history.
-  const pending =
-    unitPricing.history.find((version) =>
-      ["draft", "submitted", "approved"].includes(version.status),
-    ) ?? null;
+  const pending = canSeeInternal
+    ? (unitPricing.history.find((version) => ["draft", "submitted", "approved"].includes(version.status)) ?? null)
+    : null;
+  const active = unitPricing.active_price;
+  const activeCode = currencyCodeOf(active?.currency_id);
 
   return (
     <>
@@ -84,15 +91,24 @@ export function UnitPricingSection({
 
       {pending ? (
         <section>
-          <SectionHeader title="Price in progress" />
-          <ButtonRow>
-            <span className="chip">
-              <span className="chip-label">Version</span>
-              <strong>{pending.version_number}</strong>
+          <SectionHeader
+            title="Price in progress"
+            actions={
               <Badge tone={VERSION_TONES[pending.status] ?? "neutral"}>
                 {VERSION_LABELS[pending.status] ?? pending.status}
               </Badge>
-            </span>
+            }
+          />
+          <MetricGroup compact>
+            <Metric label="Version" value={`v${pending.version_number}`} size="sm" />
+            <Metric
+              label="Reference price (ex tax)"
+              value={money(pending.reference_price_ex_tax, currencyCodeOf(pending.currency_id))}
+              size="sm"
+            />
+            <Metric label="Prepared" value={businessDate(pending.valid_from)} size="sm" />
+          </MetricGroup>
+          <ButtonRow>
             {canPrice && pending.status === "draft" ? (
               <Button small disabled={busy} onClick={() => onMove("submit", pending.id)}>
                 Submit for approval
@@ -104,12 +120,7 @@ export function UnitPricingSection({
               </Button>
             ) : null}
             {canApprove && pending.status === "approved" ? (
-              <Button
-                small
-                variant="primary"
-                disabled={busy}
-                onClick={() => onMove("activate", pending.id)}
-              >
+              <Button small variant="primary" disabled={busy} onClick={() => onMove("activate", pending.id)}>
                 Activate
               </Button>
             ) : null}
@@ -125,14 +136,14 @@ export function UnitPricingSection({
         <SectionHeader
           title="Live list price"
           actions={
-            unitPricing.active_price ? (
+            active ? (
               <Button small onClick={onQuote}>
                 Quote preview
               </Button>
             ) : undefined
           }
         />
-        {unitPricing.active_price === null ? (
+        {active === null ? (
           <EmptyState
             title="Not priced"
             hint={
@@ -143,36 +154,31 @@ export function UnitPricingSection({
           />
         ) : (
           <>
-            <StatRow>
-              <Stat
+            <MetricGroup>
+              <Metric
                 label="Reference price (ex tax)"
-                value={money(
-                  unitPricing.active_price.reference_price_ex_tax,
-                  currencyCodeOf(unitPricing.active_price.currency_id),
-                )}
+                value={money(active.reference_price_ex_tax, activeCode)}
+                size="lg"
               />
-              <Stat
+              <Metric
                 label="Per internal unit"
-                value={money(
-                  unitPricing.active_price.price_per_internal_area,
-                  currencyCodeOf(unitPricing.active_price.currency_id),
-                )}
-                small
+                value={money(active.price_per_internal_area, activeCode)}
+                size="sm"
               />
-              <Stat
+              <Metric
                 label="Version"
-                value={`v${unitPricing.active_price.version_number}`}
-                note={`Live from ${businessDate(unitPricing.active_price.valid_from)}`}
-                small
+                value={`v${active.version_number}`}
+                note={`Live from ${businessDate(active.valid_from)}`}
+                size="sm"
               />
-              <Stat
+              <Metric
                 label="Pricing gate"
                 value={unitPricing.pricing_approved ? "Approved" : "Not approved"}
-                small
+                size="sm"
               />
-            </StatRow>
+            </MetricGroup>
             <h4 className="section-heading">How it was built</h4>
-            <PriceWaterfall version={unitPricing.active_price} />
+            <PriceWaterfall version={active} />
           </>
         )}
       </section>
@@ -180,7 +186,7 @@ export function UnitPricingSection({
       {unitPricing.history.length > 1 ? (
         <section>
           <SectionHeader title="Price history" />
-          <TableScroll label="Price history">
+          <TableScroll label="Price history" compact>
             <thead>
               <tr>
                 <th scope="col">Version</th>
@@ -190,32 +196,41 @@ export function UnitPricingSection({
                 <th scope="col" className="num">
                   Price
                 </th>
-                <th scope="col">Reason</th>
+                <th scope="col" className="cell-prose">
+                  Reason
+                </th>
               </tr>
             </thead>
             <tbody>
               {unitPricing.history.map((version) => (
                 <tr key={version.id}>
                   <th scope="row" className="mono">
-                    {version.version_number}
+                    v{version.version_number}
                   </th>
                   <td>
                     <Badge tone={VERSION_TONES[version.status] ?? "neutral"}>
                       {VERSION_LABELS[version.status] ?? version.status}
                     </Badge>
                   </td>
-                  <td className="mono nowrap">{businessDate(version.valid_from)}</td>
-                  <td className="mono nowrap">{businessDate(version.valid_to)}</td>
+                  <td className="figure">{businessDate(version.valid_from)}</td>
+                  <td className="figure">{businessDate(version.valid_to)}</td>
                   <td className="num">
                     {money(version.reference_price_ex_tax, currencyCodeOf(version.currency_id))}
                   </td>
-                  <td>{version.change_reason ?? "—"}</td>
+                  <td className="cell-prose">{version.change_reason ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </TableScroll>
         </section>
       ) : null}
+
+      {canSeeInternal ? null : (
+        <p className="footnote">
+          Prices that are not yet live — drafts, submissions and approvals awaiting activation — are
+          not shown to your role.
+        </p>
+      )}
     </>
   );
 }

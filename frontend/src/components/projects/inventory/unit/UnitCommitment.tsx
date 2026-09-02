@@ -28,6 +28,13 @@ import {
 } from "@/components/projects/sales/labels";
 
 /**
+ * The live commercial record on a unit: the reservation that holds it, the
+ * contract that owns it, or neither. Both halves are the server's own records,
+ * chosen by status, and either may be absent.
+ */
+export type Commitment = { reservation: Reservation | null; sale: SaleDetail | null };
+
+/**
  * The deal on this unit, as inventory is allowed to see it.
  *
  * A read-only view: reserving, contracting, cancelling and handing over all
@@ -44,7 +51,7 @@ export function UnitCommitment({
   commitment,
 }: {
   projectId: string;
-  commitment: { reservation: Reservation | null; sale: SaleDetail | null } | null;
+  commitment: Commitment | null;
 }) {
   const currencyCodeOf = useCurrencyCode();
 
@@ -72,19 +79,16 @@ export function UnitCommitment({
     <>
       {commitment.reservation ? (
         <section>
-          <SectionHeader title="Reservation" />
+          <SectionHeader
+            title="Reservation"
+            actions={
+              <Badge tone={reservationTone(commitment.reservation.status)}>
+                {reservationLabel(commitment.reservation.status)}
+              </Badge>
+            }
+          />
           <KeyValueGrid columns={3}>
-            <KeyValue
-              label="Number"
-              value={
-                <>
-                  <span className="mono">{commitment.reservation.reservation_number}</span>{" "}
-                  <Badge tone={reservationTone(commitment.reservation.status)}>
-                    {reservationLabel(commitment.reservation.status)}
-                  </Badge>
-                </>
-              }
-            />
+            <KeyValue label="Number" mono value={commitment.reservation.reservation_number} />
             <KeyValue label="Expires" mono value={businessDate(commitment.reservation.expires_on)} />
             <KeyValue
               label="Deposit"
@@ -114,17 +118,12 @@ export function UnitCommitment({
       {sale ? (
         <>
           <section>
-            <SectionHeader title="Sale contract" />
+            <SectionHeader
+              title="Sale contract"
+              actions={<Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge>}
+            />
             <KeyValueGrid columns={3}>
-              <KeyValue
-                label="Number"
-                value={
-                  <>
-                    <span className="mono">{sale.sale.sale_number}</span>{" "}
-                    <Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge>
-                  </>
-                }
-              />
+              <KeyValue label="Number" mono value={sale.sale.sale_number} />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />
               <KeyValue
                 label="Contract price"
@@ -155,16 +154,13 @@ export function UnitCommitment({
           </section>
 
           <section>
-            <SectionHeader
-              title="Payment plan"
-              description="Scheduled, not collected."
-            />
+            <SectionHeader title="Payment plan" description="Scheduled, not collected." />
             <PlanSummary projectId={projectId} saleId={sale.sale.id} compact />
           </section>
 
           <section>
             <SectionHeader title="Buyer parties on the contract" />
-            <TableScroll label="Contract parties">
+            <TableScroll label="Contract parties" compact>
               <thead>
                 <tr>
                   <th scope="col">Name as identification</th>

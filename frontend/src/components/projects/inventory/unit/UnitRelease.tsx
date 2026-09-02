@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Field,
+  FieldRow,
   FormActions,
   KeyValue,
   KeyValueGrid,
@@ -176,7 +177,7 @@ export function UnitRelease({
               setMove({ to_status: "", effective_date: today(), reason: "" });
             }}
           >
-            <div className="form-inline">
+            <FieldRow columns={3}>
               <Field label="Move to">
                 <select
                   className="input"
@@ -194,7 +195,7 @@ export function UnitRelease({
               </Field>
               <Field label="Effective date">
                 <input
-                  className="input input-short"
+                  className="input"
                   type="date"
                   required
                   value={move.effective_date}
@@ -203,7 +204,6 @@ export function UnitRelease({
               </Field>
               <Field
                 label="Reason"
-                grow
                 hint={
                   REASON_REQUIRED.has(move.to_status) ? "Required for this move." : "Optional."
                 }
@@ -215,7 +215,7 @@ export function UnitRelease({
                   onChange={(event) => setMove({ ...move, reason: event.target.value })}
                 />
               </Field>
-            </div>
+            </FieldRow>
             <FormActions>
               <Button variant="primary" type="submit" disabled={busy}>
                 {busy ? "Recording…" : "Record status change"}

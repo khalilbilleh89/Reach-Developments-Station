@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, sales } from "@/lib/api";
 import type {
-  ClientParty,
   HandoverDetail,
   LegalTimeline,
+  Reservation,
   ReservationDetail,
   SaleDetail,
   SalesClient,
@@ -18,22 +18,30 @@ import {
   Drawer,
   EmptyState,
   Field,
+  FieldRow,
   FormActions,
   KeyValue,
   KeyValueGrid,
   Loading,
+  Metric,
+  MetricGroup,
+  MoneyInput,
   Notice,
   PromptDialog,
+  RateInput,
   SectionHeader,
-  Stat,
-  StatRow,
+  Steps,
   SubPanel,
   TableScroll,
   Timeline,
   TimelineItem,
+  Waterfall,
+  WaterfallRow,
 } from "@/components/ui";
+import type { DrawerFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
+import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
+import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { DealCollections } from "@/components/projects/collections/DealCollections";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -64,21 +72,25 @@ import {
  * One deal file: this buyer, this unit, this price, and how far it has got.
  *
  * Deliberately one record rather than six screens. A reservation, an SPA, a
- * legal timeline, a cancellation and a handover are five records of one
- * transaction, and somebody answering "where is unit 101?" should not have to
- * visit five pages to find out. They are five sections here rather than one
+ * legal timeline, a payment plan, a cancellation and a handover are records of
+ * one transaction, and somebody answering "where is unit 101?" should not have
+ * to visit six pages to find out. They are sections of one file rather than one
  * long scroll, because the person asking is usually one of five teams and only
- * needs their own.
+ * needs their own. The header carries what every one of them opened it for:
+ * the contract price, what it is net of tax, the date, and the gate that is
+ * holding it.
  *
  * Nothing in this file calculates. Every figure shown was computed by the
  * server: the discount, the tax, the contract price, the effective net revenue
  * and whether an approval is required. The browser sends inputs and displays
  * what comes back, so there is never a second implementation of the waterfall
- * quietly disagreeing with the first.
+ * quietly disagreeing with the first. The lifecycle strip likewise draws the
+ * statuses the server returned; it decides nothing.
  *
  * Personal data is likewise the server's decision. A party arrives with an
  * identity document number or without the field at all, and this file renders
- * what it was given rather than deciding who deserves to see what.
+ * what it was given rather than deciding who deserves to see what. Collections
+ * figures are requested only on behalf of a role the server would answer.
  */
 
 const LEGAL_EVENT_TYPES = [
@@ -123,14 +135,51 @@ type Ask = {
   run: (value: string) => void;
 };
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+/** The columns a buyer party is shown by, whichever record it came from. */
+type PartyRow = {
+  id: string;
+  party_role: string;
+  name_as_identification: string;
+  nationality_code: string | null;
+  share_fraction: string;
+  identity_document_type?: string | null;
+  identity_document_number?: string | null;
+};
+
+/**
+ * Where the deal has got to, drawn from the statuses the server returned.
+ *
+ * Four milestones every team recognises. A step is "done" when the server's
+ * own status for that record says so and "current" while the record exists
+ * and is still moving; a cancelled or expired record shows as neither, and the
+ * badge beside the title says what happened instead.
+ */
+function lifecycle(terms: Reservation | null, sale: SaleDetail | null) {
+  const state = (done: boolean, current: boolean): "done" | "current" | "pending" =>
+    done ? "done" : current ? "current" : "pending";
+  const reservationDone =
+    sale !== null || (terms !== null && ["active", "extended", "converted"].includes(terms.status));
+  const reservationCurrent = terms !== null && ["draft", "deposit_pending"].includes(terms.status);
+  const contractDone = sale !== null && ["active", "termination_pending"].includes(sale.sale.status);
+  const contractCurrent = sale !== null && ["draft", "signature_pending"].includes(sale.sale.status);
+  const legal = sale?.legal.legal_status ?? "no_spa";
+  const registeredDone = ["registered", "transfer_pending", "transferred"].includes(legal);
+  const registeredCurrent = sale !== null && !registeredDone && legal !== "no_spa";
+  const handoverDone = sale?.handover?.handover.status === "handed_over";
+  const handoverCurrent = sale?.handover != null && !handoverDone;
+  return [
+    { key: "reserved", label: "Reserved", state: state(reservationDone, reservationCurrent) },
+    { key: "contracted", label: "Contracted", state: state(contractDone, contractCurrent) },
+    { key: "registered", label: "Registered", state: state(registeredDone, registeredCurrent) },
+    { key: "handed_over", label: "Handed over", state: state(handoverDone, handoverCurrent) },
+  ];
 }
 
-function PartyList({ parties }: { parties: ClientParty[] }) {
+function PartyList({ parties }: { parties: PartyRow[] }) {
   if (parties.length === 0) {
     return (
       <EmptyState
+        compact
         title="No buyers recorded yet"
         hint="A unit cannot be committed until the buyer shares total 1.000000."
       />
@@ -138,7 +187,7 @@ function PartyList({ parties }: { parties: ClientParty[] }) {
   }
   const showsIdentity = "identity_document_number" in (parties[0] ?? {});
   return (
-    <TableScroll label="Buyer parties">
+    <TableScroll label="Buyer parties" compact>
       <thead>
         <tr>
           <th scope="col">Name as identification</th>
@@ -191,10 +240,7 @@ function LegalTimelineView({
   const effective = new Set(timeline.effective_event_ids);
   if (timeline.events.length === 0) {
     return (
-      <EmptyState
-        title="Nothing recorded yet"
-        hint="Legal records each milestone as it happens."
-      />
+      <EmptyState compact title="Nothing recorded yet" hint="Legal records each milestone as it happens." />
     );
   }
   return (
@@ -223,21 +269,14 @@ function LegalTimelineView({
                   {[
                     event.authority_reference ? `Authority ${event.authority_reference}` : null,
                     event.document_reference ? `Document ${event.document_reference}` : null,
-                    event.fee_amount
-                      ? `Fee ${money(event.fee_amount, currencyCodeOf(event.currency_id))}`
-                      : null,
+                    event.fee_amount ? `Fee ${money(event.fee_amount, currencyCodeOf(event.currency_id))}` : null,
                   ]
                     .filter(Boolean)
                     .join(" · ") || "No references recorded."}
                 </span>
                 {canRecord && !correction && stands ? (
                   <div className="button-row">
-                    <Button
-                      small
-                      variant="quiet"
-                      disabled={busy}
-                      onClick={() => onReverse(event.id)}
-                    >
+                    <Button small variant="quiet" disabled={busy} onClick={() => onReverse(event.id)}>
                       Withdraw this milestone
                     </Button>
                   </div>
@@ -273,7 +312,7 @@ function HandoverView({
   canRunHandover: boolean;
 }) {
   const [form, setForm] = useState({
-    handover_date: detail.handover.handover_date ?? today(),
+    handover_date: detail.handover.handover_date ?? todayISO(),
     acceptance_document_reference: detail.handover.acceptance_document_reference ?? "",
     keys_reference: detail.handover.keys_reference ?? "",
   });
@@ -288,42 +327,26 @@ function HandoverView({
   // offering.
   const supplied = ["Handover date not recorded", "Acceptance document reference not recorded"];
   const outstanding = detail.blockers.filter((blocker) => !supplied.includes(blocker));
-  const ready =
-    outstanding.length === 0 &&
-    form.handover_date !== "" &&
-    form.acceptance_document_reference !== "";
+  const ready = outstanding.length === 0 && form.handover_date !== "" && form.acceptance_document_reference !== "";
 
   return (
     <>
       <section>
-        <SectionHeader title="Progress" />
-        <KeyValueGrid columns={3}>
-          <KeyValue
-            label="Status"
-            value={
-              <Badge tone={handoverTone(detail.handover.status)}>
-                {handoverLabel(detail.handover.status)}
-              </Badge>
-            }
-          />
+        <SectionHeader
+          title="Progress"
+          actions={
+            <Badge tone={handoverTone(detail.handover.status)}>{handoverLabel(detail.handover.status)}</Badge>
+          }
+        />
+        <KeyValueGrid columns={4}>
           <KeyValue label="Readiness" mono value={businessDate(detail.handover.readiness_date)} />
           <KeyValue label="Inspection" mono value={businessDate(detail.handover.inspection_date)} />
           <KeyValue label="Snagging" value={detail.handover.snag_status} />
-          <KeyValue
-            label="Client notice"
-            mono
-            value={businessDate(detail.handover.client_notice_date)}
-          />
-          <KeyValue
-            label="Scheduled"
-            mono
-            value={businessDate(detail.handover.scheduled_handover_date)}
-          />
+          <KeyValue label="Client notice" mono value={businessDate(detail.handover.client_notice_date)} />
+          <KeyValue label="Scheduled" mono value={businessDate(detail.handover.scheduled_handover_date)} />
           <KeyValue label="Handed over" mono value={businessDate(detail.handover.handover_date)} />
-          <KeyValue
-            label="Acceptance document"
-            value={detail.handover.acceptance_document_reference}
-          />
+          <KeyValue label="Acceptance document" value={detail.handover.acceptance_document_reference} />
+          <KeyValue label="Keys" value={detail.handover.keys_reference} />
         </KeyValueGrid>
       </section>
 
@@ -332,13 +355,15 @@ function HandoverView({
           title="Clearances"
           description="Three departments, three sign-offs. None of them is anybody else's to give."
         />
-        <TableScroll label="Handover clearances">
+        <TableScroll label="Handover clearances" compact>
           <thead>
             <tr>
               <th scope="col">Department</th>
               <th scope="col">Status</th>
               <th scope="col">Evidence</th>
-              <th scope="col">Action</th>
+              <th scope="col">
+                <span className="visually-hidden">Action</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -394,7 +419,7 @@ function HandoverView({
               });
             }}
           >
-            <div className="form-grid">
+            <FieldRow columns={3}>
               <Field label="Handover date">
                 <input
                   className="input"
@@ -407,24 +432,22 @@ function HandoverView({
                 <input
                   className="input"
                   value={form.acceptance_document_reference}
-                  onChange={(event) =>
-                    setForm({ ...form, acceptance_document_reference: event.target.value })
-                  }
+                  onChange={(event) => setForm({ ...form, acceptance_document_reference: event.target.value })}
                 />
               </Field>
-              <Field label="Keys reference">
+              <Field label="Keys reference" optional>
                 <input
                   className="input"
                   value={form.keys_reference}
                   onChange={(event) => setForm({ ...form, keys_reference: event.target.value })}
                 />
               </Field>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy || !ready}>
-                  Complete handover
-                </Button>
-              </FormActions>
-            </div>
+            </FieldRow>
+            <FormActions>
+              <Button variant="primary" type="submit" disabled={busy || !ready}>
+                Complete handover
+              </Button>
+            </FormActions>
           </form>
         </SubPanel>
       ) : null}
@@ -437,6 +460,7 @@ export function DealFile({
   reservationId,
   saleId,
   roles,
+  unitReference,
   onClose,
   onChanged,
 }: {
@@ -444,15 +468,17 @@ export function DealFile({
   reservationId: string | null;
   saleId: string | null;
   roles: Set<string>;
+  /** The unit the register row named, so the header can say it before the deal loads. */
+  unitReference?: string | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
   const [reservation, setReservation] = useState<ReservationDetail | null>(null);
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [client, setClient] = useState<SalesClient | null>(null);
-  const [parties, setParties] = useState<ClientParty[]>([]);
+  const [parties, setParties] = useState<PartyRow[]>([]);
   const [shares, setShares] = useState<string | null>(null);
-  const [section, setSection] = useState("deal");
+  const [section, setSection] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -464,7 +490,7 @@ export function DealFile({
   });
   const [legalForm, setLegalForm] = useState({
     event_type: LEGAL_EVENT_TYPES[0],
-    event_date: today(),
+    event_date: todayISO(),
     authority_reference: "",
     document_reference: "",
   });
@@ -484,6 +510,7 @@ export function DealFile({
   const canApprove = roles.has("approver_cfo");
   const canRecordLegal = roles.has("legal");
   const canCancel = roles.has("sales_operations") || roles.has("legal");
+  const seesCollections = hasAnyRole(roles, COLLECTION_READERS);
   const clearanceRoles = new Set<string>();
   if (roles.has("legal")) clearanceRoles.add("legal");
   if (roles.has("collections")) clearanceRoles.add("collection");
@@ -509,8 +536,7 @@ export function DealFile({
         const live = onUnit.find((entry) => entry.status !== "cancelled");
         if (live) loadedSale = await sales.contract(projectId, live.id);
       }
-      const clientId =
-        loadedSale?.sale.client_id ?? loadedReservation?.reservation.client_id ?? null;
+      const clientId = loadedSale?.sale.client_id ?? loadedReservation?.reservation.client_id ?? null;
       setSale(loadedSale);
       setReservation(loadedReservation);
       if (clientId) {
@@ -555,11 +581,7 @@ export function DealFile({
    * rather than a browser prompt means the person can see what they are being
    * asked about while they answer.
    */
-  const askThen = (
-    prompt: Omit<Ask, "run">,
-    action: (reason: string) => Promise<unknown>,
-    done: string,
-  ) => {
+  const askThen = (prompt: Omit<Ask, "run">, action: (reason: string) => Promise<unknown>, done: string) => {
     setAsk({
       ...prompt,
       run: (value) => {
@@ -571,7 +593,7 @@ export function DealFile({
 
   if (error && reservation === null && sale === null) {
     return (
-      <Drawer title="Deal" onClose={onClose}>
+      <Drawer eyebrow="Deal file" title={unitReference ?? "Deal"} onClose={onClose}>
         <Notice tone="error">{error}</Notice>
       </Drawer>
     );
@@ -579,8 +601,8 @@ export function DealFile({
 
   if (reservation === null && sale === null) {
     return (
-      <Drawer title="Loading the deal…" onClose={onClose}>
-        <Loading label="Loading the deal…" lines={5} />
+      <Drawer eyebrow="Deal file" title={unitReference ?? "Loading the deal…"} onClose={onClose}>
+        <Loading label="Loading the deal…" shape="page" />
       </Drawer>
     );
   }
@@ -591,7 +613,7 @@ export function DealFile({
   // A live reservation whose price lock has run out cannot proceed to contract
   // and cannot be edited either. The explicit re-quote is the way out, and the
   // screen offers it rather than leaving the operator at a dead end.
-  const lockExpired = terms !== null && terms.price_locked_until < today();
+  const lockExpired = terms !== null && terms.price_locked_until < todayISO();
   const isRate = RATE_ADJUSTMENTS.has(adjustment.adjustment_type);
   // Each record names its own denomination; nothing is inherited from the
   // project. The deposit may be taken in a different currency than the quote.
@@ -600,13 +622,44 @@ export function DealFile({
   const saleCode = currencyCodeOf(sale?.sale.currency_id);
 
   const sections = [
-    { key: "deal", label: "Reservation" },
+    ...(terms ? [{ key: "commercial", label: "Commercial" }] : []),
+    { key: "buyers", label: "Buyers" },
     ...(sale ? [{ key: "contract", label: "Contract" }] : []),
     ...(sale ? [{ key: "legal", label: "Legal" }] : []),
+    ...(sale ? [{ key: "plan", label: "Payment plan" }] : []),
+    ...(sale && seesCollections ? [{ key: "collections", label: "Collections" }] : []),
     ...(sale?.cancellation ? [{ key: "closure", label: "Cancellation" }] : []),
     ...(sale?.handover ? [{ key: "handover", label: "Handover" }] : []),
   ];
-  const activeSection = sections.some((entry) => entry.key === section) ? section : "deal";
+  const fallback = sale ? "contract" : "commercial";
+  const activeSection =
+    section !== null && sections.some((entry) => entry.key === section) ? section : fallback;
+
+  const facts: DrawerFact[] = sale
+    ? [
+        { label: "Contract price", value: money(sale.sale.total_contract_price, saleCode), note: "Buyer payable" },
+        { label: "Net of tax", value: money(sale.sale.net_contract_price_ex_tax, saleCode) },
+        { label: "Contract date", value: businessDate(sale.sale.contract_date) },
+        {
+          label: "First payment",
+          value: gateLabel(sale.sale.first_payment_gate_status),
+          note: sale.sale.first_payment_required_amount
+            ? money(sale.sale.first_payment_required_amount, saleCode)
+            : undefined,
+        },
+      ]
+    : terms
+      ? [
+          { label: "Net contract price", value: money(terms.net_contract_price_ex_tax, quoteCode), note: "Ex tax" },
+          { label: "Total buyer payable", value: money(terms.total_buyer_payable, quoteCode) },
+          { label: "Expires", value: businessDate(terms.expires_on) },
+          {
+            label: "Deposit",
+            value: gateLabel(terms.deposit_gate_status),
+            note: terms.deposit_required_amount ? money(terms.deposit_required_amount, depositCode) : undefined,
+          },
+        ]
+      : [];
 
   return (
     <Drawer
@@ -616,542 +669,464 @@ export function DealFile({
           ? `${sale.sale.sale_number}${sale.sale.spa_number ? ` · ${sale.sale.spa_number}` : ""}`
           : (terms?.reservation_number ?? "Deal")
       }
-      subtitle="One buyer, one unit, one price, and how far it has got."
+      subtitle={[unitReference ? `Unit ${unitReference}` : null, client?.display_name ?? null]
+        .filter(Boolean)
+        .join(" · ")}
       meta={
         <>
-          {terms ? (
-            <Badge tone={reservationTone(terms.status)}>{reservationLabel(terms.status)}</Badge>
-          ) : null}
+          {terms ? <Badge tone={reservationTone(terms.status)}>{reservationLabel(terms.status)}</Badge> : null}
+          {sale ? <Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge> : null}
           {sale ? (
-            <Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge>
-          ) : null}
-          {sale ? (
-            <Badge tone={statusTone(sale.legal.legal_status)}>
-              {statusLabel(sale.legal.legal_status)}
-            </Badge>
+            <Badge tone={statusTone(sale.legal.legal_status)}>{statusLabel(sale.legal.legal_status)}</Badge>
           ) : null}
           {sale?.handover ? (
             <Badge tone={handoverTone(sale.handover.handover.status)}>
               {handoverLabel(sale.handover.handover.status)}
             </Badge>
           ) : null}
+          {reservation?.closure_required ? <Badge tone="danger">Expired — closure required</Badge> : null}
         </>
       }
+      facts={facts}
       tabs={sections}
       activeTab={activeSection}
       onSelectTab={setSection}
       onClose={onClose}
     >
+      <Steps label="Where the deal has got to" steps={lifecycle(terms, sale)} />
+
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      {activeSection === "deal" ? (
+      {activeSection === "commercial" && terms ? (
         <>
           <section>
-            <SectionHeader title="Buyer" />
-            {client ? (
-              <>
-                <KeyValueGrid columns={3}>
-                  <KeyValue
-                    label="Client"
-                    value={`${client.client_number} · ${client.display_name}`}
-                  />
-                  <KeyValue
-                    label="Identity checks"
-                    value={
-                      <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
-                    }
-                  />
-                  <KeyValue
-                    label="Buyer shares"
-                    mono
-                    value={
-                      shares === null
-                        ? null
-                        : `${shares}${shares === "1.000000" ? "" : " — not yet a whole unit"}`
-                    }
-                  />
-                  {"email" in client ? <KeyValue label="Email" value={client.email} /> : null}
-                  {"phone" in client ? <KeyValue label="Phone" value={client.phone} /> : null}
-                  {"address" in client ? <KeyValue label="Address" value={client.address} /> : null}
-                </KeyValueGrid>
-                <h4 className="section-heading">Parties</h4>
-                <PartyList parties={parties} />
-              </>
-            ) : (
-              <EmptyState
-                title="Buyer not visible"
-                hint="You may see this deal but not the buyer behind it."
-              />
-            )}
+            <SectionHeader
+              title="Reservation"
+              actions={
+                <>
+                  <Badge tone={gateTone(terms.deposit_gate_status)}>
+                    Deposit {gateLabel(terms.deposit_gate_status).toLowerCase()}
+                  </Badge>
+                  <Badge tone={exceptionTone(terms.exception_approval_status)}>
+                    Approval {exceptionLabel(terms.exception_approval_status).toLowerCase()}
+                  </Badge>
+                </>
+              }
+            />
+            <KeyValueGrid columns={4}>
+              <KeyValue label="Number" mono value={terms.reservation_number} />
+              <KeyValue label="Reserved on" mono value={businessDate(terms.reservation_date)} />
+              <KeyValue label="Expires" mono value={businessDate(terms.expires_on)} />
+              <KeyValue label="Price locked until" mono value={businessDate(terms.price_locked_until)} />
+              <KeyValue label="Channel" value={terms.sales_channel_code} />
+              <KeyValue label="Branch" value={terms.sales_branch_code} />
+              <KeyValue label="Deposit required" mono value={money(terms.deposit_required_amount, depositCode)} />
+              <KeyValue label="Deposit evidence" value={terms.deposit_confirmation_reference} />
+            </KeyValueGrid>
+            {lockExpired && live ? (
+              <Notice tone="warning">
+                The price lock on this reservation ran out on {businessDate(terms.price_locked_until)}. It
+                cannot go to contract or be edited until it is re-quoted at the unit&rsquo;s current price.
+              </Notice>
+            ) : null}
           </section>
 
-          {terms ? (
-            <>
-              <section>
-                <SectionHeader title="Reservation" />
-                <ul className="chip-list">
-                  {reservation?.closure_required ? (
-                    <li>
-                      <Badge tone="danger">Expired — closure required</Badge>
-                    </li>
-                  ) : null}
-                  <li className="chip">
-                    <span className="chip-label">Deposit</span>
-                    <Badge tone={gateTone(terms.deposit_gate_status)}>
-                      {gateLabel(terms.deposit_gate_status)}
-                    </Badge>
-                  </li>
-                  <li className="chip">
-                    <span className="chip-label">Approval</span>
-                    <Badge tone={exceptionTone(terms.exception_approval_status)}>
-                      {exceptionLabel(terms.exception_approval_status)}
-                    </Badge>
-                  </li>
-                </ul>
-                <KeyValueGrid columns={3}>
-                  <KeyValue label="Number" mono value={terms.reservation_number} />
-                  <KeyValue label="Reserved on" mono value={businessDate(terms.reservation_date)} />
-                  <KeyValue label="Expires" mono value={businessDate(terms.expires_on)} />
-                  <KeyValue
-                    label="Price locked until"
-                    mono
-                    value={businessDate(terms.price_locked_until)}
-                  />
-                  <KeyValue label="Channel" value={terms.sales_channel_code} />
-                  <KeyValue label="Branch" value={terms.sales_branch_code} />
-                  <KeyValue
-                    label="Deposit required"
-                    mono
-                    value={money(terms.deposit_required_amount, depositCode)}
-                  />
-                  <KeyValue
-                    label="Deposit evidence"
-                    value={terms.deposit_confirmation_reference}
-                  />
-                </KeyValueGrid>
-                {lockExpired && live ? (
-                  <Notice tone="warning">
-                    The price lock on this reservation ran out on{" "}
-                    {businessDate(terms.price_locked_until)}. It cannot go to contract or be
-                    edited until it is re-quoted at the unit&rsquo;s current price.
-                  </Notice>
-                ) : null}
-              </section>
+          <section>
+            <SectionHeader
+              title="Quote"
+              description="Every figure here was computed by the server. The browser does no pricing arithmetic."
+            />
+            <MetricGroup>
+              <Metric label="Net contract price" value={money(terms.net_contract_price_ex_tax, quoteCode)} note="Ex tax" size="lg" />
+              <Metric label="Tax" value={money(terms.tax_total, quoteCode)} size="sm" />
+              <Metric label="Buyer fees" value={money(terms.buyer_fee_total, quoteCode)} size="sm" />
+              <Metric label="Total buyer payable" value={money(terms.total_buyer_payable, quoteCode)} />
+            </MetricGroup>
+            <h4 className="section-heading">How it was reached</h4>
+            <Waterfall>
+              <WaterfallRow label="Approved list price" note="Ex tax" amount={money(terms.reference_price_ex_tax, quoteCode)} />
+              <WaterfallRow label="Paid upgrades" amount={money(terms.paid_upgrade_amount, quoteCode)} />
+              <WaterfallRow label="Payment plan adjustment" amount={money(terms.payment_plan_adjustment_amount, quoteCode)} />
+              <WaterfallRow label="Gross quoted price" note="Ex tax" amount={money(terms.gross_quoted_price_ex_tax, quoteCode)} kind="subtotal" />
+              <WaterfallRow label="Cash discount" note="Reduces what the buyer pays" amount={money(terms.cash_discount_amount, quoteCode)} />
+              <WaterfallRow label="Seller credit" amount={money(terms.seller_credit_amount, quoteCode)} />
+              <WaterfallRow label="Net contract price" note="Ex tax" amount={money(terms.net_contract_price_ex_tax, quoteCode)} kind="total" />
+            </Waterfall>
+            <KeyValueGrid columns={3}>
+              <KeyValue label="Seller costs" mono value={money(terms.seller_cost_total, quoteCode)} />
+              <KeyValue label="Effective net revenue" mono value={money(terms.effective_net_revenue_preview, quoteCode)} />
+              <KeyValue label="Buyer fees" mono value={money(terms.buyer_fee_total, quoteCode)} />
+            </KeyValueGrid>
+            <p className="footnote">
+              Seller costs sit beside the contract price and never inside it: a package the seller
+              absorbs does not reduce what the buyer contracts to pay.
+            </p>
+            {terms.exception_approval_required ? (
+              <Notice tone="warning">
+                {terms.exception_reason ?? "This quote needs sanctioning."}{" "}
+                {terms.exception_required_role
+                  ? `Only ${terms.exception_required_role.replace("_", " ")} may approve it.`
+                  : ""}
+              </Notice>
+            ) : null}
+          </section>
 
-              <section>
-                <SectionHeader
-                  title="Quote"
-                  description="Every figure here was computed by the server. The browser does no pricing arithmetic."
-                />
-                <StatRow>
-                  <Stat
-                    label="Net contract price"
-                    value={money(terms.net_contract_price_ex_tax, quoteCode)}
-                  />
-                  <Stat label="Tax" value={money(terms.tax_total, quoteCode)} small />
-                  <Stat
-                    label="Total buyer payable"
-                    value={money(terms.total_buyer_payable, quoteCode)}
-                  />
-                </StatRow>
-                <h4 className="section-heading">How it was reached</h4>
-                <KeyValueGrid columns={3}>
-                  <KeyValue
-                    label="Approved list price"
-                    mono
-                    value={money(terms.reference_price_ex_tax, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Paid upgrades"
-                    mono
-                    value={money(terms.paid_upgrade_amount, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Payment plan adjustment"
-                    mono
-                    value={money(terms.payment_plan_adjustment_amount, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Gross quoted"
-                    mono
-                    value={money(terms.gross_quoted_price_ex_tax, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Cash discount"
-                    mono
-                    value={money(terms.cash_discount_amount, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Seller credit"
-                    mono
-                    value={money(terms.seller_credit_amount, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Net contract price"
-                    mono
-                    value={money(terms.net_contract_price_ex_tax, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Seller costs"
-                    mono
-                    value={money(terms.seller_cost_total, quoteCode)}
-                  />
-                  <KeyValue
-                    label="Effective net revenue"
-                    mono
-                    value={money(terms.effective_net_revenue_preview, quoteCode)}
-                  />
-                  <KeyValue label="Buyer fees" mono value={money(terms.buyer_fee_total, quoteCode)} />
-                </KeyValueGrid>
-                <p className="footnote">
-                  Seller costs sit beside the contract price and never inside it: a package the
-                  seller absorbs does not reduce what the buyer contracts to pay.
-                </p>
-                {terms.exception_approval_required ? (
-                  <Notice tone="warning">
-                    {terms.exception_reason ?? "This quote needs sanctioning."}{" "}
-                    {terms.exception_required_role
-                      ? `Only ${terms.exception_required_role.replace("_", " ")} may approve it.`
-                      : ""}
-                  </Notice>
-                ) : null}
-              </section>
+          <section>
+            <SectionHeader title="Commercial inputs" />
+            {reservation && reservation.adjustments.length > 0 ? (
+              <TableScroll label="Commercial inputs" compact>
+                <thead>
+                  <tr>
+                    <th scope="col">Input</th>
+                    <th scope="col">Effect</th>
+                    <th scope="col" className="num">
+                      Rate
+                    </th>
+                    <th scope="col" className="num">
+                      Amount
+                    </th>
+                    <th scope="col" className="cell-prose">
+                      Reason
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reservation.adjustments.map((item) => (
+                    <tr key={item.id}>
+                      <th scope="row">{adjustmentLabel(item.adjustment_type)}</th>
+                      <td>{treatmentLabel(item.treatment)}</td>
+                      <td className="num">{item.rate_fraction === null ? "—" : percent(item.rate_fraction)}</td>
+                      <td className="num">{money(item.amount, quoteCode)}</td>
+                      <td className="cell-prose">{item.reason ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableScroll>
+            ) : (
+              <EmptyState compact title="No adjustments" hint="The quote is the approved list price." />
+            )}
 
-              <section>
-                <SectionHeader title="Commercial inputs" />
-                {reservation && reservation.adjustments.length > 0 ? (
-                  <TableScroll label="Commercial inputs">
-                    <thead>
-                      <tr>
-                        <th scope="col">Input</th>
-                        <th scope="col">Effect</th>
-                        <th scope="col" className="num">
-                          Rate
-                        </th>
-                        <th scope="col" className="num">
-                          Amount
-                        </th>
-                        <th scope="col">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reservation.adjustments.map((item) => (
-                        <tr key={item.id}>
-                          <th scope="row">{adjustmentLabel(item.adjustment_type)}</th>
-                          <td>{treatmentLabel(item.treatment)}</td>
-                          <td className="num">{item.rate_fraction ?? "—"}</td>
-                          <td className="num">{money(item.amount, quoteCode)}</td>
-                          <td>{item.reason ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </TableScroll>
-                ) : (
-                  <EmptyState
-                    title="No adjustments"
-                    hint="The quote is the approved list price."
-                  />
-                )}
-
-                {canPrepare && preparing ? (
-                  <SubPanel title="Record a commercial input">
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void run(
-                          () =>
-                            sales.addAdjustment(projectId, terms.id, {
-                              adjustment_type: adjustment.adjustment_type,
-                              ...(isRate
-                                ? { rate_fraction: adjustment.value }
-                                : { amount: adjustment.value }),
-                              ...(adjustment.reason ? { reason: adjustment.reason } : {}),
-                            }),
-                          "Recorded, and the quote re-run.",
-                        );
-                      }}
-                    >
-                      <div className="form-grid form-grid-3">
-                        <Field label="Commercial input">
-                          <select
-                            className="input"
-                            value={adjustment.adjustment_type}
-                            onChange={(event) =>
-                              setAdjustment({ ...adjustment, adjustment_type: event.target.value })
-                            }
-                          >
-                            {ADJUSTMENT_TYPES.map((type) => (
-                              <option key={type} value={type}>
-                                {adjustmentLabel(type)}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field
-                          label={isRate ? "Rate (fraction)" : "Amount"}
-                          hint={isRate ? "0.050000 means five per cent." : undefined}
-                        >
-                          <input
-                            className="input"
-                            value={adjustment.value}
-                            onChange={(event) =>
-                              setAdjustment({ ...adjustment, value: event.target.value })
-                            }
-                          />
-                        </Field>
-                        <Field label="Reason">
-                          <input
-                            className="input"
-                            value={adjustment.reason}
-                            onChange={(event) =>
-                              setAdjustment({ ...adjustment, reason: event.target.value })
-                            }
-                          />
-                        </Field>
-                        <FormActions>
-                          <Button type="submit" disabled={busy}>
-                            Record and re-quote
-                          </Button>
-                        </FormActions>
-                      </div>
-                    </form>
-                  </SubPanel>
-                ) : null}
-              </section>
-
-              <section>
-                <SectionHeader title="What happens next" />
-                <ButtonRow>
-                  {canPrepare &&
-                  (preparing || live) &&
-                  terms.exception_approval_status === "pending" ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        askThen(
-                          {
-                            title: "Submit this quote for approval",
-                            label: "Why is this exception justified?",
-                            confirmLabel: "Submit",
-                          },
-                          (reason) => sales.submitException(projectId, terms.id, reason),
-                          "Put forward for sanction.",
-                        )
-                      }
-                    >
-                      Submit for approval
-                    </Button>
-                  ) : null}
-                  {canApprove && terms.exception_approval_status === "submitted" ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        disabled={busy}
-                        onClick={() =>
-                          askThen(
-                            {
-                              title: "Approve this exception",
-                              label: "Why is this approved?",
-                              confirmLabel: "Approve",
-                            },
-                            (reason) =>
-                              sales.decideException(projectId, terms.id, true, reason),
-                            "Approved.",
-                          )
+            {canPrepare && preparing ? (
+              <SubPanel title="Record a commercial input">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void run(
+                      () =>
+                        sales.addAdjustment(projectId, terms.id, {
+                          adjustment_type: adjustment.adjustment_type,
+                          ...(isRate
+                            ? { rate_fraction: fractionFromPercent(adjustment.value) }
+                            : { amount: adjustment.value }),
+                          ...(adjustment.reason ? { reason: adjustment.reason } : {}),
+                        }),
+                      "Recorded, and the quote re-run.",
+                    );
+                  }}
+                >
+                  <FieldRow columns={3}>
+                    <Field label="Commercial input">
+                      <select
+                        className="input"
+                        value={adjustment.adjustment_type}
+                        onChange={(event) =>
+                          setAdjustment({ ...adjustment, adjustment_type: event.target.value, value: "" })
                         }
                       >
-                        Approve exception
-                      </Button>
-                      <Button
-                        variant="danger"
-                        disabled={busy}
-                        onClick={() =>
-                          askThen(
-                            {
-                              title: "Refuse this exception",
-                              label: "Why is this refused?",
-                              confirmLabel: "Refuse",
-                            },
-                            (reason) =>
-                              sales.decideException(projectId, terms.id, false, reason),
-                            "Refused.",
-                          )
-                        }
-                      >
-                        Refuse exception
-                      </Button>
-                    </>
-                  ) : null}
-                  {canWriteSale && preparing && terms.deposit_gate_status === "pending" ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        askThen(
-                          {
-                            title: "Record deposit evidence",
-                            label: "Reference for the deposit evidence",
-                            hint: "This attests that evidence exists. It is not a receipt.",
-                            confirmLabel: "Record",
-                          },
-                          (reference) => sales.confirmDeposit(projectId, terms.id, reference),
-                          "Deposit evidence recorded. This is not a receipt.",
-                        )
-                      }
-                    >
-                      Record deposit evidence
+                        {ADJUSTMENT_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {adjustmentLabel(type)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {isRate ? (
+                      <Field label="Rate" hint="Of the reference price. Five means five per cent.">
+                        <RateInput
+                          value={adjustment.value}
+                          required
+                          onChange={(value) => setAdjustment({ ...adjustment, value })}
+                        />
+                      </Field>
+                    ) : (
+                      <Field label="Amount">
+                        <MoneyInput
+                          code={quoteCode}
+                          value={adjustment.value}
+                          required
+                          onChange={(value) => setAdjustment({ ...adjustment, value })}
+                        />
+                      </Field>
+                    )}
+                    <Field label="Reason" optional>
+                      <input
+                        className="input"
+                        value={adjustment.reason}
+                        onChange={(event) => setAdjustment({ ...adjustment, reason: event.target.value })}
+                      />
+                    </Field>
+                  </FieldRow>
+                  <FormActions>
+                    <Button type="submit" disabled={busy}>
+                      Record and re-quote
                     </Button>
-                  ) : null}
-                  {canApprove && terms.deposit_gate_status === "pending" ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        askThen(
-                          {
-                            title: "Waive the deposit",
-                            label: "Why is the deposit being waived?",
-                            confirmLabel: "Waive",
-                          },
-                          (reason) => sales.waiveDeposit(projectId, terms.id, reason),
-                          "Deposit waived.",
-                        )
-                      }
-                    >
-                      Waive deposit
-                    </Button>
-                  ) : null}
-                  {canPrepare && preparing ? (
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => sales.activateReservation(projectId, terms.id),
-                          "The unit is reserved for this buyer.",
-                        )
-                      }
-                    >
-                      Activate reservation
-                    </Button>
-                  ) : null}
-                  {canPrepare && live && lockExpired ? (
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        askThen(
-                          {
-                            title: "Re-quote this reservation",
-                            label: "Why is this reservation being re-quoted?",
-                            hint: "The quote is re-run at the unit's current price and any approval it had is withdrawn.",
-                            confirmLabel: "Re-quote",
-                          },
-                          (reason) => sales.requoteReservation(projectId, terms.id, reason),
-                          "Re-quoted at the unit's current price. Any approval it had is withdrawn.",
-                        )
-                      }
-                    >
-                      Re-quote
-                    </Button>
-                  ) : null}
-                  {canWriteSale && live && !lockExpired && sale === null ? (
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => sales.createContract(projectId, { reservation_id: terms.id }),
-                          "Contract drafted at the reservation's frozen price.",
-                        )
-                      }
-                    >
-                      Draw up contract
-                    </Button>
-                  ) : null}
-                  {canPrepare && live ? (
-                    <Button
-                      variant="danger"
-                      disabled={busy}
-                      onClick={() =>
-                        askThen(
-                          {
-                            title: "Cancel this reservation",
-                            label: "Why is the reservation being cancelled?",
-                            confirmLabel: "Cancel reservation",
-                          },
-                          (reason) => sales.cancelReservation(projectId, terms.id, reason),
-                          "Reservation cancelled.",
-                        )
-                      }
-                    >
-                      Cancel reservation
-                    </Button>
-                  ) : null}
-                  {canPrepare && reservation?.closure_required ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => sales.expireReservation(projectId, terms.id),
-                          "Reservation closed as expired.",
-                        )
-                      }
-                    >
-                      Close as expired
-                    </Button>
-                  ) : null}
-                </ButtonRow>
-              </section>
-            </>
-          ) : null}
+                  </FormActions>
+                </form>
+              </SubPanel>
+            ) : null}
+          </section>
+
+          <section>
+            <SectionHeader title="What happens next" />
+            <ButtonRow>
+              {canPrepare && (preparing || live) && terms.exception_approval_status === "pending" ? (
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    askThen(
+                      {
+                        title: "Submit this quote for approval",
+                        label: "Why is this exception justified?",
+                        confirmLabel: "Submit",
+                      },
+                      (reason) => sales.submitException(projectId, terms.id, reason),
+                      "Put forward for sanction.",
+                    )
+                  }
+                >
+                  Submit for approval
+                </Button>
+              ) : null}
+              {canApprove && terms.exception_approval_status === "submitted" ? (
+                <>
+                  <Button
+                    variant="primary"
+                    disabled={busy}
+                    onClick={() =>
+                      askThen(
+                        {
+                          title: "Approve this exception",
+                          label: "Why is this approved?",
+                          confirmLabel: "Approve",
+                        },
+                        (reason) => sales.decideException(projectId, terms.id, true, reason),
+                        "Approved.",
+                      )
+                    }
+                  >
+                    Approve exception
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() =>
+                      askThen(
+                        {
+                          title: "Refuse this exception",
+                          label: "Why is this refused?",
+                          confirmLabel: "Refuse",
+                        },
+                        (reason) => sales.decideException(projectId, terms.id, false, reason),
+                        "Refused.",
+                      )
+                    }
+                  >
+                    Refuse exception
+                  </Button>
+                </>
+              ) : null}
+              {canWriteSale && preparing && terms.deposit_gate_status === "pending" ? (
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    askThen(
+                      {
+                        title: "Record deposit evidence",
+                        label: "Reference for the deposit evidence",
+                        hint: "This attests that evidence exists. It is not a receipt.",
+                        confirmLabel: "Record",
+                      },
+                      (reference) => sales.confirmDeposit(projectId, terms.id, reference),
+                      "Deposit evidence recorded. This is not a receipt.",
+                    )
+                  }
+                >
+                  Record deposit evidence
+                </Button>
+              ) : null}
+              {canApprove && terms.deposit_gate_status === "pending" ? (
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    askThen(
+                      {
+                        title: "Waive the deposit",
+                        label: "Why is the deposit being waived?",
+                        confirmLabel: "Waive",
+                      },
+                      (reason) => sales.waiveDeposit(projectId, terms.id, reason),
+                      "Deposit waived.",
+                    )
+                  }
+                >
+                  Waive deposit
+                </Button>
+              ) : null}
+              {canPrepare && preparing ? (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      () => sales.activateReservation(projectId, terms.id),
+                      "The unit is reserved for this buyer.",
+                    )
+                  }
+                >
+                  Activate reservation
+                </Button>
+              ) : null}
+              {canPrepare && live && lockExpired ? (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    askThen(
+                      {
+                        title: "Re-quote this reservation",
+                        label: "Why is this reservation being re-quoted?",
+                        hint: "The quote is re-run at the unit's current price and any approval it had is withdrawn.",
+                        confirmLabel: "Re-quote",
+                      },
+                      (reason) => sales.requoteReservation(projectId, terms.id, reason),
+                      "Re-quoted at the unit's current price. Any approval it had is withdrawn.",
+                    )
+                  }
+                >
+                  Re-quote
+                </Button>
+              ) : null}
+              {canWriteSale && live && !lockExpired && sale === null ? (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      () => sales.createContract(projectId, { reservation_id: terms.id }),
+                      "Contract drafted at the reservation's frozen price.",
+                    )
+                  }
+                >
+                  Draw up contract
+                </Button>
+              ) : null}
+              {canPrepare && live ? (
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() =>
+                    askThen(
+                      {
+                        title: "Cancel this reservation",
+                        label: "Why is the reservation being cancelled?",
+                        confirmLabel: "Cancel reservation",
+                      },
+                      (reason) => sales.cancelReservation(projectId, terms.id, reason),
+                      "Reservation cancelled.",
+                    )
+                  }
+                >
+                  Cancel reservation
+                </Button>
+              ) : null}
+              {canPrepare && reservation?.closure_required ? (
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() => sales.expireReservation(projectId, terms.id), "Reservation closed as expired.")
+                  }
+                >
+                  Close as expired
+                </Button>
+              ) : null}
+            </ButtonRow>
+          </section>
         </>
+      ) : null}
+
+      {activeSection === "buyers" ? (
+        <section>
+          <SectionHeader
+            title="Buyer"
+            actions={
+              client ? <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge> : undefined
+            }
+          />
+          {client ? (
+            <>
+              <KeyValueGrid columns={3}>
+                <KeyValue label="Client" value={`${client.client_number} · ${client.display_name}`} />
+                <KeyValue
+                  label="Buyer shares"
+                  mono
+                  value={shares === null ? null : `${shares}${shares === "1.000000" ? "" : " — not yet a whole unit"}`}
+                />
+                <KeyValue label="Preferred language" value={client.preferred_language_code} />
+                {"email" in client ? <KeyValue label="Email" value={client.email} /> : null}
+                {"phone" in client ? <KeyValue label="Phone" value={client.phone} /> : null}
+                {"address" in client ? <KeyValue label="Address" value={client.address} /> : null}
+              </KeyValueGrid>
+              <h4 className="section-heading">Named parties</h4>
+              <PartyList parties={parties} />
+              {sale ? (
+                <>
+                  <h4 className="section-heading">Parties on the contract</h4>
+                  <PartyList parties={sale.parties} />
+                </>
+              ) : null}
+            </>
+          ) : (
+            <EmptyState title="Buyer not visible" hint="You may see this deal but not the buyer behind it." />
+          )}
+        </section>
       ) : null}
 
       {activeSection === "contract" && sale ? (
         <>
           <section>
-            <SectionHeader title="Sale contract" />
-            <StatRow>
-              <Stat
-                label="Total contract price"
-                value={money(sale.sale.total_contract_price, saleCode)}
-              />
-              <Stat
-                label="Net of tax"
-                value={money(sale.sale.net_contract_price_ex_tax, saleCode)}
-                small
-              />
-              <Stat label="Tax" value={money(sale.sale.tax_total, saleCode)} small />
-              <Stat
+            <SectionHeader
+              title="Sale contract"
+              actions={
+                <Badge tone={gateTone(sale.sale.first_payment_gate_status)}>
+                  First payment {gateLabel(sale.sale.first_payment_gate_status).toLowerCase()}
+                </Badge>
+              }
+            />
+            <MetricGroup>
+              <Metric label="Total contract price" value={money(sale.sale.total_contract_price, saleCode)} size="lg" />
+              <Metric label="Net of tax" value={money(sale.sale.net_contract_price_ex_tax, saleCode)} />
+              <Metric label="Tax" value={money(sale.sale.tax_total, saleCode)} size="sm" />
+              <Metric label="Buyer fees" value={money(sale.sale.buyer_fee_total, saleCode)} size="sm" />
+              <Metric
                 label="Effective net revenue"
                 value={money(sale.sale.effective_net_revenue_snapshot, saleCode)}
-                small
                 note="After seller costs"
+                size="sm"
               />
-            </StatRow>
-            <KeyValueGrid columns={3}>
+            </MetricGroup>
+            <KeyValueGrid columns={4}>
               <KeyValue label="Sale number" mono value={sale.sale.sale_number} />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />
               <KeyValue label="Contract date" mono value={businessDate(sale.sale.contract_date)} />
-              <KeyValue
-                label="Seller costs"
-                mono
-                value={money(sale.sale.seller_cost_total, saleCode)}
-              />
-              <KeyValue
-                label="First payment"
-                value={
-                  <Badge tone={gateTone(sale.sale.first_payment_gate_status)}>
-                    {gateLabel(sale.sale.first_payment_gate_status)}
-                  </Badge>
-                }
-              />
+              <KeyValue label="Seller costs" mono value={money(sale.sale.seller_cost_total, saleCode)} />
+              <KeyValue label="Cash discount" mono value={money(sale.sale.cash_discount_amount, saleCode)} />
+              <KeyValue label="Seller credit" mono value={money(sale.sale.seller_credit_amount, saleCode)} />
+              <KeyValue label="Channel" value={sale.sale.sales_channel_code} />
               <KeyValue
                 label="Legal standing"
                 value={
-                  <Badge tone={statusTone(sale.legal.legal_status)}>
-                    {statusLabel(sale.legal.legal_status)}
-                  </Badge>
+                  <Badge tone={statusTone(sale.legal.legal_status)}>{statusLabel(sale.legal.legal_status)}</Badge>
                 }
               />
             </KeyValueGrid>
@@ -1161,34 +1136,13 @@ export function DealFile({
             </p>
           </section>
 
-          <section>
-            <SectionHeader title="Contract parties" />
-            <PartyList parties={sale.parties as unknown as ClientParty[]} />
-          </section>
-
-          <section>
-            <SectionHeader
-              title="Payment plan"
-              description="What the buyer agreed to pay, and when. Not what has been collected."
-            />
-            <PlanSummary projectId={projectId} saleId={sale.sale.id} />
-          </section>
-
-          <section>
-            <SectionHeader
-              title="Collections"
-              description="What actually arrived, where it was applied, and what is still owed."
-            />
-            <DealCollections projectId={projectId} saleId={sale.sale.id} />
-          </section>
-
           {sale.tax_lines.length > 0 ? (
             <section>
               <SectionHeader
                 title="Frozen taxes"
                 description="The rates that applied on the contract date, kept whatever changes since."
               />
-              <TableScroll label="Frozen tax lines">
+              <TableScroll label="Frozen tax lines" compact>
                 <thead>
                   <tr>
                     <th scope="col">Tax</th>
@@ -1209,15 +1163,11 @@ export function DealFile({
                   {sale.tax_lines.map((line) => (
                     <tr key={line.id}>
                       <th scope="row">{line.label}</th>
-                      <td className="num">{line.rate_fraction}</td>
+                      <td className="num">{percent(line.rate_fraction)}</td>
                       <td>{line.calculation_basis}</td>
-                      <td className="num">
-                        {money(line.taxable_amount, currencyCodeOf(line.currency_id))}
-                      </td>
-                      <td className="num">
-                        {money(line.tax_amount, currencyCodeOf(line.currency_id))}
-                      </td>
-                      <td className="mono nowrap">{businessDate(line.valid_on)}</td>
+                      <td className="num">{money(line.taxable_amount, currencyCodeOf(line.currency_id))}</td>
+                      <td className="num">{money(line.tax_amount, currencyCodeOf(line.currency_id))}</td>
+                      <td className="figure">{businessDate(line.valid_on)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1253,8 +1203,7 @@ export function DealFile({
                         hint: "This attests that evidence exists. It is not a receipt.",
                         confirmLabel: "Record",
                       },
-                      (reference) =>
-                        sales.confirmFirstPayment(projectId, sale.sale.id, reference),
+                      (reference) => sales.confirmFirstPayment(projectId, sale.sale.id, reference),
                       "First-payment evidence recorded. This is not a receipt.",
                     )
                   }
@@ -1307,9 +1256,7 @@ export function DealFile({
                   Open handover
                 </Button>
               ) : null}
-              {canCancel &&
-              sale.cancellation === null &&
-              ["signature_pending", "active"].includes(sale.sale.status) ? (
+              {canCancel && sale.cancellation === null && ["signature_pending", "active"].includes(sale.sale.status) ? (
                 <Button variant="danger" disabled={busy} onClick={() => setCancelling(true)}>
                   Start cancellation
                 </Button>
@@ -1326,18 +1273,10 @@ export function DealFile({
                         sales.startCancellation(projectId, sale.sale.id, {
                           initiated_by_party: cancelForm.initiated_by_party,
                           reason: cancelForm.reason,
-                          ...(cancelForm.notice_date
-                            ? { notice_date: cancelForm.notice_date }
-                            : {}),
-                          ...(cancelForm.cure_deadline
-                            ? { cure_deadline: cancelForm.cure_deadline }
-                            : {}),
-                          ...(cancelForm.forfeiture_amount
-                            ? { forfeiture_amount: cancelForm.forfeiture_amount }
-                            : {}),
-                          ...(cancelForm.refund_due_amount
-                            ? { refund_due_amount: cancelForm.refund_due_amount }
-                            : {}),
+                          ...(cancelForm.notice_date ? { notice_date: cancelForm.notice_date } : {}),
+                          ...(cancelForm.cure_deadline ? { cure_deadline: cancelForm.cure_deadline } : {}),
+                          ...(cancelForm.forfeiture_amount ? { forfeiture_amount: cancelForm.forfeiture_amount } : {}),
+                          ...(cancelForm.refund_due_amount ? { refund_due_amount: cancelForm.refund_due_amount } : {}),
                         }),
                       "Cancellation opened. The unit stays committed until it completes.",
                     ).then(() => {
@@ -1346,21 +1285,17 @@ export function DealFile({
                     });
                   }}
                 >
-                  <div className="form-grid">
+                  <FieldRow columns={2}>
                     <Field label="Initiated by">
                       <select
                         className="input"
                         value={cancelForm.initiated_by_party}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, initiated_by_party: event.target.value })
-                        }
+                        onChange={(event) => setCancelForm({ ...cancelForm, initiated_by_party: event.target.value })}
                       >
                         <option value="buyer">Buyer</option>
                         <option value="seller">Seller</option>
                         <option value="mutual">Mutual</option>
-                        <option value="developer_default_process">
-                          Developer default process
-                        </option>
+                        <option value="developer_default_process">Developer default process</option>
                       </select>
                     </Field>
                     <Field label="Reason">
@@ -1368,59 +1303,52 @@ export function DealFile({
                         className="input"
                         required
                         value={cancelForm.reason}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, reason: event.target.value })
-                        }
+                        onChange={(event) => setCancelForm({ ...cancelForm, reason: event.target.value })}
                       />
                     </Field>
-                    <Field label="Notice date">
+                  </FieldRow>
+                  <FieldRow columns={4}>
+                    <Field label="Notice date" optional>
                       <input
                         className="input"
                         type="date"
                         value={cancelForm.notice_date}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, notice_date: event.target.value })
-                        }
+                        onChange={(event) => setCancelForm({ ...cancelForm, notice_date: event.target.value })}
                       />
                     </Field>
-                    <Field label="Cure deadline">
+                    <Field label="Cure deadline" optional>
                       <input
                         className="input"
                         type="date"
                         value={cancelForm.cure_deadline}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, cure_deadline: event.target.value })
-                        }
+                        onChange={(event) => setCancelForm({ ...cancelForm, cure_deadline: event.target.value })}
                       />
                     </Field>
-                    <Field label="Forfeiture">
-                      <input
-                        className="input"
+                    <Field label="Forfeiture" optional>
+                      <MoneyInput
+                        code={saleCode}
                         value={cancelForm.forfeiture_amount}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, forfeiture_amount: event.target.value })
-                        }
+                        onChange={(value) => setCancelForm({ ...cancelForm, forfeiture_amount: value })}
                       />
                     </Field>
                     <Field
                       label="Refund due"
-                      hint="What is owed. Whether it was paid is a payment record this system does not have yet."
+                      optional
+                      hint="What is owed. Whether it was paid is a payment record kept in Collections."
                     >
-                      <input
-                        className="input"
+                      <MoneyInput
+                        code={saleCode}
                         value={cancelForm.refund_due_amount}
-                        onChange={(event) =>
-                          setCancelForm({ ...cancelForm, refund_due_amount: event.target.value })
-                        }
+                        onChange={(value) => setCancelForm({ ...cancelForm, refund_due_amount: value })}
                       />
                     </Field>
-                    <FormActions>
-                      <Button variant="primary" type="submit" disabled={busy}>
-                        Open cancellation
-                      </Button>
-                      <Button onClick={() => setCancelling(false)}>Cancel</Button>
-                    </FormActions>
-                  </div>
+                  </FieldRow>
+                  <FormActions>
+                    <Button variant="primary" type="submit" disabled={busy}>
+                      Open cancellation
+                    </Button>
+                    <Button onClick={() => setCancelling(false)}>Cancel</Button>
+                  </FormActions>
                 </form>
               </SubPanel>
             ) : null}
@@ -1434,6 +1362,9 @@ export function DealFile({
             <SectionHeader
               title="Legal timeline"
               description="Each milestone as it was recorded. A withdrawal never deletes what it undoes."
+              actions={
+                <Badge tone={statusTone(sale.legal.legal_status)}>{statusLabel(sale.legal.legal_status)}</Badge>
+              }
             />
             <LegalTimelineView
               timeline={sale.legal}
@@ -1464,25 +1395,19 @@ export function DealFile({
                       sales.recordLegalEvent(projectId, sale.sale.id, {
                         event_type: legalForm.event_type,
                         event_date: legalForm.event_date,
-                        ...(legalForm.authority_reference
-                          ? { authority_reference: legalForm.authority_reference }
-                          : {}),
-                        ...(legalForm.document_reference
-                          ? { document_reference: legalForm.document_reference }
-                          : {}),
+                        ...(legalForm.authority_reference ? { authority_reference: legalForm.authority_reference } : {}),
+                        ...(legalForm.document_reference ? { document_reference: legalForm.document_reference } : {}),
                       }),
                     "Recorded.",
                   );
                 }}
               >
-                <div className="form-grid">
+                <FieldRow columns={4}>
                   <Field label="Milestone">
                     <select
                       className="input"
                       value={legalForm.event_type}
-                      onChange={(event) =>
-                        setLegalForm({ ...legalForm, event_type: event.target.value })
-                      }
+                      onChange={(event) => setLegalForm({ ...legalForm, event_type: event.target.value })}
                     >
                       {LEGAL_EVENT_TYPES.map((type) => (
                         <option key={type} value={type}>
@@ -1496,94 +1421,101 @@ export function DealFile({
                       className="input"
                       type="date"
                       value={legalForm.event_date}
-                      onChange={(event) =>
-                        setLegalForm({ ...legalForm, event_date: event.target.value })
-                      }
+                      onChange={(event) => setLegalForm({ ...legalForm, event_date: event.target.value })}
                     />
                   </Field>
-                  <Field label="Authority reference">
+                  <Field label="Authority reference" optional>
                     <input
                       className="input"
                       value={legalForm.authority_reference}
-                      onChange={(event) =>
-                        setLegalForm({ ...legalForm, authority_reference: event.target.value })
-                      }
+                      onChange={(event) => setLegalForm({ ...legalForm, authority_reference: event.target.value })}
                     />
                   </Field>
-                  <Field label="Document reference">
+                  <Field label="Document reference" optional>
                     <input
                       className="input"
                       value={legalForm.document_reference}
-                      onChange={(event) =>
-                        setLegalForm({ ...legalForm, document_reference: event.target.value })
-                      }
+                      onChange={(event) => setLegalForm({ ...legalForm, document_reference: event.target.value })}
                     />
                   </Field>
-                  <FormActions>
-                    <Button variant="primary" type="submit" disabled={busy}>
-                      Record milestone
-                    </Button>
-                  </FormActions>
-                </div>
+                </FieldRow>
+                <FormActions>
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    Record milestone
+                  </Button>
+                </FormActions>
               </form>
             </SubPanel>
           ) : null}
         </>
       ) : null}
 
+      {activeSection === "plan" && sale ? (
+        <section>
+          <SectionHeader
+            title="Payment plan"
+            description="What the buyer agreed to pay, and when. Not what has been collected."
+          />
+          <PlanSummary projectId={projectId} saleId={sale.sale.id} />
+        </section>
+      ) : null}
+
+      {activeSection === "collections" && sale && seesCollections ? (
+        <section>
+          <SectionHeader
+            title="Collections"
+            description="What actually arrived, where it was applied, and what is still owed."
+          />
+          <DealCollections projectId={projectId} saleId={sale.sale.id} />
+        </section>
+      ) : null}
+
       {activeSection === "closure" && sale?.cancellation ? (
         <>
           <section>
-            <SectionHeader title="Cancellation" />
-            <ul className="chip-list">
-              <li>
-                <Badge tone={cancellationTone(sale.cancellation.status)}>
-                  {cancellationLabel(sale.cancellation.status)}
-                </Badge>
-              </li>
-              {sale.cancellation.legal_withdrawal_required ? (
-                <li className="chip">
-                  <span className="chip-label">Registry withdrawal</span>
-                  <strong>{sale.cancellation.legal_withdrawal_status}</strong>
-                </li>
-              ) : null}
-            </ul>
-            <KeyValueGrid columns={3}>
-              <KeyValue label="Initiated by" value={sale.cancellation.initiated_by_party} />
-              <KeyValue label="Reason" value={sale.cancellation.reason} />
-              <KeyValue label="Notice" mono value={businessDate(sale.cancellation.notice_date)} />
-              <KeyValue
-                label="Cure deadline"
-                mono
-                value={businessDate(sale.cancellation.cure_deadline)}
-              />
-              <KeyValue
-                label="Forfeiture"
-                mono
-                value={money(sale.cancellation.forfeiture_amount, saleCode)}
-              />
-              <KeyValue
+            <SectionHeader
+              title="Cancellation"
+              actions={
+                <>
+                  <Badge tone={cancellationTone(sale.cancellation.status)}>
+                    {cancellationLabel(sale.cancellation.status)}
+                  </Badge>
+                  {sale.cancellation.legal_withdrawal_required ? (
+                    <Badge tone="muted">Registry withdrawal {sale.cancellation.legal_withdrawal_status}</Badge>
+                  ) : null}
+                </>
+              }
+            />
+            <MetricGroup compact>
+              <Metric label="Forfeiture" value={money(sale.cancellation.forfeiture_amount, saleCode)} size="sm" />
+              <Metric
                 label="Refund due"
-                mono
                 value={money(sale.cancellation.refund_due_amount, saleCode)}
+                note="What the contract says is owed"
+                size="sm"
               />
-              <KeyValue
+              <Metric
                 label="Financial approval"
                 value={
                   sale.cancellation.financial_approval_required
-                    ? (sale.cancellation.financial_approved_at ?? "Outstanding")
+                    ? sale.cancellation.financial_approved_at
+                      ? "Approved"
+                      : "Outstanding"
                     : "Not required"
                 }
+                size="sm"
               />
-              <KeyValue
-                label="Unit returned"
-                mono
-                value={businessDate(sale.cancellation.unit_return_date)}
-              />
+            </MetricGroup>
+            <KeyValueGrid columns={4}>
+              <KeyValue label="Initiated by" value={sale.cancellation.initiated_by_party} />
+              <KeyValue label="Reason" value={sale.cancellation.reason} />
+              <KeyValue label="Notice" mono value={businessDate(sale.cancellation.notice_date)} />
+              <KeyValue label="Cure deadline" mono value={businessDate(sale.cancellation.cure_deadline)} />
+              <KeyValue label="Unit returned" mono value={businessDate(sale.cancellation.unit_return_date)} />
             </KeyValueGrid>
             <p className="footnote">
-              A refund due is what the contract says is owed. Whether it has been paid is a
-              payment record this system does not have yet.
+              A refund due is what the contract says is owed. Whether it has been paid is recorded on
+              the collections account.
             </p>
           </section>
 
@@ -1603,8 +1535,7 @@ export function DealFile({
                         label: "Why are these terms approved?",
                         confirmLabel: "Approve",
                       },
-                      (reason) =>
-                        sales.approveCancellationTerms(projectId, sale.cancellation!.id, reason),
+                      (reason) => sales.approveCancellationTerms(projectId, sale.cancellation!.id, reason),
                       "Financial terms approved.",
                     )
                   }
@@ -1620,10 +1551,7 @@ export function DealFile({
                       disabled={busy}
                       onClick={() =>
                         void run(
-                          () =>
-                            sales.advanceCancellation(projectId, sale.cancellation!.id, {
-                              to_status: step,
-                            }),
+                          () => sales.advanceCancellation(projectId, sale.cancellation!.id, { to_status: step }),
                           `Moved to ${cancellationLabel(step).toLowerCase()}.`,
                         )
                       }
@@ -1665,8 +1593,7 @@ export function DealFile({
                 label: "Reference for the evidence",
                 confirmLabel: "Give clearance",
               },
-              (reference) =>
-                sales.grantClearance(projectId, sale.handover!.handover.id, type, reference),
+              (reference) => sales.grantClearance(projectId, sale.handover!.handover.id, type, reference),
               "Clearance given.",
             )
           }
@@ -1677,16 +1604,12 @@ export function DealFile({
                 label: "Why is this clearance being withdrawn?",
                 confirmLabel: "Withdraw",
               },
-              (reason) =>
-                sales.revokeClearance(projectId, sale.handover!.handover.id, type, reason),
+              (reason) => sales.revokeClearance(projectId, sale.handover!.handover.id, type, reason),
               "Clearance withdrawn.",
             )
           }
           onComplete={(body) =>
-            run(
-              () => sales.completeHandover(projectId, sale.handover!.handover.id, body),
-              "Handed over.",
-            )
+            run(() => sales.completeHandover(projectId, sale.handover!.handover.id, body), "Handed over.")
           }
         />
       ) : null}

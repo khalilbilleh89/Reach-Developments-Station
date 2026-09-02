@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Badge, Notice, Stat, StatRow, TableScroll } from "@/components/ui";
+import { Badge, Metric, MetricGroup, Notice, TableScroll } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type { CollectionSaleSummary, Receipt } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
@@ -32,14 +32,12 @@ import {
  * If the contract was cancelled, what is owed back and what has actually left
  * appear side by side. PR-MVP-05 was careful never to call the amount due
  * "refunded", and merging the two here would undo that.
+ *
+ * Mounted only for a role the server answers: the deal file checks the
+ * reader's roles before this section exists, so a Sales Advisor's deal file
+ * never requests the account at all.
  */
-export function DealCollections({
-  projectId,
-  saleId,
-}: {
-  projectId: string;
-  saleId: string;
-}) {
+export function DealCollections({ projectId, saleId }: { projectId: string; saleId: string }) {
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -97,36 +95,37 @@ export function DealCollections({
 
   return (
     <div className="stack">
-      <StatRow>
-        <Stat
+      <MetricGroup>
+        <Metric
           label="Position"
           value={
             <Badge tone={unitCollectionTone(summary.derived_collection_status)}>
               {unitCollectionLabel(summary.derived_collection_status)}
             </Badge>
           }
-          small
+          size="sm"
         />
-        <Stat label="Scheduled" value={money(summary.scheduled_total, code)} small />
-        <Stat
+        <Metric label="Scheduled" value={money(summary.scheduled_total, code)} size="sm" />
+        <Metric
           label="Confirmed receipts"
           value={money(summary.confirmed_receipts_total, code)}
           note="Cash Finance accepted"
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Applied"
           value={money(summary.allocated_total, code)}
           note={`${money(summary.unapplied_cash, code)} unapplied`}
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Outstanding"
           value={money(summary.outstanding_total, code)}
           note={`${money(summary.overdue_total, code)} overdue`}
-          small
+          tone={isPositive(summary.overdue_total) ? "danger" : "neutral"}
+          size="sm"
         />
-      </StatRow>
+      </MetricGroup>
 
       {isPositive(summary.unapplied_cash) ? (
         <Notice tone="warning">
@@ -138,9 +137,7 @@ export function DealCollections({
       {summary.open_disputes > 0 || summary.active_waivers > 0 ? (
         <p className="footnote">
           {summary.open_disputes > 0
-            ? `${summary.open_disputes} instalment${
-                summary.open_disputes === 1 ? "" : "s"
-              } disputed — balance unchanged. `
+            ? `${summary.open_disputes} instalment${summary.open_disputes === 1 ? "" : "s"} disputed — balance unchanged. `
             : ""}
           {summary.active_waivers > 0
             ? `${summary.active_waivers} collection hold in force — balance still due.`
@@ -148,7 +145,7 @@ export function DealCollections({
         </p>
       ) : null}
 
-      <TableScroll label="Instalments and cash received">
+      <TableScroll label="Instalments and cash received" compact>
         <thead>
           <tr>
             <th scope="col">Instalment</th>
@@ -174,11 +171,11 @@ export function DealCollections({
               <th scope="row">
                 {row.sequence}. {row.label}
               </th>
-              <td className="mono nowrap">{businessDate(row.due_date)}</td>
-              <td className="num mono">{money(row.scheduled, code)}</td>
-              <td className="num mono">{money(row.paid, code)}</td>
-              <td className="num mono">{money(row.outstanding, code)}</td>
-              <td className="num mono">{row.overdue_days > 0 ? row.overdue_days : "—"}</td>
+              <td className="figure">{businessDate(row.due_date)}</td>
+              <td className="num">{money(row.scheduled, code)}</td>
+              <td className="num">{money(row.paid, code)}</td>
+              <td className="num">{money(row.outstanding, code)}</td>
+              <td className="num">{row.overdue_days > 0 ? row.overdue_days : "—"}</td>
               <td>
                 <Badge tone={installmentTone(row.status)}>{installmentLabel(row.status)}</Badge>
               </td>
@@ -188,7 +185,7 @@ export function DealCollections({
       </TableScroll>
 
       {receipts.length > 0 ? (
-        <TableScroll label="Receipts">
+        <TableScroll label="Receipts" compact>
           <thead>
             <tr>
               <th scope="col">Receipt</th>
@@ -208,9 +205,9 @@ export function DealCollections({
                 <th scope="row" className="mono">
                   {receipt.receipt_number}
                 </th>
-                <td className="mono nowrap">{businessDate(receipt.receipt_date)}</td>
-                <td className="num mono">{money(receipt.amount, code)}</td>
-                <td className="num mono">{money(receipt.unapplied_amount, code)}</td>
+                <td className="figure">{businessDate(receipt.receipt_date)}</td>
+                <td className="num">{money(receipt.amount, code)}</td>
+                <td className="num">{money(receipt.unapplied_amount, code)}</td>
                 <td>
                   <Badge tone={receiptTone(receipt.status)}>{receiptLabel(receipt.status)}</Badge>
                 </td>
@@ -220,27 +217,22 @@ export function DealCollections({
         </TableScroll>
       ) : null}
 
-      {isPositive(summary.refund_due_total) ||
-      isPositive(summary.refund_confirmed_total) ? (
-        <StatRow>
-          <Stat
+      {isPositive(summary.refund_due_total) || isPositive(summary.refund_confirmed_total) ? (
+        <MetricGroup compact>
+          <Metric
             label="Refund due"
             value={money(summary.refund_due_total, code)}
             note="Approved on the cancellation"
-            small
+            size="sm"
           />
-          <Stat
+          <Metric
             label="Actually refunded"
             value={money(summary.refund_confirmed_total, code)}
             note="Confirmed as having left"
-            small
+            size="sm"
           />
-          <Stat
-            label="Still to pay"
-            value={money(summary.refund_outstanding, code)}
-            small
-          />
-        </StatRow>
+          <Metric label="Still to pay" value={money(summary.refund_outstanding, code)} size="sm" />
+        </MetricGroup>
       ) : null}
 
       <p className="footnote">
