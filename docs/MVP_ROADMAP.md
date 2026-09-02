@@ -342,6 +342,12 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > FX; no corporate tax. A hard-cost pool is an economic forecast allocation
 > input, and the screens say so.
 
+> **PR-UX-02 lands here.** The flagship product experience — the grouped
+> navigation rail, the project command centre and the record files — is a
+> horizontal checkpoint taken from `main` after PR-MVP-08 and before
+> construction control begins. It carries no MVP number; see
+> [Horizontal checkpoints](#horizontal-checkpoints).
+
 ## PR-MVP-09 — Construction Control
 
 - construction budget baseline
@@ -435,3 +441,61 @@ Branch `ux/pr-01-product-experience`, taken from `main` after PR-MVP-05 merged.
 
 No migration, no schema change, no backend logic, no API contract change, no
 new dependency of any kind, and no financial arithmetic added to the browser.
+
+### PR-UX-02 — Flagship Product Experience & Workspace 2.0
+
+Branch `claude/flagship-product-experience-mhgzcf`, taken from `main` after
+PR-MVP-08 merged and before PR-MVP-09 begins. Records the product's
+transformation from a functional MVP into a workspace: how the eleven modules
+are navigated, how a project is read at a glance, and how a record is opened.
+
+- the project-wide horizontal tab strip replaced by a grouped vertical rail —
+  Overview; Development (Land, Permits, Inventory); Commercial (Pricing,
+  Sales & Legal, Payment Plans, Collections); Finance (Unit Economics);
+  Governance (Documents, Access) — with a first-class project switcher and a
+  quiet context bar carrying breadcrumbs, project status and base currency
+- the rail collapses to icons between 64rem and 75rem, becomes a focus-trapped
+  drawer below 64rem, and remembers an explicit choice in `localStorage`
+- navigation, sections and record tabs mirror the backend's role contracts
+  (`frontend/src/lib/roles.ts` beside `app/modules/*/permissions.py`): a role
+  that cannot read a module has no entry for it, and the browser never
+  requests what the server would refuse — Unit Economics, internal prices, the
+  collections position and the list price are each asked for only on behalf
+  of a role the server answers
+- a Project Overview command centre composed solely from the summary endpoints
+  that already exist — inventory, pricing overview and register, sales
+  register, payment plans, collections summary and unit economics summary —
+  with a "needs attention" list built from server counts, no charts and no
+  placeholder figures; a section a role cannot read is not requested
+- the Projects landing rebuilt as a filterable register of project tiles
+- tokens 2.0: a warm canvas, a cobalt accent, a dark navigation rail, a
+  numeric scale for page, record, section and metric titles, and layout
+  tokens for the rail, context bar and drawers; figures set in tabular sans
+  with the monospace face reserved for identifiers
+- a page-header, toolbar, register, form and drawer system —
+  `PageHeader`, `Metric`/`MetricGroup`, `StatusDot`, `InlineMeta`,
+  `Waterfall`, `DataToolbar`/`ToolbarFilter`, `FieldRow`, `FormSection`,
+  `MoneyInput`, `RateInput`, drawer facts strips, `Loading` shapes — and every
+  register moved onto it with a compact header, a toolbar and a fixed
+  identity column
+- Unit 360 redesigned: a facts strip (list price, margin, outstanding, weighted
+  area — each present only for a role entitled to it), the four status
+  dimensions side by side, and Overview, Areas & features, Pricing, Sales &
+  legal, Collections, Economics, Release and History sections; the cost
+  waterfall and the price composition drawn as server-ordered waterfalls
+- the deal file redesigned: a facts strip (contract price, net of tax,
+  contract date, gate), a lifecycle strip drawn from the server's statuses,
+  and Commercial, Buyers, Contract, Legal, Payment plan, Collections,
+  Cancellation and Handover sections; the quote drawn as a waterfall
+- the payment plan builder and the collections account given facts strips;
+  percentages typed as percentages and sent as fractions by string
+  manipulation; money inputs denominated in the record's own currency
+- settings and sign-in rebuilt on the same shell; `docs/UX_SYSTEM.md` rewritten
+  as UX System 2.0
+- validated in a real browser with seeded data at 1600, 1440, 1280, 1024, 768
+  and 390 wide, as every role, with no page-level horizontal overflow and no
+  unexpected console error
+
+No migration, no schema change, no backend logic, no API contract change, no
+new dependency of any kind, no dark theme, no FX, no construction screens, and
+no financial arithmetic added to the browser.

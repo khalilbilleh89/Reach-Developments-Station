@@ -101,6 +101,32 @@ No other infrastructure is justified at MVP stage. See
 
 ---
 
+### Frontend shell
+
+The frontend is a static export served from `frontend/out`: no server
+components, no server actions, no dynamic route segments. An open project and
+its section travel in the query string — `/projects/?project=<id>&section=<key>`,
+`/settings/?section=<key>` — because project identifiers are runtime data and
+a dynamic segment would need them at build time.
+
+Since PR-UX-02 the shell is a grouped vertical rail with a project switcher, a
+context bar carrying breadcrumbs and the project's status and base currency,
+and a working surface that never scrolls sideways. Records — a unit, a deal, a
+payment plan, a collections account — open as files over the register that led
+to them. The pieces live in `frontend/src/components/shell/` (`AppShell`,
+`AppSidebar`, `ProjectSwitcher`, `ContextBar`, `navigation.ts`) and the
+primitives in `frontend/src/components/ui/`; `docs/UX_SYSTEM.md` is the
+reference.
+
+Two rules bind the shell to the backend. Visibility mirrors the permission
+sets in `app/modules/*/permissions.py` through `frontend/src/lib/roles.ts`: a
+role with no right to a module has no navigation entry for it, no section for
+it and no request to it — the browser never fetches what it may not show and
+hides it afterwards. And the browser never calculates: every price, tax,
+margin, total, allocation and approval requirement on screen is a value the
+API returned on that request, and `frontend/src/lib/format.ts` only formats
+the server's decimal strings.
+
 ## 6. Backend module shape
 
 A domain normally starts with exactly four files:
