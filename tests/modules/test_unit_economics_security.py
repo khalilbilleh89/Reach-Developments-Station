@@ -238,6 +238,20 @@ class TestPhaseScoping:
         assert response.status_code == 404
         assert response.json()["detail"] == "Allocation version not found."
 
+    def test_the_allocations_of_a_version_that_does_not_exist_are_not_an_empty_list(
+        self, finance_client: TestClient, project_id: str
+    ) -> None:
+        """An unknown version is 404, not 200 with nothing in it.
+
+        A caller cannot act on those two answers the same way: one means the
+        basis has not been calculated yet, the other means they asked the wrong
+        project. Returning an empty list for both invites a reader to conclude
+        the version allocates nothing.
+        """
+        response = finance_client.get(f"{version_url(project_id, str(uuid.uuid4()))}/allocations")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Allocation version not found."
+
 
 class TestAudit:
     """Given a governed basis, when the audit trail is read."""

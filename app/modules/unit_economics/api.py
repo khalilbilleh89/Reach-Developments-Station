@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.inventory.models import Unit
+from app.modules.projects.models import Project
 from app.modules.unit_economics import permissions, service
 from app.modules.unit_economics.models import (
     UNIT_COST_CLASS_OF,
@@ -172,6 +173,27 @@ def _pool_summary(result: service.PoolResult) -> PoolAllocationSummary:
     )
 
 
+def _version_or_404(
+    session: Session, *, project: Project, version_id: uuid.UUID
+) -> AllocationVersion:
+    """The named version, scoped to the project that owns it.
+
+    Every route naming a version resolves it through here so that an unknown id
+    and another project's id answer alike, and neither is ever reported as an
+    empty result. A caller cannot act on "no allocations yet" and "you asked
+    the wrong project" the same way, so the API must not say them the same way.
+    """
+    version = session.scalars(
+        select(AllocationVersion).where(
+            AllocationVersion.id == version_id,
+            AllocationVersion.project_id == project.id,
+        )
+    ).first()
+    if version is None:
+        raise permissions.version_not_found()
+    return version
+
+
 # --------------------------------------------------------------------------- #
 # Reads
 # --------------------------------------------------------------------------- #
@@ -187,6 +209,7 @@ def read_summary(
     session: DbSession,
     actor: ActiveActor,
 ) -> ProjectEconomicsRead:
+    permissions.require_economics_reader(actor)
     totals, _rows = service.project_economics(session, project=project, actor=actor)
     return ProjectEconomicsRead(
         currency_id=totals.currency_id,
@@ -223,6 +246,7 @@ def read_register(
     session: DbSession,
     actor: ActiveActor,
 ) -> list[UnitEconomicsRead]:
+    permissions.require_economics_reader(actor)
     return [
         _economics_read(row) for row in service.unit_register(session, project=project, actor=actor)
     ]
@@ -346,14 +370,7 @@ def read_version(
     actor: ActiveActor,
 ) -> VersionDetail:
     permissions.require_economics_reader(actor)
-    version = session.scalars(
-        select(AllocationVersion).where(
-            AllocationVersion.id == version_id,
-            AllocationVersion.project_id == project.id,
-        )
-    ).first()
-    if version is None:
-        raise permissions.version_not_found()
+    version = _version_or_404(session, project=project, version_id=version_id)
     pools = session.scalars(
         select(CostPool)
         .where(CostPool.allocation_version_id == version.id)
@@ -380,11 +397,12 @@ def read_allocations(
     pool_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[AllocationRead]:
     permissions.require_economics_reader(actor)
+    version = _version_or_404(session, project=project, version_id=version_id)
     statement = (
         select(Allocation, Unit.unit_reference)
         .join(Unit, Unit.id == Allocation.unit_id)
         .where(
-            Allocation.allocation_version_id == version_id,
+            Allocation.allocation_version_id == version.id,
             Allocation.project_id == project.id,
         )
     )

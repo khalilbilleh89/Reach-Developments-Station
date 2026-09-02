@@ -117,6 +117,10 @@ export function UnitEconomicsSection({
   // not have to assume it matches the price beside it — and on a
   // currency-mismatch unit it deliberately does not.
   const costCode = currencyCodeOf(row.cost_currency_id);
+  // And revenue is denominated separately, because on a currency-mismatch unit
+  // it genuinely is. Printing it under the cost currency would state a
+  // conversion nobody approved.
+  const revenueCode = currencyCodeOf(row.revenue_currency_id);
   const ready = row.profitability_status === "ready";
 
   return (
@@ -147,7 +151,7 @@ export function UnitEconomicsSection({
       <StatRow>
         <Stat
           label="Revenue"
-          value={money(row.revenue, costCode)}
+          value={money(row.revenue, revenueCode)}
           note={
             row.revenue_source === "sale_contract"
               ? "Frozen contract terms"

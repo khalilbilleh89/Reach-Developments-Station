@@ -323,6 +323,11 @@ function UnitsRegister({
   rows: UnitEconomicsRow[];
   code: string | null;
 }) {
+  // `code` is the project's cost currency, which every cost column is in.
+  // Revenue is not necessarily: a currency-mismatch unit earns in its own
+  // denomination, and labelling that figure with the project's code would
+  // assert an exchange rate this system does not have.
+  const currencyCodeOf = useCurrencyCode();
   const [search, setSearch] = useState("");
   const [only, setOnly] = useState("all");
 
@@ -421,7 +426,9 @@ function UnitsRegister({
                     <p className="hint">v{row.allocation_version_number}</p>
                   )}
                 </td>
-                <td className="num mono">{money(row.revenue, code)}</td>
+                <td className="num mono">
+                  {money(row.revenue, currencyCodeOf(row.revenue_currency_id))}
+                </td>
                 <td className="num mono">{money(row.land_cost, code)}</td>
                 <td className="num mono">{money(row.hard_cost, code)}</td>
                 <td className="num mono">{money(row.soft_cost, code)}</td>
