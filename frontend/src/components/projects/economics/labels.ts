@@ -131,7 +131,10 @@ export const PROFIT_EXPLANATIONS: Record<ProfitabilityStatus, string> = {
   missing_revenue:
     "This unit has no current approved price, so forecast profit cannot be calculated.",
   missing_cost_basis:
-    "No approved allocation version covered this sale's date, so its cost basis is unknown.",
+    "No approved allocation version governs this unit, so what it costs is unknown. " +
+    "An unsold unit needs a current cost basis; a sold one needs the basis that was " +
+    "governing when its contract was signed, and a basis approved afterwards is not " +
+    "that one.",
   unreconciled_cost_basis:
     "This unit's cost basis cannot be used. Either the allocation version does not " +
     "add up to its cost pools, or it never allocated to this unit — a unit created " +
