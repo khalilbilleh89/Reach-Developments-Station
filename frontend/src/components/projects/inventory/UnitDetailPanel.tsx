@@ -510,7 +510,7 @@ export function UnitDetailPanel({
         </>
       ) : null}
 
-      {activeSection === "commercial" ? <UnitCommitment projectId={projectId} commitment={commitment} /> : null}
+      {activeSection === "commercial" ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} commitment={commitment} /> : null}
 
       {activeSection === "collections" ? <UnitCollections answer={collection} /> : null}
 

@@ -6,6 +6,7 @@ import { Suspense, useEffect } from "react";
 import { useSession } from "@/lib/api/session";
 import { AppShell, PasswordGate, SessionScreen } from "@/components/shell/AppShell";
 import { isProjectSection, projectHref } from "@/components/shell/navigation";
+import { roleSet } from "@/lib/roles";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 import { ProjectsRegister } from "@/components/projects/ProjectsRegister";
 
@@ -44,7 +45,7 @@ function ProjectsScreen() {
 
   return (
     <AppShell area="projects" user={user} crumbs={[{ label: "Projects" }]}>
-      <ProjectsRegister onOpen={(id) => router.push(projectHref(id))} />
+      <ProjectsRegister onOpen={(id) => router.push(projectHref(id))} roles={roleSet(user.roles)} />
     </AppShell>
   );
 }

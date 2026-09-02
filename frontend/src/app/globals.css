@@ -38,8 +38,8 @@
   /* ---- Text ---------------------------------------------------------- */
   --text-primary: #141922;
   --text-secondary: #4b5462;
-  --text-muted: #6e7684;
-  --text-faint: #9aa1ad;
+  --text-muted: #676f7d;
+  --text-faint: #9aa1ad; /* decorative only: dots and rules, never text */
   --text-inverse: #ffffff;
 
   /* ---- Intent -------------------------------------------------------- */
@@ -818,7 +818,7 @@ textarea {
 
 .crumb-sep {
   flex: none;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .context-utilities {
@@ -1340,7 +1340,7 @@ section + section {
 }
 
 .button:hover:not(:disabled) {
-  border-color: var(--text-faint);
+  border-color: var(--text-muted);
   background-color: var(--surface-hover);
 }
 
@@ -1518,7 +1518,7 @@ section + section {
 .status-dot-info::before,
 .status-dot-accent::before { background-color: var(--accent); }
 .status-dot-muted { color: var(--text-muted); }
-.status-dot-muted::before { background-color: var(--text-faint); }
+.status-dot-muted::before { background-color: var(--text-muted); }
 
 .chip-list {
   display: flex;
@@ -1607,7 +1607,7 @@ section + section {
 }
 
 .field-optional {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--text-2xs);
   font-weight: 500;
 }
@@ -1638,7 +1638,7 @@ section + section {
 }
 
 .input:hover:not(:disabled) {
-  border-color: var(--text-faint);
+  border-color: var(--text-muted);
 }
 
 .input:focus {
@@ -1654,7 +1654,7 @@ section + section {
 }
 
 .input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .input[aria-invalid="true"] {
@@ -1714,7 +1714,7 @@ input[type="file"].input {
 }
 
 .input-shell:hover {
-  border-color: var(--text-faint);
+  border-color: var(--text-muted);
 }
 
 .input-shell:focus-within {
@@ -2571,7 +2571,7 @@ input[type="file"].input {
 }
 
 .timeline-item-void::before {
-  background-color: var(--text-faint);
+  background-color: var(--text-muted);
 }
 
 .timeline-head {
@@ -3755,4 +3755,12 @@ input[type="file"].input {
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+}
+
+/* A breadcrumb is a link a finger has to hit: never shorter than 24px. */
+.crumbs a,
+.crumbs span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
 }

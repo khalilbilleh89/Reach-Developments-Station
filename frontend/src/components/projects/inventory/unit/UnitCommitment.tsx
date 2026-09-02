@@ -48,9 +48,12 @@ export type Commitment = { reservation: Reservation | null; sale: SaleDetail | n
  */
 export function UnitCommitment({
   projectId,
+  commercialStatus,
   commitment,
 }: {
   projectId: string;
+  /** The unit's own commercial status, so a withheld record is not reported as no record. */
+  commercialStatus: string;
   commitment: Commitment | null;
 }) {
   const currencyCodeOf = useCurrencyCode();
@@ -65,6 +68,14 @@ export function UnitCommitment({
   }
 
   if (commitment.reservation === null && commitment.sale === null) {
+    if (["reserved", "contract_pending", "contracted"].includes(commercialStatus)) {
+      return (
+        <EmptyState
+          title="Not visible to you"
+          hint="This unit is committed, but the reservation or contract on it belongs to another advisor's buyer."
+        />
+      );
+    }
     return (
       <EmptyState
         title="No active commercial commitment"

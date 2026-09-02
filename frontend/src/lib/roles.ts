@@ -106,6 +106,31 @@ export const ECONOMICS_READERS: Roles = new Set([
 /** Roles that may read the audit history. */
 export const AUDIT_READERS: Roles = new Set(["system_admin", "auditor"]);
 
+/**
+ * Whether this person sees only their own buyers.
+ *
+ * Mirrors the backend's `restricts_clients_to_own`: true for a Sales Advisor
+ * who is nothing else. An advisor who is also Sales Operations is doing the
+ * desk's job and sees the desk's book. Used to offer a deal file only where
+ * the server would open it, so a register never offers a record that answers
+ * "not found".
+ */
+export function restrictedToOwnClients(roles: Roles): boolean {
+  const wider = [
+    "system_admin",
+    "project_manager",
+    "sales_operations",
+    "legal",
+    "collections",
+    "finance",
+    "approver_cfo",
+    "executive_viewer",
+    "auditor",
+  ];
+  if (wider.some((role) => roles.has(role))) return false;
+  return roles.has("sales_advisor");
+}
+
 /** Whether the person holds at least one of the roles named. */
 export function hasAnyRole(roles: Roles, allowed: Roles): boolean {
   for (const role of roles) if (allowed.has(role)) return true;

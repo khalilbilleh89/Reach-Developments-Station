@@ -38,6 +38,7 @@ import {
   saleLabel,
   saleTone,
 } from "@/components/projects/sales/labels";
+import { restrictedToOwnClients } from "@/lib/roles";
 
 /**
  * The Sales workspace, inside the project.
@@ -84,13 +85,17 @@ export function SalesTab({
   projectId,
   projectStatus,
   roles,
+  userId,
   onOpenUnit,
 }: {
   projectId: string;
   projectStatus: string;
   roles: Set<string>;
+  /** Who is reading, so an advisor is offered only the deals the server would open. */
+  userId: string;
   onOpenUnit: (unitId: string) => void;
 }) {
+  const ownOnly = restrictedToOwnClients(roles);
   const [register, setRegister] = useState<SalesRegister | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
@@ -506,13 +511,17 @@ export function SalesTab({
                     </td>
                     <td>
                       {row.reservation_id || row.sale_id ? (
-                        <Button
-                          small
-                          variant="quiet"
-                          onClick={() => setDeal({ reservationId: row.reservation_id, saleId: row.sale_id, unitReference: row.unit_reference })}
-                        >
-                          Deal file
-                        </Button>
+                        ownOnly && row.advisor_user_id !== userId ? (
+                          <span className="subtle">Another advisor&rsquo;s buyer</span>
+                        ) : (
+                          <Button
+                            small
+                            variant="quiet"
+                            onClick={() => setDeal({ reservationId: row.reservation_id, saleId: row.sale_id, unitReference: row.unit_reference })}
+                          >
+                            Deal file
+                          </Button>
+                        )
                       ) : canWriteClients && row.commercial_status === "available" ? (
                         <Button
                           small

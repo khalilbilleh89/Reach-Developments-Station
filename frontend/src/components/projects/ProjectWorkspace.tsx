@@ -289,6 +289,7 @@ export function ProjectWorkspace({
             projectId={projectId}
             projectStatus={project.status}
             roles={roles}
+            userId={user.id}
             onOpenUnit={(unitId) => setOpenUnit(unitId)}
           />
         ) : null}

@@ -34,6 +34,9 @@ import {
   saleTone,
 } from "@/components/projects/sales/labels";
 
+/** The commercial states in which a reservation or contract owns the unit. */
+const COMMITTED = new Set(["reserved", "contract_pending", "contracted"]);
+
 const DIMENSIONS: { key: keyof Unit; label: string }[] = [
   { key: "commercial_status", label: "Commercial" },
   { key: "legal_status", label: "Legal" },
@@ -220,7 +223,11 @@ export function UnitSummary({
           {commitment === null ? (
             <p className="subtle">The commercial record could not be loaded.</p>
           ) : commitment.reservation === null && commitment.sale === null ? (
-            <p className="subtle">No active commercial commitment on this unit.</p>
+            <p className="subtle">
+              {COMMITTED.has(unit.commercial_status)
+                ? "This unit is committed, but the reservation or contract on it belongs to another advisor's buyer and is not visible to you."
+                : "No active commercial commitment on this unit."}
+            </p>
           ) : (
             <KeyValueGrid columns={3}>
               {commitment.reservation ? (

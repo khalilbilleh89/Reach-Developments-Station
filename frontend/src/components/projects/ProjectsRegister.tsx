@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CountryPack, Currency, ProjectSummary, ReferenceValue } from "@/lib/api";
+import { PROJECT_WRITERS, hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
 import {
   Badge,
@@ -50,7 +51,8 @@ function emptyForm() {
  * project needs attention today. No portfolio analytics and no invented
  * metrics; a tile with nothing to flag says nothing.
  */
-export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
+export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => void; roles: Set<string> }) {
+  const canCreate = hasAnyRole(roles, PROJECT_WRITERS);
   const [rows, setRows] = useState<ProjectSummary[] | null>(null);
   const [packs, setPacks] = useState<CountryPack[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -153,9 +155,11 @@ export function ProjectsRegister({ onOpen }: { onOpen: (id: string) => void }) {
         title="Projects"
         subtitle="Manage the developments you can access."
         actions={
-          <Button variant="primary" onClick={() => setCreating((open) => !open)}>
-            {creating ? "Cancel" : "New project"}
-          </Button>
+          canCreate ? (
+            <Button variant="primary" onClick={() => setCreating((open) => !open)}>
+              {creating ? "Cancel" : "New project"}
+            </Button>
+          ) : undefined
         }
       />
 

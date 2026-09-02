@@ -547,7 +547,15 @@ export function DealFile({
       }
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load the deal.");
+      // The server answers "not found" for a buyer this advisor was not
+      // assigned, exactly as for one that never existed. Said plainly here.
+      setError(
+        caught instanceof ApiError && caught.status === 404
+          ? "This deal is not visible to you. A Sales Advisor sees only the buyers assigned to them."
+          : caught instanceof ApiError
+            ? caught.message
+            : "Could not load the deal.",
+      );
     }
   }, [projectId, reservationId, saleId]);
 
