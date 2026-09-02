@@ -1,178 +1,126 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  KeyValue,
-  KeyValueGrid,
-  Loading,
-  Notice,
-  PageHeader,
-  Stat,
-  StatRow,
-  SubPanel,
-  TabPanel,
-  Tabs,
-} from "@/components/ui";
-import type { Tone } from "@/components/ui";
 import { CurrencyProvider } from "@/lib/currency";
-import { businessDate } from "@/lib/format";
+import {
+  INTERNAL_PRICE_READERS,
+  PRICING_APPROVERS,
+  PRICING_WRITERS,
+  PROJECT_WRITERS,
+  ROLE_SYSTEM_ADMIN,
+  TECHNICAL_WRITERS,
+  hasAnyRole,
+  roleSet,
+} from "@/lib/roles";
+import { AppShell } from "@/components/shell/AppShell";
+import {
+  PROJECT_NAVIGATION,
+  findNavItem,
+  projectHref,
+  visibleNavigation,
+} from "@/components/shell/navigation";
+import type { ProjectSection } from "@/components/shell/navigation";
+import { Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
+import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCenter";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
-import { UnitEconomicsTab } from "@/components/projects/UnitEconomicsTab";
+import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { InventoryTab } from "@/components/projects/InventoryTab";
-import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { LandTab } from "@/components/projects/LandTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PricingTab } from "@/components/projects/PricingTab";
 import { SalesTab } from "@/components/projects/SalesTab";
-
-const STATUS_LABELS: Record<string, string> = {
-  setup: "Setup",
-  predevelopment: "Pre-development",
-  active: "Active",
-  on_hold: "On hold",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-/** Presentation only: the word already carries the meaning. */
-const STATUS_TONES: Record<string, Tone> = {
-  setup: "muted",
-  predevelopment: "info",
-  active: "success",
-  on_hold: "warning",
-  completed: "neutral",
-  cancelled: "danger",
-};
-
-/** What each section is for, said once at the top rather than on every card. */
-const TAB_DESCRIPTIONS: Record<string, string> = {
-  overview: "What this project is, and what is holding it up.",
-  land: "The parcels this development sits on, and what may be built on them.",
-  inventory: "Every unit in this development, and what stops each one being released.",
-  pricing: "What this development is priced at, and what that price is made of.",
-  sales: "Where every unit stands commercially, legally and on delivery.",
-  payments: "How each contracted amount is scheduled to be paid, and what makes it due.",
-  permits: "The consents this development needs, and which of them are late.",
-  documents: "Links to documents held elsewhere. Nothing is uploaded or stored here.",
-  access: "Who may open this project. Roles decide what they can do once inside.",
-};
-
-/** Roles that may change project identity and the land record. */
-const PROJECT_WRITERS = new Set(["system_admin", "project_manager"]);
-
-/** Roles that may maintain planning, permits and document references. */
-const TECHNICAL_WRITERS = new Set(["system_admin", "project_manager", "design_engineering"]);
-
-/** Roles that may prepare pricing: build a policy, price units, submit for approval. */
-const PRICING_WRITERS = new Set(["system_admin", "project_manager", "finance"]);
-
-/**
- * Roles that may sanction a price. Deliberately not the administrator: the
- * ability to configure a system is not the authority to approve what it
- * charges, and the server refuses either way — this only decides which buttons
- * are worth showing.
- */
-const PRICING_APPROVERS = new Set(["approver_cfo"]);
-
-/** Roles that may see anything other than the live list price. */
-const INTERNAL_PRICE_READERS = new Set([
-  "system_admin",
-  "project_manager",
-  "finance",
-  "approver_cfo",
-  "executive_viewer",
-  "auditor",
-]);
+import { UnitEconomicsTab } from "@/components/projects/UnitEconomicsTab";
+import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
+import { PROJECT_STATUSES, projectStatusLabel, projectStatusTone } from "./projectStatus";
 
 /** Editable project identity. `code` is absent: it is immutable once issued. */
 function projectFields(project: ProjectDetail): EditField[] {
   return [
-    { name: "name", label: "Name" },
-    { name: "developer_entity", label: "Developer entity" },
-    { name: "city", label: "City" },
-    { name: "location", label: "Location" },
-    { name: "latitude", label: "Latitude", kind: "number", hint: "Decimal degrees." },
-    { name: "longitude", label: "Longitude", kind: "number" },
-    { name: "project_type_code", label: "Project type", hint: "A configured code." },
+    { name: "name", label: "Name", group: "Identity" },
+    { name: "developer_entity", label: "Developer entity", group: "Identity" },
+    { name: "project_type_code", label: "Project type", hint: "A configured code.", group: "Identity", width: "medium" },
     {
       name: "status",
       label: "Status",
       kind: "select",
-      options: Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+      group: "Identity",
+      options: PROJECT_STATUSES.map((value) => ({ value, label: projectStatusLabel(value) })),
       // Setup is the opening state only: the backend refuses a return to it,
       // so it is not offered once the project has left it.
       hint: project.status === "setup" ? undefined : "A project cannot return to setup.",
     },
-    { name: "fiscal_year_start_month", label: "Fiscal year starts (month)", kind: "number" },
-    { name: "planned_start", label: "Planned start", kind: "date" },
-    { name: "planned_completion", label: "Planned completion", kind: "date" },
+    { name: "city", label: "City", group: "Location", width: "medium" },
+    { name: "location", label: "Location", group: "Location" },
+    { name: "latitude", label: "Latitude", kind: "number", hint: "Decimal degrees.", group: "Location" },
+    { name: "longitude", label: "Longitude", kind: "number", group: "Location" },
+    { name: "planned_start", label: "Planned start", kind: "date", group: "Programme" },
+    { name: "planned_completion", label: "Planned completion", kind: "date", group: "Programme" },
+    {
+      name: "fiscal_year_start_month",
+      label: "Fiscal year starts",
+      kind: "number",
+      hint: "Month number, 1 to 12.",
+      group: "Programme",
+    },
   ];
 }
 
 /**
- * One cohesive project workspace rather than a separate page per record type.
+ * One project, inside the shell.
  *
- * Everything about a development is reached from here, because land, planning
- * and permits are only meaningful inside the project that owns them. The header
- * names the project once, at the top, and stays true whichever section is open:
- * the most expensive mistake this product can allow is recording something
- * against the wrong development.
+ * The rail names the project and its sections; this component loads the
+ * project, resolves the currencies every figure beneath it is denominated in,
+ * and renders whichever section the address names. The most expensive mistake
+ * this product can allow is recording something against the wrong
+ * development, so the project's identity is on screen in the rail, in the
+ * breadcrumb and in the context bar whichever section is open.
  */
 export function ProjectWorkspace({
   projectId,
+  section,
   user,
-  onBack,
 }: {
   projectId: string;
+  section: ProjectSection;
   user: CurrentUser;
-  onBack: () => void;
 }) {
+  const router = useRouter();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   // Which currency each currency_id names, for every money figure below this
   // point. Seeded from the currency register (readable by any signed-in user)
   // plus the project's own base and reporting pair, so a row's REAL currency
   // is resolved rather than assumed from the project.
   const [currencyCodes, setCurrencyCodes] = useState<Record<string, string>>({});
-  const [tab, setTab] = useState("overview");
-  // Opening a unit from the price register reuses the same detail panel the
-  // Inventory tab opens. One Unit 360, reached from wherever the user was.
-  const [pricedUnit, setPricedUnit] = useState<string | null>(null);
+  // Opening a unit from the price or sales register reuses the same Unit 360
+  // the Inventory section opens. One record file, reached from wherever the
+  // person was.
+  const [openUnit, setOpenUnit] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const roles = new Set(user.roles.map((role) => role.key));
-  const isAdmin = roles.has("system_admin");
-  const canWriteProject = [...roles].some((role) => PROJECT_WRITERS.has(role));
-  const canWriteTechnical = [...roles].some((role) => TECHNICAL_WRITERS.has(role));
-  const canPrice = [...roles].some((role) => PRICING_WRITERS.has(role));
-  const canApprovePricing = [...roles].some((role) => PRICING_APPROVERS.has(role));
-  const canSeeInternalPrices = [...roles].some((role) => INTERNAL_PRICE_READERS.has(role));
+  const roles = roleSet(user.roles);
+  const isAdmin = roles.has(ROLE_SYSTEM_ADMIN);
+  const canWriteProject = hasAnyRole(roles, PROJECT_WRITERS);
+  const canWriteTechnical = hasAnyRole(roles, TECHNICAL_WRITERS);
+  const canPrice = hasAnyRole(roles, PRICING_WRITERS);
+  const canApprovePricing = hasAnyRole(roles, PRICING_APPROVERS);
+  const canSeeInternalPrices = hasAnyRole(roles, INTERNAL_PRICE_READERS);
 
-  const tabs = [
-    { key: "overview", label: "Overview" },
-    { key: "land", label: "Land" },
-    { key: "inventory", label: "Inventory" },
-    { key: "pricing", label: "Pricing" },
-    { key: "sales", label: "Sales" },
-    { key: "payments", label: "Payment plans" },
-    { key: "collections", label: "Collections" },
-    { key: "economics", label: "Unit economics" },
-    { key: "permits", label: "Permits" },
-    { key: "documents", label: "Documents" },
-    ...(isAdmin ? [{ key: "access", label: "Access" }] : []),
-  ];
+  const groups = visibleNavigation(PROJECT_NAVIGATION, roles);
+  const item = findNavItem(groups, section);
+  const navigate = useCallback(
+    (next: ProjectSection) => router.push(projectHref(projectId, next)),
+    [router, projectId],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -211,199 +159,112 @@ export function ProjectWorkspace({
     })();
   }, [load]);
 
-  if (error) {
-    return (
-      <>
-        <PageHeader
-          title="Project"
-          actions={<Button onClick={onBack}>All projects</Button>}
-        />
-        <Card>
+  const changed = async () => {
+    await load();
+    setRefreshKey((key) => key + 1);
+  };
+
+  const crumbs = [
+    { label: "Projects", href: "/projects/" },
+    ...(section === "overview"
+      ? [{ label: project?.name ?? "Project" }]
+      : [
+          { label: project?.code ?? "Project", href: projectHref(projectId) },
+          { label: item?.label ?? "Section" },
+        ]),
+  ];
+
+  const utilities = project ? (
+    <>
+      <Badge tone={projectStatusTone(project.status)}>{projectStatusLabel(project.status)}</Badge>
+      {project.base_currency_code ? (
+        <span className="context-fact">
+          Base <strong>{project.base_currency_code}</strong>
+        </span>
+      ) : null}
+    </>
+  ) : undefined;
+
+  const body = () => {
+    if (error) {
+      return (
+        <>
+          <PageHeader title="Project" />
           <Notice tone="error">{error}</Notice>
-        </Card>
-      </>
-    );
-  }
-
-  if (project === null) {
+        </>
+      );
+    }
+    if (project === null) {
+      return <Loading label="Loading project…" shape="page" />;
+    }
+    if (!item) {
+      return (
+        <>
+          <PageHeader title="Not available" />
+          <Card>
+            <EmptyState
+              title="Not available to your role"
+              hint="This section of the project is not part of what your roles may read."
+            />
+          </Card>
+        </>
+      );
+    }
+    if (section === "overview") {
+      return (
+        <>
+          {editing ? (
+            <Card
+              title="Edit project"
+              description="The code is fixed once issued. Everything else about the project's identity is maintained here."
+            >
+              <EditForm
+                fields={projectFields(project)}
+                initial={{
+                  name: asValue(project.name),
+                  developer_entity: asValue(project.developer_entity),
+                  city: asValue(project.city),
+                  location: asValue(project.location),
+                  latitude: asValue(project.latitude),
+                  longitude: asValue(project.longitude),
+                  project_type_code: asValue(project.project_type_code),
+                  status: asValue(project.status),
+                  fiscal_year_start_month: asValue(project.fiscal_year_start_month),
+                  planned_start: asValue(project.planned_start),
+                  planned_completion: asValue(project.planned_completion),
+                }}
+                onSave={async (changes) => {
+                  await projects.update(projectId, changes);
+                  await changed();
+                  setEditing(false);
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            </Card>
+          ) : null}
+          <ProjectCommandCenter
+            project={project}
+            roles={roles}
+            canEdit={canWriteProject}
+            onEdit={() => setEditing((open) => !open)}
+            onNavigate={navigate}
+            refreshKey={refreshKey}
+          />
+        </>
+      );
+    }
     return (
       <>
-        <PageHeader title="Loading project…" />
-        <Card>
-          <Loading label="Loading project…" lines={4} />
-        </Card>
-      </>
-    );
-  }
-
-  return (
-    <CurrencyProvider codes={currencyCodes}>
-      <PageHeader
-        eyebrow="Project"
-        title={project.name}
-        subtitle={`${project.developer_entity}${project.city ? ` · ${project.city}` : ""}`}
-        actions={<Button onClick={onBack}>All projects</Button>}
-        meta={
-          <>
-            <span className="chip">
-              <span className="chip-label">Code</span>
-              <strong className="mono">{project.code}</strong>
-            </span>
-            <Badge tone={STATUS_TONES[project.status] ?? "neutral"}>
-              {STATUS_LABELS[project.status] ?? project.status}
-            </Badge>
-            {project.country_code ? (
-              <span className="chip">
-                <span className="chip-label">Country</span>
-                <strong>{project.country_code}</strong>
-              </span>
-            ) : null}
-            {project.base_currency_code ? (
-              <span className="chip">
-                <span className="chip-label">Base</span>
-                <strong>{project.base_currency_code}</strong>
-              </span>
-            ) : null}
-            {project.reporting_currency_code &&
-            project.reporting_currency_code !== project.base_currency_code ? (
-              <span className="chip">
-                <span className="chip-label">Reporting</span>
-                <strong>{project.reporting_currency_code}</strong>
-              </span>
-            ) : null}
-          </>
-        }
-      />
-
-      <Tabs label="Project sections" tabs={tabs} active={tab} onSelect={setTab} />
-
-      <TabPanel group="Project sections" tab={tab}>
-        {tab === "overview" ? (
-          <>
-            <Card
-              title="Overview"
-              description={TAB_DESCRIPTIONS.overview}
-              actions={
-                canWriteProject ? (
-                  <Button onClick={() => setEditing((open) => !open)}>
-                    {editing ? "Cancel" : "Edit project"}
-                  </Button>
-                ) : undefined
-              }
-            >
-              {editing ? (
-                <SubPanel title="Edit project">
-                  <EditForm
-                    fields={projectFields(project)}
-                    initial={{
-                      name: asValue(project.name),
-                      developer_entity: asValue(project.developer_entity),
-                      city: asValue(project.city),
-                      location: asValue(project.location),
-                      latitude: asValue(project.latitude),
-                      longitude: asValue(project.longitude),
-                      project_type_code: asValue(project.project_type_code),
-                      status: asValue(project.status),
-                      fiscal_year_start_month: asValue(project.fiscal_year_start_month),
-                      planned_start: asValue(project.planned_start),
-                      planned_completion: asValue(project.planned_completion),
-                    }}
-                    onSave={async (changes) => {
-                      await projects.update(projectId, changes);
-                      await load();
-                      setEditing(false);
-                    }}
-                    onCancel={() => setEditing(false)}
-                  />
-                </SubPanel>
-              ) : null}
-
-              <h3 className="section-heading">Identity</h3>
-              <KeyValueGrid columns={3}>
-                <KeyValue label="Developer entity" value={project.developer_entity} />
-                <KeyValue label="Project manager" value={project.project_manager_display_name} />
-                <KeyValue label="Project type" value={project.project_type_code} />
-                <KeyValue label="Location" value={project.location} />
-                <KeyValue
-                  label="Coordinates"
-                  mono
-                  value={
-                    project.latitude && project.longitude
-                      ? `${project.latitude}, ${project.longitude}`
-                      : null
-                  }
-                />
-                <KeyValue
-                  label="Fiscal year starts"
-                  value={`Month ${project.fiscal_year_start_month}`}
-                />
-              </KeyValueGrid>
-
-              <h3 className="section-heading">Programme</h3>
-              <KeyValueGrid columns={3}>
-                <KeyValue label="Planned start" mono value={businessDate(project.planned_start)} />
-                <KeyValue label="Planned completion" mono value={businessDate(project.planned_completion)} />
-                <KeyValue
-                  label="Planned duration"
-                  mono
-                  value={
-                    project.planned_duration_days === null
-                      ? null
-                      : `${project.planned_duration_days} days`
-                  }
-                />
-              </KeyValueGrid>
-            </Card>
-
-            <Card
-              title="Land and consents"
-              description="Counted across this project. Open Permits to see which ones."
-              actions={
-                <Button onClick={() => setTab("permits")}>Open permits</Button>
-              }
-            >
-              {/*
-                * These counts describe the PERMITS, never the units. A permit
-                * flagged as blocking is a management flag on the consent
-                * itself; unit release truth lives in inventory and is not
-                * derived from permit status. The copy here must not claim a
-                * rule the backend does not enforce.
-                */}
-              <StatRow>
-                <Stat label="Parcels" value={project.parcel_count} />
-                <Stat label="Permits" value={project.permit_count} />
-                <Stat
-                  label="Blocking permits"
-                  value={project.blocking_permit_count}
-                  note="Consents flagged as blocking"
-                />
-                <Stat
-                  label="On the critical path"
-                  value={project.critical_path_permit_count}
-                />
-                <Stat
-                  label="Past statutory period"
-                  value={project.overdue_permit_count}
-                />
-              </StatRow>
-              {project.blocking_permit_count > 0 || project.overdue_permit_count > 0 ? (
-                <p className="footnote">
-                  These permits are flagged for management attention. Open Permits to see the
-                  affected consents.
-                </p>
-              ) : null}
-            </Card>
-          </>
-        ) : null}
-
-        {tab === "land" ? (
+        {section === "land" ? (
           <LandTab
             projectId={projectId}
+            baseCurrencyCode={project.base_currency_code}
             canWriteLand={canWriteProject}
             canWritePlanning={canWriteTechnical}
           />
         ) : null}
-        {tab === "inventory" ? (
+        {section === "permits" ? <PermitsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "inventory" ? (
           <InventoryTab
             projectId={projectId}
             projectStatus={project.status}
@@ -412,7 +273,7 @@ export function ProjectWorkspace({
             canConfigure={canWriteProject}
           />
         ) : null}
-        {tab === "pricing" ? (
+        {section === "pricing" ? (
           <PricingTab
             projectId={projectId}
             projectStatus={project.status}
@@ -420,58 +281,52 @@ export function ProjectWorkspace({
             canPrice={canPrice}
             canApprove={canApprovePricing}
             canSeeInternal={canSeeInternalPrices}
-            onOpenUnit={(unitId) => setPricedUnit(unitId)}
+            onOpenUnit={(unitId) => setOpenUnit(unitId)}
           />
         ) : null}
-        {tab === "sales" ? (
+        {section === "sales" ? (
           <SalesTab
             projectId={projectId}
             projectStatus={project.status}
             roles={roles}
-            onOpenUnit={(unitId) => setPricedUnit(unitId)}
+            onOpenUnit={(unitId) => setOpenUnit(unitId)}
           />
         ) : null}
-        {tab === "payments" ? (
-          <PaymentPlansTab
-            projectId={projectId}
-            projectStatus={project.status}
-            roles={roles}
-          />
+        {section === "payments" ? (
+          <PaymentPlansTab projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
-        {tab === "collections" ? (
-          <CollectionsTab projectId={projectId} roles={roles} />
-        ) : null}
-        {tab === "economics" ? (
-          <UnitEconomicsTab projectId={projectId} roles={roles} />
-        ) : null}
-        {tab === "permits" ? (
-          <PermitsTab projectId={projectId} canWrite={canWriteTechnical} />
-        ) : null}
-        {tab === "documents" ? (
-          <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} />
-        ) : null}
-        {tab === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
-        {tab === "access" && !isAdmin ? (
-          <Card title="Access">
-            <EmptyState
-              title="Not available to you"
-              hint="Project membership is maintained by an administrator."
-            />
-          </Card>
-        ) : null}
-      </TabPanel>
+        {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
+        {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
+        {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
+      </>
+    );
+  };
 
-      {pricedUnit ? (
-        <UnitDetailPanel
-          projectId={projectId}
-          roles={roles}
-          unitId={pricedUnit}
-          canWriteStructure={canWriteTechnical}
-          canConfigure={canWriteProject}
-          onClose={() => setPricedUnit(null)}
-          onChanged={load}
-        />
-      ) : null}
+  return (
+    <CurrencyProvider codes={currencyCodes}>
+      <AppShell
+        area="projects"
+        user={user}
+        project={project}
+        projectId={projectId}
+        section={section}
+        crumbs={crumbs}
+        utilities={utilities}
+      >
+        {body()}
+        {openUnit ? (
+          <UnitDetailPanel
+            projectId={projectId}
+            roles={roles}
+            unitId={openUnit}
+            canWriteStructure={canWriteTechnical}
+            canConfigure={canWriteProject}
+            onClose={() => setOpenUnit(null)}
+            onChanged={changed}
+          />
+        ) : null}
+      </AppShell>
     </CurrencyProvider>
   );
 }
