@@ -4,11 +4,24 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "./Button";
+import { Icon } from "./Icon";
 import { useOverlay } from "./overlay";
 import { TabPanel, Tabs } from "./Tabs";
 
+/** One headline fact about the record: a price, a margin, a balance. */
+export interface DrawerFact {
+  label: string;
+  value: ReactNode;
+  note?: ReactNode;
+}
+
 /**
- * A record opened over the register that led to it.
+ * A record file, opened over the register that led to it.
+ *
+ * The header is the record's identity and stays put: what it is, the state it
+ * is in, the three or four figures somebody opened it to read, and the
+ * sections beneath. The body scrolls under it. On a phone it takes the whole
+ * screen and the way back is at the top left, where a thumb expects it.
  *
  * Modal behaviour — Escape on the topmost overlay only, focus contained while
  * open and returned to the opening control on close — comes from `useOverlay`,
@@ -22,20 +35,27 @@ export function Drawer({
   title,
   subtitle,
   meta,
+  facts,
+  actions,
   tabs,
   activeTab,
   onSelectTab,
   onClose,
+  narrow,
   children,
 }: {
   eyebrow?: string;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   meta?: ReactNode;
+  facts?: DrawerFact[];
+  /** Contextual actions beside Close: the one or two things this record invites. */
+  actions?: ReactNode;
   tabs?: { key: string; label: string }[];
   activeTab?: string;
   onSelectTab?: (key: string) => void;
   onClose: () => void;
+  narrow?: boolean;
   children: ReactNode;
 }) {
   const panel = useOverlay<HTMLDivElement>(onClose, "container");
@@ -48,6 +68,8 @@ export function Drawer({
     };
   }, []);
 
+  const shownFacts = (facts ?? []).filter((fact) => fact.value !== null && fact.value !== undefined);
+
   return (
     <div
       className="drawer-scrim"
@@ -56,27 +78,53 @@ export function Drawer({
       }}
     >
       <div
-        className="drawer"
+        className={narrow ? "drawer drawer-narrow" : "drawer"}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
         ref={panel}
       >
-        <header className="drawer-header">
-          <div className="drawer-title-row">
-            <div>
+        <header className="drawer-head">
+          <div className="drawer-head-top">
+            <button
+              type="button"
+              className="icon-button drawer-back"
+              aria-label="Back to the register"
+              onClick={onClose}
+            >
+              <Icon name="arrow-left" />
+            </button>
+            <div className="drawer-identity">
               {eyebrow ? <p className="drawer-eyebrow">{eyebrow}</p> : null}
               <h2 className="drawer-title">{title}</h2>
               {subtitle ? <p className="drawer-subtitle">{subtitle}</p> : null}
+              {meta ? <div className="drawer-meta">{meta}</div> : null}
             </div>
-            <Button onClick={onClose}>Close</Button>
+            <div className="drawer-head-actions">
+              {actions}
+              <Button className="drawer-close-desktop" onClick={onClose}>
+                Close
+              </Button>
+            </div>
           </div>
-          {meta ? <div className="drawer-meta">{meta}</div> : null}
+          {shownFacts.length > 0 ? (
+            <dl className="drawer-facts">
+              {shownFacts.map((fact) => (
+                <div key={fact.label}>
+                  <dt className="drawer-fact-label">{fact.label}</dt>
+                  <dd className="drawer-fact-value">{fact.value}</dd>
+                  {fact.note ? <dd className="drawer-fact-note">{fact.note}</dd> : null}
+                </div>
+              ))}
+            </dl>
+          ) : null}
           {tabs && activeTab && onSelectTab ? (
-            <Tabs label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
+            <div className="drawer-sections">
+              <Tabs label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
+            </div>
           ) : (
-            <div className="drawer-header-pad" />
+            <div className="drawer-head-pad" />
           )}
         </header>
         {tabs && activeTab ? (
