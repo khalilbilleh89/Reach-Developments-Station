@@ -133,13 +133,20 @@ class TestWhoMayWrite:
             response = client.post(f"{economics_url(project_id)}/allocation-versions", json=body)
             assert response.status_code == 403, response.text
 
-    def test_an_auditor_reads_and_writes_nothing(
+    def test_an_auditor_reads_everything_and_writes_nothing(
         self,
         auditor_client: TestClient,
         project_id: str,
         priced_pair: tuple[str, str],
         governed_basis_for_security: str,
     ) -> None:
+        """Both halves matter, and the read half is the one easily lost.
+
+        Audit exists to examine the numbers, so the register must answer them —
+        a 403 here would defeat the role. What audit must never do is change
+        one, because an auditor who can record a cost is auditing their own
+        work.
+        """
         first, _second = priced_pair
         del governed_basis_for_security
         assert auditor_client.get(f"{economics_url(project_id)}/units").status_code == 200
