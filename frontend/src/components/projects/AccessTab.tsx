@@ -56,13 +56,12 @@ export function AccessTab({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     void (async () => {
-      try {
-        const [page, roleList] = await Promise.all([users.list(), users.roles()]);
-        setCandidates(page.items.filter((user) => user.is_active));
-        setRoles(roleList);
-      } catch {
-        // Only the grant control needs the directory; the roles fall back to keys.
-      }
+      // Two independent reads: the directory feeds the grant control and the
+      // role list only labels the register, so one failing must not take the
+      // other with it. The roles fall back to their keys.
+      const [page, roleList] = await Promise.allSettled([users.list(), users.roles()]);
+      if (page.status === "fulfilled") setCandidates(page.value.items.filter((user) => user.is_active));
+      if (roleList.status === "fulfilled") setRoles(roleList.value);
     })();
   }, []);
 

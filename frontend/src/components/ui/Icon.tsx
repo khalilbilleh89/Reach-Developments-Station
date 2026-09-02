@@ -10,7 +10,7 @@
  * so a future module — Construction, Cashflow — brings its own line here.
  */
 
-const PATHS: Record<string, string> = {
+const PATHS = {
   // Feedback
   check: "M3.5 8.5 6.5 11.5 12.5 4.5",
   alert: "M8 5.5v3.5M8 11.5h.01M8 2 14.5 13.5h-13z",
@@ -47,7 +47,7 @@ const PATHS: Record<string, string> = {
   "sign-out": "M6.5 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3M10 5l3 3-3 3M13 8H6",
   building: "M3.5 13.5V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10.5M2 13.5h12M6 5h1.5M8.5 5H10M6 7.5h1.5M8.5 7.5H10M6 10h1.5M8.5 10H10",
   calendar: "M2.5 4.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1ZM2.5 7h11M5.5 2v3M10.5 2v3",
-};
+} as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof PATHS;
 
