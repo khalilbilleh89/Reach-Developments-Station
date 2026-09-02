@@ -44,10 +44,13 @@ export function UnitCollections({
   const currencyCodeOf = useCurrencyCode();
 
   if (answer.status === "off") {
+    // Never requested: either nothing is contracted on the unit yet, or the
+    // reader's role is not one the server answers, so the unit file did not
+    // ask. This component cannot tell the two apart and does not pretend to.
     return (
       <EmptyState
-        title="No collections account"
-        hint="A collections account exists once a contract is signed on the unit."
+        title="No collections position to show"
+        hint="A collections account exists once a contract is signed on the unit, and its figures are shown only to roles that may read collections."
       />
     );
   }
