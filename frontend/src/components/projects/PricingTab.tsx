@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, pricing } from "@/lib/api";
+import { ApiError, inventory, pricing } from "@/lib/api";
 import type {
   AreaType,
   MarketBenchmark,
@@ -11,34 +11,32 @@ import type {
   PricingConfiguration,
   PricingOverview,
 } from "@/lib/api";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
+import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
   Card,
+  DataToolbar,
   EmptyState,
   Field,
-  FilterBar,
+  FieldRow,
   FormActions,
   Loading,
+  Metric,
+  MetricGroup,
+  MoneyInput,
   Notice,
-  Stat,
-  StatRow,
-  SubPanel,
+  PageHeader,
+  RateInput,
+  StatusDot,
   TableScroll,
+  ToolbarFilter,
 } from "@/components/ui";
-import { inventory } from "@/lib/api";
-import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
+import type { Tone } from "@/components/ui";
 import { ConfigurationPanel } from "@/components/projects/pricing/ConfigurationPanel";
 
-/**
- * The Pricing Studio, inside the project workspace.
- *
- * Three questions, in the order somebody actually asks them: what is this
- * development priced at, which units are priced, and which of them are no longer
- * priced against their own facts. Everything below is a number the backend
- * computed; nothing on this screen does pricing arithmetic.
- */
 const MARKET_LABELS: Record<string, string> = {
   within_tolerance: "In line",
   above_tolerance: "Above market",
@@ -47,7 +45,7 @@ const MARKET_LABELS: Record<string, string> = {
 };
 
 /** Presentation only: the word beside it already carries the meaning. */
-const MARKET_TONES: Record<string, "success" | "warning" | "info" | "muted"> = {
+const MARKET_TONES: Record<string, Tone> = {
   within_tolerance: "success",
   above_tolerance: "warning",
   below_tolerance: "info",
@@ -62,6 +60,14 @@ const STATUS_LABELS: Record<string, string> = {
   superseded: "Superseded",
 };
 
+/**
+ * The pricing workspace.
+ *
+ * Three questions, in the order somebody actually asks them: what policy is
+ * this development priced from, which units carry a live price, and which of
+ * them are no longer priced against their own facts. Everything below is a
+ * number the backend computed; nothing on this screen does pricing arithmetic.
+ */
 export function PricingTab({
   projectId,
   projectStatus,
@@ -86,6 +92,7 @@ export function PricingTab({
   const [phases, setPhases] = useState<Phase[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
   const [filters, setFilters] = useState({ phase_id: "", market_flag: "" });
+  const [search, setSearch] = useState("");
   const [open, setOpen] = useState<"none" | "configuration" | "benchmarks">("none");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,7 +101,7 @@ export function PricingTab({
 
   const load = useCallback(async () => {
     try {
-      const query: Record<string, string> = { limit: "100" };
+      const query: Record<string, string> = { limit: "200" };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -121,9 +128,9 @@ export function PricingTab({
 
   useEffect(() => {
     void (async () => {
-      await load();
+      if (canSeeInternal && projectStatus !== "setup") await load();
     })();
-  }, [load]);
+  }, [load, canSeeInternal, projectStatus]);
 
   const generateAll = async () => {
     setBusy(true);
@@ -145,117 +152,158 @@ export function PricingTab({
     }
   };
 
+  const header = (actions?: React.ReactNode) => (
+    <PageHeader title="Pricing" subtitle={sectionDescription("pricing")} compact actions={actions} />
+  );
+
   // Pricing is refused while the project is in setup, because that is the
   // window in which its currency can still change under whatever was priced in
   // it. Saying so beats a row of identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Card title="Pricing" description="Not yet — the project basis is still open.">
-        <EmptyState
-          title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to Pre-development before configuring pricing."
-        />
-      </Card>
+      <>
+        {header()}
+        <Card>
+          <EmptyState
+            title="Finalize project setup first"
+            hint="Confirm country and currency settings, then move the project to Pre-development before configuring pricing."
+          />
+        </Card>
+      </>
     );
   }
 
   if (!canSeeInternal) {
     return (
-      <Card title="Pricing">
-        <EmptyState
-          title="Not available to you"
-          hint="Live unit prices are on each unit. Pricing configuration belongs to Finance."
-        />
-      </Card>
+      <>
+        {header()}
+        <Card>
+          <EmptyState
+            title="Not available to your role"
+            hint="Live unit prices are on each unit. Pricing configuration belongs to Finance."
+          />
+        </Card>
+      </>
     );
   }
 
+  const needle = search.trim().toLowerCase();
+  const rows = (register?.rows ?? []).filter(
+    (row) => !needle || `${row.unit_reference} ${row.unit_number} ${row.unit_type_code ?? ""}`.toLowerCase().includes(needle),
+  );
+  const filtered = search !== "" || filters.phase_id !== "" || filters.market_flag !== "";
+
   return (
     <>
-      <Card
-        title="Pricing"
-        description="What this development is priced at, and what that price is made of."
-        actions={
-          <>
-            {canPrice || canApprove ? (
-              <Button onClick={() => setOpen(open === "configuration" ? "none" : "configuration")}>
-                {open === "configuration" ? "Cancel" : "Configuration"}
-              </Button>
-            ) : null}
-            {canPrice ? (
-              <Button onClick={() => setOpen(open === "benchmarks" ? "none" : "benchmarks")}>
-                {open === "benchmarks" ? "Cancel" : "Market benchmarks"}
-              </Button>
-            ) : null}
-            {canPrice && overview?.configuration ? (
-              <Button variant="primary" disabled={busy} onClick={generateAll}>
-                {busy ? "Generating…" : "Generate draft prices"}
-              </Button>
-            ) : null}
-          </>
-        }
-      >
+      {header(
+        <>
+          {canPrice || canApprove ? (
+            <Button
+              onClick={() => setOpen(open === "configuration" ? "none" : "configuration")}
+              aria-expanded={open === "configuration"}
+            >
+              Configuration
+            </Button>
+          ) : null}
+          {canPrice ? (
+            <Button
+              onClick={() => setOpen(open === "benchmarks" ? "none" : "benchmarks")}
+              aria-expanded={open === "benchmarks"}
+            >
+              Market benchmarks
+            </Button>
+          ) : null}
+          {canPrice && overview?.configuration ? (
+            <Button variant="primary" disabled={busy} onClick={generateAll}>
+              {busy ? "Generating…" : "Generate draft prices"}
+            </Button>
+          ) : null}
+        </>,
+      )}
+
+      <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        {overview === null ? (
-          <Loading label="Loading pricing…" lines={3} />
-        ) : overview.configuration === null ? (
-          <EmptyState
-            title="No active pricing configuration"
-            hint="Create one, add the area rules and premiums it prices by, then have it approved and activated. Until then no unit can be priced."
-          />
-        ) : (
-          <>
-            <ul className="chip-list">
-              <li className="chip">
-                <span className="chip-label">Configuration</span>
-                <strong>{overview.configuration.name}</strong>
-                <Badge tone="success">v{overview.configuration.version_number}</Badge>
-              </li>
-            </ul>
-            <StatRow>
-              <Stat
+        <Card>
+          {overview === null ? (
+            <Loading label="Loading pricing…" shape="metrics" />
+          ) : overview.configuration === null ? (
+            <EmptyState
+              title="No active pricing configuration"
+              hint="Create one, add the area rules and premiums it prices by, then have it approved and activated. Until then no unit can be priced."
+              actions={
+                canPrice ? (
+                  <Button variant="primary" onClick={() => setOpen("configuration")}>
+                    Open configuration
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <MetricGroup>
+              <Metric
+                label="Pricing policy"
+                value={`v${overview.configuration.version_number}`}
+                note={`${overview.configuration.name} · active from ${businessDate(overview.configuration.valid_from)}`}
+              />
+              <Metric
                 label="Base rate"
                 value={money(overview.base_internal_rate, currencyCodeOf(overview.currency_id))}
-                note="Per internal unit"
+                note="Per internal unit of area"
               />
-              <Stat label="Units" value={overview.units_total} small />
-              <Stat label="Priced" value={overview.units_priced} small />
-              <Stat label="Not priced" value={overview.units_not_priced} small />
-              <Stat label="Need repricing" value={overview.units_repricing_required} small />
-              <Stat label="Active escalations" value={overview.active_escalations} small />
-            </StatRow>
-          </>
-        )}
-      </Card>
+              <Metric label="Units" value={overview.units_total} size="sm" />
+              <Metric label="Priced" value={overview.units_priced} size="sm" />
+              <Metric label="Not priced" value={overview.units_not_priced} size="sm" />
+              <Metric
+                label="Need repricing"
+                value={overview.units_repricing_required}
+                size="sm"
+                tone={overview.units_repricing_required > 0 ? "danger" : "neutral"}
+              />
+              <Metric label="Active escalations" value={overview.active_escalations} size="sm" />
+            </MetricGroup>
+          )}
+        </Card>
 
-      {open === "configuration" ? (
-        <ConfigurationPanel
-          projectId={projectId}
-          configurations={configurations}
-          areaTypes={areaTypes}
-          phases={phases}
-          defaultCurrencyId={overview?.currency_id ?? reportingCurrencyId}
-          canWrite={canPrice}
-          canApprove={canApprove}
-          onChanged={load}
-        />
-      ) : null}
+        {open === "configuration" ? (
+          <ConfigurationPanel
+            projectId={projectId}
+            configurations={configurations}
+            areaTypes={areaTypes}
+            phases={phases}
+            defaultCurrencyId={overview?.currency_id ?? reportingCurrencyId}
+            canWrite={canPrice}
+            canApprove={canApprove}
+            onChanged={load}
+            onClose={() => setOpen("none")}
+          />
+        ) : null}
 
-      {open === "benchmarks" ? (
-        <BenchmarksPanel
-          projectId={projectId}
-          benchmarks={benchmarks}
-          phases={phases}
-          currencyId={overview?.currency_id ?? null}
-          onChanged={load}
-        />
-      ) : null}
+        {open === "benchmarks" ? (
+          <BenchmarksPanel
+            projectId={projectId}
+            benchmarks={benchmarks}
+            phases={phases}
+            currencyId={overview?.currency_id ?? null}
+            onChanged={load}
+            onClose={() => setOpen("none")}
+          />
+        ) : null}
 
-      <Card title="Price register" description="Every unit, and the price it is offered at.">
-        <FilterBar>
-          <Field label="Phase">
+        <DataToolbar
+          search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search the price register" }}
+          count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
+          onReset={
+            filtered
+              ? () => {
+                  setSearch("");
+                  setFilters({ phase_id: "", market_flag: "" });
+                }
+              : undefined
+          }
+        >
+          <ToolbarFilter label="Phase">
             <select
               className="input"
               value={filters.phase_id}
@@ -268,40 +316,39 @@ export function PricingTab({
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Market">
+          </ToolbarFilter>
+          <ToolbarFilter label="Market position">
             <select
               className="input"
               value={filters.market_flag}
               onChange={(event) => setFilters({ ...filters, market_flag: event.target.value })}
             >
-              <option value="">Any</option>
+              <option value="">Any market position</option>
               {Object.entries(MARKET_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
             </select>
-          </Field>
-        </FilterBar>
+          </ToolbarFilter>
+        </DataToolbar>
 
-        {register === null ? (
-          <Loading label="Loading the register…" lines={4} />
-        ) : register.rows.length === 0 ? (
-          <EmptyState title="No units match" hint="Adjust the filters, or load inventory first." />
-        ) : (
-          <>
-            <StatRow>
-              <Stat label="Units" value={register.total} small />
-              <Stat label="Priced" value={register.priced} small />
-              <Stat label="Not priced" value={register.not_priced} small />
-              <Stat label="Need repricing" value={register.repricing_required} small />
-            </StatRow>
-            <TableScroll label="Price register" fixedFirst>
+        <Card flush>
+          {register === null ? (
+            <Loading label="Loading the register…" shape="rows" rows={8} />
+          ) : rows.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title={filtered ? "No unit matches" : "No units to price"}
+                hint={filtered ? "Widen the filter to see the rest." : "Load inventory first; every unit then appears here with its price."}
+              />
+            </div>
+          ) : (
+            <>
+              <TableScroll label="Price register" fixedFirst>
                 <thead>
                   <tr>
                     <th scope="col">Unit</th>
-                    <th scope="col">Type</th>
                     <th scope="col" className="num">
                       Internal
                     </th>
@@ -309,32 +356,25 @@ export function PricingTab({
                       Weighted
                     </th>
                     <th scope="col" className="num">
-                      Price
+                      List price (ex tax)
                     </th>
                     <th scope="col" className="num">
                       Per internal
                     </th>
-                    <th scope="col" className="num">
-                      Version
-                    </th>
-                    <th scope="col">Status</th>
+                    <th scope="col">Version</th>
                     <th scope="col">Market</th>
-                    <th scope="col">Pricing</th>
+                    <th scope="col">Pricing gate</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {register.rows.map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.unit_id}>
                       <th scope="row">
-                        <button
-                          className="button-link mono"
-                          type="button"
-                          onClick={() => onOpenUnit(row.unit_id)}
-                        >
+                        <button className="button-link mono" type="button" onClick={() => onOpenUnit(row.unit_id)}>
                           {row.unit_reference}
                         </button>
+                        <span className="cell-secondary">{row.unit_type_code ?? row.unit_number}</span>
                       </th>
-                      <td>{row.unit_type_code ?? "—"}</td>
                       <td className="num">{row.internal_area_snapshot ?? "—"}</td>
                       <td className="num">{row.weighted_area_snapshot ?? "—"}</td>
                       {/*
@@ -349,33 +389,51 @@ export function PricingTab({
                       <td className="num">
                         {money(row.price_per_internal_area, currencyCodeOf(row.currency_id))}
                       </td>
-                      <td className="num">{row.version_number ?? "—"}</td>
-                      <td>{row.status ? (STATUS_LABELS[row.status] ?? row.status) : "Not priced"}</td>
+                      <td>
+                        {row.version_number === null ? (
+                          <span className="muted">Not priced</span>
+                        ) : (
+                          <>
+                            <span className="figure">v{row.version_number}</span>
+                            <span className="cell-secondary">
+                              {row.status ? (STATUS_LABELS[row.status] ?? row.status) : ""}
+                            </span>
+                          </>
+                        )}
+                      </td>
                       <td>
                         {row.market_flag ? (
-                          <Badge tone={MARKET_TONES[row.market_flag] ?? "neutral"}>
+                          <StatusDot tone={MARKET_TONES[row.market_flag] ?? "neutral"}>
                             {MARKET_LABELS[row.market_flag] ?? row.market_flag}
-                          </Badge>
+                            {row.market_deviation_fraction ? ` · ${percent(row.market_deviation_fraction)}` : ""}
+                          </StatusDot>
                         ) : (
-                          "—"
+                          <span className="muted">—</span>
                         )}
                       </td>
                       <td>
                         {row.repricing_required ? (
                           <Badge tone="danger">Repricing required</Badge>
                         ) : row.pricing_approved ? (
-                          <Badge tone="success">Approved</Badge>
+                          <StatusDot tone="success">Approved</StatusDot>
                         ) : (
-                          <span className="subtle">Not approved</span>
+                          <StatusDot tone="muted">Not approved</StatusDot>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-            </TableScroll>
-          </>
-        )}
-      </Card>
+              </TableScroll>
+              {register.total > register.rows.length ? (
+                <p className="footnote" style={{ padding: "0.75rem 1.5rem" }}>
+                  Showing the first {register.rows.length} of {register.total} units. Narrow the filter to
+                  reach the rest.
+                </p>
+              ) : null}
+            </>
+          )}
+        </Card>
+      </div>
     </>
   );
 }
@@ -393,22 +451,25 @@ function BenchmarksPanel({
   phases,
   currencyId,
   onChanged,
+  onClose,
 }: {
   projectId: string;
   benchmarks: MarketBenchmark[];
   phases: Phase[];
   currencyId: string | null;
   onChanged: () => Promise<void>;
+  onClose: () => void;
 }) {
   const currencyCodeOf = useCurrencyCode();
+  const code = currencyCodeOf(currencyId);
   const [form, setForm] = useState({
     phase_id: "",
     unit_type_code: "",
     area_basis: "internal",
     benchmark_price_per_area: "",
-    comparison_date: new Date().toISOString().slice(0, 10),
+    comparison_date: todayISO(),
     source_name: "",
-    tolerance_fraction: "0.100000",
+    tolerance_percent: "10",
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -430,7 +491,7 @@ function BenchmarksPanel({
         currency_id: currencyId,
         comparison_date: form.comparison_date,
         source_name: form.source_name,
-        tolerance_fraction: form.tolerance_fraction,
+        tolerance_fraction: fractionFromPercent(form.tolerance_percent),
       });
       setForm({ ...form, benchmark_price_per_area: "", source_name: "" });
       await onChanged();
@@ -442,132 +503,131 @@ function BenchmarksPanel({
   };
 
   return (
-    <Card title="Market benchmarks" description="Recorded observations, attributed to a source.">
+    <Card
+      title="Market benchmarks"
+      description="Recorded observations, attributed to a source. A unit price is compared only when one exists for its scope."
+      actions={<Button variant="quiet" onClick={onClose}>Close</Button>}
+    >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <SubPanel title="Record an observation">
       <form onSubmit={submit}>
-        <div className="form-grid form-grid-3">
-        <Field label="Phase">
-          <select
-            className="input"
-            value={form.phase_id}
-            onChange={(event) => setForm({ ...form, phase_id: event.target.value })}
-          >
-            <option value="">Whole project</option>
-            {phases.map((phase) => (
-              <option key={phase.id} value={phase.id}>
-                {phase.code}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Unit type">
-          <input
-            className="input input-short"
-            value={form.unit_type_code}
-            onChange={(event) => setForm({ ...form, unit_type_code: event.target.value })}
-          />
-        </Field>
-        <Field label="Basis">
-          <select
-            className="input input-short"
-            value={form.area_basis}
-            onChange={(event) => setForm({ ...form, area_basis: event.target.value })}
-          >
-            <option value="internal">Internal</option>
-            <option value="weighted">Weighted</option>
-          </select>
-        </Field>
-        <Field label="Price per area">
-          <input
-            className="input input-short"
-            inputMode="decimal"
-            required
-            value={form.benchmark_price_per_area}
-            onChange={(event) =>
-              setForm({ ...form, benchmark_price_per_area: event.target.value })
-            }
-          />
-        </Field>
-        <Field label="Tolerance" hint="0.100000 is 10%.">
-          <input
-            className="input input-short"
-            inputMode="decimal"
-            required
-            value={form.tolerance_fraction}
-            onChange={(event) => setForm({ ...form, tolerance_fraction: event.target.value })}
-          />
-        </Field>
-        <Field label="Observed on">
-          <input
-            className="input input-short"
-            type="date"
-            required
-            value={form.comparison_date}
-            onChange={(event) => setForm({ ...form, comparison_date: event.target.value })}
-          />
-        </Field>
-        <Field label="Source">
-          <input
-            className="input"
-            required
-            value={form.source_name}
-            onChange={(event) => setForm({ ...form, source_name: event.target.value })}
-          />
-        </Field>
+        <FieldRow columns={4}>
+          <Field label="Scope">
+            <select
+              className="input"
+              value={form.phase_id}
+              onChange={(event) => setForm({ ...form, phase_id: event.target.value })}
+            >
+              <option value="">Whole project</option>
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.id}>
+                  {phase.code} — {phase.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Unit type" optional>
+            <input
+              className="input input-short"
+              value={form.unit_type_code}
+              onChange={(event) => setForm({ ...form, unit_type_code: event.target.value })}
+            />
+          </Field>
+          <Field label="Area basis">
+            <select
+              className="input input-short"
+              value={form.area_basis}
+              onChange={(event) => setForm({ ...form, area_basis: event.target.value })}
+            >
+              <option value="internal">Internal</option>
+              <option value="weighted">Weighted</option>
+            </select>
+          </Field>
+          <Field label="Price per unit of area">
+            <MoneyInput
+              code={code}
+              required
+              value={form.benchmark_price_per_area}
+              onChange={(value) => setForm({ ...form, benchmark_price_per_area: value })}
+            />
+          </Field>
+          <Field label="Tolerance" hint="How far a price may sit from the benchmark and still be in line.">
+            <RateInput
+              required
+              value={form.tolerance_percent}
+              onChange={(value) => setForm({ ...form, tolerance_percent: value })}
+            />
+          </Field>
+          <Field label="Observed on">
+            <input
+              className="input input-short"
+              type="date"
+              required
+              value={form.comparison_date}
+              onChange={(event) => setForm({ ...form, comparison_date: event.target.value })}
+            />
+          </Field>
+          <Field label="Source" className="field-span-2">
+            <input
+              className="input"
+              required
+              value={form.source_name}
+              onChange={(event) => setForm({ ...form, source_name: event.target.value })}
+            />
+          </Field>
+        </FieldRow>
         <FormActions>
           <Button variant="primary" type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Record"}
+            {busy ? "Saving…" : "Record observation"}
           </Button>
         </FormActions>
-        </div>
       </form>
-      </SubPanel>
 
       {benchmarks.length === 0 ? (
-        <EmptyState title="No benchmarks" hint="A unit price is compared only when one exists." />
+        <EmptyState compact title="No benchmarks yet" hint="Record one to compare every priced unit in its scope against the market." />
       ) : (
-        <TableScroll label="Market benchmarks">
-            <thead>
-              <tr>
-                <th scope="col">Scope</th>
-                <th scope="col">Basis</th>
-                <th scope="col" className="num">
-                  Price per area
+        <TableScroll label="Market benchmarks" compact>
+          <thead>
+            <tr>
+              <th scope="col">Scope</th>
+              <th scope="col">Basis</th>
+              <th scope="col" className="num">
+                Price per area
+              </th>
+              <th scope="col" className="num">
+                Tolerance
+              </th>
+              <th scope="col">Observed</th>
+              <th scope="col">Source</th>
+              <th scope="col">State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {benchmarks.map((benchmark) => (
+              <tr key={benchmark.id}>
+                <th scope="row">
+                  {benchmark.unit_type_code ?? "Any type"} ·{" "}
+                  {phases.find((phase) => phase.id === benchmark.phase_id)?.code ?? "Whole project"}
                 </th>
-                <th scope="col" className="num">
-                  Tolerance
-                </th>
-                <th scope="col">Observed</th>
-                <th scope="col">Source</th>
-                <th scope="col">Active</th>
+                <td>{benchmark.area_basis}</td>
+                <td className="num">
+                  {money(benchmark.benchmark_price_per_area, currencyCodeOf(benchmark.currency_id))}
+                </td>
+                <td className="num">{percent(benchmark.tolerance_fraction)}</td>
+                <td className="figure">{businessDate(benchmark.comparison_date)}</td>
+                <td>
+                  {benchmark.source_name}
+                  {benchmark.source_reference ? <span className="cell-secondary">{benchmark.source_reference}</span> : null}
+                </td>
+                <td>
+                  {benchmark.is_active ? (
+                    <StatusDot tone="success">Active</StatusDot>
+                  ) : (
+                    <StatusDot tone="muted">Retired</StatusDot>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {benchmarks.map((benchmark) => (
-                <tr key={benchmark.id}>
-                  <th scope="row">
-                    {benchmark.unit_type_code ?? "Any type"} ·{" "}
-                    {phases.find((phase) => phase.id === benchmark.phase_id)?.code ??
-                      "Whole project"}
-                  </th>
-                  <td>{benchmark.area_basis}</td>
-                  <td className="num">
-                    {money(benchmark.benchmark_price_per_area, currencyCodeOf(benchmark.currency_id))}
-                  </td>
-                  <td className="num">{benchmark.tolerance_fraction}</td>
-                  <td className="mono nowrap">{businessDate(benchmark.comparison_date)}</td>
-                  <td>{benchmark.source_name}</td>
-                  <td>
-                    {benchmark.is_active ? (
-                      <Badge tone="success">Active</Badge>
-                    ) : (
-                      <Badge tone="muted">Retired</Badge>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            ))}
+          </tbody>
         </TableScroll>
       )}
     </Card>

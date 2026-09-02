@@ -4,23 +4,28 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory, sales } from "@/lib/api";
 import type { Phase, SalesClient, SalesPolicy, SalesRegister } from "@/lib/api";
+import { useCurrencyCode } from "@/lib/currency";
+import { businessDate, money } from "@/lib/format";
+import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
   Card,
+  DataToolbar,
   EmptyState,
   Field,
-  FilterBar,
+  FieldRow,
   FormActions,
   Loading,
+  Metric,
+  MetricGroup,
+  MoneyInput,
   Notice,
-  Stat,
-  StatRow,
-  SubPanel,
+  PageHeader,
+  StatusDot,
   TableScroll,
+  ToolbarFilter,
 } from "@/components/ui";
-import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { DealFile } from "@/components/projects/sales/DealFile";
@@ -56,20 +61,23 @@ const POLICY_FIELDS: { name: keyof SalesPolicy; label: string; hint?: string }[]
     label: "A reservation needs deposit evidence before it commits the unit",
   },
   { name: "handover_requires_legal_clearance", label: "Handover needs the legal clearance" },
-  {
-    name: "handover_requires_collection_clearance",
-    label: "Handover needs the collections clearance",
-  },
+  { name: "handover_requires_collection_clearance", label: "Handover needs the collections clearance" },
   { name: "handover_requires_delivery_clearance", label: "Handover needs the delivery clearance" },
-  {
-    name: "handover_requires_title_transfer",
-    label: "Handover needs the title to have transferred",
-  },
+  { name: "handover_requires_title_transfer", label: "Handover needs the title to have transferred" },
   {
     name: "title_transfer_requires_collection_clearance",
     label: "Title transfer needs the collections clearance",
-    hint: "Attested by Collections until PR-MVP-07 has real payment truth behind it.",
   },
+];
+
+const COMMERCIAL_FILTERS = [
+  "available",
+  "reserved",
+  "contract_pending",
+  "contracted",
+  "returned",
+  "held",
+  "unreleased",
 ];
 
 export function SalesTab({
@@ -87,14 +95,13 @@ export function SalesTab({
   const [phases, setPhases] = useState<Phase[]>([]);
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
   const [filters, setFilters] = useState({ phase_id: "", commercial_status: "" });
+  const [search, setSearch] = useState("");
   const [open, setOpen] = useState<"none" | "clients" | "policy">("none");
-  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null } | null>(
-    null,
-  );
+  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null; unitReference: string | null } | null>(null);
   // Reserving is the one thing that starts at a unit rather than at a deal, so
   // it starts here: the register is where somebody is looking when they decide
   // to take a unit off the market.
-  const [reserving, setReserving] = useState<{ unitId: string; reference: string } | null>(null);
+  const [reserving, setReserving] = useState<{ unitId: string; reference: string; currencyId: string | null } | null>(null);
   const [buyers, setBuyers] = useState<SalesClient[]>([]);
   const [reservation, setReservation] = useState({
     client_id: "",
@@ -112,7 +119,7 @@ export function SalesTab({
 
   const load = useCallback(async () => {
     try {
-      const query: Record<string, string> = { limit: "100" };
+      const query: Record<string, string> = { limit: "200" };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -140,198 +147,158 @@ export function SalesTab({
 
   useEffect(() => {
     void (async () => {
-      await load();
+      if (projectStatus !== "setup") await load();
     })();
-  }, [load]);
+  }, [load, projectStatus]);
+
+  const header = (actions?: React.ReactNode) => (
+    <PageHeader title="Sales & Legal" subtitle={sectionDescription("sales")} compact actions={actions} />
+  );
 
   // Sales is refused while the project is in setup, because that is the window
   // in which its currency and country pack can still change under whatever was
   // agreed in them. Saying so beats a row of identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Card title="Sales" description="Not yet — the project basis is still open.">
-        <EmptyState
-          title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to Pre-development before recording sales."
-        />
-      </Card>
+      <>
+        {header()}
+        <Card>
+          <EmptyState
+            title="Finalize project setup first"
+            hint="Confirm country and currency settings, then move the project to Pre-development before recording sales."
+          />
+        </Card>
+      </>
     );
   }
 
   if (error && register === null) {
     return (
-      <Card title="Sales">
+      <>
+        {header()}
         <Notice tone="error">{error}</Notice>
-      </Card>
+      </>
     );
   }
 
-  if (register === null) {
-    return (
-      <Card title="Sales">
-        <Loading label="Loading sales…" lines={4} />
-      </Card>
-    );
-  }
-
-  const totals = register.totals;
+  const totals = register?.totals ?? null;
+  const needle = search.trim().toLowerCase();
+  const rows = (register?.rows ?? []).filter(
+    (row) =>
+      !needle ||
+      `${row.unit_reference} ${row.client_display_name ?? ""} ${row.sale_number ?? ""} ${row.spa_number ?? ""} ${row.reservation_number ?? ""}`
+        .toLowerCase()
+        .includes(needle),
+  );
+  const filtered = search !== "" || filters.phase_id !== "" || filters.commercial_status !== "";
 
   return (
     <>
-      <Card
-        title="Sales"
-        description="Where every unit stands commercially, legally and on delivery."
-        actions={
-          <>
-            <Button onClick={() => setOpen(open === "clients" ? "none" : "clients")}>
-              {open === "clients" ? "Close buyers" : "Buyers"}
+      {header(
+        <>
+          <Button onClick={() => setOpen(open === "clients" ? "none" : "clients")} aria-expanded={open === "clients"}>
+            Buyers
+          </Button>
+          {canSetPolicy ? (
+            <Button onClick={() => setOpen(open === "policy" ? "none" : "policy")} aria-expanded={open === "policy"}>
+              Sales gates
             </Button>
-            {canSetPolicy ? (
-              <Button onClick={() => setOpen(open === "policy" ? "none" : "policy")}>
-                {open === "policy" ? "Close gates" : "Sales gates"}
-              </Button>
-            ) : null}
-          </>
-        }
-      >
+          ) : null}
+        </>,
+      )}
+
+      <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <StatRow>
-          <Stat label="Units" value={totals.units} small />
-          <Stat label="Available" value={totals.available} small />
-          <Stat label="Live reservations" value={totals.active_reservations} small />
-          <Stat label="Contract pending" value={totals.contract_pending} small />
-          <Stat label="Contracted" value={totals.contracted} small />
-          <Stat label="Returned" value={totals.returned} small />
-          <Stat label="Open cancellations" value={totals.open_cancellations} small />
-          <Stat
-            label="Contracted value"
-            value={
-              totals.mixed_currency
-                ? "Not summed"
-                : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
-            }
-            note={totals.mixed_currency ? "Mixed currencies" : undefined}
-          />
-        </StatRow>
-        <p className="footnote">
-          Counted over every unit you may see under the current filter, not the page below.
-        </p>
-      </Card>
-
-      {open === "clients" ? (
-        <ClientsPanel
-          projectId={projectId}
-          canWrite={canWriteClients}
-          onChanged={load}
-          onClose={() => setOpen("none")}
-        />
-      ) : null}
-
-      {open === "policy" && policy ? (
-        <Card
-          title="Sales gates"
-          description="Six named choices. Not a rules engine, and never becoming one."
-          actions={<Button onClick={() => setOpen("none")}>Close</Button>}
-        >
-          <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setBusy(true);
-              try {
-                setPolicy(
-                  await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>),
-                );
-                setNotice("Gates saved.");
-                setError(null);
-              } catch (caught) {
-                setError(caught instanceof ApiError ? caught.message : "Could not save the gates.");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <div className="checkbox-grid">
-              {POLICY_FIELDS.map((entry) => (
-                <label className="checkbox" key={entry.name}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(policy[entry.name])}
-                    onChange={(event) =>
-                      setPolicy({ ...policy, [entry.name]: event.target.checked })
-                    }
-                  />
-                  <span>
-                    {entry.label}
-                    {entry.hint ? <span className="field-hint"> {entry.hint}</span> : null}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <FormActions>
-              <Button variant="primary" type="submit" disabled={busy}>
-                Save gates
-              </Button>
-            </FormActions>
-          </form>
+        <Card>
+          {totals === null ? (
+            <Loading label="Loading sales…" shape="metrics" />
+          ) : (
+            <>
+              <MetricGroup>
+                <Metric
+                  label="Contracted value"
+                  value={
+                    totals.mixed_currency
+                      ? "Not summed"
+                      : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
+                  }
+                  note={totals.mixed_currency ? "Contracts in more than one currency" : "Live contracts, ex tax"}
+                  size="lg"
+                />
+                <Metric label="Units" value={totals.units} size="sm" />
+                <Metric label="Available" value={totals.available} size="sm" />
+                <Metric label="Live reservations" value={totals.active_reservations} size="sm" />
+                <Metric label="Contract pending" value={totals.contract_pending} size="sm" />
+                <Metric label="Contracted" value={totals.contracted} size="sm" />
+                <Metric label="Returned" value={totals.returned} size="sm" />
+                <Metric
+                  label="Open cancellations"
+                  value={totals.open_cancellations}
+                  size="sm"
+                  tone={totals.open_cancellations > 0 ? "warning" : "neutral"}
+                />
+              </MetricGroup>
+              <p className="footnote">
+                Counted over every unit you may see under the current filter, not the page below.
+              </p>
+            </>
+          )}
         </Card>
-      ) : null}
 
-      <Card
-        title="Sales register"
-        description="One line per unit. Three teams' answers, side by side."
-      >
-        <FilterBar>
-          <Field label="Phase">
-            <select
-              className="input"
-              value={filters.phase_id}
-              onChange={(event) => setFilters({ ...filters, phase_id: event.target.value })}
+        {open === "clients" ? (
+          <ClientsPanel projectId={projectId} canWrite={canWriteClients} onChanged={load} onClose={() => setOpen("none")} />
+        ) : null}
+
+        {open === "policy" && policy ? (
+          <Card
+            title="Sales gates"
+            description="Six named choices this project makes about what a sale must clear. Not a rules engine, and never becoming one."
+            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+          >
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setBusy(true);
+                try {
+                  setPolicy(await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>));
+                  setNotice("Gates saved.");
+                  setError(null);
+                } catch (caught) {
+                  setError(caught instanceof ApiError ? caught.message : "Could not save the gates.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
             >
-              <option value="">Every phase</option>
-              {phases.map((phase) => (
-                <option key={phase.id} value={phase.id}>
-                  {phase.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Commercial status">
-            <select
-              className="input"
-              value={filters.commercial_status}
-              onChange={(event) =>
-                setFilters({ ...filters, commercial_status: event.target.value })
-              }
-            >
-              <option value="">Any</option>
-              {[
-                "available",
-                "reserved",
-                "contract_pending",
-                "contracted",
-                "returned",
-                "held",
-                "unreleased",
-              ].map((status) => (
-                <option key={status} value={status}>
-                  {statusLabel(status)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </FilterBar>
+              <div className="checkbox-grid">
+                {POLICY_FIELDS.map((entry) => (
+                  <label className="checkbox" key={entry.name}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(policy[entry.name])}
+                      onChange={(event) => setPolicy({ ...policy, [entry.name]: event.target.checked })}
+                    />
+                    <span>{entry.label}</span>
+                  </label>
+                ))}
+              </div>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  Save gates
+                </Button>
+              </FormActions>
+            </form>
+          </Card>
+        ) : null}
 
         {reserving ? (
-          <SubPanel
+          <Card
             title={`Reserve ${reserving.reference}`}
-            actions={<Button small onClick={() => setReserving(null)}>Cancel</Button>}
+            description="Creating a reservation holds nothing. The unit stays on the market until the reservation is activated."
+            actions={<Button variant="quiet" onClick={() => setReserving(null)}>Cancel</Button>}
           >
-            <p className="section-description">
-              Creating a reservation holds nothing. The unit stays on the market until the
-              reservation is activated.
-            </p>
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
@@ -341,42 +308,30 @@ export function SalesTab({
                   const created = await sales.createReservation(projectId, {
                     unit_id: reserving.unitId,
                     client_id: reservation.client_id,
-                    ...(reservation.sales_channel_code
-                      ? { sales_channel_code: reservation.sales_channel_code }
-                      : {}),
-                    ...(reservation.sales_branch_code
-                      ? { sales_branch_code: reservation.sales_branch_code }
-                      : {}),
+                    ...(reservation.sales_channel_code ? { sales_channel_code: reservation.sales_channel_code } : {}),
+                    ...(reservation.sales_branch_code ? { sales_branch_code: reservation.sales_branch_code } : {}),
                     ...(reservation.deposit_required_amount
                       ? { deposit_required_amount: reservation.deposit_required_amount }
                       : {}),
                   });
                   setReserving(null);
-                  setNotice(
-                    `${created.reservation.reservation_number} prepared at the unit's live price.`,
-                  );
-                  setDeal({ reservationId: created.reservation.id, saleId: null });
+                  setNotice(`${created.reservation.reservation_number} prepared at the unit's live price.`);
+                  setDeal({ reservationId: created.reservation.id, saleId: null, unitReference: null });
                   await load();
                 } catch (caught) {
-                  setError(
-                    caught instanceof ApiError
-                      ? caught.message
-                      : "Could not open the reservation.",
-                  );
+                  setError(caught instanceof ApiError ? caught.message : "Could not open the reservation.");
                 } finally {
                   setBusy(false);
                 }
               }}
             >
-              <div className="form-grid">
+              <FieldRow columns={4}>
                 <Field label="Buyer">
                   <select
                     className="input"
                     required
                     value={reservation.client_id}
-                    onChange={(event) =>
-                      setReservation({ ...reservation, client_id: event.target.value })
-                    }
+                    onChange={(event) => setReservation({ ...reservation, client_id: event.target.value })}
                   >
                     <option value="">Choose a buyer</option>
                     {buyers.map((buyer) => (
@@ -386,164 +341,198 @@ export function SalesTab({
                     ))}
                   </select>
                 </Field>
-                <Field label="Sales channel">
+                <Field label="Sales channel" optional>
                   <input
                     className="input"
                     value={reservation.sales_channel_code}
-                    onChange={(event) =>
-                      setReservation({ ...reservation, sales_channel_code: event.target.value })
-                    }
+                    onChange={(event) => setReservation({ ...reservation, sales_channel_code: event.target.value })}
                   />
                 </Field>
-                <Field label="Sales branch">
+                <Field label="Sales branch" optional>
                   <input
                     className="input"
                     value={reservation.sales_branch_code}
-                    onChange={(event) =>
-                      setReservation({ ...reservation, sales_branch_code: event.target.value })
-                    }
+                    onChange={(event) => setReservation({ ...reservation, sales_branch_code: event.target.value })}
                   />
                 </Field>
-                <Field
-                  label="Deposit required"
-                  hint="The gate amount. Recording evidence against it is not a receipt."
-                >
-                  <input
-                    className="input"
+                <Field label="Deposit required" optional hint="The gate amount. Evidence against it is not a receipt.">
+                  <MoneyInput
+                    code={currencyCodeOf(reserving.currencyId)}
                     value={reservation.deposit_required_amount}
-                    onChange={(event) =>
-                      setReservation({
-                        ...reservation,
-                        deposit_required_amount: event.target.value,
-                      })
-                    }
+                    onChange={(value) => setReservation({ ...reservation, deposit_required_amount: value })}
                   />
                 </Field>
-                <FormActions>
-                  <Button variant="primary" type="submit" disabled={busy}>
-                    Open reservation
-                  </Button>
-                </FormActions>
-              </div>
+              </FieldRow>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  Open reservation
+                </Button>
+              </FormActions>
             </form>
-          </SubPanel>
+          </Card>
         ) : null}
 
-        {register.rows.length === 0 ? (
-          <EmptyState
-            title="Nothing to show"
-            hint="No unit in this project matches, or none is visible to you."
-          />
-        ) : (
-          <TableScroll label="Sales register" fixedFirst>
-            <thead>
-              <tr>
-                <th scope="col">Unit</th>
-                <th scope="col">Commercial</th>
-                <th scope="col">Buyer</th>
-                <th scope="col">Reservation</th>
-                <th scope="col">Expires</th>
-                <th scope="col">SPA</th>
-                <th scope="col">Contract</th>
-                <th scope="col" className="num">
-                  Contract price
-                </th>
-                <th scope="col">Legal</th>
-                <th scope="col">Next legal step</th>
-                <th scope="col">Handover</th>
-                <th scope="col">Delivery</th>
-                <th scope="col">Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {register.rows.map((row) => (
-                <tr key={row.unit_id}>
-                  <th scope="row">
-                    <button
-                      className="button-link mono"
-                      type="button"
-                      onClick={() => onOpenUnit(row.unit_id)}
-                    >
-                      {row.unit_reference}
-                    </button>
-                  </th>
-                  <td>
-                    <Badge tone={statusTone(row.commercial_status)}>
-                      {statusLabel(row.commercial_status)}
-                    </Badge>
-                  </td>
-                  <td>{row.client_display_name ?? "—"}</td>
-                  <td className="nowrap">
-                    <span className="mono">{row.reservation_number ?? "—"}</span>{" "}
-                    {row.closure_required ? (
-                      <Badge tone="danger">Closure required</Badge>
-                    ) : row.reservation_status ? (
-                      <Badge tone={reservationTone(row.reservation_status)}>
-                        {reservationLabel(row.reservation_status)}
-                      </Badge>
-                    ) : null}
-                  </td>
-                  <td className="mono nowrap">{businessDate(row.reservation_expires_on)}</td>
-                  <td className="mono">{row.spa_number ?? "—"}</td>
-                  <td>
-                    {row.sale_status ? (
-                      <Badge tone={saleTone(row.sale_status)}>{saleLabel(row.sale_status)}</Badge>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="num">
-                    {money(row.total_contract_price, currencyCodeOf(row.currency_id))}
-                  </td>
-                  <td>
-                    <Badge tone={statusTone(row.legal_status)}>
-                      {statusLabel(row.legal_status)}
-                    </Badge>
-                  </td>
-                  <td>{row.next_legal_step ? legalEventLabel(row.next_legal_step) : "—"}</td>
-                  <td>
-                    {row.handover_status ? (
-                      <Badge tone={handoverTone(row.handover_status)}>
-                        {handoverLabel(row.handover_status)}
-                      </Badge>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>
-                    <Badge tone={statusTone(row.delivery_status)}>
-                      {statusLabel(row.delivery_status)}
-                    </Badge>
-                  </td>
-                  <td>
-                    {row.reservation_id || row.sale_id ? (
-                      <Button
-                        small
-                        onClick={() =>
-                          setDeal({ reservationId: row.reservation_id, saleId: row.sale_id })
-                        }
-                      >
-                        Deal file
-                      </Button>
-                    ) : canWriteClients && row.commercial_status === "available" ? (
-                      <Button
-                        small
-                        onClick={() =>
-                          setReserving({ unitId: row.unit_id, reference: row.unit_reference })
-                        }
-                      >
-                        Reserve
-                      </Button>
-                    ) : (
-                      <span className="subtle">No commitment</span>
-                    )}
-                  </td>
-                </tr>
+        <DataToolbar
+          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search the sales register" }}
+          count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
+          onReset={
+            filtered
+              ? () => {
+                  setSearch("");
+                  setFilters({ phase_id: "", commercial_status: "" });
+                }
+              : undefined
+          }
+        >
+          <ToolbarFilter label="Phase">
+            <select
+              className="input"
+              value={filters.phase_id}
+              onChange={(event) => setFilters({ ...filters, phase_id: event.target.value })}
+            >
+              <option value="">Every phase</option>
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.id}>
+                  {phase.code} — {phase.name}
+                </option>
               ))}
-            </tbody>
-          </TableScroll>
-        )}
-      </Card>
+            </select>
+          </ToolbarFilter>
+          <ToolbarFilter label="Commercial status">
+            <select
+              className="input"
+              value={filters.commercial_status}
+              onChange={(event) => setFilters({ ...filters, commercial_status: event.target.value })}
+            >
+              <option value="">Any status</option>
+              {COMMERCIAL_FILTERS.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabel(status)}
+                </option>
+              ))}
+            </select>
+          </ToolbarFilter>
+        </DataToolbar>
+
+        <Card flush>
+          {register === null ? (
+            <Loading label="Loading the register…" shape="rows" rows={8} />
+          ) : rows.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title={filtered ? "No unit matches" : "Nothing to show"}
+                hint={filtered ? "Widen the filter to see the rest." : "No unit in this project is visible to you yet."}
+              />
+            </div>
+          ) : (
+            <TableScroll label="Sales register" fixedFirst>
+              <thead>
+                <tr>
+                  <th scope="col">Unit</th>
+                  <th scope="col">Commercial</th>
+                  <th scope="col">Reservation</th>
+                  <th scope="col">Contract</th>
+                  <th scope="col" className="num">
+                    Contract price
+                  </th>
+                  <th scope="col">Legal</th>
+                  <th scope="col">Next legal step</th>
+                  <th scope="col">Handover</th>
+                  <th scope="col">Delivery</th>
+                  <th scope="col">
+                    <span className="visually-hidden">Open</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.unit_id}>
+                    <th scope="row">
+                      <button className="button-link mono" type="button" onClick={() => onOpenUnit(row.unit_id)}>
+                        {row.unit_reference}
+                      </button>
+                      {row.client_display_name ? (
+                        <span className="cell-secondary cell-prose">{row.client_display_name}</span>
+                      ) : null}
+                    </th>
+                    <td>
+                      <Badge tone={statusTone(row.commercial_status)}>{statusLabel(row.commercial_status)}</Badge>
+                    </td>
+                    <td>
+                      {row.reservation_number ? (
+                        <>
+                          <span className="mono">{row.reservation_number}</span>
+                          <span className="cell-secondary">
+                            {row.closure_required ? (
+                              <Badge tone="danger">Closure required</Badge>
+                            ) : (
+                              <StatusDot tone={reservationTone(row.reservation_status)}>
+                                {reservationLabel(row.reservation_status)}
+                                {row.reservation_expires_on ? ` · to ${businessDate(row.reservation_expires_on)}` : ""}
+                              </StatusDot>
+                            )}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {row.sale_number ? (
+                        <>
+                          <span className="mono">{row.spa_number ?? row.sale_number}</span>
+                          <span className="cell-secondary">
+                            <StatusDot tone={saleTone(row.sale_status)}>{saleLabel(row.sale_status)}</StatusDot>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td className="num">{money(row.total_contract_price, currencyCodeOf(row.currency_id))}</td>
+                    <td>
+                      <StatusDot tone={statusTone(row.legal_status)}>{statusLabel(row.legal_status)}</StatusDot>
+                    </td>
+                    <td>{row.next_legal_step ? legalEventLabel(row.next_legal_step) : <span className="muted">—</span>}</td>
+                    <td>
+                      {row.handover_status ? (
+                        <StatusDot tone={handoverTone(row.handover_status)}>{handoverLabel(row.handover_status)}</StatusDot>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <StatusDot tone={statusTone(row.delivery_status)}>{statusLabel(row.delivery_status)}</StatusDot>
+                    </td>
+                    <td>
+                      {row.reservation_id || row.sale_id ? (
+                        <Button
+                          small
+                          variant="quiet"
+                          onClick={() => setDeal({ reservationId: row.reservation_id, saleId: row.sale_id, unitReference: row.unit_reference })}
+                        >
+                          Deal file
+                        </Button>
+                      ) : canWriteClients && row.commercial_status === "available" ? (
+                        <Button
+                          small
+                          onClick={() =>
+                            setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id })
+                          }
+                        >
+                          Reserve
+                        </Button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          )}
+        </Card>
+      </div>
 
       {deal ? (
         <DealFile
@@ -551,6 +540,7 @@ export function SalesTab({
           reservationId={deal.reservationId}
           saleId={deal.saleId}
           roles={roles}
+          unitReference={deal.unitReference}
           onClose={() => setDeal(null)}
           onChanged={load}
         />

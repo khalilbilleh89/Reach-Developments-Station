@@ -4,8 +4,22 @@ import { useState } from "react";
 
 import { ApiError, pricing } from "@/lib/api";
 import type { QuotePreview } from "@/lib/api";
-import { Badge, Button, Field, Notice, Panel } from "@/components/ui";
-import { money } from "@/lib/format";
+import {
+  Button,
+  Card,
+  Field,
+  FieldRow,
+  FormActions,
+  FormSection,
+  InlineMeta,
+  InlineMetaItem,
+  MoneyInput,
+  Notice,
+  RateInput,
+  Waterfall,
+  WaterfallRow,
+} from "@/components/ui";
+import { fractionFromPercent, money, percent } from "@/lib/format";
 
 /**
  * Model an offer against a unit's live price.
@@ -19,16 +33,21 @@ import { money } from "@/lib/format";
  * fact. A discount reduces what the buyer contracts to pay; a furniture package
  * the seller absorbs does not — the contract stays where it is and the seller's
  * net revenue falls.
+ *
+ * Rates are typed as percentages and sent as the server's fraction of one; the
+ * conversion moves a decimal point in a string and never multiplies.
  */
+const RATE_TERMS = new Set(["discount_fraction", "payment_plan_adjustment_fraction"]);
+
 const PRICE_TERMS: { name: string; label: string; hint?: string }[] = [
-  { name: "discount_fraction", label: "Discount (fraction)", hint: "0.050000 is 5%." },
-  { name: "discount_amount", label: "Discount (amount)" },
+  { name: "discount_fraction", label: "Discount rate", hint: "Of the reference price." },
+  { name: "discount_amount", label: "Discount amount" },
   { name: "seller_credit", label: "Seller credit" },
   { name: "paid_upgrade_amount", label: "Paid upgrade" },
   {
     name: "payment_plan_adjustment_fraction",
     label: "Payment plan adjustment",
-    hint: "A signed fraction of the reference price.",
+    hint: "Signed. A negative rate reduces the price.",
   },
 ];
 
@@ -39,15 +58,6 @@ const SELLER_COSTS: { name: string; label: string }[] = [
   { name: "financing_subsidy", label: "Financing subsidy" },
   { name: "extended_terms_npv_cost", label: "Extended-term NPV cost" },
 ];
-
-function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div>
-      <dt className="reference-term">{strong ? <strong>{label}</strong> : label}</dt>
-      <dd className="reference-value mono nowrap">{strong ? <strong>{value}</strong> : value}</dd>
-    </div>
-  );
-}
 
 export function QuotePreviewPanel({
   projectId,
@@ -66,13 +76,17 @@ export function QuotePreviewPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const set = (name: string) => (value: string) => setTerms((current) => ({ ...current, [name]: value }));
+
   const run = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
       const body = Object.fromEntries(
-        Object.entries(terms).filter(([, value]) => value.trim() !== ""),
+        Object.entries(terms)
+          .filter(([, value]) => value.trim() !== "")
+          .map(([name, value]) => [name, RATE_TERMS.has(name) ? fractionFromPercent(value) : value]),
       );
       setQuote(await pricing.quotePreview(projectId, unitId, body));
     } catch (caught) {
@@ -84,63 +98,51 @@ export function QuotePreviewPanel({
   };
 
   return (
-    <Panel
+    <Card
       title="Quote preview"
       description="A calculation, not a reservation. Nothing here is saved."
+      headingLevel={3}
       actions={
-        <Button small onClick={onClose}>
+        <Button small variant="quiet" onClick={onClose}>
           Close
         </Button>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       <form onSubmit={run}>
-        <h3 className="section-heading">Price terms</h3>
-        <div className="form-inline">
-          {PRICE_TERMS.map((term) => (
-            <Field key={term.name} label={term.label} hint={term.hint}>
-              <input
-                className="input input-short"
-                inputMode="decimal"
-                value={terms[term.name] ?? ""}
-                onChange={(event) =>
-                  setTerms({ ...terms, [term.name]: event.target.value })
-                }
-              />
+        <FormSection title="Price terms" description="These change what the buyer contracts to pay.">
+          <FieldRow columns={3}>
+            {PRICE_TERMS.map((term) => (
+              <Field key={term.name} label={term.label} hint={term.hint} optional>
+                {RATE_TERMS.has(term.name) ? (
+                  <RateInput value={terms[term.name] ?? ""} onChange={set(term.name)} />
+                ) : (
+                  <MoneyInput code={currencyCode} value={terms[term.name] ?? ""} onChange={set(term.name)} />
+                )}
+              </Field>
+            ))}
+          </FieldRow>
+        </FormSection>
+        <FormSection
+          title="Seller-borne costs"
+          description="These reduce what the sale earns. They do not reduce the contract price."
+        >
+          <FieldRow columns={3}>
+            {SELLER_COSTS.map((term) => (
+              <Field key={term.name} label={term.label} optional>
+                <MoneyInput code={currencyCode} value={terms[term.name] ?? ""} onChange={set(term.name)} />
+              </Field>
+            ))}
+            <Field label="Buyer-paid fees" optional>
+              <MoneyInput code={currencyCode} value={terms.buyer_paid_fees ?? ""} onChange={set("buyer_paid_fees")} />
             </Field>
-          ))}
-        </div>
-        <h3 className="section-heading">Seller-borne costs</h3>
-        <p className="subtle">
-          These reduce what the sale earns. They do not reduce the contract price.
-        </p>
-        <div className="form-inline">
-          {SELLER_COSTS.map((term) => (
-            <Field key={term.name} label={term.label}>
-              <input
-                className="input input-short"
-                inputMode="decimal"
-                value={terms[term.name] ?? ""}
-                onChange={(event) =>
-                  setTerms({ ...terms, [term.name]: event.target.value })
-                }
-              />
-            </Field>
-          ))}
-          <Field label="Buyer-paid fees">
-            <input
-              className="input input-short"
-              inputMode="decimal"
-              value={terms.buyer_paid_fees ?? ""}
-              onChange={(event) =>
-                setTerms({ ...terms, buyer_paid_fees: event.target.value })
-              }
-            />
-          </Field>
-        </div>
-        <Button variant="primary" type="submit" disabled={busy}>
-          {busy ? "Pricing…" : "Preview"}
-        </Button>
+          </FieldRow>
+        </FormSection>
+        <FormActions>
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? "Pricing…" : "Preview the quote"}
+          </Button>
+        </FormActions>
       </form>
 
       {quote ? (
@@ -151,69 +153,86 @@ export function QuotePreviewPanel({
               {quote.required_role ? ` Requires: ${quote.required_role}.` : ""}
             </Notice>
           ) : null}
-          <h3 className="section-heading">Contract</h3>
-          <dl className="reference-list">
-            <Line
-              label="Approved reference price (ex tax)"
-              value={money(quote.approved_reference_price_ex_tax, currencyCode)}
+          <h4 className="section-heading">Contract</h4>
+          <Waterfall>
+            <WaterfallRow
+              label="Approved reference price"
+              note="Ex tax"
+              amount={money(quote.approved_reference_price_ex_tax, currencyCode)}
             />
-            <Line label="Paid upgrade" value={money(quote.paid_upgrade_price, currencyCode)} />
-            <Line label="Payment plan adjustment" value={money(quote.payment_plan_price_adjustment, currencyCode)} />
-            <Line label="Gross quoted price (ex tax)" value={money(quote.gross_quoted_price_ex_tax, currencyCode)} strong />
-            <Line label="Cash discount" value={money(quote.cash_discount, currencyCode)} />
-            <Line label="Seller credit" value={money(quote.seller_credit, currencyCode)} />
-            <Line
-              label="Net contract price (ex tax)"
-              value={money(quote.net_contract_price_ex_tax, currencyCode)}
-              strong
+            <WaterfallRow label="Paid upgrade" amount={money(quote.paid_upgrade_price, currencyCode)} />
+            <WaterfallRow
+              label="Payment plan adjustment"
+              amount={money(quote.payment_plan_price_adjustment, currencyCode)}
             />
-          </dl>
-          <h3 className="section-heading">Seller costs</h3>
-          <dl className="reference-list">
-            <Line label="Package cost" value={money(quote.seller_package_cost, currencyCode)} />
-            <Line label="Upgrade allowance" value={money(quote.upgrade_allowance_cost, currencyCode)} />
-            <Line label="Commission support" value={money(quote.commission_support, currencyCode)} />
-            <Line label="Financing subsidy" value={money(quote.financing_subsidy, currencyCode)} />
-            <Line label="Extended-term NPV cost" value={money(quote.extended_terms_npv_cost, currencyCode)} />
-            <Line
+            <WaterfallRow
+              label="Gross quoted price"
+              note="Ex tax"
+              amount={money(quote.gross_quoted_price_ex_tax, currencyCode)}
+              kind="subtotal"
+            />
+            <WaterfallRow label="Cash discount" amount={money(quote.cash_discount, currencyCode)} />
+            <WaterfallRow label="Seller credit" amount={money(quote.seller_credit, currencyCode)} />
+            <WaterfallRow
+              label="Net contract price"
+              note="Ex tax"
+              amount={money(quote.net_contract_price_ex_tax, currencyCode)}
+              kind="total"
+            />
+          </Waterfall>
+          <h4 className="section-heading">Seller costs</h4>
+          <Waterfall>
+            <WaterfallRow label="Package cost" amount={money(quote.seller_package_cost, currencyCode)} />
+            <WaterfallRow label="Upgrade allowance" amount={money(quote.upgrade_allowance_cost, currencyCode)} />
+            <WaterfallRow label="Commission support" amount={money(quote.commission_support, currencyCode)} />
+            <WaterfallRow label="Financing subsidy" amount={money(quote.financing_subsidy, currencyCode)} />
+            <WaterfallRow label="Extended-term NPV cost" amount={money(quote.extended_terms_npv_cost, currencyCode)} />
+            <WaterfallRow
               label="Effective net revenue"
-              value={money(quote.effective_net_revenue_preview, currencyCode)}
-              strong
+              note="What the sale earns after seller costs"
+              amount={money(quote.effective_net_revenue_preview, currencyCode)}
+              kind="total"
             />
-          </dl>
-          <h3 className="section-heading">Buyer payable</h3>
+          </Waterfall>
+          <h4 className="section-heading">Buyer payable</h4>
           {quote.tax_status === "not_configured" ? (
             <Notice tone="info">
-              No sale tax is configured for this country pack, so no tax is shown. A guessed
-              rate would be worse than none.
+              No sale tax is configured for this country pack, so no tax is shown. A guessed rate
+              would be worse than none.
             </Notice>
           ) : null}
-          <dl className="reference-list">
+          <Waterfall>
+            <WaterfallRow
+              label="Net contract price"
+              note="Ex tax"
+              amount={money(quote.net_contract_price_ex_tax, currencyCode)}
+            />
             {quote.taxes.map((tax) => (
-              <Line
+              <WaterfallRow
                 key={tax.tax_code}
-                label={`${tax.label} (${tax.rate_fraction})`}
-                value={money(tax.amount, currencyCode)}
+                label={tax.label}
+                note={percent(tax.rate_fraction)}
+                amount={money(tax.amount, currencyCode)}
               />
             ))}
-            <Line label="Buyer-paid fees" value={money(quote.buyer_paid_fees, currencyCode)} />
-            <Line
+            <WaterfallRow label="Buyer-paid fees" amount={money(quote.buyer_paid_fees, currencyCode)} />
+            <WaterfallRow
               label="Total buyer payable"
-              value={money(quote.total_buyer_payable_preview, currencyCode)}
-              strong
+              amount={money(quote.total_buyer_payable_preview, currencyCode)}
+              kind="total"
             />
-          </dl>
-          <div className="chip-list">
-            <Badge tone="muted">{quote.tax_treatment_code}</Badge>
+          </Waterfall>
+          <InlineMeta>
+            <InlineMetaItem label="Tax treatment">{quote.tax_treatment_code}</InlineMetaItem>
             {quote.offer_valid_days ? (
-              <span className="chip">Offer valid {quote.offer_valid_days} days</span>
+              <InlineMetaItem label="Offer valid">{quote.offer_valid_days} days</InlineMetaItem>
             ) : null}
             {quote.reservation_expiry_days ? (
-              <span className="chip">Reservation expires in {quote.reservation_expiry_days} days</span>
+              <InlineMetaItem label="Reservation expires in">{quote.reservation_expiry_days} days</InlineMetaItem>
             ) : null}
-          </div>
+          </InlineMeta>
         </>
       ) : null}
-    </Panel>
+    </Card>
   );
 }
