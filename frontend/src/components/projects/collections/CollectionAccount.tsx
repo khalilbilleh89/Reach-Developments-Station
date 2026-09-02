@@ -78,6 +78,11 @@ const TABS = [
  * Nothing on this screen is computed here. Days overdue, aging bands,
  * outstanding balances and whether the account may be cleared all arrive from
  * the API already decided.
+ *
+ * `asOf` is the reporting date the register that opened this was read at. It is
+ * threaded through rather than defaulted, because a drawer opened from a March
+ * row and showing today's balance contradicts the row that was clicked, and
+ * nothing on the screen would say which of the two figures was which.
  */
 export function CollectionAccount({
   projectId,
@@ -87,6 +92,7 @@ export function CollectionAccount({
   clientName,
   currencyCode,
   roles,
+  asOf,
   onClose,
   onChanged,
 }: {
@@ -97,6 +103,7 @@ export function CollectionAccount({
   clientName: string;
   currencyCode: string | null;
   roles: Set<string>;
+  asOf?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -106,19 +113,24 @@ export function CollectionAccount({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const canCollect = roles.has("collections");
-  const canConfirm = roles.has("finance");
-  const canDecideWaiver = roles.has("approver_cfo");
+  // A past date is a report, not a desk. Every action in this drawer records
+  // something happening now, so a historical reading offers none of them —
+  // suppressed once, here, because every button below is already behind one of
+  // these three.
+  const historical = asOf !== undefined && asOf !== todayISO();
+  const canCollect = !historical && roles.has("collections");
+  const canConfirm = !historical && roles.has("finance");
+  const canDecideWaiver = !historical && roles.has("approver_cfo");
 
   const load = useCallback(async () => {
     try {
-      setSummary(await collections.account(projectId, saleId));
+      setSummary(await collections.account(projectId, saleId, historical ? asOf : undefined));
       setError(null);
     } catch (caught) {
       setSummary(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load the account.");
     }
-  }, [projectId, saleId]);
+  }, [projectId, saleId, historical, asOf]);
 
   useEffect(() => {
     void (async () => {
@@ -180,6 +192,13 @@ export function CollectionAccount({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+      {historical ? (
+        <Notice tone="info">
+          Position as at {businessDate(asOf)}, matching the register row this was opened
+          from. The lists on the other tabs are current. Nothing can be recorded against a
+          past date.
+        </Notice>
+      ) : null}
       {summary === null ? (
         <Loading label="Loading the account" />
       ) : (

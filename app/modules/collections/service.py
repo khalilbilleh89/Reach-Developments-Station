@@ -171,13 +171,17 @@ def _money(value: object) -> Decimal:
 # event log here and none is needed.
 #
 # What this reconstructs is the *business-effective* position: what was true of
-# the account on that date, judged by when things actually happened. It is not
-# a claim about what a screen showed somebody at the time — a receipt confirmed
-# on the 2nd of April for cash that arrived on the 30th of March moves the
-# March position, and no report printed on the 31st could have known it. That
-# is the right answer for month-end and for an auditor, and the wrong one for
-# "what did I see?", which would need event sourcing this MVP deliberately does
-# not have.
+# the account on that date, judged by when things actually happened. Every
+# lifecycle moment counts and confirmation is one of them, so cash that arrived
+# on the 30th of March but was only accepted by Finance on the 2nd of April was
+# not yet cash on the 31st, and a March read says so. That is the same rule the
+# current read applies, moved to a different day, rather than a second
+# definition of what counts as received.
+#
+# It is not a claim about every word a screen showed. Where a change leaves no
+# lifecycle stamp — a dispute's reason being edited, say — there is nothing to
+# reconstruct from, and the read shows what stands today rather than inventing
+# a history the tables do not hold.
 
 
 def _bound(as_of: date) -> datetime:

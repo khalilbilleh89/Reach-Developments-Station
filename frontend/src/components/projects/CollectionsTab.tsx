@@ -414,6 +414,7 @@ export function CollectionsTab({
           clientName={open.client_display_name}
           currencyCode={currencyFor(open)}
           roles={roles}
+          asOf={asOf}
           onClose={() => setOpen(null)}
           onChanged={() => {
             void load();
