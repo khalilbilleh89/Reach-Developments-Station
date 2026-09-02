@@ -40,6 +40,9 @@ precondition list, which is longer to write and possible to audit.
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
@@ -823,6 +826,146 @@ def _jsonable(value: object) -> object:
     if isinstance(value, list):
         return [_jsonable(item) for item in value]
     return value
+
+
+#: The seller-cost components a quote freezes, split by what they really are.
+#:
+#: A subsidised interest rate and an extended-payment NPV cost are the price of
+#: *financing* the deal; a furniture package and a commission top-up are the
+#: price of *doing* it. Both reduce what the developer keeps and they belong on
+#: different lines of an appraisal, so the split is stated once, here, beside
+#: the mapping that decides which adjustments are seller costs at all.
+_COMMERCIAL_SELLER_COST_KEYS = (
+    "seller_package_cost",
+    "upgrade_allowance_cost",
+    "commission_support",
+)
+_FINANCE_SELLER_COST_KEYS = (
+    "financing_subsidy",
+    "extended_terms_npv_cost",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenSellerCosts:
+    """What a signed contract's seller costs were, split commercial from finance.
+
+    ``reconciled`` is false when the two halves do not add up to the contract's
+    own ``seller_cost_total``. A caller must not treat an unreconciled split as
+    a cost breakdown — the honest answer is that this contract's snapshot cannot
+    be decomposed, not a set of figures that nearly add up.
+    """
+
+    commercial: Decimal
+    finance: Decimal
+    reconciled: bool
+
+
+def frozen_seller_costs(sale: SaleContract) -> FrozenSellerCosts:
+    """The seller costs this contract froze, as commercial and finance halves.
+
+    Sales owns the quote snapshot: its keys, its string-encoded decimals and the
+    policy that decides which adjustment type is a seller cost. So Sales owns
+    this reader too, and other domains ask for a typed answer rather than
+    learning the shape of somebody else's JSON.
+
+    The snapshot is read rather than the reservation's adjustment rows because
+    the snapshot is what the contract froze. Adjustments belong to a reservation
+    that has since been converted, and "what the parties signed" must not depend
+    on a row that lives under a different lifecycle.
+
+    Note for anyone computing profit from this: ``effective_net_revenue_snapshot``
+    has *already* subtracted both halves. Use ``net_contract_price_ex_tax`` as
+    revenue and subtract these once, or use the effective figure and subtract
+    nothing — never both.
+    """
+    snapshot = sale.reservation_quote_snapshot_json or {}
+
+    def total(keys: tuple[str, ...]) -> Decimal:
+        found = Decimal("0")
+        for key in keys:
+            raw = snapshot.get(key)
+            if raw is None:
+                continue
+            try:
+                found += Decimal(str(raw))
+            except (ArithmeticError, ValueError):
+                return Decimal("-1")
+        return found
+
+    commercial = total(_COMMERCIAL_SELLER_COST_KEYS)
+    finance = total(_FINANCE_SELLER_COST_KEYS)
+    if commercial < 0 or finance < 0:
+        return FrozenSellerCosts(
+            commercial=Decimal("0.00"), finance=Decimal("0.00"), reconciled=False
+        )
+    return FrozenSellerCosts(
+        commercial=money(commercial),
+        finance=money(finance),
+        reconciled=money(commercial + finance) == money(sale.seller_cost_total),
+    )
+
+
+#: The signatures that make a contract binding on both sides. ``activate_sale``
+#: refuses without both of them, so this is the same milestone the lifecycle
+#: already treats as the moment the deal became real — not a second opinion
+#: about it.
+_BINDING_SIGNATURES = (EVENT_BUYER_SIGNED, EVENT_SELLER_SIGNED)
+
+
+def economic_contract_dates(
+    session: Session, *, sale_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, date]:
+    """When each of these contracts became binding on both parties. One query.
+
+    ``contract_date`` is stamped when the contract is *drafted*, and a draft is
+    not a deal. Between drafting and signature a project's cost basis can be
+    replaced, its price list re-approved, its land register corrected — so a
+    reader that treats the draft date as the economic date can freeze a sold
+    unit onto a basis that was already superseded when the parties signed.
+
+    The economic date is the later of the two binding signatures, because a
+    contract signed by one side is not yet a contract. Reversed events are
+    excluded through the same reading of the timeline that the unit's legal
+    status derives from: an entry withdrawn by a correction never happened.
+
+    A sale with fewer than both signatures is absent from the result. That is
+    the honest answer — not today, and not the draft date.
+    """
+    if not sale_ids:
+        return {}
+    events = list(
+        session.scalars(
+            select(SaleLegalEvent).where(SaleLegalEvent.sale_contract_id.in_(list(sale_ids)))
+        )
+    )
+    reversed_ids = {event.reverses_event_id for event in events if event.reverses_event_id}
+    signed: dict[uuid.UUID, dict[str, date]] = defaultdict(dict)
+    for event in events:
+        if event.reverses_event_id is not None or event.id in reversed_ids:
+            continue
+        if event.event_type not in _BINDING_SIGNATURES:
+            continue
+        # An event type recorded twice keeps the later date: the contract was
+        # not binding until the last of the required signatures existed.
+        current = signed[event.sale_contract_id].get(event.event_type)
+        if current is None or event.event_date > current:
+            signed[event.sale_contract_id][event.event_type] = event.event_date
+    return {
+        sale_id: max(dates.values())
+        for sale_id, dates in signed.items()
+        if all(name in dates for name in _BINDING_SIGNATURES)
+    }
+
+
+def economic_contract_date(session: Session, *, sale: SaleContract) -> date | None:
+    """When this contract became binding on both parties, or ``None`` if it has not.
+
+    The single-sale form of :func:`economic_contract_dates`. ``None`` means the
+    contract has not reached contractual effect, and a caller must not
+    substitute the draft date, today, or anything else for it.
+    """
+    return economic_contract_dates(session, sale_ids=[sale.id]).get(sale.id)
 
 
 def _quote_inputs(

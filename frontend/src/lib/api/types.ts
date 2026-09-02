@@ -1720,3 +1720,266 @@ export interface CollectionClearance {
   status: string | null;
   blockers: string[];
 }
+
+/* ------------------------------------------------------------------------- */
+/* Unit economics (PR-MVP-08)                                                 */
+/* ------------------------------------------------------------------------- */
+
+export type AllocationVersionStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "active"
+  | "superseded"
+  | "rejected";
+
+export type FinanceTreatment = "allocated" | "excluded";
+
+export type PoolCategory = "land" | "hard" | "soft" | "finance";
+
+export type PoolSourceKind = "project_land" | "manual";
+
+export type PoolScope = "project" | "phase" | "building";
+
+export type AllocationMethod =
+  | "weighted_area"
+  | "raw_area"
+  | "unit_count"
+  | "revenue_value"
+  | "custom_driver";
+
+export type UnitCostType =
+  | "unit_upgrade"
+  | "finishes"
+  | "furniture_appliance"
+  | "legal_registry_support"
+  | "rectification"
+  | "other_direct"
+  | "marketing"
+  | "sales_commission"
+  | "branch_commission"
+  | "payment_fee"
+  | "seller_paid_legal"
+  | "other_selling";
+
+export type UnitCostBasis = "forecast" | "actual";
+
+export type UnitCostStatus = "active" | "reversed";
+
+/**
+ * Why a unit's profit could not be calculated, or `ready` when it could.
+ *
+ * Never absent and never silently zero: a fabricated margin is worse than a
+ * missing one, because nobody checks a number that looks finished.
+ */
+export type ProfitabilityStatus =
+  | "ready"
+  | "missing_revenue"
+  | "missing_cost_basis"
+  | "unreconciled_cost_basis"
+  | "currency_mismatch";
+
+export type RevenueSource = "approved_price" | "sale_contract";
+
+/** Which side of the sold line a unit is analysed on. */
+export type EconomicBasis = "forecast" | "sold";
+
+export interface AllocationVersion {
+  id: string;
+  project_id: string;
+  version_number: number;
+  currency_id: string;
+  status: AllocationVersionStatus;
+  finance_treatment: FinanceTreatment;
+  effective_from: string;
+  effective_to: string | null;
+  change_reason: string;
+  source_version_id: string | null;
+  calculated_at: string | null;
+  created_at: string;
+  created_by_user_id: string;
+  submitted_at: string | null;
+  submitted_by_user_id: string | null;
+  approved_at: string | null;
+  approved_by_user_id: string | null;
+  rejected_at: string | null;
+  rejected_by_user_id: string | null;
+  rejection_reason: string | null;
+  activated_at: string | null;
+  activated_by_user_id: string | null;
+  superseded_at: string | null;
+}
+
+export interface CostPool {
+  id: string;
+  allocation_version_id: string;
+  pool_number: string;
+  name: string;
+  category: PoolCategory;
+  source_kind: PoolSourceKind;
+  amount: string;
+  scope_kind: PoolScope;
+  phase_id: string | null;
+  building_id: string | null;
+  allocation_method: AllocationMethod;
+  area_type_id: string | null;
+  notes: string | null;
+}
+
+export interface UnitAllocation {
+  unit_id: string;
+  unit_reference: string;
+  driver_value: string;
+  driver_share: string;
+  allocated_amount: string;
+  source_area_schedule_id: string | null;
+  source_price_version_id: string | null;
+  is_rounding_recipient: boolean;
+}
+
+export interface PoolAllocationSummary {
+  pool_id: string;
+  pool_number: string;
+  name: string;
+  category: PoolCategory;
+  allocation_method: AllocationMethod;
+  scope_kind: PoolScope;
+  pool_amount: string;
+  eligible_units: number;
+  driver_total: string;
+  allocated_total: string;
+  variance: string;
+}
+
+export interface AllocationReconciliation {
+  reconciled: boolean;
+  source_cost_total: string;
+  allocated_cost_total: string;
+  variance: string;
+  pool_count: number;
+  allocation_count: number;
+  unreconciled_pools: string[];
+}
+
+export interface CalculationPreview {
+  version: AllocationVersion;
+  pools: PoolAllocationSummary[];
+  source_cost_total: string;
+  allocated_cost_total: string;
+  variance: string;
+  reconciled: boolean;
+  stale_sources: string[];
+}
+
+export interface AllocationVersionDetail {
+  version: AllocationVersion;
+  pools: CostPool[];
+  reconciliation: AllocationReconciliation;
+  stale_sources: string[];
+}
+
+export interface UnitCost {
+  id: string;
+  unit_id: string;
+  sale_contract_id: string | null;
+  currency_id: string;
+  cost_type: UnitCostType;
+  cost_class: string;
+  basis: UnitCostBasis;
+  amount: string;
+  effective_date: string;
+  reference: string | null;
+  notes: string | null;
+  status: UnitCostStatus;
+  created_at: string;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+}
+
+export interface WaterfallStep {
+  key: string;
+  label: string;
+  amount: string;
+  is_subtotal: boolean;
+}
+
+/**
+ * One unit's whole economic position.
+ *
+ * Every figure arrives decided. Nothing on this interface is recomputed in the
+ * browser: two implementations of a margin are two answers waiting to disagree
+ * in front of a finance director.
+ */
+export interface UnitEconomics {
+  unit_id: string;
+  unit_reference: string;
+  unit_number: string;
+  commercial_status: string;
+  basis: EconomicBasis;
+  revenue_source: RevenueSource | null;
+  revenue_source_id: string | null;
+  revenue_currency_id: string | null;
+  cost_currency_id: string;
+
+  allocation_version_id: string | null;
+  allocation_version_number: number | null;
+  allocation_effective_from: string | null;
+
+  land_cost: string;
+  hard_cost: string;
+  soft_cost: string;
+  direct_cost: string;
+  variable_selling_cost: string;
+  seller_cost: string;
+  allocated_finance_cost: string;
+  deal_finance_cost: string;
+
+  revenue: string | null;
+  development_cost: string | null;
+  commercial_cost: string | null;
+  finance_cost: string | null;
+  total_cost: string | null;
+  gross_profit: string | null;
+  gross_margin_fraction: string | null;
+  contribution_profit: string | null;
+  contribution_margin_fraction: string | null;
+  profit_after_finance: string | null;
+  margin_fraction: string | null;
+  return_on_cost_fraction: string | null;
+
+  profitability_status: ProfitabilityStatus;
+  below_margin_threshold: boolean | null;
+  threshold_fraction: string | null;
+}
+
+export interface UnitEconomicsDetail {
+  economics: UnitEconomics;
+  waterfall: WaterfallStep[];
+  unit_costs: UnitCost[];
+}
+
+export interface ProjectEconomics {
+  currency_id: string;
+  unit_count: number;
+  comparable_unit_count: number;
+  sold_count: number;
+  unsold_count: number;
+  negative_profit_count: number;
+  below_threshold_count: number;
+  incomplete_count: number;
+  currency_mismatch_count: number;
+  threshold_fraction: string | null;
+
+  revenue_total: string;
+  development_cost_total: string;
+  commercial_cost_total: string;
+  finance_cost_total: string;
+  total_cost_total: string;
+  gross_profit_total: string;
+  contribution_profit_total: string;
+  profit_total: string;
+  margin_fraction: string | null;
+  return_on_cost_fraction: string | null;
+
+  active_version: AllocationVersion | null;
+}

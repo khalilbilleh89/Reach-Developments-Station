@@ -16,6 +16,7 @@ import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { UnitCollections } from "@/components/projects/collections/UnitCollections";
+import { UnitEconomicsSection } from "@/components/projects/economics/UnitEconomicsSection";
 import {
   gateLabel,
   gateTone,
@@ -116,6 +117,8 @@ export function UnitSummary({
         projectId={unit.project_id}
         saleId={commitment?.sale?.sale?.id ?? null}
       />
+
+      <UnitEconomicsSection projectId={unit.project_id} unitId={unit.id} />
 
       <section>
         <SectionHeader

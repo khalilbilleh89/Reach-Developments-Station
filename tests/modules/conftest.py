@@ -1375,3 +1375,228 @@ def relative_plan(
     assert cfo_client.post(f"{base}/approve", json={"reason": "Terms agreed"}).status_code == 200
     assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
     return {"plan_id": plan_id, "version_id": version_id}
+
+
+# --------------------------------------------------------------------------- #
+# Unit economics (PR-MVP-08)
+# --------------------------------------------------------------------------- #
+
+
+def economics_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/unit-economics"
+
+
+@pytest.fixture
+def executive(db: Session) -> User:
+    """A reader entitled to margin but to nothing that writes it."""
+    return make_user(db, email="exec@example.com", roles=("executive_viewer",))
+
+
+@pytest.fixture
+def executive_client(admin_client: TestClient, project_id: str, executive: User) -> TestClient:
+    grant_access(admin_client, project_id, executive)
+    return client_for(executive.email)
+
+
+@pytest.fixture
+def auditor(db: Session) -> User:
+    return make_user(db, email="auditor@example.com", roles=("auditor",))
+
+
+@pytest.fixture
+def auditor_client(admin_client: TestClient, project_id: str, auditor: User) -> TestClient:
+    grant_access(admin_client, project_id, auditor)
+    return client_for(auditor.email)
+
+
+@pytest.fixture
+def land_cost(admin_client: TestClient, project_id: str) -> str:
+    """A parcel bought for 800,000 with 40,000 of acquisition fees.
+
+    The land register is the only source a land cost pool may be derived from,
+    so the economics tests buy real land through the real route rather than
+    typing a total into a pool.
+    """
+    response = admin_client.post(
+        f"{PROJECTS}/{project_id}/parcels",
+        json=parcel_payload(
+            acquisition_date="2026-01-05",
+            purchase_price="800000.00",
+            acquisition_fees="40000.00",
+        ),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def second_unit(admin_client: TestClient, project_id: str, floor_id: str) -> str:
+    """A second unit on the same floor, so a pool has something to divide."""
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/units",
+        json=unit_payload(floor_id, unit_number="102", unit_reference="B1-102", sequence=2),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+@pytest.fixture
+def priced_pair(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    second_unit: str,
+    area_types: dict[str, str],
+    priced_unit: str,
+) -> tuple[str, str]:
+    """Two measured, priced units. The smallest population an allocation needs.
+
+    The first comes from ``priced_unit`` so the whole governed pricing path is
+    exercised once; the second follows the same path with a smaller internal
+    area, which is what makes a weighted-area division produce two different
+    numbers instead of two identical halves.
+    """
+    del priced_unit
+    approve_areas(
+        admin_client,
+        project_id,
+        second_unit,
+        area_types,
+        internal="60.0000",
+        balcony="8.0000",
+    )
+    draft = finance_client.post(
+        f"{pricing_url(project_id)}/units/{second_unit}/price-versions", json={}
+    )
+    assert draft.status_code == 201, draft.text
+    version_id = draft.json()["id"]
+    base = f"{pricing_url(project_id)}/price-versions/{version_id}"
+    assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+    assert (
+        cfo_client.post(f"{base}/approve", json={"reason": "Within feasibility"}).status_code == 200
+    )
+    assert cfo_client.post(f"{base}/activate").status_code == 200
+    return unit_id, second_unit
+
+
+def today() -> str:
+    """The only date a replacement cost basis may take effect on.
+
+    A project's *first* basis may be back-dated — PR-MVP-08 arrives after sales
+    exist and those contracts need a baseline. Every later one takes effect
+    today, because a replacement dated in the past would restate a period units
+    were already signed under. Tests that create a second version therefore have
+    to use the real current date, not a fixed one.
+    """
+    return date.today().isoformat()
+
+
+def create_version(
+    client: TestClient,
+    project_id: str,
+    *,
+    effective_from: str = "2026-01-01",
+    reason: str = "Opening cost basis",
+    finance_treatment: str = "excluded",
+) -> str:
+    response = client.post(
+        f"{economics_url(project_id)}/allocation-versions",
+        json={
+            "effective_from": effective_from,
+            "change_reason": reason,
+            "finance_treatment": finance_treatment,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def add_pool(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    pool_number: str,
+    category: str,
+    allocation_method: str = "unit_count",
+    amount: str | None = "0.00",
+    source_kind: str = "manual",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "pool_number": pool_number,
+        "name": f"{category.title()} pool {pool_number}",
+        "category": category,
+        "source_kind": source_kind,
+        "allocation_method": allocation_method,
+    }
+    if amount is not None:
+        body["amount"] = amount
+    body.update(overrides)
+    return client.post(
+        f"{economics_url(project_id)}/allocation-versions/{version_id}/pools", json=body
+    )
+
+
+def cover_required_pools(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    hard: str = "0.00",
+    soft: str = "0.00",
+) -> None:
+    """Give a version the land, hard and soft pools submission insists on.
+
+    Zero is allowed and explicit; omission is not. A basis that simply left soft
+    cost out would report a margin that silently assumed there was none.
+
+    The land pool is never given an amount: land cost is whatever the project's
+    land register says, which is zero on a project that has bought none. A test
+    that wants a real land cost buys a parcel through the ``land_cost`` fixture,
+    because there is no other way to put one here.
+    """
+    land = add_pool(
+        client,
+        project_id,
+        version_id,
+        pool_number="LAND-01",
+        category="land",
+        source_kind="project_land",
+        amount=None,
+    )
+    assert land.status_code == 201, land.text
+    for number, category, amount in (("HARD-01", "hard", hard), ("SOFT-01", "soft", soft)):
+        response = add_pool(
+            client,
+            project_id,
+            version_id,
+            pool_number=number,
+            category=category,
+            amount=amount,
+        )
+        assert response.status_code == 201, response.text
+
+
+def govern(
+    finance: TestClient,
+    checker: TestClient,
+    project_id: str,
+    version_id: str,
+) -> Response:
+    """Calculate, submit, approve and activate one cost basis."""
+    base = f"{economics_url(project_id)}/allocation-versions/{version_id}"
+    assert finance.post(f"{base}/calculate", json={}).status_code == 200
+    submitted = finance.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = checker.post(f"{base}/approve", json={"reason": "Reviewed against feasibility"})
+    assert approved.status_code == 200, approved.text
+    return finance.post(f"{base}/activate", json={})
+
+
+def unit_economics(client: TestClient, project_id: str, unit_id: str) -> dict[str, Any]:
+    response = client.get(f"{economics_url(project_id)}/units/{unit_id}")
+    assert response.status_code == 200, response.text
+    return response.json()["economics"]
