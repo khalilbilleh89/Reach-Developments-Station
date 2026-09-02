@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
@@ -106,6 +106,10 @@ export function ProjectWorkspace({
   const [editing, setEditing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Every load takes a ticket, and a response that arrives after a newer
+  // load began is dropped. The workspace is already remounted per project;
+  // this guards the reloads within one project against arriving out of order.
+  const generation = useRef(0);
 
   const roles = roleSet(user.roles);
   const isAdmin = roles.has(ROLE_SYSTEM_ADMIN);
@@ -123,6 +127,7 @@ export function ProjectWorkspace({
   );
 
   const load = useCallback(async () => {
+    const ticket = ++generation.current;
     try {
       const detail = await projects.read(projectId);
       // Allowed to fail quietly: the project's own base and reporting pair
@@ -140,10 +145,12 @@ export function ProjectWorkspace({
       if (detail.reporting_currency_code) {
         codes[detail.reporting_currency_id] = detail.reporting_currency_code;
       }
+      if (ticket !== generation.current) return;
       setCurrencyCodes(codes);
       setProject(detail);
       setError(null);
     } catch (caught) {
+      if (ticket !== generation.current) return;
       setProject(null);
       setError(
         caught instanceof ApiError && caught.status === 404

@@ -40,7 +40,13 @@ function ProjectsScreen() {
   }
 
   if (openProjectId) {
-    return <ProjectWorkspace projectId={openProjectId} section={section} user={user} />;
+    // Keyed by the project: switching projects unmounts the old workspace
+    // and mounts a clean one, so no state — the project record, its
+    // currencies, an open unit, an edit in progress — can survive from one
+    // development into the next, and a slow response for the old project
+    // has nothing left to land on. Changing the section keeps the key, so
+    // the workspace stays mounted and the rail does not blink.
+    return <ProjectWorkspace key={openProjectId} projectId={openProjectId} section={section} user={user} />;
   }
 
   return (
