@@ -1186,6 +1186,9 @@ class TestMixedUnitCostCurrencies:
         version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
         cover_required_pools(finance_client, project_id, version_id, hard="100.00")
         assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+        version_currency = finance_client.get(
+            f"{economics_url(project_id)}/allocation-versions/{version_id}"
+        ).json()["version"]["currency_id"]
 
         before = finance_client.post(
             f"{economics_url(project_id)}/units/{first}/costs",
@@ -1217,6 +1220,90 @@ class TestMixedUnitCostCurrencies:
         assert row["profit_after_finance"] is None
         assert row["margin_fraction"] is None
         assert row["return_on_cost_fraction"] is None
+
+        # The figure itself, not only the margin above it. Refusing the profit
+        # while still reporting `direct_cost` 1,500.00 beside `cost_currency_id`
+        # JOD would leave the cross-currency sum on screen, in the response and
+        # in any export of it — with a status line that explains a *missing*
+        # number rather than the wrong one that is present.
+        assert row["cost_currency_id"] == version_currency
+        assert row["direct_cost"] == "1000.00"
+
+    def test_a_selling_cost_in_another_currency_is_excluded_the_same_way(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        sales_ops_client: TestClient,
+        admin_client: TestClient,
+        db: Session,
+        project_id: str,
+        active_sale: str,
+        priced_pair: tuple[str, str],
+        second_currency: str,
+    ) -> None:
+        """Both classes of unit cost, on the same terms."""
+        del priced_pair
+        sale = sales_ops_client.get(f"{sales_url(project_id)}/contracts/{active_sale}").json()
+        unit_id = sale["sale"]["unit_id"]
+
+        version_id = create_version(finance_client, project_id, effective_from="2026-01-01")
+        cover_required_pools(finance_client, project_id, version_id, hard="120000.00")
+        assert govern(finance_client, cfo_client, project_id, version_id).status_code == 200
+
+        for body in (
+            {
+                "cost_type": "sales_commission",
+                "basis": "actual",
+                "amount": "800.00",
+                "effective_date": "2026-03-01",
+                "sale_contract_id": active_sale,
+            },
+            {
+                "cost_type": "rectification",
+                "basis": "actual",
+                "amount": "1000.00",
+                "effective_date": "2026-03-02",
+            },
+        ):
+            response = finance_client.post(
+                f"{economics_url(project_id)}/units/{unit_id}/costs", json=body
+            )
+            assert response.status_code == 201, response.text
+
+        rebase_project(admin_client, db, project_id, second_currency)
+
+        for body in (
+            {
+                "cost_type": "branch_commission",
+                "basis": "actual",
+                "amount": "300.00",
+                "effective_date": "2026-04-01",
+                "sale_contract_id": active_sale,
+            },
+            {
+                "cost_type": "finishes",
+                "basis": "actual",
+                "amount": "500.00",
+                "effective_date": "2026-04-02",
+            },
+        ):
+            response = finance_client.post(
+                f"{economics_url(project_id)}/units/{unit_id}/costs", json=body
+            )
+            assert response.status_code == 201, response.text
+
+        row = unit_economics(finance_client, project_id, unit_id)
+        assert row["profitability_status"] == "currency_mismatch"
+        assert row["variable_selling_cost"] == "800.00"
+        assert row["direct_cost"] == "1000.00"
+        assert row["profit_after_finance"] is None
+
+        # Both foreign rows are still on the unit's own list, so the cause is
+        # findable rather than merely asserted.
+        detail = finance_client.get(f"{economics_url(project_id)}/units/{unit_id}")
+        assert detail.status_code == 200, detail.text
+        amounts = {cost["amount"] for cost in detail.json()["unit_costs"]}
+        assert {"800.00", "1000.00", "300.00", "500.00"} <= amounts
 
     def test_the_rows_themselves_stay_visible_with_their_own_currencies(
         self,

@@ -1952,16 +1952,44 @@ class UnitEconomics:
 class _Costs:
     """The unit-level cost rows that apply to one unit on one basis.
 
-    ``currencies`` is what the two totals were added up from. A unit cost
-    carries its own ``currency_id``, and dropping it during aggregation is how
-    1,000 JOD and 500 USD become 1,500 of nothing — a number with no
-    denomination that every layer above would then treat as money. Keeping the
-    set costs one column and lets the read refuse instead of guessing.
+    Kept **per denomination**, and never totalled across them. A unit cost
+    carries its own ``currency_id``, and adding 1,000 JOD to 500 USD produces
+    1,500 of nothing — a number in no currency that every layer above would
+    then render as money.
+
+    Refusing the *profit* on such a unit is not enough on its own, which is the
+    trap this shape closes: a response could still report ``direct_cost``
+    1,500.00 next to ``cost_currency_id`` JOD and a status saying the margin
+    could not be calculated. The status explains the missing margin; it does
+    not stop somebody reading, quoting, or exporting the 1,500. So the sum is
+    never formed. The read asks for one denomination and gets only what was
+    recorded in it.
     """
 
-    direct: Decimal
-    selling: Decimal
-    currencies: frozenset[uuid.UUID]
+    direct_by_currency: dict[uuid.UUID, Decimal]
+    selling_by_currency: dict[uuid.UUID, Decimal]
+
+    @property
+    def currencies(self) -> frozenset[uuid.UUID]:
+        """Every denomination that contributed a row, in either class."""
+        return frozenset(self.direct_by_currency) | frozenset(self.selling_by_currency)
+
+    def direct_in(self, currency_id: uuid.UUID) -> Decimal:
+        """Direct cost recorded in one currency. Rows in others are not added."""
+        return self.direct_by_currency.get(currency_id, ZERO)
+
+    def selling_in(self, currency_id: uuid.UUID) -> Decimal:
+        """Variable selling cost recorded in one currency, on the same terms."""
+        return self.selling_by_currency.get(currency_id, ZERO)
+
+
+def _merge(groups: list[dict[uuid.UUID, Decimal]]) -> dict[uuid.UUID, Decimal]:
+    """Add several per-currency groups together, within each currency only."""
+    merged: dict[uuid.UUID, Decimal] = {}
+    for group in groups:
+        for currency_id, amount in group.items():
+            merged[currency_id] = merged.get(currency_id, ZERO) + amount
+    return merged
 
 
 @dataclass(frozen=True, slots=True)
@@ -2055,11 +2083,9 @@ class _CostIndex:
                 self._direct.get((unit_id, BASIS_ACTUAL, sale_id), {}),
             ]
             selling = [self._selling.get((unit_id, BASIS_ACTUAL, sale_id), {})]
-        currencies = {currency for group in (*direct, *selling) for currency in group}
         return _Costs(
-            direct=sum((amount for group in direct for amount in group.values()), ZERO),
-            selling=sum((amount for group in selling for amount in group.values()), ZERO),
-            currencies=frozenset(currencies),
+            direct_by_currency=_merge(direct),
+            selling_by_currency=_merge(selling),
         )
 
 
@@ -2233,6 +2259,11 @@ def _economics_for(
     # project's base currency instead would relabel every historical figure
     # overnight, which is a currency conversion performed by omission.
     cost_currency = version.currency_id if version is not None else project.base_currency_id
+    # Only what was recorded in the governing denomination. A row in another one
+    # is reported below as a mismatch and named in the unit's cost list; it is
+    # never added into these figures, because the sum would be in no currency.
+    direct_cost = costs.direct_in(cost_currency)
+    selling_cost = costs.selling_in(cost_currency)
 
     if sold and sale is not None:
         revenue: Decimal | None = money(sale.net_contract_price_ex_tax)
@@ -2278,11 +2309,11 @@ def _economics_for(
         profit = calculator.profitability(
             revenue=revenue,
             costs=calculator.CostInputs(
-                direct_cost=costs.direct,
+                direct_cost=direct_cost,
                 land_cost=land,
                 hard_cost=hard,
                 soft_cost=soft,
-                variable_selling_cost=costs.selling,
+                variable_selling_cost=selling_cost,
                 commercial_seller_cost=seller_commercial,
                 allocated_finance_cost=allocated_finance,
                 deal_finance_cost=seller_finance,
@@ -2303,8 +2334,8 @@ def _economics_for(
         hard_cost=hard,
         soft_cost=soft,
         allocated_finance_cost=allocated_finance,
-        direct_cost=costs.direct,
-        variable_selling_cost=costs.selling,
+        direct_cost=direct_cost,
+        variable_selling_cost=selling_cost,
         seller_cost=seller_commercial,
         deal_finance_cost=seller_finance,
         revenue=revenue,
