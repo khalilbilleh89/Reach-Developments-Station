@@ -11,22 +11,38 @@ export { Badge, StatusDot } from "./Badge";
 export type { Tone } from "./Badge";
 export { Button, ButtonRow } from "./Button";
 export { Card, Panel, SubPanel } from "./Card";
+export type { CardTone } from "./Card";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { Drawer } from "./Drawer";
 export type { DrawerFact } from "./Drawer";
 export {
+  Breakdown,
+  BreakdownRow,
+  Distribution,
+  DistributionBand,
+  IdentityCell,
   InlineMeta,
   InlineMetaItem,
   KeyValue,
   KeyValueGrid,
+  Meter,
   Metric,
   MetricGroup,
+  PlaceCell,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
   Stat,
   StatRow,
+  StatStrip,
+  StatStripItem,
+  StatStripNote,
   TableScroll,
   Waterfall,
   WaterfallRow,
 } from "./Data";
+export { ExternalLink, isUrl } from "./Link";
 export type { MetricTone } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
 export {

@@ -13,6 +13,8 @@ export interface DrawerFact {
   label: string;
   value: ReactNode;
   note?: ReactNode;
+  /** `danger` for a figure the server flagged; `muted` for one it could not give. */
+  tone?: "danger" | "muted";
 }
 
 /**
@@ -109,9 +111,9 @@ export function Drawer({
             </div>
           </div>
           {shownFacts.length > 0 ? (
-            <dl className="drawer-facts">
+            <dl className="drawer-facts drawer-facts-strong">
               {shownFacts.map((fact) => (
-                <div key={fact.label}>
+                <div key={fact.label} className={fact.tone ? `drawer-fact-${fact.tone}` : undefined}>
                   <dt className="drawer-fact-label">{fact.label}</dt>
                   <dd className="drawer-fact-value">{fact.value}</dd>
                   {fact.note ? <dd className="drawer-fact-note">{fact.note}</dd> : null}
