@@ -1284,6 +1284,13 @@ _HISTORICAL_TABLES = frozenset(
         "collection_receipt_allocations",
         "collection_disputes",
         "collection_waivers",
+        # A certificate's formal certification is what a forecast's cutoff is
+        # measured against, and a valuation signed off days after its document
+        # date is the ordinary case rather than the exception. There is no API
+        # that can produce that gap — certifying stamps ``now`` — so the gap is
+        # arranged here and every assertion afterwards goes through the ordinary
+        # route. What is simulated is the passage of time, never a figure.
+        "construction_certificates",
     }
 )
 

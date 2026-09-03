@@ -40,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -581,6 +581,23 @@ def committed_by_cost_code(
     return dict(committed)
 
 
+def as_of_bound(as_of: date) -> datetime:
+    """The first instant after ``as_of``, in UTC.
+
+    The same exclusive upper bound collections and sales use against their own
+    ``timestamptz`` columns, restated here rather than imported: the dependency
+    runs construction -> payment_plans and construction -> inventory, and it must
+    not be turned around for one two-line function.
+
+    Exclusive rather than end-of-day inclusive so there is no last-microsecond
+    gap to argue about, and one function so that a historical cutoff means the
+    same thing everywhere in this module — a business date compared against a
+    governed timestamp has exactly one correct reading, and two call sites each
+    inventing it is two readings waiting to disagree.
+    """
+    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
+
+
 def certified_by_cost_code(
     session: Session,
     *,
@@ -595,6 +612,22 @@ def certified_by_cost_code(
     built on the work certified by its own cutoff, and re-deriving it from
     today's certificates a year later would answer a different question from the
     one Finance approved.
+
+    The cutoff is the **formal certification**, ``certified_at``, and never the
+    certificate's own document date. Those are different facts and the gap
+    between them is ordinary: a valuation dated 31 August is signed off on 5
+    September, because somebody has to read it first. Cutting off on the
+    document date would put that certificate inside a forecast taken as at 31
+    August — a forecast that, when it was activated, could not possibly have
+    included work nobody had certified yet. Re-opening it in October would then
+    show a larger certified basis and a different estimate at completion than
+    the one Finance approved, produced entirely by a backdated document.
+
+    A certificate reversed after the cutoff is excluded here, because the filter
+    is on today's ``status``. That is a deliberate limit rather than an
+    oversight: reproducing "certified then, and not yet reversed then" needs the
+    reversal timestamp in the same comparison, and reversal-as-at is a wider
+    question than the forecast basis this cutoff exists to fix.
     """
     conditions = [
         CertificateLine.project_id == project_id,
@@ -603,7 +636,7 @@ def certified_by_cost_code(
     if contract_id is not None:
         conditions.append(Certificate.contract_id == contract_id)
     if as_of is not None:
-        conditions.append(Certificate.certificate_date <= as_of)
+        conditions.append(Certificate.certified_at < as_of_bound(as_of))
     if exclude_certificate_id is not None:
         conditions.append(Certificate.id != exclude_certificate_id)
 
@@ -3598,6 +3631,7 @@ def create_forecast(
         raise ConflictError(
             "A forecast is measured against an approved budget, and this project has none in force."
         )
+    _require_governed_budget(budget)
 
     source: ForecastVersion | None = None
     if source_version_id is not None:
@@ -3656,6 +3690,36 @@ def create_forecast(
         after=_snapshot(version, _FORECAST_FIELDS),
     )
     return version
+
+
+#: The budget states a forecast may be measured against.
+#:
+#: ``superseded`` is here and matters: a forecast taken as at August is measured
+#: against whatever budget governed in August, and that budget has since been
+#: replaced. Refusing it would make a historical forecast impossible to
+#: reproduce, which is the thing the as-of date exists to protect.
+#:
+#: ``draft``, ``submitted`` and ``rejected`` are refused. A variance is a
+#: statement about an authorisation, so a denominator nobody approved makes the
+#: whole figure an opinion — and a rejected budget is one somebody explicitly
+#: declined to authorise.
+FORECAST_GOVERNED_BUDGETS = frozenset({BUDGET_APPROVED, BUDGET_ACTIVE, BUDGET_SUPERSEDED})
+
+
+def _require_governed_budget(budget: BudgetVersion) -> None:
+    """Refuse a forecast measured against a budget nobody approved.
+
+    Re-proved at submission and again at activation rather than only at
+    creation, because the budget can move underneath an open forecast: one
+    opened against an approved budget that is then rejected would otherwise be
+    activated with a denominator that had been withdrawn.
+    """
+    if budget.status not in FORECAST_GOVERNED_BUDGETS:
+        raise ConflictError(
+            f"Budget version {budget.version_number} is {budget.status}, and a forecast "
+            "cannot be governed against an unapproved budget. Its variance would be "
+            "measured against an authorisation nobody has given."
+        )
 
 
 def _open_forecast(session: Session, *, project_id: uuid.UUID) -> ForecastVersion | None:
@@ -3783,6 +3847,9 @@ def submit_forecast(
     version = _lock_forecast(session, project_id=project.id, version_id=version_id)
     if version.status != FORECAST_DRAFT:
         raise ConflictError("Only a draft forecast can be submitted.")
+    _require_governed_budget(
+        get_budget(session, project=project, version_id=version.budget_version_id)
+    )
     _require_forecast_coverage(session, project=project, version=version)
 
     before = _snapshot(version, _FORECAST_FIELDS)
@@ -3883,6 +3950,9 @@ def activate_forecast(
             "This forecast was prepared in a currency the project no longer accounts "
             "in. Prepare a revision in the project's base currency."
         )
+    _require_governed_budget(
+        get_budget(session, project=project, version_id=version.budget_version_id)
+    )
     _require_forecast_coverage(session, project=project, version=version)
 
     current = active_forecast(session, project_id=project.id)
@@ -3970,7 +4040,11 @@ def hard_cost_estimate_of(
         .where(
             CertificateLine.project_id == project_id,
             Certificate.status == CERTIFICATE_CERTIFIED,
-            Certificate.certificate_date <= version.as_of_date,
+            # The formal certification, on the same boundary the forecast basis
+            # uses. A hard-cost estimate that admitted a backdated document
+            # would hand unit economics a cost basis the construction team never
+            # approved.
+            Certificate.certified_at < as_of_bound(version.as_of_date),
             CostCode.cost_category == CATEGORY_HARD,
         )
     ).first()
@@ -3995,7 +4069,19 @@ class CostControl:
     original_commitment: Decimal
     approved_variation_delta: Decimal
     revised_commitment: Decimal
+    #: Everything certified **now**. The live position, which moves the moment a
+    #: certificate is signed and does not wait for a forecast to be revised.
     certified_to_date: Decimal
+    #: What was certified by the active forecast's own cutoff, and therefore the
+    #: basis its estimate at completion is built on. ``None`` where no forecast
+    #: is in force.
+    #:
+    #: Two fields rather than one because they answer different questions and
+    #: diverge the instant work is certified after the cutoff. Overloading a
+    #: single ``certified_to_date`` with both meanings is what made the command
+    #: centre report a stale figure: the screen said "certified to date" and
+    #: showed a number frozen at the forecast's as-of date.
+    forecast_certified_as_of: Decimal | None
     forecast_remaining: Decimal | None
     estimate_at_completion: Decimal | None
     variance_at_completion: Decimal | None
@@ -4056,19 +4142,27 @@ def cost_control_position(session: Session, *, project: Project) -> CostControl:
     original_commitment = money(original or ZERO)
     variation_delta = money(variations or ZERO)
 
-    forecast = active_forecast(session, project_id=project.id)
-    certified_as_of = forecast.as_of_date if forecast is not None else None
-    certified = money(
-        sum(
-            certified_by_cost_code(session, project_id=project.id, as_of=certified_as_of).values(),
-            ZERO,
-        )
-    )
+    # Two certified figures, deliberately. The first is what has been certified
+    # as of now and is what the command centre reports; the second is what the
+    # standing forecast was built on, and is the only one its estimate may use.
+    # Adding work certified after the cutoff to a forecast remainder that was
+    # written before it counts that work twice.
+    certified = money(sum(certified_by_cost_code(session, project_id=project.id).values(), ZERO))
 
+    forecast = active_forecast(session, project_id=project.id)
+    forecast_certified: Decimal | None = None
     remaining: Decimal | None = None
     eac: Decimal | None = None
     vac: Decimal | None = None
     if forecast is not None:
+        forecast_certified = money(
+            sum(
+                certified_by_cost_code(
+                    session, project_id=project.id, as_of=forecast.as_of_date
+                ).values(),
+                ZERO,
+            )
+        )
         total = session.scalars(
             select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax)).where(
                 ForecastLine.forecast_version_id == forecast.id
@@ -4076,7 +4170,7 @@ def cost_control_position(session: Session, *, project: Project) -> CostControl:
         ).first()
         remaining = money(total or ZERO)
         eac = calculator.estimate_at_completion(
-            certified_to_date=certified, forecast_remaining=remaining
+            certified_to_date=forecast_certified, forecast_remaining=remaining
         )
         vac = calculator.variance_at_completion(
             estimate_at_completion=eac,
@@ -4096,6 +4190,7 @@ def cost_control_position(session: Session, *, project: Project) -> CostControl:
             original_amount=original_commitment, approved_variation_delta=variation_delta
         ),
         certified_to_date=certified,
+        forecast_certified_as_of=forecast_certified,
         forecast_remaining=remaining,
         estimate_at_completion=eac,
         variance_at_completion=vac,

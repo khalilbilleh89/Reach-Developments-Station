@@ -6,6 +6,7 @@ import {
   Badge,
   Drawer,
   EmptyState,
+  IdentityCell,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -203,14 +204,19 @@ export function ContractFile({
             />
             <Position compact>
               <PositionFigure
-                label="Owed"
+                label="Approved payable"
                 value={money(contract.approved_invoice_payable, code)}
-                note="Approved invoices"
+                note="Invoices a second person has approved"
               />
               <PositionFigure
-                label="Outstanding"
+                label="Disputed payable"
+                value={money(contract.disputed_invoice_payable, code)}
+                note="Under argument, and still owed"
+              />
+              <PositionFigure
+                label="Standing outstanding"
                 value={money(contract.invoice_outstanding, code)}
-                note="Owed, less paid against it"
+                note="Approved and disputed, less cash confirmed as gone"
               />
               <PositionFigure
                 label="Paid"
@@ -218,11 +224,11 @@ export function ContractFile({
                 note="Confirmed as gone"
               />
             </Position>
+            <p className="footnote">
+              A dispute blocks payment; it does not reduce the obligation, so
+              outstanding includes disputed invoices.
+            </p>
             <PositionSupport>
-              <PositionSupportItem
-                label="Disputed"
-                value={money(contract.disputed_invoice_payable, code)}
-              />
               <PositionSupportItem
                 label="Retention held"
                 value={money(contract.retention_held, code)}
@@ -298,49 +304,108 @@ export function ContractFile({
       ) : null}
 
       {tab === "lines" ? (
-        contract.lines.length === 0 ? (
-          <EmptyState
-            title="No lines"
-            hint="This contract has not been broken down yet."
-          />
-        ) : (
-          <TableScroll label="Contract lines">
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Description</th>
-                <th scope="col">Cost code</th>
-                <th scope="col" className="numeric">
-                  Original
-                </th>
-                <th scope="col" className="numeric">
-                  Revised
-                </th>
-                <th scope="col" className="numeric">
-                  Certified
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {contract.lines.map((line) => (
-                <tr key={line.id}>
-                  <td>{line.sequence}</td>
-                  <td>{line.description}</td>
-                  <td>{line.cost_code}</td>
-                  <td className="numeric">
-                    {money(line.original_amount_ex_tax, code)}
-                  </td>
-                  <td className="numeric">
-                    {money(line.revised_commitment, code)}
-                  </td>
-                  <td className="numeric">
-                    {money(line.certified_to_date, code)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableScroll>
-        )
+        <div className="stack">
+          <section className="stack stack-tight">
+            <SectionHeader
+              title="What was signed"
+              description="Excluding tax. Each line carries only its own original value."
+            />
+            {contract.lines.length === 0 ? (
+              <EmptyState
+                title="No lines"
+                hint="This contract has not been broken down yet."
+              />
+            ) : (
+              <TableScroll label="Contract lines">
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Cost code</th>
+                    <th scope="col" className="numeric">
+                      Original
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contract.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>{line.sequence}</td>
+                      <td>{line.description}</td>
+                      <td>{line.cost_code}</td>
+                      <td className="numeric">
+                        {money(line.original_amount_ex_tax, code)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableScroll>
+            )}
+          </section>
+
+          <section className="stack stack-tight">
+            <SectionHeader
+              title="Where it now stands"
+              description="Excluding tax, by cost code — the grain variations and certificates are governed at."
+            />
+            {contract.cost_code_position.length === 0 ? (
+              <EmptyState
+                title="Nothing committed"
+                hint="This contract commits nothing against a cost code yet."
+              />
+            ) : (
+              <TableScroll label="Contract position by cost code">
+                <thead>
+                  <tr>
+                    <th scope="col">Cost code</th>
+                    <th scope="col" className="numeric">
+                      Original
+                    </th>
+                    <th scope="col" className="numeric">
+                      Approved variations
+                    </th>
+                    <th scope="col" className="numeric">
+                      Revised commitment
+                    </th>
+                    <th scope="col" className="numeric">
+                      Certified
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contract.cost_code_position.map((row) => (
+                    <tr key={row.cost_code_id}>
+                      <td>
+                        <IdentityCell
+                          name={row.cost_code}
+                          meta={row.cost_code_name}
+                        />
+                      </td>
+                      <td className="numeric">
+                        {money(row.original_amount_ex_tax, code)}
+                      </td>
+                      <td className="numeric">
+                        {money(row.approved_variation_delta, code)}
+                      </td>
+                      <td className="numeric">
+                        {money(row.revised_commitment, code)}
+                      </td>
+                      <td className="numeric">
+                        {money(row.certified_to_date, code)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableScroll>
+            )}
+            <p className="footnote">
+              Two lines may name one cost code, and nothing allocates a
+              variation or a certificate back to one of them. Revised and
+              certified figures therefore belong to the cost code, not to the
+              line that first mentioned it.
+            </p>
+          </section>
+        </div>
       ) : null}
 
       {tab === "variations" ? (

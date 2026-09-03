@@ -227,16 +227,49 @@ class ContractLineWrite(StrictRequest):
 
 
 class ContractLineOut(Response):
+    """One line of a contract, carrying only what that line actually owns.
+
+    Revised commitment and certified-to-date are deliberately absent. Two lines
+    may name the same cost code — "Concrete works, HRD-01, 400,000" and "Masonry
+    works, HRD-01, 200,000" — and nothing in the model allocates a variation or
+    a certificate back to one line rather than the other, because no such
+    business rule exists: a variation moves a *cost code*, and certification is
+    valued against a *cost code*.
+
+    So a line-level revised figure could only ever be the cost code's total,
+    repeated against every line that mentions it. Two lines each showing 650,000
+    reads as 1,300,000 committed, and a reader summing the column reaches a
+    number the contract does not owe. Those figures live on
+    ``ContractDetailOut.cost_code_position`` instead, one row per cost code,
+    where they are true.
+    """
+
     id: uuid.UUID
     sequence: int
     description: str
     cost_code_id: uuid.UUID
     cost_code: str
     original_amount_ex_tax: Money
-    #: This line's cost code as it now stands, original plus approved changes.
+    notes: str | None
+
+
+class ContractCostCodePosition(Response):
+    """One cost code's position on one contract, which is where it is true.
+
+    The grain the governed records actually use: a variation line names a cost
+    code, a certificate line names a cost code, and the commitment ceiling
+    certification is proved against is per cost code. Summing this list gives
+    the contract's own totals; summing the line list gives what was originally
+    signed, and neither invites the other's meaning.
+    """
+
+    cost_code_id: uuid.UUID
+    cost_code: str
+    cost_code_name: str
+    original_amount_ex_tax: Money
+    approved_variation_delta: SignedMoney
     revised_commitment: SignedMoney
     certified_to_date: Money
-    notes: str | None
 
 
 class ContractOut(Response):
@@ -270,6 +303,9 @@ class ContractDetailOut(ContractOut):
     tax_rate_fraction: Fraction | None
     notes: str | None
     lines: list[ContractLineOut]
+    #: Commitment and certification at the grain they are governed at. The line
+    #: list above says what was signed; this says where it now stands.
+    cost_code_position: list[ContractCostCodePosition]
     # Cash basis. Never added to the figures above.
     approved_invoice_payable: Money
     disputed_invoice_payable: Money
@@ -682,7 +718,19 @@ class CostControlPosition(Response):
     original_commitment: Money
     approved_variation_delta: SignedMoney
     revised_commitment: SignedMoney
+    #: Everything certified as of now. This is the live figure, and it moves the
+    #: moment a certificate is signed.
     certified_to_date: Money
+    #: What had been certified by the active forecast's own cutoff, and so the
+    #: basis its estimate at completion rests on. ``None`` where no forecast is
+    #: in force.
+    #:
+    #: It is exposed rather than kept internal because the two diverge as soon
+    #: as work is certified after the cutoff, and a reader comparing
+    #: ``certified_to_date`` against ``estimate_at_completion`` without it would
+    #: conclude the estimate had been left behind — when in fact the estimate is
+    #: correctly frozen to a basis somebody approved.
+    forecast_certified_as_of: Money | None
     forecast_remaining: Money | None
     estimate_at_completion: Money | None
     variance_at_completion: SignedMoney | None

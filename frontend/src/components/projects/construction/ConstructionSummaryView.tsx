@@ -75,7 +75,7 @@ export function ConstructionSummaryView({
           <PositionFigure
             label="Certified to date"
             value={money(cost.certified_to_date, code)}
-            note="Work formally certified as done"
+            note="Work formally certified, as at today"
           />
           <PositionFigure
             lead
@@ -85,6 +85,16 @@ export function ConstructionSummaryView({
             note={varianceNote(cost.variance_at_completion)}
           />
         </Position>
+        {summary.forecast_version_number === null ? null : (
+          <p className="footnote">
+            Certified to date is today&apos;s figure. The estimate at completion
+            is not: it is the work certified by the forecast&apos;s own cutoff
+            plus what that forecast said was still to come, and it stays on that
+            basis until a new forecast is activated. Certifying work after the
+            cutoff therefore moves the first figure and leaves the second alone,
+            which is the only way the two avoid counting the same work twice.
+          </p>
+        )}
         <PositionSupport>
           <PositionSupportItem
             label="Original baseline"
@@ -105,6 +115,10 @@ export function ConstructionSummaryView({
           <PositionSupportItem
             label="Approved variations"
             value={money(cost.approved_variation_delta, code)}
+          />
+          <PositionSupportItem
+            label="Certified at forecast cutoff"
+            value={money(cost.forecast_certified_as_of, code)}
           />
           <PositionSupportItem
             label="Forecast remaining"
@@ -132,14 +146,19 @@ export function ConstructionSummaryView({
         />
         <Position compact>
           <PositionFigure
-            label="Owed"
+            label="Approved payable"
             value={money(payable.approved_invoice_payable, code)}
-            note="Approved invoices"
+            note="Invoices a second person has approved"
           />
           <PositionFigure
-            label="Outstanding"
+            label="Disputed payable"
+            value={money(payable.disputed_invoice_payable, code)}
+            note="Under argument, and still owed"
+          />
+          <PositionFigure
+            label="Standing outstanding"
             value={money(payable.invoice_outstanding, code)}
-            note="Owed, less what has been paid against it"
+            note="Approved and disputed, less cash confirmed as gone"
           />
           <PositionFigure
             label="Paid"
@@ -147,11 +166,13 @@ export function ConstructionSummaryView({
             note="Cash confirmed as gone"
           />
         </Position>
+        <p className="footnote">
+          A dispute blocks payment; it does not reduce the obligation.
+          Outstanding therefore includes disputed invoices, because an amount
+          that stopped being owed the moment somebody objected to it would make
+          this a record of opinions.
+        </p>
         <PositionSupport>
-          <PositionSupportItem
-            label="Disputed"
-            value={money(payable.disputed_invoice_payable, code)}
-          />
           <PositionSupportItem
             label="Retention held back"
             value={money(payable.retention_outstanding, code)}

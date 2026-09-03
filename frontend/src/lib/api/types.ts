@@ -2068,6 +2068,13 @@ export interface ConstructionContract {
   actual_completion_date: string | null;
 }
 
+/** One contract line, carrying only what that line actually owns.
+ *
+ * No revised or certified figure: two lines may name the same cost code, and
+ * nothing allocates a variation or a certificate back to one of them, so a
+ * line-level figure could only be the cost code's total repeated. Those live on
+ * `ContractDetail.cost_code_position`.
+ */
 export interface ContractLine {
   id: string;
   sequence: number;
@@ -2075,9 +2082,18 @@ export interface ContractLine {
   cost_code_id: string;
   cost_code: string;
   original_amount_ex_tax: string;
+  notes: string | null;
+}
+
+/** One cost code's position on one contract — the grain these figures are true at. */
+export interface ContractCostCodePosition {
+  cost_code_id: string;
+  cost_code: string;
+  cost_code_name: string;
+  original_amount_ex_tax: string;
+  approved_variation_delta: string;
   revised_commitment: string;
   certified_to_date: string;
-  notes: string | null;
 }
 
 export interface ContractDetail extends ConstructionContract {
@@ -2088,6 +2104,7 @@ export interface ContractDetail extends ConstructionContract {
   tax_rate_fraction: string;
   notes: string | null;
   lines: ContractLine[];
+  cost_code_position: ContractCostCodePosition[];
   approved_invoice_payable: string;
   disputed_invoice_payable: string;
   confirmed_paid: string;
@@ -2315,7 +2332,10 @@ export interface CostControlPosition {
   original_commitment: string;
   approved_variation_delta: string;
   revised_commitment: string;
+  /** Everything certified as of now. Moves the moment a certificate is signed. */
   certified_to_date: string;
+  /** What the active forecast's estimate rests on, frozen at its own cutoff. */
+  forecast_certified_as_of: string | null;
   forecast_remaining: string | null;
   estimate_at_completion: string | null;
   variance_at_completion: string | null;

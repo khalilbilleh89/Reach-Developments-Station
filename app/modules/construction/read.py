@@ -232,6 +232,14 @@ def contract_detail(
     certified_by_code = service.certified_by_cost_code(
         session, project_id=project.id, contract_id=contract.id
     )
+
+    contract_lines = list(
+        session.scalars(
+            select(ContractLine)
+            .where(ContractLine.contract_id == contract.id)
+            .order_by(ContractLine.sequence)
+        )
+    )
     lines = [
         schemas.ContractLineOut(
             id=line.id,
@@ -240,14 +248,33 @@ def contract_detail(
             cost_code_id=line.cost_code_id,
             cost_code=codes[line.cost_code_id].code if line.cost_code_id in codes else "",
             original_amount_ex_tax=line.original_amount_ex_tax,
-            revised_commitment=committed.get(line.cost_code_id, ZERO),
-            certified_to_date=certified_by_code.get(line.cost_code_id, ZERO),
             notes=line.notes,
         )
-        for line in session.scalars(
-            select(ContractLine)
-            .where(ContractLine.contract_id == contract.id)
-            .order_by(ContractLine.sequence)
+        for line in contract_lines
+    ]
+
+    # The same figures, at the grain that owns them. Two lines naming one cost
+    # code contribute one row here, and their originals are added — which is the
+    # only operation the model supports on them, since a variation moves the
+    # code and not a line.
+    original_by_code: dict[uuid.UUID, Decimal] = {}
+    for line in contract_lines:
+        original_by_code[line.cost_code_id] = money(
+            original_by_code.get(line.cost_code_id, ZERO) + line.original_amount_ex_tax
+        )
+    cost_code_position = [
+        schemas.ContractCostCodePosition(
+            cost_code_id=cost_code_id,
+            cost_code=codes[cost_code_id].code if cost_code_id in codes else "",
+            cost_code_name=codes[cost_code_id].name if cost_code_id in codes else "",
+            original_amount_ex_tax=original,
+            approved_variation_delta=money(committed.get(cost_code_id, ZERO) - original),
+            revised_commitment=committed.get(cost_code_id, ZERO),
+            certified_to_date=certified_by_code.get(cost_code_id, ZERO),
+        )
+        for cost_code_id, original in sorted(
+            original_by_code.items(),
+            key=lambda item: codes[item[0]].code if item[0] in codes else "",
         )
     ]
 
@@ -286,6 +313,7 @@ def contract_detail(
         tax_rate_fraction=contract.tax_rate_fraction,
         notes=contract.notes,
         lines=lines,
+        cost_code_position=cost_code_position,
         approved_invoice_payable=approved_total,
         disputed_invoice_payable=disputed_total,
         confirmed_paid=paid_total,
@@ -657,6 +685,7 @@ def summary_out(session: Session, *, project: Project) -> schemas.ConstructionSu
             approved_variation_delta=cost.approved_variation_delta,
             revised_commitment=cost.revised_commitment,
             certified_to_date=cost.certified_to_date,
+            forecast_certified_as_of=cost.forecast_certified_as_of,
             forecast_remaining=cost.forecast_remaining,
             estimate_at_completion=cost.estimate_at_completion,
             variance_at_completion=cost.variance_at_completion,

@@ -847,6 +847,40 @@ bank (payment) and what it will finish at (forecast). A single "spent" figure
 would have to pick one and hide the other five, and every one of them is the
 right answer to a different person's question.
 
+**A forecast's cutoff is the formal certification, never the certificate's own
+date.** A valuation dated 31 August is signed off on 5 September, because
+somebody has to read it first, and a forecast taken as at 31 August could not
+have contained work nobody had certified yet. Cutting off on the document date
+would let a backdated form enlarge a forecast months after Finance approved it,
+which is the opposite of what naming an as-of date is for. One helper states the
+bound — the first instant after the cutoff, in UTC — and both readers use it, so
+"as at" cannot come to mean two things in one module.
+
+**Certified to date is today's figure; the estimate at completion is not.** The
+first answers "what has been certified?" and must move the moment a certificate
+is signed. The second is the standing forecast's answer, and it stays on the
+basis that forecast was approved against: the work certified by its own cutoff
+plus what it said was still to come. Refreshing the certified half of a
+completion estimate while leaving the remainder alone counts the new work twice,
+so the frozen basis is carried beside the live one rather than left to be
+inferred by subtraction.
+
+**A forecast is measured against an authorisation somebody actually gave.** A
+draft budget is a working paper, a submitted one is a question, and a rejected
+one is a refusal; none of the three can be the denominator of a variance.
+Approved, active and superseded can — a replaced authorisation was still an
+authorisation, and refusing it would make every forecast unreadable the moment
+the next budget was activated. The check is re-proved at submission and at
+activation rather than trusted from when the draft was opened.
+
+**A contract line carries only what that line owns.** Two lines may name one
+cost code, and nothing in the model allocates a variation or a certificate back
+to one line rather than the other, because no such business rule exists: a
+variation moves a cost code and certification is valued against a cost code. A
+line-level "revised commitment" could therefore only be the code's total,
+repeated — two lines each showing 650,000 read as 1,300,000 committed. Those
+figures are reported once, at the cost-code grain that owns them.
+
 **Cost is stated excluding tax; cash is stated including it.** The two never
 share a row or a heading. Tax is recoverable in most of the jurisdictions this
 product serves, so a cost figure carrying it overstates the build — and a screen
