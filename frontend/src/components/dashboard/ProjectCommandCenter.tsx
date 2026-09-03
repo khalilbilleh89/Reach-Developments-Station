@@ -16,7 +16,7 @@ import type {
 import { useAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money, percent } from "@/lib/format";
+import { businessDate, isPositive, money, percent } from "@/lib/format";
 import {
   COLLECTION_READERS,
   ECONOMICS_READERS,
@@ -47,25 +47,10 @@ import {
   PositionSupportItem,
   SectionHeader,
 } from "@/components/ui";
-import { AGING_BUCKETS, bucketLabel } from "@/components/projects/collections/labels";
+import { AGING_BUCKETS, bucketHeat, bucketLabel } from "@/components/projects/collections/labels";
 import { AttentionPanel } from "./AttentionPanel";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectPlate } from "./ProjectPlate";
-
-/** How old a band's money is, in the order the server ages it. */
-const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
-  awaiting_trigger: "cool",
-  current: "cool",
-  "1_30": "warm",
-  "31_60": "hot",
-  "61_90": "hot",
-  "91_plus": "late",
-};
-
-/** Is this server decimal anything other than zero? A string test, never a parse. */
-function isNonZero(value: string | null | undefined): boolean {
-  return typeof value === "string" && /[1-9]/.test(value);
-}
 
 /**
  * The project's front page: what is happening in this development right now.
@@ -609,12 +594,12 @@ export function ProjectCommandCenter({
                           <PositionFigure
                             label="Overdue"
                             value={money(totals.overdue_total, code)}
-                            tone={isNonZero(totals.overdue_total) ? "danger" : "neutral"}
+                            tone={isPositive(totals.overdue_total) ? "danger" : "neutral"}
                           />
                           <PositionFigure
                             label="Unapplied cash"
                             value={money(totals.unapplied_cash, code)}
-                            tone={isNonZero(totals.unapplied_cash) ? "warning" : "neutral"}
+                            tone={isPositive(totals.unapplied_cash) ? "warning" : "neutral"}
                             note="Received, not yet applied"
                           />
                         </Position>
@@ -632,7 +617,7 @@ export function ProjectCommandCenter({
                               key={bucket}
                               label={bucketLabel(bucket)}
                               value={money(totals.buckets[bucket], code)}
-                              heat={BUCKET_HEAT[bucket] ?? "cool"}
+                              heat={bucketHeat(bucket)}
                             />
                           ))}
                         </Distribution>

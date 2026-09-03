@@ -19,7 +19,7 @@ import type {
 import { toAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
-import { money, percent } from "@/lib/format";
+import { isPositive, money, percent } from "@/lib/format";
 import {
   COLLECTION_READERS,
   ECONOMICS_READERS,
@@ -386,7 +386,7 @@ export function UnitDetailPanel({
             label: "Outstanding",
             value: money(collection.data.outstanding_total, currencyCodeOf(collection.data.currency_id)),
             note: unitCollectionLabel(collection.data.derived_collection_status),
-            tone: /[1-9]/.test(collection.data.overdue_total) ? ("danger" as const) : undefined,
+            tone: isPositive(collection.data.overdue_total) ? ("danger" as const) : undefined,
           },
         ]
       : collection.status === "failed"

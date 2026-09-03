@@ -213,6 +213,26 @@ export const clearanceTone = toner({
   revoked: "danger",
 });
 
+/**
+ * How old a band's money is, in the order the server ages it.
+ *
+ * A band marker, not a measurement: the rule above each band warms as the
+ * money gets older, and no width anywhere encodes an amount. One place, so
+ * the same band never reads warm on the collections summary and hot on the
+ * project's front page.
+ */
+const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
+  awaiting_trigger: "cool",
+  current: "cool",
+  "1_30": "warm",
+  "31_60": "warm",
+  "61_90": "hot",
+  "91_plus": "late",
+};
+
+export const bucketHeat = (value: string | null | undefined): "cool" | "warm" | "hot" | "late" =>
+  value ? (BUCKET_HEAT[value] ?? "cool") : "cool";
+
 /** The bands, in report order. */
 export const AGING_BUCKETS = [
   "current",

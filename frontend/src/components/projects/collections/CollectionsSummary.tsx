@@ -14,7 +14,7 @@ import {
 import type { CollectionCurrencyTotals, CollectionProjectSummary } from "@/lib/api";
 import { businessDate, isPositive, money } from "@/lib/format";
 
-import { AGING_BUCKETS, bucketLabel } from "./labels";
+import { AGING_BUCKETS, bucketHeat, bucketLabel } from "./labels";
 
 /**
  * The project's collections position, as at a stated date.
@@ -81,21 +81,6 @@ export function CollectionsSummary({
   );
 }
 
-/**
- * How old a band's money is, in the order the server ages it.
- *
- * A band marker, not a measurement: the rule above each band warms as the
- * money gets older, and no width anywhere encodes an amount.
- */
-const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
-  awaiting_trigger: "cool",
-  current: "cool",
-  "1_30": "warm",
-  "31_60": "warm",
-  "61_90": "hot",
-  "91_plus": "late",
-};
-
 function CurrencyBlock({
   totals,
   asOf,
@@ -153,7 +138,7 @@ function CurrencyBlock({
             key={bucket}
             label={bucketLabel(bucket)}
             value={money(totals.buckets[bucket] ?? "0.00", code)}
-            heat={BUCKET_HEAT[bucket] ?? "cool"}
+            heat={bucketHeat(bucket)}
           />
         ))}
       </Distribution>
