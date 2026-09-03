@@ -12,13 +12,16 @@ import {
   Button,
   Card,
   DataToolbar,
+  IdentityCell,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
   Loading,
-  Metric,
-  MetricGroup,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
   MoneyInput,
   Notice,
   PageHeader,
@@ -216,13 +219,20 @@ export function SalesTab({
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <Card>
+        {/* The book, as a desk reads it: what has been agreed, what is being
+            agreed, and what is still on the shelf. */}
+        <Card
+          tone={totals ? "command" : undefined}
+          title="Commercial pipeline"
+          description={totals ? "Counted over every unit you may see, not the page below." : undefined}
+        >
           {totals === null ? (
             <Loading label="Loading sales…" shape="metrics" />
           ) : (
             <>
-              <MetricGroup>
-                <Metric
+              <Position>
+                <PositionFigure
+                  lead
                   label="Contracted value"
                   value={
                     totals.mixed_currency
@@ -230,24 +240,21 @@ export function SalesTab({
                       : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
                   }
                   note={totals.mixed_currency ? "Contracts in more than one currency" : "Live contracts, ex tax"}
-                  size="lg"
                 />
-                <Metric label="Units" value={totals.units} size="sm" />
-                <Metric label="Available" value={totals.available} size="sm" />
-                <Metric label="Live reservations" value={totals.active_reservations} size="sm" />
-                <Metric label="Contract pending" value={totals.contract_pending} size="sm" />
-                <Metric label="Contracted" value={totals.contracted} size="sm" />
-                <Metric label="Returned" value={totals.returned} size="sm" />
-                <Metric
-                  label="Open cancellations"
-                  value={totals.open_cancellations}
-                  size="sm"
-                  tone={totals.open_cancellations > 0 ? "warning" : "neutral"}
+                <PositionFigure
+                  label="Contracted"
+                  value={`${totals.contracted} of ${totals.units}`}
+                  note="Units"
                 />
-              </MetricGroup>
-              <p className="footnote">
-                Counted over every unit you may see under the current filter, not the page below.
-              </p>
+                <PositionFigure label="Live reservations" value={totals.active_reservations} />
+                <PositionFigure label="Available" value={totals.available} />
+              </Position>
+              <PositionSupport>
+                <PositionSupportItem label="Contract pending" value={totals.contract_pending} />
+                <PositionSupportItem label="Active contracts" value={totals.active_contracts} />
+                <PositionSupportItem label="Returned" value={totals.returned} />
+                <PositionSupportItem label="Open cancellations" value={totals.open_cancellations} />
+              </PositionSupport>
             </>
           )}
         </Card>
@@ -378,6 +385,7 @@ export function SalesTab({
         ) : null}
 
         <DataToolbar
+          framed
           search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search the sales register" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
@@ -389,7 +397,7 @@ export function SalesTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Phase">
+          <ToolbarFilter label="Phase" active={filters.phase_id !== ""}>
             <select
               className="input"
               value={filters.phase_id}
@@ -403,7 +411,7 @@ export function SalesTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Commercial status">
+          <ToolbarFilter label="Commercial status" active={filters.commercial_status !== ""}>
             <select
               className="input"
               value={filters.commercial_status}
@@ -453,12 +461,9 @@ export function SalesTab({
                 {rows.map((row) => (
                   <tr key={row.unit_id}>
                     <th scope="row">
-                      <button className="button-link mono" type="button" onClick={() => onOpenUnit(row.unit_id)}>
-                        {row.unit_reference}
+                      <button className="button-link" type="button" onClick={() => onOpenUnit(row.unit_id)}>
+                        <IdentityCell name={row.unit_reference} meta={row.client_display_name ?? undefined} />
                       </button>
-                      {row.client_display_name ? (
-                        <span className="cell-secondary cell-prose">{row.client_display_name}</span>
-                      ) : null}
                     </th>
                     <td>
                       <Badge tone={statusTone(row.commercial_status)}>{statusLabel(row.commercial_status)}</Badge>

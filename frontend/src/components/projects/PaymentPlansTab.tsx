@@ -11,13 +11,16 @@ import {
   Button,
   Card,
   DataToolbar,
+  IdentityCell,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
   Loading,
-  Metric,
-  MetricGroup,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
   Notice,
   PageHeader,
   StatusDot,
@@ -161,29 +164,39 @@ export function PaymentPlansTab({
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <Card>
+        {/* Scheduling, governed. Every figure counts plans and instalments, not
+            money received: what a buyer has actually paid is Collections' to
+            say, and "next scheduled" is the next date still to come rather
+            than any statement about arrears. */}
+        <Card
+          tone={register ? "command" : undefined}
+          title="Scheduled position"
+          description={register ? "What is agreed and when it falls due, across this project." : undefined}
+        >
           {register === null ? (
             <Loading label="Loading payment plans…" shape="metrics" />
           ) : (
             <>
-              <MetricGroup compact>
-                <Metric label="Plans" value={rows.length} size="sm" />
-                <Metric label="Active" value={active} size="sm" />
-                <Metric label="Reconciled" value={reconciled} size="sm" tone={reconciled < rows.length ? "warning" : "neutral"} />
-                <Metric label="Being revised" value={revising} size="sm" note="Standing terms unchanged" />
-                <Metric
-                  label="Contracts not yet scheduled"
-                  value={unscheduled.length}
-                  size="sm"
-                  tone={unscheduled.length > 0 ? "warning" : "neutral"}
+              <Position compact>
+                <PositionFigure lead label="Plans" value={rows.length} />
+                <PositionFigure label="Active" value={active} note="Governing a sale" />
+                <PositionFigure
+                  label="Reconciled"
+                  value={reconciled}
+                  tone={reconciled < rows.length ? "warning" : "neutral"}
+                  note="Cover their contract exactly"
                 />
-                <Metric label="Instalments awaiting a trigger" value={awaiting} size="sm" note="Contracted, not yet due" />
-              </MetricGroup>
-              <p className="footnote">
-                A schedule says what the buyer agreed to pay and when. What has actually been paid is
-                Collections&rsquo; to say, so &ldquo;next scheduled&rdquo; is the next date still to come and
-                never a statement about arrears.
-              </p>
+                <PositionFigure
+                  label="Not yet scheduled"
+                  value={unscheduled.length}
+                  tone={unscheduled.length > 0 ? "warning" : "neutral"}
+                  note="Contracts without a plan"
+                />
+              </Position>
+              <PositionSupport>
+                <PositionSupportItem label="Being revised" value={revising} />
+                <PositionSupportItem label="Instalments awaiting a trigger" value={awaiting} />
+              </PositionSupport>
             </>
           )}
         </Card>
@@ -289,6 +302,7 @@ export function PaymentPlansTab({
         ) : null}
 
         <DataToolbar
+          framed
           search={{ value: search, onChange: setSearch, placeholder: "Plan, unit, buyer or contract", label: "Search payment plans" }}
           count={register ? { shown: shown.length, total: register.total, noun: "plan" } : undefined}
           onReset={
@@ -300,7 +314,7 @@ export function PaymentPlansTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Version status">
+          <ToolbarFilter label="Version status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Any status</option>
               {["draft", "submitted", "approved", "active", "rejected"].map((value) => (
@@ -353,10 +367,12 @@ export function PaymentPlansTab({
                 {shown.map((row) => (
                   <tr key={row.plan_id}>
                     <th scope="row">
-                      <button className="button-link mono" type="button" onClick={() => setOpenPlan(row.plan_id)}>
-                        {row.plan_number}
+                      <button className="button-link" type="button" onClick={() => setOpenPlan(row.plan_id)}>
+                        <IdentityCell
+                          name={row.plan_number}
+                          meta={<span className="mono">{row.unit_reference}</span>}
+                        />
                       </button>
-                      <span className="cell-secondary mono">{row.unit_reference}</span>
                     </th>
                     <td className="cell-prose">{row.client_display_name}</td>
                     <td className="mono">{row.spa_number ?? row.sale_number}</td>

@@ -19,6 +19,7 @@
  */
 
 import type { Tone } from "@/components/ui";
+import { isPositive } from "@/lib/format";
 
 const RECEIPT_LABELS: Record<string, string> = {
   recorded: "Awaiting confirmation",
@@ -212,6 +213,45 @@ export const clearanceTone = toner({
   cleared: "success",
   revoked: "danger",
 });
+
+/**
+ * How old a band's money is, in the order the server ages it.
+ *
+ * A band marker, not a measurement: the rule above each band warms as the
+ * money gets older, and no width anywhere encodes an amount. One place, so
+ * the same band never reads warm on the collections summary and hot on the
+ * project's front page.
+ */
+const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
+  awaiting_trigger: "cool",
+  current: "cool",
+  "1_30": "warm",
+  "31_60": "warm",
+  "61_90": "hot",
+  "91_plus": "late",
+};
+
+export type BucketHeat = "cool" | "warm" | "hot" | "late";
+
+export const bucketHeat = (value: string | null | undefined): BucketHeat =>
+  value ? (BUCKET_HEAT[value] ?? "cool") : "cool";
+
+/**
+ * The heat a band is actually entitled to, given what is standing in it.
+ *
+ * A band's age is a property of the band; its heat is a claim about money.
+ * "91+ JOD 0.00" carries no late money, and colouring it late says the
+ * opposite of the figure printed beside it — the same mistake as tinting a
+ * whole register row, one band smaller. So a band with nothing positive in it
+ * is cool whatever its age, and a credit is nothing positive.
+ *
+ * `isPositive` reads the sign and the digits as text, so this decides on the
+ * server's exact decimal and never on a float.
+ */
+export const bucketHeatForAmount = (
+  bucket: string | null | undefined,
+  amount: string | null | undefined,
+): BucketHeat => (isPositive(amount) ? bucketHeat(bucket) : "cool");
 
 /** The bands, in report order. */
 export const AGING_BUCKETS = [

@@ -149,6 +149,7 @@ export function DataToolbar({
   count,
   onReset,
   actions,
+  framed,
 }: {
   search?: {
     value: string;
@@ -160,10 +161,17 @@ export function DataToolbar({
   count?: { shown: number; total?: number; noun: string };
   onReset?: () => void;
   actions?: ReactNode;
+  /**
+   * Draw the row as one command surface rather than as separate controls.
+   * A register's toolbar is a single instrument — search, the two or three
+   * filters that narrow it, and the count of what survived — and five
+   * independently bordered boxes make it read as five unrelated questions.
+   */
+  framed?: boolean;
 }) {
   const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
   return (
-    <div className="toolbar" role="search">
+    <div className={framed ? "toolbar toolbar-framed" : "toolbar"} role="search">
       {search ? (
         <label className="toolbar-search">
           <span className="visually-hidden">{search.label ?? "Search"}</span>
@@ -199,10 +207,23 @@ export function DataToolbar({
   );
 }
 
-/** One filter in the toolbar. The control's first option is its visible label. */
-export function ToolbarFilter({ label, children }: { label: string; children: ReactNode }) {
+/**
+ * One filter in the toolbar. The control's first option is its visible label.
+ *
+ * `active` marks a filter that is currently narrowing the register, so a
+ * reader who cannot find a row can see why without opening every control.
+ */
+export function ToolbarFilter({
+  label,
+  active,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="field toolbar-filter">
+    <label className={active ? "field toolbar-filter toolbar-filter-active" : "field toolbar-filter"}>
       <span className="visually-hidden">{label}</span>
       {children}
     </label>

@@ -180,3 +180,223 @@ export function WaterfallRow({
     </li>
   );
 }
+
+/**
+ * The composition a page is opened for: two to four reported figures, set
+ * large, with the label beneath.
+ *
+ * A tear sheet does it this way for a reason. The number is what a reader came
+ * for; the word only confirms which number it is, so the word goes second and
+ * goes quiet. Hairlines separate the figures instead of boxes, because they
+ * are one answer read across, not three answers stacked.
+ *
+ * As with every figure in this product, each value arrived from the API on
+ * this request. Nothing here is totalled, averaged or projected.
+ */
+export function Position({ children, compact }: { children: ReactNode; compact?: boolean }) {
+  return <div className={compact ? "position position-compact" : "position"}>{children}</div>;
+}
+
+export function PositionFigure({
+  label,
+  value,
+  note,
+  lead,
+  tone = "neutral",
+}: {
+  label: string;
+  value: ReactNode;
+  note?: ReactNode;
+  /** The single figure the composition is built around. */
+  lead?: boolean;
+  tone?: "neutral" | "danger" | "warning" | "success";
+}) {
+  const valueClass = tone === "neutral" ? "position-value" : `position-value position-value-${tone}`;
+  return (
+    <div className={lead ? "position-figure position-figure-lead" : "position-figure"}>
+      <p className={valueClass}>{value === null || value === undefined || value === "" ? "—" : value}</p>
+      <p className="position-label">{label}</p>
+      {note ? <p className="position-note">{note}</p> : null}
+    </div>
+  );
+}
+
+/** The supporting facts under a position, on one rule-separated line. */
+export function PositionSupport({ children }: { children: ReactNode }) {
+  return <div className="position-support">{children}</div>;
+}
+
+export function PositionSupportItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <span className="position-support-item">
+      <span className="position-support-label">{label}</span>
+      <span className="position-support-value">
+        {value === null || value === undefined || value === "" ? "—" : value}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A row of counts in one band: "126 Units · 31 Available · 8 Held".
+ *
+ * For the four or five numbers that describe a register at a glance. They are
+ * counts, not findings, and four separate cards for four integers is four
+ * times the furniture the information deserves.
+ */
+export function StatStrip({ children }: { children: ReactNode }) {
+  return <div className="stat-strip">{children}</div>;
+}
+
+export function StatStripItem({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: "neutral" | "danger" | "warning";
+}) {
+  return (
+    <span className={tone === "neutral" ? "stat-strip-item" : `stat-strip-item stat-strip-item-${tone}`}>
+      <span className="stat-strip-value">{value === null || value === undefined || value === "" ? "—" : value}</span>
+      <span className="stat-strip-label">{label}</span>
+    </span>
+  );
+}
+
+/** A closing remark on a stat strip: an as-at date, a basis. */
+export function StatStripNote({ children }: { children: ReactNode }) {
+  return <span className="stat-strip-note">{children}</span>;
+}
+
+/**
+ * What a total is made of, line by line, with a leader to each amount.
+ *
+ * Different from a `Waterfall`: a waterfall is a sequence the server applied
+ * in order to reach a figure, and this is a set of parts the server reported
+ * beside their total. Neither adds anything up in the browser.
+ */
+export function Breakdown({ children }: { children: ReactNode }) {
+  return <ul className="breakdown">{children}</ul>;
+}
+
+export function BreakdownRow({
+  label,
+  note,
+  amount,
+  total,
+}: {
+  label: ReactNode;
+  note?: ReactNode;
+  amount: ReactNode;
+  /** The server's own total for these parts, ruled off beneath them. */
+  total?: boolean;
+}) {
+  return (
+    <li className={total ? "breakdown-row breakdown-row-total" : "breakdown-row"}>
+      <span className="breakdown-label">
+        {label}
+        {note ? <span className="breakdown-note"> · {note}</span> : null}
+      </span>
+      <span className="breakdown-lead" aria-hidden="true" />
+      <span className="breakdown-amount">{amount}</span>
+    </li>
+  );
+}
+
+/**
+ * A balance spread across the bands the server aged it into.
+ *
+ * Bands sit side by side at equal width with a hairline between and a two-pixel
+ * rule above that warms as the money gets older. The rule is a band marker, not
+ * a measurement: no width here encodes an amount, because the browser would
+ * have to divide to know one.
+ */
+export function Distribution({ children }: { children: ReactNode }) {
+  return <ol className="distribution">{children}</ol>;
+}
+
+export function DistributionBand({
+  label,
+  value,
+  note,
+  heat = "cool",
+}: {
+  label: string;
+  value: ReactNode;
+  note?: ReactNode;
+  /** How old this band's money is, in the order the server named the bands. */
+  heat?: "cool" | "warm" | "hot" | "late";
+}) {
+  return (
+    <li className={heat === "cool" ? "distribution-band" : `distribution-band distribution-band-${heat}`}>
+      <p className="distribution-label">{label}</p>
+      <p className="distribution-value">{value}</p>
+      {note ? <p className="distribution-note">{note}</p> : null}
+    </li>
+  );
+}
+
+/**
+ * A register row's identity: the reference somebody says out loud, and beneath
+ * it the few words that tell them which record it is.
+ *
+ * The anchor of every register in the product. The name carries the weight and
+ * the metadata recedes, so a column of two hundred rows scans as a column of
+ * references rather than as a paragraph per line.
+ */
+export function IdentityCell({ name, meta }: { name: ReactNode; meta?: ReactNode }) {
+  return (
+    <span className="identity-cell">
+      <span className="identity-cell-name">{name}</span>
+      {meta ? <span className="identity-cell-meta">{meta}</span> : null}
+    </span>
+  );
+}
+
+/** Where a record sits in the development: its container, then the path. */
+export function PlaceCell({ main, sub }: { main: ReactNode; sub?: ReactNode }) {
+  return (
+    <span className="place-cell">
+      <span className="place-main">{main === null || main === undefined || main === "" ? "—" : main}</span>
+      {sub ? <span className="place-sub">{sub}</span> : null}
+    </span>
+  );
+}
+
+/**
+ * A percentage the server reported, drawn at the width it reported.
+ *
+ * The only bar in this product, and it is not a chart: `percent` is a whole
+ * number the API returned for this record, and the fill is that number. There
+ * is no series behind it and nothing is interpolated. The figure is printed
+ * beside the bar, because a bar alone is not a number anybody can quote.
+ */
+export function Meter({
+  percent,
+  label,
+  note,
+}: {
+  percent: number;
+  /** Read out instead of the bar; defaults to the percentage itself. */
+  label?: string;
+  note?: ReactNode;
+}) {
+  const width = Math.max(0, Math.min(100, percent));
+  const fillClass =
+    width >= 100 ? "meter-fill meter-fill-complete" : width < 50 ? "meter-fill meter-fill-low" : "meter-fill";
+  return (
+    <span className="meter-block">
+      <span className="meter">
+        <span className="meter-track" role="img" aria-label={label ?? `${percent}%`}>
+          <span className={fillClass} style={{ width: `${width}%` }} />
+        </span>
+        <span className="meter-text" aria-hidden="true">
+          {percent}%
+        </span>
+      </span>
+      {note ? <span className="meter-note">{note}</span> : null}
+    </span>
+  );
+}

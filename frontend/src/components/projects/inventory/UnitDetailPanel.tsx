@@ -19,7 +19,7 @@ import type {
 import { toAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
-import { money, percent } from "@/lib/format";
+import { isPositive, money, percent } from "@/lib/format";
 import {
   COLLECTION_READERS,
   ECONOMICS_READERS,
@@ -337,7 +337,12 @@ export function UnitDetailPanel({
   // shown as unavailable when the request failed, and absent while loading,
   // when refused, or when never asked. A failure is never drawn as "not
   // priced", "no margin" or a cleared balance.
-  const unavailable = (label: string): DrawerFact => ({ label, value: "Unavailable", note: "Could not be loaded" });
+  const unavailable = (label: string): DrawerFact => ({
+    label,
+    value: "Unavailable",
+    note: "Could not be loaded",
+    tone: "muted",
+  });
   const facts: DrawerFact[] = [
     ...(unitPricing
       ? [
@@ -345,6 +350,7 @@ export function UnitDetailPanel({
             label: "List price",
             value: price ? money(price.reference_price_ex_tax, priceCode) : "Not priced",
             note: price ? (unitPricing.repricing_required ? "Repricing required" : `v${price.version_number} · ex tax`) : undefined,
+            tone: unitPricing.repricing_required ? ("danger" as const) : price ? undefined : ("muted" as const),
           },
         ]
       : pricingAnswer.status === "failed"
@@ -362,6 +368,13 @@ export function UnitDetailPanel({
               economics.data.economics.profitability_status === "ready"
                 ? `${economics.data.economics.basis === "sold" ? "Sold" : "Forecast"} basis`
                 : undefined,
+            // The server's own flags, repeated: a loss, or a margin under the
+            // configured floor. Nothing here decides either.
+            tone:
+              economics.data.economics.profit_after_finance?.startsWith("-") ||
+              economics.data.economics.below_margin_threshold
+                ? ("danger" as const)
+                : undefined,
           },
         ]
       : economics.status === "failed"
@@ -373,6 +386,7 @@ export function UnitDetailPanel({
             label: "Outstanding",
             value: money(collection.data.outstanding_total, currencyCodeOf(collection.data.currency_id)),
             note: unitCollectionLabel(collection.data.derived_collection_status),
+            tone: isPositive(collection.data.overdue_total) ? ("danger" as const) : undefined,
           },
         ]
       : collection.status === "failed"

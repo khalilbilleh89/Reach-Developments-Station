@@ -188,6 +188,84 @@ nothing.
 
 ---
 
+## 3a. Surfaces
+
+The shell frames the work. This is the work itself, in five weights. A surface
+earns its treatment from what it holds, never from a wish to be noticed, and a
+page has at most one of the strong ones — giving everything a tone is the same
+as giving nothing one.
+
+| Surface | Where | Treatment |
+| --- | --- | --- |
+| **Command** | The one thing a page exists to answer: a project's position, a pricing policy, a collections balance, a unit economics result. | `Card tone="command"` — a cool near-white ground and a two-pixel hairline of the navigation rail's own ink across the top. |
+| **Operational** | Ordinary workflow: a commercial position, a development summary, a form that opened. | The plain `Card`. Most blocks are this. |
+| **Data** | A register. | `Card flush` around a `TableScroll`: the frame recedes and the rows carry the page. |
+| **Attention** | Something owed, blocked or past its date. | `Card tone="attention"` — a narrow warm rail and the faintest tint. Never a red page. |
+| **Record** | A unit, a deal, a plan, a version. | The `Drawer`, opened over the register that led to it, with a facts strip on the command ground. |
+
+`tone="subtle"` is the fifth, and the quietest: a supporting block beside
+something that matters more.
+
+**The ink hairline is the product's signature.** The rail is `--nav-bg`, and the
+same colour reappears as the rule above a command surface. It is the one place
+the navigation's material shows up inside the working area, and it is what
+makes the most important block on a page read as part of the same object the
+reader navigated with rather than as a card that happens to be there.
+
+### Figures are set like a tear sheet
+
+A reported figure that a page is opened for is large, tightly tracked, tabular,
+and carries **its label underneath**. That inversion is the whole difference
+between a dashboard statistic and a financial statement: the number is what the
+reader came for, and the word only confirms which number it is.
+
+Ordinary metrics keep the label above the value. The two treatments are how a
+page says which of its figures is the answer and which are the supporting cast.
+
+```
+37.3044%            JOD 6,975,559.30        59.5009%
+MARGIN              PROFIT                  RETURN ON COST
+Minimum 18%         After finance
+──────────────────────────────────────────────────────────────
+Revenue JOD 18,699,007.38   Total cost JOD 11,723,448.08   Covered 118 of 126
+```
+
+`Position` lays those out; `PositionSupport` is the ruled line of facts beneath
+them. `Position compact` steps the figures down for a composition of four or
+five money amounts, where four full-size ones would wrap.
+
+### The compositions, and what each is for
+
+- **`StatStrip`** — four or five counts in one band: "126 Units · 88 Available ·
+  6 Held · 10 Unreleased". Counts are not findings, and four cards for four
+  integers is four times the furniture the information deserves.
+- **`Breakdown`** — the parts of a total, each with a dotted leader to its
+  amount and the server's own total ruled off underneath. The leader is a
+  financial-document convention, and it is why the block reads as a statement
+  rather than as two columns that happen to be near each other.
+- **`Waterfall`** — a sequence the server applied in order to reach a figure.
+  Different from a breakdown, which is a set of parts beside their total.
+- **`Distribution`** — a balance across the bands the server aged it into, with
+  a two-pixel rule above each band that warms as the money gets older. **The
+  rule is a band marker, not a measurement.** No width anywhere encodes an
+  amount, because the browser would have to divide to know one.
+- **`Meter`** — the only bar in the product, and it is not a chart: the fill is
+  a whole-number percentage the API returned for that record, and the figure is
+  printed beside it because a bar alone is not a number anybody can quote.
+- **`IdentityCell`** / **`PlaceCell`** — a register row's reference with the two
+  or three words that say which record it is, and where in the development it
+  sits. The anchor of every register in the product.
+
+### What is deliberately absent
+
+No charts. No sparklines, trends, deltas, health scores, projections or
+occupancy dials. Where the API returns no series, none is drawn — and none of
+these modules returns one. Premium information design does not require invented
+analytics, and a plausible line is worse than an empty space, because somebody
+will quote it.
+
+---
+
 ## 4. The shell
 
 ```
@@ -276,6 +354,22 @@ only a cell marked `.cell-prose` — a reason, a note — may wrap. The identity
 cell is the record's reference as a `button-link` with its secondary name
 underneath; that link opens the record file.
 
+**The toolbar is one instrument.** `DataToolbar framed` draws search, the two
+or three filters that narrow the register, and the count of what survived as a
+single command surface. Five independently bordered boxes read as five
+unrelated questions; a filter that is currently narrowing the register carries
+a quiet accent so a reader who cannot find a row can see why without opening
+every control.
+
+**A register row is an object.** The identity is an `IdentityCell` inside the
+link that opens the record, the row whose record is open carries an accent rail
+and a tinted ground so closing the drawer lands the reader where they were, and
+a chevron appears at the far right on hover. A row the server flagged — a permit
+past its statutory period, one holding the programme — takes a warm rail and
+nothing else: the status and flag columns already carry the words, and tinting
+the whole row turns a register into an alarm panel where nothing stands out
+because everything does.
+
 **Secondary states are dots.** A `Badge` is for the state the row is about —
 commercial status on Inventory, sale status on Sales. Every other state on the
 same row (legal, collection, delivery, a gate) is a `StatusDot`: the same
@@ -289,9 +383,17 @@ never wraps mid-number. `size="lg"` is the one number a screen is opened for,
 figure only when the server said something is wrong — a loss, an overdue
 balance, a breach of the margin floor.
 
-**The project's identity is a header, not a card.** Inside a project the
-Overview opens with the identity block: name, developer and location, then
-code, status, type, programme, base currency and manager as inline facts.
+**The project's identity is a plate, not a card.** Inside a project the Overview
+opens with `ProjectPlate`: the name, who is developing it, where it is, and then
+code, status, type, programme, currency and manager as inline facts. No figure
+appears on it — figures are labelled and belong in the position beneath.
+
+**Where a project is, is a place.** The location field has always been free
+text, so half of them hold "Abdoun, Amman" and half hold a hundred characters of
+map query string that somebody pasted because it was the fastest way to record
+the site. Both are useful and neither is a name: `isUrl` decides which of the
+two a screen is holding, the address goes into an `ExternalLink` labelled "Open
+location", and the plate says the place.
 
 ---
 
@@ -425,6 +527,14 @@ knows a business rule.
 | `TableScroll` (`fixedFirst`, `compact`)     | A wide register that scrolls inside itself.                            |
 | `KeyValueGrid` / `KeyValue`                 | Labelled facts about one record.                                       |
 | `Metric` / `MetricGroup`                    | One reported number, labelled; a strip of them.                        |
+| `Position` / `PositionFigure`               | The figures a page is opened for, label beneath, tear-sheet style.     |
+| `PositionSupport` / `PositionSupportItem`   | The ruled line of supporting facts under a position.                   |
+| `StatStrip` / `StatStripItem`               | Four or five counts in one compact band.                               |
+| `Breakdown` / `BreakdownRow`                | The parts of a total, with a leader to each amount.                    |
+| `Distribution` / `DistributionBand`         | A balance across the bands the server aged it into.                    |
+| `Meter`                                     | A percentage the server reported, drawn at the width it reported.      |
+| `IdentityCell` / `PlaceCell`                | A register row's reference and where it sits.                          |
+| `ExternalLink`                              | A destination outside the product, named rather than addressed.        |
 | `InlineMeta` / `InlineMetaItem`             | Small facts in a line: "Code RG-01 · Status Active".                   |
 | `Waterfall` / `WaterfallRow`                | The lines a figure is made of, in the server's order, to the total.    |
 | `Badge` / `StatusDot`                       | The state a row is about; every other state on the same row.           |

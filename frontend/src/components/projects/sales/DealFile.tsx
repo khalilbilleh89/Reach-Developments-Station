@@ -26,6 +26,8 @@ import {
   Metric,
   MetricGroup,
   MoneyInput,
+  Position,
+  PositionFigure,
   Notice,
   PromptDialog,
   RateInput,
@@ -745,12 +747,17 @@ export function DealFile({
               title="Quote"
               description="Every figure here was computed by the server. The browser does no pricing arithmetic."
             />
-            <MetricGroup>
-              <Metric label="Net contract price" value={money(terms.net_contract_price_ex_tax, quoteCode)} note="Ex tax" size="lg" />
-              <Metric label="Tax" value={money(terms.tax_total, quoteCode)} size="sm" />
-              <Metric label="Buyer fees" value={money(terms.buyer_fee_total, quoteCode)} size="sm" />
-              <Metric label="Total buyer payable" value={money(terms.total_buyer_payable, quoteCode)} />
-            </MetricGroup>
+            <Position compact>
+              <PositionFigure
+                lead
+                label="Net contract price"
+                value={money(terms.net_contract_price_ex_tax, quoteCode)}
+                note="Ex tax"
+              />
+              <PositionFigure label="Tax" value={money(terms.tax_total, quoteCode)} />
+              <PositionFigure label="Buyer fees" value={money(terms.buyer_fee_total, quoteCode)} />
+              <PositionFigure label="Total buyer payable" value={money(terms.total_buyer_payable, quoteCode)} />
+            </Position>
             <h4 className="section-heading">How it was reached</h4>
             <Waterfall>
               <WaterfallRow label="Approved list price" note="Ex tax" amount={money(terms.reference_price_ex_tax, quoteCode)} />
@@ -1111,18 +1118,17 @@ export function DealFile({
                 </Badge>
               }
             />
-            <MetricGroup>
-              <Metric label="Total contract price" value={money(sale.sale.total_contract_price, saleCode)} size="lg" />
-              <Metric label="Net of tax" value={money(sale.sale.net_contract_price_ex_tax, saleCode)} />
-              <Metric label="Tax" value={money(sale.sale.tax_total, saleCode)} size="sm" />
-              <Metric label="Buyer fees" value={money(sale.sale.buyer_fee_total, saleCode)} size="sm" />
-              <Metric
+            <Position compact>
+              <PositionFigure lead label="Total contract price" value={money(sale.sale.total_contract_price, saleCode)} />
+              <PositionFigure label="Net of tax" value={money(sale.sale.net_contract_price_ex_tax, saleCode)} />
+              <PositionFigure label="Tax" value={money(sale.sale.tax_total, saleCode)} />
+              <PositionFigure label="Buyer fees" value={money(sale.sale.buyer_fee_total, saleCode)} />
+              <PositionFigure
                 label="Effective net revenue"
                 value={money(sale.sale.effective_net_revenue_snapshot, saleCode)}
                 note="After seller costs"
-                size="sm"
               />
-            </MetricGroup>
+            </Position>
             <KeyValueGrid columns={4}>
               <KeyValue label="Sale number" mono value={sale.sale.sale_number} />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />

@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   DataToolbar,
+  IdentityCell,
   Drawer,
   EmptyState,
   Field,
@@ -20,8 +21,8 @@ import {
   KeyValue,
   KeyValueGrid,
   Loading,
-  Metric,
-  MetricGroup,
+  StatStrip,
+  StatStripItem,
   Notice,
   PageHeader,
   StatusDot,
@@ -309,24 +310,20 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {register ? (
-          <Card>
-            <MetricGroup compact>
-              <Metric label="Permits" value={register.total} size="sm" />
-              <Metric
-                label="Blocking"
-                value={register.blocking_count}
-                size="sm"
-                tone={register.blocking_count > 0 ? "warning" : "neutral"}
-              />
-              <Metric label="Critical path" value={register.critical_path_count} size="sm" />
-              <Metric
-                label="Past statutory period"
-                value={register.sla_overdue_count}
-                size="sm"
-                tone={register.sla_overdue_count > 0 ? "danger" : "neutral"}
-              />
-            </MetricGroup>
-          </Card>
+          <StatStrip>
+            <StatStripItem label="Permits" value={register.total} />
+            <StatStripItem
+              label="Blocking"
+              value={register.blocking_count}
+              tone={register.blocking_count > 0 ? "warning" : "neutral"}
+            />
+            <StatStripItem label="Critical path" value={register.critical_path_count} />
+            <StatStripItem
+              label="Past statutory period"
+              value={register.sla_overdue_count}
+              tone={register.sla_overdue_count > 0 ? "danger" : "neutral"}
+            />
+          </StatStrip>
         ) : null}
 
         {creating ? (
@@ -414,6 +411,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
         ) : null}
 
         <DataToolbar
+          framed
           search={{ value: search, onChange: setSearch, placeholder: "Code, authority or type", label: "Search permits" }}
           count={register ? { shown: shown.length, total: register.total, noun: "permit" } : undefined}
           onReset={
@@ -426,7 +424,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               : undefined
           }
         >
-          <ToolbarFilter label="Show">
+          <ToolbarFilter label="Show" active={filter !== ""}>
             <select className="input" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
               <option value="">All permits</option>
               <option value="blocking">Blocking only</option>
@@ -434,7 +432,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               <option value="overdue">Late or expired only</option>
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Status">
+          <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Any status</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -479,12 +477,19 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               </thead>
               <tbody>
                 {shown.map((permit) => (
-                  <tr key={permit.id}>
+                  // A permit the authority has had longer than the law allows,
+                  // or one consents management says is holding the programme,
+                  // carries a rail rather than a red row: the words in the
+                  // status and flag columns still say which of the two it is.
+                  <tr
+                    key={permit.id}
+                    aria-selected={selected?.id === permit.id}
+                    className={permit.sla_overdue || permit.is_blocking ? "row-flag" : undefined}
+                  >
                     <th scope="row">
-                      <button className="button-link mono" type="button" onClick={() => setSelected(permit)}>
-                        {permit.permit_code}
+                      <button className="button-link" type="button" onClick={() => setSelected(permit)}>
+                        <IdentityCell name={permit.permit_code} meta={typeLabel(permit.permit_type_code)} />
                       </button>
-                      <span className="cell-secondary">{typeLabel(permit.permit_type_code)}</span>
                     </th>
                     <td className="cell-prose">
                       {permit.authority}

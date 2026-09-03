@@ -19,13 +19,16 @@ import {
   Button,
   Card,
   DataToolbar,
+  IdentityCell,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
   Loading,
-  Metric,
-  MetricGroup,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
   MoneyInput,
   Notice,
   PageHeader,
@@ -225,7 +228,16 @@ export function PricingTab({
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <Card>
+        {/* What this development is currently offered at, before any of the
+            machinery that decides it. The rate is the headline because it is
+            the number a commercial team quotes; the policy that produced it
+            is named underneath, where a reader who doubts the rate can find
+            which version to open. */}
+        <Card
+          tone={overview?.configuration ? "command" : undefined}
+          title="Commercial position"
+          description={overview?.configuration ? "The policy in force and what it has priced." : undefined}
+        >
           {overview === null ? (
             <Loading label="Loading pricing…" shape="metrics" />
           ) : overview.configuration === null ? (
@@ -241,28 +253,43 @@ export function PricingTab({
               }
             />
           ) : (
-            <MetricGroup>
-              <Metric
-                label="Pricing policy"
-                value={`v${overview.configuration.version_number}`}
-                note={`${overview.configuration.name} · active from ${businessDate(overview.configuration.valid_from)}`}
-              />
-              <Metric
-                label="Base rate"
-                value={money(overview.base_internal_rate, currencyCodeOf(overview.currency_id))}
-                note="Per internal unit of area"
-              />
-              <Metric label="Units" value={overview.units_total} size="sm" />
-              <Metric label="Priced" value={overview.units_priced} size="sm" />
-              <Metric label="Not priced" value={overview.units_not_priced} size="sm" />
-              <Metric
-                label="Need repricing"
-                value={overview.units_repricing_required}
-                size="sm"
-                tone={overview.units_repricing_required > 0 ? "danger" : "neutral"}
-              />
-              <Metric label="Active escalations" value={overview.active_escalations} size="sm" />
-            </MetricGroup>
+            <>
+              <Position>
+                <PositionFigure
+                  lead
+                  label="Base rate"
+                  value={money(overview.base_internal_rate, currencyCodeOf(overview.currency_id))}
+                  note="Per internal unit of area"
+                />
+                <PositionFigure
+                  label="Priced"
+                  value={`${overview.units_priced} of ${overview.units_total}`}
+                  note="Units with a live price"
+                />
+                <PositionFigure
+                  label="Not priced"
+                  value={overview.units_not_priced}
+                  tone={overview.units_not_priced > 0 ? "warning" : "neutral"}
+                />
+                <PositionFigure
+                  label="Need repricing"
+                  value={overview.units_repricing_required}
+                  tone={overview.units_repricing_required > 0 ? "danger" : "neutral"}
+                  note="Changed since pricing"
+                />
+              </Position>
+              <PositionSupport>
+                <PositionSupportItem
+                  label="Policy"
+                  value={`v${overview.configuration.version_number} · ${overview.configuration.name}`}
+                />
+                <PositionSupportItem
+                  label="Active from"
+                  value={businessDate(overview.configuration.valid_from)}
+                />
+                <PositionSupportItem label="Active escalations" value={overview.active_escalations} />
+              </PositionSupport>
+            </>
           )}
         </Card>
 
@@ -292,6 +319,7 @@ export function PricingTab({
         ) : null}
 
         <DataToolbar
+          framed
           search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search the price register" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
@@ -303,7 +331,7 @@ export function PricingTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Phase">
+          <ToolbarFilter label="Phase" active={filters.phase_id !== ""}>
             <select
               className="input"
               value={filters.phase_id}
@@ -317,7 +345,7 @@ export function PricingTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Market position">
+          <ToolbarFilter label="Market position" active={filters.market_flag !== ""}>
             <select
               className="input"
               value={filters.market_flag}
@@ -370,10 +398,9 @@ export function PricingTab({
                   {rows.map((row) => (
                     <tr key={row.unit_id}>
                       <th scope="row">
-                        <button className="button-link mono" type="button" onClick={() => onOpenUnit(row.unit_id)}>
-                          {row.unit_reference}
+                        <button className="button-link" type="button" onClick={() => onOpenUnit(row.unit_id)}>
+                          <IdentityCell name={row.unit_reference} meta={row.unit_type_code ?? row.unit_number} />
                         </button>
-                        <span className="cell-secondary">{row.unit_type_code ?? row.unit_number}</span>
                       </th>
                       <td className="num">{row.internal_area_snapshot ?? "—"}</td>
                       <td className="num">{row.weighted_area_snapshot ?? "—"}</td>

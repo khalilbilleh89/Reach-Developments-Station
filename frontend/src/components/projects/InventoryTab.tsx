@@ -11,11 +11,16 @@ import {
   Card,
   DataToolbar,
   EmptyState,
+  Icon,
+  IdentityCell,
   Loading,
-  Metric,
-  MetricGroup,
+  Meter,
   Notice,
   PageHeader,
+  PlaceCell,
+  StatStrip,
+  StatStripItem,
+  StatStripNote,
   StatusDot,
   TableScroll,
   ToolbarFilter,
@@ -36,11 +41,14 @@ const PAGE = "200";
  * clearly as a component library would, without the component library.
  *
  * The register is built to be scanned down: the unit's identity pinned on the
- * left, its physical facts in the middle, and its four status dimensions on
- * the right — commercial carrying the weight, the other three as a dot and a
- * word, because the column heading already says they are statuses. Secondary
- * attributes live in Unit 360; a register showing thirty-five columns is a
- * register nobody reads.
+ * left, where it sits and how big it is in the middle, and its four status
+ * dimensions on the right — commercial carrying the weight, the other three as
+ * a dot and a word, because the column heading already says they are statuses.
+ *
+ * Every column here is one somebody filters or sorts a development by. Parking
+ * and storage, the sub-assets, the custom fields and the release blockers are
+ * all real and all live in Unit 360: a register wide enough to hold them is a
+ * register that scrolls sideways before it answers anything.
  */
 export function InventoryTab({
   projectId,
@@ -165,7 +173,11 @@ export function InventoryTab({
         actions={
           <>
             {canConfigure ? (
-              <Button onClick={() => setOpen(open === "areas" ? "none" : "areas")} aria-expanded={open === "areas"}>
+              <Button
+                variant="quiet"
+                onClick={() => setOpen(open === "areas" ? "none" : "areas")}
+                aria-expanded={open === "areas"}
+              >
                 Area types
               </Button>
             ) : null}
@@ -226,17 +238,23 @@ export function InventoryTab({
         ) : null}
 
         {register ? (
-          <Card>
-            <MetricGroup compact>
-              <Metric label="Units" value={register.total} size="sm" />
-              <Metric label="Available" value={register.available_count} size="sm" />
-              <Metric label="Held" value={register.held_count} size="sm" tone={register.held_count > 0 ? "warning" : "neutral"} />
-              <Metric label="Unreleased" value={register.unreleased_count} size="sm" />
-            </MetricGroup>
-          </Card>
+          <StatStrip>
+            <StatStripItem label="Units" value={register.total} />
+            <StatStripItem label="Available" value={register.available_count} />
+            <StatStripItem
+              label="Held"
+              value={register.held_count}
+              tone={register.held_count > 0 ? "warning" : "neutral"}
+            />
+            <StatStripItem label="Unreleased" value={register.unreleased_count} />
+            {areaTypes.length === 0 ? (
+              <StatStripNote>No area types configured — no unit can be measured or released.</StatStripNote>
+            ) : null}
+          </StatStrip>
         ) : null}
 
         <DataToolbar
+          framed
           search={{
             value: filters.search,
             onChange: (value) => setFilters({ ...filters, search: value }),
@@ -250,7 +268,7 @@ export function InventoryTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Phase">
+          <ToolbarFilter label="Phase" active={filters.phase_id !== ""}>
             <select
               className="input"
               value={filters.phase_id}
@@ -266,7 +284,7 @@ export function InventoryTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Building">
+          <ToolbarFilter label="Building" active={filters.building_id !== ""}>
             <select
               className="input"
               value={filters.building_id}
@@ -280,7 +298,7 @@ export function InventoryTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Floor">
+          <ToolbarFilter label="Floor" active={filters.floor_id !== ""}>
             <select
               className="input"
               value={filters.floor_id}
@@ -294,7 +312,7 @@ export function InventoryTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Commercial status">
+          <ToolbarFilter label="Commercial status" active={filters.commercial_status !== ""}>
             <select
               className="input"
               value={filters.commercial_status}
@@ -334,52 +352,53 @@ export function InventoryTab({
                     <th scope="col">Unit</th>
                     <th scope="col">Location</th>
                     <th scope="col" className="num">
-                      Internal
+                      Area
                     </th>
-                    <th scope="col" className="num">
-                      Weighted
-                    </th>
-                    <th scope="col">Assets</th>
                     <th scope="col">Commercial</th>
                     <th scope="col">Legal</th>
                     <th scope="col">Collection</th>
                     <th scope="col">Delivery</th>
                     <th scope="col">Readiness</th>
+                    <th scope="col">
+                      <span className="visually-hidden">Open</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {register.units.map((unit) => (
-                    <tr key={unit.id}>
+                    <tr key={unit.id} aria-selected={selected?.id === unit.id}>
                       <th scope="row">
-                        <button className="button-link mono" type="button" onClick={() => setSelected(unit)}>
-                          {unit.unit_reference}
+                        <button className="button-link" type="button" onClick={() => setSelected(unit)}>
+                          <IdentityCell
+                            name={unit.unit_reference}
+                            meta={
+                              [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]
+                                .filter(Boolean)
+                                .join(" · ") || unit.asset_class
+                            }
+                          />
                         </button>
-                        <span className="cell-secondary">
-                          {[unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]
-                            .filter(Boolean)
-                            .join(" · ") || unit.asset_class}
-                        </span>
                       </th>
-                      <td className="nowrap">
-                        {[unit.phase_code, unit.building_code, unit.floor_code].map((part) => part ?? "—").join(" · ")}
+                      <td>
+                        <PlaceCell
+                          main={unit.building_code ? `Building ${unit.building_code}` : null}
+                          sub={
+                            [
+                              unit.phase_code ? `Phase ${unit.phase_code}` : null,
+                              unit.floor_code ? `Floor ${unit.floor_code}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || undefined
+                          }
+                        />
                       </td>
                       <td className="num">
                         {unit.internal_area ?? "—"}
-                      </td>
-                      <td className="num">
-                        {unit.weighted_saleable_area ?? "—"}
-                      </td>
-                      <td className="nowrap">
-                        {unit.parking_count === 0 && unit.storage_count === 0 ? (
-                          <span className="muted">—</span>
-                        ) : (
-                          [
-                            unit.parking_count > 0 ? `${unit.parking_count} parking` : null,
-                            unit.storage_count > 0 ? `${unit.storage_count} storage` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        )}
+                        {unit.weighted_saleable_area ? (
+                          <span className="cell-secondary">
+                            {unit.weighted_saleable_area} {unit.weighted_saleable_area_unit ?? ""} weighted
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         <Badge tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</Badge>
@@ -399,10 +418,15 @@ export function InventoryTab({
                         {unit.release_eligible ? (
                           <StatusDot tone="success">Releasable</StatusDot>
                         ) : (
-                          <StatusDot tone="muted">
-                            {unit.is_complete ? "Not releasable" : `${unit.completeness_percent}% complete`}
-                          </StatusDot>
+                          <Meter
+                            percent={unit.completeness_percent}
+                            label={`Data completeness ${unit.completeness_percent} per cent`}
+                            note={unit.is_complete ? "Not releasable" : "Incomplete"}
+                          />
                         )}
+                      </td>
+                      <td className="row-go" aria-hidden="true">
+                        <Icon name="chevron" />
                       </td>
                     </tr>
                   ))}

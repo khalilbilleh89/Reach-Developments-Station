@@ -9,10 +9,11 @@ import {
   Button,
   Card,
   EmptyState,
+  ExternalLink,
   Field,
   FieldRow,
   FormActions,
-  Icon,
+  IdentityCell,
   Loading,
   Notice,
   PageHeader,
@@ -302,8 +303,7 @@ export function DocumentsTab({
                 {rows.map((document) => (
                   <tr key={document.id}>
                     <th scope="row" className="cell-prose">
-                      {document.title}
-                      {document.notes ? <span className="cell-secondary">{document.notes}</span> : null}
+                      <IdentityCell name={document.title} meta={document.notes ?? undefined} />
                     </th>
                     <td>{typeLabel(document.document_type_code)}</td>
                     <td className="mono">{document.reference_number ?? "—"}</td>
@@ -316,14 +316,7 @@ export function DocumentsTab({
                       )}
                     </td>
                     <td>
-                      <a
-                        className="button button-small button-quiet"
-                        href={document.external_url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        Open <Icon name="external" />
-                      </a>
+                      <ExternalLink href={document.external_url}>Open</ExternalLink>
                     </td>
                     {canWrite ? (
                       <td>
