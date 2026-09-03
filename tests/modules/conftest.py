@@ -1600,3 +1600,481 @@ def unit_economics(client: TestClient, project_id: str, unit_id: str) -> dict[st
     response = client.get(f"{economics_url(project_id)}/units/{unit_id}")
     assert response.status_code == 200, response.text
     return response.json()["economics"]
+
+
+# --------------------------------------------------------------------------- #
+# Construction (PR-MVP-09)
+# --------------------------------------------------------------------------- #
+
+
+def construction_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/construction"
+
+
+@pytest.fixture
+def engineer_client(admin_client: TestClient, project_id: str, engineer_member: User) -> TestClient:
+    """Design / Engineering, and a member of the project."""
+    return client_for(engineer_member.email)
+
+
+def create_cost_code(
+    client: TestClient,
+    project_id: str,
+    *,
+    code: str,
+    cost_category: str = "hard",
+    name: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "code": code,
+        "name": name or f"{code} works",
+        "cost_category": cost_category,
+    }
+    body.update(overrides)
+    return client.post(f"{construction_url(project_id)}/cost-codes", json=body)
+
+
+@pytest.fixture
+def cost_codes(finance_client: TestClient, project_id: str) -> dict[str, str]:
+    """One cost code per category, keyed by category.
+
+    Every governed surface in this module is addressed by cost code, so a test
+    that wants to prove a rule about hard cost should not have to build a
+    breakdown first.
+    """
+    codes: dict[str, str] = {}
+    for category, code in (
+        ("hard", "HRD-01"),
+        ("soft", "SFT-01"),
+        ("contingency", "CNT-01"),
+        ("other", "OTH-01"),
+    ):
+        response = create_cost_code(finance_client, project_id, code=code, cost_category=category)
+        assert response.status_code == 201, response.text
+        codes[category] = response.json()["id"]
+    return codes
+
+
+def create_budget(
+    client: TestClient,
+    project_id: str,
+    *,
+    effective_date: str = "2026-01-01",
+    change_reason: str = "Opening authorisation",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "effective_date": effective_date,
+        "change_reason": change_reason,
+    }
+    body.update(overrides)
+    return client.post(f"{construction_url(project_id)}/budgets", json=body)
+
+
+def set_budget_line(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    cost_code_id: str,
+    approved_budget_amount: str,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "cost_code_id": cost_code_id,
+        "approved_budget_amount": approved_budget_amount,
+    }
+    body.update(overrides)
+    return client.put(f"{construction_url(project_id)}/budgets/{version_id}/lines", json=body)
+
+
+def cover_budget(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    cost_codes: dict[str, str],
+    *,
+    hard: str = "10000000.00",
+    soft: str = "0.00",
+    contingency: str = "0.00",
+    other: str = "0.00",
+) -> None:
+    """Authorise every active cost code, which is what submission insists on.
+
+    An explicit zero is an answer; an omission is not. A budget that simply left
+    a cost code out would let a contract be signed against an authorisation
+    nobody made.
+    """
+    for category, amount in (
+        ("hard", hard),
+        ("soft", soft),
+        ("contingency", contingency),
+        ("other", other),
+    ):
+        response = set_budget_line(
+            client,
+            project_id,
+            version_id,
+            cost_code_id=cost_codes[category],
+            approved_budget_amount=amount,
+        )
+        assert response.status_code == 200, response.text
+
+
+def govern_budget(
+    preparer: TestClient,
+    approver: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    activator: TestClient | None = None,
+) -> Response:
+    """Submit, approve and activate one budget version."""
+    base = f"{construction_url(project_id)}/budgets/{version_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = approver.post(f"{base}/approve", json={"reason": "Authorised against feasibility"})
+    assert approved.status_code == 200, approved.text
+    return (activator or preparer).post(f"{base}/activate", json={})
+
+
+@pytest.fixture
+def active_budget(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+) -> str:
+    """A budget in force, with headroom on every category."""
+    created = create_budget(finance_client, project_id)
+    assert created.status_code == 201, created.text
+    version_id = created.json()["id"]
+    cover_budget(
+        finance_client,
+        project_id,
+        version_id,
+        cost_codes,
+        hard="10000000.00",
+        soft="1000000.00",
+        contingency="500000.00",
+        other="250000.00",
+    )
+    activated = govern_budget(finance_client, cfo_client, project_id, version_id)
+    assert activated.status_code == 200, activated.text
+    return version_id
+
+
+def create_contract(
+    client: TestClient,
+    project_id: str,
+    currency_id: str,
+    *,
+    contract_number: str = "CT-001",
+    vendor_name: str = "Meridian Construction LLC",
+    original_contract_value_ex_tax: str = "1000000.00",
+    contract_type: str = "works",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "contract_number": contract_number,
+        "contract_type": contract_type,
+        "vendor_name": vendor_name,
+        "original_contract_value_ex_tax": original_contract_value_ex_tax,
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(f"{construction_url(project_id)}/contracts", json=body)
+
+
+def set_contract_line(
+    client: TestClient,
+    project_id: str,
+    contract_id: str,
+    *,
+    sequence: int,
+    cost_code_id: str,
+    original_amount_ex_tax: str,
+    description: str = "Works",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "sequence": sequence,
+        "description": description,
+        "cost_code_id": cost_code_id,
+        "original_amount_ex_tax": original_amount_ex_tax,
+    }
+    body.update(overrides)
+    return client.put(f"{construction_url(project_id)}/contracts/{contract_id}/lines", json=body)
+
+
+def govern_contract(
+    preparer: TestClient,
+    approver: TestClient,
+    project_id: str,
+    contract_id: str,
+) -> Response:
+    """Submit and activate one contract, by two different people."""
+    base = f"{construction_url(project_id)}/contracts/{contract_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    return approver.post(f"{base}/activate", json={})
+
+
+@pytest.fixture
+def active_contract(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    currency_id: str,
+    cost_codes: dict[str, str],
+    active_budget: str,
+) -> str:
+    """A live main-works contract for 1,000,000, 10% retention, 100,000 advance.
+
+    The worked example the module's arithmetic is pinned against, so a test that
+    needs a commitment does not have to restate one.
+    """
+    created = create_contract(
+        finance_client,
+        project_id,
+        currency_id,
+        retention_rate_fraction="0.1000",
+        advance_entitlement_amount="100000.00",
+        planned_start_date="2026-01-05",
+        planned_completion_date="2026-12-31",
+    )
+    assert created.status_code == 201, created.text
+    contract_id = created.json()["id"]
+    line = set_contract_line(
+        finance_client,
+        project_id,
+        contract_id,
+        sequence=1,
+        cost_code_id=cost_codes["hard"],
+        original_amount_ex_tax="1000000.00",
+    )
+    assert line.status_code == 200, line.text
+    activated = govern_contract(finance_client, cfo_client, project_id, contract_id)
+    assert activated.status_code == 200, activated.text
+    return contract_id
+
+
+def create_certificate(
+    client: TestClient,
+    project_id: str,
+    contract_id: str,
+    *,
+    certificate_number: str = "IPC-01",
+    period_start: str = "2026-01-01",
+    period_end: str = "2026-01-31",
+    certificate_date: str = "2026-02-05",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "certificate_number": certificate_number,
+        "period_start": period_start,
+        "period_end": period_end,
+        "certificate_date": certificate_date,
+    }
+    body.update(overrides)
+    return client.post(
+        f"{construction_url(project_id)}/contracts/{contract_id}/certificates", json=body
+    )
+
+
+def set_certificate_line(
+    client: TestClient,
+    project_id: str,
+    certificate_id: str,
+    *,
+    cost_code_id: str,
+    current_work_value_ex_tax: str,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "cost_code_id": cost_code_id,
+        "current_work_value_ex_tax": current_work_value_ex_tax,
+    }
+    body.update(overrides)
+    return client.put(
+        f"{construction_url(project_id)}/certificates/{certificate_id}/lines", json=body
+    )
+
+
+def certify(
+    preparer: TestClient,
+    certifier: TestClient,
+    project_id: str,
+    certificate_id: str,
+) -> Response:
+    """Submit and certify one certificate, by two different people."""
+    base = f"{construction_url(project_id)}/certificates/{certificate_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    return certifier.post(f"{base}/certify", json={})
+
+
+@pytest.fixture
+def certified_certificate(
+    finance_client: TestClient,
+    manager_member_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    active_contract: str,
+) -> str:
+    """The first certificate: 200,000 certified, 20,000 retained, 180,000 net due.
+
+    No retention release, because at this point none is held: retention is
+    released out of what earlier certificates withheld, and this is the first.
+    The 185,000 figure the calculator is pinned against needs a second
+    certificate to release from, which
+    ``test_construction_certificates.py`` builds explicitly.
+    """
+    created = create_certificate(
+        finance_client,
+        project_id,
+        active_contract,
+    )
+    assert created.status_code == 201, created.text
+    certificate_id = created.json()["id"]
+    line = set_certificate_line(
+        finance_client,
+        project_id,
+        certificate_id,
+        cost_code_id=cost_codes["hard"],
+        current_work_value_ex_tax="200000.00",
+    )
+    assert line.status_code == 200, line.text
+    certified = certify(finance_client, manager_member_client, project_id, certificate_id)
+    assert certified.status_code == 200, certified.text
+    return certificate_id
+
+
+@pytest.fixture
+def manager_member_client(admin_client: TestClient, project_id: str, manager: User) -> TestClient:
+    """A Project Manager who is a member of the project.
+
+    Distinct from ``finance`` so that the maker/checker comparison has two real
+    identifiers to compare on the technical ladder.
+    """
+    grant_access(admin_client, project_id, manager)
+    return client_for(manager.email)
+
+
+def record_invoice(
+    client: TestClient,
+    project_id: str,
+    contract_id: str,
+    *,
+    invoice_number: str = "INV-001",
+    invoice_type: str = "progress",
+    invoice_date: str = "2026-02-06",
+    amount_ex_tax: str = "185000.00",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "invoice_number": invoice_number,
+        "invoice_type": invoice_type,
+        "invoice_date": invoice_date,
+        "amount_ex_tax": amount_ex_tax,
+    }
+    body.update(overrides)
+    return client.post(
+        f"{construction_url(project_id)}/contracts/{contract_id}/invoices", json=body
+    )
+
+
+def record_payment(
+    client: TestClient,
+    project_id: str,
+    contract_id: str,
+    currency_id: str,
+    *,
+    payment_reference: str = "PMT-001",
+    payment_date: str = "2026-02-20",
+    amount: str = "185000.00",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "payment_reference": payment_reference,
+        "payment_date": payment_date,
+        "amount": amount,
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(
+        f"{construction_url(project_id)}/contracts/{contract_id}/payments", json=body
+    )
+
+
+def create_milestone(
+    client: TestClient,
+    project_id: str,
+    *,
+    code: str = "FOUNDATION",
+    name: str = "Foundation complete",
+    milestone_type: str = "progress",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "code": code,
+        "name": name,
+        "milestone_type": milestone_type,
+    }
+    body.update(overrides)
+    return client.post(f"{construction_url(project_id)}/milestones", json=body)
+
+
+def create_forecast(
+    client: TestClient,
+    project_id: str,
+    *,
+    as_of_date: str | None = None,
+    change_reason: str = "Month-end forecast",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "as_of_date": as_of_date or date.today().isoformat(),
+        "change_reason": change_reason,
+    }
+    body.update(overrides)
+    return client.post(f"{construction_url(project_id)}/forecasts", json=body)
+
+
+def set_forecast_line(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    cost_code_id: str,
+    forecast_remaining_amount_ex_tax: str,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "cost_code_id": cost_code_id,
+        "forecast_remaining_amount_ex_tax": forecast_remaining_amount_ex_tax,
+    }
+    body.update(overrides)
+    return client.put(f"{construction_url(project_id)}/forecasts/{version_id}/lines", json=body)
+
+
+def govern_forecast(
+    preparer: TestClient,
+    approver: TestClient,
+    project_id: str,
+    version_id: str,
+) -> Response:
+    """Submit, approve and activate one forecast version."""
+    base = f"{construction_url(project_id)}/forecasts/{version_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = approver.post(f"{base}/approve", json={"reason": "Reviewed with the team"})
+    assert approved.status_code == 200, approved.text
+    return preparer.post(f"{base}/activate", json={})
+
+
+def construction_summary(client: TestClient, project_id: str) -> dict[str, Any]:
+    response = client.get(f"{construction_url(project_id)}/summary")
+    assert response.status_code == 200, response.text
+    return response.json()

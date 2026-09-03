@@ -130,7 +130,7 @@ from app.modules.construction.models import (
 )
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.custom_fields import business_today
-from app.modules.inventory.models import Building, Phase, Unit
+from app.modules.inventory.models import Building, Floor, Phase, Unit
 from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.payment_plans import service as payment_plans_service
 from app.modules.projects.models import Project
@@ -2601,6 +2601,17 @@ def approve_invoice(
         certificate = get_certificate(
             session, project=project, certificate_id=invoice.certificate_id
         )
+        # Re-read rather than trusted from when the invoice was entered. A
+        # recorded invoice is only a document, so it does not block a reversal
+        # of the certificate it names — which leaves exactly this window:
+        # reverse the certification, then approve the claim, and the liability
+        # rests on an authorisation that has been withdrawn.
+        if certificate.status != CERTIFICATE_CERTIFIED:
+            raise ConflictError(
+                f"Certificate {certificate.certificate_number} is no longer certified, "
+                "so it authorises nothing. Record the claim against the certificate "
+                "that does."
+            )
         amounts = certificate_amounts(session, contract=contract, certificate=certificate)
         claimed = session.scalars(
             select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
@@ -3925,6 +3936,24 @@ def hard_cost_estimate_at_completion(
     version = active_forecast(session, project_id=project_id)
     if version is None:
         return None
+    return version, hard_cost_estimate_of(session, project_id=project_id, version=version)
+
+
+def hard_cost_estimate_of(
+    session: Session, *, project_id: uuid.UUID, version: ForecastVersion
+) -> Decimal:
+    """The hard-cost estimate at completion of one named forecast version.
+
+    The second half of the same contract, and the half staleness detection
+    needs. A consumer that pinned a forecast has to be able to ask what *that*
+    forecast says today, not only what the current one says — otherwise the two
+    ways a pinned amount can go wrong are indistinguishable. A newer forecast
+    having been activated is a decision somebody made and a basis somebody
+    should rebuild on purpose; the pinned forecast's own estimate having moved
+    underneath it, because a certificate dated on or before its as-of date was
+    reversed or added since, is a figure that was never re-approved. Both are
+    stale, and a caller that can only see the first would activate the second.
+    """
     total = session.scalars(
         select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax))
         .join(CostCode, CostCode.id == ForecastLine.cost_code_id)
@@ -3945,7 +3974,7 @@ def hard_cost_estimate_at_completion(
             CostCode.cost_category == CATEGORY_HARD,
         )
     ).first()
-    return version, calculator.estimate_at_completion(
+    return calculator.estimate_at_completion(
         certified_to_date=money(certified or ZERO), forecast_remaining=remaining
     )
 
@@ -4402,15 +4431,22 @@ def apply_delivery(
         building_id=building_id,
     )
 
+    # A unit hangs off a floor, a floor off a building, a building off a phase.
+    # Every scope below reaches the unit through that chain rather than through
+    # a denormalised column, because there is no such column and inventing one
+    # here would be a second answer to where a unit sits.
+    in_building = select(Unit.id).join(Floor, Floor.id == Unit.floor_id)
     statement = select(Unit).where(Unit.project_id == project.id)
     if unit_id is not None:
         statement = statement.where(Unit.id == unit_id)
     elif building_id is not None:
-        statement = statement.where(Unit.building_id == building_id)
+        statement = statement.where(
+            Unit.id.in_(in_building.where(Floor.building_id == building_id))
+        )
     else:
         statement = statement.where(
-            Unit.building_id.in_(
-                select(Building.id).where(
+            Unit.id.in_(
+                in_building.join(Building, Building.id == Floor.building_id).where(
                     Building.phase_id == phase_id, Building.project_id == project.id
                 )
             )
@@ -4418,10 +4454,11 @@ def apply_delivery(
     allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
     if allowed is not None:
         statement = statement.where(
-            Unit.building_id.in_(
-                select(Building.id).where(
-                    Building.phase_id.in_(allowed), Building.project_id == project.id
-                )
+            Unit.id.in_(
+                select(Unit.id)
+                .join(Floor, Floor.id == Unit.floor_id)
+                .join(Building, Building.id == Floor.building_id)
+                .where(Building.phase_id.in_(allowed), Building.project_id == project.id)
             )
         )
     # Deterministic order, so two concurrent bulk actions take the same unit

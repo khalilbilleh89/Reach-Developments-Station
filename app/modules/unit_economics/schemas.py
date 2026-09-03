@@ -214,6 +214,11 @@ class CostPoolRead(BaseModel):
     category: PoolCategory
     source_kind: PoolSourceKind
     amount: Money
+    #: Set on a ``construction_forecast`` pool and null on every other kind.
+    #: Exposed rather than kept internal because the amount above is a snapshot:
+    #: a reader has to be able to see *which* forecast it is a snapshot of, or
+    #: they cannot tell an out-of-date basis from a current one.
+    source_construction_forecast_version_id: uuid.UUID | None = None
     scope_kind: PoolScope
     phase_id: uuid.UUID | None
     building_id: uuid.UUID | None

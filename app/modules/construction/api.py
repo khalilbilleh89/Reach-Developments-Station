@@ -29,19 +29,23 @@ import uuid
 
 from fastapi import APIRouter, status
 
+from app.core.errors import ValidationError
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.construction import permissions, schemas, service
+from app.modules.construction.models import BudgetVersion
 from app.modules.construction.permissions import (
     ConstructionProject,
     GovernedConstructionProject,
 )
 from app.modules.construction.read import (
     budget_detail,
+    budget_out,
     certificate_detail,
     contract_detail,
     contract_out,
     cost_code_out,
     forecast_detail,
+    forecast_out,
     invoice_out,
     milestone_out,
     payment_out,
@@ -181,7 +185,7 @@ def list_budgets(
 ) -> list[schemas.BudgetOut]:
     del actor
     return [
-        schemas.BudgetOut.model_validate(version, from_attributes=True)
+        budget_out(session, version=version)
         for version in service.list_budgets(session, project=project)
     ]
 
@@ -1252,7 +1256,11 @@ def list_forecasts(
 ) -> list[schemas.ForecastOut]:
     del actor
     return [
-        schemas.ForecastOut.model_validate(version, from_attributes=True)
+        forecast_out(
+            session,
+            version=version,
+            budget=session.get(BudgetVersion, version.budget_version_id),
+        )
         for version in service.list_forecasts(session, project=project)
     ]
 
@@ -1443,8 +1451,6 @@ def revoke_construction_readiness(
     """
     permissions.require_construction_technical(actor)
     if not (payload.reason or "").strip():
-        from app.core.errors import ValidationError
-
         raise ValidationError("Revoking readiness needs a reason on the record.")
     result = service.apply_delivery(
         session,

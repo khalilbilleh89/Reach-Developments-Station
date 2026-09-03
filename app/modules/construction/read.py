@@ -24,6 +24,7 @@ from app.modules.construction import calculator, schemas, service
 from app.modules.construction.calculator import ZERO, money
 from app.modules.construction.models import (
     INVOICE_STANDING,
+    BudgetVersion,
     Certificate,
     CertificateLine,
     Contract,
@@ -71,8 +72,34 @@ def cost_code_out(code: CostCode) -> schemas.CostCodeOut:
 # --------------------------------------------------------------------------- #
 
 
+def budget_out(session: Session, *, version: BudgetVersion) -> schemas.BudgetOut:
+    """A budget version header, with its currency resolved to a code.
+
+    Built field by field rather than validated straight off the ORM row. The
+    row stores ``currency_id``; the response states a code, and a schema that
+    filled the gap with a default would answer with a null denomination on
+    every figure under it.
+    """
+    return schemas.BudgetOut(
+        id=version.id,
+        version_number=version.version_number,
+        status=version.status,
+        effective_date=version.effective_date,
+        change_reason=version.change_reason,
+        source_version_id=version.source_version_id,
+        currency_code=_currency_code(session, version.currency_id),
+        created_at=version.created_at,
+        submitted_at=version.submitted_at,
+        approved_at=version.approved_at,
+        rejected_at=version.rejected_at,
+        rejection_reason=version.rejection_reason,
+        activated_at=version.activated_at,
+        superseded_at=version.superseded_at,
+    )
+
+
 def budget_detail(
-    session: Session, *, project: Project, version: schemas.BudgetOut | object
+    session: Session, *, project: Project, version: BudgetVersion
 ) -> schemas.BudgetDetailOut:
     """One budget version with its lines, each showing what it now carries.
 
@@ -121,7 +148,7 @@ def budget_detail(
         control = money(control + line_control)
 
     return schemas.BudgetDetailOut(
-        **schemas.BudgetOut.model_validate(version, from_attributes=True).model_dump(),
+        **budget_out(session, version=version).model_dump(),
         lines=out_lines,
         total_baseline=baseline,
         total_approved_budget=approved,
@@ -524,6 +551,35 @@ def milestone_out(session: Session, *, milestone: Milestone) -> schemas.Mileston
 # --------------------------------------------------------------------------- #
 
 
+def forecast_out(
+    session: Session, *, version: ForecastVersion, budget: BudgetVersion | None
+) -> schemas.ForecastOut:
+    """A forecast version header, with its currency and its budget resolved.
+
+    Two fields the row does not carry: the currency's code, and the number of
+    the budget the variance is measured against. A forecast presented without
+    that number is a variance against an unnamed baseline.
+    """
+    return schemas.ForecastOut(
+        id=version.id,
+        version_number=version.version_number,
+        status=version.status,
+        as_of_date=version.as_of_date,
+        budget_version_id=version.budget_version_id,
+        budget_version_number=budget.version_number if budget is not None else None,
+        change_reason=version.change_reason,
+        source_version_id=version.source_version_id,
+        currency_code=_currency_code(session, version.currency_id),
+        created_at=version.created_at,
+        submitted_at=version.submitted_at,
+        approved_at=version.approved_at,
+        rejected_at=version.rejected_at,
+        rejection_reason=version.rejection_reason,
+        activated_at=version.activated_at,
+        superseded_at=version.superseded_at,
+    )
+
+
 def forecast_detail(
     session: Session, *, project: Project, version: ForecastVersion
 ) -> schemas.ForecastDetailOut:
@@ -531,7 +587,7 @@ def forecast_detail(
     codes = _cost_code_labels(session, project_id=project.id)
     positions = service.forecast_position(session, project=project, version=version)
     lines = service.forecast_lines_by_cost_code(session, forecast_version_id=version.id)
-    budget = session.get(service.BudgetVersion, version.budget_version_id)
+    budget = session.get(BudgetVersion, version.budget_version_id)
 
     out_lines: list[schemas.ForecastLineOut] = []
     control = certified = remaining = eac = ZERO
@@ -564,11 +620,7 @@ def forecast_detail(
     vac = calculator.variance_at_completion(estimate_at_completion=eac, control_budget=control)
 
     return schemas.ForecastDetailOut(
-        **schemas.ForecastOut.model_validate(version, from_attributes=True).model_dump(
-            exclude={"budget_version_number", "currency_code"}
-        ),
-        budget_version_number=budget.version_number if budget else None,
-        currency_code=_currency_code(session, version.currency_id),
+        **forecast_out(session, version=version, budget=budget).model_dump(),
         lines=out_lines,
         total_control_budget=control,
         total_certified=certified,

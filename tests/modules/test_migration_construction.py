@@ -174,7 +174,10 @@ class TestTheDatabaseRefusesTheseShapes:
                 )
             )
         db.rollback()
-        assert "cx_source_shape" in str(caught.value) or "violates" in str(caught.value)
+        # The named constraint, not merely "some constraint". An assertion that
+        # accepted any violation would have passed while the row was refused by
+        # a stale source enumeration that did not know this source exists.
+        assert "cx_source_shape" in str(caught.value)
 
     def test_provenance_is_required_by_that_source_and_forbidden_to_others(
         self, db: Session
@@ -192,7 +195,32 @@ class TestTheDatabaseRefusesTheseShapes:
                 )
             )
         db.rollback()
-        assert "cx_provenance_shape" in str(caught.value) or "violates" in str(caught.value)
+        assert "cx_provenance_shape" in str(caught.value)
+
+    def test_the_source_enumeration_admits_the_construction_forecast(self, db: Session) -> None:
+        """The widened column and the closed set have to agree.
+
+        Autogenerate sees a changed column type and not a changed CHECK, so the
+        two can drift apart: a column wide enough to hold
+        ``construction_forecast`` beside a constraint that still lists only two
+        sources. The row below is refused for its scope, which proves the source
+        itself got past the enumeration.
+        """
+        with pytest.raises(Exception) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO unit_economics_cost_pools "
+                    "(id, project_id, allocation_version_id, pool_number, name, category, "
+                    " source_kind, amount, scope_kind, allocation_method, created_by_user_id, "
+                    " source_construction_forecast_version_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'X', 'X', "
+                    " 'hard', 'construction_forecast', 1, 'phase', 'unit_count', "
+                    " gen_random_uuid(), gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "source_ok" not in str(caught.value)
+        assert "cx_source_shape" in str(caught.value)
 
 
 class TestLineageIsProvenNotNoted:
