@@ -499,3 +499,45 @@ are navigated, how a project is read at a glance, and how a record is opened.
 No migration, no schema change, no backend logic, no API contract change, no
 new dependency of any kind, no dark theme, no FX, no construction screens, and
 no financial arithmetic added to the browser.
+
+### PR-UX-03 — Interior Product Surfaces
+
+Branch `claude/flagship-product-experience-mhgzcf`, taken from `main` after
+PR-UX-02 merged. The shell landed with PR-UX-02 and the interiors did not keep
+up: inside a 2030-grade frame, most module screens were still a white card, a
+title, some small numbers and a table. This closes that gap.
+
+- a surface hierarchy — command, operational, data, attention, record — with
+  card tones, and the navigation rail's own ink as a hairline over a command
+  surface, so the most important block on a page belongs visibly to the same
+  object as the navigation
+- reported figures set like a tear sheet: large, tight, tabular, label beneath
+  (`Position`, `PositionFigure`, `PositionSupport`), with ordinary metrics
+  keeping the label above so a page says which of its figures is the answer
+- new compositions built only from server values — `StatStrip` for register
+  counts, `Breakdown` with dot leaders for the parts of a total, `Distribution`
+  for an aged balance, `Meter` for a percentage the API returned, `IdentityCell`
+  and `PlaceCell` for a register row's identity, `ExternalLink` for a
+  destination outside the product
+- a project identity plate that says the place and links the map, rather than
+  printing a hundred characters of map query string as the development's name
+- Project Overview recomposed as a command centre: a dominant project position
+  with the cost composition beneath it, a compact attention list beside it, and
+  two columns that stack independently so a long attention list never opens a
+  void under the position
+- Inventory rebuilt as an operating register: a compact status strip, one
+  framed command row for search and filters with active filters marked, a unit
+  identity anchor, a hierarchical location cell, area merged into one column,
+  the four status dimensions as dots, a readiness meter drawn at the server's
+  own completeness percentage, and row hover, focus, open and flagged states
+- Pricing, Sales & Legal, Payment Plans, Collections and Unit Economics each
+  given the command position their page exists to state; Permits given a status
+  strip and a warm rail on the rows the server flagged; the deal file's quote
+  and contract brought onto the same figure language
+- forms given comfortable control heights and quieter labels; project tiles
+  levelled; documents given a proper external-link treatment
+- `docs/UX_SYSTEM.md` gains the surfaces section and the new primitives
+
+No migration, no schema change, no backend logic, no API contract change, no new
+dependency of any kind, no chart, no dark theme, no FX, and no financial
+arithmetic added to the browser.
