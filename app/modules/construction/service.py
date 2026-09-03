@@ -60,6 +60,7 @@ from app.modules.construction.models import (
     BUDGET_REJECTED,
     BUDGET_SUBMITTED,
     BUDGET_SUPERSEDED,
+    CATEGORY_HARD,
     CERTIFICATE_CERTIFIED,
     CERTIFICATE_DRAFT,
     CERTIFICATE_REJECTED,
@@ -77,10 +78,19 @@ from app.modules.construction.models import (
     ENTITY_CERTIFICATE,
     ENTITY_CONTRACT,
     ENTITY_COST_CODE,
+    ENTITY_FORECAST,
     ENTITY_INVOICE,
     ENTITY_MILESTONE,
     ENTITY_PAYMENT,
     ENTITY_VARIATION,
+    FORECAST_ACTIVE,
+    FORECAST_APPROVED,
+    FORECAST_DRAFT,
+    FORECAST_FROZEN,
+    FORECAST_OPEN,
+    FORECAST_REJECTED,
+    FORECAST_SUBMITTED,
+    FORECAST_SUPERSEDED,
     INVOICE_ADVANCE,
     INVOICE_APPROVED,
     INVOICE_DISPUTED,
@@ -108,6 +118,7 @@ from app.modules.construction.models import (
     ContractLine,
     CostCode,
     ForecastLine,
+    ForecastVersion,
     Invoice,
     Milestone,
     MilestoneDependency,
@@ -141,6 +152,13 @@ _COST_CODE_FIELDS = (
 )
 
 _BUDGET_FIELDS = ("status", "effective_date", "change_reason")
+
+_FORECAST_FIELDS = (
+    "version_number",
+    "status",
+    "as_of_date",
+    "change_reason",
+)
 
 _MILESTONE_FIELDS = (
     "code",
@@ -3455,4 +3473,476 @@ def milestone_trigger_options(session: Session, *, project: Project) -> list[Mil
             )
             .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
         )
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Forecast
+# --------------------------------------------------------------------------- #
+
+
+def list_forecasts(session: Session, *, project: Project) -> list[ForecastVersion]:
+    """Every forecast this project has had, newest first."""
+    return list(
+        session.scalars(
+            select(ForecastVersion)
+            .where(ForecastVersion.project_id == project.id)
+            .order_by(ForecastVersion.version_number.desc())
+        )
+    )
+
+
+def get_forecast(session: Session, *, project: Project, version_id: uuid.UUID) -> ForecastVersion:
+    """Load one forecast version of this project, or refuse as if it were absent."""
+    version = session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.id == version_id, ForecastVersion.project_id == project.id
+        )
+    ).first()
+    if version is None:
+        raise permissions.forecast_not_found()
+    return version
+
+
+def active_forecast(session: Session, *, project_id: uuid.UUID) -> ForecastVersion | None:
+    """The forecast currently in force, or ``None`` where none has been activated."""
+    return session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.project_id == project_id, ForecastVersion.status == FORECAST_ACTIVE
+        )
+    ).first()
+
+
+def _lock_forecast(
+    session: Session, *, project_id: uuid.UUID, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Take a forecast version for update, after the project lock above it."""
+    version = session.scalars(
+        select(ForecastVersion)
+        .where(ForecastVersion.id == version_id, ForecastVersion.project_id == project_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+    if version is None:
+        raise permissions.forecast_not_found()
+    return version
+
+
+def forecast_lines_by_cost_code(
+    session: Session, *, forecast_version_id: uuid.UUID
+) -> dict[uuid.UUID, ForecastLine]:
+    """One forecast version's lines, keyed by cost code."""
+    return {
+        line.cost_code_id: line
+        for line in session.scalars(
+            select(ForecastLine).where(ForecastLine.forecast_version_id == forecast_version_id)
+        )
+    }
+
+
+def create_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    as_of_date: date,
+    change_reason: str,
+    budget_version_id: uuid.UUID | None = None,
+    source_version_id: uuid.UUID | None = None,
+) -> ForecastVersion:
+    """Open a forecast, measured against a stated budget as at a stated date.
+
+    Two dates decide everything about a forecast's meaning. ``as_of_date`` fixes
+    which certified work is inside its estimate, which is what lets a superseded
+    forecast still be reproduced a year later instead of quietly re-deriving
+    itself from today's certificates. And the budget version it names fixes what
+    its variance is measured against, so "over budget" refers to an
+    authorisation somebody can point at rather than whatever happens to be
+    current when the screen is opened.
+
+    A future cutoff is refused: a forecast cannot include work that has not been
+    certified yet, and a date in the future would silently mean "today" until
+    the day arrived and then mean something else.
+    """
+    lock_project(session, project.id)
+    if as_of_date > business_today():
+        raise ValidationError(
+            "A forecast cannot be taken as at a future date. Its certified basis is "
+            "the work certified by its cutoff, and there is none after today."
+        )
+    if _open_forecast(session, project_id=project.id) is not None:
+        raise ConflictError(
+            "This project already has a forecast being prepared. Finish or reject it "
+            "before opening another."
+        )
+
+    budget: BudgetVersion | None
+    if budget_version_id is not None:
+        budget = get_budget(session, project=project, version_id=budget_version_id)
+    else:
+        budget = active_budget(session, project_id=project.id)
+    if budget is None:
+        raise ConflictError(
+            "A forecast is measured against an approved budget, and this project has none in force."
+        )
+
+    source: ForecastVersion | None = None
+    if source_version_id is not None:
+        source = get_forecast(session, project=project, version_id=source_version_id)
+    elif (current := active_forecast(session, project_id=project.id)) is not None:
+        source = current
+    if source is not None and as_of_date < source.as_of_date:
+        raise ValidationError(
+            f"This forecast is taken as at {as_of_date}, before the standing "
+            f"forecast's own cutoff of {source.as_of_date}. A replacement looks "
+            "forward from where the last one stopped."
+        )
+
+    highest = session.scalars(
+        select(func.max(ForecastVersion.version_number)).where(
+            ForecastVersion.project_id == project.id
+        )
+    ).first()
+    version = ForecastVersion(
+        project_id=project.id,
+        version_number=(highest or 0) + 1,
+        currency_id=project.base_currency_id,
+        budget_version_id=budget.id,
+        as_of_date=as_of_date,
+        status=FORECAST_DRAFT,
+        source_version_id=source.id if source is not None else None,
+        change_reason=change_reason.strip(),
+        created_by_user_id=actor.user_id,
+    )
+    session.add(version)
+    _flush(session)
+
+    if source is not None:
+        for line in session.scalars(
+            select(ForecastLine).where(ForecastLine.forecast_version_id == source.id)
+        ):
+            session.add(
+                ForecastLine(
+                    project_id=project.id,
+                    forecast_version_id=version.id,
+                    cost_code_id=line.cost_code_id,
+                    forecast_remaining_amount_ex_tax=line.forecast_remaining_amount_ex_tax,
+                    note=line.note,
+                )
+            )
+        _flush(session)
+
+    record_event(
+        session,
+        action="construction.forecast_created",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=change_reason,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def _open_forecast(session: Session, *, project_id: uuid.UUID) -> ForecastVersion | None:
+    """The forecast being drafted, checked or waiting to be activated."""
+    return session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.project_id == project_id,
+            ForecastVersion.status.in_(tuple(FORECAST_OPEN)),
+        )
+    ).first()
+
+
+def set_forecast_line(
+    session: Session,
+    *,
+    project: Project,
+    version_id: uuid.UUID,
+    cost_code_id: uuid.UUID,
+    forecast_remaining_amount_ex_tax: Decimal,
+    note: str | None = None,
+) -> ForecastLine:
+    """Write what one cost code has left to spend, in Finance's judgement.
+
+    An explicit zero is a statement — nothing further expected here. It is not
+    the same as no line, which is why submission refuses until every governed
+    code has one.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status in FORECAST_FROZEN:
+        raise ConflictError(
+            "This forecast is no longer a draft. Open a revision to change what the "
+            "project expects to spend."
+        )
+    code = get_cost_code(session, project=project, cost_code_id=cost_code_id)
+
+    line = session.scalars(
+        select(ForecastLine).where(
+            ForecastLine.forecast_version_id == version.id,
+            ForecastLine.cost_code_id == code.id,
+        )
+    ).first()
+    if line is None:
+        line = ForecastLine(
+            project_id=project.id,
+            forecast_version_id=version.id,
+            cost_code_id=code.id,
+            forecast_remaining_amount_ex_tax=money(forecast_remaining_amount_ex_tax),
+            note=(note or "").strip() or None,
+        )
+        session.add(line)
+    else:
+        line.forecast_remaining_amount_ex_tax = money(forecast_remaining_amount_ex_tax)
+        line.note = (note or "").strip() or None
+    _flush(session)
+    return line
+
+
+def _require_forecast_coverage(
+    session: Session, *, project: Project, version: ForecastVersion
+) -> None:
+    """Refuse a forecast that leaves an active cost code unaddressed.
+
+    Same rule as the budget's, for the same reason: "we expect no further cost
+    here" and "nobody looked at this code" are different statements, and a
+    forecast that cannot tell them apart is a guess wearing a governed
+    version number.
+    """
+    active = {
+        code.id: code.code
+        for code in session.scalars(
+            select(CostCode).where(CostCode.project_id == project.id, CostCode.is_active.is_(True))
+        )
+    }
+    addressed = set(forecast_lines_by_cost_code(session, forecast_version_id=version.id))
+    missing = sorted(label for code_id, label in active.items() if code_id not in addressed)
+    if missing:
+        raise ValidationError(
+            "Every active cost code needs a forecast line, even if the answer is "
+            "zero — " + ", ".join(missing) + "."
+        )
+
+
+def forecast_position(
+    session: Session, *, project: Project, version: ForecastVersion
+) -> dict[uuid.UUID, calculator.CostCodePosition]:
+    """Each cost code's whole control position on this forecast's own basis.
+
+    Certified work is read as at the version's cutoff rather than as at today,
+    which is the property that makes a superseded forecast reproducible: asking
+    a year-old forecast what it thought is answered with what it actually
+    thought, not with today's certificates run through yesterday's judgement.
+    """
+    budget = session.get(BudgetVersion, version.budget_version_id)
+    budget_lines = (
+        budget_lines_by_cost_code(session, budget_version_id=budget.id)
+        if budget is not None
+        else {}
+    )
+    committed = committed_by_cost_code(session, project_id=project.id)
+    certified = certified_by_cost_code(session, project_id=project.id, as_of=version.as_of_date)
+    lines = forecast_lines_by_cost_code(session, forecast_version_id=version.id)
+
+    positions: dict[uuid.UUID, calculator.CostCodePosition] = {}
+    for cost_code_id in set(budget_lines) | set(lines) | set(committed) | set(certified):
+        budget_line = budget_lines.get(cost_code_id)
+        line = lines.get(cost_code_id)
+        positions[cost_code_id] = calculator.cost_code_position(
+            approved_budget=budget_line.approved_budget_amount if budget_line else ZERO,
+            contingency=budget_line.contingency_amount if budget_line else ZERO,
+            revised_commitment_amount=committed.get(cost_code_id, ZERO),
+            certified_to_date=certified.get(cost_code_id, ZERO),
+            forecast_remaining=(
+                line.forecast_remaining_amount_ex_tax if line is not None else ZERO
+            ),
+        )
+    return positions
+
+
+def submit_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Hand a draft forecast to a checker."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_DRAFT:
+        raise ConflictError("Only a draft forecast can be submitted.")
+    _require_forecast_coverage(session, project=project, version=version)
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_SUBMITTED
+    version.submitted_at = _now()
+    version.submitted_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_submitted",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def approve_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Sign off a submitted forecast. Not the same act as putting it in force."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_SUBMITTED:
+        raise ConflictError("Only a submitted forecast can be approved.")
+    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_APPROVED
+    version.approved_at = _now()
+    version.approved_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_approved",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def reject_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    version_id: uuid.UUID,
+    reason: str,
+) -> ForecastVersion:
+    """Refuse a submitted forecast, with the reason on the record."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_SUBMITTED:
+        raise ConflictError("Only a submitted forecast can be rejected.")
+    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_REJECTED
+    version.rejected_at = _now()
+    version.rejected_by_user_id = actor.user_id
+    version.rejection_reason = reason.strip()
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_rejected",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def activate_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Put an approved forecast into force, superseding the one it replaces.
+
+    Coverage is re-proved here rather than trusted from submission: a cost code
+    created while the version waited for approval is a code this forecast does
+    not address, and activating anyway would put a project estimate one line
+    short without saying so.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_APPROVED:
+        raise ConflictError("Only an approved forecast can be activated.")
+    if version.currency_id != project.base_currency_id:
+        raise ConflictError(
+            "This forecast was prepared in a currency the project no longer accounts "
+            "in. Prepare a revision in the project's base currency."
+        )
+    _require_forecast_coverage(session, project=project, version=version)
+
+    current = active_forecast(session, project_id=project.id)
+    if current is not None:
+        current.status = FORECAST_SUPERSEDED
+        current.superseded_at = _now()
+        _flush(session)
+        record_event(
+            session,
+            action="construction.forecast_superseded",
+            entity_type=ENTITY_FORECAST,
+            entity_id=current.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            after=_snapshot(current, _FORECAST_FIELDS),
+        )
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_ACTIVE
+    version.activated_at = _now()
+    version.activated_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_activated",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def hard_cost_estimate_at_completion(
+    session: Session, *, project_id: uuid.UUID
+) -> tuple[ForecastVersion, Decimal] | None:
+    """The project's governed hard-cost estimate at completion, for unit economics.
+
+    The public read contract in the other direction: unit economics may consume
+    this, and construction never writes a cost pool. Returns the version as well
+    as the amount, because a pool that cannot say which forecast it came from is
+    an amount with no provenance — and provenance is what stops a later forecast
+    appearing to rewrite a basis units were already sold against.
+
+    ``None`` where no forecast is in force. A missing estimate is a missing
+    estimate; answering zero would let a version be built on a hard cost of
+    nothing without anybody noticing.
+    """
+    version = active_forecast(session, project_id=project_id)
+    if version is None:
+        return None
+    total = session.scalars(
+        select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax))
+        .join(CostCode, CostCode.id == ForecastLine.cost_code_id)
+        .where(
+            ForecastLine.forecast_version_id == version.id,
+            CostCode.cost_category == CATEGORY_HARD,
+        )
+    ).first()
+    remaining = money(total or ZERO)
+    certified = session.scalars(
+        select(func.sum(CertificateLine.current_work_value_ex_tax))
+        .join(Certificate, Certificate.id == CertificateLine.certificate_id)
+        .join(CostCode, CostCode.id == CertificateLine.cost_code_id)
+        .where(
+            CertificateLine.project_id == project_id,
+            Certificate.status == CERTIFICATE_CERTIFIED,
+            Certificate.certificate_date <= version.as_of_date,
+            CostCode.cost_category == CATEGORY_HARD,
+        )
+    ).first()
+    return version, calculator.estimate_at_completion(
+        certified_to_date=money(certified or ZERO), forecast_remaining=remaining
     )
