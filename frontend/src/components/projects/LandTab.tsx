@@ -18,6 +18,7 @@ import {
   KeyValueGrid,
   Loading,
   Metric,
+  IdentityCell,
   MetricGroup,
   MoneyInput,
   Notice,
@@ -446,15 +447,18 @@ export function LandTab({
               </thead>
               <tbody>
                 {parcels.map((parcel) => (
-                  <tr key={parcel.id}>
+                  <tr key={parcel.id} aria-selected={selected?.id === parcel.id}>
                     <th scope="row">
                       <button
-                        className="button-link mono"
+                        className="button-link"
                         type="button"
                         aria-expanded={selected?.id === parcel.id}
                         onClick={() => void open(parcel)}
                       >
-                        {parcel.plot_number}
+                        <IdentityCell
+                          name={parcel.plot_number}
+                          meta={parcel.cadastral_reference ?? parcel.title_deed_number ?? undefined}
+                        />
                       </button>
                     </th>
                     <td className="mono">{parcel.title_deed_number ?? "—"}</td>

@@ -1,6 +1,16 @@
 "use client";
 
-import { Metric, MetricGroup } from "@/components/ui";
+import {
+  Distribution,
+  DistributionBand,
+  Metric,
+  MetricGroup,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
+  SectionHeader,
+} from "@/components/ui";
 import type { CollectionCurrencyTotals, CollectionProjectSummary } from "@/lib/api";
 import { businessDate, isPositive, money } from "@/lib/format";
 
@@ -71,13 +81,20 @@ export function CollectionsSummary({
   );
 }
 
-/** Which bucket carries how much heat: past grace is warm, past ninety days is hot. */
-function bucketClass(bucket: string, amount: string): string {
-  if (!isPositive(amount)) return "aging-cell aging-cell-quiet";
-  if (bucket === "61_90" || bucket === "91_plus") return "aging-cell aging-cell-hot";
-  if (bucket === "1_30" || bucket === "31_60") return "aging-cell aging-cell-warm";
-  return "aging-cell";
-}
+/**
+ * How old a band's money is, in the order the server ages it.
+ *
+ * A band marker, not a measurement: the rule above each band warms as the
+ * money gets older, and no width anywhere encodes an amount.
+ */
+const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
+  awaiting_trigger: "cool",
+  current: "cool",
+  "1_30": "warm",
+  "31_60": "warm",
+  "61_90": "hot",
+  "91_plus": "late",
+};
 
 function CurrencyBlock({
   totals,
@@ -101,41 +118,45 @@ function CurrencyBlock({
         </p>
       ) : null}
 
-      <MetricGroup>
-        <Metric label="Outstanding" value={money(totals.outstanding_total, code)} size="lg" />
-        <Metric label="Due now" value={money(totals.due_total, code)} note="Reached its date, still owed" />
-        <Metric
+      <Position compact>
+        <PositionFigure lead label="Outstanding" value={money(totals.outstanding_total, code)} />
+        <PositionFigure
+          label="Due now"
+          value={money(totals.due_total, code)}
+          note="Reached its date, still owed"
+        />
+        <PositionFigure
           label="Overdue"
           value={money(totals.overdue_total, code)}
           note="Past grace"
           tone={isPositive(totals.overdue_total) ? "danger" : "neutral"}
         />
-        <Metric
+        <PositionFigure
           label="Unapplied cash"
           value={money(totals.unapplied_cash, code)}
           note="Confirmed, not yet applied"
           tone={isPositive(totals.unapplied_cash) ? "warning" : "neutral"}
         />
-        <Metric
+      </Position>
+      <PositionSupport>
+        <PositionSupportItem
           label="Confirmed receipts, lifetime"
           value={money(totals.confirmed_receipts_total, code)}
-          note={`All cash confirmed to ${businessDate(asOf)}`}
-          size="sm"
         />
-      </MetricGroup>
+        <PositionSupportItem label="All cash confirmed to" value={businessDate(asOf)} />
+      </PositionSupport>
 
-      <h3 className="section-heading">Outstanding by age</h3>
-      <dl className="aging">
-        {AGING_BUCKETS.map((bucket) => {
-          const amount = totals.buckets[bucket] ?? "0.00";
-          return (
-            <div key={bucket} className={bucketClass(bucket, amount)}>
-              <dt className="aging-cell-label">{bucketLabel(bucket)}</dt>
-              <dd className="aging-cell-value">{money(amount, code)}</dd>
-            </div>
-          );
-        })}
-      </dl>
+      <SectionHeader title="Outstanding by age" />
+      <Distribution>
+        {AGING_BUCKETS.map((bucket) => (
+          <DistributionBand
+            key={bucket}
+            label={bucketLabel(bucket)}
+            value={money(totals.buckets[bucket] ?? "0.00", code)}
+            heat={BUCKET_HEAT[bucket] ?? "cool"}
+          />
+        ))}
+      </Distribution>
     </div>
   );
 }

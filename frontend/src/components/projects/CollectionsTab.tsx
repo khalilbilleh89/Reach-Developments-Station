@@ -6,6 +6,7 @@ import {
   Badge,
   Card,
   DataToolbar,
+  IdentityCell,
   EmptyState,
   Loading,
   Notice,
@@ -150,6 +151,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
         </Card>
 
         <DataToolbar
+          framed
           search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search accounts" }}
           count={
             rows && view === "accounts"
@@ -270,12 +272,11 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                   {visible.map((row) => {
                     const code = currencyFor(row);
                     return (
-                      <tr key={row.sale_id}>
+                      <tr key={row.sale_id} aria-selected={open?.sale_id === row.sale_id}>
                         <th scope="row">
-                          <button className="button-link mono" type="button" onClick={() => setOpen(row)}>
-                            {row.unit_number}
+                          <button className="button-link" type="button" onClick={() => setOpen(row)}>
+                            <IdentityCell name={row.unit_number} meta={row.client_display_name} />
                           </button>
-                          <span className="cell-secondary cell-prose">{row.client_display_name}</span>
                         </th>
                         <td className="mono">{row.spa_number ?? row.sale_number}</td>
                         <td className="num">{money(row.summary.scheduled_total, code)}</td>

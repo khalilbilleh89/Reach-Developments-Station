@@ -17,6 +17,10 @@ import {
   Loading,
   Metric,
   MetricGroup,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
   MoneyInput,
   Notice,
   PageHeader,
@@ -282,19 +286,30 @@ function Overview({
   return (
     <div className="grid-12">
       <div className="span-12">
-        <Card>
-          <MetricGroup>
-            <Metric label="Revenue" value={money(summary.revenue_total, code)} size="lg" />
-            <Metric label="Total cost" value={money(summary.total_cost_total, code)} size="lg" />
-            <Metric
+        {/* The institutional read: the two ratios first, because they are what
+            a board asks for, and the money that produced them underneath. All
+            five are the server's own weighted totals — margin is total profit
+            over total revenue, not the average of the unit ratios, and the
+            difference between those two is a number somebody would have to
+            defend. */}
+        <Card tone="command" title="Project result" description={`On cost basis v${version.version_number}.`}>
+          <Position>
+            <PositionFigure lead label="Margin" value={percent(summary.margin_fraction)} />
+            <PositionFigure label="Return on cost" value={percent(summary.return_on_cost_fraction)} />
+            <PositionFigure
               label="Profit after finance"
               value={money(summary.profit_total, code)}
-              size="lg"
               tone={summary.profit_total.startsWith("-") ? "danger" : "neutral"}
             />
-            <Metric label="Margin" value={percent(summary.margin_fraction)} size="lg" />
-            <Metric label="Return on cost" value={percent(summary.return_on_cost_fraction)} size="lg" />
-          </MetricGroup>
+          </Position>
+          <PositionSupport>
+            <PositionSupportItem label="Revenue" value={money(summary.revenue_total, code)} />
+            <PositionSupportItem label="Total cost" value={money(summary.total_cost_total, code)} />
+            <PositionSupportItem
+              label="Covered"
+              value={`${summary.comparable_unit_count} of ${summary.unit_count} units`}
+            />
+          </PositionSupport>
           <p className="footnote">
             Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
             frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
