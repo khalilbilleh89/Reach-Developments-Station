@@ -7,5 +7,11 @@
 # Starlette 1.x drives its TestClient with httpx2; using httpx here raises a
 # deprecation warning, and pytest is configured to treat warnings as errors.
 httpx2==2.12.0
+
+# Starlette's TestClient still touches the anyio.abc.BlockingPortal
+# compatibility alias. anyio 4.15.0 warns on that alias and pytest treats
+# warnings as errors, so pin the CI/test dependency until Starlette no
+# longer uses it.
+anyio==4.14.2
 pytest==9.1.1
 ruff==0.16.4
