@@ -1527,6 +1527,16 @@ def upgrade() -> None:
         ["variation_id"],
         unique=False,
     )
+    # ``construction_forecast`` is twenty-one characters and the column held
+    # sixteen, so the new source kind could not physically be written: the
+    # insert failed on truncation before any check constraint was consulted.
+    op.alter_column(
+        "unit_economics_cost_pools",
+        "source_kind",
+        existing_type=sa.String(length=16),
+        type_=sa.String(length=24),
+        existing_nullable=False,
+    )
     op.add_column(
         "unit_economics_cost_pools",
         sa.Column("source_construction_forecast_version_id", sa.UUID(), nullable=True),
@@ -1578,6 +1588,13 @@ def downgrade() -> None:
         postgresql_where=sa.text("source_kind = 'construction_forecast'"),
     )
     op.drop_column("unit_economics_cost_pools", "source_construction_forecast_version_id")
+    op.alter_column(
+        "unit_economics_cost_pools",
+        "source_kind",
+        existing_type=sa.String(length=24),
+        type_=sa.String(length=16),
+        existing_nullable=False,
+    )
     op.drop_index("ix_cx_variation_lines_variation", table_name="construction_variation_lines")
     op.drop_index("ix_cx_variation_lines_cost_code", table_name="construction_variation_lines")
     op.drop_table("construction_variation_lines")

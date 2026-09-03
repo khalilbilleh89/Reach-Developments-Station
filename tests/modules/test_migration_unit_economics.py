@@ -79,13 +79,21 @@ class TestTheRevision:
             ):
                 assert forbidden not in columns, f"{table}.{forbidden}"
 
-    def test_there_is_exactly_one_head_and_it_is_this_revision(self) -> None:
+    def test_the_history_still_has_exactly_one_head(self) -> None:
+        """0009 took the head; what this revision still owes is a single chain.
+
+        The "and it is this revision" half of this assertion belongs to whichever
+        migration is newest, and it moved to test_migration_construction.py when
+        0009 landed. Keeping it here would mean every future migration had to
+        edit this file, which is how a branch point gets merged without anybody
+        noticing.
+        """
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         assert len(script.get_heads()) == 1
-        assert script.get_current_head() == "0008_unit_economics"
+        assert script.get_revision("0008_unit_economics") is not None
 
     def test_the_revision_sits_directly_on_collections(self) -> None:
         from alembic.config import Config

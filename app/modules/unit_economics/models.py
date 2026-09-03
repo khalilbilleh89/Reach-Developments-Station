@@ -394,7 +394,11 @@ class CostPool(Base):
     pool_number: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     category: Mapped[str] = mapped_column(String(16), nullable=False)
-    source_kind: Mapped[str] = mapped_column(String(16), nullable=False, default=SOURCE_MANUAL)
+    #: Twenty-four characters because ``construction_forecast`` is twenty-one.
+    #: A column too narrow for a value in its own closed set is a check
+    #: constraint that can never be reached: the insert fails first, with a
+    #: truncation error that says nothing about the rule being broken.
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False, default=SOURCE_MANUAL)
     #: Denominated in the version's currency, which is the project's base
     #: currency. For a ``project_land`` pool this is a snapshot of the land
     #: register's total, re-derived and compared at activation.
