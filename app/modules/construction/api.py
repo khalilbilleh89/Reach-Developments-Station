@@ -1052,10 +1052,14 @@ def reverse_payment(
 def list_milestones(
     project: ConstructionProject, session: DbSession, actor: ActiveActor
 ) -> list[schemas.MilestoneOut]:
-    del actor
+    """The register, narrowed in SQL to what this caller may see.
+
+    A phase-scoped engineer is given the milestones of the phases they hold, not
+    the project's list with the rest hidden by the browser.
+    """
     return [
-        milestone_out(session, milestone=milestone)
-        for milestone in service.list_milestones(session, project=project)
+        milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
+        for milestone in service.list_milestones(session, project=project, actor=actor)
     ]
 
 
@@ -1083,7 +1087,7 @@ def create_milestone(
         notes=payload.notes,
     )
     session.commit()
-    return milestone_out(session, milestone=milestone)
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.get("/milestones/{milestone_id}", response_model=schemas.MilestoneOut)
@@ -1093,9 +1097,10 @@ def read_milestone(
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.MilestoneOut:
-    del actor
-    milestone = service.get_milestone(session, project=project, milestone_id=milestone_id)
-    return milestone_out(session, milestone=milestone)
+    milestone = service.get_milestone(
+        session, project=project, milestone_id=milestone_id, actor=actor
+    )
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.patch("/milestones/{milestone_id}", response_model=schemas.MilestoneOut)
@@ -1116,7 +1121,7 @@ def update_milestone(
         changes=payload.model_dump(exclude_unset=True),
     )
     session.commit()
-    return milestone_out(session, milestone=milestone)
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.post("/milestones/{milestone_id}/achieve", response_model=schemas.MilestoneOut)
@@ -1138,7 +1143,7 @@ def achieve_milestone(
         evidence_reference=payload.evidence_reference,
     )
     session.commit()
-    return milestone_out(session, milestone=milestone)
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.post("/milestones/{milestone_id}/certify", response_model=schemas.MilestoneCertifiedOut)
@@ -1167,7 +1172,7 @@ def certify_milestone(
     )
     session.commit()
     return schemas.MilestoneCertifiedOut(
-        milestone=milestone_out(session, milestone=milestone),
+        milestone=milestone_out(session, project_id=project.id, milestone=milestone, actor=actor),
         triggered_installment_count=len(result.triggered_installment_ids),
         triggered_plan_count=len(result.plan_ids),
     )
@@ -1191,7 +1196,7 @@ def cancel_milestone(
         reason=payload.reason,
     )
     session.commit()
-    return milestone_out(session, milestone=milestone)
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.put("/milestones/{milestone_id}/dependencies", response_model=schemas.MilestoneOut)
@@ -1211,8 +1216,10 @@ def add_dependency(
         depends_on_milestone_id=payload.depends_on_milestone_id,
     )
     session.commit()
-    milestone = service.get_milestone(session, project=project, milestone_id=milestone_id)
-    return milestone_out(session, milestone=milestone)
+    milestone = service.get_milestone(
+        session, project=project, milestone_id=milestone_id, actor=actor
+    )
+    return milestone_out(session, project_id=project.id, milestone=milestone, actor=actor)
 
 
 @router.get("/milestone-trigger-options", response_model=list[schemas.MilestoneTriggerOption])
@@ -1241,7 +1248,7 @@ def read_milestone_trigger_options(
             is_certified=milestone.certified_date is not None,
             certified_date=milestone.certified_date,
         )
-        for milestone in service.milestone_trigger_options(session, project=project)
+        for milestone in service.milestone_trigger_options(session, project=project, actor=actor)
     ]
 
 

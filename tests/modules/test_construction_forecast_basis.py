@@ -18,6 +18,11 @@ and rejected budgets govern nothing.
 
 **A contract's commitment is reported at the grain that owns it.** Two lines
 naming one cost code are two lines, but one commitment.
+
+**A governed forecast survives a later reversal.** What was certified at a
+cutoff is a fact about that date, and today's certificate status cannot revise
+it. Withdrawing a certificate in September changes what is certified now; it
+does not change what August's forecast was approved on.
 """
 
 from __future__ import annotations
@@ -149,6 +154,27 @@ def certified_work(
     assert line.status_code == 200, line.text
     certified = certify(preparer, certifier, project_id, certificate_id)
     assert certified.status_code == 200, certified.text
+    return certificate_id
+
+
+def reverse(
+    client: TestClient,
+    project_id: str,
+    certificate_id: str,
+    *,
+    reason: str = "Valuation withdrawn after re-measurement",
+) -> str:
+    """Withdraw a certification, returning when it was withdrawn.
+
+    ``reversed_at`` is stamped by the reversal itself and is therefore always
+    now, exactly like ``certified_at``. Where a test needs it earlier, it moves
+    it with ``backdate``.
+    """
+    response = client.post(
+        f"{construction_url(project_id)}/certificates/{certificate_id}/reverse",
+        json={"reason": reason},
+    )
+    assert response.status_code == 200, response.text
     return certificate_id
 
 
@@ -362,6 +388,129 @@ class TestTheSummaryIsCurrentAndTheEstimateIsFrozen:
         assert cost["certified_to_date"] == "200000.00"
         assert cost["forecast_certified_as_of"] is None
         assert cost["estimate_at_completion"] is None
+
+
+class TestAGovernedForecastSurvivesALaterReversal:
+    """What was standing at the cutoff, not what happens to be standing today."""
+
+    def test_a_certificate_reversed_after_the_cutoff_stays_in_the_old_forecast(
+        self,
+        finance_client: TestClient,
+        manager_member_client: TestClient,
+        project_id: str,
+        forecast_over_history: str,
+    ) -> None:
+        """Given / When / Then: certified before, reversed after, therefore inside.
+
+        200,000 was certified five days ago and is inside the forecast taken as
+        at two days ago. Withdrawing it today is a decision made after that
+        forecast was approved, and the forecast has to go on saying what it said
+        — otherwise a reversal in September silently reduces August's certified
+        basis, moves its estimate at completion, and changes a variance somebody
+        signed. Filtering the historical basis on today's status is what would
+        do that, which is why it does not.
+        """
+        before = forecast_detail(finance_client, project_id, forecast_over_history)
+        assert before["total_certified"] == "200000.00"
+
+        reverse(
+            manager_member_client, project_id, self._only_certificate(finance_client, project_id)
+        )
+
+        after = forecast_detail(finance_client, project_id, forecast_over_history)
+        assert after["total_certified"] == "200000.00"
+        assert after["total_estimate_at_completion"] == before["total_estimate_at_completion"]
+        assert after["total_variance_at_completion"] == before["total_variance_at_completion"]
+
+        cost = construction_summary(finance_client, project_id)["cost_control"]
+        assert cost["forecast_certified_as_of"] == "200000.00"
+        assert cost["estimate_at_completion"] == "12250000.00"
+
+    def test_the_current_position_drops_a_certificate_the_moment_it_is_reversed(
+        self,
+        finance_client: TestClient,
+        manager_member_client: TestClient,
+        project_id: str,
+        forecast_over_history: str,
+    ) -> None:
+        """The two answers differ on purpose, and this is the pair that proves it.
+
+        August's forecast still counts the work; today's position does not. A
+        reader who found the same number in both would be looking at a system
+        that had either frozen the live figure or rewritten the historical one.
+        """
+        certificate_id = self._only_certificate(finance_client, project_id)
+        assert (
+            construction_summary(finance_client, project_id)["cost_control"]["certified_to_date"]
+            == "200000.00"
+        )
+
+        reverse(manager_member_client, project_id, certificate_id)
+
+        cost = construction_summary(finance_client, project_id)["cost_control"]
+        assert cost["certified_to_date"] == "0.00"
+        assert cost["forecast_certified_as_of"] == "200000.00"
+
+    def test_a_certificate_reversed_before_the_cutoff_stays_out(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        manager_member_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_contract: str,
+    ) -> None:
+        """Certified on day six, withdrawn on day four, forecast on day two.
+
+        By the cutoff this certificate had already been taken back, so it was
+        not standing then and cannot be in the basis. Testing only the reversal
+        timestamp without the certification one would let it in; testing only
+        the certification one would let every later reversal in.
+        """
+        certificate_id = certified_work(
+            finance_client,
+            manager_member_client,
+            project_id,
+            active_contract,
+            cost_codes["hard"],
+            number="IPC-01",
+            amount="200000.00",
+            certificate_date=days_ago(7),
+        )
+        backdate(
+            db,
+            table="construction_certificates",
+            row_id=certificate_id,
+            certified_at=at(days_ago(6)),
+        )
+        reverse(manager_member_client, project_id, certificate_id)
+        backdate(
+            db,
+            table="construction_certificates",
+            row_id=certificate_id,
+            reversed_at=at(days_ago(4)),
+        )
+
+        version_id = governed_forecast(
+            finance_client, cfo_client, project_id, cost_codes, as_of=days_ago(2)
+        )
+
+        detail = forecast_detail(finance_client, project_id, version_id)
+        assert detail["total_certified"] == "0.00"
+        assert detail["total_estimate_at_completion"] == FORECAST_REMAINING
+
+        cost = construction_summary(finance_client, project_id)["cost_control"]
+        assert cost["certified_to_date"] == "0.00"
+        assert cost["forecast_certified_as_of"] == "0.00"
+
+    @staticmethod
+    def _only_certificate(client: TestClient, project_id: str) -> str:
+        """The project's single certificate, so the fixture keeps its own id."""
+        rows = client.get(f"{construction_url(project_id)}/certificates").json()
+        assert len(rows) == 1, rows
+        identifier: str = rows[0]["id"]
+        return identifier
 
 
 @pytest.fixture

@@ -10,16 +10,24 @@ rewrites a basis somebody already sold units against.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
     add_pool,
+    at,
+    backdate,
+    certify,
     construction_url,
     cover_required_pools,
+    create_certificate,
     create_forecast,
     create_version,
     economics_url,
     govern_forecast,
+    set_certificate_line,
     set_forecast_line,
 )
 
@@ -34,6 +42,43 @@ def active_forecast_of(
 ) -> str:
     """Put a forecast in force with ``hard`` remaining on the hard cost code."""
     version_id = create_forecast(finance_client, project_id).json()["id"]
+    for category, amount in (
+        ("hard", hard),
+        ("soft", "0.00"),
+        ("contingency", "0.00"),
+        ("other", "0.00"),
+    ):
+        response = set_forecast_line(
+            finance_client,
+            project_id,
+            version_id,
+            cost_code_id=cost_codes[category],
+            forecast_remaining_amount_ex_tax=amount,
+        )
+        assert response.status_code == 200, response.text
+    governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+    assert governed.status_code == 200, governed.text
+    return version_id
+
+
+def active_forecast_as_at(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    *,
+    hard: str,
+    as_of: date,
+) -> str:
+    """The same forecast, taken as at a stated cutoff rather than today.
+
+    A historical cutoff is what makes a reversal *after* it something other than
+    an edit to the basis, so the reversal tests need one they can put a later
+    event beyond.
+    """
+    version_id = create_forecast(finance_client, project_id, as_of_date=as_of.isoformat()).json()[
+        "id"
+    ]
     for category, amount in (
         ("hard", hard),
         ("soft", "0.00"),
@@ -388,6 +433,109 @@ class TestALaterForecastNeverRewritesHistory:
         assert pool["amount"] == "9000000.00"
         submitted = finance_client.post(f"{base}/submit", json={})
         assert submitted.status_code == 200, submitted.text
+
+
+class TestAReversalAfterTheCutoffDoesNotStaleABasis:
+    def test_a_pinned_basis_survives_a_certificate_reversed_after_its_cutoff(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        manager_member_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_contract: str,
+        unit_id: str,
+        land_cost: str,
+    ) -> None:
+        """Staleness must mean the basis moved, not that a later event happened.
+
+        The pool is drawn from a forecast taken as at two days ago, whose
+        hard-cost estimate is 7,500,000 still to come plus 200,000 already
+        certified. Withdrawing that certificate today is a decision made after
+        the cutoff, so what that forecast is worth has not changed — and a
+        submission refused here would be telling Finance to rebuild a basis that
+        is still correct, on the strength of an event the forecast never
+        included. Under a historical filter that read today's certificate status
+        the estimate would drop to 7,500,000 and the version would be refused.
+        """
+        certificate = create_certificate(
+            finance_client,
+            project_id,
+            active_contract,
+            certificate_number="IPC-01",
+            period_start=(date.today() - timedelta(days=35)).isoformat(),
+            period_end=(date.today() - timedelta(days=6)).isoformat(),
+            certificate_date=(date.today() - timedelta(days=6)).isoformat(),
+        )
+        assert certificate.status_code == 201, certificate.text
+        certificate_id = certificate.json()["id"]
+        line = set_certificate_line(
+            finance_client,
+            project_id,
+            certificate_id,
+            cost_code_id=cost_codes["hard"],
+            current_work_value_ex_tax="200000.00",
+        )
+        assert line.status_code == 200, line.text
+        certified = certify(finance_client, manager_member_client, project_id, certificate_id)
+        assert certified.status_code == 200, certified.text
+        backdate(
+            db,
+            table="construction_certificates",
+            row_id=certificate_id,
+            certified_at=at(date.today() - timedelta(days=5)),
+        )
+
+        active_forecast_as_at(
+            finance_client,
+            cfo_client,
+            project_id,
+            cost_codes,
+            hard="7500000.00",
+            as_of=date.today() - timedelta(days=2),
+        )
+        version_id = create_version(finance_client, project_id)
+        for pool_number, category, source_kind, amount in (
+            ("LAND-01", "land", "project_land", None),
+            ("HARD-CX", "hard", "construction_forecast", None),
+            ("SOFT-01", "soft", None, "0.00"),
+        ):
+            created = add_pool(
+                finance_client,
+                project_id,
+                version_id,
+                pool_number=pool_number,
+                category=category,
+                **({"source_kind": source_kind} if source_kind else {}),
+                amount=amount,
+            )
+            assert created.status_code == 201, created.text
+        base = f"{economics_url(project_id)}/allocation-versions/{version_id}"
+        assert finance_client.post(f"{base}/calculate", json={}).status_code == 200
+
+        pool = next(
+            row
+            for row in pools_of(finance_client, project_id, version_id)
+            if row["pool_number"] == "HARD-CX"
+        )
+        assert pool["amount"] == "7700000.00"
+
+        reversed_response = manager_member_client.post(
+            f"{construction_url(project_id)}/certificates/{certificate_id}/reverse",
+            json={"reason": "Withdrawn after re-measurement"},
+        )
+        assert reversed_response.status_code == 200, reversed_response.text
+
+        submitted = finance_client.post(f"{base}/submit", json={})
+        assert submitted.status_code == 200, submitted.text
+
+        unchanged = next(
+            row
+            for row in pools_of(finance_client, project_id, version_id)
+            if row["pool_number"] == "HARD-CX"
+        )
+        assert unchanged["amount"] == "7700000.00"
 
 
 class TestConstructionNeverReachesBack:

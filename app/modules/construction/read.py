@@ -20,6 +20,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.access.dependencies import ActorContext
 from app.modules.construction import calculator, schemas, service
 from app.modules.construction.calculator import ZERO, money
 from app.modules.construction.models import (
@@ -544,12 +545,28 @@ def payment_out(session: Session, *, project: Project, payment: Payment) -> sche
 # --------------------------------------------------------------------------- #
 
 
-def milestone_out(session: Session, *, milestone: Milestone) -> schemas.MilestoneOut:
+def milestone_out(
+    session: Session, *, project_id: uuid.UUID, milestone: Milestone, actor: ActorContext
+) -> schemas.MilestoneOut:
+    """One milestone, with the dependencies this caller may know about.
+
+    The dependency list is narrowed by the same rule as the register. A
+    whole-project planner may legitimately record that a Phase A milestone waits
+    on a Phase B one, and handing that edge to a Phase A engineer would tell
+    them a record they cannot open exists and hand them its identifier. The edge
+    still exists and still governs; this reader simply is not the one it is
+    shown to.
+    """
     depends = [
         row[0]
         for row in session.execute(
-            select(MilestoneDependency.depends_on_milestone_id).where(
-                MilestoneDependency.milestone_id == milestone.id
+            select(MilestoneDependency.depends_on_milestone_id)
+            .join(Milestone, Milestone.id == MilestoneDependency.depends_on_milestone_id)
+            .where(
+                MilestoneDependency.milestone_id == milestone.id,
+                *service.milestone_visibility_conditions(
+                    session, project_id=project_id, actor=actor
+                ),
             )
         ).all()
     ]

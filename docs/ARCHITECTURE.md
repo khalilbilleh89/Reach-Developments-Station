@@ -865,6 +865,17 @@ completion estimate while leaving the remainder alone counts the new work twice,
 so the frozen basis is carried beside the live one rather than left to be
 inferred by subtraction.
 
+**A historical basis is read from timestamps, never from today's status.** A
+certificate certified on 20 August and withdrawn on 15 September *was* certified
+on 31 August, and the forecast taken as at 31 August was approved with it
+inside. Asking the status column would delete it from that basis retrospectively
+and move an estimate somebody signed, so a historical cutoff asks the two facts
+that cannot change — it had been certified by the cutoff, and it had not yet been
+reversed by it. The live position still asks the status column, because "what has
+been certified?" is a question about now and a withdrawn certificate is not an
+answer to it. One predicate holds both readings so the forecast basis and the
+unit-economics cost basis cannot disagree about the same date.
+
 **A forecast is measured against an authorisation somebody actually gave.** A
 draft budget is a working paper, a submitted one is a question, and a rejected
 one is a refusal; none of the three can be the denominator of a variance.
@@ -916,6 +927,18 @@ phases quietly removed — a number that is neither the project's nor their own,
 with nothing on screen to say so. Every whole-project financial surface requires
 whole-project access; the technical records that genuinely belong to one phase
 stay available.
+
+**And a technical record reaches only the phases it belongs to.** That is the
+other half of the same rule, and the half with teeth: milestones are addressed by
+identifier and certifying one makes buyers' instalments fall due, so a register
+that filtered on ``project_id`` alone would let a Phase A engineer reach a Phase B
+milestone by supplying its id — not a display bug but an unauthorised financial
+act one request away. The narrowing is in the SQL, in one predicate the register,
+the lookup, the dependency edges and the payment-plan trigger options all share;
+a hidden record answers 404 rather than 403, because a refusal that confirms the
+identifier is real is itself the disclosure. A milestone scoped to neither a phase
+nor a building belongs to the whole development, and needs whole-project access to
+create, widen into, or certify.
 
 **Nothing is deletable.** Governed history is superseded, reversed, voided or
 withdrawn — each with a reason on the record. There is no DELETE route anywhere

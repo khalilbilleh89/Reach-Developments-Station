@@ -44,10 +44,15 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.construction import calculator, permissions
@@ -598,6 +603,44 @@ def as_of_bound(as_of: date) -> datetime:
     return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
 
 
+def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[bool]]:
+    """Which certificates were standing — now, or at a historical cutoff.
+
+    Two different questions, and only one of them is about today's status.
+
+    *Now* is the live position, and the answer is the status column: a
+    certificate that has been reversed is not certified, and the command centre
+    must stop counting it the moment somebody withdraws it.
+
+    *At a cutoff* is a question about the past, and today's status cannot
+    answer it. A certificate certified on 20 August and reversed on 15
+    September was certified on 31 August — that is simply what happened — and a
+    forecast taken as at 31 August was approved with it inside. Filtering that
+    forecast on today's status would remove the certificate from a basis
+    somebody governed, so re-opening the August forecast in October would show
+    a smaller certified figure and a different estimate at completion than the
+    one Finance approved. The forecast would have been rewritten by an event
+    that happened after it.
+
+    So the historical form asks the two persisted timestamps instead: it had
+    been certified by the cutoff, and it had not yet been reversed by it. Both
+    use the same exclusive bound as everything else here, which is what makes a
+    reversal stamped exactly at ``as_of_bound(as_of)`` fall *after* an as-of of
+    the previous day rather than into an argument about microseconds.
+
+    A certificate that never reached certification has no ``certified_at`` at
+    all, and ``NULL < bound`` is not true, so drafts, submitted claims and
+    rejections stay out of the historical basis without a status test.
+    """
+    if as_of is None:
+        return [Certificate.status == CERTIFICATE_CERTIFIED]
+    bound = as_of_bound(as_of)
+    return [
+        Certificate.certified_at < bound,
+        or_(Certificate.reversed_at.is_(None), Certificate.reversed_at >= bound),
+    ]
+
+
 def certified_by_cost_code(
     session: Session,
     *,
@@ -623,20 +666,18 @@ def certified_by_cost_code(
     show a larger certified basis and a different estimate at completion than
     the one Finance approved, produced entirely by a backdated document.
 
-    A certificate reversed after the cutoff is excluded here, because the filter
-    is on today's ``status``. That is a deliberate limit rather than an
-    oversight: reproducing "certified then, and not yet reversed then" needs the
-    reversal timestamp in the same comparison, and reversal-as-at is a wider
-    question than the forecast basis this cutoff exists to fix.
+    Reversal is read on the same footing. Without ``as_of`` the standing status
+    answers, so a reversed certificate stops counting immediately. With one, the
+    question is what was standing *then*: certified by the cutoff and not yet
+    reversed by it. Both readings live in
+    :func:`_standing_certificate_conditions` rather than being spelled out here,
+    because a second call site writing the historical rule slightly differently
+    is exactly how a forecast comes to have two certified bases.
     """
-    conditions = [
-        CertificateLine.project_id == project_id,
-        Certificate.status == CERTIFICATE_CERTIFIED,
-    ]
+    conditions: list[ColumnElement[bool]] = [CertificateLine.project_id == project_id]
+    conditions.extend(_standing_certificate_conditions(as_of))
     if contract_id is not None:
         conditions.append(Certificate.contract_id == contract_id)
-    if as_of is not None:
-        conditions.append(Certificate.certified_at < as_of_bound(as_of))
     if exclude_certificate_id is not None:
         conditions.append(Certificate.id != exclude_certificate_id)
 
@@ -3105,21 +3146,107 @@ def reverse_payment(
 # --------------------------------------------------------------------------- #
 
 
-def list_milestones(session: Session, *, project: Project) -> list[Milestone]:
-    """The project's milestones, in planned order."""
+def milestone_visibility_conditions(
+    session: Session, *, project_id: uuid.UUID, actor: ActorContext
+) -> list[ColumnElement[bool]]:
+    """The milestones this caller may reach, as SQL rather than as a later filter.
+
+    A milestone is a technical record, so a phase-scoped engineer keeps the ones
+    that belong to a phase they hold — that is the half of the access model the
+    financial surfaces deliberately do not have. But belonging has to be read
+    from the milestone's own scope and not from its project: every milestone in
+    the project carries the same ``project_id``, so filtering on that alone
+    hands a Phase A engineer every Phase B milestone in the development.
+
+    Two ways a milestone belongs to a phase, and both are honoured: named
+    directly through ``phase_id``, or reached through the phase of the building
+    it is scoped to. ``require_valid_scope`` has already proved the two agree
+    where both are set, so either match is sufficient.
+
+    A milestone scoped to neither is the whole development's, and a phase-scoped
+    actor gets no match from either arm — which is the intended answer. "Project
+    completion" is not a Phase A record, and certifying it can make instalments
+    fall due for buyers across every phase, including the ones this actor was
+    deliberately not given.
+
+    Returning conditions rather than a narrowed statement is what lets the same
+    rule sit in a list, a lookup and the payment-plan trigger options without
+    any of the three restating it. ``None`` from ``visible_phase_ids`` means no
+    narrowing is needed, which is an empty list here — never an empty result.
+    """
+    allowed = visible_phase_ids(session, project_id=project_id, actor=actor)
+    if allowed is None:
+        return []
+    return [
+        or_(
+            Milestone.phase_id.in_(allowed),
+            Milestone.building_id.in_(select(Building.id).where(Building.phase_id.in_(allowed))),
+        )
+    ]
+
+
+def _require_whole_project_scope(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    phase_id: uuid.UUID | None,
+    building_id: uuid.UUID | None,
+) -> None:
+    """Refuse a phase-scoped actor a milestone that belongs to the whole project.
+
+    ``require_valid_scope`` proves that a *named* phase or building is one the
+    caller holds; it has nothing to test when both are absent, and an unscoped
+    milestone is the widest record in the module. Certifying one makes every
+    buyer instalment waiting on that code fall due, in phases this actor was
+    deliberately not given, so the authority for it is whole-project access.
+
+    A refusal rather than a not-found, because there is no record here whose
+    existence needs protecting — only an action the caller may not take.
+    """
+    if phase_id is not None or building_id is not None:
+        return
+    if visible_phase_ids(session, project_id=project.id, actor=actor) is None:
+        return
+    raise PermissionDeniedError(
+        "A milestone scoped to neither a phase nor a building belongs to the whole "
+        "development, and certifying one can make instalments fall due for buyers in "
+        "every phase of it. That needs whole-project access; scope this milestone to "
+        "a phase you hold instead."
+    )
+
+
+def list_milestones(session: Session, *, project: Project, actor: ActorContext) -> list[Milestone]:
+    """The project's milestones the caller may see, in planned order."""
     return list(
         session.scalars(
             select(Milestone)
-            .where(Milestone.project_id == project.id)
+            .where(
+                Milestone.project_id == project.id,
+                *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
+            )
             .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
         )
     )
 
 
-def get_milestone(session: Session, *, project: Project, milestone_id: uuid.UUID) -> Milestone:
-    """Load one milestone of this project, or refuse as if it did not exist."""
+def get_milestone(
+    session: Session, *, project: Project, milestone_id: uuid.UUID, actor: ActorContext
+) -> Milestone:
+    """Load one milestone the caller may see, or refuse as if it did not exist.
+
+    The refusal is a 404 and not a 403 on purpose: a 403 would confirm that the
+    identifier names a real milestone of this project, which is the one thing a
+    caller who may not see it should not learn. Every mutation reaches its
+    milestone through here, so the visibility rule holds for achieving,
+    certifying and cancelling without each of them repeating it.
+    """
     milestone = session.scalars(
-        select(Milestone).where(Milestone.id == milestone_id, Milestone.project_id == project.id)
+        select(Milestone).where(
+            Milestone.id == milestone_id,
+            Milestone.project_id == project.id,
+            *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
+        )
     ).first()
     if milestone is None:
         raise permissions.milestone_not_found()
@@ -3160,6 +3287,9 @@ def create_milestone(
     """Add a milestone. Its code is its handle for ever after."""
     lock_project(session, project.id)
     require_valid_scope(
+        session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+    )
+    _require_whole_project_scope(
         session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
     )
     milestone = Milestone(
@@ -3206,7 +3336,7 @@ def update_milestone(
     thing nobody notices until a buyer stops paying.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if "code" in changes and changes["code"] != milestone.code:
         raise ConflictError(
             "A milestone's code is the handle payment plans use to point at it and "
@@ -3215,12 +3345,16 @@ def update_milestone(
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone is a record of what happened.")
     if "phase_id" in changes or "building_id" in changes:
+        phase_id = changes.get("phase_id", milestone.phase_id)
+        building_id = changes.get("building_id", milestone.building_id)
         require_valid_scope(
-            session,
-            project=project,
-            actor=actor,
-            phase_id=changes.get("phase_id", milestone.phase_id),
-            building_id=changes.get("building_id", milestone.building_id),
+            session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+        )
+        # Clearing both is how a phase-scoped milestone would become a
+        # whole-project one, so the same authority is required to do it as to
+        # create one that way.
+        _require_whole_project_scope(
+            session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
         )
     before = _snapshot(milestone, _MILESTONE_FIELDS)
     for field, value in changes.items():
@@ -3258,7 +3392,7 @@ def achieve_milestone(
     depend on, and nothing here touches a payment plan.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status in (MILESTONE_CERTIFIED, MILESTONE_CANCELLED):
         raise ConflictError("This milestone is already closed.")
     before = _snapshot(milestone, _MILESTONE_FIELDS)
@@ -3311,7 +3445,7 @@ def certify_milestone(
     something to do by accident.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CANCELLED:
         raise ConflictError("A cancelled milestone cannot be certified.")
     if milestone.status == MILESTONE_CERTIFIED:
@@ -3390,7 +3524,7 @@ def cancel_milestone(
     never happen — money the buyer owes that the system will never ask for.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone is a record of what happened.")
     waiting = payment_plans_service.plans_awaiting_milestone(
@@ -3431,8 +3565,14 @@ def add_milestone_dependency(
 ) -> MilestoneDependency:
     """Record that one milestone waits on another. Refuses a cycle."""
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
-    upstream = get_milestone(session, project=project, milestone_id=depends_on_milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
+    # Both ends, and both through the same visibility rule: a Phase A user
+    # supplying a hidden Phase B identifier must get the same answer as if it
+    # named nothing, or the dependency edge becomes a way to confirm the
+    # existence of records they were not given.
+    upstream = get_milestone(
+        session, project=project, milestone_id=depends_on_milestone_id, actor=actor
+    )
     if milestone.id == upstream.id:
         raise ValidationError("A milestone cannot depend on itself.")
     _require_no_dependency_cycle(
@@ -3481,12 +3621,13 @@ def remove_milestone_dependency(
     session: Session,
     *,
     project: Project,
+    actor: ActorContext,
     milestone_id: uuid.UUID,
     depends_on_milestone_id: uuid.UUID,
 ) -> None:
     """Drop a dependency from a milestone that is not yet certified."""
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone's programme is history.")
     dependency = session.scalars(
@@ -3501,7 +3642,9 @@ def remove_milestone_dependency(
     _flush(session)
 
 
-def milestone_trigger_options(session: Session, *, project: Project) -> list[Milestone]:
+def milestone_trigger_options(
+    session: Session, *, project: Project, actor: ActorContext
+) -> list[Milestone]:
     """The milestones a payment plan may point at, and nothing else.
 
     Deliberately the whole milestone rows for the caller to narrow: the schema
@@ -3509,6 +3652,13 @@ def milestone_trigger_options(session: Session, *, project: Project) -> list[Mil
     state. A plan builder is used by Sales Operations, who may not read this
     module at all — so the endpoint that exposes this must never hand back a
     budget, a contract value, an estimate at completion or any other cost.
+
+    The phase rule applies here too, and for the same reason it applies to the
+    register: this caller is authorised on the payment plans, not on the whole
+    development, and a plan builder scoped to one phase reading every phase's
+    milestone names and programme dates is the same leak wearing a narrower
+    schema. Being unable to read construction is not what limits it; holding
+    part of the project is.
     """
     return list(
         session.scalars(
@@ -3516,6 +3666,7 @@ def milestone_trigger_options(session: Session, *, project: Project) -> list[Mil
             .where(
                 Milestone.project_id == project.id,
                 Milestone.status != MILESTONE_CANCELLED,
+                *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
             )
             .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
         )
@@ -4039,12 +4190,10 @@ def hard_cost_estimate_of(
         .join(CostCode, CostCode.id == CertificateLine.cost_code_id)
         .where(
             CertificateLine.project_id == project_id,
-            Certificate.status == CERTIFICATE_CERTIFIED,
-            # The formal certification, on the same boundary the forecast basis
-            # uses. A hard-cost estimate that admitted a backdated document
-            # would hand unit economics a cost basis the construction team never
-            # approved.
-            Certificate.certified_at < as_of_bound(version.as_of_date),
+            # The same historical predicate the forecast basis uses, so a pinned
+            # cost basis and the forecast it was drawn from cannot disagree about
+            # what was certified at that cutoff — including after a reversal.
+            *_standing_certificate_conditions(version.as_of_date),
             CostCode.cost_category == CATEGORY_HARD,
         )
     ).first()
