@@ -1626,35 +1626,10 @@ def upgrade() -> None:
         "unit_economics_cost_pools",
         "source_kind <> 'construction_forecast' OR (category = 'hard' AND scope_kind = 'project')",
     )
-    # Autogenerate does not see a changed CHECK, only a changed column type, so
-    # the closed set has to be replaced by hand. Without this the column is wide
-    # enough for 'construction_forecast' and the old constraint still refuses
-    # it — a value in its own enumeration that the database rejects, with an
-    # error naming a rule nobody broke.
-    op.drop_constraint(
-        op.f("ck_unit_economics_cost_pools_source_ok"),
-        "unit_economics_cost_pools",
-        type_="check",
-    )
-    op.create_check_constraint(
-        op.f("ck_unit_economics_cost_pools_source_ok"),
-        "unit_economics_cost_pools",
-        "source_kind IN ('project_land', 'manual', 'construction_forecast')",
-    )
 
 
 def downgrade() -> None:
     """Revert this revision."""
-    op.drop_constraint(
-        op.f("ck_unit_economics_cost_pools_source_ok"),
-        "unit_economics_cost_pools",
-        type_="check",
-    )
-    op.create_check_constraint(
-        op.f("ck_unit_economics_cost_pools_source_ok"),
-        "unit_economics_cost_pools",
-        "source_kind IN ('project_land', 'manual')",
-    )
     op.drop_constraint(
         op.f("ck_unit_economics_cost_pools_cx_source_shape"),
         "unit_economics_cost_pools",

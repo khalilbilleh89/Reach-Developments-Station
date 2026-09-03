@@ -42,13 +42,19 @@ CONSTRUCTION_TABLES = (
 
 
 class TestTheRevision:
-    def test_there_is_exactly_one_head_and_it_is_this_revision(self) -> None:
+    def test_there_is_exactly_one_head(self) -> None:
+        """The head moves with each revision; the *one* is the invariant.
+
+        Asserting a particular revision is the head belongs in one place, and
+        that place is ``tests/test_migrations.py``. Naming it here as well meant
+        this file broke every time a revision landed, which taught everybody to
+        update the string rather than to ask why it had moved.
+        """
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         assert len(script.get_heads()) == 1
-        assert script.get_current_head() == "0009_construction"
 
     def test_the_revision_sits_directly_on_unit_economics(self) -> None:
         from alembic.config import Config
@@ -57,6 +63,34 @@ class TestTheRevision:
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         revision = script.get_revision("0009_construction")
         assert revision.down_revision == "0008_unit_economics"
+
+    def test_the_source_kind_correction_sits_directly_on_construction(self) -> None:
+        """0010 corrects 0009 by appending to it, never by editing it.
+
+        0009 is applied history. A database stamped at it will not run it again,
+        so the only correction that can reach one is a later revision — and the
+        chain has to say so.
+        """
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        script = ScriptDirectory.from_config(Config("alembic.ini"))
+        revision = script.get_revision("0010_construction_source_kind")
+        assert revision.down_revision == "0009_construction"
+
+    def test_0009_does_not_touch_the_source_enumeration(self) -> None:
+        """The proof that the shipped revision was left alone.
+
+        Read off the file rather than the database, because the database only
+        ever shows the *end* of the history. If a later refactor moves the
+        correction back into 0009, a fresh install still works and every
+        deployed database silently stays broken — this is the assertion that
+        fails instead.
+        """
+        from pathlib import Path
+
+        shipped = Path("app/db/migrations/versions/0009_construction.py").read_text()
+        assert "ck_unit_economics_cost_pools_source_ok" not in shipped
 
     def test_every_construction_table_exists(self) -> None:
         """Sixteen tables, because five financial truths need five records."""
