@@ -202,6 +202,20 @@ def require_different_approver(
         raise PermissionDeniedError(_MAKER)
 
 
+def require_different_invoice_approver(
+    actor: ActorContext, *, recorded_by_user_id: uuid.UUID
+) -> None:
+    """Refuse an invoice approval by the person who recorded it.
+
+    Approving is what turns a supplier's document into a liability the company
+    owes, so it gets the same separation as releasing the cash that settles it.
+    Named separately from the payment check because the wording matters in the
+    refusal a person actually reads.
+    """
+    if recorded_by_user_id == actor.user_id:
+        raise PermissionDeniedError("The person who recorded this invoice may not approve it.")
+
+
 def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uuid.UUID) -> None:
     """Refuse a payment confirmation by the person who recorded it.
 

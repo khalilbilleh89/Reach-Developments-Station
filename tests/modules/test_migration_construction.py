@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_engine
@@ -192,3 +193,98 @@ class TestTheDatabaseRefusesTheseShapes:
             )
         db.rollback()
         assert "cx_provenance_shape" in str(caught.value) or "violates" in str(caught.value)
+
+
+class TestLineageIsProvenNotNoted:
+    """A source version that cannot be proved is a note, not provenance."""
+
+    def test_budget_lineage_is_a_composite_key_into_the_same_project(self) -> None:
+        inspector = inspect(get_engine())
+        keys = [
+            key
+            for key in inspector.get_foreign_keys("construction_budget_versions")
+            if key["referred_table"] == "construction_budget_versions"
+        ]
+        assert len(keys) == 1, "budget lineage must be a foreign key"
+        assert set(keys[0]["constrained_columns"]) == {"source_version_id", "project_id"}
+        assert set(keys[0]["referred_columns"]) == {"id", "project_id"}
+
+    def test_forecast_lineage_is_a_composite_key_into_the_same_project(self) -> None:
+        inspector = inspect(get_engine())
+        keys = [
+            key
+            for key in inspector.get_foreign_keys("construction_forecast_versions")
+            if key["referred_table"] == "construction_forecast_versions"
+        ]
+        assert len(keys) == 1, "forecast lineage must be a foreign key"
+        assert set(keys[0]["constrained_columns"]) == {"source_version_id", "project_id"}
+        assert set(keys[0]["referred_columns"]) == {"id", "project_id"}
+
+    def test_a_budget_cannot_name_a_source_that_does_not_exist(self, db: Session) -> None:
+        with pytest.raises(IntegrityError) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO construction_budget_versions "
+                    "(id, project_id, version_number, currency_id, status, effective_date, "
+                    " source_version_id, change_reason, created_by_user_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), 1, gen_random_uuid(), "
+                    " 'draft', CURRENT_DATE, gen_random_uuid(), 'x', gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "source_version" in str(caught.value) or "violates" in str(caught.value)
+
+
+class TestALifecycleClaimNeedsItsEvidence:
+    """Every one of these is a status somebody could assert without signing it."""
+
+    def test_a_milestone_cannot_be_certified_without_a_certifier(self, db: Session) -> None:
+        """The tautological scope check that used to sit beside this proved
+        nothing; this one is the reason the table has a check at all."""
+        with pytest.raises(Exception) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO construction_milestones "
+                    "(id, project_id, code, name, milestone_type, progress_fraction, "
+                    " status, certified_date, certified_at, certified_by_user_id, "
+                    " created_by_user_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), 'M1', 'M', 'progress', 0, "
+                    " 'certified', CURRENT_DATE, NULL, NULL, gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "certified_shape" in str(caught.value) or "violates" in str(caught.value)
+
+    def test_a_payment_cannot_be_confirmed_without_a_confirmer(self, db: Session) -> None:
+        with pytest.raises(Exception) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO construction_payments "
+                    "(id, project_id, contract_id, payment_reference, payment_date, amount, "
+                    " currency_id, status, recorded_by_user_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'P1', "
+                    " CURRENT_DATE, 1, gen_random_uuid(), 'confirmed', gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "confirmed_shape" in str(caught.value) or "violates" in str(caught.value)
+
+    def test_an_other_invoice_cannot_stand_without_a_certificate(self, db: Session) -> None:
+        """The escape hatch that used to exist: an invoice type with no ceiling.
+
+        An approved liability has to fit inside something that authorised it, and
+        "other" with no certificate fitted inside nothing at all.
+        """
+        with pytest.raises(Exception) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO construction_invoices "
+                    "(id, project_id, contract_id, certificate_id, invoice_number, "
+                    " invoice_type, invoice_date, amount_ex_tax, tax_amount, status, "
+                    " recorded_by_user_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), NULL, "
+                    " 'I1', 'other', CURRENT_DATE, 100, 0, 'recorded', gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "claim_has_certificate" in str(caught.value) or "violates" in str(caught.value)

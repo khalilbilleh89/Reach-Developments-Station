@@ -30,7 +30,7 @@ pricing, inventory and projects precisely as 0008 left them.
 
 Revision ID: 0009_construction
 Revises: 0008_unit_economics
-Create Date: 2026-09-03 07:27:59.359138+00:00
+Create Date: 2026-09-03 09:27:00.560778+00:00
 
 """
 
@@ -83,8 +83,23 @@ def upgrade() -> None:
         sa.Column("activated_by_user_id", sa.UUID(), nullable=True),
         sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
+            "status <> 'rejected' OR (rejected_at IS NOT NULL"
+            " AND rejected_by_user_id IS NOT NULL AND rejection_reason IS NOT NULL)",
+            name=op.f("ck_construction_budget_versions_rejected_shape"),
+        ),
+        sa.CheckConstraint(
             "status IN ('draft', 'submitted', 'approved', 'active', 'superseded', 'rejected')",
             name=op.f("ck_construction_budget_versions_status_ok"),
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('active', 'superseded') OR (activated_at IS NOT NULL"
+            " AND activated_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_budget_versions_activated_shape"),
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('approved', 'active', 'superseded') OR (approved_at IS NOT NULL"
+            " AND approved_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_budget_versions_approved_shape"),
         ),
         sa.CheckConstraint(
             "length(change_reason) > 0", name=op.f("ck_construction_budget_versions_reason_present")
@@ -126,6 +141,12 @@ def upgrade() -> None:
             ["rejected_by_user_id"],
             ["users.id"],
             name=op.f("fk_construction_budget_versions_rejected_by_user_id_users"),
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_version_id", "project_id"],
+            ["construction_budget_versions.id", "construction_budget_versions.project_id"],
+            name="source_version",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
@@ -344,12 +365,18 @@ def upgrade() -> None:
         sa.Column("reversed_by_user_id", sa.UUID(), nullable=True),
         sa.Column("reversal_reason", sa.String(length=1000), nullable=True),
         sa.CheckConstraint(
+            "status <> 'certified' OR (certified_at IS NOT NULL"
+            " AND certified_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_certificates_certified_shape"),
+        ),
+        sa.CheckConstraint(
             "status <> 'rejected' OR rejection_reason IS NOT NULL",
             name=op.f("ck_construction_certificates_rejected_has_reason"),
         ),
         sa.CheckConstraint(
-            "status <> 'reversed' OR reversal_reason IS NOT NULL",
-            name=op.f("ck_construction_certificates_reversed_has_reason"),
+            "status <> 'reversed' OR (reversed_at IS NOT NULL"
+            " AND reversed_by_user_id IS NOT NULL AND reversal_reason IS NOT NULL)",
+            name=op.f("ck_construction_certificates_reversed_shape"),
         ),
         sa.CheckConstraint(
             "status IN ('draft', 'submitted', 'certified', 'rejected', 'reversed')",
@@ -478,8 +505,23 @@ def upgrade() -> None:
         sa.Column("activated_by_user_id", sa.UUID(), nullable=True),
         sa.Column("superseded_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
+            "status <> 'rejected' OR (rejected_at IS NOT NULL"
+            " AND rejected_by_user_id IS NOT NULL AND rejection_reason IS NOT NULL)",
+            name=op.f("ck_construction_forecast_versions_rejected_shape"),
+        ),
+        sa.CheckConstraint(
             "status IN ('draft', 'submitted', 'approved', 'active', 'superseded', 'rejected')",
             name=op.f("ck_construction_forecast_versions_status_ok"),
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('active', 'superseded') OR (activated_at IS NOT NULL"
+            " AND activated_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_forecast_versions_activated_shape"),
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('approved', 'active', 'superseded') OR (approved_at IS NOT NULL"
+            " AND approved_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_forecast_versions_approved_shape"),
         ),
         sa.CheckConstraint(
             "length(change_reason) > 0",
@@ -528,6 +570,12 @@ def upgrade() -> None:
             ["rejected_by_user_id"],
             ["users.id"],
             name=op.f("fk_construction_forecast_versions_rejected_by_user_id_users"),
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_version_id", "project_id"],
+            ["construction_forecast_versions.id", "construction_forecast_versions.project_id"],
+            name="source_version",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
@@ -599,8 +647,14 @@ def upgrade() -> None:
         sa.Column("reversed_by_user_id", sa.UUID(), nullable=True),
         sa.Column("reversal_reason", sa.String(length=1000), nullable=True),
         sa.CheckConstraint(
-            "status <> 'reversed' OR reversal_reason IS NOT NULL",
-            name=op.f("ck_construction_payments_reversed_has_reason"),
+            "status <> 'confirmed' OR (confirmed_at IS NOT NULL"
+            " AND confirmed_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_payments_confirmed_shape"),
+        ),
+        sa.CheckConstraint(
+            "status <> 'reversed' OR (reversed_at IS NOT NULL"
+            " AND reversed_by_user_id IS NOT NULL AND reversal_reason IS NOT NULL)",
+            name=op.f("ck_construction_payments_reversed_shape"),
         ),
         sa.CheckConstraint(
             "status IN ('recorded', 'confirmed', 'reversed')",
@@ -915,7 +969,7 @@ def upgrade() -> None:
             name=op.f("ck_construction_invoices_advance_has_no_certificate"),
         ),
         sa.CheckConstraint(
-            "invoice_type = 'advance' OR invoice_type = 'other' OR certificate_id IS NOT NULL",
+            "invoice_type = 'advance' OR certificate_id IS NOT NULL",
             name=op.f("ck_construction_invoices_claim_has_certificate"),
         ),
         sa.CheckConstraint(
@@ -923,12 +977,17 @@ def upgrade() -> None:
             name=op.f("ck_construction_invoices_type_ok"),
         ),
         sa.CheckConstraint(
+            "status <> 'approved' OR (approved_at IS NOT NULL AND approved_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_invoices_approved_shape"),
+        ),
+        sa.CheckConstraint(
             "status <> 'disputed' OR dispute_reason IS NOT NULL",
             name=op.f("ck_construction_invoices_disputed_has_reason"),
         ),
         sa.CheckConstraint(
-            "status <> 'voided' OR void_reason IS NOT NULL",
-            name=op.f("ck_construction_invoices_voided_has_reason"),
+            "status <> 'voided' OR (voided_at IS NOT NULL AND voided_by_user_id IS NOT NULL"
+            " AND void_reason IS NOT NULL)",
+            name=op.f("ck_construction_invoices_voided_shape"),
         ),
         sa.CheckConstraint(
             "status IN ('recorded', 'approved', 'disputed', 'voided')",
@@ -1056,7 +1115,8 @@ def upgrade() -> None:
         sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cancellation_reason", sa.String(length=1000), nullable=True),
         sa.CheckConstraint(
-            "(status = 'certified') = (certified_date IS NOT NULL)",
+            "(status = 'certified') = (certified_date IS NOT NULL AND certified_at IS NOT NULL"
+            " AND certified_by_user_id IS NOT NULL)",
             name=op.f("ck_construction_milestones_certified_shape"),
         ),
         sa.CheckConstraint(
@@ -1064,16 +1124,18 @@ def upgrade() -> None:
             name=op.f("ck_construction_milestones_type_ok"),
         ),
         sa.CheckConstraint(
-            "status <> 'cancelled' OR cancellation_reason IS NOT NULL",
-            name=op.f("ck_construction_milestones_cancelled_has_reason"),
+            "status <> 'achieved' OR (actual_achieved_date IS NOT NULL"
+            " AND achieved_by_user_id IS NOT NULL)",
+            name=op.f("ck_construction_milestones_achieved_shape"),
+        ),
+        sa.CheckConstraint(
+            "status <> 'cancelled' OR (cancelled_at IS NOT NULL"
+            " AND cancellation_reason IS NOT NULL)",
+            name=op.f("ck_construction_milestones_cancelled_shape"),
         ),
         sa.CheckConstraint(
             "status IN ('planned', 'in_progress', 'achieved', 'certified', 'cancelled')",
             name=op.f("ck_construction_milestones_status_ok"),
-        ),
-        sa.CheckConstraint(
-            "building_id IS NULL OR phase_id IS NULL OR building_id IS NOT NULL",
-            name=op.f("ck_construction_milestones_scope_shape"),
         ),
         sa.CheckConstraint(
             "length(code) > 0", name=op.f("ck_construction_milestones_code_present")
@@ -1527,19 +1589,16 @@ def upgrade() -> None:
         ["variation_id"],
         unique=False,
     )
-    # ``construction_forecast`` is twenty-one characters and the column held
-    # sixteen, so the new source kind could not physically be written: the
-    # insert failed on truncation before any check constraint was consulted.
-    op.alter_column(
-        "unit_economics_cost_pools",
-        "source_kind",
-        existing_type=sa.String(length=16),
-        type_=sa.String(length=24),
-        existing_nullable=False,
-    )
     op.add_column(
         "unit_economics_cost_pools",
         sa.Column("source_construction_forecast_version_id", sa.UUID(), nullable=True),
+    )
+    op.alter_column(
+        "unit_economics_cost_pools",
+        "source_kind",
+        existing_type=sa.VARCHAR(length=16),
+        type_=sa.String(length=24),
+        existing_nullable=False,
     )
     op.create_index(
         "uq_ue_pools_one_construction",
@@ -1587,14 +1646,14 @@ def downgrade() -> None:
         table_name="unit_economics_cost_pools",
         postgresql_where=sa.text("source_kind = 'construction_forecast'"),
     )
-    op.drop_column("unit_economics_cost_pools", "source_construction_forecast_version_id")
     op.alter_column(
         "unit_economics_cost_pools",
         "source_kind",
         existing_type=sa.String(length=24),
-        type_=sa.String(length=16),
+        type_=sa.VARCHAR(length=16),
         existing_nullable=False,
     )
+    op.drop_column("unit_economics_cost_pools", "source_construction_forecast_version_id")
     op.drop_index("ix_cx_variation_lines_variation", table_name="construction_variation_lines")
     op.drop_index("ix_cx_variation_lines_cost_code", table_name="construction_variation_lines")
     op.drop_table("construction_variation_lines")

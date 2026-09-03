@@ -46,7 +46,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.construction import calculator, permissions
@@ -107,6 +107,7 @@ from app.modules.construction.models import (
     Contract,
     ContractLine,
     CostCode,
+    ForecastLine,
     Invoice,
     Milestone,
     MilestoneDependency,
@@ -115,6 +116,9 @@ from app.modules.construction.models import (
     Variation,
     VariationLine,
 )
+from app.modules.inventory.custom_fields import business_today
+from app.modules.inventory.models import Building, Phase
+from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.payment_plans import service as payment_plans_service
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
@@ -277,6 +281,56 @@ def _require_no_cycle(
         ).first()
 
 
+def require_valid_scope(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    phase_id: uuid.UUID | None,
+    building_id: uuid.UUID | None,
+) -> None:
+    """Prove a phase and building actually go together, and that the caller sees them.
+
+    Proving each half belongs to the project is not the same as proving they
+    belong to each other. Phase A paired with a building from Phase B satisfies
+    two independent project checks and is still nonsense — the cost code or
+    milestone would report against a phase whose buildings do not include it.
+
+    A database check cannot hold this: it spans ``phases`` and ``buildings``,
+    which is why the constraint that used to sit on the milestone was written as
+    a tautology and protected nothing. It is proved here, against the rows.
+
+    Visibility is proved in the same place, because a phase-scoped engineer
+    naming a phase they cannot see is the same mistake wearing a different hat.
+    """
+    allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
+
+    phase: Phase | None = None
+    if phase_id is not None:
+        statement = select(Phase).where(Phase.id == phase_id, Phase.project_id == project.id)
+        if allowed is not None:
+            statement = statement.where(Phase.id.in_(allowed))
+        phase = session.scalars(statement).first()
+        if phase is None:
+            raise NotFoundError("Phase not found.")
+
+    if building_id is not None:
+        statement = select(Building).where(
+            Building.id == building_id, Building.project_id == project.id
+        )
+        if allowed is not None:
+            statement = statement.where(Building.phase_id.in_(allowed))
+        building = session.scalars(statement).first()
+        if building is None:
+            raise NotFoundError("Building not found.")
+        if phase is not None and building.phase_id != phase.id:
+            raise ValidationError(
+                "That building belongs to a different phase. A record scoped to one "
+                "phase and a building in another would report against a phase whose "
+                "buildings do not include it."
+            )
+
+
 def create_cost_code(
     session: Session,
     *,
@@ -293,6 +347,9 @@ def create_cost_code(
 ) -> CostCode:
     """Add one line to the project's construction breakdown."""
     lock_project(session, project.id)
+    require_valid_scope(
+        session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+    )
     if parent_cost_code_id is not None:
         parent = get_cost_code(session, project=project, cost_code_id=parent_cost_code_id)
         _require_no_cycle(session, project_id=project.id, code_id=None, parent_id=parent.id)
@@ -342,6 +399,15 @@ def update_cost_code(
     row = get_cost_code(session, project=project, cost_code_id=cost_code_id)
     before = _snapshot(row, _COST_CODE_FIELDS)
 
+    if "phase_id" in changes or "building_id" in changes:
+        require_valid_scope(
+            session,
+            project=project,
+            actor=actor,
+            phase_id=changes.get("phase_id", row.phase_id),
+            building_id=changes.get("building_id", row.building_id),
+        )
+
     if "parent_cost_code_id" in changes and changes["parent_cost_code_id"] is not None:
         parent = get_cost_code(
             session, project=project, cost_code_id=changes["parent_cost_code_id"]
@@ -379,7 +445,11 @@ def _cost_code_is_referenced(
     session: Session, *, project_id: uuid.UUID, cost_code_id: uuid.UUID
 ) -> bool:
     """Whether any governed financial row names this cost code."""
-    for model in (BudgetLine, ContractLine, VariationLine, CertificateLine):
+    # ForecastLine belongs here as much as the other four. A cost code used
+    # only by a forecast still has its meaning fixed by it: changing the code
+    # renames what a historical estimate was about, and changing the category
+    # can move the money in or out of the hard-cost total unit economics reads.
+    for model in (BudgetLine, ContractLine, VariationLine, CertificateLine, ForecastLine):
         found = session.scalars(
             select(model.id)
             .where(model.cost_code_id == cost_code_id, model.project_id == project_id)
@@ -666,6 +736,21 @@ def create_budget(
     elif (current := active_budget(session, project_id=project.id)) is not None:
         source = current
 
+    # An opening version may carry a historical date: the project may have been
+    # building for two years before this module existed. A replacement may not,
+    # because the period it would claim to govern has already been lived under
+    # the budget that actually governed it, and commitments were authorised
+    # against that one. Today or later, never yesterday.
+    if (
+        active_budget(session, project_id=project.id) is not None
+        and effective_date < business_today()
+    ):
+        raise ValidationError(
+            f"A replacement budget cannot take effect on {effective_date}, which has "
+            "already passed. The budget in force governed that period and commitments "
+            "were authorised against it; a replacement takes effect today or later."
+        )
+
     highest = session.scalars(
         select(func.max(BudgetVersion.version_number)).where(BudgetVersion.project_id == project.id)
     ).first()
@@ -816,6 +901,38 @@ def remove_budget_line(
     _flush(session)
 
 
+def _require_cost_code_coverage(
+    session: Session, *, project: Project, version: BudgetVersion
+) -> None:
+    """Refuse a budget that leaves an active cost code unaddressed.
+
+    A missing line and a line of zero are different statements, and only one of
+    them is an answer. "Nothing is authorised for this code" is a decision
+    somebody made; "nobody wrote a line for this code" is an omission, and a
+    register that renders both as an empty cell cannot tell them apart — which
+    is exactly the ambiguity the whole versioned-budget design exists to remove.
+
+    Only *active* codes are required. A retired code keeps reading everywhere it
+    was used and does not force a line into a version that has no business
+    authorising it.
+    """
+    active = {
+        code.id: code.code
+        for code in session.scalars(
+            select(CostCode).where(CostCode.project_id == project.id, CostCode.is_active.is_(True))
+        )
+    }
+    addressed = set(budget_lines_by_cost_code(session, budget_version_id=version.id))
+    missing = sorted(label for code_id, label in active.items() if code_id not in addressed)
+    if missing:
+        raise ValidationError(
+            "Every active cost code needs a line, even if the answer is zero — "
+            + ", ".join(missing)
+            + ". An omitted line is not the same statement as an authorisation of "
+            "nothing, and a budget that cannot tell them apart cannot be read."
+        )
+
+
 def submit_budget(
     session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
 ) -> BudgetVersion:
@@ -829,6 +946,7 @@ def submit_budget(
     ).all()
     if not lines:
         raise ValidationError("A budget with no lines authorises nothing.")
+    _require_cost_code_coverage(session, project=project, version=version)
 
     before = _snapshot(version, _BUDGET_FIELDS)
     version.status = BUDGET_SUBMITTED
@@ -932,6 +1050,19 @@ def activate_budget(
         raise ConflictError(
             "This budget was prepared in a currency the project no longer accounts "
             "in. Prepare a revision in the project's base currency."
+        )
+    # Re-proved rather than trusted from submission: a cost code created while
+    # the version sat waiting for approval is a code this budget does not
+    # authorise, and activating anyway would put a commitment one step away from
+    # a line nobody wrote.
+    _require_cost_code_coverage(session, project=project, version=version)
+
+    today = business_today()
+    if version.effective_date > today:
+        raise ConflictError(
+            f"This budget takes effect on {version.effective_date}. It stays approved "
+            "until then — nothing here schedules an activation, because a budget "
+            "coming into force is a decision somebody takes on the day."
         )
 
     lines = budget_lines_by_cost_code(session, budget_version_id=version.id)
@@ -1235,6 +1366,12 @@ def activate_contract(
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
     if contract.status != CONTRACT_SUBMITTED:
         raise ConflictError("Only a submitted contract can be activated.")
+    # Activating is the act that commits the company. The person who prepared
+    # the contract may hold every role in the system and is still one pair of
+    # eyes, so the check is on the identifier rather than on what they may do.
+    permissions.require_different_approver(
+        actor, submitted_by_user_id=contract.submitted_by_user_id
+    )
     if contract.currency_id != project.base_currency_id:
         raise ConflictError(
             "This contract is not denominated in the project's base currency and "
@@ -1696,6 +1833,38 @@ def approve_variation(
 
     contract = _lock_contract(session, project_id=project.id, contract_id=variation.contract_id)
     deltas = variation_delta_by_cost_code(session, variation_id=variation.id)
+
+    # A signed variation may reduce a commitment, but not into nonsense and not
+    # below work that has already been formally certified. Certification is a
+    # statement that work was done and authorised; a later omission cannot make
+    # that history unauthorised after the fact, and a contract cannot commit a
+    # negative amount at all.
+    committed = contract_committed_by_cost_code(
+        session, project_id=project.id, contract_id=contract.id
+    )
+    certified = certified_by_cost_code(session, project_id=project.id, contract_id=contract.id)
+    below: list[str] = []
+    for cost_code_id, delta in deltas.items():
+        if delta >= ZERO:
+            continue
+        code = session.get(CostCode, cost_code_id)
+        label = code.code if code is not None else str(cost_code_id)
+        after = money(committed.get(cost_code_id, ZERO) + delta)
+        if after < ZERO:
+            below.append(f"{label}: would commit {after}")
+            continue
+        standing = certified.get(cost_code_id, ZERO)
+        if after < standing:
+            below.append(f"{label}: would leave {after} committed against {standing} certified")
+    if below:
+        raise ConflictError(
+            "This variation would reduce the commitment below what has already been "
+            "certified, or below zero — "
+            + "; ".join(sorted(below))
+            + ". Work that has been certified was authorised when it was certified, "
+            "and an omission cannot take that authorisation away afterwards."
+        )
+
     if any(delta > ZERO for delta in deltas.values()):
         budget = active_budget(session, project_id=project.id)
         if budget is None:
@@ -2349,8 +2518,9 @@ def record_invoice(
             )
     elif invoice_type in INVOICE_NEEDS_CERTIFICATE:
         raise ValidationError(
-            "A progress, retention release or final invoice must name the "
-            "certificate that authorises it."
+            "Every invoice except an advance must name the certified certificate "
+            "that authorises it. An invoice with no ceiling is a liability made "
+            "out of nothing."
         )
 
     invoice = Invoice(
@@ -2397,6 +2567,11 @@ def approve_invoice(
     invoice = _lock_invoice(session, project_id=project.id, invoice_id=invoice_id)
     if invoice.status != INVOICE_RECORDED:
         raise ConflictError("Only a recorded invoice can be approved.")
+    # Approving turns a document into a liability the company owes. Same
+    # discipline as confirming the payment that later settles it.
+    permissions.require_different_invoice_approver(
+        actor, recorded_by_user_id=invoice.recorded_by_user_id
+    )
     contract = _lock_contract(session, project_id=project.id, contract_id=invoice.contract_id)
     payable = calculator.invoice_payable(
         amount_ex_tax=invoice.amount_ex_tax, tax=invoice.tax_amount
@@ -2920,6 +3095,9 @@ def create_milestone(
 ) -> Milestone:
     """Add a milestone. Its code is its handle for ever after."""
     lock_project(session, project.id)
+    require_valid_scope(
+        session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+    )
     milestone = Milestone(
         project_id=project.id,
         code=code.strip(),
@@ -2972,6 +3150,14 @@ def update_milestone(
         )
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone is a record of what happened.")
+    if "phase_id" in changes or "building_id" in changes:
+        require_valid_scope(
+            session,
+            project=project,
+            actor=actor,
+            phase_id=changes.get("phase_id", milestone.phase_id),
+            building_id=changes.get("building_id", milestone.building_id),
+        )
     before = _snapshot(milestone, _MILESTONE_FIELDS)
     for field, value in changes.items():
         if field == "code":

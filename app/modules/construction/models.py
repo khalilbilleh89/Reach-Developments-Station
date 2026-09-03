@@ -177,8 +177,14 @@ INVOICE_RETENTION_RELEASE = "retention_release"
 INVOICE_FINAL = "final"
 INVOICE_OTHER = "other"
 
-#: Invoice kinds that must name the certificate that authorises them.
-INVOICE_NEEDS_CERTIFICATE = frozenset({INVOICE_PROGRESS, INVOICE_RETENTION_RELEASE, INVOICE_FINAL})
+#: Invoice kinds that must name the certificate that authorises them, which is
+#: every kind but the advance. ``other`` is in here deliberately: an invoice type
+#: with no ceiling is a way to approve a liability that no certified work and no
+#: contractual entitlement supports, and that is the one thing this module is
+#: built to prevent.
+INVOICE_NEEDS_CERTIFICATE = frozenset(
+    {INVOICE_PROGRESS, INVOICE_RETENTION_RELEASE, INVOICE_FINAL, INVOICE_OTHER}
+)
 
 #: An invoice's life. ``recorded`` is a document somebody entered; it is not yet
 #: a liability. ``disputed`` is a liability under argument — still owed, still
@@ -382,7 +388,10 @@ class BudgetVersion(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=BUDGET_DRAFT)
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    #: The version this one was cloned from, where it was.
+    #: The version this one was cloned from, where it was. A composite key
+    #: rather than a bare identifier: lineage that cannot prove the parent
+    #: exists and belongs to the same project is a note, not provenance, and the
+    #: first thing anybody asks of a budget is what it replaced.
     source_version_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     change_reason: Mapped[str] = mapped_column(String(1000), nullable=False)
 
@@ -415,11 +424,40 @@ class BudgetVersion(Base):
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_version_id", "project_id"],
+            [
+                "construction_budget_versions.id",
+                "construction_budget_versions.project_id",
+            ],
+            name="source_version",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "project_id", name="cx_budget_project"),
         UniqueConstraint("project_id", "version_number", name="uq_cx_budget_number"),
         CheckConstraint(in_list("status", BUDGET_STATUSES), name="status_ok"),
         CheckConstraint("version_number >= 1", name="number_positive"),
         CheckConstraint("length(change_reason) > 0", name="reason_present"),
+        # A status is a claim; these are the fields that make it evidence. A row
+        # saying "approved" with nobody's name on it is exactly what an audit
+        # asks about and exactly what the service must never be the only thing
+        # preventing.
+        CheckConstraint(
+            "status <> 'rejected'"
+            " OR (rejected_at IS NOT NULL AND rejected_by_user_id IS NOT NULL"
+            " AND rejection_reason IS NOT NULL)",
+            name="rejected_shape",
+        ),
+        CheckConstraint(
+            "status NOT IN ('active', 'superseded')"
+            " OR (activated_at IS NOT NULL AND activated_by_user_id IS NOT NULL)",
+            name="activated_shape",
+        ),
+        CheckConstraint(
+            "status NOT IN ('approved', 'active', 'superseded')"
+            " OR (approved_at IS NOT NULL AND approved_by_user_id IS NOT NULL)",
+            name="approved_shape",
+        ),
         # One budget in force, and one being worked on. Both are partial unique
         # indexes rather than service checks because two concurrent activations
         # would each read "no active version" and both write one.
@@ -943,7 +981,15 @@ class Certificate(Base):
             "status <> 'rejected' OR rejection_reason IS NOT NULL", name="rejected_has_reason"
         ),
         CheckConstraint(
-            "status <> 'reversed' OR reversal_reason IS NOT NULL", name="reversed_has_reason"
+            "status <> 'reversed'"
+            " OR (reversed_at IS NOT NULL AND reversed_by_user_id IS NOT NULL"
+            " AND reversal_reason IS NOT NULL)",
+            name="reversed_shape",
+        ),
+        CheckConstraint(
+            "status <> 'certified'"
+            " OR (certified_at IS NOT NULL AND certified_by_user_id IS NOT NULL)",
+            name="certified_shape",
         ),
         Index("ix_cx_certs_contract_status", "contract_id", "status"),
         Index("ix_cx_certs_project_status", "project_id", "status"),
@@ -1100,9 +1146,14 @@ class Invoice(Base):
         CheckConstraint("tax_amount >= 0", name="tax_nonneg"),
         CheckConstraint("length(invoice_number) > 0", name="number_present"),
         CheckConstraint("due_date IS NULL OR due_date >= invoice_date", name="due_order"),
-        # Everything but an advance claims against certified work.
+        # Everything but an advance claims against certified work — "other"
+        # included. An invoice type with no authorisation ceiling is a way to
+        # make an approved liability out of nothing, and the module rests on an
+        # invoice fitting inside what authorised it. A liability that genuinely
+        # sits outside certified work needs its own authorisation model, not an
+        # unrestricted escape hatch.
         CheckConstraint(
-            "invoice_type = 'advance' OR invoice_type = 'other' OR certificate_id IS NOT NULL",
+            "invoice_type = 'advance' OR certificate_id IS NOT NULL",
             name="claim_has_certificate",
         ),
         CheckConstraint(
@@ -1112,7 +1163,16 @@ class Invoice(Base):
         CheckConstraint(
             "status <> 'disputed' OR dispute_reason IS NOT NULL", name="disputed_has_reason"
         ),
-        CheckConstraint("status <> 'voided' OR void_reason IS NOT NULL", name="voided_has_reason"),
+        CheckConstraint(
+            "status <> 'voided'"
+            " OR (voided_at IS NOT NULL AND voided_by_user_id IS NOT NULL"
+            " AND void_reason IS NOT NULL)",
+            name="voided_shape",
+        ),
+        CheckConstraint(
+            "status <> 'approved' OR (approved_at IS NOT NULL AND approved_by_user_id IS NOT NULL)",
+            name="approved_shape",
+        ),
         Index("ix_cx_invoices_contract_status", "contract_id", "status"),
         Index("ix_cx_invoices_project_status", "project_id", "status"),
         Index("ix_cx_invoices_due_date", "due_date"),
@@ -1206,7 +1266,17 @@ class Payment(Base):
         CheckConstraint("length(payment_reference) > 0", name="reference_present"),
         CheckConstraint("value_date IS NULL OR value_date >= payment_date", name="value_order"),
         CheckConstraint(
-            "status <> 'reversed' OR reversal_reason IS NOT NULL", name="reversed_has_reason"
+            "status <> 'reversed'"
+            " OR (reversed_at IS NOT NULL AND reversed_by_user_id IS NOT NULL"
+            " AND reversal_reason IS NOT NULL)",
+            name="reversed_shape",
+        ),
+        # Cash leaving needs the second person's name on the row, not only in
+        # the service that wrote it.
+        CheckConstraint(
+            "status <> 'confirmed'"
+            " OR (confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL)",
+            name="confirmed_shape",
         ),
         Index("ix_cx_payments_contract_status", "contract_id", "status"),
         Index("ix_cx_payments_project_status", "project_id", "status"),
@@ -1383,15 +1453,31 @@ class Milestone(Base):
         # Certification is a state, a date and an actor together. A certified
         # date on a milestone nobody certified is exactly the shape of the
         # mistake this module exists to prevent.
+        # Certification is a state, a date, a time and a person together. The
+        # earlier version checked only the date, which let a raw insert claim a
+        # certification nobody signed — and a certified milestone is what makes
+        # a buyer's instalment fall due.
+        #
+        # The scope check that used to sit here was a tautology: "building IS
+        # NULL OR phase IS NULL OR building IS NOT NULL" is true for every row.
+        # Whether a building belongs to the named phase spans two other tables
+        # and is proved in the service, so a constraint that looked like it
+        # covered it was worse than no constraint at all.
         CheckConstraint(
-            "(status = 'certified') = (certified_date IS NOT NULL)", name="certified_shape"
+            "(status = 'certified')"
+            " = (certified_date IS NOT NULL AND certified_at IS NOT NULL"
+            " AND certified_by_user_id IS NOT NULL)",
+            name="certified_shape",
         ),
         CheckConstraint(
-            "status <> 'cancelled' OR cancellation_reason IS NOT NULL", name="cancelled_has_reason"
+            "status <> 'cancelled'"
+            " OR (cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL)",
+            name="cancelled_shape",
         ),
         CheckConstraint(
-            "building_id IS NULL OR phase_id IS NULL OR building_id IS NOT NULL",
-            name="scope_shape",
+            "status <> 'achieved'"
+            " OR (actual_achieved_date IS NOT NULL AND achieved_by_user_id IS NOT NULL)",
+            name="achieved_shape",
         ),
         Index("ix_cx_milestones_project_status", "project_id", "status"),
         Index("ix_cx_milestones_planned_date", "planned_date"),
@@ -1521,11 +1607,37 @@ class ForecastVersion(Base):
             name="budget",
             ondelete="RESTRICT",
         ),
+        # Same proof as the budget's lineage, for the same reason.
+        ForeignKeyConstraint(
+            ["source_version_id", "project_id"],
+            [
+                "construction_forecast_versions.id",
+                "construction_forecast_versions.project_id",
+            ],
+            name="source_version",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "project_id", name="cx_forecast_project"),
         UniqueConstraint("project_id", "version_number", name="uq_cx_forecast_number"),
         CheckConstraint(in_list("status", FORECAST_STATUSES), name="status_ok"),
         CheckConstraint("version_number >= 1", name="number_positive"),
         CheckConstraint("length(change_reason) > 0", name="reason_present"),
+        CheckConstraint(
+            "status <> 'rejected'"
+            " OR (rejected_at IS NOT NULL AND rejected_by_user_id IS NOT NULL"
+            " AND rejection_reason IS NOT NULL)",
+            name="rejected_shape",
+        ),
+        CheckConstraint(
+            "status NOT IN ('active', 'superseded')"
+            " OR (activated_at IS NOT NULL AND activated_by_user_id IS NOT NULL)",
+            name="activated_shape",
+        ),
+        CheckConstraint(
+            "status NOT IN ('approved', 'active', 'superseded')"
+            " OR (approved_at IS NOT NULL AND approved_by_user_id IS NOT NULL)",
+            name="approved_shape",
+        ),
         Index(
             "uq_cx_forecasts_one_active",
             "project_id",
