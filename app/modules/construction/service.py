@@ -38,7 +38,7 @@ schedule still waits for it.
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -78,6 +78,7 @@ from app.modules.construction.models import (
     ENTITY_CONTRACT,
     ENTITY_COST_CODE,
     ENTITY_INVOICE,
+    ENTITY_MILESTONE,
     ENTITY_PAYMENT,
     ENTITY_VARIATION,
     INVOICE_ADVANCE,
@@ -87,7 +88,10 @@ from app.modules.construction.models import (
     INVOICE_RECORDED,
     INVOICE_STANDING,
     INVOICE_VOIDED,
+    MILESTONE_ACHIEVED,
+    MILESTONE_CANCELLED,
     MILESTONE_CERTIFIED,
+    MILESTONE_PLANNED,
     PAYMENT_CONFIRMED,
     PAYMENT_RECORDED,
     PAYMENT_REVERSED,
@@ -105,11 +109,13 @@ from app.modules.construction.models import (
     CostCode,
     Invoice,
     Milestone,
+    MilestoneDependency,
     Payment,
     PaymentAllocation,
     Variation,
     VariationLine,
 )
+from app.modules.payment_plans import service as payment_plans_service
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.settings.models import CountryApprovalThreshold
@@ -131,6 +137,18 @@ _COST_CODE_FIELDS = (
 )
 
 _BUDGET_FIELDS = ("status", "effective_date", "change_reason")
+
+_MILESTONE_FIELDS = (
+    "code",
+    "name",
+    "milestone_type",
+    "planned_date",
+    "forecast_date",
+    "actual_achieved_date",
+    "certified_date",
+    "progress_fraction",
+    "status",
+)
 
 _INVOICE_FIELDS = (
     "invoice_number",
@@ -2841,3 +2859,414 @@ def reverse_payment(
         after=_snapshot(payment, _PAYMENT_FIELDS),
     )
     return payment
+
+
+# --------------------------------------------------------------------------- #
+# Milestones
+# --------------------------------------------------------------------------- #
+
+
+def list_milestones(session: Session, *, project: Project) -> list[Milestone]:
+    """The project's milestones, in planned order."""
+    return list(
+        session.scalars(
+            select(Milestone)
+            .where(Milestone.project_id == project.id)
+            .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
+        )
+    )
+
+
+def get_milestone(session: Session, *, project: Project, milestone_id: uuid.UUID) -> Milestone:
+    """Load one milestone of this project, or refuse as if it did not exist."""
+    milestone = session.scalars(
+        select(Milestone).where(Milestone.id == milestone_id, Milestone.project_id == project.id)
+    ).first()
+    if milestone is None:
+        raise permissions.milestone_not_found()
+    return milestone
+
+
+def milestone_delay_days(milestone: Milestone, *, today: date) -> int | None:
+    """How late a milestone is against its plan, in days. Derived, never stored.
+
+    One precedence, stated once and used everywhere: the date it was actually
+    certified or achieved if it has one, else its forecast, else today where the
+    planned date has already passed. A milestone with no plan has no delay —
+    there is nothing to be late against, and returning zero would say it was on
+    time.
+    """
+    if milestone.planned_date is None:
+        return None
+    against = milestone.certified_date or milestone.actual_achieved_date or milestone.forecast_date
+    if against is None:
+        against = today if today > milestone.planned_date else milestone.planned_date
+    return (against - milestone.planned_date).days
+
+
+def create_milestone(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    code: str,
+    name: str,
+    milestone_type: str,
+    phase_id: uuid.UUID | None = None,
+    building_id: uuid.UUID | None = None,
+    planned_date: date | None = None,
+    forecast_date: date | None = None,
+    notes: str | None = None,
+) -> Milestone:
+    """Add a milestone. Its code is its handle for ever after."""
+    lock_project(session, project.id)
+    milestone = Milestone(
+        project_id=project.id,
+        code=code.strip(),
+        name=name.strip(),
+        milestone_type=milestone_type,
+        phase_id=phase_id,
+        building_id=building_id,
+        planned_date=planned_date,
+        forecast_date=forecast_date,
+        notes=(notes or "").strip() or None,
+        status=MILESTONE_PLANNED,
+        created_by_user_id=actor.user_id,
+    )
+    session.add(milestone)
+    _flush(session)
+    record_event(
+        session,
+        action="construction.milestone_created",
+        entity_type=ENTITY_MILESTONE,
+        entity_id=milestone.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        after=_snapshot(milestone, _MILESTONE_FIELDS),
+    )
+    return milestone
+
+
+def update_milestone(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    milestone_id: uuid.UUID,
+    changes: dict[str, object],
+) -> Milestone:
+    """Amend a milestone's planning fields.
+
+    ``code`` is refused outright. A payment plan written years ago may point at
+    it through ``trigger_reference``, and renaming it would silently detach a
+    live contractual schedule from the event that triggers it — a failure that
+    surfaces as an instalment that never falls due, which is exactly the kind of
+    thing nobody notices until a buyer stops paying.
+    """
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    if "code" in changes and changes["code"] != milestone.code:
+        raise ConflictError(
+            "A milestone's code is the handle payment plans use to point at it and "
+            "cannot be changed. Create a new milestone if the breakdown has changed."
+        )
+    if milestone.status == MILESTONE_CERTIFIED:
+        raise ConflictError("A certified milestone is a record of what happened.")
+    before = _snapshot(milestone, _MILESTONE_FIELDS)
+    for field, value in changes.items():
+        if field == "code":
+            continue
+        setattr(milestone, field, value)
+    _flush(session)
+    record_event(
+        session,
+        action="construction.milestone_updated",
+        entity_type=ENTITY_MILESTONE,
+        entity_id=milestone.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(milestone, _MILESTONE_FIELDS),
+    )
+    return milestone
+
+
+def achieve_milestone(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    milestone_id: uuid.UUID,
+    achieved_date: date,
+    evidence_reference: str | None = None,
+) -> Milestone:
+    """Record that site says the work is done. This triggers nothing.
+
+    The gap between this and certification is the control the module exists to
+    keep. Somebody on site reporting that a floor is complete is information;
+    it is not the formal certification a buyer's contract makes their money
+    depend on, and nothing here touches a payment plan.
+    """
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    if milestone.status in (MILESTONE_CERTIFIED, MILESTONE_CANCELLED):
+        raise ConflictError("This milestone is already closed.")
+    before = _snapshot(milestone, _MILESTONE_FIELDS)
+    milestone.status = MILESTONE_ACHIEVED
+    milestone.actual_achieved_date = achieved_date
+    milestone.achieved_at = _now()
+    milestone.achieved_by_user_id = actor.user_id
+    if evidence_reference is not None:
+        milestone.evidence_reference = evidence_reference.strip() or None
+    _flush(session)
+    record_event(
+        session,
+        action="construction.milestone_achieved",
+        entity_type=ENTITY_MILESTONE,
+        entity_id=milestone.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(milestone, _MILESTONE_FIELDS),
+    )
+    return milestone
+
+
+def certify_milestone(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    milestone_id: uuid.UUID,
+    certified_date: date,
+    evidence_reference: str | None = None,
+    linked_certificate_id: uuid.UUID | None = None,
+) -> tuple[Milestone, payment_plans_service.MilestoneCertificationResult]:
+    """Formally certify a milestone, and make the buyer instalments waiting on it due.
+
+    The two halves are one transaction, deliberately. There is no state in which
+    a milestone is certified and a schedule still waits for it, and none in which
+    an instalment is due for a milestone that was not certified: if either half
+    fails, the caller's rollback discards both.
+
+    Payment plans is reached through its own public contract, so construction
+    never writes an instalment column and payment plans never imports
+    construction. The dependency runs one way and the buyer's due date is set by
+    the module that owns buyers' due dates.
+
+    Re-certifying a milestone that is already certified on the same date is a
+    no-op rather than an error, because a retried request should not be a
+    failure. Re-certifying on a *different* date is refused: moving a date a
+    buyer's receivable, ageing and collection actions already stand on is not
+    something to do by accident.
+    """
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    if milestone.status == MILESTONE_CANCELLED:
+        raise ConflictError("A cancelled milestone cannot be certified.")
+    if milestone.status == MILESTONE_CERTIFIED:
+        if milestone.certified_date == certified_date:
+            return milestone, payment_plans_service.MilestoneCertificationResult(
+                triggered_installment_ids=(), plan_ids=()
+            )
+        raise ConflictError(
+            f"This milestone was already certified on {milestone.certified_date}. "
+            "A buyer's instalment may already be due on that date, so it cannot be "
+            "moved by re-certifying."
+        )
+
+    certificate: Certificate | None = None
+    if linked_certificate_id is not None:
+        certificate = get_certificate(
+            session, project=project, certificate_id=linked_certificate_id
+        )
+        if certificate.status != CERTIFICATE_CERTIFIED:
+            raise ConflictError(
+                "A milestone can only be evidenced by a certificate that has been certified."
+            )
+
+    before = _snapshot(milestone, _MILESTONE_FIELDS)
+    milestone.status = MILESTONE_CERTIFIED
+    milestone.certified_date = certified_date
+    milestone.certified_at = _now()
+    milestone.certified_by_user_id = actor.user_id
+    if certificate is not None:
+        milestone.linked_certificate_id = certificate.id
+    if evidence_reference is not None:
+        milestone.evidence_reference = evidence_reference.strip() or None
+    if milestone.actual_achieved_date is None:
+        milestone.actual_achieved_date = certified_date
+    _flush(session)
+
+    result = payment_plans_service.apply_construction_milestone_certification(
+        session,
+        project=project,
+        milestone_code=milestone.code,
+        certified_date=certified_date,
+        evidence_reference=milestone.evidence_reference,
+        actor=actor,
+        correlation_id=actor.correlation_id,
+    )
+
+    record_event(
+        session,
+        action="construction.milestone_certified",
+        entity_type=ENTITY_MILESTONE,
+        entity_id=milestone.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=(
+            f"{len(result.triggered_installment_ids)} instalment(s) became due on {certified_date}"
+        ),
+        before=before,
+        after=_snapshot(milestone, _MILESTONE_FIELDS),
+    )
+    return milestone, result
+
+
+def cancel_milestone(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    milestone_id: uuid.UUID,
+    reason: str,
+) -> Milestone:
+    """Retire a milestone, unless a live payment plan is waiting on it.
+
+    Asked of payment plans through its own read contract rather than guessed
+    from a join here. A milestone removed while a contractual schedule still
+    points at its code would leave that instalment waiting for an event that can
+    never happen — money the buyer owes that the system will never ask for.
+    """
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    if milestone.status == MILESTONE_CERTIFIED:
+        raise ConflictError("A certified milestone is a record of what happened.")
+    waiting = payment_plans_service.plans_awaiting_milestone(
+        session, project_id=project.id, milestone_code=milestone.code
+    )
+    if waiting:
+        raise ConflictError(
+            f"{len(waiting)} active payment plan(s) are waiting on milestone "
+            f"{milestone.code}. Revise those schedules before retiring it, or the "
+            "instalments will wait for an event that can no longer happen."
+        )
+    before = _snapshot(milestone, _MILESTONE_FIELDS)
+    milestone.status = MILESTONE_CANCELLED
+    milestone.cancelled_at = _now()
+    milestone.cancellation_reason = reason.strip()
+    _flush(session)
+    record_event(
+        session,
+        action="construction.milestone_cancelled",
+        entity_type=ENTITY_MILESTONE,
+        entity_id=milestone.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(milestone, _MILESTONE_FIELDS),
+    )
+    return milestone
+
+
+def add_milestone_dependency(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    milestone_id: uuid.UUID,
+    depends_on_milestone_id: uuid.UUID,
+) -> MilestoneDependency:
+    """Record that one milestone waits on another. Refuses a cycle."""
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    upstream = get_milestone(session, project=project, milestone_id=depends_on_milestone_id)
+    if milestone.id == upstream.id:
+        raise ValidationError("A milestone cannot depend on itself.")
+    _require_no_dependency_cycle(
+        session, project_id=project.id, milestone_id=milestone.id, upstream_id=upstream.id
+    )
+    dependency = MilestoneDependency(
+        project_id=project.id,
+        milestone_id=milestone.id,
+        depends_on_milestone_id=upstream.id,
+        created_by_user_id=actor.user_id,
+    )
+    session.add(dependency)
+    _flush(session)
+    return dependency
+
+
+def _require_no_dependency_cycle(
+    session: Session, *, project_id: uuid.UUID, milestone_id: uuid.UUID, upstream_id: uuid.UUID
+) -> None:
+    """Refuse a dependency that would make the programme wait on itself.
+
+    Breadth-first from the proposed upstream milestone: if the milestone being
+    edited is reachable from it, adding this edge closes a loop. Not a scheduler
+    and not a critical path — one traversal, so a register can be read without a
+    dependency chain that never terminates.
+    """
+    seen: set[uuid.UUID] = set()
+    queue: deque[uuid.UUID] = deque([upstream_id])
+    while queue:
+        current = queue.popleft()
+        if current == milestone_id:
+            raise ValidationError("That dependency would make the programme wait on itself.")
+        if current in seen:
+            continue
+        seen.add(current)
+        for (next_id,) in session.execute(
+            select(MilestoneDependency.depends_on_milestone_id).where(
+                MilestoneDependency.milestone_id == current,
+                MilestoneDependency.project_id == project_id,
+            )
+        ).all():
+            queue.append(next_id)
+
+
+def remove_milestone_dependency(
+    session: Session,
+    *,
+    project: Project,
+    milestone_id: uuid.UUID,
+    depends_on_milestone_id: uuid.UUID,
+) -> None:
+    """Drop a dependency from a milestone that is not yet certified."""
+    lock_project(session, project.id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    if milestone.status == MILESTONE_CERTIFIED:
+        raise ConflictError("A certified milestone's programme is history.")
+    dependency = session.scalars(
+        select(MilestoneDependency).where(
+            MilestoneDependency.milestone_id == milestone.id,
+            MilestoneDependency.depends_on_milestone_id == depends_on_milestone_id,
+        )
+    ).first()
+    if dependency is None:
+        raise permissions.milestone_not_found()
+    session.delete(dependency)
+    _flush(session)
+
+
+def milestone_trigger_options(session: Session, *, project: Project) -> list[Milestone]:
+    """The milestones a payment plan may point at, and nothing else.
+
+    Deliberately the whole milestone rows for the caller to narrow: the schema
+    that serialises them returns only code, name, scope, dates and certification
+    state. A plan builder is used by Sales Operations, who may not read this
+    module at all — so the endpoint that exposes this must never hand back a
+    budget, a contract value, an estimate at completion or any other cost.
+    """
+    return list(
+        session.scalars(
+            select(Milestone)
+            .where(
+                Milestone.project_id == project.id,
+                Milestone.status != MILESTONE_CANCELLED,
+            )
+            .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
+        )
+    )

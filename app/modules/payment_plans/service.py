@@ -26,6 +26,7 @@ the change it describes.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -2262,4 +2263,138 @@ def activate_restructured_version(
         plan=plan,
         version=version,
         correlation_id=correlation_id,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The construction milestone contract
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class MilestoneCertificationResult:
+    """What one milestone certification did to the schedules waiting on it."""
+
+    #: Instalments whose actual due date this certification set.
+    triggered_installment_ids: tuple[uuid.UUID, ...]
+    #: The plans those instalments belong to, for the caller's audit trail.
+    plan_ids: tuple[uuid.UUID, ...]
+
+
+def plans_awaiting_milestone(
+    session: Session, *, project_id: uuid.UUID, milestone_code: str
+) -> list[uuid.UUID]:
+    """Which active plans still wait on this milestone code.
+
+    Construction asks before retiring a milestone, so a live contractual
+    schedule is never stranded on a trigger somebody removed. A narrow question
+    with a narrow answer — plan identifiers and nothing about the money.
+    """
+    rows = session.execute(
+        select(PaymentPlanVersion.payment_plan_id)
+        .join(
+            PaymentPlanInstallment,
+            PaymentPlanInstallment.payment_plan_version_id == PaymentPlanVersion.id,
+        )
+        .where(
+            PaymentPlanVersion.project_id == project_id,
+            PaymentPlanVersion.status == VERSION_ACTIVE,
+            PaymentPlanInstallment.trigger_type == TRIGGER_CONSTRUCTION_MILESTONE,
+            PaymentPlanInstallment.trigger_reference == milestone_code,
+            PaymentPlanInstallment.trigger_status == TRIGGER_AWAITING,
+        )
+        .distinct()
+    ).all()
+    return [row[0] for row in rows]
+
+
+def apply_construction_milestone_certification(
+    session: Session,
+    *,
+    project: Project,
+    milestone_code: str,
+    certified_date: date,
+    evidence_reference: str | None,
+    actor: ActorContext,
+    correlation_id: uuid.UUID,
+) -> MilestoneCertificationResult:
+    """Make instalments waiting on this milestone due, on the date it was certified.
+
+    The public contract PR-MVP-09 calls, and the only path by which a
+    construction event moves a buyer's money. Three properties matter, and each
+    is the answer to a way this could have been built wrong.
+
+    **Certification only.** The caller has already established that a milestone
+    was formally certified. A forecast date, a site report of work achieved, and
+    an operator's opinion are all incapable of reaching this function, because
+    construction is the only module that can say what certification is and it
+    only says so once.
+
+    **The certified date is the due date.** Not today, not the date somebody got
+    round to entering it. What the buyer contracted to is that the instalment
+    falls due when the milestone is certified, so that is the date written, and
+    ``contractual_due_date`` and ``forecast_due_date`` keep their own meanings
+    untouched.
+
+    **Does not commit.** The caller's transaction covers both this and the
+    certification that caused it, so there is no window in which a milestone is
+    certified and a schedule still waits for it — or the reverse. If either half
+    fails, neither happened.
+
+    Idempotent by construction: an instalment already triggered is not selected,
+    so re-running a certification changes nothing and reports nothing changed.
+    """
+    installments = list(
+        session.scalars(
+            select(PaymentPlanInstallment)
+            .join(
+                PaymentPlanVersion,
+                PaymentPlanVersion.id == PaymentPlanInstallment.payment_plan_version_id,
+            )
+            .where(
+                PaymentPlanInstallment.project_id == project.id,
+                PaymentPlanVersion.status == VERSION_ACTIVE,
+                PaymentPlanInstallment.trigger_type == TRIGGER_CONSTRUCTION_MILESTONE,
+                PaymentPlanInstallment.trigger_reference == milestone_code,
+                PaymentPlanInstallment.trigger_status == TRIGGER_AWAITING,
+            )
+            .order_by(PaymentPlanInstallment.id)
+            .with_for_update(of=PaymentPlanInstallment)
+            .execution_options(populate_existing=True)
+        )
+    )
+    if not installments:
+        return MilestoneCertificationResult(triggered_installment_ids=(), plan_ids=())
+
+    version_ids = {row.payment_plan_version_id for row in installments}
+    plan_ids = {
+        plan_id
+        for (plan_id,) in session.execute(
+            select(PaymentPlanVersion.payment_plan_id).where(PaymentPlanVersion.id.in_(version_ids))
+        ).all()
+    }
+
+    for row in installments:
+        row.actual_due_date = certified_date
+        row.trigger_status = TRIGGER_TRIGGERED
+    session.flush()
+
+    record_event(
+        session,
+        action="payment_plan.construction_milestone_triggered",
+        entity_type="payment_plan_installment",
+        entity_id=None,
+        correlation_id=correlation_id,
+        actor_user_id=actor.user_id,
+        reason=evidence_reference,
+        after={
+            "milestone_code": milestone_code,
+            "certified_date": certified_date.isoformat(),
+            "installments": [str(row.id) for row in installments],
+            "plans": sorted(str(plan_id) for plan_id in plan_ids),
+        },
+    )
+    return MilestoneCertificationResult(
+        triggered_installment_ids=tuple(row.id for row in installments),
+        plan_ids=tuple(sorted(plan_ids, key=str)),
     )
