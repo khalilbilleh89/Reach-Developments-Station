@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -127,8 +128,9 @@ from app.modules.construction.models import (
     Variation,
     VariationLine,
 )
+from app.modules.inventory import service as inventory_service
 from app.modules.inventory.custom_fields import business_today
-from app.modules.inventory.models import Building, Phase
+from app.modules.inventory.models import Building, Phase, Unit
 from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.payment_plans import service as payment_plans_service
 from app.modules.projects.models import Project
@@ -3946,3 +3948,518 @@ def hard_cost_estimate_at_completion(
     return version, calculator.estimate_at_completion(
         certified_to_date=money(certified or ZERO), forecast_remaining=remaining
     )
+
+
+# --------------------------------------------------------------------------- #
+# Project position
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CostControl:
+    """The project's cost side. Every figure ex tax, without exception."""
+
+    original_baseline: Decimal
+    current_approved_budget: Decimal
+    approved_contingency: Decimal
+    control_budget: Decimal
+    original_commitment: Decimal
+    approved_variation_delta: Decimal
+    revised_commitment: Decimal
+    certified_to_date: Decimal
+    forecast_remaining: Decimal | None
+    estimate_at_completion: Decimal | None
+    variance_at_completion: Decimal | None
+
+
+@dataclass(frozen=True)
+class Payable:
+    """The project's cash side. These carry tax, retention and deductions."""
+
+    approved_invoice_payable: Decimal
+    disputed_invoice_payable: Decimal
+    confirmed_paid: Decimal
+    invoice_outstanding: Decimal
+    retention_outstanding: Decimal
+    advance_paid: Decimal
+    advance_recovered: Decimal
+    advance_outstanding: Decimal
+
+
+def cost_control_position(session: Session, *, project: Project) -> CostControl:
+    """Assemble the project's cost position from the rows, on one basis: ex tax.
+
+    Nothing here is stored and nothing is a running total kept up to date by the
+    writes. Each figure is a sum over immutable rows taken at read time, which
+    is why a reversal is simply a row that stops counting rather than a
+    correction that has to find every place the number was cached.
+    """
+    budget = active_budget(session, project_id=project.id)
+    baseline = approved = contingency = ZERO
+    if budget is not None:
+        totals = session.execute(
+            select(
+                func.coalesce(func.sum(BudgetLine.baseline_amount), 0),
+                func.coalesce(func.sum(BudgetLine.approved_budget_amount), 0),
+                func.coalesce(func.sum(BudgetLine.contingency_amount), 0),
+            ).where(BudgetLine.budget_version_id == budget.id)
+        ).one()
+        baseline, approved, contingency = (money(value) for value in totals)
+
+    original = session.scalars(
+        select(func.sum(ContractLine.original_amount_ex_tax))
+        .join(Contract, Contract.id == ContractLine.contract_id)
+        .where(
+            ContractLine.project_id == project.id,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ).first()
+    variations = session.scalars(
+        select(func.sum(VariationLine.value_delta_ex_tax))
+        .join(Variation, Variation.id == VariationLine.variation_id)
+        .join(Contract, Contract.id == Variation.contract_id)
+        .where(
+            VariationLine.project_id == project.id,
+            Variation.status == VARIATION_APPROVED,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ).first()
+    original_commitment = money(original or ZERO)
+    variation_delta = money(variations or ZERO)
+
+    forecast = active_forecast(session, project_id=project.id)
+    certified_as_of = forecast.as_of_date if forecast is not None else None
+    certified = money(
+        sum(
+            certified_by_cost_code(session, project_id=project.id, as_of=certified_as_of).values(),
+            ZERO,
+        )
+    )
+
+    remaining: Decimal | None = None
+    eac: Decimal | None = None
+    vac: Decimal | None = None
+    if forecast is not None:
+        total = session.scalars(
+            select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax)).where(
+                ForecastLine.forecast_version_id == forecast.id
+            )
+        ).first()
+        remaining = money(total or ZERO)
+        eac = calculator.estimate_at_completion(
+            certified_to_date=certified, forecast_remaining=remaining
+        )
+        vac = calculator.variance_at_completion(
+            estimate_at_completion=eac,
+            control_budget=calculator.control_budget(
+                approved_budget=approved, contingency=contingency
+            ),
+        )
+
+    return CostControl(
+        original_baseline=baseline,
+        current_approved_budget=approved,
+        approved_contingency=contingency,
+        control_budget=calculator.control_budget(approved_budget=approved, contingency=contingency),
+        original_commitment=original_commitment,
+        approved_variation_delta=variation_delta,
+        revised_commitment=calculator.revised_commitment(
+            original_amount=original_commitment, approved_variation_delta=variation_delta
+        ),
+        certified_to_date=certified,
+        forecast_remaining=remaining,
+        estimate_at_completion=eac,
+        variance_at_completion=vac,
+    )
+
+
+def payable_position(session: Session, *, project: Project) -> Payable:
+    """Assemble the project's cash position. Never added to the cost position."""
+    approved = session.scalars(
+        select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
+            Invoice.project_id == project.id, Invoice.status == INVOICE_APPROVED
+        )
+    ).first()
+    disputed = session.scalars(
+        select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
+            Invoice.project_id == project.id, Invoice.status == INVOICE_DISPUTED
+        )
+    ).first()
+    paid = session.scalars(
+        select(func.sum(PaymentAllocation.amount))
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .where(PaymentAllocation.project_id == project.id, Payment.status == PAYMENT_CONFIRMED)
+    ).first()
+    approved_total = money(approved or ZERO)
+    disputed_total = money(disputed or ZERO)
+    paid_total = money(paid or ZERO)
+
+    held = released = advance_paid = advance_recovered = ZERO
+    for contract in session.scalars(
+        select(Contract).where(
+            Contract.project_id == project.id,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ):
+        contract_held, contract_released = retention_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        held = money(held + contract_held)
+        released = money(released + contract_released)
+        contract_advance, contract_recovered = advance_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        advance_paid = money(advance_paid + contract_advance)
+        advance_recovered = money(advance_recovered + contract_recovered)
+
+    return Payable(
+        approved_invoice_payable=approved_total,
+        disputed_invoice_payable=disputed_total,
+        confirmed_paid=paid_total,
+        # A disputed invoice is still owed. Subtracting it would make the
+        # obligation fall the moment somebody objected to it.
+        invoice_outstanding=money(approved_total + disputed_total - paid_total),
+        retention_outstanding=calculator.retention_outstanding(held=held, released=released),
+        advance_paid=advance_paid,
+        advance_recovered=advance_recovered,
+        advance_outstanding=calculator.advance_outstanding(
+            paid=advance_paid, recovered=advance_recovered
+        ),
+    )
+
+
+def construction_controls(session: Session, *, project: Project) -> dict[str, int | bool]:
+    """The counts a screen may act on, each from a stored fact.
+
+    No severity, no score, no weighting. A health percentage over a set of
+    pass/fail questions tells a reader something is wrong without saying what,
+    and goes green while one of them is still failing.
+    """
+    today = business_today()
+    budget = active_budget(session, project_id=project.id)
+    forecast = active_forecast(session, project_id=project.id)
+
+    over_budget = 0
+    below_commitment = 0
+    if budget is not None:
+        lines = budget_lines_by_cost_code(session, budget_version_id=budget.id)
+        committed = committed_by_cost_code(session, project_id=project.id)
+        positions = (
+            forecast_position(session, project=project, version=forecast)
+            if forecast is not None
+            else {}
+        )
+        for cost_code_id, line in lines.items():
+            if committed.get(cost_code_id, ZERO) > calculator.control_budget(
+                approved_budget=line.approved_budget_amount,
+                contingency=line.contingency_amount,
+            ):
+                over_budget += 1
+        below_commitment = sum(
+            1 for position in positions.values() if position.forecast_below_commitment
+        )
+
+    open_variations = session.scalar(
+        select(func.count())
+        .select_from(Variation)
+        .where(Variation.project_id == project.id, Variation.status == VARIATION_SUBMITTED)
+    )
+    late = session.scalar(
+        select(func.count())
+        .select_from(Milestone)
+        .where(
+            Milestone.project_id == project.id,
+            Milestone.status.notin_((MILESTONE_CERTIFIED, MILESTONE_CANCELLED)),
+            Milestone.planned_date.is_not(None),
+            Milestone.planned_date < today,
+        )
+    )
+    uncertified = session.scalar(
+        select(func.count())
+        .select_from(Milestone)
+        .where(Milestone.project_id == project.id, Milestone.status == MILESTONE_ACHIEVED)
+    )
+    overdue_invoices = session.scalar(
+        select(func.count())
+        .select_from(Invoice)
+        .where(
+            Invoice.project_id == project.id,
+            Invoice.status == INVOICE_APPROVED,
+            Invoice.due_date.is_not(None),
+            Invoice.due_date < today,
+        )
+    )
+    escalated = 0
+    for variation in session.scalars(
+        select(Variation).where(
+            Variation.project_id == project.id, Variation.status == VARIATION_SUBMITTED
+        )
+    ):
+        needs, _threshold, _total = variation_requires_escalation(
+            session, project=project, variation_id=variation.id
+        )
+        if needs:
+            escalated += 1
+
+    return {
+        "open_variations": int(open_variations or 0),
+        "escalated_variations": escalated,
+        "over_budget_cost_codes": over_budget,
+        "forecast_below_commitment_cost_codes": below_commitment,
+        "late_milestones": int(late or 0),
+        "achieved_uncertified_milestones": int(uncertified or 0),
+        "overdue_approved_invoices": int(overdue_invoices or 0),
+        "has_active_budget": budget is not None,
+        "has_active_forecast": forecast is not None,
+    }
+
+
+def reconciliation(session: Session, *, project: Project) -> list[calculator.Check]:
+    """Explicit questions the rows must answer, with no tolerance anywhere.
+
+    Each check is a sentence somebody can act on rather than a contribution to a
+    score. A reconciliation that reported "94% healthy" would be green while a
+    contract's lines disagreed with its own header by a cent, which is exactly
+    the case this exists to surface.
+    """
+    checks: list[calculator.Check] = []
+
+    for contract in session.scalars(select(Contract).where(Contract.project_id == project.id)):
+        checks.append(
+            calculator.equality_check(
+                key=f"contract_lines:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: lines against header",
+                amount=contract_line_total(session, contract_id=contract.id),
+                expected=contract.original_contract_value_ex_tax,
+            )
+        )
+        committed = contract_committed_by_cost_code(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        certified = certified_by_cost_code(session, project_id=project.id, contract_id=contract.id)
+        checks.append(
+            calculator.limit_check(
+                key=f"certified:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: certified against commitment",
+                amount=money(sum(certified.values(), ZERO)),
+                limit=money(sum(committed.values(), ZERO)),
+            )
+        )
+        held, released = retention_position(session, project_id=project.id, contract_id=contract.id)
+        checks.append(
+            calculator.limit_check(
+                key=f"retention:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: retention released against held",
+                amount=released,
+                limit=held,
+            )
+        )
+        advance_paid, recovered = advance_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        checks.append(
+            calculator.limit_check(
+                key=f"advance:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: advance recovered against paid",
+                amount=recovered,
+                limit=advance_paid,
+            )
+        )
+
+    for payment in session.scalars(
+        select(Payment).where(Payment.project_id == project.id, Payment.status == PAYMENT_CONFIRMED)
+    ):
+        checks.append(
+            calculator.equality_check(
+                key=f"payment_allocated:{payment.payment_reference}",
+                label=f"Payment {payment.payment_reference}: allocations against amount",
+                amount=payment_allocated(session, payment_id=payment.id),
+                expected=payment.amount,
+                detail="A confirmed disbursement must say in full what it settled.",
+            )
+        )
+
+    for invoice in session.scalars(
+        select(Invoice).where(
+            Invoice.project_id == project.id, Invoice.status.in_(tuple(INVOICE_STANDING))
+        )
+    ):
+        checks.append(
+            calculator.limit_check(
+                key=f"invoice_paid:{invoice.invoice_number}",
+                label=f"Invoice {invoice.invoice_number}: cash applied against payable",
+                amount=invoice_allocated(session, invoice_id=invoice.id),
+                limit=calculator.invoice_payable(
+                    amount_ex_tax=invoice.amount_ex_tax, tax=invoice.tax_amount
+                ),
+            )
+        )
+
+    forecast = active_forecast(session, project_id=project.id)
+    active_codes = session.scalar(
+        select(func.count())
+        .select_from(CostCode)
+        .where(CostCode.project_id == project.id, CostCode.is_active.is_(True))
+    )
+    if forecast is not None:
+        covered = len(forecast_lines_by_cost_code(session, forecast_version_id=forecast.id))
+        checks.append(
+            calculator.equality_check(
+                key="forecast_coverage",
+                label="Forecast addresses every active cost code",
+                amount=Decimal(covered),
+                expected=Decimal(int(active_codes or 0)),
+                detail="A missing line is not a forecast of zero.",
+            )
+        )
+
+    # No exchange rates exist anywhere in this platform, so a second
+    # denomination is a figure nothing could add to the project's position.
+    unlike = session.scalar(
+        select(func.count())
+        .select_from(Contract)
+        .where(
+            Contract.project_id == project.id,
+            Contract.currency_id != project.base_currency_id,
+        )
+    )
+    checks.append(
+        calculator.equality_check(
+            key="currency",
+            label="Every contract is in the project's base currency",
+            amount=Decimal(int(unlike or 0)),
+            expected=ZERO,
+            detail="There is no FX in this platform; unlike currencies are never added.",
+        )
+    )
+    return checks
+
+
+# --------------------------------------------------------------------------- #
+# Delivery
+# --------------------------------------------------------------------------- #
+
+#: The build states construction answers for. Handover — blocked, ready, handed
+#: over — belongs to sales, and nothing here can reach it: a module that could
+#: mark a unit handed over would be a second writer for a status somebody else
+#: is accountable for.
+CONSTRUCTION_DELIVERY_STATES = ("not_started", "under_construction", "ready")
+
+
+def milestone_scope_label(session: Session, *, milestone: Milestone) -> str | None:
+    """What a milestone is about, in words: a phase, a building, or the project."""
+    if milestone.building_id is not None:
+        building = session.get(Building, milestone.building_id)
+        if building is not None:
+            return building.code
+    if milestone.phase_id is not None:
+        phase = session.get(Phase, milestone.phase_id)
+        if phase is not None:
+            return phase.code
+    return None
+
+
+def apply_delivery(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    to_status: str,
+    unit_id: uuid.UUID | None,
+    building_id: uuid.UUID | None,
+    phase_id: uuid.UUID | None,
+    effective_date: date,
+    reason: str | None = None,
+    revoking: bool = False,
+) -> dict[str, object]:
+    """Move a unit, a building's units or a phase's units through the build.
+
+    Everything is validated before anything is applied. A bulk action that
+    updated eighty-seven units and failed on the eighty-eighth would leave a
+    building in two states with no record of which half moved, so the whole set
+    is proved first and then written — all of it or none.
+
+    Every write goes through inventory's public contract. Construction decides
+    which value follows from the build; inventory owns the column, the closed
+    set and the append-only event behind it, and there is no line here that
+    assigns ``unit.delivery_status``.
+    """
+    lock_project(session, project.id)
+    if to_status not in CONSTRUCTION_DELIVERY_STATES:
+        raise ValidationError(
+            "Construction moves units between not started, under construction and "
+            "ready. Handover states belong to sales."
+        )
+    named = [value for value in (unit_id, building_id, phase_id) if value is not None]
+    if len(named) != 1:
+        raise ValidationError("Name exactly one of a unit, a building or a phase.")
+
+    require_valid_scope(
+        session,
+        project=project,
+        actor=actor,
+        phase_id=phase_id,
+        building_id=building_id,
+    )
+
+    statement = select(Unit).where(Unit.project_id == project.id)
+    if unit_id is not None:
+        statement = statement.where(Unit.id == unit_id)
+    elif building_id is not None:
+        statement = statement.where(Unit.building_id == building_id)
+    else:
+        statement = statement.where(
+            Unit.building_id.in_(
+                select(Building.id).where(
+                    Building.phase_id == phase_id, Building.project_id == project.id
+                )
+            )
+        )
+    allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
+    if allowed is not None:
+        statement = statement.where(
+            Unit.building_id.in_(
+                select(Building.id).where(
+                    Building.phase_id.in_(allowed), Building.project_id == project.id
+                )
+            )
+        )
+    # Deterministic order, so two concurrent bulk actions take the same unit
+    # locks in the same sequence rather than deadlocking against each other.
+    units = list(session.scalars(statement.order_by(Unit.id)))
+    if not units:
+        raise NotFoundError("No units found in that scope.")
+
+    blocked: list[str] = []
+    for unit in units:
+        current = unit.delivery_status
+        if current not in CONSTRUCTION_DELIVERY_STATES:
+            blocked.append(
+                f"{unit.unit_number}: {current} is a handover state and belongs to sales"
+            )
+            continue
+        if revoking and current != "ready":
+            blocked.append(f"{unit.unit_number}: is {current}, not ready")
+    if blocked:
+        raise ConflictError(
+            "This would not apply to every unit in the scope, so none of it was "
+            "applied — " + "; ".join(sorted(blocked)) + "."
+        )
+
+    moved: list[uuid.UUID] = []
+    for unit in units:
+        if unit.delivery_status == to_status:
+            continue
+        inventory_service.apply_delivery_status(
+            session,
+            project=project,
+            unit=unit,
+            to_status=to_status,
+            effective_date=effective_date,
+            actor_user_id=actor.user_id,
+            correlation_id=actor.correlation_id,
+            reason=reason,
+        )
+        moved.append(unit.id)
+    _flush(session)
+    return {"to_status": to_status, "unit_count": len(moved), "unit_ids": moved}
