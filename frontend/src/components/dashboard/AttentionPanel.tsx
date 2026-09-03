@@ -22,6 +22,18 @@ export interface AttentionItem {
   section: ProjectSection;
 }
 
+/**
+ * What is owed, blocked or overdue, as a list of counts and their way in.
+ *
+ * The card takes the attention tone only when it has something to say. A page
+ * where nothing is flagged is good news, and drawing good news in warning
+ * colours teaches people to ignore the colour.
+ *
+ * There is no score and no ranking. Ordering these by a weight the browser
+ * invented would put a number in front of a director that no one on the
+ * finance team could reproduce; lifecycle order is the order the development
+ * itself runs in, and it needs no arithmetic to defend.
+ */
 export function AttentionPanel({
   items,
   loading,
@@ -35,16 +47,21 @@ export function AttentionPanel({
   onNavigate: (section: ProjectSection) => void;
 }) {
   const shown = items.filter((item) => item.count > 0);
+  const flagged = shown.length > 0;
   return (
-    <Card title="Needs attention" description="What the system has flagged, in lifecycle order.">
+    <Card
+      title="Needs attention"
+      description={flagged ? "In lifecycle order." : undefined}
+      tone={flagged ? "attention" : undefined}
+    >
       {problems.map((problem) => (
         <Notice key={problem} tone="warning">
           {problem}
         </Notice>
       ))}
-      {loading && shown.length === 0 ? (
+      {loading && !flagged ? (
         <Loading label="Checking the project…" lines={3} />
-      ) : shown.length === 0 ? (
+      ) : !flagged ? (
         <p className="attention-clear">
           <Icon name="check" />
           Nothing is flagged for attention.

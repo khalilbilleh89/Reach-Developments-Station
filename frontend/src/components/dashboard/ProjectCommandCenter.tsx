@@ -28,22 +28,44 @@ import {
 import type { Roles } from "@/lib/roles";
 import type { ProjectSection } from "@/components/shell/navigation";
 import {
-  Badge,
+  Breakdown,
+  BreakdownRow,
   Button,
   Card,
+  Distribution,
+  DistributionBand,
   EmptyState,
-  InlineMeta,
-  InlineMetaItem,
   KeyValue,
   KeyValueGrid,
   Loading,
   Metric,
   MetricGroup,
   Notice,
+  Position,
+  PositionFigure,
+  PositionSupport,
+  PositionSupportItem,
+  SectionHeader,
 } from "@/components/ui";
-import { projectStatusLabel, projectStatusTone } from "@/components/projects/projectStatus";
+import { AGING_BUCKETS, bucketLabel } from "@/components/projects/collections/labels";
 import { AttentionPanel } from "./AttentionPanel";
 import type { AttentionItem } from "./AttentionPanel";
+import { ProjectPlate } from "./ProjectPlate";
+
+/** How old a band's money is, in the order the server ages it. */
+const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
+  awaiting_trigger: "cool",
+  current: "cool",
+  "1_30": "warm",
+  "31_60": "hot",
+  "61_90": "hot",
+  "91_plus": "late",
+};
+
+/** Is this server decimal anything other than zero? A string test, never a parse. */
+function isNonZero(value: string | null | undefined): boolean {
+  return typeof value === "string" && /[1-9]/.test(value);
+}
 
 /**
  * The project's front page: what is happening in this development right now.
@@ -238,50 +260,25 @@ export function ProjectCommandCenter({
 
   const loading = sources.some(([, answer]) => answer.status === "loading");
 
-  const baseCode = project.base_currency_code;
+  // The financial position is the page's answer where Finance has given one.
+  // Where it has not — the reader is not entitled to it, or no cost basis
+  // governs the project yet — the composition falls back to what the
+  // commercial modules did answer rather than showing an empty frame.
+  const economic = economics.status === "ready" && economics.data.active_version !== null ? economics.data : null;
+  const economicCode = economic ? currencyCodeOf(economic.currency_id) : null;
+  const dealTotals = deals.status === "ready" ? deals.data.totals : null;
+  const unitTotals = units.status === "ready" ? units.data : null;
+  const priceTotals = prices.status === "ready" ? prices.data : null;
+  const hasPosition = economic !== null || unitTotals !== null;
 
   return (
     <>
-      <header className="identity">
-        <div className="identity-main">
-          <h1 className="identity-title">{project.name}</h1>
-          <p className="identity-sub">
-            {project.developer_entity}
-            {project.city || project.location
-              ? ` · ${[project.location, project.city].filter(Boolean).join(", ")}`
-              : ""}
-          </p>
-          <InlineMeta>
-            <InlineMetaItem label="Code">
-              <span className="mono">{project.code}</span>
-            </InlineMetaItem>
-            <InlineMetaItem label="Status">
-              <Badge tone={projectStatusTone(project.status)}>{projectStatusLabel(project.status)}</Badge>
-            </InlineMetaItem>
-            {project.project_type_code ? (
-              <InlineMetaItem label="Type">{project.project_type_code}</InlineMetaItem>
-            ) : null}
-            <InlineMetaItem label="Programme">
-              {project.planned_start || project.planned_completion
-                ? `${businessDate(project.planned_start)} → ${businessDate(project.planned_completion)}`
-                : "Not planned"}
-            </InlineMetaItem>
-            <InlineMetaItem label="Base">{baseCode ?? "—"}</InlineMetaItem>
-            {project.reporting_currency_code && project.reporting_currency_code !== baseCode ? (
-              <InlineMetaItem label="Reporting">{project.reporting_currency_code}</InlineMetaItem>
-            ) : null}
-            {project.project_manager_display_name ? (
-              <InlineMetaItem label="Manager">{project.project_manager_display_name}</InlineMetaItem>
-            ) : null}
-          </InlineMeta>
-        </div>
-        {canEdit ? (
-          <div className="identity-actions">
-            <Button onClick={onEdit}>Edit project</Button>
-          </div>
-        ) : null}
-      </header>
+      <ProjectPlate
+        project={project}
+        actions={canEdit ? <Button onClick={onEdit}>Edit project</Button> : undefined}
+      />
 
+      <div className="stack">
       {!operational ? (
         <Notice tone="info">
           This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -290,264 +287,381 @@ export function ProjectCommandCenter({
         </Notice>
       ) : null}
 
-      <div className="grid-12">
-        <div className="span-4">
-          <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
-        </div>
-
-        <div className="span-8">
-          <Card
-            title="Commercial position"
-            description="Units, where they stand, and what has been agreed."
-            actions={
-              <Button small variant="quiet" onClick={() => onNavigate("inventory")}>
-                Inventory
-              </Button>
-            }
-          >
-            <Section answer={units} name="Inventory" off="Inventory opens after setup.">
-              {(data) => (
-                <MetricGroup>
-                  <Metric label="Units" value={data.total} size="lg" />
-                  <Metric label="Available" value={data.available_count} />
-                  <Metric label="Held" value={data.held_count} />
-                  <Metric label="Unreleased" value={data.unreleased_count} />
-                </MetricGroup>
-              )}
-            </Section>
-            {seesSales ? (
-              <Section answer={deals} name="Sales" off="">
-                {(data) => (
-                  <>
-                    <h3 className="section-heading">Sales</h3>
-                    <MetricGroup>
-                      <Metric label="Live reservations" value={data.totals.active_reservations} size="sm" />
-                      <Metric label="Contract pending" value={data.totals.contract_pending} size="sm" />
-                      <Metric label="Contracted" value={data.totals.contracted} size="sm" />
-                      <Metric label="Returned" value={data.totals.returned} size="sm" />
-                      <Metric
-                        label="Contracted value"
-                        value={
-                          data.totals.mixed_currency
-                            ? "Not summed"
-                            : money(data.totals.contracted_value, currencyCodeOf(data.totals.currency_id))
-                        }
-                        note={data.totals.mixed_currency ? "Contracts in more than one currency" : undefined}
-                        size="sm"
+      {/* Two columns that stack on their own rather than a twelve-column grid.
+          A grid row is as tall as its tallest card, so a project with eleven
+          things needing attention would open a hand's depth of empty page
+          under the position beside it. */}
+      <div className="split">
+        <div className="stack">
+          {operational && hasPosition ? (
+            <Card
+              tone="command"
+              title="Project position"
+              description={
+                economic
+                  ? "Sold units on their frozen terms, unsold on today's price and basis."
+                  : "Where the development stands across its units."
+              }
+              actions={
+                economic ? (
+                  <Button small variant="quiet" onClick={() => onNavigate("economics")}>
+                    Unit economics
+                  </Button>
+                ) : (
+                  <Button small variant="quiet" onClick={() => onNavigate("inventory")}>
+                    Inventory
+                  </Button>
+                )
+              }
+            >
+              {economic ? (
+                <>
+                  <Position>
+                    {/* The project's own margin, in ink. Units below the
+                        minimum are counted in Needs attention, and colouring
+                        the whole development's margin for them would report a
+                        problem this figure does not have. */}
+                    <PositionFigure
+                      lead
+                      label="Margin"
+                      value={percent(economic.margin_fraction)}
+                      note={
+                        economic.threshold_fraction
+                          ? `Minimum ${percent(economic.threshold_fraction)}`
+                          : undefined
+                      }
+                    />
+                    <PositionFigure
+                      label="Profit"
+                      value={money(economic.profit_total, economicCode)}
+                      tone={economic.profit_total.startsWith("-") ? "danger" : "neutral"}
+                      note="After finance"
+                    />
+                    <PositionFigure label="Return on cost" value={percent(economic.return_on_cost_fraction)} />
+                  </Position>
+                  <PositionSupport>
+                    {dealTotals ? (
+                      <PositionSupportItem
+                        label="Contracted"
+                        value={`${dealTotals.contracted} of ${dealTotals.units} units`}
                       />
-                      {plans.status === "ready" ? (
-                        <Metric label="Payment plans" value={plans.data.total} size="sm" />
-                      ) : null}
-                    </MetricGroup>
-                  </>
+                    ) : null}
+                    <PositionSupportItem label="Revenue" value={money(economic.revenue_total, economicCode)} />
+                    <PositionSupportItem label="Total cost" value={money(economic.total_cost_total, economicCode)} />
+                    <PositionSupportItem
+                      label="Cost basis"
+                      value={`v${economic.active_version?.version_number} · ${businessDate(
+                        economic.active_version?.effective_from ?? null,
+                      )}`}
+                    />
+                    <PositionSupportItem
+                      label="Covered"
+                      value={`${economic.comparable_unit_count} of ${economic.unit_count} units`}
+                    />
+                  </PositionSupport>
+                  <SectionHeader
+                    title="Cost composition"
+                    description="The pools the server allocated, and the total it reached."
+                  />
+                  <Breakdown>
+                    <BreakdownRow
+                      label="Development"
+                      note="Land, hard and soft"
+                      amount={money(economic.development_cost_total, economicCode)}
+                    />
+                    <BreakdownRow
+                      label="Commercial"
+                      note="Selling and seller-borne"
+                      amount={money(economic.commercial_cost_total, economicCode)}
+                    />
+                    <BreakdownRow label="Finance" amount={money(economic.finance_cost_total, economicCode)} />
+                    <BreakdownRow total label="Total cost" amount={money(economic.total_cost_total, economicCode)} />
+                  </Breakdown>
+                </>
+              ) : unitTotals ? (
+                <>
+                  <Position>
+                    <PositionFigure lead label="Units" value={unitTotals.total} />
+                    <PositionFigure label="Available" value={unitTotals.available_count} />
+                    {dealTotals ? (
+                      <PositionFigure
+                        label="Contracted"
+                        value={dealTotals.contracted}
+                        note={`of ${dealTotals.units} units`}
+                      />
+                    ) : (
+                      <PositionFigure label="Held" value={unitTotals.held_count} />
+                    )}
+                    {dealTotals && !dealTotals.mixed_currency ? (
+                      <PositionFigure
+                        label="Contracted value"
+                        value={money(dealTotals.contracted_value, currencyCodeOf(dealTotals.currency_id))}
+                        note="Live contracts, ex tax"
+                      />
+                    ) : (
+                      <PositionFigure label="Unreleased" value={unitTotals.unreleased_count} />
+                    )}
+                  </Position>
+                  <PositionSupport>
+                    <PositionSupportItem label="Held" value={unitTotals.held_count} />
+                    <PositionSupportItem label="Unreleased" value={unitTotals.unreleased_count} />
+                    {priceTotals ? <PositionSupportItem label="Priced" value={priceTotals.units_priced} /> : null}
+                    {plans.status === "ready" ? (
+                      <PositionSupportItem label="Payment plans" value={plans.data.total} />
+                    ) : null}
+                  </PositionSupport>
+                  {seesEconomics ? (
+                    <p className="footnote">
+                      No approved cost allocation version governs this project yet, so no margin,
+                      profit or return can be stated.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {operational ? (
+            <Card
+              title="Commercial position"
+              description="Units, where they stand, and what has been agreed."
+              actions={
+                <Button small variant="quiet" onClick={() => onNavigate("inventory")}>
+                  Inventory
+                </Button>
+              }
+            >
+              <Section answer={units} name="Inventory" off="Inventory opens after setup.">
+                {(data) => (
+                  <MetricGroup>
+                    <Metric label="Units" value={data.total} />
+                    <Metric label="Available" value={data.available_count} />
+                    {dealTotals ? <Metric label="Contracted" value={dealTotals.contracted} /> : null}
+                    <Metric label="Held" value={data.held_count} size="sm" />
+                    <Metric label="Unreleased" value={data.unreleased_count} size="sm" />
+                  </MetricGroup>
                 )}
               </Section>
-            ) : null}
-            {seesPricing ? (
-              <Section answer={prices} name="Pricing" off="">
-                {(data) => (
-                  <>
-                    <h3 className="section-heading">Pricing</h3>
-                    {data.configuration === null ? (
-                      <p className="footnote">
-                        No active pricing configuration, so no unit can be priced yet.
-                      </p>
-                    ) : (
-                      <MetricGroup>
+              {seesSales ? (
+                <Section answer={deals} name="Sales" off="">
+                  {(data) => (
+                    <>
+                      <SectionHeader title="Sales" />
+                      <MetricGroup compact>
+                        <Metric label="Live reservations" value={data.totals.active_reservations} size="sm" />
+                        <Metric label="Contract pending" value={data.totals.contract_pending} size="sm" />
+                        <Metric label="Active contracts" value={data.totals.active_contracts} size="sm" />
+                        <Metric label="Returned" value={data.totals.returned} size="sm" />
                         <Metric
-                          label="Policy"
-                          value={`v${data.configuration.version_number}`}
-                          note={data.configuration.name}
+                          label="Contracted value"
+                          value={
+                            data.totals.mixed_currency
+                              ? "Not summed"
+                              : money(data.totals.contracted_value, currencyCodeOf(data.totals.currency_id))
+                          }
+                          note={data.totals.mixed_currency ? "Contracts in more than one currency" : undefined}
                           size="sm"
                         />
-                        <Metric
-                          label="Base rate"
-                          value={money(data.base_internal_rate, currencyCodeOf(data.currency_id))}
-                          note="Per internal unit of area"
-                          size="sm"
-                        />
-                        <Metric label="Priced" value={data.units_priced} size="sm" />
-                        <Metric label="Not priced" value={data.units_not_priced} size="sm" />
-                        <Metric
-                          label="Need repricing"
-                          value={data.units_repricing_required}
-                          size="sm"
-                          tone={data.units_repricing_required > 0 ? "danger" : "neutral"}
-                        />
-                        {register.status === "ready" ? (
-                          <Metric label="In register" value={register.data.total} size="sm" />
+                        {plans.status === "ready" ? (
+                          <Metric label="Payment plans" value={plans.data.total} size="sm" />
                         ) : null}
                       </MetricGroup>
-                    )}
-                  </>
-                )}
-              </Section>
-            ) : null}
-          </Card>
+                    </>
+                  )}
+                </Section>
+              ) : null}
+              {seesPricing ? (
+                <Section answer={prices} name="Pricing" off="">
+                  {(data) => (
+                    <>
+                      <SectionHeader
+                        title="Pricing"
+                        actions={
+                          <Button small variant="quiet" onClick={() => onNavigate("pricing")}>
+                            Pricing
+                          </Button>
+                        }
+                      />
+                      {data.configuration === null ? (
+                        <EmptyState
+                          compact
+                          title="No active pricing configuration"
+                          hint="Until a configuration is approved and activated, no unit in this project can be priced."
+                          actions={
+                            <Button small onClick={() => onNavigate("pricing")}>
+                              Open pricing
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <MetricGroup compact>
+                          <Metric
+                            label="Policy"
+                            value={`v${data.configuration.version_number}`}
+                            note={data.configuration.name}
+                            size="sm"
+                          />
+                          <Metric
+                            label="Base rate"
+                            value={money(data.base_internal_rate, currencyCodeOf(data.currency_id))}
+                            note="Per internal unit of area"
+                            size="sm"
+                          />
+                          <Metric label="Priced" value={data.units_priced} size="sm" />
+                          <Metric label="Not priced" value={data.units_not_priced} size="sm" />
+                          <Metric
+                            label="Need repricing"
+                            value={data.units_repricing_required}
+                            size="sm"
+                            tone={data.units_repricing_required > 0 ? "danger" : "neutral"}
+                          />
+                        </MetricGroup>
+                      )}
+                    </>
+                  )}
+                </Section>
+              ) : null}
+            </Card>
+          ) : null}
+          {operational ? (
+            <Card
+              title="Development"
+              description="The land, the consents, and the programme."
+              actions={
+                <Button small variant="quiet" onClick={() => onNavigate("permits")}>
+                  Permits
+                </Button>
+              }
+            >
+              <MetricGroup compact>
+                <Metric label="Parcels" value={project.parcel_count} size="sm" />
+                <Metric label="Permits" value={project.permit_count} size="sm" />
+                <Metric
+                  label="Blocking"
+                  value={project.blocking_permit_count}
+                  size="sm"
+                  tone={project.blocking_permit_count > 0 ? "warning" : "neutral"}
+                />
+                <Metric label="Critical path" value={project.critical_path_permit_count} size="sm" />
+                <Metric
+                  label="Past statutory period"
+                  value={project.overdue_permit_count}
+                  size="sm"
+                  tone={project.overdue_permit_count > 0 ? "danger" : "neutral"}
+                />
+              </MetricGroup>
+              <SectionHeader title="Programme" />
+              <KeyValueGrid columns={4}>
+                <KeyValue label="Planned start" mono value={businessDate(project.planned_start)} />
+                <KeyValue label="Planned completion" mono value={businessDate(project.planned_completion)} />
+                <KeyValue
+                  label="Duration"
+                  mono
+                  value={project.planned_duration_days === null ? null : `${project.planned_duration_days} days`}
+                />
+                <KeyValue label="Fiscal year starts" value={`Month ${project.fiscal_year_start_month}`} />
+              </KeyValueGrid>
+            </Card>
+          ) : null}
         </div>
 
-        {seesEconomics ? (
-          <div className="span-6">
-            <Card
-              title="Economic position"
-              description="Sold units on their frozen terms, unsold on today's price and basis."
-              actions={
-                <Button small variant="quiet" onClick={() => onNavigate("economics")}>
-                  Unit economics
-                </Button>
-              }
-            >
-              <Section answer={economics} name="Unit economics" off="Opens after setup.">
-                {(data) => {
-                  const code = currencyCodeOf(data.currency_id);
-                  return data.active_version === null ? (
-                    <EmptyState
-                      compact
-                      title="No approved cost basis yet"
-                      hint="Create the opening Finance allocation version before profitability can be calculated."
-                    />
-                  ) : (
-                    <>
-                      <MetricGroup>
-                        <Metric label="Margin" value={percent(data.margin_fraction)} size="lg" />
-                        <Metric label="Return on cost" value={percent(data.return_on_cost_fraction)} size="lg" />
-                        <Metric
-                          label="Profit"
-                          value={money(data.profit_total, code)}
-                          tone={data.profit_total.startsWith("-") ? "danger" : "neutral"}
-                        />
-                      </MetricGroup>
-                      <MetricGroup>
-                        <Metric label="Revenue" value={money(data.revenue_total, code)} size="sm" />
-                        <Metric label="Total cost" value={money(data.total_cost_total, code)} size="sm" />
-                        <Metric
-                          label="Cost basis"
-                          value={`v${data.active_version.version_number}`}
-                          note={`Effective ${businessDate(data.active_version.effective_from)}`}
-                          size="sm"
-                        />
-                        <Metric
-                          label="Covered"
-                          value={`${data.comparable_unit_count} of ${data.unit_count}`}
-                          note="Units in these totals"
-                          size="sm"
-                        />
-                      </MetricGroup>
-                    </>
-                  );
-                }}
-              </Section>
-            </Card>
-          </div>
-        ) : null}
+        <div className="stack">
+          <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
+        </div>
+      </div>
 
-        {seesCollections ? (
-          <div className="span-6">
-            <Card
-              title="Collections"
-              description="What has arrived, what is owed, and how old it is."
-              actions={
-                <Button small variant="quiet" onClick={() => onNavigate("collections")}>
-                  Collections
-                </Button>
-              }
-            >
-              <Section answer={cash} name="Collections" off="Opens after setup.">
-                {(data) =>
-                  data.currencies.length === 0 ? (
-                    <EmptyState
-                      compact
-                      title="Nothing to collect yet"
-                      hint="No sale in this project has an active payment schedule."
+      {operational && seesCollections ? (
+        <Card
+          title="Collections"
+          description="What has arrived, what is owed, and how old it is."
+          actions={
+            <Button small variant="quiet" onClick={() => onNavigate("collections")}>
+              Collections
+            </Button>
+          }
+        >
+          <Section answer={cash} name="Collections" off="Opens after setup.">
+            {(data) =>
+              data.currencies.length === 0 ? (
+                <EmptyState
+                  compact
+                  title="Nothing to collect yet"
+                  hint="No sale in this project has an active payment schedule."
+                />
+              ) : (
+                <>
+                  {data.currencies.map((totals) => {
+                    const code = currencyCodeOf(totals.currency_id);
+                    // Each currency is its own position. A project selling in two
+                    // currencies has two answers, and one figure covering both
+                    // could only be produced by adding unlike money.
+                    return (
+                      <div key={totals.currency_id} className="currency-block">
+                        {data.currencies.length > 1 ? (
+                          <p className="currency-block-title">
+                            {code ?? "Unknown currency"}
+                            <span className="muted">· {totals.accounts} accounts</span>
+                          </p>
+                        ) : null}
+                        <Position compact>
+                          <PositionFigure lead label="Outstanding" value={money(totals.outstanding_total, code)} />
+                          <PositionFigure label="Due now" value={money(totals.due_total, code)} />
+                          <PositionFigure
+                            label="Overdue"
+                            value={money(totals.overdue_total, code)}
+                            tone={isNonZero(totals.overdue_total) ? "danger" : "neutral"}
+                          />
+                          <PositionFigure
+                            label="Unapplied cash"
+                            value={money(totals.unapplied_cash, code)}
+                            tone={isNonZero(totals.unapplied_cash) ? "warning" : "neutral"}
+                            note="Received, not yet applied"
+                          />
+                        </Position>
+                        <PositionSupport>
+                          <PositionSupportItem
+                            label="Confirmed receipts, lifetime"
+                            value={money(totals.confirmed_receipts_total, code)}
+                          />
+                          <PositionSupportItem label="Accounts" value={totals.accounts} />
+                        </PositionSupport>
+                        <SectionHeader title="Ageing" />
+                        <Distribution>
+                          {AGING_BUCKETS.filter((bucket) => totals.buckets[bucket] !== undefined).map((bucket) => (
+                            <DistributionBand
+                              key={bucket}
+                              label={bucketLabel(bucket)}
+                              value={money(totals.buckets[bucket], code)}
+                              heat={BUCKET_HEAT[bucket] ?? "cool"}
+                            />
+                          ))}
+                        </Distribution>
+                      </div>
+                    );
+                  })}
+                  <MetricGroup compact>
+                    <Metric label="Accounts" value={data.accounts} size="sm" />
+                    <Metric
+                      label="Overdue"
+                      value={data.accounts_overdue}
+                      size="sm"
+                      tone={data.accounts_overdue > 0 ? "danger" : "neutral"}
                     />
-                  ) : (
-                    <>
-                      {data.currencies.map((totals) => {
-                        const code = currencyCodeOf(totals.currency_id);
-                        return (
-                          <div key={totals.currency_id} className="currency-block">
-                            {data.currencies.length > 1 ? (
-                              <p className="currency-block-title">
-                                {code ?? "Unknown currency"}
-                                <span className="muted">· {totals.accounts} accounts</span>
-                              </p>
-                            ) : null}
-                            <MetricGroup>
-                              <Metric label="Outstanding" value={money(totals.outstanding_total, code)} size="lg" />
-                              <Metric label="Due now" value={money(totals.due_total, code)} />
-                              <Metric
-                                label="Overdue"
-                                value={money(totals.overdue_total, code)}
-                                tone={totals.overdue_total.replace(/[^1-9]/g, "") ? "danger" : "neutral"}
-                              />
-                              <Metric
-                                label="Unapplied cash"
-                                value={money(totals.unapplied_cash, code)}
-                                tone={totals.unapplied_cash.replace(/[^1-9]/g, "") ? "warning" : "neutral"}
-                              />
-                            </MetricGroup>
-                          </div>
-                        );
-                      })}
-                      <MetricGroup compact>
-                        <Metric label="Accounts" value={data.accounts} size="sm" />
-                        <Metric label="Overdue" value={data.accounts_overdue} size="sm" />
-                        <Metric label="Disputed" value={data.accounts_disputed} size="sm" />
-                        <Metric label="Cleared" value={data.accounts_cleared} size="sm" />
-                      </MetricGroup>
-                      <p className="footnote">As at {businessDate(data.as_of)}.</p>
-                    </>
-                  )
-                }
-              </Section>
-            </Card>
-          </div>
-        ) : null}
-
-        <div className={seesEconomics || seesCollections ? "span-6" : "span-12"}>
-          <Card
-            title="Development"
-            description="The land, the consents, and the programme."
-            actions={
-              <Button small variant="quiet" onClick={() => onNavigate("permits")}>
-                Permits
-              </Button>
+                    <Metric
+                      label="Disputed"
+                      value={data.accounts_disputed}
+                      size="sm"
+                      tone={data.accounts_disputed > 0 ? "warning" : "neutral"}
+                    />
+                    <Metric label="Cleared" value={data.accounts_cleared} size="sm" />
+                  </MetricGroup>
+                  <p className="footnote">As at {businessDate(data.as_of)}.</p>
+                </>
+              )
             }
-          >
-            <MetricGroup>
-              <Metric label="Parcels" value={project.parcel_count} />
-              <Metric label="Permits" value={project.permit_count} />
-              <Metric
-                label="Blocking"
-                value={project.blocking_permit_count}
-                tone={project.blocking_permit_count > 0 ? "warning" : "neutral"}
-              />
-              <Metric label="Critical path" value={project.critical_path_permit_count} />
-              <Metric
-                label="Past statutory period"
-                value={project.overdue_permit_count}
-                tone={project.overdue_permit_count > 0 ? "danger" : "neutral"}
-              />
-            </MetricGroup>
-            <h3 className="section-heading">Programme</h3>
-            <KeyValueGrid columns={3}>
-              <KeyValue label="Planned start" mono value={businessDate(project.planned_start)} />
-              <KeyValue label="Planned completion" mono value={businessDate(project.planned_completion)} />
-              <KeyValue
-                label="Planned duration"
-                mono
-                value={project.planned_duration_days === null ? null : `${project.planned_duration_days} days`}
-              />
-              <KeyValue label="Fiscal year starts" value={`Month ${project.fiscal_year_start_month}`} />
-              <KeyValue label="Country" value={project.country_code} />
-              <KeyValue
-                label="Coordinates"
-                mono
-                value={project.latitude && project.longitude ? `${project.latitude}, ${project.longitude}` : null}
-              />
-            </KeyValueGrid>
-          </Card>
-        </div>
+          </Section>
+        </Card>
+      ) : null}
       </div>
     </>
   );
