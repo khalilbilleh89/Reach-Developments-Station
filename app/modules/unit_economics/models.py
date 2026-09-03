@@ -120,11 +120,19 @@ CATEGORY_FINANCE = "finance"
 REQUIRED_CATEGORIES = (CATEGORY_LAND, CATEGORY_HARD, CATEGORY_SOFT)
 
 #: Where a pool's amount comes from. ``project_land`` is derived from the land
-#: register and re-derived at activation; ``manual`` is governed Finance input.
-#: There is no third kind until PR-MVP-09 exists to supply one.
-POOL_SOURCE_KINDS = ("project_land", "manual")
+#: register and re-derived at activation; ``manual`` is governed Finance input;
+#: ``construction_forecast`` is the hard-cost estimate at completion that an
+#: active construction forecast states, read through that module's public
+#: contract and never written by it.
+POOL_SOURCE_KINDS = ("project_land", "manual", "construction_forecast")
 SOURCE_PROJECT_LAND = "project_land"
 SOURCE_MANUAL = "manual"
+SOURCE_CONSTRUCTION_FORECAST = "construction_forecast"
+
+#: Sources whose amount is somebody else's governed truth rather than Finance's
+#: own input, and therefore goes stale when that truth is superseded between
+#: drafting a version and activating it.
+DERIVED_SOURCES = frozenset({SOURCE_PROJECT_LAND, SOURCE_CONSTRUCTION_FORECAST})
 
 #: Which units a pool reaches. Three explicit shapes, never an expression.
 POOL_SCOPES = ("project", "phase", "building")
@@ -392,6 +400,14 @@ class CostPool(Base):
     #: register's total, re-derived and compared at activation.
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
 
+    #: The construction forecast whose hard-cost estimate at completion this
+    #: pool took its amount from. Provenance rather than a live link: the
+    #: amount above is the snapshot that was approved, and a later forecast
+    #: does not reach back and change a basis units were already sold against.
+    source_construction_forecast_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
+
     scope_kind: Mapped[str] = mapped_column(String(16), nullable=False, default=SCOPE_PROJECT)
     phase_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     building_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
@@ -441,6 +457,15 @@ class CostPool(Base):
             name="area_type",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["source_construction_forecast_version_id", "project_id"],
+            [
+                "construction_forecast_versions.id",
+                "construction_forecast_versions.project_id",
+            ],
+            name="construction_forecast",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("allocation_version_id", "pool_number", name="uq_ue_pool_number"),
         UniqueConstraint("id", "project_id", name="ue_pool_project"),
         #: The key an allocation's three-column parentage points at, so that a
@@ -482,6 +507,23 @@ class CostPool(Base):
         CheckConstraint(
             "source_kind <> 'project_land' OR category = 'land'", name="land_source_shape"
         ),
+        # A construction-sourced pool is the project's hard cost or it is
+        # nothing. A phase or building slice of a project-wide estimate at
+        # completion would let two pools each draw part of the same total while
+        # both still reconciled, which is a double count nothing downstream can
+        # see.
+        CheckConstraint(
+            "source_kind <> 'construction_forecast'"
+            " OR (category = 'hard' AND scope_kind = 'project')",
+            name="cx_source_shape",
+        ),
+        # Provenance belongs to exactly the source that has it. A pool naming a
+        # forecast it did not come from is a pool whose amount cannot be traced.
+        CheckConstraint(
+            "(source_kind = 'construction_forecast')"
+            " = (source_construction_forecast_version_id IS NOT NULL)",
+            name="cx_provenance_shape",
+        ),
         # One canonical land pool per version. Two of them each draw the whole
         # project land total, so the land cost doubles while every pool still
         # reconciles exactly — a false result nothing downstream can detect.
@@ -490,6 +532,15 @@ class CostPool(Base):
             "allocation_version_id",
             unique=True,
             postgresql_where=text("source_kind = 'project_land'"),
+        ),
+        # One construction-sourced hard pool per version, for the same reason:
+        # two of them each carry the project's whole estimate at completion, so
+        # the hard cost doubles while every pool still reconciles exactly.
+        Index(
+            "uq_ue_pools_one_construction",
+            "allocation_version_id",
+            unique=True,
+            postgresql_where=text("source_kind = 'construction_forecast'"),
         ),
         Index("ix_ue_pools_version", "allocation_version_id"),
     )
