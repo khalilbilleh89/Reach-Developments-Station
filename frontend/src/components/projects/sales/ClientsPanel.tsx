@@ -8,12 +8,17 @@ import {
   Badge,
   Button,
   Card,
+  DataToolbar,
   EmptyState,
   Field,
-  FilterBar,
+  FieldRow,
   FormActions,
+  FormSection,
+  InlineMeta,
+  InlineMetaItem,
   Loading,
   Notice,
+  StatusDot,
   SubPanel,
   TableScroll,
 } from "@/components/ui";
@@ -51,6 +56,7 @@ export function ClientsPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [form, setForm] = useState({ display_name: "", email: "", phone: "" });
   const [party, setParty] = useState({
     name_as_identification: "",
@@ -117,218 +123,35 @@ export function ClientsPanel({
   if (clients === null) {
     return (
       <Card title="Buyers">
-        <Loading label="Loading buyers…" lines={3} />
+        <Loading label="Loading buyers…" shape="rows" rows={4} />
       </Card>
     );
   }
+
+  const chosen = clients.find((client) => client.id === selected) ?? null;
 
   return (
     <Card
       title="Buyers"
       description="Project-scoped. This is not a portfolio-wide customer master."
-      actions={<Button onClick={onClose}>Close</Button>}
+      actions={
+        <>
+          {canWrite ? (
+            <Button variant="primary" small onClick={() => setRegistering((open) => !open)}>
+              {registering ? "Cancel" : "Register a buyer"}
+            </Button>
+          ) : null}
+          <Button variant="quiet" small onClick={onClose}>
+            Close
+          </Button>
+        </>
+      }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <FilterBar>
-        <Field label="Search" grow>
-          <input
-            className="input"
-            value={search}
-            placeholder="Name or client number"
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </Field>
-      </FilterBar>
-
-      {clients.length === 0 ? (
-        <EmptyState
-          title="No buyers yet"
-          hint={canWrite ? "Register one below." : "Nobody has been registered on this project."}
-        />
-      ) : (
-        <TableScroll label="Buyers">
-            <thead>
-              <tr>
-                <th scope="col">Client</th>
-                <th scope="col">Name</th>
-                <th scope="col">Identity checks</th>
-                <th scope="col">Contact</th>
-                <th scope="col">Active</th>
-                <th scope="col">Parties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.id}>
-                  <th scope="row" className="mono">
-                    {client.client_number}
-                  </th>
-                  <td>{client.display_name}</td>
-                  <td>
-                    <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
-                  </td>
-                  <td>
-                    {"email" in client ? (
-                      (client.email ?? client.phone ?? "—")
-                    ) : (
-                      <span className="subtle">Not shown to your role</span>
-                    )}
-                  </td>
-                  <td>
-                    {client.is_active ? (
-                      <Badge tone="success">Active</Badge>
-                    ) : (
-                      <Badge tone="muted">Inactive</Badge>
-                    )}
-                  </td>
-                  <td>
-                    <Button
-                      small
-                      onClick={() => setSelected(selected === client.id ? null : client.id)}
-                    >
-                      {selected === client.id ? "Hide" : "Open"}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-        </TableScroll>
-      )}
-
-      {selected ? (
-        <>
-          <h3 className="section-heading">Buyer parties</h3>
-          {shares !== null ? (
-            <div className="chip-list">
-              <span className="chip">Shares total {shares}</span>
-              {shares === "1.000000" ? (
-                <Badge tone="success">A whole unit</Badge>
-              ) : (
-                <Badge tone="muted">Not yet a whole unit</Badge>
-              )}
-            </div>
-          ) : null}
-          {parties.length === 0 ? (
-            <EmptyState title="No parties recorded" />
-          ) : (
-            <TableScroll label="Buyer parties">
-                <thead>
-                  <tr>
-                    <th scope="col">Name as identification</th>
-                    <th scope="col">Role</th>
-                    <th scope="col" className="num">
-                      Share
-                    </th>
-                    <th scope="col">Identity document</th>
-                    <th scope="col">Active</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parties.map((item) => (
-                    <tr key={item.id}>
-                      <th scope="row">{item.name_as_identification}</th>
-                      <td>{item.party_role === "purchaser" ? "Purchaser" : "Joint purchaser"}</td>
-                      <td className="num">{item.share_fraction}</td>
-                      <td className="mono">
-                        {"identity_document_number" in item ? (
-                          `${item.identity_document_type ?? "—"} ${item.identity_document_number ?? ""}`
-                        ) : (
-                          <span className="subtle">Not shown to your role</span>
-                        )}
-                      </td>
-                      <td>{item.is_active ? "Yes" : "No"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-            </TableScroll>
-          )}
-
-          {canWrite ? (
-            <SubPanel title="Add a named party">
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run(
-                  () =>
-                    sales.createParty(projectId, selected, {
-                      name_as_identification: party.name_as_identification,
-                      share_fraction: party.share_fraction,
-                      party_role: party.party_role,
-                      ...(party.identity_document_type
-                        ? { identity_document_type: party.identity_document_type }
-                        : {}),
-                      ...(party.identity_document_number
-                        ? { identity_document_number: party.identity_document_number }
-                        : {}),
-                    }),
-                  "Buyer added.",
-                );
-              }}
-            >
-              <div className="form-grid">
-              <Field label="Name as identification">
-                <input
-                  className="input"
-                  required
-                  value={party.name_as_identification}
-                  onChange={(event) =>
-                    setParty({ ...party, name_as_identification: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Share" hint="0.500000 for a half. All active shares must total 1.000000.">
-                <input
-                  className="input"
-                  required
-                  value={party.share_fraction}
-                  onChange={(event) => setParty({ ...party, share_fraction: event.target.value })}
-                />
-              </Field>
-              <Field label="Role">
-                <select
-                  className="input"
-                  value={party.party_role}
-                  onChange={(event) => setParty({ ...party, party_role: event.target.value })}
-                >
-                  <option value="purchaser">Purchaser</option>
-                  <option value="joint_purchaser">Joint purchaser</option>
-                </select>
-              </Field>
-              <Field label="Identity document type">
-                <input
-                  className="input"
-                  value={party.identity_document_type}
-                  onChange={(event) =>
-                    setParty({ ...party, identity_document_type: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Identity document number">
-                <input
-                  className="input"
-                  value={party.identity_document_number}
-                  onChange={(event) =>
-                    setParty({ ...party, identity_document_number: event.target.value })
-                  }
-                />
-              </Field>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  Add party
-                </Button>
-              </FormActions>
-              </div>
-            </form>
-            </SubPanel>
-          ) : null}
-        </>
-      ) : null}
-
-      {canWrite ? (
-        <>
-          <SubPanel title="Register a buyer">
+      {canWrite && registering ? (
+        <SubPanel title="Register a buyer">
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -340,46 +163,255 @@ export function ClientsPanel({
                     ...(form.phone ? { phone: form.phone } : {}),
                   }),
                 "Buyer registered. Add the named parties next.",
-              );
+              ).then(() => {
+                setRegistering(false);
+                setForm({ display_name: "", email: "", phone: "" });
+              });
             }}
           >
-            <div className="form-grid form-grid-3">
-            <Field label="Display name">
-              <input
-                className="input"
-                required
-                value={form.display_name}
-                onChange={(event) => setForm({ ...form, display_name: event.target.value })}
-              />
-            </Field>
-            <Field label="Email">
-              <input
-                className="input"
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-              />
-            </Field>
-            <Field label="Phone">
-              <input
-                className="input"
-                value={form.phone}
-                onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              />
-            </Field>
+            <FieldRow columns={3}>
+              <Field label="Display name">
+                <input
+                  className="input"
+                  required
+                  value={form.display_name}
+                  onChange={(event) => setForm({ ...form, display_name: event.target.value })}
+                />
+              </Field>
+              <Field label="Email" optional>
+                <input
+                  className="input"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                />
+              </Field>
+              <Field label="Phone" optional>
+                <input
+                  className="input"
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                />
+              </Field>
+            </FieldRow>
             <FormActions>
               <Button variant="primary" type="submit" disabled={busy}>
                 Register buyer
               </Button>
             </FormActions>
-            </div>
+            <p className="footnote">
+              The client number is issued by the server. Identity is the stable identifier behind
+              it, never the human reference.
+            </p>
           </form>
-          <p className="footnote">
-            The client number is issued by the server. Identity is the stable identifier behind it,
-            never the human reference.
-          </p>
-          </SubPanel>
-        </>
+        </SubPanel>
+      ) : null}
+
+      <DataToolbar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Name or client number",
+          label: "Search buyers",
+        }}
+        count={{ shown: clients.length, noun: "buyer" }}
+        onReset={search ? () => setSearch("") : undefined}
+      />
+
+      {clients.length === 0 ? (
+        <EmptyState
+          title="No buyers yet"
+          hint={canWrite ? "Register one to reserve a unit for them." : "Nobody has been registered on this project."}
+        />
+      ) : (
+        <TableScroll label="Buyers" compact>
+          <thead>
+            <tr>
+              <th scope="col">Client</th>
+              <th scope="col">Name</th>
+              <th scope="col">Identity checks</th>
+              <th scope="col">Contact</th>
+              <th scope="col">Standing</th>
+              <th scope="col">
+                <span className="visually-hidden">Parties</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((client) => (
+              <tr key={client.id} aria-selected={selected === client.id}>
+                <th scope="row" className="mono">
+                  {client.client_number}
+                </th>
+                <td>{client.display_name}</td>
+                <td>
+                  <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
+                </td>
+                <td>
+                  {"email" in client ? (
+                    (client.email ?? client.phone ?? "—")
+                  ) : (
+                    <span className="subtle">Not shown to your role</span>
+                  )}
+                </td>
+                <td>
+                  {client.is_active ? (
+                    <StatusDot tone="success">Active</StatusDot>
+                  ) : (
+                    <StatusDot tone="muted">Inactive</StatusDot>
+                  )}
+                </td>
+                <td>
+                  <Button
+                    small
+                    variant="quiet"
+                    aria-expanded={selected === client.id}
+                    onClick={() => setSelected(selected === client.id ? null : client.id)}
+                  >
+                    {selected === client.id ? "Hide parties" : "Parties"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableScroll>
+      )}
+
+      {selected ? (
+        <SubPanel
+          title={chosen ? `Parties on ${chosen.display_name}` : "Buyer parties"}
+          actions={
+            shares !== null ? (
+              <InlineMeta>
+                <InlineMetaItem label="Shares total">
+                  <span className="figure">{shares}</span>
+                </InlineMetaItem>
+                <InlineMetaItem label="Unit">
+                  {shares === "1.000000" ? (
+                    <Badge tone="success">A whole unit</Badge>
+                  ) : (
+                    <Badge tone="warning">Not yet a whole unit</Badge>
+                  )}
+                </InlineMetaItem>
+              </InlineMeta>
+            ) : undefined
+          }
+        >
+          {parties.length === 0 ? (
+            <EmptyState compact title="No parties recorded" hint="A unit cannot be committed until the buyer shares total 1.000000." />
+          ) : (
+            <TableScroll label="Buyer parties" compact>
+              <thead>
+                <tr>
+                  <th scope="col">Name as identification</th>
+                  <th scope="col">Role</th>
+                  <th scope="col" className="num">
+                    Share
+                  </th>
+                  <th scope="col">Identity document</th>
+                  <th scope="col">Standing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parties.map((item) => (
+                  <tr key={item.id}>
+                    <th scope="row">{item.name_as_identification}</th>
+                    <td>{item.party_role === "purchaser" ? "Purchaser" : "Joint purchaser"}</td>
+                    <td className="num">{item.share_fraction}</td>
+                    <td className="mono">
+                      {"identity_document_number" in item ? (
+                        `${item.identity_document_type ?? "—"} ${item.identity_document_number ?? ""}`
+                      ) : (
+                        <span className="subtle">Not shown to your role</span>
+                      )}
+                    </td>
+                    <td>
+                      {item.is_active ? (
+                        <StatusDot tone="success">Active</StatusDot>
+                      ) : (
+                        <StatusDot tone="muted">Inactive</StatusDot>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          )}
+
+          {canWrite ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(
+                  () =>
+                    sales.createParty(projectId, selected, {
+                      name_as_identification: party.name_as_identification,
+                      share_fraction: party.share_fraction,
+                      party_role: party.party_role,
+                      ...(party.identity_document_type ? { identity_document_type: party.identity_document_type } : {}),
+                      ...(party.identity_document_number
+                        ? { identity_document_number: party.identity_document_number }
+                        : {}),
+                    }),
+                  "Buyer added.",
+                );
+              }}
+            >
+              <FormSection title="Add a named party" description="All active shares on a buyer must total 1.000000 before a unit can be committed.">
+                <FieldRow columns={3}>
+                  <Field label="Name as identification">
+                    <input
+                      className="input"
+                      required
+                      value={party.name_as_identification}
+                      onChange={(event) => setParty({ ...party, name_as_identification: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Share" hint="A fraction of one: 0.500000 for a half.">
+                    <input
+                      className="input figure"
+                      inputMode="decimal"
+                      required
+                      value={party.share_fraction}
+                      onChange={(event) => setParty({ ...party, share_fraction: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Role">
+                    <select
+                      className="input"
+                      value={party.party_role}
+                      onChange={(event) => setParty({ ...party, party_role: event.target.value })}
+                    >
+                      <option value="purchaser">Purchaser</option>
+                      <option value="joint_purchaser">Joint purchaser</option>
+                    </select>
+                  </Field>
+                </FieldRow>
+                <FieldRow columns={2}>
+                  <Field label="Identity document type" optional>
+                    <input
+                      className="input"
+                      value={party.identity_document_type}
+                      onChange={(event) => setParty({ ...party, identity_document_type: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Identity document number" optional>
+                    <input
+                      className="input"
+                      value={party.identity_document_number}
+                      onChange={(event) => setParty({ ...party, identity_document_number: event.target.value })}
+                    />
+                  </Field>
+                </FieldRow>
+              </FormSection>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  Add party
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
+        </SubPanel>
       ) : null}
     </Card>
   );

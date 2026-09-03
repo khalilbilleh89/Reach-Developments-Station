@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, audit } from "@/lib/api";
 import type { AuditEvent } from "@/lib/api";
-import { Button, EmptyState, Loading, Notice, Panel, TableScroll } from "@/components/ui";
+import { Button, Card, DataToolbar, EmptyState, Loading, Notice, TableScroll } from "@/components/ui";
 
 /** Format a before/after snapshot as readable field lines, not raw JSON. */
 function Snapshot({ title, data }: { title: string; data: Record<string, unknown> | null }) {
@@ -16,7 +16,7 @@ function Snapshot({ title, data }: { title: string; data: Record<string, unknown
         {Object.entries(data).map(([key, value]) => (
           <div key={key} className="snapshot-row">
             <dt>{key.replace(/_/g, " ")}</dt>
-            <dd className="mono">{Array.isArray(value) ? value.join(", ") : String(value)}</dd>
+            <dd>{Array.isArray(value) ? value.join(", ") : String(value)}</dd>
           </div>
         ))}
       </dl>
@@ -33,6 +33,7 @@ function Snapshot({ title, data }: { title: string; data: Record<string, unknown
 export function AuditSection() {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -55,57 +56,79 @@ export function AuditSection() {
     })();
   }, [load]);
 
-  if (events === null) return <Loading label="Loading audit history…" />;
+  const needle = search.trim().toLowerCase();
+  const shown = (events ?? []).filter(
+    (event) =>
+      !needle ||
+      `${event.action} ${event.entity_type} ${event.actor_display_name ?? ""} ${event.reason ?? ""}`
+        .toLowerCase()
+        .includes(needle),
+  );
 
   return (
-    <Panel title="Audit" description="Every material governance change, with who made it and why.">
+    <div className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
 
-      {events.length === 0 && !error ? (
-        <EmptyState title="No audit events yet" hint="Changes to users and configuration appear here." />
-      ) : null}
+      <DataToolbar
+        search={{ value: search, onChange: setSearch, placeholder: "Action, object, person or reason", label: "Search audit history" }}
+        count={events ? { shown: shown.length, total: events.length, noun: "event" } : undefined}
+      />
 
-      {events.length > 0 ? (
-        <TableScroll label="Audit history">
+      <Card flush>
+        {events === null ? (
+          <Loading label="Loading audit history…" shape="rows" />
+        ) : shown.length === 0 ? (
+          <div className="card-body">
+            <EmptyState
+              title={events.length === 0 ? "No audit events yet" : "No event matches"}
+              hint={events.length === 0 ? "Changes to users and configuration appear here." : "Try another word."}
+            />
+          </div>
+        ) : (
+          <TableScroll label="Audit history">
             <thead>
               <tr>
-                <th scope="col">Time</th>
-                <th scope="col">Actor</th>
+                <th scope="col">When</th>
+                <th scope="col">Who</th>
                 <th scope="col">Action</th>
                 <th scope="col">Object</th>
                 <th scope="col">Reason</th>
-                <th scope="col">Detail</th>
+                <th scope="col">
+                  <span className="visually-hidden">Detail</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
+              {shown.map((event) => (
                 <tr key={event.id}>
-                  <td className="mono nowrap">{new Date(event.occurred_at).toLocaleString()}</td>
+                  <td className="figure">{new Date(event.occurred_at).toLocaleString()}</td>
                   <td>{event.actor_display_name ?? event.source}</td>
                   <td className="mono">{event.action}</td>
                   <td>{event.entity_type}</td>
-                  <td>{event.reason ?? "—"}</td>
+                  <td className="cell-prose">{event.reason ?? "—"}</td>
                   <td>
                     <Button
                       small
+                      variant="quiet"
                       aria-expanded={open === event.id}
                       onClick={() => setOpen(open === event.id ? null : event.id)}
                     >
-                      {open === event.id ? "Hide" : "Show"}
+                      {open === event.id ? "Hide" : "Detail"}
                     </Button>
                     {open === event.id ? (
                       <div className="detail">
                         <Snapshot title="Before" data={event.before_data} />
                         <Snapshot title="After" data={event.after_data} />
-                        <p className="subtle mono">Correlation {event.correlation_id}</p>
+                        <p className="hint mono">Correlation {event.correlation_id}</p>
                       </div>
                     ) : null}
                   </td>
                 </tr>
               ))}
             </tbody>
-</TableScroll>
-      ) : null}
-    </Panel>
+          </TableScroll>
+        )}
+      </Card>
+    </div>
   );
 }

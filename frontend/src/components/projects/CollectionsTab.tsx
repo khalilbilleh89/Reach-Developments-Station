@@ -4,19 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Badge,
-  Button,
   Card,
+  DataToolbar,
   EmptyState,
-  Field,
-  FilterBar,
   Loading,
   Notice,
+  PageHeader,
+  StatusDot,
   TableScroll,
+  ToolbarFilter,
 } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type { AgingRow, CollectionProjectSummary, CollectionRegisterRow } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
+import { sectionDescription } from "@/components/shell/navigation";
 
 import { CollectionAccount } from "@/components/projects/collections/CollectionAccount";
 import { CollectionsSummary } from "@/components/projects/collections/CollectionsSummary";
@@ -36,14 +38,15 @@ const VIEWS = [
 ];
 
 /**
- * The collections workspace: one line per account, and the aging behind it.
+ * The collections workspace: the position, one line per account, and the
+ * aging behind it.
  *
  * Built for somebody who opens it every morning, so density beats decoration:
- * money right-aligned in a tabular face, delinquency obvious without reading a
- * number, and the drill from a project total down to the receipt that proves it
- * never more than two clicks.
+ * the money that matters — outstanding, due, overdue, unapplied — at the top,
+ * the age of it in a strip beneath, and the drill from a project total down to
+ * the receipt that proves it never more than two clicks.
  *
- * The `as of` control is a real parameter, not a filter over what was loaded.
+ * The `as at` control is a real parameter, not a filter over what was loaded.
  * Aging is derived at read time from append-only rows, so asking what the
  * position was at the end of last month is an ordinary question with an exact
  * answer — and month-end reporting and an auditor both ask it.
@@ -53,13 +56,7 @@ const VIEWS = [
  * server decides what this caller may see; these controls decide what they want
  * to look at.
  */
-export function CollectionsTab({
-  projectId,
-  roles,
-}: {
-  projectId: string;
-  roles: Set<string>;
-}) {
+export function CollectionsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
   const [view, setView] = useState("accounts");
   const [asOf, setAsOf] = useState(todayISO());
   const [summary, setSummary] = useState<CollectionProjectSummary | null>(null);
@@ -69,9 +66,7 @@ export function CollectionsTab({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [bucket, setBucket] = useState("");
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [unappliedOnly, setUnappliedOnly] = useState(false);
-  const [disputedOnly, setDisputedOnly] = useState(false);
+  const [only, setOnly] = useState("");
   const [open, setOpen] = useState<CollectionRegisterRow | null>(null);
   const currencyCodeOf = useCurrencyCode();
 
@@ -87,9 +82,7 @@ export function CollectionsTab({
     } catch (caught) {
       setSummary(null);
       setRows(null);
-      setError(
-        caught instanceof ApiError ? caught.message : "Could not load the collections position.",
-      );
+      setError(caught instanceof ApiError ? caught.message : "Could not load the collections position.");
     }
   }, [projectId, asOf]);
 
@@ -101,17 +94,15 @@ export function CollectionsTab({
 
   const loadAging = useCallback(async () => {
     try {
-      setAging(await collections.aging(projectId, { asOf, overdueOnly }));
+      setAging(await collections.aging(projectId, { asOf, overdueOnly: only === "overdue" }));
       setError(null);
     } catch (caught) {
       // An empty aging list and a failed request look identical on screen, and
       // "Nothing aged" is the more reassuring of the two. Say which it was.
       setAging(null);
-      setError(
-        caught instanceof ApiError ? caught.message : "Could not load the aging report.",
-      );
+      setError(caught instanceof ApiError ? caught.message : "Could not load the aging report.");
     }
-  }, [projectId, asOf, overdueOnly]);
+  }, [projectId, asOf, only]);
 
   useEffect(() => {
     void (async () => {
@@ -125,137 +116,216 @@ export function CollectionsTab({
     return rows.filter((row) => {
       if (
         needle &&
-        ![row.sale_number, row.unit_number, row.client_display_name, row.spa_number ?? ""].some(
-          (value) => value.toLowerCase().includes(needle),
+        ![row.sale_number, row.unit_number, row.client_display_name, row.spa_number ?? ""].some((value) =>
+          value.toLowerCase().includes(needle),
         )
       ) {
         return false;
       }
       if (status && row.summary.derived_collection_status !== status) return false;
-      if (overdueOnly && !isPositive(row.summary.overdue_total)) return false;
-      if (unappliedOnly && !isPositive(row.summary.unapplied_cash)) return false;
-      if (disputedOnly && row.summary.open_disputes === 0) return false;
+      if (only === "overdue" && !isPositive(row.summary.overdue_total)) return false;
+      if (only === "unapplied" && !isPositive(row.summary.unapplied_cash)) return false;
+      if (only === "disputed" && row.summary.open_disputes === 0) return false;
       if (bucket && !row.summary.installments.some((line) => line.bucket === bucket)) return false;
       return true;
     });
-  }, [rows, search, status, overdueOnly, unappliedOnly, disputedOnly, bucket]);
+  }, [rows, search, status, only, bucket]);
 
   const currencyFor = (row: { currency_id: string }) => currencyCodeOf(row.currency_id);
+  const filtered = search !== "" || status !== "" || bucket !== "" || only !== "";
 
   return (
-    <div className="stack">
-      {error ? <Notice tone="error">{error}</Notice> : null}
+    <>
+      <PageHeader title="Collections" subtitle={sectionDescription("collections")} compact />
 
-      <Card
-        title="Collections"
-        description="What the buyers have actually paid, what is still owed, and how old it is."
-      >
-        <FilterBar
+      <div className="stack">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+
+        <Card>
+          {summary === null ? (
+            <Loading label="Loading the position…" shape="metrics" />
+          ) : (
+            <CollectionsSummary summary={summary} currencyCodeOf={currencyCodeOf} />
+          )}
+        </Card>
+
+        <DataToolbar
+          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search accounts" }}
+          count={
+            rows && view === "accounts"
+              ? { shown: visible.length, total: rows.length, noun: "account" }
+              : aging && view === "aging"
+                ? { shown: aging.length, noun: "instalment" }
+                : undefined
+          }
+          onReset={
+            filtered
+              ? () => {
+                  setSearch("");
+                  setStatus("");
+                  setBucket("");
+                  setOnly("");
+                }
+              : undefined
+          }
           actions={
-            <>
+            <div className="segmented" role="group" aria-label="View">
               {VIEWS.map((option) => (
-                <Button
+                <button
                   key={option.key}
-                  variant={view === option.key ? "primary" : undefined}
+                  type="button"
+                  className="segment"
+                  aria-pressed={view === option.key}
                   onClick={() => setView(option.key)}
                 >
                   {option.label}
-                </Button>
+                </button>
               ))}
-            </>
+            </div>
           }
         >
-          <Field label="As at" hint="Aging is derived for this date, not snapshotted.">
+          <ToolbarFilter label="As at">
             <input
+              className="input"
               type="date"
               value={asOf}
+              title="Aging is derived for this date, not snapshotted."
               onChange={(event) => setAsOf(event.target.value || todayISO())}
             />
-          </Field>
-          <Field label="Search" grow>
-            <input
-              value={search}
-              placeholder="Unit, buyer or contract"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </Field>
-          <Field label="Status">
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="">Any</option>
-              {["current", "partially_paid", "overdue", "disputed", "cleared", "cancelled"].map(
-                (value) => (
-                  <option key={value} value={value}>
-                    {unitCollectionLabel(value)}
-                  </option>
-                ),
-              )}
+          </ToolbarFilter>
+          <ToolbarFilter label="Status">
+            <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">Any status</option>
+              {["current", "partially_paid", "overdue", "disputed", "cleared", "cancelled"].map((value) => (
+                <option key={value} value={value}>
+                  {unitCollectionLabel(value)}
+                </option>
+              ))}
             </select>
-          </Field>
-          <Field label="Age">
-            <select value={bucket} onChange={(event) => setBucket(event.target.value)}>
-              <option value="">Any</option>
+          </ToolbarFilter>
+          <ToolbarFilter label="Age">
+            <select className="input" value={bucket} onChange={(event) => setBucket(event.target.value)}>
+              <option value="">Any age</option>
               {AGING_BUCKETS.map((value) => (
                 <option key={value} value={value}>
                   {bucketLabel(value)}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Only show">
-            <span className="filter-checks">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={overdueOnly}
-                  onChange={(event) => setOverdueOnly(event.target.checked)}
-                />
-                Overdue
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={unappliedOnly}
-                  onChange={(event) => setUnappliedOnly(event.target.checked)}
-                />
-                Unapplied cash
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={disputedOnly}
-                  onChange={(event) => setDisputedOnly(event.target.checked)}
-                />
-                Disputed
-              </label>
-            </span>
-          </Field>
-        </FilterBar>
+          </ToolbarFilter>
+          <ToolbarFilter label="Only show">
+            <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
+              <option value="">Everything</option>
+              <option value="overdue">Overdue only</option>
+              <option value="unapplied">With unapplied cash</option>
+              <option value="disputed">With an open dispute</option>
+            </select>
+          </ToolbarFilter>
+        </DataToolbar>
 
-        {summary ? (
-          <CollectionsSummary summary={summary} currencyCodeOf={currencyCodeOf} />
-        ) : null}
-      </Card>
-
-      {rows === null ? (
-        <Loading label="Loading the receivables" />
-      ) : view === "accounts" ? (
-        visible.length === 0 ? (
-          <EmptyState
-            title={rows.length === 0 ? "Nothing to collect yet" : "No account matches"}
-            hint={
-              rows.length === 0
-                ? "No sale in this project has a payment schedule to collect against."
-                : "No account matches these filters. Widen them to see the rest."
-            }
-          />
-        ) : (
-          <Card title={`${visible.length} account${visible.length === 1 ? "" : "s"}`}>
-            <TableScroll label="Receivables" fixedFirst>
+        <Card flush>
+          {rows === null ? (
+            <Loading label="Loading the receivables…" shape="rows" />
+          ) : view === "accounts" ? (
+            visible.length === 0 ? (
+              <div className="card-body">
+                <EmptyState
+                  title={rows.length === 0 ? "Nothing to collect yet" : "No account matches"}
+                  hint={
+                    rows.length === 0
+                      ? "No sale in this project has a payment schedule to collect against."
+                      : "Widen the filters to see the rest."
+                  }
+                />
+              </div>
+            ) : (
+              <TableScroll label="Receivables" fixedFirst>
+                <thead>
+                  <tr>
+                    <th scope="col">Account</th>
+                    <th scope="col">Contract</th>
+                    <th scope="col" className="num">
+                      Scheduled
+                    </th>
+                    <th scope="col" className="num">
+                      Collected
+                    </th>
+                    <th scope="col" className="num">
+                      Unapplied
+                    </th>
+                    <th scope="col" className="num">
+                      Outstanding
+                    </th>
+                    <th scope="col" className="num">
+                      Overdue
+                    </th>
+                    <th scope="col" className="num">
+                      Oldest
+                    </th>
+                    <th scope="col">State</th>
+                    <th scope="col">Next follow-up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => {
+                    const code = currencyFor(row);
+                    return (
+                      <tr key={row.sale_id}>
+                        <th scope="row">
+                          <button className="button-link mono" type="button" onClick={() => setOpen(row)}>
+                            {row.unit_number}
+                          </button>
+                          <span className="cell-secondary cell-prose">{row.client_display_name}</span>
+                        </th>
+                        <td className="mono">{row.spa_number ?? row.sale_number}</td>
+                        <td className="num">{money(row.summary.scheduled_total, code)}</td>
+                        <td className="num">{money(row.summary.allocated_total, code)}</td>
+                        <td className="num">
+                          {isPositive(row.summary.unapplied_cash) ? (
+                            <StatusDot tone="warning">{money(row.summary.unapplied_cash, code)}</StatusDot>
+                          ) : (
+                            money(row.summary.unapplied_cash, code)
+                          )}
+                        </td>
+                        <td className="num">{money(row.summary.outstanding_total, code)}</td>
+                        <td className="num">
+                          {isPositive(row.summary.overdue_total) ? (
+                            <StatusDot tone="danger">{money(row.summary.overdue_total, code)}</StatusDot>
+                          ) : (
+                            money(row.summary.overdue_total, code)
+                          )}
+                        </td>
+                        <td className="num">
+                          {row.summary.oldest_overdue_days > 0 ? `${row.summary.oldest_overdue_days} d` : "—"}
+                        </td>
+                        <td>
+                          <Badge tone={unitCollectionTone(row.summary.derived_collection_status)}>
+                            {unitCollectionLabel(row.summary.derived_collection_status)}
+                          </Badge>
+                          {row.summary.open_disputes > 0 ? (
+                            <span className="cell-secondary">{row.summary.open_disputes} disputed, still owed</span>
+                          ) : null}
+                        </td>
+                        <td className="figure">{businessDate(row.summary.next_action_date)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TableScroll>
+            )
+          ) : aging === null ? (
+            error ? null : <Loading label="Loading the aging…" shape="rows" />
+          ) : aging.length === 0 ? (
+            <div className="card-body">
+              <EmptyState title="Nothing aged" hint={`No overdue receivables as at ${businessDate(asOf)}.`} />
+            </div>
+          ) : (
+            <TableScroll label={`Aging as at ${businessDate(asOf)}`} fixedFirst>
               <thead>
                 <tr>
-                  <th scope="col">Unit</th>
-                  <th scope="col">Buyer</th>
-                  <th scope="col">Contract</th>
+                  <th scope="col">Account</th>
+                  <th scope="col">Instalment</th>
+                  <th scope="col">Due</th>
                   <th scope="col" className="num">
                     Scheduled
                   </th>
@@ -263,147 +333,50 @@ export function CollectionsTab({
                     Collected
                   </th>
                   <th scope="col" className="num">
-                    Unapplied
-                  </th>
-                  <th scope="col" className="num">
                     Outstanding
                   </th>
                   <th scope="col" className="num">
-                    Overdue
+                    Days
                   </th>
-                  <th scope="col" className="num">
-                    Oldest
-                  </th>
+                  <th scope="col">Age</th>
                   <th scope="col">State</th>
-                  <th scope="col">Next</th>
-                  <th scope="col">
-                    <span className="visually-hidden">Open</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row) => {
-                  const code = currencyFor(row);
+                {aging.map((row) => {
+                  const code = currencyCodeOf(row.currency_id);
+                  const line = row.installment;
                   return (
-                    <tr key={row.sale_id}>
-                      <th scope="row">{row.unit_number}</th>
-                      <td>{row.client_display_name}</td>
-                      <td className="mono">{row.sale_number}</td>
-                      <td className="num mono">
-                        {money(row.summary.scheduled_total, code)}
+                    <tr key={`${row.sale_id}-${line.installment_id}`}>
+                      <th scope="row">
+                        <span className="mono">{row.unit_number}</span>
+                        <span className="cell-secondary cell-prose">{row.client_display_name}</span>
+                      </th>
+                      <td>
+                        {line.sequence}. {line.label}
                       </td>
-                      <td className="num mono">
-                        {money(row.summary.allocated_total, code)}
-                      </td>
-                      <td className="num mono">
-                        {isPositive(row.summary.unapplied_cash) ? (
-                          <Badge tone="warning">
-                            {money(row.summary.unapplied_cash, code)}
-                          </Badge>
-                        ) : (
-                          money(row.summary.unapplied_cash, code)
-                        )}
-                      </td>
-                      <td className="num mono">
-                        {money(row.summary.outstanding_total, code)}
-                      </td>
-                      <td className="num mono">{money(row.summary.overdue_total, code)}</td>
-                      <td className="num mono">
-                        {row.summary.oldest_overdue_days > 0
-                          ? `${row.summary.oldest_overdue_days} d`
-                          : "—"}
+                      <td className="figure">{businessDate(line.due_date)}</td>
+                      <td className="num">{money(line.scheduled, code)}</td>
+                      <td className="num">{money(line.paid, code)}</td>
+                      <td className="num">{money(line.outstanding, code)}</td>
+                      <td className="num">{line.overdue_days > 0 ? line.overdue_days : "—"}</td>
+                      <td>
+                        <StatusDot tone={bucketTone(line.bucket)}>{bucketLabel(line.bucket)}</StatusDot>
                       </td>
                       <td>
-                        <Badge tone={unitCollectionTone(row.summary.derived_collection_status)}>
-                          {unitCollectionLabel(row.summary.derived_collection_status)}
-                        </Badge>
-                        {row.summary.open_disputes > 0 ? (
-                          <p className="hint">
-                            {row.summary.open_disputes} disputed, still owed
-                          </p>
+                        <Badge tone={installmentTone(line.status)}>{installmentLabel(line.status)}</Badge>
+                        {line.has_active_waiver ? (
+                          <span className="cell-secondary">Collection paused, balance still due</span>
                         ) : null}
-                      </td>
-                      <td>{businessDate(row.summary.next_action_date)}</td>
-                      <td>
-                        <Button onClick={() => setOpen(row)}>Open</Button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </TableScroll>
-          </Card>
-        )
-      ) : aging === null ? (
-        // A failed load clears the rows and sets `error`, which is shown above.
-        // Without this the screen would spin for ever on a 403 or a 500.
-        error ? null : <Loading label="Loading the aging" />
-      ) : aging.length === 0 ? (
-        <EmptyState
-          title="Nothing aged"
-          hint={`No overdue receivables as at ${businessDate(asOf)}.`}
-        />
-      ) : (
-        <Card title={`Aging as at ${businessDate(asOf)}`}>
-          <TableScroll label="Aging" fixedFirst>
-            <thead>
-              <tr>
-                <th scope="col">Unit</th>
-                <th scope="col">Buyer</th>
-                <th scope="col">Instalment</th>
-                <th scope="col">Due</th>
-                <th scope="col" className="num">
-                  Scheduled
-                </th>
-                <th scope="col" className="num">
-                  Collected
-                </th>
-                <th scope="col" className="num">
-                  Outstanding
-                </th>
-                <th scope="col" className="num">
-                  Days
-                </th>
-                <th scope="col">Age</th>
-                <th scope="col">State</th>
-              </tr>
-            </thead>
-            <tbody>
-              {aging.map((row) => {
-                const code = currencyCodeOf(row.currency_id);
-                const line = row.installment;
-                return (
-                  <tr key={`${row.sale_id}-${line.installment_id}`}>
-                    <th scope="row">{row.unit_number}</th>
-                    <td>{row.client_display_name}</td>
-                    <td>
-                      {line.sequence}. {line.label}
-                    </td>
-                    <td>{businessDate(line.due_date)}</td>
-                    <td className="num mono">{money(line.scheduled, code)}</td>
-                    <td className="num mono">{money(line.paid, code)}</td>
-                    <td className="num mono">{money(line.outstanding, code)}</td>
-                    <td className="num mono">
-                      {line.overdue_days > 0 ? line.overdue_days : "—"}
-                    </td>
-                    <td>
-                      <Badge tone={bucketTone(line.bucket)}>{bucketLabel(line.bucket)}</Badge>
-                    </td>
-                    <td>
-                      <Badge tone={installmentTone(line.status)}>
-                        {installmentLabel(line.status)}
-                      </Badge>
-                      {line.has_active_waiver ? (
-                        <p className="hint">Collection paused, balance still due</p>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </TableScroll>
+          )}
         </Card>
-      )}
+      </div>
 
       {open ? (
         <CollectionAccount
@@ -422,6 +395,6 @@ export function CollectionsTab({
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }

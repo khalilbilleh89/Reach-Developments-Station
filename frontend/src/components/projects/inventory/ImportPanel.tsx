@@ -4,7 +4,16 @@ import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { ImportReport } from "@/lib/api";
-import { Button, Field, Notice, TableScroll } from "@/components/ui";
+import {
+  Button,
+  Field,
+  FieldRow,
+  FormActions,
+  InlineMeta,
+  InlineMetaItem,
+  Notice,
+  TableScroll,
+} from "@/components/ui";
 
 /**
  * Bulk inventory load, in the order an operator actually works.
@@ -63,9 +72,7 @@ export function ImportPanel({
         : await inventory.validateImport(projectId, csv, query());
       setReport(result);
       if (apply && result.applied) {
-        setNotice(
-          `Applied: ${result.create_count} created, ${result.update_count} updated.`,
-        );
+        setNotice(`Applied: ${result.create_count} created, ${result.update_count} updated.`);
         await onApplied();
       }
     } catch (caught) {
@@ -81,7 +88,7 @@ export function ImportPanel({
       setCsv(template.content);
       setFilename(template.filename);
       setReport(null);
-      setNotice("Template loaded. Validate it to see the shape, or paste your own file.");
+      setNotice("Template loaded. Validate it to see the shape, or choose your own file.");
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not load the template.");
     }
@@ -90,18 +97,17 @@ export function ImportPanel({
   const ready = report !== null && report.error_count === 0 && !report.applied;
 
   return (
-    <div>
-      <h3 className="section-heading">Import inventory</h3>
+    <div className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <div className="form-inline">
-        <Field label="CSV file">
+      <FieldRow columns={3}>
+        <Field label="CSV file" hint={filename ? `Chosen: ${filename}` : "Or load the template to see the shape."}>
           <input className="input" type="file" accept=".csv,text/csv" onChange={choose} />
         </Field>
         <Field label="Mode" hint="Upsert updates existing units by their identifier.">
           <select
-            className="input input-short"
+            className="input"
             value={mode}
             onChange={(event) => setMode(event.target.value as "create" | "upsert")}
           >
@@ -109,70 +115,67 @@ export function ImportPanel({
             <option value="upsert">Upsert</option>
           </select>
         </Field>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={createHierarchy}
-            onChange={(event) => setCreateHierarchy(event.target.checked)}
-          />
-          <span>Create missing phases, buildings and floors</span>
-        </label>
-      </div>
+        <Field label="Structure">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={createHierarchy}
+              onChange={(event) => setCreateHierarchy(event.target.checked)}
+            />
+            <span>Create missing phases, buildings and floors</span>
+          </label>
+        </Field>
+      </FieldRow>
 
-      <div className="form-actions">
-        <Button onClick={() => void showTemplate()}>
+      <FormActions>
+        <Button variant="quiet" onClick={() => void showTemplate()}>
           Load template
         </Button>
-        <button
-          className="button"
-          type="button"
-          disabled={csv === null || busy}
-          onClick={() => void run(false)}
-        >
+        <Button disabled={csv === null || busy} onClick={() => void run(false)}>
           {busy ? "Working…" : "Validate"}
-        </button>
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={!ready || busy}
-          onClick={() => void run(true)}
-        >
+        </Button>
+        <Button variant="primary" disabled={!ready || busy} onClick={() => void run(true)}>
           Apply
-        </button>
-        {filename ? <span className="subtle">{filename}</span> : null}
-      </div>
+        </Button>
+      </FormActions>
 
       {report ? (
         <>
-          <div className="chip-list">
-            <span className="chip">{report.total_rows} rows</span>
-            <span className="chip">{report.valid_rows} valid</span>
-            <span className="chip">{report.error_count} errors</span>
-            <span className="chip">{report.create_count} to create</span>
-            <span className="chip">{report.update_count} to update</span>
-          </div>
+          <InlineMeta>
+            <InlineMetaItem label="Rows">{report.total_rows}</InlineMetaItem>
+            <InlineMetaItem label="Valid">{report.valid_rows}</InlineMetaItem>
+            <InlineMetaItem label="Errors">{report.error_count}</InlineMetaItem>
+            <InlineMetaItem label="To create">{report.create_count}</InlineMetaItem>
+            <InlineMetaItem label="To update">{report.update_count}</InlineMetaItem>
+          </InlineMeta>
           {report.error_count === 0 && !report.applied ? (
             <Notice tone="info">Nothing has been written yet. Apply to commit the batch.</Notice>
           ) : null}
           {report.issues.length > 0 ? (
-            <TableScroll label="Import issues">
-                <thead>
-                  <tr>
-                    <th scope="col">Row</th>
-                    <th scope="col">Column</th>
-                    <th scope="col">Problem</th>
+            <TableScroll label="Import issues" compact>
+              <thead>
+                <tr>
+                  <th scope="col" className="num">
+                    Row
+                  </th>
+                  <th scope="col">Column</th>
+                  <th scope="col" className="cell-prose">
+                    Problem
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.issues.map((issue, index) => (
+                  <tr key={`${issue.row}-${issue.column}-${index}`}>
+                    <th scope="row" className="num">
+                      {issue.row}
+                    </th>
+                    <td>{issue.column ?? "—"}</td>
+                    <td className="cell-prose">{issue.message}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {report.issues.map((issue, index) => (
-                    <tr key={`${issue.row}-${issue.column}-${index}`}>
-                      <th scope="row">{issue.row}</th>
-                      <td>{issue.column ?? "—"}</td>
-                      <td>{issue.message}</td>
-                    </tr>
-                  ))}
-                </tbody>
-</TableScroll>
+                ))}
+              </tbody>
+            </TableScroll>
           ) : null}
           {report.issues_truncated ? (
             <p className="subtle">

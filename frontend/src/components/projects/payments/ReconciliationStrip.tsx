@@ -1,9 +1,9 @@
 "use client";
 
 import type { PlanReconciliation } from "@/lib/api";
-import { Badge, Notice, Stat, StatRow } from "@/components/ui";
+import { Badge, Metric, MetricGroup } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { money } from "@/lib/format";
+import { money, percent } from "@/lib/format";
 
 /**
  * What the schedule adds up to, against what it must cover.
@@ -30,56 +30,54 @@ export function ReconciliationStrip({
 
   return (
     <>
-      <StatRow>
-        <Stat
+      <MetricGroup compact>
+        <Metric
           label="Principal scheduled"
           value={money(reconciliation.scheduled_principal_total, code)}
           note={`of ${money(reconciliation.contract_value_covered, code)}`}
+          size="sm"
         />
-        <Stat
-          label="Percentage"
-          value={reconciliation.scheduled_fraction_total}
-          note="must total 1.000000"
-          small
+        <Metric
+          label="Share scheduled"
+          value={percent(reconciliation.scheduled_fraction_total)}
+          note="Must total 100%"
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Tax"
           value={money(reconciliation.scheduled_tax_total, code)}
           note={`of ${money(reconciliation.tax_total_snapshot, code)}`}
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Buyer fees"
           value={money(reconciliation.scheduled_fee_total, code)}
           note={`of ${money(reconciliation.buyer_fee_total_snapshot, code)}`}
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Buyer total"
           value={money(reconciliation.scheduled_buyer_total, code)}
           note={`of ${money(reconciliation.total_buyer_payable_snapshot, code)}`}
+          size="sm"
         />
-        <Stat
-          label="Instalments"
-          value={reconciliation.installment_count}
-          note={ok ? "Reconciled" : "Does not reconcile"}
-          small
-        />
-      </StatRow>
-      {ok ? (
-        <Notice tone="success">
-          <strong>Reconciled.</strong> The schedule covers the contract exactly.
-        </Notice>
-      ) : (
-        <Notice tone="warning">
-          <strong>This schedule cannot be put forward yet.</strong>
+        <Metric label="Instalments" value={reconciliation.installment_count} size="sm" />
+      </MetricGroup>
+      <div className={ok ? "reconcile reconcile-ok" : "reconcile reconcile-fail"} role="status">
+        <span className="reconcile-title">{ok ? "Reconciled." : "Does not reconcile."}</span>
+        <span>
+          {ok
+            ? "The schedule covers the contract exactly."
+            : "This schedule cannot be put forward yet."}
+        </span>
+        {ok ? null : (
           <ul className="reason-list">
             {reconciliation.blocking_reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
-        </Notice>
-      )}
+        )}
+      </div>
     </>
   );
 }

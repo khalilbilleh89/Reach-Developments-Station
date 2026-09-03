@@ -1,11 +1,13 @@
 "use client";
 
 import type { Reservation, SaleDetail } from "@/lib/api";
+import type { Answer } from "@/lib/answer";
 import {
   Badge,
   EmptyState,
   KeyValue,
   KeyValueGrid,
+  Loading,
   Notice,
   SectionHeader,
   TableScroll,
@@ -28,6 +30,13 @@ import {
 } from "@/components/projects/sales/labels";
 
 /**
+ * The live commercial record on a unit: the reservation that holds it, the
+ * contract that owns it, or neither. Both halves are the server's own records,
+ * chosen by status, and either may be absent.
+ */
+export type Commitment = { reservation: Reservation | null; sale: SaleDetail | null };
+
+/**
  * The deal on this unit, as inventory is allowed to see it.
  *
  * A read-only view: reserving, contracting, cancelling and handing over all
@@ -38,17 +47,24 @@ import {
  * Buyer identity is shown only where the API returned it. A field the server
  * withheld is reported as withheld rather than blanked, because "not shown to
  * your role" and "not recorded" are different facts.
+ *
+ * The answer is the unit file's. A refusal, a failure, a unit nobody has
+ * committed to, and a commitment this advisor may not see are four different
+ * facts, and each is said as itself.
  */
 export function UnitCommitment({
   projectId,
-  commitment,
+  commercialStatus,
+  answer,
 }: {
   projectId: string;
-  commitment: { reservation: Reservation | null; sale: SaleDetail | null } | null;
+  /** The unit's own commercial status, so a withheld record is not reported as no record. */
+  commercialStatus: string;
+  answer: Answer<Commitment>;
 }) {
   const currencyCodeOf = useCurrencyCode();
 
-  if (commitment === null) {
+  if (answer.status === "off" || answer.status === "denied") {
     return (
       <EmptyState
         title="Not available to your role"
@@ -56,8 +72,28 @@ export function UnitCommitment({
       />
     );
   }
+  if (answer.status === "loading") {
+    return <Loading label="Loading the commercial record" shape="rows" rows={3} />;
+  }
+  if (answer.status === "failed") {
+    return (
+      <Notice tone="error">
+        The commercial record could not be loaded. {answer.message} Whether this unit is reserved
+        or contracted is not known until it can be.
+      </Notice>
+    );
+  }
+  const commitment = answer.data;
 
   if (commitment.reservation === null && commitment.sale === null) {
+    if (["reserved", "contract_pending", "contracted"].includes(commercialStatus)) {
+      return (
+        <EmptyState
+          title="Not visible to you"
+          hint="This unit is committed, but the reservation or contract on it belongs to another advisor's buyer."
+        />
+      );
+    }
     return (
       <EmptyState
         title="No active commercial commitment"
@@ -72,19 +108,16 @@ export function UnitCommitment({
     <>
       {commitment.reservation ? (
         <section>
-          <SectionHeader title="Reservation" />
+          <SectionHeader
+            title="Reservation"
+            actions={
+              <Badge tone={reservationTone(commitment.reservation.status)}>
+                {reservationLabel(commitment.reservation.status)}
+              </Badge>
+            }
+          />
           <KeyValueGrid columns={3}>
-            <KeyValue
-              label="Number"
-              value={
-                <>
-                  <span className="mono">{commitment.reservation.reservation_number}</span>{" "}
-                  <Badge tone={reservationTone(commitment.reservation.status)}>
-                    {reservationLabel(commitment.reservation.status)}
-                  </Badge>
-                </>
-              }
-            />
+            <KeyValue label="Number" mono value={commitment.reservation.reservation_number} />
             <KeyValue label="Expires" mono value={businessDate(commitment.reservation.expires_on)} />
             <KeyValue
               label="Deposit"
@@ -114,17 +147,12 @@ export function UnitCommitment({
       {sale ? (
         <>
           <section>
-            <SectionHeader title="Sale contract" />
+            <SectionHeader
+              title="Sale contract"
+              actions={<Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge>}
+            />
             <KeyValueGrid columns={3}>
-              <KeyValue
-                label="Number"
-                value={
-                  <>
-                    <span className="mono">{sale.sale.sale_number}</span>{" "}
-                    <Badge tone={saleTone(sale.sale.status)}>{saleLabel(sale.sale.status)}</Badge>
-                  </>
-                }
-              />
+              <KeyValue label="Number" mono value={sale.sale.sale_number} />
               <KeyValue label="SPA number" mono value={sale.sale.spa_number} />
               <KeyValue
                 label="Contract price"
@@ -155,16 +183,13 @@ export function UnitCommitment({
           </section>
 
           <section>
-            <SectionHeader
-              title="Payment plan"
-              description="Scheduled, not collected."
-            />
+            <SectionHeader title="Payment plan" description="Scheduled, not collected." />
             <PlanSummary projectId={projectId} saleId={sale.sale.id} compact />
           </section>
 
           <section>
             <SectionHeader title="Buyer parties on the contract" />
-            <TableScroll label="Contract parties">
+            <TableScroll label="Contract parties" compact>
               <thead>
                 <tr>
                   <th scope="col">Name as identification</th>

@@ -27,7 +27,7 @@ export function UnitHistory({ history }: { history: UnitStatusEvent[] }) {
   }
 
   return (
-    <TableScroll label="Unit status history">
+    <TableScroll label="Unit status history" compact>
       <thead>
         <tr>
           <th scope="col">Effective</th>
@@ -40,7 +40,7 @@ export function UnitHistory({ history }: { history: UnitStatusEvent[] }) {
       <tbody>
         {history.map((event) => (
           <tr key={event.id}>
-            <th scope="row" className="mono nowrap">
+            <th scope="row" className="figure">
               {businessDate(event.effective_date)}
             </th>
             <td>{DIMENSION_LABELS[event.dimension] ?? event.dimension}</td>

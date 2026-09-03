@@ -14,13 +14,15 @@ import {
   KeyValue,
   KeyValueGrid,
   Loading,
+  Metric,
+  MetricGroup,
+  MoneyInput,
   Notice,
   PromptDialog,
-  Stat,
-  StatRow,
   SubPanel,
   TableScroll,
 } from "@/components/ui";
+import type { DrawerFact } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type {
   CollectionAction,
@@ -158,14 +160,40 @@ export function CollectionAccount({
     }
   };
 
+  // The four figures anybody opens this account for, kept in the header while
+  // the tabs beneath change. All four are the server's summary; the badges
+  // beside the title are the same summary read as states.
+  const facts: DrawerFact[] | undefined = summary
+    ? [
+        {
+          label: "Outstanding",
+          value: money(summary.outstanding_total, currencyCode),
+          note: isPositive(summary.overdue_total)
+            ? `${money(summary.overdue_total, currencyCode)} overdue`
+            : "Nothing overdue",
+        },
+        {
+          label: "Collected",
+          value: money(summary.allocated_total, currencyCode),
+          note: "Applied to instalments",
+        },
+        {
+          label: "Unapplied cash",
+          value: money(summary.unapplied_cash, currencyCode),
+          note: isPositive(summary.unapplied_cash) ? "Received, not yet applied" : undefined,
+        },
+        { label: "Next follow-up", value: businessDate(summary.next_action_date) },
+      ]
+    : undefined;
+
   return (
     <Drawer
-      eyebrow={`Unit ${unitNumber}`}
+      eyebrow="Collections account"
       title={clientName}
-      subtitle={saleNumber}
+      subtitle={`Unit ${unitNumber} · ${saleNumber}`}
       meta={
         summary ? (
-          <ButtonRow>
+          <>
             <Badge tone={unitCollectionTone(summary.derived_collection_status)}>
               {unitCollectionLabel(summary.derived_collection_status)}
             </Badge>
@@ -177,14 +205,11 @@ export function CollectionAccount({
                 {summary.open_disputes} open dispute{summary.open_disputes === 1 ? "" : "s"}
               </Badge>
             ) : null}
-            {isPositive(summary.unapplied_cash) ? (
-              <Badge tone="warning">
-                {money(summary.unapplied_cash, currencyCode)} unapplied
-              </Badge>
-            ) : null}
-          </ButtonRow>
+            {historical ? <Badge tone="info">As at {businessDate(asOf)}</Badge> : null}
+          </>
         ) : null
       }
+      facts={facts}
       tabs={TABS}
       activeTab={tab}
       onSelectTab={setTab}
@@ -200,7 +225,7 @@ export function CollectionAccount({
         </Notice>
       ) : null}
       {summary === null ? (
-        <Loading label="Loading the account" />
+        <Loading label="Loading the account" shape="page" />
       ) : (
         <>
           {tab === "position" ? (
@@ -307,24 +332,24 @@ function PositionTab({
 
   return (
     <div className="stack">
-      <StatRow>
-        <Stat label="Scheduled" value={money(summary.scheduled_total, currencyCode)} />
-        <Stat
+      <MetricGroup>
+        <Metric label="Scheduled" value={money(summary.scheduled_total, currencyCode)} />
+        <Metric
           label="Confirmed receipts"
           value={money(summary.confirmed_receipts_total, currencyCode)}
           note="Cash Finance has accepted"
         />
-        <Stat
+        <Metric
           label="Applied"
           value={money(summary.allocated_total, currencyCode)}
           note="Assigned to instalments"
         />
-        <Stat
+        <Metric
           label="Outstanding"
           value={money(summary.outstanding_total, currencyCode)}
           note={`of which ${money(summary.overdue_total, currencyCode)} overdue`}
         />
-      </StatRow>
+      </MetricGroup>
 
       {isPositive(summary.unapplied_cash) ? (
         <Notice tone="warning">
@@ -363,10 +388,10 @@ function PositionTab({
                   {row.sequence}. {row.label}
                 </th>
                 <td>{businessDate(row.due_date)}</td>
-                <td className="num mono">{money(row.scheduled, currencyCode)}</td>
-                <td className="num mono">{money(row.paid, currencyCode)}</td>
-                <td className="num mono">{money(row.outstanding, currencyCode)}</td>
-                <td className="num mono">{row.overdue_days > 0 ? row.overdue_days : "—"}</td>
+                <td className="num">{money(row.scheduled, currencyCode)}</td>
+                <td className="num">{money(row.paid, currencyCode)}</td>
+                <td className="num">{money(row.outstanding, currencyCode)}</td>
+                <td className="num">{row.overdue_days > 0 ? row.overdue_days : "—"}</td>
                 <td>
                   <Badge tone={bucketTone(row.bucket)}>{bucketLabel(row.bucket)}</Badge>
                 </td>
@@ -486,14 +511,14 @@ function ActionsTab({
 
   return (
     <div className="stack">
-      <StatRow>
-        <Stat
+      <MetricGroup>
+        <Metric
           label="Next follow-up"
           value={businessDate(summary.next_action_date)}
           note="Planned, not promised"
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Overdue"
           value={money(summary.overdue_total, currencyCode)}
           note={
@@ -501,9 +526,9 @@ function ActionsTab({
               ? `Oldest ${summary.oldest_overdue_days} days`
               : "Nothing past grace"
           }
-          small
+          size="sm"
         />
-      </StatRow>
+      </MetricGroup>
 
       {canCollect ? (
         <SubPanel
@@ -545,6 +570,7 @@ function ActionsTab({
             >
               <Field label="What happened">
                 <select
+                  className="input"
                   value={form.action_type}
                   onChange={(event) => setForm({ ...form, action_type: event.target.value })}
                 >
@@ -557,6 +583,7 @@ function ActionsTab({
               </Field>
               <Field label="When" hint="Something that has happened. Not a future date.">
                 <input
+                  className="input"
                   type="date"
                   value={form.action_at}
                   max={todayISO()}
@@ -566,6 +593,7 @@ function ActionsTab({
               </Field>
               <Field label="Notes">
                 <textarea
+                  className="input"
                   value={form.notes}
                   rows={3}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
@@ -574,21 +602,17 @@ function ActionsTab({
               </Field>
               {form.action_type === "promise_to_pay" ? (
                 <>
-                  <Field
-                    label={`Amount promised${currencyCode ? ` (${currencyCode})` : ""}`}
-                    hint="A promise is not a payment. It changes no balance."
-                  >
-                    <input
+                  <Field label="Amount promised" hint="A promise is not a payment. It changes no balance.">
+                    <MoneyInput
+                      code={currencyCode}
                       value={form.promised_amount}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        setForm({ ...form, promised_amount: event.target.value })
-                      }
+                      onChange={(value) => setForm({ ...form, promised_amount: value })}
                       required
                     />
                   </Field>
                   <Field label="Promised by">
                     <input
+                      className="input"
                       type="date"
                       value={form.promised_date}
                       onChange={(event) => setForm({ ...form, promised_date: event.target.value })}
@@ -598,6 +622,7 @@ function ActionsTab({
               ) : null}
               <Field label="Next follow-up" hint="May be in the future — it is a plan.">
                 <input
+                  className="input"
                   type="date"
                   value={form.next_action_date}
                   onChange={(event) =>
@@ -643,7 +668,7 @@ function ActionsTab({
                 <th scope="row">{businessDate(row.action_at)}</th>
                 <td>{actionLabel(row.action_type)}</td>
                 <td>{row.notes}</td>
-                <td className="num mono">
+                <td className="num">
                   {row.promised_amount ? money(row.promised_amount, currencyCode) : "—"}
                   {row.promised_date ? (
                     <p className="hint">by {businessDate(row.promised_date)}</p>
@@ -724,6 +749,7 @@ function ExceptionsTab({
         {canCollect ? (
           <Field label="Contest an instalment">
             <select
+              className="input"
               value={openingDispute ?? ""}
               onChange={(event) => setOpeningDispute(event.target.value || null)}
             >
@@ -826,6 +852,7 @@ function ExceptionsTab({
           >
             <Field label="Instalment">
               <select
+                className="input"
                 value={waiverFor}
                 onChange={(event) => setWaiverFor(event.target.value)}
                 required
@@ -840,6 +867,7 @@ function ExceptionsTab({
             </Field>
             <Field label="Type">
               <select
+                className="input"
                 value={waiverForm.waiver_type}
                 onChange={(event) =>
                   setWaiverForm({ ...waiverForm, waiver_type: event.target.value })
@@ -857,6 +885,7 @@ function ExceptionsTab({
               hint="A future date. The contractual balance remains due throughout."
             >
               <input
+                className="input"
                 type="date"
                 value={waiverForm.waived_until}
                 onChange={(event) =>
@@ -867,6 +896,7 @@ function ExceptionsTab({
             </Field>
             <Field label="Reason">
               <textarea
+                className="input"
                 value={waiverForm.reason}
                 rows={2}
                 onChange={(event) => setWaiverForm({ ...waiverForm, reason: event.target.value })}
@@ -1072,25 +1102,25 @@ function RestructureTab({
         happens at all.
       </Notice>
 
-      <StatRow>
-        <Stat
+      <MetricGroup>
+        <Metric
           label="Confirmed receipts"
           value={money(summary.confirmed_receipts_total, currencyCode)}
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="To carry forward"
           value={money(summary.allocated_total, currencyCode)}
           note="Cash currently applied"
-          small
+          size="sm"
         />
-        <Stat
+        <Metric
           label="Stays unapplied"
           value={money(summary.unapplied_cash, currencyCode)}
           note="A restructure never applies it"
-          small
+          size="sm"
         />
-      </StatRow>
+      </MetricGroup>
 
       {open === null && canCollect ? (
         <SubPanel
@@ -1158,26 +1188,26 @@ function RestructureTab({
             ) : undefined
           }
         >
-          <StatRow>
-            <Stat
+          <MetricGroup>
+            <Metric
               label="Cash to carry"
               value={money(preview.carried_total, currencyCode)}
               note={`${preview.superseding} allocation${
                 preview.superseding === 1 ? "" : "s"
               } superseded`}
-              small
+              size="sm"
             />
-            <Stat
+            <Metric
               label="Unapplied, unchanged"
               value={money(preview.unapplied_total, currencyCode)}
-              small
+              size="sm"
             />
-            <Stat
+            <Metric
               label="Confirmed receipts, unchanged"
               value={money(preview.confirmed_receipts_total, currencyCode)}
-              small
+              size="sm"
             />
-          </StatRow>
+          </MetricGroup>
 
           {preview.ready_to_apply ? (
             <Notice tone="success">
@@ -1207,7 +1237,7 @@ function RestructureTab({
                       {line.receipt_id.slice(0, 8)}
                     </th>
                     <td className="mono">{line.installment_id.slice(0, 8)}</td>
-                    <td className="num mono">{money(line.amount, currencyCode)}</td>
+                    <td className="num">{money(line.amount, currencyCode)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1324,22 +1354,22 @@ function RefundsTab({
 
   return (
     <div className="stack">
-      <StatRow>
-        <Stat
+      <MetricGroup>
+        <Metric
           label="Refund due"
           value={money(summary.refund_due_total, currencyCode)}
           note="Approved on the cancellation"
         />
-        <Stat
+        <Metric
           label="Actually refunded"
           value={money(summary.refund_confirmed_total, currencyCode)}
           note="Confirmed as having left"
         />
-        <Stat
+        <Metric
           label="Still to pay"
           value={money(summary.refund_outstanding, currencyCode)}
         />
-      </StatRow>
+      </MetricGroup>
 
       <Notice tone="info">
         What is owed and what has been paid are two figures and stay two. A refund is money
@@ -1373,7 +1403,7 @@ function RefundsTab({
                   {refund.refund_number}
                 </th>
                 <td>{businessDate(refund.refund_date)}</td>
-                <td className="num mono">{money(refund.amount, currencyCode)}</td>
+                <td className="num">{money(refund.amount, currencyCode)}</td>
                 <td>
                   <Badge tone={refundTone(refund.status)}>{refundLabel(refund.status)}</Badge>
                   {refund.reversal_reason ? (

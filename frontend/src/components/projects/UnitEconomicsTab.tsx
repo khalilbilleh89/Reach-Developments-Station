@@ -5,21 +5,30 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
   Button,
+  ButtonRow,
+  Card,
+  DataToolbar,
   EmptyState,
   Field,
-  FilterBar,
+  FieldRow,
   FormDialog,
-  KeyValue,
-  KeyValueGrid,
+  InlineMeta,
+  InlineMetaItem,
   Loading,
+  Metric,
+  MetricGroup,
+  MoneyInput,
   Notice,
+  PageHeader,
   PromptDialog,
-  SectionHeader,
-  Stat,
-  StatRow,
-  Tabs,
-  TabPanel,
+  StatusDot,
+  Steps,
   TableScroll,
+  TabPanel,
+  Tabs,
+  ToolbarFilter,
+  Waterfall,
+  WaterfallRow,
 } from "@/components/ui";
 import { ApiError, inventory, unitEconomics } from "@/lib/api";
 import type {
@@ -38,20 +47,21 @@ import type {
   UnitEconomics as UnitEconomicsRow,
 } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money, percent, todayISO } from "@/lib/format";
+import { businessDate, isPositive, money, percent, todayISO } from "@/lib/format";
+import { sectionDescription } from "@/components/shell/navigation";
 
 import {
   ALLOCATION_METHODS,
   DIRECT_COST_TYPES,
   POOL_CATEGORIES,
   POOL_SCOPES,
-  PROFIT_EXPLANATIONS,
   SELLING_COST_TYPES,
   basisLabel,
   categoryLabel,
   costBasisLabel,
   costTypeLabel,
   methodLabel,
+  profitTone,
   profitabilityLabel,
   profitabilityTone,
   scopeLabel,
@@ -66,13 +76,15 @@ const TABS = [
   { key: "costs", label: "Unit costs" },
 ];
 
+const VERSION_SEQUENCE = ["draft", "submitted", "approved", "active"];
+
 /**
  * The project's unit economics: what each unit costs, and the basis that says so.
  *
  * Nothing on this screen is calculated in the browser. Allocation,
  * reconciliation, every profit layer and every ratio arrive from the API
- * already decided — the arithmetic is tested once, in `calculator.py`, and a
- * second implementation here would be a second answer.
+ * already decided — the arithmetic is tested once, on the server, and a second
+ * implementation here would be a second answer.
  *
  * Two rules shape the presentation.
  *
@@ -85,13 +97,7 @@ const TABS = [
  * subset, which is exactly the failure this platform refuses everywhere money is
  * added up.
  */
-export function UnitEconomicsTab({
-  projectId,
-  roles,
-}: {
-  projectId: string;
-  roles: Set<string>;
-}) {
+export function UnitEconomicsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
   const currencyCodeOf = useCurrencyCode();
   const [tab, setTab] = useState("overview");
   const [summary, setSummary] = useState<ProjectEconomics | null>(null);
@@ -172,66 +178,69 @@ export function UnitEconomicsTab({
     }
   };
 
+  const header = <PageHeader title="Unit Economics" subtitle={sectionDescription("economics")} compact />;
+
   if (denied) {
     return (
-      <EmptyState
-        title="Not available to your role"
-        hint="Unit cost and margin are restricted to Finance, the CFO, project management, executives and audit."
-      />
+      <>
+        {header}
+        <Card>
+          <EmptyState
+            title="Not available to your role"
+            hint="Unit cost and margin are restricted to Finance, the CFO, project management, executives and audit."
+          />
+        </Card>
+      </>
     );
   }
   if (summary === null || rows === null || versions === null || costs === null) {
-    return error ? (
-      <Notice tone="error">{error}</Notice>
-    ) : (
-      <Loading label="Loading unit economics" />
+    return (
+      <>
+        {header}
+        {error ? <Notice tone="error">{error}</Notice> : <Loading label="Loading unit economics…" shape="metrics" />}
+      </>
     );
   }
 
   const code = currencyCodeOf(summary.currency_id);
 
   return (
-    <div className="stack">
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
+    <>
+      {header}
+      <div className="stack">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <Tabs label="Unit economics sections" tabs={TABS} active={tab} onSelect={setTab} />
-      <TabPanel group="Unit economics sections" tab={tab}>
-        {tab === "overview" ? (
-          <Overview summary={summary} code={code} />
-        ) : null}
-        {tab === "units" ? <UnitsRegister rows={rows} code={code} /> : null}
-        {tab === "versions" ? (
-          governanceDenied ? (
-            <EmptyState
-              title="Not available at your phase scope"
-              hint="A cost basis covers the whole project, including phases outside your access. Your units' economics above stay available."
-            />
-          ) : (
-            <Versions
-              projectId={projectId}
-              versions={versions}
-              code={code}
-              canWrite={canWrite}
-              canApprove={canApprove}
-              busy={busy}
-              onAct={act}
-            />
-          )
-        ) : null}
-        {tab === "costs" ? (
-          <UnitCosts
-            projectId={projectId}
-            costs={costs}
-            rows={rows}
-            code={code}
-            canWrite={canWrite}
-            busy={busy}
-            onAct={act}
-          />
-        ) : null}
-      </TabPanel>
-    </div>
+        <Tabs label="Unit economics sections" tabs={TABS} active={tab} onSelect={setTab} />
+        <TabPanel group="Unit economics sections" tab={tab}>
+          {tab === "overview" ? <Overview summary={summary} code={code} onOpenVersions={() => setTab("versions")} canWrite={canWrite} /> : null}
+          {tab === "units" ? <UnitsRegister rows={rows} code={code} /> : null}
+          {tab === "versions" ? (
+            governanceDenied ? (
+              <Card>
+                <EmptyState
+                  title="Not available at your phase scope"
+                  hint="A cost basis covers the whole project, including phases outside your access. Your units' economics stay available."
+                />
+              </Card>
+            ) : (
+              <Versions
+                projectId={projectId}
+                versions={versions}
+                code={code}
+                canWrite={canWrite}
+                canApprove={canApprove}
+                busy={busy}
+                onAct={act}
+              />
+            )
+          ) : null}
+          {tab === "costs" ? (
+            <UnitCosts projectId={projectId} costs={costs} rows={rows} code={code} canWrite={canWrite} busy={busy} onAct={act} />
+          ) : null}
+        </TabPanel>
+      </div>
+    </>
   );
 }
 
@@ -240,116 +249,156 @@ export function UnitEconomicsTab({
 function Overview({
   summary,
   code,
+  canWrite,
+  onOpenVersions,
 }: {
   summary: ProjectEconomics;
   code: string | null;
+  canWrite: boolean;
+  onOpenVersions: () => void;
 }) {
-  const plural = (count: number, word: string) =>
-    `${count} ${word}${count === 1 ? "" : "s"}`;
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+  if (summary.active_version === null) {
+    return (
+      <Card>
+        <EmptyState
+          title="No approved cost allocation basis yet"
+          hint="Create the opening Finance allocation version, reconcile it to its cost pools, and make it current. Until then no unit's profitability can be calculated, and none is invented."
+          actions={
+            canWrite ? (
+              <Button variant="primary" onClick={onOpenVersions}>
+                Allocation versions
+              </Button>
+            ) : undefined
+          }
+        />
+      </Card>
+    );
+  }
+
+  const version = summary.active_version;
 
   return (
-    <div className="stack">
-      <SectionHeader
-        title="Current blended economics"
-        description="Locked where sold, expected where not: sold units keep the terms and cost basis they were sold under, unsold units use today's approved price and today's basis."
-      />
+    <div className="grid-12">
+      <div className="span-12">
+        <Card>
+          <MetricGroup>
+            <Metric label="Revenue" value={money(summary.revenue_total, code)} size="lg" />
+            <Metric label="Total cost" value={money(summary.total_cost_total, code)} size="lg" />
+            <Metric
+              label="Profit after finance"
+              value={money(summary.profit_total, code)}
+              size="lg"
+              tone={summary.profit_total.startsWith("-") ? "danger" : "neutral"}
+            />
+            <Metric label="Margin" value={percent(summary.margin_fraction)} size="lg" />
+            <Metric label="Return on cost" value={percent(summary.return_on_cost_fraction)} size="lg" />
+          </MetricGroup>
+          <p className="footnote">
+            Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
+            frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
+            today&rsquo;s basis. Margin is total profit over total revenue and return on cost is total
+            profit over total cost — weighted on the server, never the average of the unit ratios.
+          </p>
+          {summary.currency_mismatch_count > 0 ? (
+            <Notice tone="warning">
+              {plural(summary.currency_mismatch_count, "unit")} cannot be included because revenue and project
+              cost currency differ. There is no exchange rate in this system, so those units are reported on
+              their own and never added to these totals.
+            </Notice>
+          ) : null}
+        </Card>
+      </div>
 
-      {summary.active_version === null ? (
-        <EmptyState
-          title="No approved cost allocation basis exists yet"
-          hint="Create the opening Finance allocation version to calculate unit profitability."
-        />
-      ) : null}
+      <div className="span-7">
+        <Card title="Profit waterfall" description="Every line is the server's. Read top to bottom.">
+          <Waterfall>
+            <WaterfallRow label="Revenue" amount={money(summary.revenue_total, code)} kind="subtotal" />
+            <WaterfallRow
+              label="Development cost"
+              note="Land, hard and soft pools allocated to units, plus direct unit costs"
+              amount={money(summary.development_cost_total, code)}
+            />
+            <WaterfallRow label="Gross profit" amount={money(summary.gross_profit_total, code)} kind="subtotal" />
+            <WaterfallRow
+              label="Commercial cost"
+              note="Variable selling costs and seller-borne concessions"
+              amount={money(summary.commercial_cost_total, code)}
+            />
+            <WaterfallRow label="Contribution profit" amount={money(summary.contribution_profit_total, code)} kind="subtotal" />
+            <WaterfallRow
+              label="Finance cost"
+              note={version.finance_treatment === "allocated" ? "Allocated to units on this basis" : "Excluded from this basis"}
+              amount={money(summary.finance_cost_total, code)}
+            />
+            <WaterfallRow label="Profit after finance" amount={money(summary.profit_total, code)} kind="total" />
+          </Waterfall>
+        </Card>
+      </div>
 
-      <StatRow>
-        <Stat label="Revenue" value={money(summary.revenue_total, code)} small />
-        <Stat label="Total cost" value={money(summary.total_cost_total, code)} small />
-        <Stat label="Profit" value={money(summary.profit_total, code)} small />
-        <Stat label="Margin" value={percent(summary.margin_fraction)} small />
-        <Stat
-          label="Return on cost"
-          value={percent(summary.return_on_cost_fraction)}
-          small
-        />
-      </StatRow>
-
-      <StatRow>
-        <Stat label="Sold units" value={summary.sold_count} small />
-        <Stat label="Unsold units" value={summary.unsold_count} small />
-        <Stat
-          label="Loss-making"
-          value={summary.negative_profit_count}
-          note="Profit after finance below zero"
-          small
-        />
-        <Stat
-          label="Below minimum margin"
-          value={summary.below_threshold_count}
-          note={
-            summary.threshold_fraction
-              ? `Threshold ${percent(summary.threshold_fraction)}`
-              : "No threshold configured"
+      <div className="span-5">
+        <Card
+          title="Allocation basis"
+          description="The governed version turning shared project cost into unit cost."
+          actions={
+            <Button small variant="quiet" onClick={onOpenVersions}>
+              Versions
+            </Button>
           }
-          small
-        />
-        <Stat
-          label="Incomplete"
-          value={summary.incomplete_count}
-          note="No price or no cost basis"
-          small
-        />
-      </StatRow>
-
-      {summary.currency_mismatch_count > 0 ? (
-        <Notice tone="warning">
-          {plural(summary.currency_mismatch_count, "unit")} cannot be included because
-          revenue and project cost currency differ. There is no exchange rate in this
-          system, so those units are reported on their own and never added to these
-          totals.
-        </Notice>
-      ) : null}
-
-      <p className="footnote">
-        Totals cover {summary.comparable_unit_count} of {summary.unit_count} units.
-        Margin is total profit over total revenue and return on cost is total profit
-        over total cost — weighted, never the average of the unit ratios, which is a
-        different number and not the developer&rsquo;s.
-      </p>
-
-      {summary.active_version ? (
-        <KeyValueGrid columns={3}>
-          <KeyValue
-            label="Current cost basis"
-            value={`v${summary.active_version.version_number}`}
-          />
-          <KeyValue
-            label="Effective from"
-            mono
-            value={businessDate(summary.active_version.effective_from)}
-          />
-          <KeyValue
-            label="Finance cost"
-            value={
-              summary.active_version.finance_treatment === "allocated"
-                ? "Allocated to units"
-                : "Excluded from this basis"
-            }
-          />
-        </KeyValueGrid>
-      ) : null}
+        >
+          <InlineMeta>
+            <InlineMetaItem label="Basis">v{version.version_number}</InlineMetaItem>
+            <InlineMetaItem label="Status">
+              <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>
+            </InlineMetaItem>
+            <InlineMetaItem label="Effective">{businessDate(version.effective_from)}</InlineMetaItem>
+            <InlineMetaItem label="Finance cost">
+              {version.finance_treatment === "allocated" ? "Allocated" : "Excluded"}
+            </InlineMetaItem>
+          </InlineMeta>
+          <h3 className="section-heading">Units</h3>
+          <MetricGroup compact>
+            <Metric label="Sold basis" value={summary.sold_count} size="sm" />
+            <Metric label="Forecast basis" value={summary.unsold_count} size="sm" />
+            <Metric
+              label="Loss-making"
+              value={summary.negative_profit_count}
+              size="sm"
+              tone={summary.negative_profit_count > 0 ? "danger" : "neutral"}
+              note="Profit after finance below zero"
+            />
+            <Metric
+              label="Below minimum margin"
+              value={summary.below_threshold_count}
+              size="sm"
+              tone={summary.below_threshold_count > 0 ? "warning" : "neutral"}
+              note={summary.threshold_fraction ? `Threshold ${percent(summary.threshold_fraction)}` : "No threshold configured"}
+            />
+            <Metric
+              label="Incomplete"
+              value={summary.incomplete_count}
+              size="sm"
+              tone={summary.incomplete_count > 0 ? "warning" : "neutral"}
+              note="No price or no cost basis"
+            />
+            <Metric
+              label="Currency differs"
+              value={summary.currency_mismatch_count}
+              size="sm"
+              tone={summary.currency_mismatch_count > 0 ? "warning" : "neutral"}
+              note="Reported apart, never combined"
+            />
+          </MetricGroup>
+        </Card>
+      </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------------- */
 
-function UnitsRegister({
-  rows,
-  code,
-}: {
-  rows: UnitEconomicsRow[];
-  code: string | null;
-}) {
+function UnitsRegister({ rows, code }: { rows: UnitEconomicsRow[]; code: string | null }) {
   // `code` is the project's cost currency, which every cost column is in.
   // Revenue is not necessarily: a currency-mismatch unit earns in its own
   // denomination, and labelling that figure with the project's code would
@@ -363,9 +412,7 @@ function UnitsRegister({
     if (search && !text.includes(search.toLowerCase())) return false;
     if (only === "sold") return row.basis === "sold";
     if (only === "unsold") return row.basis === "forecast";
-    if (only === "loss") {
-      return row.profit_after_finance !== null && row.profit_after_finance.startsWith("-");
-    }
+    if (only === "loss") return row.profit_after_finance !== null && row.profit_after_finance.startsWith("-");
     if (only === "below") return row.below_margin_threshold === true;
     if (only === "incomplete") return row.profitability_status !== "ready";
     return true;
@@ -373,122 +420,133 @@ function UnitsRegister({
 
   return (
     <div className="stack">
-      <FilterBar>
-        <Field label="Search" grow>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Unit reference"
-          />
-        </Field>
-        <Field label="Show">
-          <select value={only} onChange={(event) => setOnly(event.target.value)}>
+      <DataToolbar
+        search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search units" }}
+        count={{ shown: shown.length, total: rows.length, noun: "unit" }}
+        onReset={
+          search || only !== "all"
+            ? () => {
+                setSearch("");
+                setOnly("all");
+              }
+            : undefined
+        }
+      >
+        <ToolbarFilter label="Show">
+          <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
             <option value="all">Every unit</option>
-            <option value="sold">Sold</option>
-            <option value="unsold">Unsold</option>
+            <option value="sold">Sold basis</option>
+            <option value="unsold">Forecast basis</option>
             <option value="loss">Loss-making</option>
             <option value="below">Below minimum margin</option>
             <option value="incomplete">Incomplete economics</option>
           </select>
-        </Field>
-      </FilterBar>
+        </ToolbarFilter>
+      </DataToolbar>
 
-      {shown.length === 0 ? (
-        <EmptyState
-          title="No units match"
-          hint="Widen the filter, or record a cost basis so units can be analysed."
-        />
-      ) : (
-        <TableScroll label="Unit economics">
-          <thead>
-            <tr>
-              <th scope="col">Unit</th>
-              <th scope="col">Basis</th>
-              <th scope="col" className="num">
-                Revenue
-              </th>
-              <th scope="col" className="num">
-                Land
-              </th>
-              <th scope="col" className="num">
-                Hard
-              </th>
-              <th scope="col" className="num">
-                Soft
-              </th>
-              <th scope="col" className="num">
-                Direct
-              </th>
-              <th scope="col" className="num">
-                Selling
-              </th>
-              <th scope="col" className="num">
-                Finance
-              </th>
-              <th scope="col" className="num">
-                Total cost
-              </th>
-              <th scope="col" className="num">
-                Profit
-              </th>
-              <th scope="col" className="num">
-                Margin
-              </th>
-              <th scope="col" className="num">
-                ROC
-              </th>
-              <th scope="col">State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((row) => (
-              <tr key={row.unit_id}>
-                <th scope="row" className="mono">
-                  {row.unit_reference}
+      <Card flush>
+        {shown.length === 0 ? (
+          <div className="card-body">
+            <EmptyState title="No units match" hint="Widen the filter, or record a cost basis so units can be analysed." />
+          </div>
+        ) : (
+          <TableScroll label="Unit economics" fixedFirst>
+            <thead>
+              <tr>
+                <th scope="col">Unit</th>
+                <th scope="col">Basis</th>
+                <th scope="col" className="num">
+                  Revenue
                 </th>
-                <td>
-                  {basisLabel(row.basis)}
-                  {row.allocation_version_number === null ? null : (
-                    <p className="hint">v{row.allocation_version_number}</p>
-                  )}
-                </td>
-                <td className="num mono">
-                  {money(row.revenue, currencyCodeOf(row.revenue_currency_id))}
-                </td>
-                <td className="num mono">{money(row.land_cost, code)}</td>
-                <td className="num mono">{money(row.hard_cost, code)}</td>
-                <td className="num mono">{money(row.soft_cost, code)}</td>
-                <td className="num mono">{money(row.direct_cost, code)}</td>
-                <td className="num mono">
-                  {money(row.variable_selling_cost, code)}
-                  {row.seller_cost === "0.00" ? null : (
-                    <p className="hint">+{money(row.seller_cost, code)} seller</p>
-                  )}
-                </td>
-                <td className="num mono">
-                  {money(row.finance_cost ?? row.allocated_finance_cost, code)}
-                </td>
-                <td className="num mono">{money(row.total_cost, code)}</td>
-                <td className="num mono">{money(row.profit_after_finance, code)}</td>
-                <td className="num mono">{percent(row.margin_fraction)}</td>
-                <td className="num mono">{percent(row.return_on_cost_fraction)}</td>
-                <td>
-                  <Badge tone={profitabilityTone(row.profitability_status)}>
-                    {profitabilityLabel(row.profitability_status)}
-                  </Badge>
-                  {row.profitability_status === "ready" ? null : (
-                    <p className="hint">{PROFIT_EXPLANATIONS[row.profitability_status]}</p>
-                  )}
-                  {row.below_margin_threshold ? (
-                    <p className="hint">Below the minimum margin.</p>
-                  ) : null}
-                </td>
+                <th scope="col" className="num">
+                  Land
+                </th>
+                <th scope="col" className="num">
+                  Hard
+                </th>
+                <th scope="col" className="num">
+                  Soft
+                </th>
+                <th scope="col" className="num">
+                  Direct
+                </th>
+                <th scope="col" className="num">
+                  Selling
+                </th>
+                <th scope="col" className="num">
+                  Finance
+                </th>
+                <th scope="col" className="num">
+                  Total cost
+                </th>
+                <th scope="col" className="num">
+                  Profit
+                </th>
+                <th scope="col" className="num">
+                  Margin
+                </th>
+                <th scope="col" className="num">
+                  ROC
+                </th>
+                <th scope="col">State</th>
               </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      )}
+            </thead>
+            <tbody>
+              {shown.map((row) => (
+                <tr key={row.unit_id}>
+                  <th scope="row" className="mono">
+                    {row.unit_reference}
+                  </th>
+                  <td>
+                    {basisLabel(row.basis)}
+                    {row.allocation_version_number === null ? null : (
+                      <span className="cell-secondary">v{row.allocation_version_number}</span>
+                    )}
+                  </td>
+                  <td className="num">{money(row.revenue, currencyCodeOf(row.revenue_currency_id))}</td>
+                  <td className="num">{money(row.land_cost, code)}</td>
+                  <td className="num">{money(row.hard_cost, code)}</td>
+                  <td className="num">{money(row.soft_cost, code)}</td>
+                  <td className="num">{money(row.direct_cost, code)}</td>
+                  <td className="num">
+                    {money(row.variable_selling_cost, code)}
+                    {isPositive(row.seller_cost) ? (
+                      <span className="cell-secondary">+{money(row.seller_cost, code)} seller</span>
+                    ) : null}
+                  </td>
+                  <td className="num">{money(row.finance_cost ?? row.allocated_finance_cost, code)}</td>
+                  <td className="num">{money(row.total_cost, code)}</td>
+                  <td className="num">
+                    {row.profit_after_finance === null ? (
+                      "—"
+                    ) : (
+                      <span className={profitTone(row.profit_after_finance) === "danger" ? "status-dot status-dot-danger" : undefined}>
+                        {money(row.profit_after_finance, code)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="num">{percent(row.margin_fraction)}</td>
+                  <td className="num">{percent(row.return_on_cost_fraction)}</td>
+                  <td className="cell-prose">
+                    {row.profitability_status === "ready" ? (
+                      <StatusDot tone="success">Calculated</StatusDot>
+                    ) : (
+                      <Badge tone={profitabilityTone(row.profitability_status)}>
+                        {profitabilityLabel(row.profitability_status)}
+                      </Badge>
+                    )}
+                    {row.below_margin_threshold ? <span className="cell-secondary">Below the minimum margin</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
+        )}
+      </Card>
+      <p className="footnote">
+        Where a state is not &ldquo;Calculated&rdquo; the zeros beside it are missing figures, not a cost of
+        nothing. Open the unit for the reason.
+      </p>
     </div>
   );
 }
@@ -535,288 +593,103 @@ function Versions({
     })();
   }, [loadDetail, versions]);
 
-  const after = (run: () => Promise<unknown>, done: string) =>
-    void onAct(run, done).then(() => void loadDetail());
+  const after = (run: () => Promise<unknown>, done: string) => void onAct(run, done).then(() => void loadDetail());
 
   return (
-    <div className="stack">
-      <SectionHeader
-        title="Allocation versions"
-        description="Each version is one governed basis for turning shared project cost into unit cost. A sold unit keeps the version that governed when its contract was signed."
-        actions={
-          canWrite ? (
-            <Button variant="primary" disabled={busy} onClick={() => setCreating(true)}>
-              New version
-            </Button>
-          ) : null
-        }
-      />
-
-      {versions.length === 0 ? (
-        <EmptyState
-          title="No approved cost allocation basis exists yet"
-          hint="Create the opening Finance allocation version to calculate unit profitability."
-        />
-      ) : (
-        <TableScroll label="Allocation versions">
-          <thead>
-            <tr>
-              <th scope="col">Version</th>
-              <th scope="col">Effective</th>
-              <th scope="col">Finance cost</th>
-              <th scope="col">Status</th>
-              <th scope="col">
-                <span className="visually-hidden">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {versions.map((version) => (
-              <tr key={version.id}>
-                <th scope="row">v{version.version_number}</th>
-                <td className="mono">
-                  {businessDate(version.effective_from)}
-                  {version.effective_to
-                    ? ` – ${businessDate(version.effective_to)}`
-                    : ""}
-                </td>
-                <td>
-                  {version.finance_treatment === "allocated" ? "Allocated" : "Excluded"}
-                </td>
-                <td>
-                  <Badge tone={versionTone(version.status)}>
-                    {versionLabel(version.status)}
-                  </Badge>
-                  {version.rejection_reason ? (
-                    <p className="hint">{version.rejection_reason}</p>
-                  ) : null}
-                </td>
-                <td>
-                  <Button
-                    disabled={busy}
+    <div className="grid-12">
+      <div className="span-4">
+        <Card
+          title="Versions"
+          description="One governed basis at a time. A sold unit keeps the version that governed when its contract was signed."
+          actions={
+            canWrite ? (
+              <Button variant="primary" small disabled={busy} onClick={() => setCreating(true)}>
+                New version
+              </Button>
+            ) : undefined
+          }
+          flush
+        >
+          {versions.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                compact
+                title="No cost basis yet"
+                hint="Create the opening Finance allocation version to calculate unit profitability."
+              />
+            </div>
+          ) : (
+            <ul className="version-list" style={{ margin: 0, padding: "0.25rem 0" }}>
+              {versions.map((version) => (
+                <li key={version.id}>
+                  <button
+                    type="button"
+                    className="switcher-option"
+                    style={{ borderRadius: 0, padding: "0.625rem 1.5rem" }}
+                    aria-current={version.id === open ? "true" : undefined}
                     onClick={() => {
                       setOpen(version.id);
                       setPreview(null);
                     }}
                   >
-                    Open
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      )}
+                    <span className="switcher-option-code">v{version.version_number}</span>
+                    <span className="switcher-option-name">
+                      {businessDate(version.effective_from)}
+                      {version.effective_to ? ` – ${businessDate(version.effective_to)}` : ""}
+                    </span>
+                    <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>
+                    <span className="switcher-option-meta">
+                      {version.finance_treatment === "allocated" ? "Finance allocated" : "Finance excluded"}
+                      {version.rejection_reason ? ` · ${version.rejection_reason}` : ""}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
-      {detail ? (
-        <>
-          <SectionHeader
-            title={`Version ${detail.version.version_number}`}
-            description={detail.version.change_reason}
-            actions={
-              <>
-                {canWrite && detail.version.status === "draft" ? (
-                  <>
-                    <Button disabled={busy} onClick={() => setAddingPool(true)}>
-                      Add pool
-                    </Button>
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void onAct(async () => {
-                          setPreview(
-                            await unitEconomics.calculate(projectId, detail.version.id),
-                          );
-                        }, "Allocation calculated.").then(() => void loadDetail())
-                      }
-                    >
-                      Calculate
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        after(
-                          () => unitEconomics.submitVersion(projectId, detail.version.id),
-                          "Cost basis submitted for approval.",
-                        )
-                      }
-                    >
-                      Submit
-                    </Button>
-                  </>
-                ) : null}
-                {canApprove && detail.version.status === "submitted" ? (
-                  <>
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        after(
-                          () => unitEconomics.approveVersion(projectId, detail.version.id),
-                          "Cost basis approved.",
-                        )
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="danger"
-                      disabled={busy}
-                      onClick={() => setRejecting(detail.version.id)}
-                    >
-                      Reject
-                    </Button>
-                  </>
-                ) : null}
-                {canWrite && detail.version.status === "approved" ? (
-                  <Button
-                    variant="primary"
-                    disabled={busy}
-                    onClick={() =>
-                      after(
-                        () => unitEconomics.activateVersion(projectId, detail.version.id),
-                        "Cost basis is now current.",
-                      )
-                    }
-                  >
-                    Make current
-                  </Button>
-                ) : null}
-                {canWrite && detail.version.status !== "draft" ? (
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      after(
-                        () =>
-                          unitEconomics.cloneVersion(projectId, detail.version.id, {
-                            effective_from: todayISO(),
-                            change_reason: `Revision of version ${detail.version.version_number}`,
-                          }),
-                        "Cloned to a new draft.",
-                      )
-                    }
-                  >
-                    Clone
-                  </Button>
-                ) : null}
-              </>
+      <div className="span-8">
+        {detail ? (
+          <VersionFile
+            projectId={projectId}
+            detail={detail}
+            preview={preview}
+            code={code}
+            canWrite={canWrite}
+            canApprove={canApprove}
+            busy={busy}
+            onAddPool={() => setAddingPool(true)}
+            onCalculate={() =>
+              void onAct(async () => {
+                setPreview(await unitEconomics.calculate(projectId, detail.version.id));
+              }, "Allocation calculated.").then(() => void loadDetail())
+            }
+            onSubmit={() => after(() => unitEconomics.submitVersion(projectId, detail.version.id), "Cost basis submitted for approval.")}
+            onApprove={() => after(() => unitEconomics.approveVersion(projectId, detail.version.id), "Cost basis approved.")}
+            onReject={() => setRejecting(detail.version.id)}
+            onActivate={() => after(() => unitEconomics.activateVersion(projectId, detail.version.id), "Cost basis is now current.")}
+            onClone={() =>
+              after(
+                () =>
+                  unitEconomics.cloneVersion(projectId, detail.version.id, {
+                    effective_from: todayISO(),
+                    change_reason: `Revision of version ${detail.version.version_number}`,
+                  }),
+                "Cloned to a new draft.",
+              )
+            }
+            onRemovePool={(poolId) =>
+              after(() => unitEconomics.removePool(projectId, detail.version.id, poolId), "Pool removed from the draft.")
             }
           />
-
-          {detail.stale_sources.length > 0 ? (
-            <Notice tone="warning">
-              This basis was calculated against sources that have since changed —{" "}
-              {detail.stale_sources.join("; ")}. It cannot be made current until it is
-              recalculated.
-            </Notice>
-          ) : null}
-
-          <StatRow>
-            <Stat
-              label="Source cost"
-              value={money(detail.reconciliation.source_cost_total, code)}
-              small
-            />
-            <Stat
-              label="Allocated"
-              value={money(detail.reconciliation.allocated_cost_total, code)}
-              small
-            />
-            <Stat
-              label="Variance"
-              value={money(detail.reconciliation.variance, code)}
-              note={detail.reconciliation.reconciled ? "Reconciled" : "Does not reconcile"}
-              small
-            />
-            <Stat label="Pools" value={detail.reconciliation.pool_count} small />
-            <Stat
-              label="Allocations"
-              value={detail.reconciliation.allocation_count}
-              small
-            />
-          </StatRow>
-
-          {detail.pools.length === 0 ? (
-            <EmptyState
-              title="No cost pools yet"
-              hint="A basis must address land, hard and soft cost explicitly before it can be submitted. Record a zero pool where the cost is genuinely nil."
-            />
-          ) : (
-            <TableScroll label="Cost pools">
-              <thead>
-                <tr>
-                  <th scope="col">Pool</th>
-                  <th scope="col">Category</th>
-                  <th scope="col" className="num">
-                    Amount
-                  </th>
-                  <th scope="col">Scope</th>
-                  <th scope="col">Method</th>
-                  <th scope="col" className="num">
-                    Allocated
-                  </th>
-                  <th scope="col" className="num">
-                    Variance
-                  </th>
-                  <th scope="col">
-                    <span className="visually-hidden">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.pools.map((pool) => {
-                  const line = preview?.pools.find((row) => row.pool_id === pool.id);
-                  return (
-                    <tr key={pool.id}>
-                      <th scope="row" className="mono">
-                        {pool.pool_number}
-                        <p className="hint">{pool.name}</p>
-                      </th>
-                      <td>{categoryLabel(pool.category)}</td>
-                      <td className="num mono">
-                        {money(pool.amount, code)}
-                        {pool.source_kind === "project_land" ? (
-                          <p className="hint">From the land register</p>
-                        ) : (
-                          <p className="hint">Current forecast input</p>
-                        )}
-                      </td>
-                      <td>{scopeLabel(pool.scope_kind)}</td>
-                      <td>{methodLabel(pool.allocation_method)}</td>
-                      <td className="num mono">
-                        {line ? money(line.allocated_total, code) : "—"}
-                      </td>
-                      <td className="num mono">{line ? money(line.variance, code) : "—"}</td>
-                      <td>
-                        {canWrite && detail.version.status === "draft" ? (
-                          <Button
-                            variant="danger"
-                            disabled={busy}
-                            onClick={() =>
-                              after(
-                                () =>
-                                  unitEconomics.removePool(
-                                    projectId,
-                                    detail.version.id,
-                                    pool.id,
-                                  ),
-                                "Pool removed from the draft.",
-                              )
-                            }
-                          >
-                            Remove
-                          </Button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </TableScroll>
-          )}
-        </>
-      ) : null}
+        ) : versions.length > 0 ? (
+          <Card>
+            <Loading label="Loading the version…" shape="metrics" />
+          </Card>
+        ) : null}
+      </div>
 
       {creating ? (
         <NewVersionDialog
@@ -824,10 +697,7 @@ function Versions({
           onCancel={() => setCreating(false)}
           onSubmit={(body) => {
             setCreating(false);
-            void onAct(
-              () => unitEconomics.createVersion(projectId, body),
-              "Draft cost basis created.",
-            );
+            void onAct(() => unitEconomics.createVersion(projectId, body), "Draft cost basis created.");
           }}
         />
       ) : null}
@@ -835,14 +705,12 @@ function Versions({
       {addingPool && detail ? (
         <NewPoolDialog
           projectId={projectId}
+          code={code}
           busy={busy}
           onCancel={() => setAddingPool(false)}
           onSubmit={(body) => {
             setAddingPool(false);
-            after(
-              () => unitEconomics.addPool(projectId, detail.version.id, body),
-              "Cost pool added.",
-            );
+            after(() => unitEconomics.addPool(projectId, detail.version.id, body), "Cost pool added.");
           }}
         />
       ) : null}
@@ -858,14 +726,241 @@ function Versions({
           onSubmit={(reason) => {
             const target = rejecting;
             setRejecting(null);
-            after(
-              () => unitEconomics.rejectVersion(projectId, target, reason),
-              "Cost basis rejected.",
-            );
+            after(() => unitEconomics.rejectVersion(projectId, target, reason), "Cost basis rejected.");
           }}
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One allocation version: its header, its lifecycle, its pools, and whether
+ * the pools reconcile to what was allocated. A zero variance is calm; a
+ * failure is impossible to miss.
+ */
+function VersionFile({
+  projectId,
+  detail,
+  preview,
+  code,
+  canWrite,
+  canApprove,
+  busy,
+  onAddPool,
+  onCalculate,
+  onSubmit,
+  onApprove,
+  onReject,
+  onActivate,
+  onClone,
+  onRemovePool,
+}: {
+  projectId: string;
+  detail: AllocationVersionDetail;
+  preview: CalculationPreview | null;
+  code: string | null;
+  canWrite: boolean;
+  canApprove: boolean;
+  busy: boolean;
+  onAddPool: () => void;
+  onCalculate: () => void;
+  onSubmit: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onActivate: () => void;
+  onClone: () => void;
+  onRemovePool: (poolId: string) => void;
+}) {
+  const currencyCodeOf = useCurrencyCode();
+  const version = detail.version;
+  const reconciliation = detail.reconciliation;
+  const draft = version.status === "draft";
+  void projectId;
+
+  return (
+    <Card
+      title={`Cost basis v${version.version_number}`}
+      description={version.change_reason}
+      actions={
+        <ButtonRow>
+          {canWrite && draft ? (
+            <>
+              <Button disabled={busy} onClick={onAddPool}>
+                Add pool
+              </Button>
+              <Button disabled={busy} onClick={onCalculate}>
+                Calculate
+              </Button>
+              <Button variant="primary" disabled={busy} onClick={onSubmit}>
+                Submit
+              </Button>
+            </>
+          ) : null}
+          {canApprove && version.status === "submitted" ? (
+            <>
+              <Button variant="primary" disabled={busy} onClick={onApprove}>
+                Approve
+              </Button>
+              <Button variant="danger" disabled={busy} onClick={onReject}>
+                Reject
+              </Button>
+            </>
+          ) : null}
+          {canWrite && version.status === "approved" ? (
+            <Button variant="primary" disabled={busy} onClick={onActivate}>
+              Make current
+            </Button>
+          ) : null}
+          {canWrite && !draft ? (
+            <Button disabled={busy} onClick={onClone}>
+              Clone
+            </Button>
+          ) : null}
+        </ButtonRow>
+      }
+    >
+      <div className="stack stack-tight">
+        <Steps
+          label="Cost basis lifecycle"
+          steps={VERSION_SEQUENCE.map((key) => ({
+            key,
+            label: versionLabel(key as AllocationVersion["status"]),
+            state:
+              key === version.status
+                ? "current"
+                : version.status === "superseded" || VERSION_SEQUENCE.indexOf(key) < VERSION_SEQUENCE.indexOf(version.status)
+                  ? "done"
+                  : "pending",
+          }))}
+        />
+        <InlineMeta>
+          <InlineMetaItem label="Status">
+            <Badge tone={versionTone(version.status)}>{versionLabel(version.status)}</Badge>
+          </InlineMetaItem>
+          <InlineMetaItem label="Effective">
+            {businessDate(version.effective_from)}
+            {version.effective_to ? ` – ${businessDate(version.effective_to)}` : ""}
+          </InlineMetaItem>
+          <InlineMetaItem label="Currency">{currencyCodeOf(version.currency_id) ?? "—"}</InlineMetaItem>
+          <InlineMetaItem label="Finance treatment">
+            {version.finance_treatment === "allocated" ? "Allocated to units" : "Excluded from this basis"}
+          </InlineMetaItem>
+          {version.calculated_at ? (
+            <InlineMetaItem label="Calculated">{version.calculated_at.slice(0, 10)}</InlineMetaItem>
+          ) : null}
+        </InlineMeta>
+        {version.rejection_reason ? <Notice tone="error">Rejected: {version.rejection_reason}</Notice> : null}
+      </div>
+
+      {detail.stale_sources.length > 0 ? (
+        <Notice tone="warning">
+          This basis was calculated against sources that have since changed — {detail.stale_sources.join("; ")}.
+          It cannot be made current until it is recalculated.
+        </Notice>
+      ) : null}
+
+      <h3 className="section-heading">Reconciliation</h3>
+      <MetricGroup>
+        <Metric label="Source cost" value={money(reconciliation.source_cost_total, code)} />
+        <Metric label="Allocated" value={money(reconciliation.allocated_cost_total, code)} />
+        <Metric
+          label="Variance"
+          value={money(reconciliation.variance, code)}
+          tone={reconciliation.reconciled ? "success" : "danger"}
+        />
+        <Metric label="Pools" value={reconciliation.pool_count} size="sm" />
+        <Metric label="Allocations" value={reconciliation.allocation_count} size="sm" />
+      </MetricGroup>
+      <div className={reconciliation.reconciled ? "reconcile reconcile-ok" : "reconcile reconcile-fail"} role="status">
+        <span className="reconcile-title">
+          {reconciliation.reconciled ? "Reconciled." : "Does not reconcile."}
+        </span>
+        <span>
+          {reconciliation.reconciled
+            ? "Every pool is allocated to its units exactly, residual included."
+            : reconciliation.unreconciled_pools.length > 0
+              ? `Unreconciled: ${reconciliation.unreconciled_pools.join(", ")}. Calculate again, or fix the pools.`
+              : "Calculate the basis to allocate its pools."}
+        </span>
+      </div>
+
+      <h3 className="section-heading">Cost pools</h3>
+      {detail.pools.length === 0 ? (
+        <EmptyState
+          compact
+          title="No cost pools yet"
+          hint="A basis must address land, hard and soft cost explicitly before it can be submitted. Record a zero pool where the cost is genuinely nil."
+        />
+      ) : (
+        <TableScroll label="Cost pools" compact>
+          <thead>
+            <tr>
+              <th scope="col">Pool</th>
+              <th scope="col">Category</th>
+              <th scope="col">Scope</th>
+              <th scope="col">Method</th>
+              <th scope="col" className="num">
+                Amount
+              </th>
+              <th scope="col" className="num">
+                Allocated
+              </th>
+              <th scope="col" className="num">
+                Variance
+              </th>
+              {canWrite && draft ? (
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody>
+            {detail.pools.map((pool) => {
+              const line = preview?.pools.find((row) => row.pool_id === pool.id);
+              return (
+                <tr key={pool.id}>
+                  <th scope="row">
+                    <span className="mono">{pool.pool_number}</span>
+                    <span className="cell-secondary">{pool.name}</span>
+                  </th>
+                  <td>{categoryLabel(pool.category)}</td>
+                  <td>{scopeLabel(pool.scope_kind)}</td>
+                  <td>{methodLabel(pool.allocation_method)}</td>
+                  <td className="num">
+                    {money(pool.amount, code)}
+                    <span className="cell-secondary">
+                      {pool.source_kind === "project_land" ? "From the land register" : "Forecast input"}
+                    </span>
+                  </td>
+                  <td className="num">{line ? money(line.allocated_total, code) : "—"}</td>
+                  <td className="num">
+                    {line ? (
+                      <StatusDot tone={isPositive(line.variance) || line.variance.startsWith("-") ? "danger" : "success"}>
+                        {money(line.variance, code)}
+                      </StatusDot>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  {canWrite && draft ? (
+                    <td>
+                      <Button small variant="quiet" disabled={busy} onClick={() => onRemovePool(pool.id)}>
+                        Remove
+                      </Button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </TableScroll>
+      )}
+      {preview === null && draft ? (
+        <p className="footnote">Allocated and variance per pool appear after Calculate.</p>
+      ) : null}
+    </Card>
   );
 }
 
@@ -892,16 +987,11 @@ function NewVersionDialog({
       busy={busy}
       disabled={reason.trim().length === 0}
       onCancel={onCancel}
-      onSubmit={() =>
-        onSubmit({
-          effective_from: effectiveFrom,
-          change_reason: reason.trim(),
-          finance_treatment: treatment,
-        })
-      }
+      onSubmit={() => onSubmit({ effective_from: effectiveFrom, change_reason: reason.trim(), finance_treatment: treatment })}
     >
       <Field label="Effective from" hint="The date this basis starts governing.">
         <input
+          className="input input-short"
           type="date"
           value={effectiveFrom}
           onChange={(event) => setEffectiveFrom(event.target.value)}
@@ -909,18 +999,13 @@ function NewVersionDialog({
         />
       </Field>
       <Field label="Reason">
-        <textarea
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          rows={3}
-          required
-        />
+        <textarea className="input" value={reason} onChange={(event) => setReason(event.target.value)} rows={3} required />
       </Field>
       <Field
         label="Finance cost"
-        hint="Excluded is a statement, not an omission: the screens will say finance cost is excluded rather than implying it is nil."
+        hint="Excluded is a statement, not an omission: the screens say finance cost is excluded rather than implying it is nil."
       >
-        <select value={treatment} onChange={(event) => setTreatment(event.target.value)}>
+        <select className="input" value={treatment} onChange={(event) => setTreatment(event.target.value)}>
           <option value="excluded">Excluded from this basis</option>
           <option value="allocated">Allocated to units</option>
         </select>
@@ -931,11 +1016,13 @@ function NewVersionDialog({
 
 function NewPoolDialog({
   projectId,
+  code,
   busy,
   onCancel,
   onSubmit,
 }: {
   projectId: string;
+  code: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
@@ -1010,63 +1097,47 @@ function NewPoolDialog({
         })
       }
     >
-      <Field label="Reference">
-        <input
-          value={poolNumber}
-          onChange={(event) => setPoolNumber(event.target.value)}
-          placeholder="HARD-01"
-          required
-        />
-      </Field>
-      <Field label="Name">
-        <input value={name} onChange={(event) => setName(event.target.value)} required />
-      </Field>
-      <Field label="Category">
-        <select
-          value={category}
-          onChange={(event) => setCategory(event.target.value as PoolCategory)}
-        >
-          {POOL_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {categoryLabel(value)}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {derived ? (
-        <Notice tone="info">
-          Land cost comes from this project&apos;s land register — the parcels&apos; purchase
-          price and acquisition fees — and is re-derived when the basis is made current.
-          There is no amount to enter, and one cost basis draws it once.
-        </Notice>
-      ) : null}
-      {derived ? null : (
-        <Field label="Amount">
-          <input
-            inputMode="decimal"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            required
-          />
+      <FieldRow columns={2}>
+        <Field label="Reference">
+          <input className="input" value={poolNumber} onChange={(event) => setPoolNumber(event.target.value)} placeholder="HARD-01" required />
         </Field>
-      )}
-      {derived ? null : (
-        <Field
-          label="Scope"
-          hint="A pool reaches the units in its scope and no others. A phase carrying none of this category still needs a pool of its own, for zero."
-        >
-          <select value={scope} onChange={(event) => setScope(event.target.value as PoolScope)}>
-            {POOL_SCOPES.map((value) => (
+        <Field label="Category">
+          <select className="input" value={category} onChange={(event) => setCategory(event.target.value as PoolCategory)}>
+            {POOL_CATEGORIES.map((value) => (
               <option key={value} value={value}>
-                {scopeLabel(value)}
+                {categoryLabel(value)}
               </option>
             ))}
           </select>
         </Field>
+      </FieldRow>
+      <Field label="Name">
+        <input className="input" value={name} onChange={(event) => setName(event.target.value)} required />
+      </Field>
+      {derived ? (
+        <Notice tone="info">
+          Land cost comes from this project&apos;s land register — the parcels&apos; purchase price and
+          acquisition fees — and is re-derived when the basis is made current. There is no amount to enter.
+        </Notice>
+      ) : (
+        <FieldRow columns={2}>
+          <Field label="Amount">
+            <MoneyInput code={code} value={amount} onChange={setAmount} required />
+          </Field>
+          <Field label="Scope" hint="A pool reaches the units in its scope and no others.">
+            <select className="input" value={scope} onChange={(event) => setScope(event.target.value as PoolScope)}>
+              {POOL_SCOPES.map((value) => (
+                <option key={value} value={value}>
+                  {scopeLabel(value)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FieldRow>
       )}
       {scopeKind === "phase" ? (
         <Field label="Phase">
-          <select value={phaseId} onChange={(event) => setPhaseId(event.target.value)} required>
+          <select className="input" value={phaseId} onChange={(event) => setPhaseId(event.target.value)} required>
             <option value="">Choose a phase</option>
             {phases.map((phase) => (
               <option key={phase.id} value={phase.id}>
@@ -1078,11 +1149,7 @@ function NewPoolDialog({
       ) : null}
       {scopeKind === "building" ? (
         <Field label="Building">
-          <select
-            value={buildingId}
-            onChange={(event) => setBuildingId(event.target.value)}
-            required
-          >
+          <select className="input" value={buildingId} onChange={(event) => setBuildingId(event.target.value)} required>
             <option value="">Choose a building</option>
             {buildings.map((building) => (
               <option key={building.id} value={building.id}>
@@ -1096,10 +1163,7 @@ function NewPoolDialog({
         label="Allocation method"
         hint="Weighted and raw area read the approved area schedule; revenue value reads the current approved price."
       >
-        <select
-          value={method}
-          onChange={(event) => setMethod(event.target.value as AllocationMethod)}
-        >
+        <select className="input" value={method} onChange={(event) => setMethod(event.target.value as AllocationMethod)}>
           {ALLOCATION_METHODS.map((value) => (
             <option key={value} value={value}>
               {methodLabel(value)}
@@ -1108,15 +1172,8 @@ function NewPoolDialog({
         </select>
       </Field>
       {needsArea ? (
-        <Field
-          label="Area type"
-          hint="Raw area divides by one measured area exactly as recorded, without the weighting the price uses."
-        >
-          <select
-            value={areaTypeId}
-            onChange={(event) => setAreaTypeId(event.target.value)}
-            required
-          >
+        <Field label="Area type" hint="Raw area divides by one measured area exactly as recorded, without the weighting the price uses.">
+          <select className="input" value={areaTypeId} onChange={(event) => setAreaTypeId(event.target.value)} required>
             <option value="">Choose an area type</option>
             {areaTypes.map((areaType) => (
               <option key={areaType.id} value={areaType.id}>
@@ -1151,90 +1208,106 @@ function UnitCosts({
 }) {
   const [recording, setRecording] = useState(false);
   const [reversing, setReversing] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const reference = new Map(rows.map((row) => [row.unit_id, row.unit_reference]));
+  const needle = search.trim().toLowerCase();
+  const shown = costs.filter(
+    (cost) => !needle || `${reference.get(cost.unit_id) ?? ""} ${costTypeLabel(cost.cost_type)} ${cost.reference ?? ""}`.toLowerCase().includes(needle),
+  );
 
   return (
     <div className="stack">
-      <SectionHeader
-        title="Unit costs"
-        description="Costs belonging to one unit rather than divided from a shared pool. Recorded, never edited; corrected by reversal and replacement."
+      <DataToolbar
+        search={{ value: search, onChange: setSearch, placeholder: "Unit, cost type or reference", label: "Search unit costs" }}
+        count={{ shown: shown.length, total: costs.length, noun: "cost" }}
         actions={
           canWrite ? (
             <Button variant="primary" disabled={busy} onClick={() => setRecording(true)}>
               Record a cost
             </Button>
-          ) : null
+          ) : undefined
         }
       />
 
-      {costs.length === 0 ? (
-        <EmptyState
-          title="No unit-specific costs recorded"
-          hint="Upgrades, furniture, commissions and other costs belonging to a single unit would appear here."
-        />
-      ) : (
-        <TableScroll label="Unit costs">
-          <thead>
-            <tr>
-              <th scope="col">Unit</th>
-              <th scope="col">Cost</th>
-              <th scope="col">Treatment</th>
-              <th scope="col">Basis</th>
-              <th scope="col">Date</th>
-              <th scope="col" className="num">
-                Amount
-              </th>
-              <th scope="col">State</th>
-              <th scope="col">
-                <span className="visually-hidden">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {costs.map((cost) => (
-              <tr key={cost.id}>
-                <th scope="row" className="mono">
-                  {reference.get(cost.unit_id) ?? "—"}
+      <Card flush>
+        {shown.length === 0 ? (
+          <div className="card-body">
+            <EmptyState
+              title={costs.length === 0 ? "No unit-specific costs recorded" : "No cost matches"}
+              hint={
+                costs.length === 0
+                  ? "Upgrades, furniture, commissions and other costs belonging to a single unit are recorded here. Recorded, never edited; corrected by reversal and replacement."
+                  : "Try another word."
+              }
+            />
+          </div>
+        ) : (
+          <TableScroll label="Unit costs">
+            <thead>
+              <tr>
+                <th scope="col">Unit</th>
+                <th scope="col">Cost</th>
+                <th scope="col">Treatment</th>
+                <th scope="col">Basis</th>
+                <th scope="col">Date</th>
+                <th scope="col" className="num">
+                  Amount
                 </th>
-                <td>{costTypeLabel(cost.cost_type)}</td>
-                <td>
-                  {cost.cost_class === "direct" ? "Development" : "Variable selling"}
-                </td>
-                <td>{costBasisLabel(cost.basis)}</td>
-                <td>{businessDate(cost.effective_date)}</td>
-                <td className="num mono">{money(cost.amount, code)}</td>
-                <td>
-                  <Badge tone={cost.status === "reversed" ? "danger" : "neutral"}>
-                    {cost.status === "reversed" ? "Reversed" : "Counted"}
-                  </Badge>
-                  {cost.reversal_reason ? (
-                    <p className="hint">{cost.reversal_reason}</p>
-                  ) : null}
-                </td>
-                <td>
-                  {canWrite && cost.status === "active" ? (
-                    <Button disabled={busy} onClick={() => setReversing(cost.id)}>
-                      Reverse
-                    </Button>
-                  ) : null}
-                </td>
+                <th scope="col">State</th>
+                {canWrite ? (
+                  <th scope="col">
+                    <span className="visually-hidden">Actions</span>
+                  </th>
+                ) : null}
               </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      )}
+            </thead>
+            <tbody>
+              {shown.map((cost) => (
+                <tr key={cost.id}>
+                  <th scope="row" className="mono">
+                    {reference.get(cost.unit_id) ?? "—"}
+                  </th>
+                  <td>
+                    {costTypeLabel(cost.cost_type)}
+                    {cost.reference ? <span className="cell-secondary mono">{cost.reference}</span> : null}
+                  </td>
+                  <td>{cost.cost_class === "direct" ? "Development" : "Variable selling"}</td>
+                  <td>{costBasisLabel(cost.basis)}</td>
+                  <td className="figure">{businessDate(cost.effective_date)}</td>
+                  <td className="num">{money(cost.amount, code)}</td>
+                  <td>
+                    {cost.status === "reversed" ? (
+                      <StatusDot tone="danger">Reversed</StatusDot>
+                    ) : (
+                      <StatusDot tone="success">Counted</StatusDot>
+                    )}
+                    {cost.reversal_reason ? <span className="cell-secondary">{cost.reversal_reason}</span> : null}
+                  </td>
+                  {canWrite ? (
+                    <td>
+                      {cost.status === "active" ? (
+                        <Button small variant="quiet" disabled={busy} onClick={() => setReversing(cost.id)}>
+                          Reverse
+                        </Button>
+                      ) : null}
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
+        )}
+      </Card>
 
       {recording ? (
         <RecordCostDialog
           rows={rows}
+          code={code}
           busy={busy}
           onCancel={() => setRecording(false)}
           onSubmit={(unitId, body) => {
             setRecording(false);
-            void onAct(
-              () => unitEconomics.recordUnitCost(projectId, unitId, body),
-              "Unit cost recorded.",
-            );
+            void onAct(() => unitEconomics.recordUnitCost(projectId, unitId, body), "Unit cost recorded.");
           }}
         />
       ) : null}
@@ -1250,10 +1323,7 @@ function UnitCosts({
           onSubmit={(reason) => {
             const target = reversing;
             setReversing(null);
-            void onAct(
-              () => unitEconomics.reverseUnitCost(projectId, target, reason),
-              "Unit cost reversed.",
-            );
+            void onAct(() => unitEconomics.reverseUnitCost(projectId, target, reason), "Unit cost reversed.");
           }}
         />
       ) : null}
@@ -1263,11 +1333,13 @@ function UnitCosts({
 
 function RecordCostDialog({
   rows,
+  code,
   busy,
   onCancel,
   onSubmit,
 }: {
   rows: UnitEconomicsRow[];
+  code: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (unitId: string, body: Record<string, unknown>) => void;
@@ -1278,7 +1350,6 @@ function RecordCostDialog({
   const [amount, setAmount] = useState("");
   const [effectiveDate, setEffectiveDate] = useState(todayISO());
   const [reference, setReference] = useState("");
-
   const [chargeToDeal, setChargeToDeal] = useState(true);
 
   const chosen = rows.find((row) => row.unit_id === unitId);
@@ -1289,8 +1360,7 @@ function RecordCostDialog({
   // unit happens to be sold. A commission was incurred to win one buyer and must
   // name them, or it would be charged to the unit again after they walk away. A
   // rectification belongs to the building and may predate every buyer, so it may
-  // be recorded with no contract at all — and forcing it onto whichever contract
-  // exists later would attribute it to somebody who had nothing to do with it.
+  // be recorded with no contract at all.
   const attachSale = basis === "actual" && saleId !== null && (isSelling || chargeToDeal);
   const sellingNeedsASale = basis === "actual" && isSelling && saleId === null;
 
@@ -1313,87 +1383,69 @@ function RecordCostDialog({
         })
       }
     >
-      <Field label="Unit">
-        <select value={unitId} onChange={(event) => setUnitId(event.target.value)}>
-          {rows.map((row) => (
-            <option key={row.unit_id} value={row.unit_id}>
-              {row.unit_reference}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Cost type">
-        <select
-          value={costType}
-          onChange={(event) => setCostType(event.target.value as UnitCostType)}
-        >
-          <optgroup label="Development cost">
-            {DIRECT_COST_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {costTypeLabel(value)}
+      <FieldRow columns={2}>
+        <Field label="Unit">
+          <select className="input" value={unitId} onChange={(event) => setUnitId(event.target.value)}>
+            {rows.map((row) => (
+              <option key={row.unit_id} value={row.unit_id}>
+                {row.unit_reference}
               </option>
             ))}
-          </optgroup>
-          <optgroup label="Variable selling cost">
-            {SELLING_COST_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {costTypeLabel(value)}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      </Field>
-      <Field
-        label="Basis"
-        hint={
-          saleId
-            ? "A forecast is what the unit is expected to cost. Once it is sold, its actuals are what the deal is judged on."
-            : "An unsold unit is analysed on forecast costs."
-        }
-      >
-        <select value={basis} onChange={(event) => setBasis(event.target.value)}>
-          <option value="forecast">Forecast</option>
-          <option value="actual">Actual</option>
-        </select>
-      </Field>
-      {sellingNeedsASale ? (
-        <Notice tone="warning">
-          A selling cost is incurred to win one buyer, so it needs a live contract to
-          record against. This unit has none.
-        </Notice>
-      ) : null}
-      {basis === "actual" && saleId !== null && !isSelling ? (
-        <Field
-          label="Belongs to"
-          hint="A cost incurred before this buyer arrived stays with the unit and follows it into any later sale."
-        >
-          <select
-            value={chargeToDeal ? "deal" : "unit"}
-            onChange={(event) => setChargeToDeal(event.target.value === "deal")}
-          >
-            <option value="deal">This deal</option>
-            <option value="unit">The unit itself</option>
           </select>
         </Field>
+        <Field label="Cost type">
+          <select className="input" value={costType} onChange={(event) => setCostType(event.target.value as UnitCostType)}>
+            <optgroup label="Development cost">
+              {DIRECT_COST_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {costTypeLabel(value)}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Variable selling cost">
+              {SELLING_COST_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {costTypeLabel(value)}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </Field>
+      </FieldRow>
+      <FieldRow columns={2}>
+        <Field
+          label="Basis"
+          hint={saleId ? "Forecast is what the unit is expected to cost; actuals are what the deal is judged on." : "An unsold unit is analysed on forecast costs."}
+        >
+          <select className="input" value={basis} onChange={(event) => setBasis(event.target.value)}>
+            <option value="forecast">Forecast</option>
+            <option value="actual">Actual</option>
+          </select>
+        </Field>
+        {basis === "actual" && saleId !== null && !isSelling ? (
+          <Field label="Belongs to" hint="A cost incurred before this buyer arrived stays with the unit.">
+            <select className="input" value={chargeToDeal ? "deal" : "unit"} onChange={(event) => setChargeToDeal(event.target.value === "deal")}>
+              <option value="deal">This deal</option>
+              <option value="unit">The unit itself</option>
+            </select>
+          </Field>
+        ) : null}
+      </FieldRow>
+      {sellingNeedsASale ? (
+        <Notice tone="warning">
+          A selling cost is incurred to win one buyer, so it needs a live contract to record against. This unit has none.
+        </Notice>
       ) : null}
-      <Field label="Amount">
-        <input
-          inputMode="decimal"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-          required
-        />
-      </Field>
-      <Field label="Effective date">
-        <input
-          type="date"
-          value={effectiveDate}
-          onChange={(event) => setEffectiveDate(event.target.value)}
-          required
-        />
-      </Field>
-      <Field label="Reference" hint="An invoice or purchase order number, if there is one.">
-        <input value={reference} onChange={(event) => setReference(event.target.value)} />
+      <FieldRow columns={2}>
+        <Field label="Amount">
+          <MoneyInput code={code} value={amount} onChange={setAmount} required />
+        </Field>
+        <Field label="Effective date">
+          <input className="input input-short" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} required />
+        </Field>
+      </FieldRow>
+      <Field label="Reference" optional hint="An invoice or purchase order number.">
+        <input className="input" value={reference} onChange={(event) => setReference(event.target.value)} />
       </Field>
     </FormDialog>
   );

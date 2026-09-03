@@ -31,7 +31,7 @@ export function Notice({ tone, children }: { tone: NoticeTone; children: ReactNo
 }
 
 /**
- * Nothing here — and what to do about it.
+ * Nothing here — what is missing, why it matters, and what to do next.
  *
  * Never a placeholder figure and never an invented row. Empty space is better
  * than false information, and a hint that names the next step is better than
@@ -41,13 +41,15 @@ export function EmptyState({
   title,
   hint,
   actions,
+  compact,
 }: {
   title: string;
   hint?: string;
   actions?: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <div className="empty-state">
+    <div className={compact ? "empty-state empty-state-compact" : "empty-state"}>
       <p className="empty-title">{title}</p>
       {hint ? <p className="empty-hint">{hint}</p> : null}
       {actions ? <div className="empty-actions">{actions}</div> : null}
@@ -55,8 +57,62 @@ export function EmptyState({
   );
 }
 
-/** Waiting, with the shape of what is coming so the page does not jump. */
-export function Loading({ label, lines = 0 }: { label: string; lines?: number }) {
+/**
+ * Waiting, with the shape of what is coming so the page does not jump.
+ *
+ * `lines` draws a paragraph's worth of placeholder; `shape` draws the
+ * silhouette of a metric strip, a register, or a whole page. With neither it
+ * is a short sentence.
+ */
+export function Loading({
+  label,
+  lines = 0,
+  shape,
+  rows = 5,
+}: {
+  label: string;
+  lines?: number;
+  shape?: "metrics" | "rows" | "page";
+  rows?: number;
+}) {
+  if (shape === "metrics") {
+    return (
+      <div role="status" aria-label={label} className="skeleton-metrics">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="skeleton-metric">
+            <span className="skeleton" />
+            <span className="skeleton" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (shape === "rows") {
+    return (
+      <div role="status" aria-label={label} className="skeleton-rows">
+        {Array.from({ length: rows }, (_, index) => (
+          <div key={index} className="skeleton-row">
+            <span className="skeleton" />
+            <span className="skeleton" />
+            <span className="skeleton" />
+            <span className="skeleton" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (shape === "page") {
+    return (
+      <div role="status" aria-label={label}>
+        <span className="skeleton skeleton-title" />
+        <div className="skeleton-lines">
+          <span className="skeleton" />
+          <span className="skeleton" />
+          <span className="skeleton" />
+        </div>
+      </div>
+    );
+  }
   if (lines > 0) {
     return (
       <div role="status" aria-label={label}>

@@ -1,27 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { Permit, PermitRegister, PermitStatusEvent, ReferenceValue } from "@/lib/api";
+import { businessDate, money, todayISO } from "@/lib/format";
+import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
   Card,
+  DataToolbar,
+  Drawer,
   EmptyState,
   Field,
-  FilterBar,
+  FieldRow,
   FormActions,
+  FormSection,
   KeyValue,
   KeyValueGrid,
   Loading,
+  Metric,
+  MetricGroup,
   Notice,
-  Stat,
-  StatRow,
-  SubPanel,
+  PageHeader,
+  StatusDot,
   TableScroll,
+  ToolbarFilter,
 } from "@/components/ui";
-import { businessDate, money } from "@/lib/format";
+import type { Tone } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -94,27 +101,24 @@ const STATUS_LABELS: Record<string, string> = {
  * in a register of forty, so those carry weight; everything in flight is
  * neutral, because "submitted" is neither good news nor bad.
  */
-const STATUS_TONES: Record<string, "neutral" | "muted" | "info" | "success" | "warning" | "danger"> =
-  {
-    not_started: "muted",
-    preparing: "muted",
-    submitted: "info",
-    accepted_for_review: "info",
-    comments_received: "warning",
-    resubmission: "warning",
-    approved_with_conditions: "success",
-    issued: "success",
-    expired: "danger",
-    renewed: "success",
-    rejected: "danger",
-    on_hold: "warning",
-    withdrawn: "muted",
-  };
+const STATUS_TONES: Record<string, Tone> = {
+  not_started: "muted",
+  preparing: "muted",
+  submitted: "info",
+  accepted_for_review: "info",
+  comments_received: "warning",
+  resubmission: "warning",
+  approved_with_conditions: "success",
+  issued: "success",
+  expired: "danger",
+  renewed: "success",
+  rejected: "danger",
+  on_hold: "warning",
+  withdrawn: "muted",
+};
 
 /** Moves the API requires an explanation for. */
 const REASON_REQUIRED = new Set(["rejected", "on_hold", "withdrawn", "preparing"]);
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 function slaLabel(permit: Permit): string {
   if (permit.sla_days_remaining === null) return "—";
@@ -136,53 +140,54 @@ function slaLabel(permit: Permit): string {
 function permitFields(permit: Permit): EditField[] {
   const frozen = !["not_started", "preparing"].includes(permit.status);
   return [
-    {
-      name: "authority",
-      label: "Authority",
-      visible: !frozen,
-      hint: "Fixed once the application is submitted.",
-    },
-    { name: "permit_type_code", label: "Permit type", visible: !frozen },
-    { name: "authority_reference", label: "Authority reference" },
-    { name: "consultant", label: "Consultant" },
-    { name: "planned_submission_date", label: "Planned submission", kind: "date" },
-    { name: "forecast_submission_date", label: "Forecast submission", kind: "date" },
-    { name: "actual_submission_date", label: "Actual submission", kind: "date" },
-    { name: "accepted_for_review_date", label: "Accepted for review", kind: "date" },
-    { name: "comments_received_date", label: "Comments received", kind: "date" },
-    { name: "resubmission_date", label: "Resubmission", kind: "date" },
-    { name: "planned_issue_date", label: "Planned issue", kind: "date" },
-    { name: "forecast_issue_date", label: "Forecast issue", kind: "date" },
-    { name: "issue_date", label: "Issued", kind: "date" },
-    { name: "expiry_date", label: "Expiry", kind: "date" },
-    { name: "renewal_date", label: "Renewal", kind: "date" },
-    { name: "statutory_sla_days", label: "Statutory period (days)", kind: "number" },
+    { name: "authority", label: "Authority", visible: !frozen, hint: "Fixed once the application is submitted.", group: "Application" },
+    { name: "permit_type_code", label: "Permit type", visible: !frozen, group: "Application", width: "medium" },
+    { name: "authority_reference", label: "Authority reference", group: "Application", width: "medium" },
+    { name: "consultant", label: "Consultant", group: "Application" },
+    { name: "statutory_sla_days", label: "Statutory period", kind: "number", group: "Application", affix: "days" },
     {
       name: "fee_amount",
-      label: `Fee${permit.base_currency_code ? ` (${permit.base_currency_code})` : ""}`,
+      label: "Fee",
       kind: "number",
       visible: permit.financials_visible,
+      group: "Application",
+      affix: permit.base_currency_code ?? undefined,
     },
-    { name: "conditions", label: "Conditions", kind: "textarea" },
-    { name: "next_action", label: "Next action" },
-    { name: "notes", label: "Notes", kind: "textarea" },
-    { name: "is_blocking", label: "Blocking", kind: "checkbox" },
-    { name: "is_critical_path", label: "On the critical path", kind: "checkbox" },
+    { name: "planned_submission_date", label: "Planned submission", kind: "date", group: "Submission" },
+    { name: "forecast_submission_date", label: "Forecast submission", kind: "date", group: "Submission" },
+    { name: "actual_submission_date", label: "Actual submission", kind: "date", group: "Submission" },
+    { name: "accepted_for_review_date", label: "Accepted for review", kind: "date", group: "Submission" },
+    { name: "comments_received_date", label: "Comments received", kind: "date", group: "Submission" },
+    { name: "resubmission_date", label: "Resubmission", kind: "date", group: "Submission" },
+    { name: "planned_issue_date", label: "Planned issue", kind: "date", group: "Issue" },
+    { name: "forecast_issue_date", label: "Forecast issue", kind: "date", group: "Issue" },
+    { name: "issue_date", label: "Issued", kind: "date", group: "Issue" },
+    { name: "expiry_date", label: "Expiry", kind: "date", group: "Issue" },
+    { name: "renewal_date", label: "Renewal", kind: "date", group: "Issue" },
+    { name: "conditions", label: "Conditions", kind: "textarea", group: "Management" },
+    { name: "next_action", label: "Next action", group: "Management" },
+    { name: "notes", label: "Notes", kind: "textarea", group: "Management" },
+    { name: "is_blocking", label: "Blocking the programme", kind: "checkbox", group: "Management" },
+    { name: "is_critical_path", label: "On the critical path", kind: "checkbox", group: "Management" },
   ];
 }
 
+type Filter = "" | "blocking" | "critical" | "overdue";
+
 /**
- * The permit tracker: the register plus the one control that moves a permit.
+ * The permit register, and the one control that moves a permit.
  *
- * Status is deliberately not an editable field anywhere here. It moves through
- * "Change status", which records why and when, because the history is the
- * record of what the authority actually did.
+ * Built so the late and the blocking are obvious without inventing a
+ * criticality of their own: the flags are the server's, the statutory clock
+ * is the server's, and the register only draws them where a project manager
+ * looks first. Status is deliberately not an editable field anywhere here. It
+ * moves through "Change status", which records why and when, because the
+ * history is the record of what the authority actually did.
  */
 export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrite: boolean }) {
   const [register, setRegister] = useState<PermitRegister | null>(null);
   const [types, setTypes] = useState<ReferenceValue[]>([]);
   const [selected, setSelected] = useState<Permit | null>(null);
-  const [history, setHistory] = useState<PermitStatusEvent[]>([]);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
     permit_code: "",
@@ -192,23 +197,21 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
     planned_issue_date: "",
     statutory_sla_days: "",
   });
-  const [move, setMove] = useState({ to_status: "", effective_date: today(), reason: "" });
-  const [filter, setFilter] = useState("");
-  const [editingPermit, setEditingPermit] = useState(false);
+  const [filter, setFilter] = useState<Filter>("");
+  const [status, setStatus] = useState("");
+  const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const query: Record<string, string> =
-        filter === "blocking" ? { is_blocking: "true" } : {};
-      setRegister(await projects.permits(projectId, query));
+      setRegister(await projects.permits(projectId));
       setError(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not load permits.");
     }
-  }, [projectId, filter]);
+  }, [projectId]);
 
   useEffect(() => {
     void (async () => {
@@ -227,12 +230,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
     })();
   }, []);
 
-  const open = async (permit: Permit) => {
-    setSelected(permit);
-    setEditingPermit(false);
-    setMove({ to_status: "", effective_date: today(), reason: "" });
-    setHistory(await projects.permitHistory(projectId, permit.id));
-  };
+  const typeLabel = (code: string) => types.find((value) => value.code === code)?.label ?? code;
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -244,13 +242,9 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
         permit_type_code: form.permit_type_code,
         authority: form.authority,
       };
-      if (form.planned_submission_date) {
-        payload.planned_submission_date = form.planned_submission_date;
-      }
+      if (form.planned_submission_date) payload.planned_submission_date = form.planned_submission_date;
       if (form.planned_issue_date) payload.planned_issue_date = form.planned_issue_date;
-      if (form.statutory_sla_days) {
-        payload.statutory_sla_days = Number(form.statutory_sla_days);
-      }
+      if (form.statutory_sla_days) payload.statutory_sla_days = Number(form.statutory_sla_days);
       await projects.createPermit(projectId, payload);
       setNotice(`Permit ${form.permit_code} registered.`);
       setCreating(false);
@@ -270,20 +264,359 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
     }
   };
 
+  // Narrowing happens here, over rows the server already decided this reader
+  // may see. The counts on the strip stay the server's, over the whole set.
+  const shown = useMemo(() => {
+    const rows = register?.permits ?? [];
+    const needle = search.trim().toLowerCase();
+    return rows.filter((permit) => {
+      if (filter === "blocking" && !permit.is_blocking) return false;
+      if (filter === "critical" && !permit.is_critical_path) return false;
+      if (filter === "overdue" && !permit.sla_overdue && !permit.expired_flag) return false;
+      if (status && permit.status !== status) return false;
+      if (
+        needle &&
+        !`${permit.permit_code} ${permit.authority} ${typeLabel(permit.permit_type_code)} ${permit.authority_reference ?? ""}`
+          .toLowerCase()
+          .includes(needle)
+      ) {
+        return false;
+      }
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [register, filter, status, search, types]);
+
+  const filtered = filter !== "" || status !== "" || search !== "";
+
+  return (
+    <>
+      <PageHeader
+        title="Permits"
+        subtitle={sectionDescription("permits")}
+        compact
+        actions={
+          canWrite ? (
+            <Button variant="primary" onClick={() => setCreating((open) => !open)}>
+              {creating ? "Cancel" : "New permit"}
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <div className="stack">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+        {register ? (
+          <Card>
+            <MetricGroup compact>
+              <Metric label="Permits" value={register.total} size="sm" />
+              <Metric
+                label="Blocking"
+                value={register.blocking_count}
+                size="sm"
+                tone={register.blocking_count > 0 ? "warning" : "neutral"}
+              />
+              <Metric label="Critical path" value={register.critical_path_count} size="sm" />
+              <Metric
+                label="Past statutory period"
+                value={register.sla_overdue_count}
+                size="sm"
+                tone={register.sla_overdue_count > 0 ? "danger" : "neutral"}
+              />
+            </MetricGroup>
+          </Card>
+        ) : null}
+
+        {creating ? (
+          <Card title="Register a permit" description="The consent, who issues it, and when it is planned. Everything else is maintained from the permit's file.">
+            <form onSubmit={create}>
+              <FormSection title="Consent">
+                <FieldRow columns={3}>
+                  <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
+                    <input
+                      className="input input-medium"
+                      required
+                      value={form.permit_code}
+                      onChange={(event) => setForm({ ...form, permit_code: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Permit type">
+                    <select
+                      className="input"
+                      required
+                      value={form.permit_type_code}
+                      onChange={(event) => setForm({ ...form, permit_type_code: event.target.value })}
+                    >
+                      <option value="">Choose…</option>
+                      {types.map((value) => (
+                        <option key={value.id} value={value.code}>
+                          {value.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Authority">
+                    <input
+                      className="input"
+                      required
+                      value={form.authority}
+                      onChange={(event) => setForm({ ...form, authority: event.target.value })}
+                    />
+                  </Field>
+                </FieldRow>
+              </FormSection>
+              <FormSection title="Programme">
+                <FieldRow columns={3}>
+                  <Field label="Planned submission" optional>
+                    <input
+                      className="input input-short"
+                      type="date"
+                      value={form.planned_submission_date}
+                      onChange={(event) => setForm({ ...form, planned_submission_date: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Planned issue" optional>
+                    <input
+                      className="input input-short"
+                      type="date"
+                      value={form.planned_issue_date}
+                      onChange={(event) => setForm({ ...form, planned_issue_date: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Statutory period" optional hint="How long the authority has by law.">
+                    <span className="input-shell input-shell-rate">
+                      <input
+                        className="input"
+                        type="number"
+                        min="1"
+                        value={form.statutory_sla_days}
+                        onChange={(event) => setForm({ ...form, statutory_sla_days: event.target.value })}
+                      />
+                      <span className="input-affix" aria-hidden="true">
+                        days
+                      </span>
+                    </span>
+                  </Field>
+                </FieldRow>
+              </FormSection>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Register permit"}
+                </Button>
+                <Button onClick={() => setCreating(false)} disabled={busy}>
+                  Cancel
+                </Button>
+              </FormActions>
+            </form>
+          </Card>
+        ) : null}
+
+        <DataToolbar
+          search={{ value: search, onChange: setSearch, placeholder: "Code, authority or type", label: "Search permits" }}
+          count={register ? { shown: shown.length, total: register.total, noun: "permit" } : undefined}
+          onReset={
+            filtered
+              ? () => {
+                  setFilter("");
+                  setStatus("");
+                  setSearch("");
+                }
+              : undefined
+          }
+        >
+          <ToolbarFilter label="Show">
+            <select className="input" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
+              <option value="">All permits</option>
+              <option value="blocking">Blocking only</option>
+              <option value="critical">Critical path only</option>
+              <option value="overdue">Late or expired only</option>
+            </select>
+          </ToolbarFilter>
+          <ToolbarFilter label="Status">
+            <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">Any status</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </ToolbarFilter>
+        </DataToolbar>
+
+        <Card flush>
+          {register === null ? (
+            <Loading label="Loading permits…" shape="rows" />
+          ) : shown.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title={register.total === 0 ? "No permits registered" : "No permit matches"}
+                hint={
+                  register.total === 0
+                    ? "Add the approvals this development needs, and track where each one stands with the authority."
+                    : "Widen the filter to see the rest of the register."
+                }
+              />
+            </div>
+          ) : (
+            <TableScroll label="Permit register" fixedFirst>
+              <thead>
+                <tr>
+                  <th scope="col">Permit</th>
+                  <th scope="col">Authority</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Required by</th>
+                  <th scope="col">Forecast / received</th>
+                  <th scope="col" className="num">
+                    Days in stage
+                  </th>
+                  <th scope="col">Statutory clock</th>
+                  <th scope="col">Flags</th>
+                  <th scope="col">Next action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((permit) => (
+                  <tr key={permit.id}>
+                    <th scope="row">
+                      <button className="button-link mono" type="button" onClick={() => setSelected(permit)}>
+                        {permit.permit_code}
+                      </button>
+                      <span className="cell-secondary">{typeLabel(permit.permit_type_code)}</span>
+                    </th>
+                    <td className="cell-prose">
+                      {permit.authority}
+                      {permit.authority_reference ? (
+                        <span className="cell-secondary mono">{permit.authority_reference}</span>
+                      ) : null}
+                    </td>
+                    <td>
+                      <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
+                        {STATUS_LABELS[permit.status] ?? permit.status}
+                      </Badge>
+                    </td>
+                    <td className="figure">{businessDate(permit.planned_issue_date)}</td>
+                    <td className="figure">
+                      {permit.issue_date
+                        ? businessDate(permit.issue_date)
+                        : permit.forecast_issue_date
+                          ? businessDate(permit.forecast_issue_date)
+                          : "—"}
+                      {!permit.issue_date && permit.forecast_issue_date ? (
+                        <span className="cell-secondary">forecast</span>
+                      ) : null}
+                    </td>
+                    <td className="num">{permit.days_in_stage}</td>
+                    <td>
+                      {permit.sla_overdue ? (
+                        <StatusDot tone="danger">{slaLabel(permit)}</StatusDot>
+                      ) : permit.sla_days_remaining === null ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <StatusDot tone="success">{slaLabel(permit)}</StatusDot>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+                        {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
+                        {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
+                        {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
+                      </div>
+                    </td>
+                    <td className="cell-prose">{permit.next_action ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          )}
+        </Card>
+      </div>
+
+      {selected ? (
+        <PermitFile
+          projectId={projectId}
+          permit={selected}
+          typeLabel={typeLabel}
+          canWrite={canWrite}
+          onClose={() => setSelected(null)}
+          onChanged={async (updated) => {
+            setSelected(updated);
+            await load();
+          }}
+          onNotice={setNotice}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const SECTIONS = [
+  { key: "permit", label: "Permit" },
+  { key: "history", label: "Status history" },
+];
+
+/**
+ * One permit's file, opened over the register.
+ *
+ * What the authority has, when it is expected, what it costs, and the one
+ * control that moves it — plus every move it has made, in order, with the
+ * reason each one was recorded with.
+ */
+function PermitFile({
+  projectId,
+  permit,
+  typeLabel,
+  canWrite,
+  onClose,
+  onChanged,
+  onNotice,
+}: {
+  projectId: string;
+  permit: Permit;
+  typeLabel: (code: string) => string;
+  canWrite: boolean;
+  onClose: () => void;
+  onChanged: (updated: Permit) => Promise<void>;
+  onNotice: (message: string) => void;
+}) {
+  const [section, setSection] = useState("permit");
+  const [history, setHistory] = useState<PermitStatusEvent[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [move, setMove] = useState({ to_status: "", effective_date: todayISO(), reason: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistory(await projects.permitHistory(projectId, permit.id));
+    } catch {
+      setHistory([]);
+    }
+  }, [projectId, permit.id]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadHistory();
+    })();
+  }, [loadHistory]);
+
   const transition = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selected) return;
     setBusy(true);
     setError(null);
     try {
-      const updated = await projects.transitionPermit(projectId, selected.id, {
+      const updated = await projects.transitionPermit(projectId, permit.id, {
         to_status: move.to_status,
         effective_date: move.effective_date,
         ...(move.reason ? { reason: move.reason } : {}),
       });
-      setNotice(`${updated.permit_code} moved to ${STATUS_LABELS[updated.status]}.`);
-      await load();
-      await open(updated);
+      onNotice(`${updated.permit_code} moved to ${STATUS_LABELS[updated.status] ?? updated.status}.`);
+      setMove({ to_status: "", effective_date: todayISO(), reason: "" });
+      await onChanged(updated);
+      await loadHistory();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not change the status.");
     } finally {
@@ -291,348 +624,202 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
     }
   };
 
+  const moves = TRANSITIONS[permit.status] ?? [];
+
   return (
-    <>
-      <Card
-        title="Permits"
-        description="The consents this development needs, where each one stands, and which of them are holding units back."
-        actions={
-          canWrite ? (
-            <Button onClick={() => setCreating((open) => !open)}>
-              {creating ? "Cancel" : "New permit"}
-            </Button>
-          ) : undefined
-        }
-      >
-        {error ? <Notice tone="error">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
+    <Drawer
+      narrow
+      eyebrow={typeLabel(permit.permit_type_code)}
+      title={permit.permit_code}
+      subtitle={permit.authority}
+      meta={
+        <>
+          <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
+            {STATUS_LABELS[permit.status] ?? permit.status}
+          </Badge>
+          {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+          {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
+          {permit.sla_overdue ? <Badge tone="danger">{slaLabel(permit)}</Badge> : null}
+        </>
+      }
+      facts={[
+        { label: "Status since", value: businessDate(permit.status_effective_date) },
+        { label: "Days in stage", value: permit.days_in_stage },
+        { label: "Required by", value: businessDate(permit.planned_issue_date) },
+        {
+          label: "Statutory clock",
+          value: permit.sla_days_remaining === null ? "Not set" : slaLabel(permit),
+        },
+        ...(permit.financials_visible
+          ? [{ label: "Fee", value: money(permit.fee_amount, permit.base_currency_code) }]
+          : []),
+      ]}
+      actions={
+        canWrite ? (
+          <Button onClick={() => setEditing((open) => !open)}>{editing ? "Cancel edit" : "Edit permit"}</Button>
+        ) : undefined
+      }
+      tabs={SECTIONS}
+      activeTab={section}
+      onSelectTab={setSection}
+      onClose={onClose}
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
 
-        {register ? (
-          <StatRow>
-            <Stat label="Permits" value={register.total} small />
-            <Stat label="Blocking" value={register.blocking_count} small />
-            <Stat label="Critical path" value={register.critical_path_count} small />
-            <Stat label="Past statutory period" value={register.sla_overdue_count} small />
-          </StatRow>
-        ) : null}
-
-        <FilterBar>
-          <Field label="Show">
-            <select
-              className="input input-short"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            >
-              <option value="">All permits</option>
-              <option value="blocking">Blocking only</option>
-            </select>
-          </Field>
-        </FilterBar>
-
-        {creating ? (
-          <SubPanel title="New permit">
-          <form onSubmit={create}>
-            <div className="form-grid">
-              <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
-                <input
-                  className="input"
-                  required
-                  value={form.permit_code}
-                  onChange={(event) => setForm({ ...form, permit_code: event.target.value })}
-                />
-              </Field>
-              <Field label="Permit type">
-                <select
-                  className="input"
-                  required
-                  value={form.permit_type_code}
-                  onChange={(event) =>
-                    setForm({ ...form, permit_type_code: event.target.value })
-                  }
-                >
-                  <option value="">Choose…</option>
-                  {types.map((value) => (
-                    <option key={value.id} value={value.code}>
-                      {value.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Authority">
-                <input
-                  className="input"
-                  required
-                  value={form.authority}
-                  onChange={(event) => setForm({ ...form, authority: event.target.value })}
-                />
-              </Field>
-              <Field label="Planned submission">
-                <input
-                  className="input input-short"
-                  type="date"
-                  value={form.planned_submission_date}
-                  onChange={(event) =>
-                    setForm({ ...form, planned_submission_date: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Planned issue">
-                <input
-                  className="input input-short"
-                  type="date"
-                  value={form.planned_issue_date}
-                  onChange={(event) =>
-                    setForm({ ...form, planned_issue_date: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Statutory period (days)">
-                <input
-                  className="input input-short"
-                  type="number"
-                  min="1"
-                  value={form.statutory_sla_days}
-                  onChange={(event) =>
-                    setForm({ ...form, statutory_sla_days: event.target.value })
-                  }
-                />
-              </Field>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Register permit"}
-                </Button>
-              </FormActions>
-            </div>
-          </form>
-          </SubPanel>
-        ) : null}
-
-        {register === null ? (
-          <Loading label="Loading permits…" lines={4} />
-        ) : register.permits.length === 0 ? (
-          <EmptyState
-            title="No permits registered"
-            hint="Add the approvals this development needs, and track where each one stands."
-          />
-        ) : (
-          <TableScroll label="Permit register" fixedFirst>
-              <thead>
-                <tr>
-                  <th scope="col">Code</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Authority</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="num">
-                    Days in stage
-                  </th>
-                  <th scope="col">Statutory period</th>
-                  <th scope="col">Next action</th>
-                  <th scope="col">Flags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {register.permits.map((permit) => (
-                  <tr key={permit.id}>
-                    <th scope="row">
-                      <button
-                        className="button-link mono"
-                        type="button"
-                        onClick={() => void open(permit)}
-                      >
-                        {permit.permit_code}
-                      </button>
-                    </th>
-                    <td>{permit.permit_type_code}</td>
-                    <td>{permit.authority}</td>
-                    <td>
-                      <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
-                        {STATUS_LABELS[permit.status] ?? permit.status}
-                      </Badge>
-                    </td>
-                    <td className="num">{permit.days_in_stage}</td>
-                    <td className="nowrap">
-                      {permit.sla_overdue ? (
-                        <Badge tone="danger">{slaLabel(permit)}</Badge>
-                      ) : (
-                        slaLabel(permit)
-                      )}
-                    </td>
-                    <td>{permit.next_action ?? "—"}</td>
-                    <td>
-                      <div className="row-actions">
-                        {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
-                        {permit.is_critical_path ? (
-                          <Badge tone="info">Critical path</Badge>
-                        ) : null}
-                        {!permit.prerequisite_satisfied ? (
-                          <Badge tone="muted">Prerequisite open</Badge>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-          </TableScroll>
-        )}
-      </Card>
-
-      {selected ? (
-        <Card
-          title={`${selected.permit_code} — ${STATUS_LABELS[selected.status] ?? selected.status}`}
-          description={selected.authority}
-          actions={
-            <>
-              {canWrite ? (
-                <Button onClick={() => setEditingPermit((open) => !open)}>
-                  {editingPermit ? "Cancel" : "Edit permit"}
-                </Button>
-              ) : null}
-              <Button onClick={() => setSelected(null)}>Close</Button>
-            </>
-          }
-        >
-          {editingPermit ? (
-            <EditForm
-              fields={permitFields(selected)}
-              initial={Object.fromEntries(
-                permitFields(selected).map((field) => [
-                  field.name,
-                  asValue(selected[field.name as keyof Permit] as never),
-                ]),
-              )}
-              onSave={async (changes) => {
-                const updated = await projects.updatePermit(projectId, selected.id, changes);
-                await load();
-                await open(updated);
-                setNotice(`${updated.permit_code} updated.`);
-              }}
-              onCancel={() => setEditingPermit(false)}
-            />
-          ) : null}
-          <KeyValueGrid columns={3}>
-            <KeyValue
-              label="Status since"
-              mono
-              value={businessDate(selected.status_effective_date)}
-            />
-            <KeyValue label="Submitted" mono value={businessDate(selected.actual_submission_date)} />
-            <KeyValue label="Issued" mono value={businessDate(selected.issue_date)} />
-            <KeyValue
-              label="Submission variance"
-              mono
-              value={
-                selected.submission_variance_days === null
-                  ? null
-                  : `${selected.submission_variance_days} days`
-              }
-            />
-            <KeyValue
-              label="Issue variance"
-              mono
-              value={
-                selected.issue_variance_days === null
-                  ? null
-                  : `${selected.issue_variance_days} days`
-              }
-            />
-            <KeyValue label="Consultant" value={selected.consultant} />
-            <KeyValue label="Conditions" value={selected.conditions} />
-            {selected.financials_visible ? (
-              <KeyValue
-                label="Fee"
-                mono
-                value={money(selected.fee_amount, selected.base_currency_code)}
+      {section === "permit" ? (
+        <>
+          {editing ? (
+            <Card title="Edit permit">
+              <EditForm
+                fields={permitFields(permit)}
+                columns={2}
+                initial={Object.fromEntries(
+                  permitFields(permit).map((field) => [
+                    field.name,
+                    asValue(permit[field.name as keyof Permit] as never),
+                  ]),
+                )}
+                onSave={async (changes) => {
+                  const updated = await projects.updatePermit(projectId, permit.id, changes);
+                  onNotice(`${updated.permit_code} updated.`);
+                  await onChanged(updated);
+                }}
+                onCancel={() => setEditing(false)}
               />
-            ) : null}
-          </KeyValueGrid>
-
-          {canWrite && TRANSITIONS[selected.status].length > 0 ? (
-            <form onSubmit={transition}>
-              <h3 className="section-heading">Change status</h3>
-              <div className="form-inline">
-                <Field label="Move to">
-                  <select
-                    className="input"
-                    required
-                    value={move.to_status}
-                    onChange={(event) => setMove({ ...move, to_status: event.target.value })}
-                  >
-                    <option value="">Choose…</option>
-                    {TRANSITIONS[selected.status].map((value) => (
-                      <option key={value} value={value}>
-                        {STATUS_LABELS[value]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Effective date">
-                  <input
-                    className="input input-short"
-                    type="date"
-                    required
-                    value={move.effective_date}
-                    onChange={(event) =>
-                      setMove({ ...move, effective_date: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field
-                  label="Reason"
-                  hint={
-                    REASON_REQUIRED.has(move.to_status)
-                      ? "Required for this move."
-                      : "Optional."
-                  }
-                >
-                  <input
-                    className="input"
-                    required={REASON_REQUIRED.has(move.to_status)}
-                    value={move.reason}
-                    onChange={(event) => setMove({ ...move, reason: event.target.value })}
-                  />
-                </Field>
-              </div>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  {busy ? "Recording…" : "Record status change"}
-                </Button>
-              </FormActions>
-            </form>
+            </Card>
           ) : null}
 
-          <h3 className="section-heading">Status history</h3>
-          {history.length === 0 ? (
-            <p className="subtle">Nothing recorded yet.</p>
-          ) : (
-            <TableScroll label="Permit status history">
-                <thead>
-                  <tr>
-                    <th scope="col">Effective</th>
-                    <th scope="col">From</th>
-                    <th scope="col">To</th>
-                    <th scope="col">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((event) => (
-                    <tr key={event.id}>
-                      <th scope="row" className="mono nowrap">
-                        {businessDate(event.effective_date)}
-                      </th>
-                      <td>{STATUS_LABELS[event.from_status] ?? event.from_status}</td>
-                      <td>
-                        <Badge tone={STATUS_TONES[event.to_status] ?? "neutral"}>
-                          {STATUS_LABELS[event.to_status] ?? event.to_status}
-                        </Badge>
-                      </td>
-                      <td>{event.reason ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-            </TableScroll>
-          )}
-        </Card>
+          <section>
+            <h3 className="section-heading">Dates</h3>
+            <KeyValueGrid columns={3}>
+              <KeyValue label="Planned submission" mono value={businessDate(permit.planned_submission_date)} />
+              <KeyValue label="Forecast submission" mono value={businessDate(permit.forecast_submission_date)} />
+              <KeyValue label="Submitted" mono value={businessDate(permit.actual_submission_date)} />
+              <KeyValue label="Accepted for review" mono value={businessDate(permit.accepted_for_review_date)} />
+              <KeyValue label="Comments received" mono value={businessDate(permit.comments_received_date)} />
+              <KeyValue label="Resubmitted" mono value={businessDate(permit.resubmission_date)} />
+              <KeyValue label="Planned issue" mono value={businessDate(permit.planned_issue_date)} />
+              <KeyValue label="Forecast issue" mono value={businessDate(permit.forecast_issue_date)} />
+              <KeyValue label="Issued" mono value={businessDate(permit.issue_date)} />
+              <KeyValue label="Expiry" mono value={businessDate(permit.expiry_date)} />
+              <KeyValue label="Renewal" mono value={businessDate(permit.renewal_date)} />
+              <KeyValue
+                label="Submission variance"
+                mono
+                value={permit.submission_variance_days === null ? null : `${permit.submission_variance_days} days`}
+              />
+              <KeyValue
+                label="Issue variance"
+                mono
+                value={permit.issue_variance_days === null ? null : `${permit.issue_variance_days} days`}
+              />
+            </KeyValueGrid>
+          </section>
+
+          <section>
+            <h3 className="section-heading">Application</h3>
+            <KeyValueGrid columns={3}>
+              <KeyValue label="Authority reference" mono value={permit.authority_reference} />
+              <KeyValue label="Consultant" value={permit.consultant} />
+              <KeyValue
+                label="Statutory period"
+                mono
+                value={permit.statutory_sla_days === null ? null : `${permit.statutory_sla_days} days`}
+              />
+              <KeyValue label="Prerequisite" value={permit.prerequisite_satisfied ? "Satisfied" : "Still open"} />
+              <KeyValue label="Conditions" value={permit.conditions} />
+              <KeyValue label="Next action" value={permit.next_action} />
+              <KeyValue label="Notes" value={permit.notes} />
+            </KeyValueGrid>
+          </section>
+
+          {canWrite && moves.length > 0 ? (
+            <section>
+              <h3 className="section-heading">Change status</h3>
+              <form onSubmit={transition}>
+                <FieldRow columns={3}>
+                  <Field label="Move to">
+                    <select
+                      className="input"
+                      required
+                      value={move.to_status}
+                      onChange={(event) => setMove({ ...move, to_status: event.target.value })}
+                    >
+                      <option value="">Choose…</option>
+                      {moves.map((value) => (
+                        <option key={value} value={value}>
+                          {STATUS_LABELS[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Effective date">
+                    <input
+                      className="input input-short"
+                      type="date"
+                      required
+                      value={move.effective_date}
+                      onChange={(event) => setMove({ ...move, effective_date: event.target.value })}
+                    />
+                  </Field>
+                  <Field
+                    label="Reason"
+                    optional={!REASON_REQUIRED.has(move.to_status)}
+                    hint={REASON_REQUIRED.has(move.to_status) ? "Required for this move." : undefined}
+                  >
+                    <input
+                      className="input"
+                      required={REASON_REQUIRED.has(move.to_status)}
+                      value={move.reason}
+                      onChange={(event) => setMove({ ...move, reason: event.target.value })}
+                    />
+                  </Field>
+                </FieldRow>
+                <FormActions>
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    {busy ? "Recording…" : "Record status change"}
+                  </Button>
+                </FormActions>
+              </form>
+            </section>
+          ) : null}
+        </>
       ) : null}
-    </>
+
+      {section === "history" ? (
+        history === null ? (
+          <Loading label="Loading history…" lines={3} />
+        ) : history.length === 0 ? (
+          <EmptyState title="Nothing recorded yet" hint="Every status change is kept here with its effective date and reason." />
+        ) : (
+          <TableScroll label="Permit status history" compact>
+            <thead>
+              <tr>
+                <th scope="col">Effective</th>
+                <th scope="col">From</th>
+                <th scope="col">To</th>
+                <th scope="col">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((event) => (
+                <tr key={event.id}>
+                  <th scope="row" className="figure">
+                    {businessDate(event.effective_date)}
+                  </th>
+                  <td>{STATUS_LABELS[event.from_status] ?? event.from_status}</td>
+                  <td>
+                    <Badge tone={STATUS_TONES[event.to_status] ?? "neutral"}>
+                      {STATUS_LABELS[event.to_status] ?? event.to_status}
+                    </Badge>
+                  </td>
+                  <td className="cell-prose">{event.reason ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
+        )
+      ) : null}
+    </Drawer>
   );
 }

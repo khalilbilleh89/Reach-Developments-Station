@@ -4,14 +4,19 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, Permit, ReferenceValue } from "@/lib/api";
+import { sectionDescription } from "@/components/shell/navigation";
 import {
-  Badge,
   Button,
+  Card,
   EmptyState,
   Field,
+  FieldRow,
+  FormActions,
+  Icon,
   Loading,
   Notice,
-  Panel,
+  PageHeader,
+  StatusDot,
   TableScroll,
 } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
@@ -23,8 +28,8 @@ import type { EditField } from "@/components/projects/EditForm";
  */
 const DOCUMENT_FIELDS: EditField[] = [
   { name: "title", label: "Title" },
-  { name: "document_type_code", label: "Document type" },
-  { name: "reference_number", label: "Reference number" },
+  { name: "document_type_code", label: "Document type", width: "medium" },
+  { name: "reference_number", label: "Reference number", width: "medium" },
   { name: "external_url", label: "Link" },
   { name: "notes", label: "Notes", kind: "textarea" },
 ];
@@ -33,7 +38,8 @@ const DOCUMENT_FIELDS: EditField[] = [
  * Document *references*, deliberately named as such.
  *
  * Nothing here uploads, stores or versions a file. Each row says which evidence
- * supports a record and where to find it.
+ * supports a record and where to find it, so the register is compact: a title,
+ * a type, a reference, what it supports, and the way out to where it is held.
  */
 export function DocumentsTab({
   projectId,
@@ -83,13 +89,11 @@ export function DocumentsTab({
           projects.parcels(projectId),
           projects.permits(projectId),
         ]);
-        setTypes(
-          values.filter((value) => value.is_active && value.category === "document_type"),
-        );
+        setTypes(values.filter((value) => value.is_active && value.category === "document_type"));
         setParcels(parcelList);
         setPermits(register.permits);
       } catch {
-        // Only the create form needs these.
+        // Only the create form and the "supports" column need these.
       }
     })();
   }, [projectId]);
@@ -114,13 +118,7 @@ export function DocumentsTab({
       }
       await projects.createDocument(projectId, payload);
       setNotice("Document reference recorded.");
-      setForm({
-        title: "",
-        document_type_code: "",
-        external_url: "",
-        reference_number: "",
-        attach_to: "",
-      });
+      setForm({ title: "", document_type_code: "", external_url: "", reference_number: "", attach_to: "" });
       setCreating(false);
       await load();
     } catch (caught) {
@@ -139,6 +137,8 @@ export function DocumentsTab({
     }
   };
 
+  const typeLabel = (code: string) => types.find((value) => value.code === code)?.label ?? code;
+
   const attachment = (document: DocumentReference) => {
     if (document.parcel_id) {
       const parcel = parcels.find((item) => item.id === document.parcel_id);
@@ -152,176 +152,198 @@ export function DocumentsTab({
   };
 
   return (
-    <Panel
-      title="Document references"
-      description="Links to documents held elsewhere. Nothing is uploaded or stored here."
-      actions={
-        canWrite ? (
-          <Button
-            small
-            onClick={() => setCreating((open) => !open)}
-          >
-            {creating ? "Cancel" : "New reference"}
-          </Button>
-        ) : undefined
-      }
-    >
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
-
-      {editing ? (
-        <EditForm
-          fields={DOCUMENT_FIELDS}
-          submitLabel="Save reference"
-          initial={Object.fromEntries(
-            DOCUMENT_FIELDS.map((field) => [
-              field.name,
-              asValue(editing[field.name as keyof DocumentReference] as never),
-            ]),
-          )}
-          onSave={async (changes) => {
-            await projects.updateDocument(projectId, editing.id, changes);
-            await load();
-            setNotice("Reference updated.");
-          }}
-          onCancel={() => setEditing(null)}
-        />
-      ) : null}
-
-      {creating ? (
-        <form onSubmit={submit}>
-          <div className="form-grid">
-            <Field label="Title">
-              <input
-                className="input"
-                required
-                value={form.title}
-                onChange={(event) => setForm({ ...form, title: event.target.value })}
-              />
-            </Field>
-            <Field label="Document type">
-              <select
-                className="input"
-                required
-                value={form.document_type_code}
-                onChange={(event) =>
-                  setForm({ ...form, document_type_code: event.target.value })
-                }
-              >
-                <option value="">Choose…</option>
-                {types.map((value) => (
-                  <option key={value.id} value={value.code}>
-                    {value.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Link" hint="A web address where the document is held.">
-              <input
-                className="input"
-                type="url"
-                required
-                value={form.external_url}
-                onChange={(event) => setForm({ ...form, external_url: event.target.value })}
-              />
-            </Field>
-            <Field label="Reference number">
-              <input
-                className="input"
-                value={form.reference_number}
-                onChange={(event) =>
-                  setForm({ ...form, reference_number: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="Supports" hint="The project, or one parcel or permit.">
-              <select
-                className="input"
-                value={form.attach_to}
-                onChange={(event) => setForm({ ...form, attach_to: event.target.value })}
-              >
-                <option value="">The project</option>
-                {parcels.map((parcel) => (
-                  <option key={parcel.id} value={`parcel:${parcel.id}`}>
-                    Plot {parcel.plot_number}
-                  </option>
-                ))}
-                {permits.map((permit) => (
-                  <option key={permit.id} value={`permit:${permit.id}`}>
-                    {permit.permit_code}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Record reference"}
+    <>
+      <PageHeader
+        title="Documents"
+        subtitle={sectionDescription("documents")}
+        compact
+        actions={
+          canWrite ? (
+            <Button variant="primary" onClick={() => setCreating((open) => !open)}>
+              {creating ? "Cancel" : "New reference"}
             </Button>
-          </div>
-        </form>
-      ) : null}
+          ) : undefined
+        }
+      />
 
-      {rows === null ? (
-        <Loading label="Loading references…" />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title="No document references"
-          hint="Point at the deeds, drawings and approvals that support this project's records."
-        />
-      ) : (
-        <TableScroll label="Document references">
-            <thead>
-              <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Type</th>
-                <th scope="col">Reference</th>
-                <th scope="col">Supports</th>
-                <th scope="col">Link</th>
-                <th scope="col">State</th>
-                {canWrite ? <th scope="col">Action</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((document) => (
-                <tr key={document.id}>
-                  <th scope="row">{document.title}</th>
-                  <td>{document.document_type_code}</td>
-                  <td>{document.reference_number ?? "—"}</td>
-                  <td>{attachment(document)}</td>
-                  <td>
-                    <a href={document.external_url} target="_blank" rel="noreferrer noopener">
-                      Open
-                    </a>
-                  </td>
-                  <td>
-                    {document.is_active ? (
-                      <Badge tone="success">Current</Badge>
-                    ) : (
-                      <Badge tone="muted">Superseded</Badge>
-                    )}
-                  </td>
+      <div className="stack">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+        {editing ? (
+          <Card title="Edit reference" description={editing.title}>
+            <EditForm
+              fields={DOCUMENT_FIELDS}
+              submitLabel="Save reference"
+              initial={Object.fromEntries(
+                DOCUMENT_FIELDS.map((field) => [
+                  field.name,
+                  asValue(editing[field.name as keyof DocumentReference] as never),
+                ]),
+              )}
+              onSave={async (changes) => {
+                await projects.updateDocument(projectId, editing.id, changes);
+                await load();
+                setNotice("Reference updated.");
+              }}
+              onCancel={() => setEditing(null)}
+            />
+          </Card>
+        ) : null}
+
+        {creating ? (
+          <Card
+            title="New document reference"
+            description="A pointer to a document held elsewhere. The file itself is never uploaded here."
+          >
+            <form onSubmit={submit}>
+              <FieldRow columns={3}>
+                <Field label="Title">
+                  <input
+                    className="input"
+                    required
+                    value={form.title}
+                    onChange={(event) => setForm({ ...form, title: event.target.value })}
+                  />
+                </Field>
+                <Field label="Document type">
+                  <select
+                    className="input"
+                    required
+                    value={form.document_type_code}
+                    onChange={(event) => setForm({ ...form, document_type_code: event.target.value })}
+                  >
+                    <option value="">Choose…</option>
+                    {types.map((value) => (
+                      <option key={value.id} value={value.code}>
+                        {value.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Reference number" optional>
+                  <input
+                    className="input"
+                    value={form.reference_number}
+                    onChange={(event) => setForm({ ...form, reference_number: event.target.value })}
+                  />
+                </Field>
+                <Field label="Link" hint="A web address where the document is held." className="field-span-2">
+                  <input
+                    className="input"
+                    type="url"
+                    required
+                    value={form.external_url}
+                    onChange={(event) => setForm({ ...form, external_url: event.target.value })}
+                  />
+                </Field>
+                <Field label="Supports" hint="The project, or one parcel or permit.">
+                  <select
+                    className="input"
+                    value={form.attach_to}
+                    onChange={(event) => setForm({ ...form, attach_to: event.target.value })}
+                  >
+                    <option value="">The project</option>
+                    {parcels.map((parcel) => (
+                      <option key={parcel.id} value={`parcel:${parcel.id}`}>
+                        Plot {parcel.plot_number}
+                      </option>
+                    ))}
+                    {permits.map((permit) => (
+                      <option key={permit.id} value={`permit:${permit.id}`}>
+                        {permit.permit_code}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </FieldRow>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Record reference"}
+                </Button>
+                <Button onClick={() => setCreating(false)} disabled={busy}>
+                  Cancel
+                </Button>
+              </FormActions>
+            </form>
+          </Card>
+        ) : null}
+
+        <Card flush>
+          {rows === null ? (
+            <Loading label="Loading references…" shape="rows" rows={4} />
+          ) : rows.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title="No document references"
+                hint="Point at the deeds, drawings and approvals that support this project's records. The documents stay where they are held."
+              />
+            </div>
+          ) : (
+            <TableScroll label="Document references">
+              <thead>
+                <tr>
+                  <th scope="col">Document</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Reference</th>
+                  <th scope="col">Supports</th>
+                  <th scope="col">State</th>
+                  <th scope="col">
+                    <span className="visually-hidden">Open</span>
+                  </th>
                   {canWrite ? (
-                    <td className="chip-list">
-                      <Button
-                        small
-                        onClick={() => setEditing(document)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        small
-                        onClick={() => void retire(document)}
-                      >
-                        {document.is_active ? "Supersede" : "Restore"}
-                      </Button>
-                    </td>
+                    <th scope="col">
+                      <span className="visually-hidden">Actions</span>
+                    </th>
                   ) : null}
                 </tr>
-              ))}
-            </tbody>
-</TableScroll>
-      )}
-    </Panel>
+              </thead>
+              <tbody>
+                {rows.map((document) => (
+                  <tr key={document.id}>
+                    <th scope="row" className="cell-prose">
+                      {document.title}
+                      {document.notes ? <span className="cell-secondary">{document.notes}</span> : null}
+                    </th>
+                    <td>{typeLabel(document.document_type_code)}</td>
+                    <td className="mono">{document.reference_number ?? "—"}</td>
+                    <td>{attachment(document)}</td>
+                    <td>
+                      {document.is_active ? (
+                        <StatusDot tone="success">Current</StatusDot>
+                      ) : (
+                        <StatusDot tone="muted">Superseded</StatusDot>
+                      )}
+                    </td>
+                    <td>
+                      <a
+                        className="button button-small button-quiet"
+                        href={document.external_url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        Open <Icon name="external" />
+                      </a>
+                    </td>
+                    {canWrite ? (
+                      <td>
+                        <div className="row-actions">
+                          <Button small variant="quiet" onClick={() => setEditing(document)}>
+                            Edit
+                          </Button>
+                          <Button small variant="quiet" onClick={() => void retire(document)}>
+                            {document.is_active ? "Supersede" : "Restore"}
+                          </Button>
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          )}
+        </Card>
+      </div>
+    </>
   );
 }

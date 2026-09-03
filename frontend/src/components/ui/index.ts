@@ -7,15 +7,41 @@
  * a unit may be released, or who may do either.
  */
 
-export { Badge } from "./Badge";
+export { Badge, StatusDot } from "./Badge";
 export type { Tone } from "./Badge";
 export { Button, ButtonRow } from "./Button";
 export { Card, Panel, SubPanel } from "./Card";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { Drawer } from "./Drawer";
-export { KeyValue, KeyValueGrid, Stat, StatRow, TableScroll } from "./Data";
+export type { DrawerFact } from "./Drawer";
+export {
+  InlineMeta,
+  InlineMetaItem,
+  KeyValue,
+  KeyValueGrid,
+  Metric,
+  MetricGroup,
+  Stat,
+  StatRow,
+  TableScroll,
+  Waterfall,
+  WaterfallRow,
+} from "./Data";
+export type { MetricTone } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
-export { Field, FilterBar, Form, FormActions, StickyActions } from "./Form";
+export {
+  DataToolbar,
+  Field,
+  FieldRow,
+  FilterBar,
+  Form,
+  FormActions,
+  FormSection,
+  MoneyInput,
+  RateInput,
+  StickyActions,
+  ToolbarFilter,
+} from "./Form";
 export { FormDialog } from "./FormDialog";
 export { PageHeader, SectionHeader } from "./Headers";
 export { PromptDialog } from "./PromptDialog";

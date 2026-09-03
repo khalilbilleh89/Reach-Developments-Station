@@ -3,27 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
-import type {
-  AreaType,
-  Building,
-  Floor,
-  Phase,
-  UnitRegister,
-  UnitSummary,
-} from "@/lib/api";
+import type { AreaType, Building, Floor, Phase, UnitRegister, UnitSummary } from "@/lib/api";
+import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
   Card,
+  DataToolbar,
   EmptyState,
-  Field,
-  FilterBar,
   Loading,
+  Metric,
+  MetricGroup,
   Notice,
-  Stat,
-  StatRow,
-  SubPanel,
+  PageHeader,
+  StatusDot,
   TableScroll,
+  ToolbarFilter,
 } from "@/components/ui";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
 import { HierarchyForms } from "@/components/projects/inventory/HierarchyForms";
@@ -31,15 +26,21 @@ import { ImportPanel } from "@/components/projects/inventory/ImportPanel";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
+const PAGE = "200";
+
 /**
  * The inventory register, inside the project workspace.
  *
- * Deliberately one filter strip and one table rather than a tree: a development
- * is Phase → Building → Floor → Unit, and four select boxes say that as clearly
- * as a component library would, without the component library.
+ * One toolbar and one table rather than a tree: a development is
+ * Phase → Building → Floor → Unit, and three narrowing selects say that as
+ * clearly as a component library would, without the component library.
  *
- * Secondary attributes live in the detail panel. A register showing thirty-five
- * columns is a register nobody reads.
+ * The register is built to be scanned down: the unit's identity pinned on the
+ * left, its physical facts in the middle, and its four status dimensions on
+ * the right — commercial carrying the weight, the other three as a dot and a
+ * word, because the column heading already says they are statuses. Secondary
+ * attributes live in Unit 360; a register showing thirty-five columns is a
+ * register nobody reads.
  */
 export function InventoryTab({
   projectId,
@@ -80,7 +81,7 @@ export function InventoryTab({
     const ticket = latestRequest.current + 1;
     latestRequest.current = ticket;
     try {
-      const query: Record<string, string> = { limit: "100" };
+      const query: Record<string, string> = { limit: PAGE };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -90,13 +91,7 @@ export function InventoryTab({
       setError(null);
     } catch (caught) {
       if (ticket !== latestRequest.current) return;
-      setRegister({
-        units: [],
-        total: 0,
-        available_count: 0,
-        held_count: 0,
-        unreleased_count: 0,
-      });
+      setRegister({ units: [], total: 0, available_count: 0, held_count: 0, unreleased_count: 0 });
       setError(caught instanceof ApiError ? caught.message : "Could not load the inventory.");
     }
   }, [projectId, filters]);
@@ -142,83 +137,125 @@ export function InventoryTab({
   const visibleFloors = filters.building_id
     ? floors.filter((floor) => floor.building_id === filters.building_id)
     : floors;
+  const filtered = Object.values(filters).some((value) => value !== "");
 
   // Inventory is refused while the project is in setup, because that is the
   // window in which its country and currencies can still change under whatever
   // was validated against them. Saying so beats eleven identical 409s.
   if (projectStatus === "setup") {
     return (
-      <Card title="Inventory" description="Not yet — the project basis is still open.">
-        <EmptyState
-          title="Finalize project setup"
-          hint="Confirm country and currency settings, then move the project to Pre-development before loading inventory."
-        />
-      </Card>
+      <>
+        <PageHeader title="Inventory" subtitle={sectionDescription("inventory")} compact />
+        <Card>
+          <EmptyState
+            title="Finalize project setup first"
+            hint="Confirm country and currency settings, then move the project to Pre-development before loading inventory."
+          />
+        </Card>
+      </>
     );
   }
 
   return (
     <>
-      <Card
+      <PageHeader
         title="Inventory"
-        description="Every unit in this development, and what stops each one being released."
+        subtitle={sectionDescription("inventory")}
+        compact
         actions={
           <>
-            {canWriteStructure ? (
-              <Button onClick={() => setOpen(open === "hierarchy" ? "none" : "hierarchy")}>
-                {open === "hierarchy" ? "Cancel" : "Add structure"}
-              </Button>
-            ) : null}
             {canConfigure ? (
-              <Button onClick={() => setOpen(open === "areas" ? "none" : "areas")}>
-                {open === "areas" ? "Cancel" : "Area types"}
+              <Button onClick={() => setOpen(open === "areas" ? "none" : "areas")} aria-expanded={open === "areas"}>
+                Area types
               </Button>
             ) : null}
             {canWriteStructure ? (
-              <Button onClick={() => setOpen(open === "import" ? "none" : "import")}>
-                {open === "import" ? "Cancel" : "Import inventory"}
+              <Button onClick={() => setOpen(open === "import" ? "none" : "import")} aria-expanded={open === "import"}>
+                Import
+              </Button>
+            ) : null}
+            {canWriteStructure ? (
+              <Button
+                variant="primary"
+                onClick={() => setOpen(open === "hierarchy" ? "none" : "hierarchy")}
+                aria-expanded={open === "hierarchy"}
+              >
+                Add structure
               </Button>
             ) : null}
           </>
         }
-      >
+      />
+
+      <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         {open === "hierarchy" ? (
-          <SubPanel title="Add structure">
-          <HierarchyForms
-            projectId={projectId}
-            phases={phases}
-            buildings={buildings}
-            floors={floors}
-            canConfigure={canConfigure}
-            onChanged={refresh}
-          />
-          </SubPanel>
+          <Card
+            title="Add structure"
+            description="A phase, a building, a floor or a unit. For a whole development, import a CSV instead."
+            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+          >
+            <HierarchyForms
+              projectId={projectId}
+              phases={phases}
+              buildings={buildings}
+              floors={floors}
+              canConfigure={canConfigure}
+              onChanged={refresh}
+            />
+          </Card>
         ) : null}
         {open === "areas" ? (
-          <SubPanel title="Area types">
+          <Card
+            title="Area types"
+            description="How this project measures its units, and how much of each area it sells."
+            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+          >
             <AreaTypesPanel projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
-          </SubPanel>
+          </Card>
         ) : null}
         {open === "import" ? (
-          <SubPanel title="Import inventory">
+          <Card
+            title="Import inventory"
+            description="Validate a CSV, read what is wrong, fix the file, apply. Nothing is written until the batch is clean."
+            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+          >
             <ImportPanel projectId={projectId} onApplied={refresh} />
-          </SubPanel>
+          </Card>
         ) : null}
 
-        <FilterBar>
-          <Field label="Phase">
+        {register ? (
+          <Card>
+            <MetricGroup compact>
+              <Metric label="Units" value={register.total} size="sm" />
+              <Metric label="Available" value={register.available_count} size="sm" />
+              <Metric label="Held" value={register.held_count} size="sm" tone={register.held_count > 0 ? "warning" : "neutral"} />
+              <Metric label="Unreleased" value={register.unreleased_count} size="sm" />
+            </MetricGroup>
+          </Card>
+        ) : null}
+
+        <DataToolbar
+          search={{
+            value: filters.search,
+            onChange: (value) => setFilters({ ...filters, search: value }),
+            placeholder: "Unit reference or number",
+            label: "Search units",
+          }}
+          count={register ? { shown: register.units.length, total: register.total, noun: "unit" } : undefined}
+          onReset={
+            filtered
+              ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", commercial_status: "", search: "" })
+              : undefined
+          }
+        >
+          <ToolbarFilter label="Phase">
             <select
               className="input"
               value={filters.phase_id}
               onChange={(event) =>
-                setFilters({
-                  ...filters,
-                  phase_id: event.target.value,
-                  building_id: "",
-                  floor_id: "",
-                })
+                setFilters({ ...filters, phase_id: event.target.value, building_id: "", floor_id: "" })
               }
             >
               <option value="">All phases</option>
@@ -228,171 +265,159 @@ export function InventoryTab({
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Building">
+          </ToolbarFilter>
+          <ToolbarFilter label="Building">
             <select
               className="input"
               value={filters.building_id}
-              onChange={(event) =>
-                setFilters({ ...filters, building_id: event.target.value, floor_id: "" })
-              }
+              onChange={(event) => setFilters({ ...filters, building_id: event.target.value, floor_id: "" })}
             >
               <option value="">All buildings</option>
               {visibleBuildings.map((building) => (
                 <option key={building.id} value={building.id}>
-                  {building.code}
+                  {building.code} — {building.name}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Floor">
+          </ToolbarFilter>
+          <ToolbarFilter label="Floor">
             <select
-              className="input input-short"
+              className="input"
               value={filters.floor_id}
               onChange={(event) => setFilters({ ...filters, floor_id: event.target.value })}
             >
               <option value="">All floors</option>
               {visibleFloors.map((floor) => (
                 <option key={floor.id} value={floor.id}>
-                  {floor.code}
+                  {floor.code} — {floor.label}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Commercial status">
+          </ToolbarFilter>
+          <ToolbarFilter label="Commercial status">
             <select
               className="input"
               value={filters.commercial_status}
-              onChange={(event) =>
-                setFilters({ ...filters, commercial_status: event.target.value })
-              }
+              onChange={(event) => setFilters({ ...filters, commercial_status: event.target.value })}
             >
               <option value="">Any status</option>
-              {["unreleased", "held", "available", "reserved", "contracted"].map((status) => (
-                <option key={status} value={status}>
-                  {statusLabel(status)}
-                </option>
-              ))}
+              {["unreleased", "held", "available", "reserved", "contract_pending", "contracted", "returned"].map(
+                (status) => (
+                  <option key={status} value={status}>
+                    {statusLabel(status)}
+                  </option>
+                ),
+              )}
             </select>
-          </Field>
-          <Field label="Search" grow>
-            <input
-              className="input"
-              value={filters.search}
-              placeholder="Unit reference or number"
-              onChange={(event) => setFilters({ ...filters, search: event.target.value })}
-            />
-          </Field>
-        </FilterBar>
+          </ToolbarFilter>
+        </DataToolbar>
 
-        {register === null ? (
-          <Loading label="Loading inventory…" lines={4} />
-        ) : register.units.length === 0 ? (
-          <EmptyState
-            title="No units match"
-            hint="Add a phase, building and floor, then create units or import them from a CSV."
-          />
-        ) : (
-          <>
-            <StatRow>
-              <Stat label="Units" value={register.total} small />
-              <Stat label="Unreleased" value={register.unreleased_count} small />
-              <Stat label="Held" value={register.held_count} small />
-              <Stat label="Available" value={register.available_count} small />
-            </StatRow>
-            <TableScroll label="Unit register" fixedFirst>
+        <Card flush>
+          {register === null ? (
+            <Loading label="Loading inventory…" shape="rows" rows={8} />
+          ) : register.units.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title={filtered ? "No unit matches" : "No units yet"}
+                hint={
+                  filtered
+                    ? "Widen the filter to see the rest of the register."
+                    : "Add a phase, building and floor, then create units or import them from a CSV."
+                }
+              />
+            </div>
+          ) : (
+            <>
+              <TableScroll label="Unit register" fixedFirst>
                 <thead>
                   <tr>
                     <th scope="col">Unit</th>
-                    <th scope="col">Phase</th>
-                    <th scope="col">Building / floor</th>
-                    <th scope="col">Type</th>
-                    <th scope="col" className="num">
-                      Beds
-                    </th>
+                    <th scope="col">Location</th>
                     <th scope="col" className="num">
                       Internal
                     </th>
                     <th scope="col" className="num">
                       Weighted
                     </th>
-                    <th scope="col" className="num">
-                      Parking
-                    </th>
-                    <th scope="col" className="num">
-                      Storage
-                    </th>
+                    <th scope="col">Assets</th>
                     <th scope="col">Commercial</th>
                     <th scope="col">Legal</th>
                     <th scope="col">Collection</th>
                     <th scope="col">Delivery</th>
-                    <th scope="col">Complete</th>
-                    <th scope="col">Release</th>
+                    <th scope="col">Readiness</th>
                   </tr>
                 </thead>
                 <tbody>
                   {register.units.map((unit) => (
                     <tr key={unit.id}>
                       <th scope="row">
-                        <button
-                          className="button-link mono"
-                          type="button"
-                          onClick={() => setSelected(unit)}
-                        >
+                        <button className="button-link mono" type="button" onClick={() => setSelected(unit)}>
                           {unit.unit_reference}
                         </button>
+                        <span className="cell-secondary">
+                          {[unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]
+                            .filter(Boolean)
+                            .join(" · ") || unit.asset_class}
+                        </span>
                       </th>
-                      <td>{unit.phase_code ?? "—"}</td>
                       <td className="nowrap">
-                        {unit.building_code ?? "—"} / {unit.floor_code ?? "—"}
+                        {[unit.phase_code, unit.building_code, unit.floor_code].map((part) => part ?? "—").join(" · ")}
                       </td>
-                      <td>{unit.unit_type_code ?? "—"}</td>
-                      <td className="num">{unit.bedrooms ?? "—"}</td>
-                      <td className="num">{unit.internal_area ?? "—"}</td>
-                      <td className="num">{unit.weighted_saleable_area ?? "—"}</td>
-                      <td className="num">{unit.parking_count}</td>
-                      <td className="num">{unit.storage_count}</td>
-                      <td>
-                        <Badge tone={statusTone(unit.commercial_status)}>
-                          {statusLabel(unit.commercial_status)}
-                        </Badge>
+                      <td className="num">
+                        {unit.internal_area ?? "—"}
                       </td>
-                      <td>
-                        <Badge tone={statusTone(unit.legal_status)}>
-                          {statusLabel(unit.legal_status)}
-                        </Badge>
+                      <td className="num">
+                        {unit.weighted_saleable_area ?? "—"}
                       </td>
-                      <td>
-                        <Badge tone={statusTone(unit.collection_status)}>
-                          {statusLabel(unit.collection_status)}
-                        </Badge>
-                      </td>
-                      <td>
-                        <Badge tone={statusTone(unit.delivery_status)}>
-                          {statusLabel(unit.delivery_status)}
-                        </Badge>
-                      </td>
-                      <td>
-                        {unit.is_complete ? (
-                          <Badge tone="success">Complete</Badge>
+                      <td className="nowrap">
+                        {unit.parking_count === 0 && unit.storage_count === 0 ? (
+                          <span className="muted">—</span>
                         ) : (
-                          <span className="subtle">{unit.completeness_percent}%</span>
+                          [
+                            unit.parking_count > 0 ? `${unit.parking_count} parking` : null,
+                            unit.storage_count > 0 ? `${unit.storage_count} storage` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
                         )}
                       </td>
                       <td>
+                        <Badge tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</Badge>
+                      </td>
+                      <td>
+                        <StatusDot tone={statusTone(unit.legal_status)}>{statusLabel(unit.legal_status)}</StatusDot>
+                      </td>
+                      <td>
+                        <StatusDot tone={statusTone(unit.collection_status)}>
+                          {statusLabel(unit.collection_status)}
+                        </StatusDot>
+                      </td>
+                      <td>
+                        <StatusDot tone={statusTone(unit.delivery_status)}>{statusLabel(unit.delivery_status)}</StatusDot>
+                      </td>
+                      <td>
                         {unit.release_eligible ? (
-                          <Badge tone="success">Eligible</Badge>
+                          <StatusDot tone="success">Releasable</StatusDot>
                         ) : (
-                          <Badge tone="muted">Blocked</Badge>
+                          <StatusDot tone="muted">
+                            {unit.is_complete ? "Not releasable" : `${unit.completeness_percent}% complete`}
+                          </StatusDot>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-            </TableScroll>
-          </>
-        )}
-      </Card>
+              </TableScroll>
+              {register.total > register.units.length ? (
+                <p className="footnote" style={{ padding: "0.75rem 1.5rem" }}>
+                  Showing the first {register.units.length} of {register.total} units. Narrow the filter to
+                  reach the rest.
+                </p>
+              ) : null}
+            </>
+          )}
+        </Card>
+      </div>
 
       {selected ? (
         <UnitDetailPanel

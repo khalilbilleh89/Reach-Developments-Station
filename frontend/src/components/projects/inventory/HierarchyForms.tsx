@@ -4,23 +4,23 @@ import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { Building, Floor, Phase } from "@/lib/api";
-import { Button, Field, FormActions, Notice, Tabs } from "@/components/ui";
+import { Button, Field, FieldRow, FormActions, Notice, Tabs } from "@/components/ui";
 
 type Kind = "phase" | "building" | "floor" | "unit";
 
 const KINDS: { key: Kind; label: string }[] = [
-  { key: "phase", label: "New phase" },
-  { key: "building", label: "New building" },
-  { key: "floor", label: "New floor" },
-  { key: "unit", label: "New unit" },
+  { key: "phase", label: "Phase" },
+  { key: "building", label: "Building" },
+  { key: "floor", label: "Floor" },
+  { key: "unit", label: "Unit" },
 ];
 
 /**
  * The small administration actions that make a development's structure.
  *
- * Inside the Inventory tab rather than on four separate pages: a phase only
- * means something in the project that owns it, and making somebody navigate
- * away to create one loses the context they are working in.
+ * Inside the Inventory section rather than on four separate pages: a phase
+ * only means something in the project that owns it, and making somebody
+ * navigate away to create one loses the context they are working in.
  *
  * For a first load of two hundred units the CSV import is the right tool, and
  * the import panel says so.
@@ -93,7 +93,7 @@ export function HierarchyForms({
   };
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -110,118 +110,88 @@ export function HierarchyForms({
         }}
       />
 
-      <div className="form-grid form-grid-3">
-        {kind === "phase" ? (
-          <>
-            <Field label="Phase code" hint="Immutable once issued, e.g. PHASE-1.">
-              <input
-                className="input"
-                required
-                value={values.code ?? ""}
-                onChange={(event) => set("code", event.target.value)}
-              />
-            </Field>
-            <Field label="Name">
-              <input
-                className="input"
-                required
-                value={values.name ?? ""}
-                onChange={(event) => set("name", event.target.value)}
-              />
-            </Field>
-            <Field label="Sequence" hint="Where it sits in the delivery order.">
-              <input
-                className="input input-short"
-                inputMode="numeric"
-                value={values.sequence ?? ""}
-                onChange={(event) => set("sequence", event.target.value)}
-              />
-            </Field>
-          </>
-        ) : null}
+      {kind === "phase" ? (
+        <FieldRow columns={3}>
+          <Field label="Phase code" hint="Immutable once issued, e.g. PHASE-1.">
+            <input className="input" required value={values.code ?? ""} onChange={(event) => set("code", event.target.value)} />
+          </Field>
+          <Field label="Name">
+            <input className="input" required value={values.name ?? ""} onChange={(event) => set("name", event.target.value)} />
+          </Field>
+          <Field label="Sequence" hint="Where it sits in the delivery order." optional>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={values.sequence ?? ""}
+              onChange={(event) => set("sequence", event.target.value)}
+            />
+          </Field>
+        </FieldRow>
+      ) : null}
 
-        {kind === "building" ? (
-          <>
-            <Field label="Phase">
-              <select
-                className="input"
-                required
-                value={values.phase_id ?? ""}
-                onChange={(event) => set("phase_id", event.target.value)}
-              >
-                <option value="">Choose…</option>
-                {phases.map((phase) => (
-                  <option key={phase.id} value={phase.id}>
-                    {phase.code} — {phase.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Building code">
-              <input
-                className="input"
-                required
-                value={values.code ?? ""}
-                onChange={(event) => set("code", event.target.value)}
-              />
-            </Field>
-            <Field label="Name">
-              <input
-                className="input"
-                required
-                value={values.name ?? ""}
-                onChange={(event) => set("name", event.target.value)}
-              />
-            </Field>
-          </>
-        ) : null}
+      {kind === "building" ? (
+        <FieldRow columns={3}>
+          <Field label="Phase">
+            <select
+              className="input"
+              required
+              value={values.phase_id ?? ""}
+              onChange={(event) => set("phase_id", event.target.value)}
+            >
+              <option value="">Choose…</option>
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.id}>
+                  {phase.code} — {phase.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Building code">
+            <input className="input" required value={values.code ?? ""} onChange={(event) => set("code", event.target.value)} />
+          </Field>
+          <Field label="Name">
+            <input className="input" required value={values.name ?? ""} onChange={(event) => set("name", event.target.value)} />
+          </Field>
+        </FieldRow>
+      ) : null}
 
-        {kind === "floor" ? (
-          <>
-            <Field label="Building">
-              <select
-                className="input"
-                required
-                value={values.building_id ?? ""}
-                onChange={(event) => set("building_id", event.target.value)}
-              >
-                <option value="">Choose…</option>
-                {buildings.map((building) => (
-                  <option key={building.id} value={building.id}>
-                    {building.code} — {building.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Floor code" hint="B2, B1, GF, M, 01, RF — whatever the building uses.">
-              <input
-                className="input input-short"
-                required
-                value={values.code ?? ""}
-                onChange={(event) => set("code", event.target.value)}
-              />
-            </Field>
-            <Field label="Label">
-              <input
-                className="input"
-                required
-                value={values.label ?? ""}
-                onChange={(event) => set("label", event.target.value)}
-              />
-            </Field>
-            <Field label="Level number" hint="Optional numeric ordering.">
-              <input
-                className="input input-short"
-                inputMode="numeric"
-                value={values.level_number ?? ""}
-                onChange={(event) => set("level_number", event.target.value)}
-              />
-            </Field>
-          </>
-        ) : null}
+      {kind === "floor" ? (
+        <FieldRow columns={4}>
+          <Field label="Building">
+            <select
+              className="input"
+              required
+              value={values.building_id ?? ""}
+              onChange={(event) => set("building_id", event.target.value)}
+            >
+              <option value="">Choose…</option>
+              {buildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.code} — {building.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Floor code" hint="B2, B1, GF, M, 01, RF — whatever the building uses.">
+            <input className="input" required value={values.code ?? ""} onChange={(event) => set("code", event.target.value)} />
+          </Field>
+          <Field label="Label">
+            <input className="input" required value={values.label ?? ""} onChange={(event) => set("label", event.target.value)} />
+          </Field>
+          <Field label="Level number" hint="Numeric ordering." optional>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={values.level_number ?? ""}
+              onChange={(event) => set("level_number", event.target.value)}
+            />
+          </Field>
+        </FieldRow>
+      ) : null}
 
-        {kind === "unit" ? (
-          <>
+      {kind === "unit" ? (
+        <>
+          <FieldRow columns={3}>
             <Field label="Floor">
               <select
                 className="input"
@@ -239,7 +209,7 @@ export function HierarchyForms({
             </Field>
             <Field label="Unit number" hint="Unique on its floor.">
               <input
-                className="input input-short"
+                className="input"
                 required
                 value={values.unit_number ?? ""}
                 onChange={(event) => set("unit_number", event.target.value)}
@@ -253,6 +223,8 @@ export function HierarchyForms({
                 onChange={(event) => set("unit_reference", event.target.value)}
               />
             </Field>
+          </FieldRow>
+          <FieldRow columns={3}>
             <Field label="Asset class">
               <select
                 className="input"
@@ -266,35 +238,33 @@ export function HierarchyForms({
                 ))}
               </select>
             </Field>
-            <Field label="Unit type" hint="A configured code.">
+            <Field label="Unit type" hint="A configured code." optional>
               <input
                 className="input"
                 value={values.unit_type_code ?? ""}
                 onChange={(event) => set("unit_type_code", event.target.value)}
               />
             </Field>
-            <Field label="Bedrooms">
+            <Field label="Bedrooms" optional>
               <input
-                className="input input-short"
+                className="input"
                 inputMode="numeric"
                 value={values.bedrooms ?? ""}
                 onChange={(event) => set("bedrooms", event.target.value)}
               />
             </Field>
-          </>
-        ) : null}
+          </FieldRow>
+        </>
+      ) : null}
 
-        <FormActions>
-          <Button variant="primary" type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Create"}
-          </Button>
-          {kind === "unit" ? (
-            <p className="subtle">
-              Loading a whole development? Use Import inventory rather than this form.
-            </p>
-          ) : null}
-        </FormActions>
-      </div>
+      <FormActions>
+        <Button variant="primary" type="submit" disabled={busy}>
+          {busy ? "Saving…" : `Create ${KINDS.find((entry) => entry.key === kind)?.label.toLowerCase() ?? ""}`}
+        </Button>
+        {kind === "unit" ? (
+          <span className="subtle">Loading a whole development? Import a CSV instead.</span>
+        ) : null}
+      </FormActions>
     </form>
   );
 }

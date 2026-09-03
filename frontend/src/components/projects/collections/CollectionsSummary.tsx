@@ -1,8 +1,8 @@
 "use client";
 
-import { Stat, StatRow, TableScroll } from "@/components/ui";
+import { Metric, MetricGroup } from "@/components/ui";
 import type { CollectionCurrencyTotals, CollectionProjectSummary } from "@/lib/api";
-import { businessDate, money } from "@/lib/format";
+import { businessDate, isPositive, money } from "@/lib/format";
 
 import { AGING_BUCKETS, bucketLabel } from "./labels";
 
@@ -21,8 +21,7 @@ import { AGING_BUCKETS, bucketLabel } from "./labels";
  *
  * Two labels are doing real work. **Confirmed receipts** says *lifetime*,
  * because an unqualified "Collected" sitting beside a current outstanding
- * balance invites exactly the wrong subtraction — a reader would take one from
- * the other and get a number that means nothing. And **Unapplied cash** is on
+ * balance invites exactly the wrong subtraction. And **Unapplied cash** is on
  * the strip at all because money that has arrived and not been assigned to an
  * instalment is a live operational problem: it is the buyer's money, it is in
  * the company's account, and nobody has decided what it settles.
@@ -34,44 +33,10 @@ export function CollectionsSummary({
   summary: CollectionProjectSummary;
   currencyCodeOf: (id: string | null | undefined) => string | null;
 }) {
-  const plural = (count: number, word: string) =>
-    `${count} ${word}${count === 1 ? "" : "s"}`;
-
   return (
-    <div className="stack">
-      <StatRow>
-        <Stat
-          label="Accounts"
-          value={summary.accounts}
-          note={
-            summary.currencies.length > 1
-              ? `${summary.currencies.length} currencies, reported separately`
-              : `As at ${businessDate(summary.as_of)}`
-          }
-          small
-        />
-        <Stat
-          label="Accounts overdue"
-          value={summary.accounts_overdue}
-          note="Past grace"
-          small
-        />
-        <Stat
-          label="Accounts disputed"
-          value={summary.accounts_disputed}
-          note="Contested, and still counted"
-          small
-        />
-        <Stat
-          label="Accounts cleared"
-          value={summary.accounts_cleared}
-          note="Nothing owed, nothing unapplied"
-          small
-        />
-      </StatRow>
-
+    <div className="stack stack-tight">
       {summary.currencies.length === 0 ? (
-        <p className="muted">No accounts have a governing schedule yet.</p>
+        <p className="footnote">No accounts have a governing schedule yet.</p>
       ) : null}
 
       {summary.currencies.map((totals) => (
@@ -81,11 +46,37 @@ export function CollectionsSummary({
           asOf={summary.as_of}
           code={currencyCodeOf(totals.currency_id)}
           showHeading={summary.currencies.length > 1}
-          plural={plural}
         />
       ))}
+
+      <MetricGroup compact>
+        <Metric label="Accounts" value={summary.accounts} size="sm" note={`As at ${businessDate(summary.as_of)}`} />
+        <Metric
+          label="Overdue"
+          value={summary.accounts_overdue}
+          size="sm"
+          note="Past grace"
+          tone={summary.accounts_overdue > 0 ? "danger" : "neutral"}
+        />
+        <Metric
+          label="Disputed"
+          value={summary.accounts_disputed}
+          size="sm"
+          note="Contested, still counted"
+          tone={summary.accounts_disputed > 0 ? "danger" : "neutral"}
+        />
+        <Metric label="Cleared" value={summary.accounts_cleared} size="sm" note="Nothing owed, nothing unapplied" />
+      </MetricGroup>
     </div>
   );
+}
+
+/** Which bucket carries how much heat: past grace is warm, past ninety days is hot. */
+function bucketClass(bucket: string, amount: string): string {
+  if (!isPositive(amount)) return "aging-cell aging-cell-quiet";
+  if (bucket === "61_90" || bucket === "91_plus") return "aging-cell aging-cell-hot";
+  if (bucket === "1_30" || bucket === "31_60") return "aging-cell aging-cell-warm";
+  return "aging-cell";
 }
 
 function CurrencyBlock({
@@ -93,74 +84,58 @@ function CurrencyBlock({
   asOf,
   code,
   showHeading,
-  plural,
 }: {
   totals: CollectionCurrencyTotals;
   asOf: string;
   code: string | null;
   showHeading: boolean;
-  plural: (count: number, word: string) => string;
 }) {
   return (
-    <div className="stack">
+    <div className="currency-block">
       {showHeading ? (
-        <h3 className="section-heading">
+        <p className="currency-block-title">
           {code ?? "Unknown currency"}
-          <span className="muted"> · {plural(totals.accounts, "account")}</span>
-        </h3>
+          <span className="muted">
+            · {totals.accounts} account{totals.accounts === 1 ? "" : "s"}
+          </span>
+        </p>
       ) : null}
 
-      <StatRow>
-        <Stat
-          label="Outstanding"
-          value={money(totals.outstanding_total, code)}
-          note={plural(totals.accounts, "account")}
-        />
-        <Stat
-          label="Due now"
-          value={money(totals.due_total, code)}
-          note="Reached its date, still owed"
-        />
-        <Stat
+      <MetricGroup>
+        <Metric label="Outstanding" value={money(totals.outstanding_total, code)} size="lg" />
+        <Metric label="Due now" value={money(totals.due_total, code)} note="Reached its date, still owed" />
+        <Metric
           label="Overdue"
           value={money(totals.overdue_total, code)}
           note="Past grace"
+          tone={isPositive(totals.overdue_total) ? "danger" : "neutral"}
         />
-        <Stat
+        <Metric
           label="Unapplied cash"
           value={money(totals.unapplied_cash, code)}
           note="Confirmed, not yet applied"
+          tone={isPositive(totals.unapplied_cash) ? "warning" : "neutral"}
         />
-      </StatRow>
-      <StatRow>
-        <Stat
-          label="Confirmed receipts (lifetime)"
+        <Metric
+          label="Confirmed receipts, lifetime"
           value={money(totals.confirmed_receipts_total, code)}
           note={`All cash confirmed to ${businessDate(asOf)}`}
-          small
+          size="sm"
         />
-      </StatRow>
+      </MetricGroup>
 
-      <TableScroll label={code ? `Outstanding by age (${code})` : "Outstanding by age"}>
-        <thead>
-          <tr>
-            {AGING_BUCKETS.map((bucket) => (
-              <th key={bucket} scope="col" className="num">
-                {bucketLabel(bucket)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            {AGING_BUCKETS.map((bucket) => (
-              <td key={bucket} className="num mono">
-                {money(totals.buckets[bucket] ?? "0.00", code)}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </TableScroll>
+      <h3 className="section-heading">Outstanding by age</h3>
+      <dl className="aging">
+        {AGING_BUCKETS.map((bucket) => {
+          const amount = totals.buckets[bucket] ?? "0.00";
+          return (
+            <div key={bucket} className={bucketClass(bucket, amount)}>
+              <dt className="aging-cell-label">{bucketLabel(bucket)}</dt>
+              <dd className="aging-cell-value">{money(amount, code)}</dd>
+            </div>
+          );
+        })}
+      </dl>
     </div>
   );
 }

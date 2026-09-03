@@ -131,3 +131,37 @@ export function isPositive(value: string | null | undefined): boolean {
   if (sign === "-") return false;
   return /[1-9]/.test(integer) || /[1-9]/.test(fraction ?? "");
 }
+
+/**
+ * The percentage a stored fraction represents, as text for an input:
+ * `percentInput("0.160000")` is `"16"`, `percentInput("0.055000")` is `"5.5"`.
+ * The inverse of `fractionFromPercent`, and like it a string operation only.
+ */
+export function percentInput(fraction: string | null | undefined): string {
+  if (fraction === null || fraction === undefined || fraction === "") return "";
+  const shown = percent(fraction);
+  return shown.endsWith("%") ? shown.slice(0, -1) : shown;
+}
+
+/**
+ * The fraction of one a typed percentage means: `fractionFromPercent("16")`
+ * is `"0.16"`, `"5.5"` is `"0.055"`, `"100"` is `"1"`.
+ *
+ * The decimal point is moved two places by string manipulation — never by
+ * dividing, because `5.5 / 100` is already not `0.055` in floating point and
+ * a tax rate must not depend on how badly a float rounds. Text that is not a
+ * plain number is returned untouched so the server can refuse it in its own
+ * words.
+ */
+export function fractionFromPercent(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === "") return "";
+  const match = /^(-?)(\d*)(?:\.(\d*))?$/.exec(trimmed);
+  if (!match || (match[2] === "" && (match[3] ?? "") === "")) return trimmed;
+  const [, sign, integer, decimals = ""] = match;
+  const digits = ((integer || "0") + decimals).padStart(decimals.length + 3, "0");
+  const point = digits.length - decimals.length - 2;
+  const whole = digits.slice(0, point).replace(/^0+(?=\d)/, "") || "0";
+  const rest = digits.slice(point).replace(/0+$/, "");
+  return `${sign}${whole}${rest ? `.${rest}` : ""}`;
+}
