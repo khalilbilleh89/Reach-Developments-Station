@@ -94,6 +94,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "payment_plans": ("payment_plan", "migration_payment_plans"),
     "collections": ("collection", "migration_collections"),
     "unit_economics": ("unit_economics", "migration_unit_economics"),
+    "construction": ("construction", "migration_construction"),
 }
 
 #: What each domain feeds **directly**. Read strictly downstream: a change here
@@ -118,8 +119,15 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "inventory": ("pricing",),
     "pricing": ("sales",),
     "sales": ("payment_plans", "unit_economics"),
-    "payment_plans": ("collections",),
+    # Construction calls payment plans' milestone certification contract, so a
+    # change to that contract can break construction. The edge is the code
+    # relationship and not the roadmap order: construction came later, but that
+    # is not why its tests run.
+    "payment_plans": ("collections", "construction"),
     "collections": (),
+    # Unit economics may source a construction forecast's hard-cost estimate at
+    # completion through a named reader, so a construction change reaches it.
+    "construction": ("unit_economics",),
     "unit_economics": (),
     "audit": (),
     "access": (),

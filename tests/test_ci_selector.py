@@ -36,6 +36,7 @@ AVAILABLE = [
     "tests/test_static_frontend.py",
     "tests/test_ux_copy.py",
     "tests/test_ci_selector.py",
+    "tests/modules/test_construction_calculations.py",
     "tests/modules/test_audit.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
@@ -93,7 +94,12 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
     result = chosen("app/modules/payment_plans/service.py")
 
     assert result.full is False
-    assert result.domains == ["collections", "payment_plans"]
+    assert result.domains == [
+        "collections",
+        "construction",
+        "payment_plans",
+        "unit_economics",
+    ]
     assert "tests/modules/test_payment_plans.py" in result.paths
     assert "tests/modules/test_payment_plan_register.py" in result.paths
     assert "tests/modules/test_migration_payment_plans.py" in result.paths
@@ -114,7 +120,13 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
     result = chosen("app/modules/sales/service.py")
 
     assert result.full is False
-    assert result.domains == ["collections", "payment_plans", "sales", "unit_economics"]
+    assert result.domains == [
+        "collections",
+        "construction",
+        "payment_plans",
+        "sales",
+        "unit_economics",
+    ]
     assert "tests/modules/test_sales_legal.py" in result.paths
     assert "tests/modules/test_payment_plans.py" in result.paths
     assert "tests/modules/test_unit_economics_profitability.py" in result.paths
@@ -127,6 +139,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
 
     assert result.domains == [
         "collections",
+        "construction",
         "payment_plans",
         "pricing",
         "sales",
@@ -144,6 +157,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
 
     assert result.domains == [
         "collections",
+        "construction",
         "inventory",
         "payment_plans",
         "pricing",
@@ -164,6 +178,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
     )
     assert result.domains == [
         "collections",
+        "construction",
         "inventory",
         "payment_plans",
         "pricing",
@@ -285,14 +300,15 @@ def test_cross_cutting_infrastructure_falls_back_to_the_full_suite(path: str) ->
 def test_an_unknown_backend_domain_falls_back_and_says_which() -> None:
     """Fail safe, not fail open: a new module runs everything until it is mapped.
 
-    ``collections`` was the example here, then ``unit_economics``, and both are
-    real domains now. The example keeps moving on purpose: the guard applies to
-    whatever module arrives next, not to a name somebody wrote down once.
+    ``collections`` was the example here, then ``unit_economics``, then
+    ``construction``, and all three are real domains now. The example keeps
+    moving on purpose: the guard applies to whatever module arrives next, not to
+    a name somebody wrote down once. PR-MVP-10's cashflow is next.
     """
-    result = chosen("app/modules/construction/service.py")
+    result = chosen("app/modules/cashflow/service.py")
 
     assert result.full is True
-    assert any("construction" in reason for reason in result.reasons)
+    assert any("cashflow" in reason for reason in result.reasons)
 
 
 def test_a_mapped_domain_with_no_test_family_falls_back() -> None:
@@ -524,6 +540,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
     """
     assert selector.closure({"pricing"}) == [
         "collections",
+        "construction",
         "payment_plans",
         "pricing",
         "sales",
@@ -532,11 +549,20 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
 
     assert selector.closure({"sales"}) == [
         "collections",
+        "construction",
         "payment_plans",
         "sales",
         "unit_economics",
     ]
-    assert selector.closure({"payment_plans"}) == ["collections", "payment_plans"]
+    assert selector.closure({"payment_plans"}) == [
+        "collections",
+        "construction",
+        "payment_plans",
+        "unit_economics",
+    ]
+    # Construction reaches unit economics and stops; nothing is downstream of
+    # unit economics, so the chain terminates there rather than looping back.
+    assert selector.closure({"construction"}) == ["construction", "unit_economics"]
     # And still downstream only: neither leaf drags sales back in.
     assert selector.closure({"collections"}) == ["collections"]
     assert selector.closure({"unit_economics"}) == ["unit_economics"]
@@ -568,7 +594,12 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
     """One new edge, and the schedule's downstream consumer comes with it."""
     result = chosen("app/modules/payment_plans/service.py")
 
-    assert result.domains == ["collections", "payment_plans"]
+    assert result.domains == [
+        "collections",
+        "construction",
+        "payment_plans",
+        "unit_economics",
+    ]
     assert "tests/modules/test_collection_restructures.py" in result.paths
     assert "tests/modules/test_payment_plans.py" in result.paths
     assert "tests/modules/test_sales_legal.py" not in result.paths
@@ -578,7 +609,13 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
     """Two hops, no edge from sales to collections anywhere in the map."""
     result = chosen("app/modules/sales/service.py")
 
-    assert result.domains == ["collections", "payment_plans", "sales", "unit_economics"]
+    assert result.domains == [
+        "collections",
+        "construction",
+        "payment_plans",
+        "sales",
+        "unit_economics",
+    ]
     assert "tests/modules/test_collection_status.py" in result.paths
     assert "tests/modules/test_pricing_calculator.py" not in result.paths
 
@@ -588,6 +625,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
 
     assert result.domains == [
         "collections",
+        "construction",
         "payment_plans",
         "pricing",
         "sales",
