@@ -273,18 +273,25 @@ will quote it.
 ├── .sidebar                        the rail
 │   ├── brand
 │   ├── ProjectSwitcher             inside a project; "Projects" outside one
-│   ├── nav groups                  Overview · Development · Commercial · Finance · Governance
+│   ├── nav groups                  Overview · Development · Commercial · Delivery · Finance · Governance
 │   └── footer                      who you are · Settings · Sign out
 ├── .context-bar                    menu (phone) · rail toggle · breadcrumbs · utilities
 └── .content                        PageHeader, then the section's cards
 ```
 
-**The rail replaces the project-wide tab strip.** Eleven modules do not fit
+**The rail replaces the project-wide tab strip.** Twelve modules do not fit
 in a row of tabs, and a row of tabs cannot say which ones belong together. The
 groups are the developer's own departments — Development (Land, Permits,
 Inventory), Commercial (Pricing, Sales & Legal, Payment Plans, Collections),
-Finance (Unit Economics), Governance (Documents, Access) — with Overview on
-its own at the top. A group with nothing the reader may open is not drawn.
+Delivery (Construction), Finance (Unit Economics), Governance (Documents,
+Access) — with Overview on its own at the top. A group with nothing the reader
+may open is not drawn.
+
+Delivery is its own group rather than an entry under Finance because the people
+who open it are not the people who open Unit Economics. Construction is what the
+build costs the developer; unit economics is what a unit earns. Design /
+Engineering can read the first and cannot read the second, and a rail that put
+them under one heading would suggest one permission where there are two.
 
 **The project switcher is first-class.** It sits under the brand, shows the
 project's code, status and city, and opens a searchable menu of the projects
@@ -470,6 +477,23 @@ header; the schedule editor types shares as percentages and money in the
 contract's currency. **The collections account** carries outstanding,
 collected, unapplied cash and the next follow-up.
 
+**The contract file** — Position (commitment, certification and cash as three
+separate compositions with their bases written above them), Lines, Variations,
+Certificates, and Invoices & payments. The Position tab is the record's whole
+argument: this is the screen where somebody is most tempted to treat the three
+as one, so they never share a row and the reader is never invited to subtract
+one from another. Retention and advance sit under cash, not under cost.
+
+**The certificate file** carries the waterfall in the server's order — work
+certified, retention withheld, retention released, advance recovered, other
+deductions, tax, net due — and recomputes none of it. Applying those deductions
+in a different sequence gives a different answer on the same inputs, and
+`net_due` is the ceiling an invoice is approved within, so a browser-side sum
+disagreeing by a cent would offer an approvable claim the server then refuses.
+Its lines carry previously certified, this period and cumulative as three
+columns, because a single column labelled "certified" is read as whichever one
+the reader expected.
+
 **Narrow drawers** (`narrow`) are for records with less to say — a permit.
 Below 64rem every drawer takes the whole screen, and the way back is a button
 at the top left, where a thumb expects it.
@@ -569,6 +593,12 @@ Status words live with the module that owns them, next to the labels:
 - `components/projects/collections/labels.ts` — receipts, instalments,
   buckets, disputes, waivers, restructures, refunds, clearance
 - `components/projects/economics/labels.ts` — versions, pools, profitability
+- `components/projects/construction/labels.ts` — budgets, contracts, variations,
+  certificates, invoices, payments, milestones, forecasts — and the two that
+  decide something rather than name it: `varianceTone` (**positive is over
+  budget**) and `headroomTone` (negative is committed past the authorisation).
+  Both live in one place because a second copy would eventually disagree, and
+  the disagreement would print an overrun in the colour used for good news.
 
 A status the interface has not been taught falls through unchanged and is
 drawn neutral. It is still a status somebody needs to see.

@@ -2,6 +2,7 @@ import type { IconName } from "@/components/ui/Icon";
 import {
   AUDIT_READERS,
   COLLECTION_READERS,
+  CONSTRUCTION_READERS,
   ECONOMICS_READERS,
   INTERNAL_PRICE_READERS,
   PLAN_READERS,
@@ -20,10 +21,10 @@ import type { Roles } from "@/lib/roles";
  * and what each one earned. The groups are that lifecycle; the sidebar draws
  * them and nothing else does.
  *
- * This is UI composition, not a plugin system. When PR-MVP-09 lands,
- * Construction is one entry under a new Delivery group; when PR-MVP-10 lands,
- * Cashflow & Reporting is a second entry under Finance. A group with no
- * visible entries is not drawn, so nothing is ever advertised before it exists.
+ * This is UI composition, not a plugin system. PR-MVP-09 added Construction as
+ * the one entry under Delivery; when PR-MVP-10 lands, Cashflow & Reporting is a
+ * second entry under Finance. A group with no visible entries is not drawn, so
+ * nothing is ever advertised before it exists.
  *
  * `visible` mirrors the backend's reader sets for the module. A person whose
  * every request to a module would be refused is not shown the door — that is
@@ -39,6 +40,7 @@ export type ProjectSection =
   | "sales"
   | "payments"
   | "collections"
+  | "construction"
   | "economics"
   | "documents"
   | "access";
@@ -83,21 +85,24 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         key: "land",
         label: "Land",
         icon: "land",
-        description: "The parcels this development sits on, and what may be built on them.",
+        description:
+          "The parcels this development sits on, and what may be built on them.",
         visible: everyone,
       },
       {
         key: "permits",
         label: "Permits",
         icon: "permits",
-        description: "The consents this development needs, and which of them are late.",
+        description:
+          "The consents this development needs, and which of them are late.",
         visible: everyone,
       },
       {
         key: "inventory",
         label: "Inventory",
         icon: "inventory",
-        description: "Every unit in this development, and what stops each one being released.",
+        description:
+          "Every unit in this development, and what stops each one being released.",
         visible: everyone,
       },
     ],
@@ -110,29 +115,47 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         key: "pricing",
         label: "Pricing",
         icon: "pricing",
-        description: "What this development is priced at, and what that price is made of.",
+        description:
+          "What this development is priced at, and what that price is made of.",
         visible: (roles) => hasAnyRole(roles, INTERNAL_PRICE_READERS),
       },
       {
         key: "sales",
         label: "Sales & Legal",
         icon: "sales",
-        description: "Where every unit stands commercially, legally and on delivery.",
+        description:
+          "Where every unit stands commercially, legally and on delivery.",
         visible: (roles) => hasAnyRole(roles, SALES_READERS),
       },
       {
         key: "payments",
         label: "Payment Plans",
         icon: "payments",
-        description: "How each contracted amount is scheduled to be paid, and what makes it due.",
+        description:
+          "How each contracted amount is scheduled to be paid, and what makes it due.",
         visible: (roles) => hasAnyRole(roles, PLAN_READERS),
       },
       {
         key: "collections",
         label: "Collections",
         icon: "collections",
-        description: "What the buyers have actually paid, what is still owed, and how old it is.",
+        description:
+          "What the buyers have actually paid, what is still owed, and how old it is.",
         visible: (roles) => hasAnyRole(roles, COLLECTION_READERS),
+      },
+    ],
+  },
+  {
+    key: "delivery",
+    label: "Delivery",
+    items: [
+      {
+        key: "construction",
+        label: "Construction",
+        icon: "permits",
+        description:
+          "What the build was authorised to cost, what has been committed, certified and paid, and where it now lands.",
+        visible: (roles) => hasAnyRole(roles, CONSTRUCTION_READERS),
       },
     ],
   },
@@ -144,7 +167,8 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         key: "economics",
         label: "Unit Economics",
         icon: "economics",
-        description: "What each unit costs, what it earns, and the governed basis that says so.",
+        description:
+          "What each unit costs, what it earns, and the governed basis that says so.",
         visible: (roles) => hasAnyRole(roles, ECONOMICS_READERS),
       },
     ],
@@ -157,14 +181,16 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         key: "documents",
         label: "Documents",
         icon: "documents",
-        description: "Links to documents held elsewhere. Nothing is uploaded or stored here.",
+        description:
+          "Links to documents held elsewhere. Nothing is uploaded or stored here.",
         visible: everyone,
       },
       {
         key: "access",
         label: "Access",
         icon: "access",
-        description: "Who may open this project. Roles decide what they can do once inside.",
+        description:
+          "Who may open this project. Roles decide what they can do once inside.",
         visible: (roles) => roles.has(ROLE_SYSTEM_ADMIN),
       },
     ],
@@ -188,21 +214,24 @@ export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
         key: "country",
         label: "Country packs",
         icon: "land",
-        description: "The tax, currency and legal defaults a project inherits when it is created.",
+        description:
+          "The tax, currency and legal defaults a project inherits when it is created.",
         visible: everyone,
       },
       {
         key: "currencies",
         label: "Currencies",
         icon: "collections",
-        description: "The currencies this business transacts in. No exchange rates are stored.",
+        description:
+          "The currencies this business transacts in. No exchange rates are stored.",
         visible: everyone,
       },
       {
         key: "reference",
         label: "Reference data",
         icon: "documents",
-        description: "The controlled vocabularies every project chooses its codes from.",
+        description:
+          "The controlled vocabularies every project chooses its codes from.",
         visible: everyone,
       },
     ],
@@ -215,7 +244,8 @@ export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
         key: "users",
         label: "Users & roles",
         icon: "user",
-        description: "Who has an account, and what each of them may do across the portfolio.",
+        description:
+          "Who has an account, and what each of them may do across the portfolio.",
         visible: (roles) => roles.has(ROLE_SYSTEM_ADMIN),
       },
       {
@@ -275,11 +305,15 @@ const SETTINGS_SECTIONS = new Set<string>(
   SETTINGS_NAVIGATION.flatMap((group) => group.items.map((item) => item.key)),
 );
 
-export function isProjectSection(value: string | null | undefined): value is ProjectSection {
+export function isProjectSection(
+  value: string | null | undefined,
+): value is ProjectSection {
   return value !== null && value !== undefined && PROJECT_SECTIONS.has(value);
 }
 
-export function isSettingsSection(value: string | null | undefined): value is SettingsSection {
+export function isSettingsSection(
+  value: string | null | undefined,
+): value is SettingsSection {
   return value !== null && value !== undefined && SETTINGS_SECTIONS.has(value);
 }
 
@@ -290,7 +324,10 @@ export function sectionDescription(key: ProjectSection): string {
 
 /** The address of a project section. The frontend is a static export, so the
  * open project and its section travel in the query string. */
-export function projectHref(projectId: string, section: ProjectSection = "overview"): string {
+export function projectHref(
+  projectId: string,
+  section: ProjectSection = "overview",
+): string {
   const params = new URLSearchParams({ project: projectId });
   if (section !== "overview") params.set("section", section);
   return `/projects/?${params.toString()}`;

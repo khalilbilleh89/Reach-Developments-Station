@@ -1,7 +1,13 @@
 "use client";
 
-import type { PlanInstallment } from "@/lib/api";
-import { Badge, Button, MoneyInput, RateInput, TableScroll } from "@/components/ui";
+import type { MilestoneTriggerOption, PlanInstallment } from "@/lib/api";
+import {
+  Badge,
+  Button,
+  MoneyInput,
+  RateInput,
+  TableScroll,
+} from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money, percent, percentInput } from "@/lib/format";
 import {
@@ -56,7 +62,8 @@ export function rowFrom(installment: PlanInstallment): DraftRow {
     label: installment.label,
     trigger_type: installment.trigger_type,
     trigger_reference: installment.trigger_reference ?? "",
-    offset_days: installment.offset_days === null ? "" : String(installment.offset_days),
+    offset_days:
+      installment.offset_days === null ? "" : String(installment.offset_days),
     contractual_due_date: installment.contractual_due_date ?? "",
     forecast_due_date: installment.forecast_due_date ?? "",
     grace_days: String(installment.grace_days),
@@ -84,6 +91,7 @@ export function ScheduleEditor({
   allocationMode,
   chargeMode,
   currencyId,
+  milestones,
   onChange,
   onRemove,
 }: {
@@ -91,6 +99,18 @@ export function ScheduleEditor({
   allocationMode: string;
   chargeMode: string;
   currencyId: string;
+  /**
+   * The construction milestones this project actually has, or null where the
+   * caller could not read them.
+   *
+   * Null and empty mean different things and are presented differently. Null is
+   * "this person cannot see the programme" — Collections can read the trigger
+   * options and a Sales Advisor cannot — and falls back to the free-text field.
+   * Empty is "there are no milestones", which is a real answer and one the
+   * preparer needs to see rather than an empty dropdown they blame on the
+   * software.
+   */
+  milestones: MilestoneTriggerOption[] | null;
   onChange: (key: string, field: keyof DraftRow, value: string) => void;
   onRemove: (key: string) => void;
 }) {
@@ -141,7 +161,9 @@ export function ScheduleEditor({
                   className="input input-label"
                   aria-label={`Label for instalment ${row.sequence}`}
                   value={row.label}
-                  onChange={(event) => onChange(row.key, "label", event.target.value)}
+                  onChange={(event) =>
+                    onChange(row.key, "label", event.target.value)
+                  }
                 />
               </td>
               <td>
@@ -149,7 +171,9 @@ export function ScheduleEditor({
                   className="input"
                   aria-label={`Trigger for instalment ${row.sequence}`}
                   value={row.trigger_type}
-                  onChange={(event) => onChange(row.key, "trigger_type", event.target.value)}
+                  onChange={(event) =>
+                    onChange(row.key, "trigger_type", event.target.value)
+                  }
                 >
                   {TRIGGER_TYPES.map((type) => (
                     <option key={type} value={type}>
@@ -159,7 +183,11 @@ export function ScheduleEditor({
                 </select>
               </td>
               <td>
-                <TriggerDetail row={row} onChange={onChange} />
+                <TriggerDetail
+                  row={row}
+                  milestones={milestones}
+                  onChange={onChange}
+                />
               </td>
               <td className="num">
                 {byPercentage ? (
@@ -167,7 +195,9 @@ export function ScheduleEditor({
                     aria-label={`Share for instalment ${row.sequence}`}
                     placeholder="25"
                     value={row.principal_fraction}
-                    onChange={(value) => onChange(row.key, "principal_fraction", value)}
+                    onChange={(value) =>
+                      onChange(row.key, "principal_fraction", value)
+                    }
                   />
                 ) : (
                   <MoneyInput
@@ -175,7 +205,9 @@ export function ScheduleEditor({
                     aria-label={`Principal for instalment ${row.sequence}`}
                     placeholder="0.00"
                     value={row.principal_amount}
-                    onChange={(value) => onChange(row.key, "principal_amount", value)}
+                    onChange={(value) =>
+                      onChange(row.key, "principal_amount", value)
+                    }
                   />
                 )}
               </td>
@@ -186,7 +218,9 @@ export function ScheduleEditor({
                       code={code}
                       aria-label={`Tax for instalment ${row.sequence}`}
                       value={row.tax_amount}
-                      onChange={(value) => onChange(row.key, "tax_amount", value)}
+                      onChange={(value) =>
+                        onChange(row.key, "tax_amount", value)
+                      }
                     />
                   </td>
                   <td className="num">
@@ -194,7 +228,9 @@ export function ScheduleEditor({
                       code={code}
                       aria-label={`Buyer fee for instalment ${row.sequence}`}
                       value={row.fee_amount}
-                      onChange={(value) => onChange(row.key, "fee_amount", value)}
+                      onChange={(value) =>
+                        onChange(row.key, "fee_amount", value)
+                      }
                     />
                   </td>
                 </>
@@ -205,7 +241,9 @@ export function ScheduleEditor({
                   inputMode="numeric"
                   aria-label={`Grace days for instalment ${row.sequence}`}
                   value={row.grace_days}
-                  onChange={(event) => onChange(row.key, "grace_days", event.target.value)}
+                  onChange={(event) =>
+                    onChange(row.key, "grace_days", event.target.value)
+                  }
                 />
               </td>
               <td>
@@ -224,9 +262,11 @@ export function ScheduleEditor({
       </table>
       {code ? (
         <p className="footnote">
-          Amounts are denominated in {code}, taken from the contract. Shares are typed as
-          percentages and sent as fractions of one. The server derives{" "}
-          {byPercentage ? "each amount from its share" : "each share from its amount"}
+          Amounts are denominated in {code}, taken from the contract. Shares are
+          typed as percentages and sent as fractions of one. The server derives{" "}
+          {byPercentage
+            ? "each amount from its share"
+            : "each share from its amount"}
           {manualCharges ? "" : ", and spreads tax and buyer fees pro rata"}.
         </p>
       ) : null}
@@ -237,9 +277,11 @@ export function ScheduleEditor({
 /** Only the fields the chosen trigger actually uses. */
 function TriggerDetail({
   row,
+  milestones,
   onChange,
 }: {
   row: DraftRow;
+  milestones: MilestoneTriggerOption[] | null;
   onChange: (key: string, field: keyof DraftRow, value: string) => void;
 }) {
   if (row.trigger_type === "days_after_spa") {
@@ -250,7 +292,9 @@ function TriggerDetail({
         aria-label={`Days after the SPA for instalment ${row.sequence}`}
         placeholder="30"
         value={row.offset_days}
-        onChange={(event) => onChange(row.key, "offset_days", event.target.value)}
+        onChange={(event) =>
+          onChange(row.key, "offset_days", event.target.value)
+        }
       />
     );
   }
@@ -261,21 +305,30 @@ function TriggerDetail({
         type="date"
         aria-label={`Due date for instalment ${row.sequence}`}
         value={row.contractual_due_date}
-        onChange={(event) => onChange(row.key, "contractual_due_date", event.target.value)}
+        onChange={(event) =>
+          onChange(row.key, "contractual_due_date", event.target.value)
+        }
       />
     );
   }
+  const isMilestone = row.trigger_type === "construction_milestone";
   return (
     <div className="trigger-detail">
-      {REFERENCE_TRIGGERS.has(row.trigger_type) ? (
+      {isMilestone && milestones !== null ? (
+        <MilestoneSelector
+          row={row}
+          milestones={milestones}
+          onChange={onChange}
+        />
+      ) : REFERENCE_TRIGGERS.has(row.trigger_type) ? (
         <input
           className="input input-label"
           aria-label={`Trigger reference for instalment ${row.sequence}`}
-          placeholder={
-            row.trigger_type === "construction_milestone" ? "Milestone code" : "What must happen"
-          }
+          placeholder={isMilestone ? "Milestone code" : "What must happen"}
           value={row.trigger_reference}
-          onChange={(event) => onChange(row.key, "trigger_reference", event.target.value)}
+          onChange={(event) =>
+            onChange(row.key, "trigger_reference", event.target.value)
+          }
         />
       ) : null}
       <input
@@ -283,10 +336,77 @@ function TriggerDetail({
         type="date"
         aria-label={`Forecast date for instalment ${row.sequence}`}
         value={row.forecast_due_date}
-        onChange={(event) => onChange(row.key, "forecast_due_date", event.target.value)}
+        onChange={(event) =>
+          onChange(row.key, "forecast_due_date", event.target.value)
+        }
       />
-      <span className="field-hint">Forecast only. It never makes the amount due.</span>
+      <span className="field-hint">
+        Forecast only. It never makes the amount due.
+      </span>
     </div>
+  );
+}
+
+/**
+ * Which construction milestone this instalment waits on.
+ *
+ * A selector rather than a text box, and it stores the milestone's **code** —
+ * the value construction's certification looks the schedule up by. A typed
+ * reference is a trigger that silently never fires: the milestone is certified,
+ * nothing matches "Foundations complete" against `FOUNDATION`, and the
+ * instalment sits at awaiting while the buyer believes it is due. That failure
+ * is invisible until somebody chases a payment that was never raised.
+ *
+ * A code already on the row that is no longer offered is kept and marked,
+ * because a saved schedule must not silently lose its trigger when a milestone
+ * is renamed or retired. The person edits it deliberately or leaves it alone.
+ *
+ * The options carry no cost, no contract and no vendor. Preparing a buyer's
+ * schedule is not a reason to see what the build costs, and the server's
+ * endpoint is shaped to make sure it cannot be.
+ */
+function MilestoneSelector({
+  row,
+  milestones,
+  onChange,
+}: {
+  row: DraftRow;
+  milestones: MilestoneTriggerOption[];
+  onChange: (key: string, field: keyof DraftRow, value: string) => void;
+}) {
+  const known = milestones.some(
+    (option) => option.code === row.trigger_reference,
+  );
+  if (milestones.length === 0) {
+    return (
+      <span className="field-hint">
+        This development has no construction milestones yet, so nothing can wait
+        on one.
+      </span>
+    );
+  }
+  return (
+    <select
+      className="input"
+      aria-label={`Construction milestone for instalment ${row.sequence}`}
+      value={row.trigger_reference}
+      onChange={(event) =>
+        onChange(row.key, "trigger_reference", event.target.value)
+      }
+    >
+      <option value="">Choose a milestone</option>
+      {row.trigger_reference && !known ? (
+        <option value={row.trigger_reference}>
+          {row.trigger_reference} — no longer in the programme
+        </option>
+      ) : null}
+      {milestones.map((option) => (
+        <option key={option.code} value={option.code}>
+          {option.code} — {option.name}
+          {option.is_certified ? " (certified)" : ""}
+        </option>
+      ))}
+    </select>
   );
 }
 

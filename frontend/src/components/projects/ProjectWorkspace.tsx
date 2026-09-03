@@ -28,6 +28,7 @@ import { Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/componen
 import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCenter";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
+import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -304,6 +305,7 @@ export function ProjectWorkspace({
           <PaymentPlansTab projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
         {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
+        {section === "construction" ? <ConstructionTab projectId={projectId} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}

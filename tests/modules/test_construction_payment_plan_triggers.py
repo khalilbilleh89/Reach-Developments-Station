@@ -88,7 +88,7 @@ class TestCertificationTriggersTheInstalment:
 
         before = installments(collections_client, project_id, plan_id)
         waiting = next(row for row in before if row["sequence"] == 2)
-        assert waiting["trigger_status"] == "awaiting"
+        assert waiting["trigger_status"] == "awaiting_trigger"
 
         certified = manager_member_client.post(
             f"{construction_url(project_id)}/milestones/{milestone.json()['id']}/certify",
@@ -101,7 +101,13 @@ class TestCertificationTriggersTheInstalment:
         after = installments(collections_client, project_id, plan_id)
         triggered = next(row for row in after if row["sequence"] == 2)
         assert triggered["trigger_status"] == "triggered"
-        assert triggered["triggered_due_date"] == "2026-05-02"
+        # The certified date, not today and not the date somebody entered it.
+        # What the buyer contracted to is that the instalment falls due when the
+        # milestone is certified, and the other two dates keep their own
+        # meanings: the contract never named a date, and the forecast is still
+        # only what somebody expected.
+        assert triggered["actual_due_date"] == "2026-05-02"
+        assert triggered["contractual_due_date"] is None
 
     def test_achieving_the_milestone_triggers_nothing(
         self,
@@ -123,7 +129,8 @@ class TestCertificationTriggersTheInstalment:
         assert achieved.status_code == 200, achieved.text
 
         rows = installments(collections_client, project_id, plan_id)
-        assert next(row for row in rows if row["sequence"] == 2)["trigger_status"] == "awaiting"
+        waiting = next(row for row in rows if row["sequence"] == 2)
+        assert waiting["trigger_status"] == "awaiting_trigger"
 
     def test_a_milestone_no_plan_waits_on_triggers_nothing(
         self,
@@ -147,7 +154,8 @@ class TestCertificationTriggersTheInstalment:
         assert certified.json()["triggered_installment_count"] == 0
 
         rows = installments(collections_client, project_id, plan_id)
-        assert next(row for row in rows if row["sequence"] == 2)["trigger_status"] == "awaiting"
+        waiting = next(row for row in rows if row["sequence"] == 2)
+        assert waiting["trigger_status"] == "awaiting_trigger"
 
 
 class TestTheSelectorFeedsTheReference:

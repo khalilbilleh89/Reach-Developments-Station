@@ -179,6 +179,7 @@ The business domains stack in one direction, and it is never reversed:
 ```text
 inventory  ↑  pricing  ↑  sales  ↑  payment_plans  ↑  collections
                                ↑  unit_economics
+                  payment_plans  ↑  construction  ↑  unit_economics
 ```
 
 `payment_plans` reads sales through its public service contract — a completed
@@ -262,12 +263,49 @@ today: a replacement dated in the past would, on activation, close the standing
 version's window on a date already lived, and every contract signed in the
 overlap would silently change cost basis.
 
+`construction` sits above payment plans and below unit economics, and it is the
+only domain that both reads a contract and is read through one:
+
+```text
+construction → inventory.apply_delivery_status                  not_started → under_construction → ready
+construction → payment_plans.plans_awaiting_milestone           which schedules wait on a milestone code
+construction → payment_plans.apply_construction_milestone_certification
+                                                                the instalments a certification makes due
+unit_economics → construction.hard_cost_estimate_at_completion  the governed hard cost, and its forecast id
+unit_economics → construction.hard_cost_estimate_of             what a *pinned* forecast says today
+```
+
+Payment plans does not import construction, and no instalment column is written
+outside that contract. The direction is the point: construction is the only
+module that can say what certification *is*, and payment plans is the only
+module that owns a buyer's due date. A milestone reported complete by site
+cannot reach a schedule — only a formal certification can, and the date written
+is the certified date rather than today.
+
+Delivery status is the same shape in the other direction. Construction owns
+`not_started → under_construction → ready` and nothing above it: the handover
+states belong to sales, and construction's write path refuses a unit that has
+already reached one. Every move goes through inventory's contract, so the
+append-only status event exists whoever asked for the change, and a bulk action
+validates every unit before applying any of them — a building left in two states
+is worse than a refusal.
+
+Unit economics reads construction rather than the reverse, and it reads a
+*snapshot*. A cost pool sourced from a forecast stores the amount **and** the
+forecast version it came from, and that pin is what stops a later forecast
+appearing to rewrite a basis units were already sold against: the derived amount
+is refreshed only while the version is a draft, and a superseded pin makes the
+basis stale — refused at submission and again at activation — rather than
+silently re-derived. Construction never writes a cost pool, never reads an
+allocation, and never learns what a unit earns.
+
 Reading another domain's rows is ordinary and done directly. Writing them is
-not, and there is no path in collections or unit economics that does.
+not, and there is no path in collections, unit economics or construction that
+does.
 
 ---
 
-## 7. Current state (through PR-MVP-08)
+## 7. Current state (through PR-MVP-09)
 
 ```text
 app/
@@ -288,6 +326,8 @@ app/
     ├── sales/               clients, reservations, contracts, legal events, cancellation, handover
     ├── payment_plans/       payment schedules, versions, instalments, triggers
     ├── collections/         receipts, allocations, aging, disputes, waivers, restructures, refunds
+    ├── construction/        cost codes, budgets, contracts, variations, certificates,
+    │                        invoices, payments, milestones, forecasts
     ├── unit_economics/      cost pools, allocation versions, unit costs, profitability
     └── audit/               append-only governance history
 ```
@@ -437,6 +477,26 @@ reads `forecast_due_date` at all — a construction milestone whose expected dat
 passed three months ago is awaiting its trigger, not ninety days overdue, and
 the absence of the branch is a stronger guarantee than a branch that declines to
 take it.
+
+`construction` carries seven files, and the seventh is the one worth naming:
+
+```text
+app/modules/construction/
+├── models.py
+├── schemas.py
+├── permissions.py    preparer, technical, certifier, finance, checker, approver
+├── calculator.py     the money arithmetic, with no session and no actor
+├── service.py        the governed transitions and the locks that serialise them
+├── read.py           response assembly: every derived figure, computed once
+└── api.py
+```
+
+`read.py` exists because the alternative is worse. Seventy-two routes each
+assembling their own totals is seventy-two chances for two screens to disagree
+about what "certified to date" means on the same contract. Every derived figure
+a construction response carries — a headroom, a waterfall, a variance, a
+position — is built in exactly one function there, and the API layer only calls
+it.
 
 `unit_economics` carries a sixth file for the third time, and the pattern is now
 the rule rather than a coincidence:
@@ -777,6 +837,55 @@ Sales Operations completes the handover and signs none of the three. Which
 clearances apply is the project's own configuration — six named booleans in
 `sales_project_policies`, not a condition language that could express anything
 and be audited for nothing.
+
+### Construction control
+
+**Six separate truths, and none of them is derived from another.** What was
+authorised (budget), what was signed (commitment), what was formally certified
+as done (certification), what the vendor claims (invoice), what has left the
+bank (payment) and what it will finish at (forecast). A single "spent" figure
+would have to pick one and hide the other five, and every one of them is the
+right answer to a different person's question.
+
+**Cost is stated excluding tax; cash is stated including it.** The two never
+share a row or a heading. Tax is recoverable in most of the jurisdictions this
+product serves, so a cost figure carrying it overstates the build — and a screen
+that put certified-ex-tax beside paid-including-tax would invite a subtraction
+whose answer means nothing.
+
+**A positive variance at completion is over budget.** One convention,
+everywhere, derived on the server and never re-derived in the browser. The sign
+is the single easiest thing in this module to get backwards, and a screen that
+reversed it would print an overrun in the colour the rest of the product uses
+for good news.
+
+**Retention and advance are cash timing, never cost reductions.** Retention
+withheld does not reduce what the work cost; it delays when the money moves. A
+release can only ever come out of retention actually held, and an advance can
+only be recovered against advance cash actually paid — money that never left the
+bank cannot be taken back out of a valuation.
+
+**Status never moves money.** Terminating a contract does not remove its
+commitment; a variation does. Disputing an invoice does not reduce what is owed;
+it blocks payment while the argument runs. An obligation that vanished the
+moment somebody objected to it would make the ledger a record of opinions.
+
+**A maker is never the checker, by identifier.** Budget, contract, variation,
+certificate, invoice and payment each have two people, and the second is
+compared by user id rather than by role: a user holding both Finance and
+Approver / CFO is still one pair of eyes. The System Administrator reads
+everything and signs nothing.
+
+**A partial view of a project total is refused, not filtered.** A phase-scoped
+reader who opened a budget would be shown "the project's budget" with the hidden
+phases quietly removed — a number that is neither the project's nor their own,
+with nothing on screen to say so. Every whole-project financial surface requires
+whole-project access; the technical records that genuinely belong to one phase
+stay available.
+
+**Nothing is deletable.** Governed history is superseded, reversed, voided or
+withdrawn — each with a reason on the record. There is no DELETE route anywhere
+in the module.
 
 ### Deferred by design
 

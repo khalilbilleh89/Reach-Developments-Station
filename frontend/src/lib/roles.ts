@@ -19,7 +19,10 @@ export type Roles = ReadonlySet<string>;
 export const ROLE_SYSTEM_ADMIN = "system_admin";
 
 /** Roles that may change project identity and the land record. */
-export const PROJECT_WRITERS: Roles = new Set(["system_admin", "project_manager"]);
+export const PROJECT_WRITERS: Roles = new Set([
+  "system_admin",
+  "project_manager",
+]);
 
 /** Roles that may maintain planning, permits and document references. */
 export const TECHNICAL_WRITERS: Roles = new Set([
@@ -39,7 +42,11 @@ export const PROJECT_FINANCIAL_READERS: Roles = new Set([
 ]);
 
 /** Roles that may prepare pricing: build a policy, price units, submit. */
-export const PRICING_WRITERS: Roles = new Set(["system_admin", "project_manager", "finance"]);
+export const PRICING_WRITERS: Roles = new Set([
+  "system_admin",
+  "project_manager",
+  "finance",
+]);
 
 /**
  * The one role that may sanction a price. Deliberately not the administrator:
@@ -92,6 +99,29 @@ export const SALES_READERS: Roles = new Set([
 /** Roles that may read a payment schedule, and the same set for the cash against it. */
 export const PLAN_READERS: Roles = SALES_READERS;
 export const COLLECTION_READERS: Roles = SALES_READERS;
+
+/**
+ * Roles that may read what the build costs the developer.
+ *
+ * Design / Engineering is here and is deliberately absent from
+ * `ECONOMICS_READERS`: the people running the build need the build's cost, and
+ * do not need the margin a unit earns. Sales, Legal and Collections are absent
+ * from both — each can already see the unit and in some cases the contract, and
+ * an advisor who knows what a unit cost to build has an argument for a discount
+ * the company never agreed to make available.
+ *
+ * This mirrors `CONSTRUCTION_READER_ROLES` on the server. It decides which door
+ * is drawn, not who gets in: every request is authorised again server-side.
+ */
+export const CONSTRUCTION_READERS: Roles = new Set([
+  "system_admin",
+  "project_manager",
+  "design_engineering",
+  "finance",
+  "approver_cfo",
+  "executive_viewer",
+  "auditor",
+]);
 
 /** Roles that may read unit cost, margin and the allocation basis behind them. */
 export const ECONOMICS_READERS: Roles = new Set([

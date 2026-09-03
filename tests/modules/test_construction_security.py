@@ -42,6 +42,14 @@ def scoped_engineer(db: Session, admin_client: TestClient, project_id: str, phas
     """A Design / Engineering user granted one phase rather than the project."""
     user = make_user(db, email="scoped@example.com", roles=("design_engineering",))
     grant_access(admin_client, project_id, user)
+    # Membership alone sees every phase. Narrowing is a second, explicit act,
+    # and without it this fixture would build a full-access reader and the tests
+    # below would pass for the wrong reason.
+    narrowed = admin_client.patch(
+        f"{PROJECTS}/{project_id}/access/{user.id}/phase-scope",
+        json={"phase_scope": "selected"},
+    )
+    assert narrowed.status_code == 200, narrowed.text
     granted = admin_client.put(f"{PROJECTS}/{project_id}/access/{user.id}/phases/{phase_id}")
     assert granted.status_code in {200, 201}, granted.text
     return user
