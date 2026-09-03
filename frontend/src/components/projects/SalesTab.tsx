@@ -397,7 +397,7 @@ export function SalesTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Phase">
+          <ToolbarFilter label="Phase" active={filters.phase_id !== ""}>
             <select
               className="input"
               value={filters.phase_id}
@@ -411,7 +411,7 @@ export function SalesTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Commercial status">
+          <ToolbarFilter label="Commercial status" active={filters.commercial_status !== ""}>
             <select
               className="input"
               value={filters.commercial_status}

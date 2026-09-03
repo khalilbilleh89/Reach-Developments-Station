@@ -314,7 +314,7 @@ export function PaymentPlansTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Version status">
+          <ToolbarFilter label="Version status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Any status</option>
               {["draft", "submitted", "approved", "active", "rejected"].map((value) => (
@@ -368,9 +368,11 @@ export function PaymentPlansTab({
                   <tr key={row.plan_id}>
                     <th scope="row">
                       <button className="button-link" type="button" onClick={() => setOpenPlan(row.plan_id)}>
-                        <IdentityCell name={row.plan_number} meta={row.unit_reference} />
+                        <IdentityCell
+                          name={row.plan_number}
+                          meta={<span className="mono">{row.unit_reference}</span>}
+                        />
                       </button>
-                      <span className="cell-secondary mono">{row.unit_reference}</span>
                     </th>
                     <td className="cell-prose">{row.client_display_name}</td>
                     <td className="mono">{row.spa_number ?? row.sale_number}</td>

@@ -331,7 +331,7 @@ export function PricingTab({
               : undefined
           }
         >
-          <ToolbarFilter label="Phase">
+          <ToolbarFilter label="Phase" active={filters.phase_id !== ""}>
             <select
               className="input"
               value={filters.phase_id}
@@ -345,7 +345,7 @@ export function PricingTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Market position">
+          <ToolbarFilter label="Market position" active={filters.market_flag !== ""}>
             <select
               className="input"
               value={filters.market_flag}

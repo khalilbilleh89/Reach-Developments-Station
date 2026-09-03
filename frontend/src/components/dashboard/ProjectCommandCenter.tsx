@@ -47,7 +47,11 @@ import {
   PositionSupportItem,
   SectionHeader,
 } from "@/components/ui";
-import { AGING_BUCKETS, bucketHeat, bucketLabel } from "@/components/projects/collections/labels";
+import {
+  AGING_BUCKETS,
+  bucketHeatForAmount,
+  bucketLabel,
+} from "@/components/projects/collections/labels";
 import { AttentionPanel } from "./AttentionPanel";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectPlate } from "./ProjectPlate";
@@ -617,7 +621,7 @@ export function ProjectCommandCenter({
                               key={bucket}
                               label={bucketLabel(bucket)}
                               value={money(totals.buckets[bucket], code)}
-                              heat={bucketHeat(bucket)}
+                              heat={bucketHeatForAmount(bucket, totals.buckets[bucket])}
                             />
                           ))}
                         </Distribution>

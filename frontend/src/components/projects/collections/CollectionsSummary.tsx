@@ -14,7 +14,7 @@ import {
 import type { CollectionCurrencyTotals, CollectionProjectSummary } from "@/lib/api";
 import { businessDate, isPositive, money } from "@/lib/format";
 
-import { AGING_BUCKETS, bucketHeat, bucketLabel } from "./labels";
+import { AGING_BUCKETS, bucketHeatForAmount, bucketLabel } from "./labels";
 
 /**
  * The project's collections position, as at a stated date.
@@ -138,7 +138,7 @@ function CurrencyBlock({
             key={bucket}
             label={bucketLabel(bucket)}
             value={money(totals.buckets[bucket] ?? "0.00", code)}
-            heat={bucketHeat(bucket)}
+            heat={bucketHeatForAmount(bucket, totals.buckets[bucket] ?? "0.00")}
           />
         ))}
       </Distribution>

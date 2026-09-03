@@ -19,6 +19,7 @@
  */
 
 import type { Tone } from "@/components/ui";
+import { isPositive } from "@/lib/format";
 
 const RECEIPT_LABELS: Record<string, string> = {
   recorded: "Awaiting confirmation",
@@ -230,8 +231,27 @@ const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
   "91_plus": "late",
 };
 
-export const bucketHeat = (value: string | null | undefined): "cool" | "warm" | "hot" | "late" =>
+export type BucketHeat = "cool" | "warm" | "hot" | "late";
+
+export const bucketHeat = (value: string | null | undefined): BucketHeat =>
   value ? (BUCKET_HEAT[value] ?? "cool") : "cool";
+
+/**
+ * The heat a band is actually entitled to, given what is standing in it.
+ *
+ * A band's age is a property of the band; its heat is a claim about money.
+ * "91+ JOD 0.00" carries no late money, and colouring it late says the
+ * opposite of the figure printed beside it — the same mistake as tinting a
+ * whole register row, one band smaller. So a band with nothing positive in it
+ * is cool whatever its age, and a credit is nothing positive.
+ *
+ * `isPositive` reads the sign and the digits as text, so this decides on the
+ * server's exact decimal and never on a float.
+ */
+export const bucketHeatForAmount = (
+  bucket: string | null | undefined,
+  amount: string | null | undefined,
+): BucketHeat => (isPositive(amount) ? bucketHeat(bucket) : "cool");
 
 /** The bands, in report order. */
 export const AGING_BUCKETS = [

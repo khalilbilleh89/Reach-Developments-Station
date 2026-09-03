@@ -447,7 +447,7 @@ function UnitsRegister({ rows, code }: { rows: UnitEconomicsRow[]; code: string 
             : undefined
         }
       >
-        <ToolbarFilter label="Show">
+        <ToolbarFilter label="Show" active={only !== "all"}>
           <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
             <option value="all">Every unit</option>
             <option value="sold">Sold basis</option>

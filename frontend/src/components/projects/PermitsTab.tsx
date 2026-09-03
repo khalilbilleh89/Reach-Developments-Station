@@ -424,7 +424,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               : undefined
           }
         >
-          <ToolbarFilter label="Show">
+          <ToolbarFilter label="Show" active={filter !== ""}>
             <select className="input" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
               <option value="">All permits</option>
               <option value="blocking">Blocking only</option>
@@ -432,7 +432,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
               <option value="overdue">Late or expired only</option>
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Status">
+          <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Any status</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => (

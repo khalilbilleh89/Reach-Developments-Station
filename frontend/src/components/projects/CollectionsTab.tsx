@@ -195,7 +195,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
               onChange={(event) => setAsOf(event.target.value || todayISO())}
             />
           </ToolbarFilter>
-          <ToolbarFilter label="Status">
+          <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">Any status</option>
               {["current", "partially_paid", "overdue", "disputed", "cleared", "cancelled"].map((value) => (
@@ -205,7 +205,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Age">
+          <ToolbarFilter label="Age" active={bucket !== ""}>
             <select className="input" value={bucket} onChange={(event) => setBucket(event.target.value)}>
               <option value="">Any age</option>
               {AGING_BUCKETS.map((value) => (
@@ -215,7 +215,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Only show">
+          <ToolbarFilter label="Only show" active={only !== ""}>
             <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
               <option value="">Everything</option>
               <option value="overdue">Overdue only</option>
