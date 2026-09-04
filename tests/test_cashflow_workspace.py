@@ -189,7 +189,7 @@ class TestUnavailableFiguresAreSaidAndNotInvented:
         for path in workspace_sources():
             source = read(path)
             if 'status === "failed"' in source:
-                assert "Notice tone=\"error\"" in source, (
+                assert 'Notice tone="error"' in source, (
                     f"{path.name} handles a failure without saying so in words"
                 )
 
