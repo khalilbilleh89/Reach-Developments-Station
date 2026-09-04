@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, paymentPlans } from "@/lib/api";
-import type { PaymentPlanDetail, PlanInstallment, PlanVersionDetail } from "@/lib/api";
+import { ApiError, construction, paymentPlans } from "@/lib/api";
+import type {
+  MilestoneTriggerOption,
+  PaymentPlanDetail,
+  PlanInstallment,
+  PlanVersionDetail,
+} from "@/lib/api";
 import {
   Badge,
   Button,
@@ -26,7 +31,12 @@ import {
 } from "@/components/ui";
 import type { DrawerFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, fractionFromPercent, money, todayISO } from "@/lib/format";
+import {
+  businessDate,
+  fractionFromPercent,
+  money,
+  todayISO,
+} from "@/lib/format";
 import { ReconciliationStrip } from "@/components/projects/payments/ReconciliationStrip";
 import {
   ScheduleEditor,
@@ -117,12 +127,22 @@ export function PlanBuilder({
   const [attesting, setAttesting] = useState<PlanInstallment | null>(null);
   const [attestation, setAttestation] = useState(emptyAttestation());
   const [revising, setRevising] = useState(false);
-  const [revision, setRevision] = useState({ change_reason: "", effective_date: "" });
+  const [revision, setRevision] = useState({
+    change_reason: "",
+    effective_date: "",
+  });
   // Which version the drawer is showing. Null means the one being prepared;
   // any other id selects a version to read. Selecting one changes nothing on
   // the server — it is a choice of which immutable record to look at.
   const [showing, setShowing] = useState<string | null>(null);
   const [historical, setHistorical] = useState<PlanVersionDetail | null>(null);
+  // The construction milestones an instalment may wait on, or null where this
+  // caller cannot read them. A failure here is not an error the preparer needs
+  // to see — it means the milestone trigger falls back to a typed reference,
+  // which is what this screen did before construction existed.
+  const [milestones, setMilestones] = useState<MilestoneTriggerOption[] | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,7 +162,11 @@ export function PlanBuilder({
       }
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load the payment plan.");
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not load the payment plan.",
+      );
     }
   }, [projectId, planId]);
 
@@ -152,17 +176,35 @@ export function PlanBuilder({
     })();
   }, [load]);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        setMilestones(await construction.milestoneTriggerOptions(projectId));
+      } catch {
+        setMilestones(null);
+      }
+    })();
+  }, [projectId]);
+
   // A version that is neither in preparation nor governing is read on demand.
   // The plan response already carries those two in full, so the only request
   // ever made here is for history somebody deliberately opened.
   useEffect(() => {
     if (showing === null || detail === null) return;
-    if (showing === detail.current?.version.id || showing === detail.active?.version.id) return;
+    if (
+      showing === detail.current?.version.id ||
+      showing === detail.active?.version.id
+    )
+      return;
     void (async () => {
       try {
         setHistorical(await paymentPlans.version(projectId, planId, showing));
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : "Could not load that version.");
+        setError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not load that version.",
+        );
       }
     })();
   }, [showing, detail, projectId, planId]);
@@ -178,7 +220,9 @@ export function PlanBuilder({
       await load();
       await onChanged();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "That did not work.");
+      setError(
+        caught instanceof ApiError ? caught.message : "That did not work.",
+      );
     } finally {
       setBusy(false);
     }
@@ -200,7 +244,9 @@ export function PlanBuilder({
 
   const change = (key: string, field: keyof DraftRow, value: string) => {
     setRows((current) =>
-      current.map((row) => (row.key === key ? { ...row, [field]: value } : row)),
+      current.map((row) =>
+        row.key === key ? { ...row, [field]: value } : row,
+      ),
     );
   };
 
@@ -212,7 +258,8 @@ export function PlanBuilder({
     );
   };
 
-  const addRow = () => setRows((current) => [...current, emptyRow(current.length + 1)]);
+  const addRow = () =>
+    setRows((current) => [...current, emptyRow(current.length + 1)]);
 
   const addSeries = async () => {
     setBusy(true);
@@ -234,9 +281,15 @@ export function PlanBuilder({
         })),
       ]);
       setSeriesOpen(false);
-      setNotice(`${preview.rows.length} dates added. Set what each one is worth, then save.`);
+      setNotice(
+        `${preview.rows.length} dates added. Set what each one is worth, then save.`,
+      );
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not propose those dates.");
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not propose those dates.",
+      );
     } finally {
       setBusy(false);
     }
@@ -252,18 +305,31 @@ export function PlanBuilder({
             sequence: row.sequence,
             label: row.label,
             trigger_type: row.trigger_type,
-            ...(row.trigger_reference ? { trigger_reference: row.trigger_reference } : {}),
-            ...(row.offset_days ? { offset_days: Number(row.offset_days) } : {}),
+            ...(row.trigger_reference
+              ? { trigger_reference: row.trigger_reference }
+              : {}),
+            ...(row.offset_days
+              ? { offset_days: Number(row.offset_days) }
+              : {}),
             ...(row.contractual_due_date
               ? { contractual_due_date: row.contractual_due_date }
               : {}),
-            ...(row.forecast_due_date ? { forecast_due_date: row.forecast_due_date } : {}),
+            ...(row.forecast_due_date
+              ? { forecast_due_date: row.forecast_due_date }
+              : {}),
             grace_days: Number(row.grace_days || "0"),
             ...(allocationMode === "percentage"
-              ? { principal_fraction: fractionFromPercent(row.principal_fraction) }
+              ? {
+                  principal_fraction: fractionFromPercent(
+                    row.principal_fraction,
+                  ),
+                }
               : { principal_amount: row.principal_amount }),
             ...(chargeMode === "manual"
-              ? { tax_amount: row.tax_amount || "0.00", fee_amount: row.fee_amount || "0.00" }
+              ? {
+                  tax_amount: row.tax_amount || "0.00",
+                  fee_amount: row.fee_amount || "0.00",
+                }
               : {}),
           })),
         }),
@@ -280,7 +346,11 @@ export function PlanBuilder({
   }
   if (detail === null) {
     return (
-      <Drawer eyebrow="Payment plan" title="Loading the payment plan…" onClose={onClose}>
+      <Drawer
+        eyebrow="Payment plan"
+        title="Loading the payment plan…"
+        onClose={onClose}
+      >
         <Loading label="Loading the payment plan…" shape="page" />
       </Drawer>
     );
@@ -291,7 +361,9 @@ export function PlanBuilder({
   // Two versions can be true at once: the one being prepared and the one the
   // buyer is actually being held to. They are the same most of the time, and
   // during a revision — which can run for weeks — they are not.
-  const revisionOpen = Boolean(current && active && current.version.id !== active.version.id);
+  const revisionOpen = Boolean(
+    current && active && current.version.id !== active.version.id,
+  );
   // A previously fetched version is only used when it is the one asked for,
   // so no stale schedule can be shown while the next one is on its way — which
   // is also why the effect above never has to clear it.
@@ -304,8 +376,12 @@ export function PlanBuilder({
           ? historical
           : null;
   const version = shownDetail?.version ?? null;
-  const isCurrent = Boolean(version && current && version.id === current.version.id);
-  const isActive = Boolean(version && active && version.id === active.version.id);
+  const isCurrent = Boolean(
+    version && current && version.id === current.version.id,
+  );
+  const isActive = Boolean(
+    version && active && version.id === active.version.id,
+  );
   const isHistory = Boolean(version && !isCurrent && !isActive);
   // Only the version in preparation is editable, and only while it is a draft.
   const isDraft = isCurrent && version?.status === "draft";
@@ -334,8 +410,14 @@ export function PlanBuilder({
   // The figures every reader opens a plan for. All four are the version's own
   // frozen basis and the server's reconciliation of the schedule against it.
   const facts: DrawerFact[] = [
-    { label: "Contract principal", value: money(version?.contract_value_covered ?? null, code) },
-    { label: "Total buyer payable", value: money(version?.total_buyer_payable_snapshot ?? null, code) },
+    {
+      label: "Contract principal",
+      value: money(version?.contract_value_covered ?? null, code),
+    },
+    {
+      label: "Total buyer payable",
+      value: money(version?.total_buyer_payable_snapshot ?? null, code),
+    },
     {
       label: "Instalments",
       value: shownDetail ? shownDetail.reconciliation.installment_count : "—",
@@ -365,7 +447,9 @@ export function PlanBuilder({
               v{active.version.version_number} governs this sale
             </Badge>
           ) : null}
-          {collectionsStarted ? <Badge tone="info">Collections started</Badge> : null}
+          {collectionsStarted ? (
+            <Badge tone="info">Collections started</Badge>
+          ) : null}
         </>
       }
       facts={facts}
@@ -385,7 +469,11 @@ export function PlanBuilder({
                 title="Two schedules"
                 description="One is being prepared. The other is the one this buyer is being held to until the revision is activated."
               />
-              <div className="version-switch" role="group" aria-label="Which version to show">
+              <div
+                className="version-switch"
+                role="group"
+                aria-label="Which version to show"
+              >
                 <Button
                   variant={isCurrent ? "primary" : "quiet"}
                   aria-pressed={isCurrent}
@@ -399,22 +487,24 @@ export function PlanBuilder({
                   aria-pressed={isActive}
                   onClick={() => setShowing(active.version.id)}
                 >
-                  Standing schedule · v{active.version.version_number} · Governs this sale
+                  Standing schedule · v{active.version.version_number} · Governs
+                  this sale
                 </Button>
               </div>
               <p className="footnote">
-                Opening a revision does not change what the buyer owes. Instalments on the
-                standing schedule keep falling due, and attestations against it can still be
-                made and decided, until the revision is activated.
+                Opening a revision does not change what the buyer owes.
+                Instalments on the standing schedule keep falling due, and
+                attestations against it can still be made and decided, until the
+                revision is activated.
               </p>
             </section>
           ) : null}
 
           {isHistory ? (
             <Notice tone="info">
-              Reading version {version.version_number} as it stands. Nothing here can be
-              changed — a superseded schedule is the record of what governed, and it is kept
-              exactly as it was.{" "}
+              Reading version {version.version_number} as it stands. Nothing
+              here can be changed — a superseded schedule is the record of what
+              governed, and it is kept exactly as it was.{" "}
               <button
                 className="button-link"
                 type="button"
@@ -443,19 +533,22 @@ export function PlanBuilder({
                 state:
                   key === version.status
                     ? "current"
-                    : VERSION_SEQUENCE.indexOf(key) < VERSION_SEQUENCE.indexOf(version.status)
+                    : VERSION_SEQUENCE.indexOf(key) <
+                        VERSION_SEQUENCE.indexOf(version.status)
                       ? "done"
                       : "pending",
               }))}
             />
             {version.status === "rejected" ? (
               <Notice tone="error">
-                Refused: {version.rejection_reason}. Create a new version to revise the terms.
+                Refused: {version.rejection_reason}. Create a new version to
+                revise the terms.
               </Notice>
             ) : null}
             {version.status === "superseded" ? (
               <Notice tone="info">
-                Superseded. This is the schedule that governed the sale until it was replaced.
+                Superseded. This is the schedule that governed the sale until it
+                was replaced.
               </Notice>
             ) : null}
           </section>
@@ -485,7 +578,10 @@ export function PlanBuilder({
                     <Button small onClick={addRow}>
                       Add instalment
                     </Button>
-                    <Button small onClick={() => setSeriesOpen((open) => !open)}>
+                    <Button
+                      small
+                      onClick={() => setSeriesOpen((open) => !open)}
+                    >
                       {seriesOpen ? "Cancel series" : "Add a series"}
                     </Button>
                   </>
@@ -496,8 +592,8 @@ export function PlanBuilder({
             {isDraft && canPrepare && seriesOpen ? (
               <SubPanel title="Add a recurring series">
                 <p className="section-description">
-                  Proposes the dates only. What each instalment is worth stays with the
-                  allocation mode below.
+                  Proposes the dates only. What each instalment is worth stays
+                  with the allocation mode below.
                 </p>
                 <FieldRow columns={4}>
                   <Field label="Frequency">
@@ -518,7 +614,10 @@ export function PlanBuilder({
                       type="date"
                       value={series.first_due_date}
                       onChange={(event) =>
-                        setSeries({ ...series, first_due_date: event.target.value })
+                        setSeries({
+                          ...series,
+                          first_due_date: event.target.value,
+                        })
                       }
                     />
                   </Field>
@@ -527,7 +626,9 @@ export function PlanBuilder({
                       className="input"
                       inputMode="numeric"
                       value={series.count}
-                      onChange={(event) => setSeries({ ...series, count: event.target.value })}
+                      onChange={(event) =>
+                        setSeries({ ...series, count: event.target.value })
+                      }
                     />
                   </Field>
                   <Field label="Label prefix">
@@ -535,7 +636,10 @@ export function PlanBuilder({
                       className="input"
                       value={series.label_prefix}
                       onChange={(event) =>
-                        setSeries({ ...series, label_prefix: event.target.value })
+                        setSeries({
+                          ...series,
+                          label_prefix: event.target.value,
+                        })
                       }
                     />
                   </Field>
@@ -562,10 +666,16 @@ export function PlanBuilder({
                     <select
                       className="input"
                       value={allocationMode}
-                      onChange={(event) => setAllocationMode(event.target.value)}
+                      onChange={(event) =>
+                        setAllocationMode(event.target.value)
+                      }
                     >
-                      <option value="percentage">{allocationLabel("percentage")}</option>
-                      <option value="amount">{allocationLabel("amount")}</option>
+                      <option value="percentage">
+                        {allocationLabel("percentage")}
+                      </option>
+                      <option value="amount">
+                        {allocationLabel("amount")}
+                      </option>
                     </select>
                   </Field>
                   <Field label="Tax and buyer fees">
@@ -574,7 +684,9 @@ export function PlanBuilder({
                       value={chargeMode}
                       onChange={(event) => setChargeMode(event.target.value)}
                     >
-                      <option value="pro_rata">{chargeLabel("pro_rata")}</option>
+                      <option value="pro_rata">
+                        {chargeLabel("pro_rata")}
+                      </option>
                       <option value="manual">{chargeLabel("manual")}</option>
                     </select>
                   </Field>
@@ -595,6 +707,7 @@ export function PlanBuilder({
                     allocationMode={allocationMode}
                     chargeMode={chargeMode}
                     currencyId={detail.currency_id}
+                    milestones={milestones}
                     onChange={change}
                     onRemove={remove}
                   />
@@ -610,7 +723,10 @@ export function PlanBuilder({
                 </FormActions>
               </>
             ) : shownDetail.installments.length === 0 ? (
-              <EmptyState title="No instalments" hint="This version has no schedule." />
+              <EmptyState
+                title="No instalments"
+                hint="This version has no schedule."
+              />
             ) : (
               <ScheduleTable
                 installments={shownDetail.installments}
@@ -628,7 +744,12 @@ export function PlanBuilder({
                   disabled={busy || !shownDetail.reconciliation.is_reconciled}
                   onClick={() =>
                     void run(
-                      () => paymentPlans.submitVersion(projectId, planId, version.id),
+                      () =>
+                        paymentPlans.submitVersion(
+                          projectId,
+                          planId,
+                          version.id,
+                        ),
                       "Put forward for approval.",
                     )
                   }
@@ -649,7 +770,12 @@ export function PlanBuilder({
                           confirmLabel: "Approve",
                         },
                         (reason) =>
-                          paymentPlans.approveVersion(projectId, planId, version.id, reason),
+                          paymentPlans.approveVersion(
+                            projectId,
+                            planId,
+                            version.id,
+                            reason,
+                          ),
                         "Approved. Activate it to make it the governing schedule.",
                       )
                     }
@@ -667,7 +793,12 @@ export function PlanBuilder({
                           confirmLabel: "Refuse",
                         },
                         (reason) =>
-                          paymentPlans.rejectVersion(projectId, planId, version.id, reason),
+                          paymentPlans.rejectVersion(
+                            projectId,
+                            planId,
+                            version.id,
+                            reason,
+                          ),
                         "Refused. A revision is a new version.",
                       )
                     }
@@ -676,13 +807,21 @@ export function PlanBuilder({
                   </Button>
                 </>
               ) : null}
-              {canApprove && isCurrent && version.status === "approved" && !collectionsStarted ? (
+              {canApprove &&
+              isCurrent &&
+              version.status === "approved" &&
+              !collectionsStarted ? (
                 <Button
                   variant="primary"
                   disabled={busy}
                   onClick={() =>
                     void run(
-                      () => paymentPlans.activateVersion(projectId, planId, version.id),
+                      () =>
+                        paymentPlans.activateVersion(
+                          projectId,
+                          planId,
+                          version.id,
+                        ),
                       "Active. This is now the schedule governing the sale.",
                     )
                   }
@@ -690,11 +829,14 @@ export function PlanBuilder({
                   Activate
                 </Button>
               ) : null}
-              {isCurrent && version.status === "approved" && collectionsStarted ? (
+              {isCurrent &&
+              version.status === "approved" &&
+              collectionsStarted ? (
                 <Notice tone="info">
-                  This plan has confirmed collection activity, so the schedule cannot be swapped
-                  out from here. Apply it through a Collections restructure, which carries the
-                  cash already received onto the new instalments in the same transaction.
+                  This plan has confirmed collection activity, so the schedule
+                  cannot be swapped out from here. Apply it through a
+                  Collections restructure, which carries the cash already
+                  received onto the new instalments in the same transaction.
                 </Notice>
               ) : null}
               {canPrepare && isActive ? (
@@ -703,7 +845,10 @@ export function PlanBuilder({
                     <Button
                       disabled={busy}
                       onClick={() => {
-                        setRevision({ change_reason: "", effective_date: todayISO() });
+                        setRevision({
+                          change_reason: "",
+                          effective_date: todayISO(),
+                        });
                         setRevising(true);
                       }}
                     >
@@ -714,7 +859,10 @@ export function PlanBuilder({
                     disabled={busy}
                     onClick={() =>
                       void run(async () => {
-                        const result = await paymentPlans.refreshTriggers(projectId, planId);
+                        const result = await paymentPlans.refreshTriggers(
+                          projectId,
+                          planId,
+                        );
                         setNotice(
                           `${result.triggered.length} instalment(s) triggered; ` +
                             `${result.still_awaiting.length} still awaiting.`,
@@ -729,7 +877,8 @@ export function PlanBuilder({
             </ButtonRow>
             {isDraft && !shownDetail.reconciliation.is_reconciled ? (
               <p className="footnote">
-                A schedule can only be put forward once it covers the contract exactly.
+                A schedule can only be put forward once it covers the contract
+                exactly.
               </p>
             ) : null}
           </section>
@@ -747,7 +896,12 @@ export function PlanBuilder({
               }}
               onApprove={(eventId) =>
                 void run(
-                  () => paymentPlans.approveManualTrigger(projectId, planId, eventId),
+                  () =>
+                    paymentPlans.approveManualTrigger(
+                      projectId,
+                      planId,
+                      eventId,
+                    ),
                   "Attestation approved. The instalment is now due.",
                 )
               }
@@ -759,7 +913,13 @@ export function PlanBuilder({
                     hint: "The attestation stays on the record. The instalment goes back to waiting.",
                     confirmLabel: "Withdraw",
                   },
-                  (reason) => paymentPlans.reverseManualTrigger(projectId, planId, eventId, reason),
+                  (reason) =>
+                    paymentPlans.reverseManualTrigger(
+                      projectId,
+                      planId,
+                      eventId,
+                      reason,
+                    ),
                   "Withdrawn. The instalment is waiting on its trigger again.",
                 )
               }
@@ -770,7 +930,10 @@ export function PlanBuilder({
 
       {section === "schedule" && !shownDetail ? (
         showing === null ? (
-          <EmptyState title="No version" hint="This plan has no schedule yet." />
+          <EmptyState
+            title="No version"
+            hint="This plan has no schedule yet."
+          />
         ) : (
           <Loading label="Loading that version…" shape="rows" rows={4} />
         )
@@ -783,29 +946,55 @@ export function PlanBuilder({
             description="Frozen from the contract when this version was created. Never recomputed."
           />
           <KeyValueGrid columns={3}>
-            <KeyValue label="Contract principal" mono value={money(version.contract_value_covered, code)} />
-            <KeyValue label="Tax" mono value={money(version.tax_total_snapshot, code)} />
-            <KeyValue label="Buyer fees" mono value={money(version.buyer_fee_total_snapshot, code)} />
+            <KeyValue
+              label="Contract principal"
+              mono
+              value={money(version.contract_value_covered, code)}
+            />
+            <KeyValue
+              label="Tax"
+              mono
+              value={money(version.tax_total_snapshot, code)}
+            />
+            <KeyValue
+              label="Buyer fees"
+              mono
+              value={money(version.buyer_fee_total_snapshot, code)}
+            />
             <KeyValue
               label="Total buyer payable"
               mono
               value={money(version.total_buyer_payable_snapshot, code)}
             />
-            <KeyValue label="Allocation" value={allocationLabel(version.allocation_mode)} />
-            <KeyValue label="Tax and fees" value={chargeLabel(version.charge_allocation_mode)} />
+            <KeyValue
+              label="Allocation"
+              value={allocationLabel(version.allocation_mode)}
+            />
+            <KeyValue
+              label="Tax and fees"
+              value={chargeLabel(version.charge_allocation_mode)}
+            />
             <KeyValue
               label="Reservation"
               value={reservationTreatmentLabel(version.reservation_treatment)}
             />
             <KeyValue label="Origin" value={originLabel(version.origin_type)} />
-            <KeyValue label="Takes effect" mono value={businessDate(version.effective_date)} />
+            <KeyValue
+              label="Takes effect"
+              mono
+              value={businessDate(version.effective_date)}
+            />
             <KeyValue label="SPA" mono value={detail.spa_number} />
-            <KeyValue label="Sale status" value={detail.sale_status.replace("_", " ")} />
+            <KeyValue
+              label="Sale status"
+              value={detail.sale_status.replace("_", " ")}
+            />
             <KeyValue label="Change reason" value={version.change_reason} />
           </KeyValueGrid>
           <p className="footnote">
-            A confirmed deposit or first-payment gate on the contract attests that evidence
-            exists. It is not a receipt, and it is never subtracted from this schedule.
+            A confirmed deposit or first-payment gate on the contract attests
+            that evidence exists. It is not a receipt, and it is never
+            subtracted from this schedule.
           </p>
         </section>
       ) : null}
@@ -835,9 +1024,13 @@ export function PlanBuilder({
                     v{entry.version_number}
                   </th>
                   <td>
-                    <Badge tone={versionTone(entry.status)}>{versionLabel(entry.status)}</Badge>
+                    <Badge tone={versionTone(entry.status)}>
+                      {versionLabel(entry.status)}
+                    </Badge>
                   </td>
-                  <td className="figure">{businessDate(entry.effective_date)}</td>
+                  <td className="figure">
+                    {businessDate(entry.effective_date)}
+                  </td>
                   <td>
                     {entry.id === detail.active?.version.id
                       ? "Governs this sale"
@@ -862,8 +1055,9 @@ export function PlanBuilder({
             </tbody>
           </TableScroll>
           <p className="footnote">
-            Nothing is overwritten. A superseded schedule stays readable exactly as it governed,
-            and opening one changes nothing about which schedule the sale runs on.
+            Nothing is overwritten. A superseded schedule stays readable exactly
+            as it governed, and opening one changes nothing about which schedule
+            the sale runs on.
           </p>
         </section>
       ) : null}
@@ -906,26 +1100,40 @@ export function PlanBuilder({
               max={todayISO()}
               value={attestation.event_date}
               onChange={(event) =>
-                setAttestation({ ...attestation, event_date: event.target.value })
+                setAttestation({
+                  ...attestation,
+                  event_date: event.target.value,
+                })
               }
             />
           </Field>
-          <Field label="Evidence reference" hint="The document or record that proves it.">
+          <Field
+            label="Evidence reference"
+            hint="The document or record that proves it."
+          >
             <input
               className="input"
               required
               value={attestation.evidence_reference}
               onChange={(event) =>
-                setAttestation({ ...attestation, evidence_reference: event.target.value })
+                setAttestation({
+                  ...attestation,
+                  evidence_reference: event.target.value,
+                })
               }
             />
           </Field>
-          <Field label="Reason" hint="What an approver needs to know to sanction this.">
+          <Field
+            label="Reason"
+            hint="What an approver needs to know to sanction this."
+          >
             <input
               className="input"
               required
               value={attestation.reason}
-              onChange={(event) => setAttestation({ ...attestation, reason: event.target.value })}
+              onChange={(event) =>
+                setAttestation({ ...attestation, reason: event.target.value })
+              }
             />
           </Field>
         </FormDialog>
@@ -1028,7 +1236,8 @@ function ContingentSection({
   onReverse: (eventId: string) => void;
 }) {
   const contingent = installments.filter(
-    (row) => !DATE_TRIGGERS.has(row.trigger_type) || row.trigger_events.length > 0,
+    (row) =>
+      !DATE_TRIGGERS.has(row.trigger_type) || row.trigger_events.length > 0,
   );
   if (contingent.length === 0) return null;
 
@@ -1043,15 +1252,21 @@ function ContingentSection({
         }
       />
       {contingent.map((row) => {
-        const standing = row.trigger_events.find((event) => event.status === "submitted");
+        const standing = row.trigger_events.find(
+          (event) => event.status === "submitted",
+        );
         return (
           <div key={row.id} className="contingent-row">
             <div className="contingent-head">
               <span className="chip-label">#{row.sequence}</span>
               <strong>{row.label}</strong>
-              <span className="chip-label">{triggerLabel(row.trigger_type)}</span>
+              <span className="chip-label">
+                {triggerLabel(row.trigger_type)}
+              </span>
               {row.trigger_status === "triggered" ? (
-                <Badge tone="success">Due {businessDate(row.actual_due_date)}</Badge>
+                <Badge tone="success">
+                  Due {businessDate(row.actual_due_date)}
+                </Badge>
               ) : (
                 <Badge tone="warning">Awaiting its trigger</Badge>
               )}
@@ -1062,7 +1277,12 @@ function ContingentSection({
               canPrepare &&
               !standing &&
               row.trigger_status !== "triggered" ? (
-                <Button small variant="quiet" disabled={busy} onClick={() => onAttest(row)}>
+                <Button
+                  small
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => onAttest(row)}
+                >
                   Attest
                 </Button>
               ) : null}
@@ -1082,12 +1302,16 @@ function ContingentSection({
                   {ATTESTATION_LABELS[event.status] ?? event.status}
                 </Badge>
                 <span className="chip-label">Occurred</span>
-                <strong className="mono nowrap">{businessDate(event.event_date)}</strong>
+                <strong className="mono nowrap">
+                  {businessDate(event.event_date)}
+                </strong>
                 <span className="chip-label">Evidence</span>
                 <strong className="mono">{event.evidence_reference}</strong>
                 <p className="attestation-reason">{event.reason}</p>
                 {event.status === "reversed" && event.reversal_reason ? (
-                  <p className="attestation-reason">Withdrawn: {event.reversal_reason}</p>
+                  <p className="attestation-reason">
+                    Withdrawn: {event.reversal_reason}
+                  </p>
                 ) : null}
                 {canApprove && event.status === "submitted" ? (
                   <Button
@@ -1117,13 +1341,14 @@ function ContingentSection({
             row.trigger_events.length === 0 &&
             !canPrepare ? (
               <p className="footnote">
-                Collections attests that this event occurred; an Approver / CFO sanctions it.
+                Collections attests that this event occurred; an Approver / CFO
+                sanctions it.
               </p>
             ) : null}
             {governing && standing && !canApprove ? (
               <p className="footnote">
-                Submitted, and waiting on an Approver / CFO. Nothing is due until they sanction
-                it.
+                Submitted, and waiting on an Approver / CFO. Nothing is due
+                until they sanction it.
               </p>
             ) : null}
           </div>
@@ -1131,9 +1356,10 @@ function ContingentSection({
       })}
       {governing ? (
         <p className="footnote">
-          A construction milestone becomes due when construction certifies it, which this system
-          does not yet record. Handover and title transfer resolve from the sale itself — use
-          Refresh triggers once the event has happened.
+          A construction milestone becomes due when construction certifies it,
+          which this system does not yet record. Handover and title transfer
+          resolve from the sale itself — use Refresh triggers once the event has
+          happened.
         </p>
       ) : null}
     </section>

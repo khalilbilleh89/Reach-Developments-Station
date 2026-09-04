@@ -43,6 +43,8 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
+from app.modules.construction import service as construction_service
+from app.modules.construction.models import ForecastVersion as ConstructionForecastVersion
 from app.modules.inventory.custom_fields import business_today
 from app.modules.inventory.models import (
     AREA_SCHEDULE_APPROVED,
@@ -103,6 +105,7 @@ from app.modules.unit_economics.models import (
     SCOPE_BUILDING,
     SCOPE_PHASE,
     SCOPE_PROJECT,
+    SOURCE_CONSTRUCTION_FORECAST,
     SOURCE_MANUAL,
     SOURCE_PROJECT_LAND,
     UNIT_COST_CLASS_OF,
@@ -311,6 +314,190 @@ def project_land_total(session: Session, *, project_id: uuid.UUID) -> Decimal:
         ).where(LandParcel.project_id == project_id, LandParcel.is_active.is_(True))
     )
     return money(Decimal(total or 0))
+
+
+# --------------------------------------------------------------------------- #
+# Construction hard cost, the other derived pool amount
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True, slots=True)
+class ConstructionHardCost:
+    """What an active construction forecast says the project's hard cost will be."""
+
+    forecast_version_id: uuid.UUID
+    currency_id: uuid.UUID
+    estimate_at_completion: Decimal
+
+
+def construction_hard_cost(
+    session: Session, *, project_id: uuid.UUID
+) -> ConstructionHardCost | None:
+    """The construction forecast's hard-cost estimate at completion, and its id.
+
+    Read through construction's named public contract, in one direction only.
+    This module consumes an estimate; it never reaches into a forecast line, and
+    construction never writes a cost pool. That asymmetry is what keeps the two
+    governance ladders separate — a forecast is approved by construction people
+    for construction reasons, a cost basis by Finance for allocation reasons,
+    and neither approval should silently carry the other.
+
+    The identifier comes back with the amount because a pool has to record which
+    forecast it came from. Without that, "the hard cost changed" and "a different
+    forecast is in force" are the same observation, and only one of them is a
+    reason to rebuild a basis.
+
+    The currency comes back for the same kind of reason. Both modules pin
+    themselves to the project's base currency today, so the check the caller
+    makes with it can never fail — which is the point. It is the assertion that
+    fails first, loudly, on the day either module admits a second denomination,
+    rather than the sum that quietly adds an amount in one currency to amounts
+    in another.
+
+    ``None`` where no forecast is active. Deliberately not zero: a project whose
+    construction team has not yet published a forecast has an *unknown* hard
+    cost, and a basis built on a known zero would allocate nothing and reconcile
+    perfectly while doing it.
+    """
+    answer = construction_service.hard_cost_estimate_at_completion(session, project_id=project_id)
+    if answer is None:
+        return None
+    version, amount = answer
+    return ConstructionHardCost(
+        forecast_version_id=version.id,
+        currency_id=version.currency_id,
+        estimate_at_completion=amount,
+    )
+
+
+def _construction_pool_amount(
+    session: Session, *, project_id: uuid.UUID, currency_id: uuid.UUID
+) -> tuple[uuid.UUID, Decimal]:
+    """The same figure, refusing rather than returning ``None``, and denominated."""
+    answer = construction_hard_cost(session, project_id=project_id)
+    if answer is None:
+        raise ConflictError(
+            "This project has no active construction forecast, so there is no "
+            "hard-cost estimate to allocate. Activate a forecast first."
+        )
+    if answer.currency_id != currency_id:
+        raise ConflictError(
+            "The construction forecast is stated in a different currency from "
+            "this cost basis. There is no exchange rate in this platform, so "
+            "the estimate cannot be allocated here."
+        )
+    return answer.forecast_version_id, answer.estimate_at_completion
+
+
+def _require_canonical_construction_shape(
+    session: Session,
+    *,
+    version_id: uuid.UUID,
+    source_kind: str,
+    category: str,
+    scope_kind: str,
+    excluding_pool_id: uuid.UUID | None = None,
+) -> None:
+    """Hard cost comes from the forecast, once, for the whole project.
+
+    The same refusals as land, for the same reasons, against a different source.
+
+    **It is the hard category.** The estimate at completion is construction
+    work. Labelling it soft or contingency would put it in a category whose
+    total finance reads as something else, and PR-MVP-08 already requires a hard
+    pool for a complete basis — one that is secretly the forecast is worse than
+    none.
+
+    **It is project-wide.** The forecast is a project total. Scoping it to a
+    phase would assert a phase-level split of construction cost that no forecast
+    line supports; cost codes carry no phase attribution, so the split would be
+    invented here.
+
+    **There is one of them per version.** Two construction pools each draw the
+    entire estimate at completion, so a project forecasting 40,000,000 allocates
+    80,000,000 — and both pools reconcile exactly, which is precisely what makes
+    it undetectable downstream.
+
+    **Hard cost has one source.** The fourth refusal has no land equivalent,
+    because nothing competes with the land register. The forecast's estimate at
+    completion is the *whole* project's hard cost, not the part somebody has not
+    typed in yet, so a manual hard pool standing beside it double-counts
+    whatever both describe — and, again, both reconcile. Finance keeps typing
+    hard cost or draws the forecast; it cannot do half of each and call the
+    total a cost basis.
+    """
+    if source_kind == SOURCE_CONSTRUCTION_FORECAST:
+        if category != CATEGORY_HARD:
+            raise ValidationError(
+                "A construction-sourced pool carries the project's hard cost. It "
+                "cannot be recorded under another category."
+            )
+        if scope_kind != SCOPE_PROJECT:
+            raise ValidationError(
+                "The construction forecast is a project total. There is no "
+                "phase-level forecast to scope it by, and assigning the whole "
+                "estimate at completion to one phase would assert a split that "
+                "nobody decided."
+            )
+    _require_single_hard_source(
+        session,
+        version_id=version_id,
+        source_kind=source_kind,
+        category=category,
+        excluding_pool_id=excluding_pool_id,
+    )
+
+
+def _require_single_hard_source(
+    session: Session,
+    *,
+    version_id: uuid.UUID,
+    source_kind: str,
+    category: str,
+    excluding_pool_id: uuid.UUID | None,
+) -> None:
+    """Refuse a second construction pool, and a manual hard pool beside one."""
+    if category != CATEGORY_HARD:
+        return
+    others = select(CostPool).where(
+        CostPool.allocation_version_id == version_id, CostPool.category == CATEGORY_HARD
+    )
+    if excluding_pool_id is not None:
+        others = others.where(CostPool.id != excluding_pool_id)
+    existing = list(session.scalars(others))
+
+    if source_kind == SOURCE_CONSTRUCTION_FORECAST:
+        if any(pool.source_kind == SOURCE_CONSTRUCTION_FORECAST for pool in existing):
+            raise ConflictError(
+                "This cost basis already draws the construction forecast. A "
+                "second construction pool would allocate the same estimate at "
+                "completion twice, and both would reconcile."
+            )
+        manual = sorted(
+            pool.pool_number
+            for pool in existing
+            if pool.source_kind != SOURCE_CONSTRUCTION_FORECAST
+        )
+        if manual:
+            raise ConflictError(
+                "This cost basis already records hard cost by hand, under "
+                + ", ".join(manual)
+                + ". The construction forecast is the whole project's hard cost, "
+                "so drawing it as well would count the same construction twice. "
+                "Remove the typed hard pools first."
+            )
+        return
+
+    drawn = sorted(
+        pool.pool_number for pool in existing if pool.source_kind == SOURCE_CONSTRUCTION_FORECAST
+    )
+    if drawn:
+        raise ConflictError(
+            "This cost basis takes its hard cost from the construction forecast, "
+            "under " + ", ".join(drawn) + ". A typed hard pool beside it would "
+            "count construction the forecast already covers. Remove the "
+            "construction pool first if hard cost should be entered by hand."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -784,15 +971,31 @@ def _require_canonical_land_shape(
 
 
 def _resolve_pool_amount(
-    session: Session, *, project_id: uuid.UUID, source_kind: str, amount: Decimal | None
-) -> Decimal:
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    currency_id: uuid.UUID,
+    source_kind: str,
+    amount: Decimal | None,
+) -> tuple[Decimal, uuid.UUID | None]:
+    """The amount to store, and the forecast it came from where there is one.
+
+    A derived pool ignores whatever amount was sent. Accepting one "as a
+    default" would let a typed figure survive in the column that is supposed to
+    be canonical, and nothing later in the flow could tell the two apart.
+    """
     if source_kind == SOURCE_PROJECT_LAND:
-        return project_land_total(session, project_id=project_id)
+        return project_land_total(session, project_id=project_id), None
+    if source_kind == SOURCE_CONSTRUCTION_FORECAST:
+        forecast_id, estimate = _construction_pool_amount(
+            session, project_id=project_id, currency_id=currency_id
+        )
+        return estimate, forecast_id
     if amount is None:
         raise ValidationError("A manual cost pool needs an amount.")
     if amount < 0:
         raise ValidationError("A cost pool amount cannot be negative.")
-    return money(amount)
+    return money(amount), None
 
 
 def add_pool(
@@ -837,6 +1040,13 @@ def add_pool(
         source_kind=source_kind,
         scope_kind=scope_kind,
     )
+    _require_canonical_construction_shape(
+        session,
+        version_id=version.id,
+        source_kind=source_kind,
+        category=category,
+        scope_kind=scope_kind,
+    )
     if category == CATEGORY_FINANCE and version.finance_treatment == FINANCE_EXCLUDED:
         raise ConflictError(
             "This cost basis records finance cost as excluded, so it cannot carry "
@@ -854,6 +1064,13 @@ def add_pool(
         building_id=building_id,
     )
 
+    resolved, forecast_version_id = _resolve_pool_amount(
+        session,
+        project_id=project.id,
+        currency_id=version.currency_id,
+        source_kind=source_kind,
+        amount=amount,
+    )
     pool = CostPool(
         project_id=project.id,
         allocation_version_id=version.id,
@@ -861,9 +1078,8 @@ def add_pool(
         name=_text(name, detail="A cost pool needs a name."),
         category=category,
         source_kind=source_kind,
-        amount=_resolve_pool_amount(
-            session, project_id=project.id, source_kind=source_kind, amount=amount
-        ),
+        amount=resolved,
+        source_construction_forecast_version_id=forecast_version_id,
         scope_kind=scope_kind,
         phase_id=phase_id,
         building_id=building_id,
@@ -926,8 +1142,18 @@ def update_pool(
                 "This pool takes its amount from the land register. Correct the "
                 "land record instead of typing a different total here."
             )
-        pool.amount = _resolve_pool_amount(
-            session, project_id=project.id, source_kind=SOURCE_MANUAL, amount=changes["amount"]
+        if pool.source_kind == SOURCE_CONSTRUCTION_FORECAST:
+            raise ConflictError(
+                "This pool takes its amount from the construction forecast. "
+                "Revise and activate a forecast instead of typing a different "
+                "estimate here."
+            )
+        pool.amount, _ = _resolve_pool_amount(
+            session,
+            project_id=project.id,
+            currency_id=version.currency_id,
+            source_kind=SOURCE_MANUAL,
+            amount=changes["amount"],
         )
     if "allocation_method" in changes:
         method = changes["allocation_method"]
@@ -965,6 +1191,14 @@ def update_pool(
             version_id=version.id,
             category=pool.category,
             source_kind=pool.source_kind,
+            scope_kind=pool.scope_kind,
+            excluding_pool_id=pool.id,
+        )
+        _require_canonical_construction_shape(
+            session,
+            version_id=version.id,
+            source_kind=pool.source_kind,
+            category=pool.category,
             scope_kind=pool.scope_kind,
             excluding_pool_id=pool.id,
         )
@@ -1162,8 +1396,19 @@ def calculate_version(
 
     results: list[PoolResult] = []
     for pool in pools:
+        # A derived pool is re-read here rather than trusted from when it was
+        # added, because a draft can sit for days while its source moves. This
+        # is the only place either amount is refreshed, and it is reachable only
+        # on a draft — which is what stops a later forecast or a corrected land
+        # record from rewriting a basis that units have already been sold on.
         if pool.source_kind == SOURCE_PROJECT_LAND:
             pool.amount = project_land_total(session, project_id=project.id)
+        elif pool.source_kind == SOURCE_CONSTRUCTION_FORECAST:
+            forecast_id, estimate = _construction_pool_amount(
+                session, project_id=project.id, currency_id=version.currency_id
+            )
+            pool.amount = estimate
+            pool.source_construction_forecast_version_id = forecast_id
         unit_ids = _eligible_unit_ids(session, pool=pool)
         if not unit_ids:
             raise ConflictError(
@@ -1354,7 +1599,92 @@ def stale_sources(session: Session, *, version: AllocationVersion) -> list[str]:
         if drifted:
             problems.append("the land register total changed under " + ", ".join(sorted(drifted)))
 
+    problems.extend(_construction_drift(session, version=version))
     problems.extend(_population_drift(session, version=version))
+    return problems
+
+
+def _construction_drift(session: Session, *, version: AllocationVersion) -> list[str]:
+    """Construction pools whose forecast is no longer the one they divided.
+
+    Two separate drifts, reported separately because the operator does something
+    different about each.
+
+    A **newer forecast is in force**: the construction team revised the estimate
+    at completion after this basis was calculated. The basis is not wrong, it is
+    simply out of date, and the fix is to recalculate the draft against the
+    current forecast.
+
+    The **pinned forecast's own estimate moved**: the version this pool named is
+    still the active one, but its estimate at completion no longer computes to
+    the stored amount, because a certificate dated on or before its as-of date
+    was certified or reversed in the meantime. That is the more dangerous of the
+    two, because the forecast reference still looks right.
+
+    Both are checked here rather than at read time, and both are checked twice —
+    before submission and again immediately before activation — because the gap
+    between those two is exactly where a superseded estimate slips through.
+
+    Nothing in this function writes. A stale basis is refused, never quietly
+    corrected: silently re-deriving the amount at activation would let a
+    forecast approved by the construction team change a cost basis that Finance
+    approved, without either of them signing the result.
+    """
+    pools = list(
+        session.scalars(
+            select(CostPool)
+            .where(
+                CostPool.allocation_version_id == version.id,
+                CostPool.source_kind == SOURCE_CONSTRUCTION_FORECAST,
+            )
+            .order_by(CostPool.pool_number)
+        )
+    )
+    if not pools:
+        return []
+
+    problems: list[str] = []
+    current = construction_hard_cost(session, project_id=version.project_id)
+    if current is None:
+        return [
+            "the construction forecast behind "
+            + ", ".join(pool.pool_number for pool in pools)
+            + " is no longer in force"
+        ]
+    current_version_id = current.forecast_version_id
+
+    superseded = sorted(
+        pool.pool_number
+        for pool in pools
+        if pool.source_construction_forecast_version_id != current_version_id
+    )
+    if superseded:
+        problems.append(
+            "a newer construction forecast has been activated since "
+            + ", ".join(superseded)
+            + " was divided"
+        )
+
+    moved: list[str] = []
+    for pool in pools:
+        pinned_id = pool.source_construction_forecast_version_id
+        if pinned_id is None or pinned_id != current_version_id:
+            # Reported above, or unreachable: the provenance CHECK makes a
+            # construction pool without a forecast impossible.
+            continue
+        forecast = session.get(ConstructionForecastVersion, pinned_id)
+        if forecast is None:
+            moved.append(pool.pool_number)
+            continue
+        estimate = construction_service.hard_cost_estimate_of(
+            session, project_id=version.project_id, version=forecast
+        )
+        if money(pool.amount) != estimate:
+            moved.append(pool.pool_number)
+    if moved:
+        problems.append(
+            "the construction estimate at completion changed under " + ", ".join(sorted(moved))
+        )
     return problems
 
 

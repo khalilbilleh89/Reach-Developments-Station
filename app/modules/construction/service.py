@@ -39,14 +39,20 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict, deque
-from datetime import UTC, date, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.construction import calculator, permissions
@@ -60,6 +66,7 @@ from app.modules.construction.models import (
     BUDGET_REJECTED,
     BUDGET_SUBMITTED,
     BUDGET_SUPERSEDED,
+    CATEGORY_HARD,
     CERTIFICATE_CERTIFIED,
     CERTIFICATE_DRAFT,
     CERTIFICATE_REJECTED,
@@ -77,10 +84,19 @@ from app.modules.construction.models import (
     ENTITY_CERTIFICATE,
     ENTITY_CONTRACT,
     ENTITY_COST_CODE,
+    ENTITY_FORECAST,
     ENTITY_INVOICE,
     ENTITY_MILESTONE,
     ENTITY_PAYMENT,
     ENTITY_VARIATION,
+    FORECAST_ACTIVE,
+    FORECAST_APPROVED,
+    FORECAST_DRAFT,
+    FORECAST_FROZEN,
+    FORECAST_OPEN,
+    FORECAST_REJECTED,
+    FORECAST_SUBMITTED,
+    FORECAST_SUPERSEDED,
     INVOICE_ADVANCE,
     INVOICE_APPROVED,
     INVOICE_DISPUTED,
@@ -108,6 +124,7 @@ from app.modules.construction.models import (
     ContractLine,
     CostCode,
     ForecastLine,
+    ForecastVersion,
     Invoice,
     Milestone,
     MilestoneDependency,
@@ -116,8 +133,9 @@ from app.modules.construction.models import (
     Variation,
     VariationLine,
 )
+from app.modules.inventory import service as inventory_service
 from app.modules.inventory.custom_fields import business_today
-from app.modules.inventory.models import Building, Phase
+from app.modules.inventory.models import Building, Floor, Phase, Unit
 from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.payment_plans import service as payment_plans_service
 from app.modules.projects.models import Project
@@ -141,6 +159,13 @@ _COST_CODE_FIELDS = (
 )
 
 _BUDGET_FIELDS = ("status", "effective_date", "change_reason")
+
+_FORECAST_FIELDS = (
+    "version_number",
+    "status",
+    "as_of_date",
+    "change_reason",
+)
 
 _MILESTONE_FIELDS = (
     "code",
@@ -561,6 +586,61 @@ def committed_by_cost_code(
     return dict(committed)
 
 
+def as_of_bound(as_of: date) -> datetime:
+    """The first instant after ``as_of``, in UTC.
+
+    The same exclusive upper bound collections and sales use against their own
+    ``timestamptz`` columns, restated here rather than imported: the dependency
+    runs construction -> payment_plans and construction -> inventory, and it must
+    not be turned around for one two-line function.
+
+    Exclusive rather than end-of-day inclusive so there is no last-microsecond
+    gap to argue about, and one function so that a historical cutoff means the
+    same thing everywhere in this module — a business date compared against a
+    governed timestamp has exactly one correct reading, and two call sites each
+    inventing it is two readings waiting to disagree.
+    """
+    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
+
+
+def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[bool]]:
+    """Which certificates were standing — now, or at a historical cutoff.
+
+    Two different questions, and only one of them is about today's status.
+
+    *Now* is the live position, and the answer is the status column: a
+    certificate that has been reversed is not certified, and the command centre
+    must stop counting it the moment somebody withdraws it.
+
+    *At a cutoff* is a question about the past, and today's status cannot
+    answer it. A certificate certified on 20 August and reversed on 15
+    September was certified on 31 August — that is simply what happened — and a
+    forecast taken as at 31 August was approved with it inside. Filtering that
+    forecast on today's status would remove the certificate from a basis
+    somebody governed, so re-opening the August forecast in October would show
+    a smaller certified figure and a different estimate at completion than the
+    one Finance approved. The forecast would have been rewritten by an event
+    that happened after it.
+
+    So the historical form asks the two persisted timestamps instead: it had
+    been certified by the cutoff, and it had not yet been reversed by it. Both
+    use the same exclusive bound as everything else here, which is what makes a
+    reversal stamped exactly at ``as_of_bound(as_of)`` fall *after* an as-of of
+    the previous day rather than into an argument about microseconds.
+
+    A certificate that never reached certification has no ``certified_at`` at
+    all, and ``NULL < bound`` is not true, so drafts, submitted claims and
+    rejections stay out of the historical basis without a status test.
+    """
+    if as_of is None:
+        return [Certificate.status == CERTIFICATE_CERTIFIED]
+    bound = as_of_bound(as_of)
+    return [
+        Certificate.certified_at < bound,
+        or_(Certificate.reversed_at.is_(None), Certificate.reversed_at >= bound),
+    ]
+
+
 def certified_by_cost_code(
     session: Session,
     *,
@@ -575,15 +655,29 @@ def certified_by_cost_code(
     built on the work certified by its own cutoff, and re-deriving it from
     today's certificates a year later would answer a different question from the
     one Finance approved.
+
+    The cutoff is the **formal certification**, ``certified_at``, and never the
+    certificate's own document date. Those are different facts and the gap
+    between them is ordinary: a valuation dated 31 August is signed off on 5
+    September, because somebody has to read it first. Cutting off on the
+    document date would put that certificate inside a forecast taken as at 31
+    August — a forecast that, when it was activated, could not possibly have
+    included work nobody had certified yet. Re-opening it in October would then
+    show a larger certified basis and a different estimate at completion than
+    the one Finance approved, produced entirely by a backdated document.
+
+    Reversal is read on the same footing. Without ``as_of`` the standing status
+    answers, so a reversed certificate stops counting immediately. With one, the
+    question is what was standing *then*: certified by the cutoff and not yet
+    reversed by it. Both readings live in
+    :func:`_standing_certificate_conditions` rather than being spelled out here,
+    because a second call site writing the historical rule slightly differently
+    is exactly how a forecast comes to have two certified bases.
     """
-    conditions = [
-        CertificateLine.project_id == project_id,
-        Certificate.status == CERTIFICATE_CERTIFIED,
-    ]
+    conditions: list[ColumnElement[bool]] = [CertificateLine.project_id == project_id]
+    conditions.extend(_standing_certificate_conditions(as_of))
     if contract_id is not None:
         conditions.append(Certificate.contract_id == contract_id)
-    if as_of is not None:
-        conditions.append(Certificate.certificate_date <= as_of)
     if exclude_certificate_id is not None:
         conditions.append(Certificate.id != exclude_certificate_id)
 
@@ -2581,6 +2675,17 @@ def approve_invoice(
         certificate = get_certificate(
             session, project=project, certificate_id=invoice.certificate_id
         )
+        # Re-read rather than trusted from when the invoice was entered. A
+        # recorded invoice is only a document, so it does not block a reversal
+        # of the certificate it names — which leaves exactly this window:
+        # reverse the certification, then approve the claim, and the liability
+        # rests on an authorisation that has been withdrawn.
+        if certificate.status != CERTIFICATE_CERTIFIED:
+            raise ConflictError(
+                f"Certificate {certificate.certificate_number} is no longer certified, "
+                "so it authorises nothing. Record the claim against the certificate "
+                "that does."
+            )
         amounts = certificate_amounts(session, contract=contract, certificate=certificate)
         claimed = session.scalars(
             select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
@@ -3041,21 +3146,107 @@ def reverse_payment(
 # --------------------------------------------------------------------------- #
 
 
-def list_milestones(session: Session, *, project: Project) -> list[Milestone]:
-    """The project's milestones, in planned order."""
+def milestone_visibility_conditions(
+    session: Session, *, project_id: uuid.UUID, actor: ActorContext
+) -> list[ColumnElement[bool]]:
+    """The milestones this caller may reach, as SQL rather than as a later filter.
+
+    A milestone is a technical record, so a phase-scoped engineer keeps the ones
+    that belong to a phase they hold — that is the half of the access model the
+    financial surfaces deliberately do not have. But belonging has to be read
+    from the milestone's own scope and not from its project: every milestone in
+    the project carries the same ``project_id``, so filtering on that alone
+    hands a Phase A engineer every Phase B milestone in the development.
+
+    Two ways a milestone belongs to a phase, and both are honoured: named
+    directly through ``phase_id``, or reached through the phase of the building
+    it is scoped to. ``require_valid_scope`` has already proved the two agree
+    where both are set, so either match is sufficient.
+
+    A milestone scoped to neither is the whole development's, and a phase-scoped
+    actor gets no match from either arm — which is the intended answer. "Project
+    completion" is not a Phase A record, and certifying it can make instalments
+    fall due for buyers across every phase, including the ones this actor was
+    deliberately not given.
+
+    Returning conditions rather than a narrowed statement is what lets the same
+    rule sit in a list, a lookup and the payment-plan trigger options without
+    any of the three restating it. ``None`` from ``visible_phase_ids`` means no
+    narrowing is needed, which is an empty list here — never an empty result.
+    """
+    allowed = visible_phase_ids(session, project_id=project_id, actor=actor)
+    if allowed is None:
+        return []
+    return [
+        or_(
+            Milestone.phase_id.in_(allowed),
+            Milestone.building_id.in_(select(Building.id).where(Building.phase_id.in_(allowed))),
+        )
+    ]
+
+
+def _require_whole_project_scope(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    phase_id: uuid.UUID | None,
+    building_id: uuid.UUID | None,
+) -> None:
+    """Refuse a phase-scoped actor a milestone that belongs to the whole project.
+
+    ``require_valid_scope`` proves that a *named* phase or building is one the
+    caller holds; it has nothing to test when both are absent, and an unscoped
+    milestone is the widest record in the module. Certifying one makes every
+    buyer instalment waiting on that code fall due, in phases this actor was
+    deliberately not given, so the authority for it is whole-project access.
+
+    A refusal rather than a not-found, because there is no record here whose
+    existence needs protecting — only an action the caller may not take.
+    """
+    if phase_id is not None or building_id is not None:
+        return
+    if visible_phase_ids(session, project_id=project.id, actor=actor) is None:
+        return
+    raise PermissionDeniedError(
+        "A milestone scoped to neither a phase nor a building belongs to the whole "
+        "development, and certifying one can make instalments fall due for buyers in "
+        "every phase of it. That needs whole-project access; scope this milestone to "
+        "a phase you hold instead."
+    )
+
+
+def list_milestones(session: Session, *, project: Project, actor: ActorContext) -> list[Milestone]:
+    """The project's milestones the caller may see, in planned order."""
     return list(
         session.scalars(
             select(Milestone)
-            .where(Milestone.project_id == project.id)
+            .where(
+                Milestone.project_id == project.id,
+                *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
+            )
             .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
         )
     )
 
 
-def get_milestone(session: Session, *, project: Project, milestone_id: uuid.UUID) -> Milestone:
-    """Load one milestone of this project, or refuse as if it did not exist."""
+def get_milestone(
+    session: Session, *, project: Project, milestone_id: uuid.UUID, actor: ActorContext
+) -> Milestone:
+    """Load one milestone the caller may see, or refuse as if it did not exist.
+
+    The refusal is a 404 and not a 403 on purpose: a 403 would confirm that the
+    identifier names a real milestone of this project, which is the one thing a
+    caller who may not see it should not learn. Every mutation reaches its
+    milestone through here, so the visibility rule holds for achieving,
+    certifying and cancelling without each of them repeating it.
+    """
     milestone = session.scalars(
-        select(Milestone).where(Milestone.id == milestone_id, Milestone.project_id == project.id)
+        select(Milestone).where(
+            Milestone.id == milestone_id,
+            Milestone.project_id == project.id,
+            *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
+        )
     ).first()
     if milestone is None:
         raise permissions.milestone_not_found()
@@ -3096,6 +3287,9 @@ def create_milestone(
     """Add a milestone. Its code is its handle for ever after."""
     lock_project(session, project.id)
     require_valid_scope(
+        session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+    )
+    _require_whole_project_scope(
         session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
     )
     milestone = Milestone(
@@ -3142,7 +3336,7 @@ def update_milestone(
     thing nobody notices until a buyer stops paying.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if "code" in changes and changes["code"] != milestone.code:
         raise ConflictError(
             "A milestone's code is the handle payment plans use to point at it and "
@@ -3151,12 +3345,16 @@ def update_milestone(
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone is a record of what happened.")
     if "phase_id" in changes or "building_id" in changes:
+        phase_id = changes.get("phase_id", milestone.phase_id)
+        building_id = changes.get("building_id", milestone.building_id)
         require_valid_scope(
-            session,
-            project=project,
-            actor=actor,
-            phase_id=changes.get("phase_id", milestone.phase_id),
-            building_id=changes.get("building_id", milestone.building_id),
+            session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
+        )
+        # Clearing both is how a phase-scoped milestone would become a
+        # whole-project one, so the same authority is required to do it as to
+        # create one that way.
+        _require_whole_project_scope(
+            session, project=project, actor=actor, phase_id=phase_id, building_id=building_id
         )
     before = _snapshot(milestone, _MILESTONE_FIELDS)
     for field, value in changes.items():
@@ -3194,7 +3392,7 @@ def achieve_milestone(
     depend on, and nothing here touches a payment plan.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status in (MILESTONE_CERTIFIED, MILESTONE_CANCELLED):
         raise ConflictError("This milestone is already closed.")
     before = _snapshot(milestone, _MILESTONE_FIELDS)
@@ -3247,7 +3445,7 @@ def certify_milestone(
     something to do by accident.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CANCELLED:
         raise ConflictError("A cancelled milestone cannot be certified.")
     if milestone.status == MILESTONE_CERTIFIED:
@@ -3326,7 +3524,7 @@ def cancel_milestone(
     never happen — money the buyer owes that the system will never ask for.
     """
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone is a record of what happened.")
     waiting = payment_plans_service.plans_awaiting_milestone(
@@ -3367,8 +3565,14 @@ def add_milestone_dependency(
 ) -> MilestoneDependency:
     """Record that one milestone waits on another. Refuses a cycle."""
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
-    upstream = get_milestone(session, project=project, milestone_id=depends_on_milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
+    # Both ends, and both through the same visibility rule: a Phase A user
+    # supplying a hidden Phase B identifier must get the same answer as if it
+    # named nothing, or the dependency edge becomes a way to confirm the
+    # existence of records they were not given.
+    upstream = get_milestone(
+        session, project=project, milestone_id=depends_on_milestone_id, actor=actor
+    )
     if milestone.id == upstream.id:
         raise ValidationError("A milestone cannot depend on itself.")
     _require_no_dependency_cycle(
@@ -3417,12 +3621,13 @@ def remove_milestone_dependency(
     session: Session,
     *,
     project: Project,
+    actor: ActorContext,
     milestone_id: uuid.UUID,
     depends_on_milestone_id: uuid.UUID,
 ) -> None:
     """Drop a dependency from a milestone that is not yet certified."""
     lock_project(session, project.id)
-    milestone = get_milestone(session, project=project, milestone_id=milestone_id)
+    milestone = get_milestone(session, project=project, milestone_id=milestone_id, actor=actor)
     if milestone.status == MILESTONE_CERTIFIED:
         raise ConflictError("A certified milestone's programme is history.")
     dependency = session.scalars(
@@ -3437,7 +3642,9 @@ def remove_milestone_dependency(
     _flush(session)
 
 
-def milestone_trigger_options(session: Session, *, project: Project) -> list[Milestone]:
+def milestone_trigger_options(
+    session: Session, *, project: Project, actor: ActorContext
+) -> list[Milestone]:
     """The milestones a payment plan may point at, and nothing else.
 
     Deliberately the whole milestone rows for the caller to narrow: the schema
@@ -3445,6 +3652,13 @@ def milestone_trigger_options(session: Session, *, project: Project) -> list[Mil
     state. A plan builder is used by Sales Operations, who may not read this
     module at all — so the endpoint that exposes this must never hand back a
     budget, a contract value, an estimate at completion or any other cost.
+
+    The phase rule applies here too, and for the same reason it applies to the
+    register: this caller is authorised on the payment plans, not on the whole
+    development, and a plan builder scoped to one phase reading every phase's
+    milestone names and programme dates is the same leak wearing a narrower
+    schema. Being unable to read construction is not what limits it; holding
+    part of the project is.
     """
     return list(
         session.scalars(
@@ -3452,7 +3666,1081 @@ def milestone_trigger_options(session: Session, *, project: Project) -> list[Mil
             .where(
                 Milestone.project_id == project.id,
                 Milestone.status != MILESTONE_CANCELLED,
+                *milestone_visibility_conditions(session, project_id=project.id, actor=actor),
             )
             .order_by(Milestone.planned_date.nulls_last(), Milestone.code)
         )
     )
+
+
+# --------------------------------------------------------------------------- #
+# Forecast
+# --------------------------------------------------------------------------- #
+
+
+def list_forecasts(session: Session, *, project: Project) -> list[ForecastVersion]:
+    """Every forecast this project has had, newest first."""
+    return list(
+        session.scalars(
+            select(ForecastVersion)
+            .where(ForecastVersion.project_id == project.id)
+            .order_by(ForecastVersion.version_number.desc())
+        )
+    )
+
+
+def get_forecast(session: Session, *, project: Project, version_id: uuid.UUID) -> ForecastVersion:
+    """Load one forecast version of this project, or refuse as if it were absent."""
+    version = session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.id == version_id, ForecastVersion.project_id == project.id
+        )
+    ).first()
+    if version is None:
+        raise permissions.forecast_not_found()
+    return version
+
+
+def active_forecast(session: Session, *, project_id: uuid.UUID) -> ForecastVersion | None:
+    """The forecast currently in force, or ``None`` where none has been activated."""
+    return session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.project_id == project_id, ForecastVersion.status == FORECAST_ACTIVE
+        )
+    ).first()
+
+
+def _lock_forecast(
+    session: Session, *, project_id: uuid.UUID, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Take a forecast version for update, after the project lock above it."""
+    version = session.scalars(
+        select(ForecastVersion)
+        .where(ForecastVersion.id == version_id, ForecastVersion.project_id == project_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+    if version is None:
+        raise permissions.forecast_not_found()
+    return version
+
+
+def forecast_lines_by_cost_code(
+    session: Session, *, forecast_version_id: uuid.UUID
+) -> dict[uuid.UUID, ForecastLine]:
+    """One forecast version's lines, keyed by cost code."""
+    return {
+        line.cost_code_id: line
+        for line in session.scalars(
+            select(ForecastLine).where(ForecastLine.forecast_version_id == forecast_version_id)
+        )
+    }
+
+
+def create_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    as_of_date: date,
+    change_reason: str,
+    budget_version_id: uuid.UUID | None = None,
+    source_version_id: uuid.UUID | None = None,
+) -> ForecastVersion:
+    """Open a forecast, measured against a stated budget as at a stated date.
+
+    Two dates decide everything about a forecast's meaning. ``as_of_date`` fixes
+    which certified work is inside its estimate, which is what lets a superseded
+    forecast still be reproduced a year later instead of quietly re-deriving
+    itself from today's certificates. And the budget version it names fixes what
+    its variance is measured against, so "over budget" refers to an
+    authorisation somebody can point at rather than whatever happens to be
+    current when the screen is opened.
+
+    A future cutoff is refused: a forecast cannot include work that has not been
+    certified yet, and a date in the future would silently mean "today" until
+    the day arrived and then mean something else.
+    """
+    lock_project(session, project.id)
+    if as_of_date > business_today():
+        raise ValidationError(
+            "A forecast cannot be taken as at a future date. Its certified basis is "
+            "the work certified by its cutoff, and there is none after today."
+        )
+    if _open_forecast(session, project_id=project.id) is not None:
+        raise ConflictError(
+            "This project already has a forecast being prepared. Finish or reject it "
+            "before opening another."
+        )
+
+    budget: BudgetVersion | None
+    if budget_version_id is not None:
+        budget = get_budget(session, project=project, version_id=budget_version_id)
+    else:
+        budget = active_budget(session, project_id=project.id)
+    if budget is None:
+        raise ConflictError(
+            "A forecast is measured against an approved budget, and this project has none in force."
+        )
+    _require_governed_budget(budget)
+
+    source: ForecastVersion | None = None
+    if source_version_id is not None:
+        source = get_forecast(session, project=project, version_id=source_version_id)
+    elif (current := active_forecast(session, project_id=project.id)) is not None:
+        source = current
+    if source is not None and as_of_date < source.as_of_date:
+        raise ValidationError(
+            f"This forecast is taken as at {as_of_date}, before the standing "
+            f"forecast's own cutoff of {source.as_of_date}. A replacement looks "
+            "forward from where the last one stopped."
+        )
+
+    highest = session.scalars(
+        select(func.max(ForecastVersion.version_number)).where(
+            ForecastVersion.project_id == project.id
+        )
+    ).first()
+    version = ForecastVersion(
+        project_id=project.id,
+        version_number=(highest or 0) + 1,
+        currency_id=project.base_currency_id,
+        budget_version_id=budget.id,
+        as_of_date=as_of_date,
+        status=FORECAST_DRAFT,
+        source_version_id=source.id if source is not None else None,
+        change_reason=change_reason.strip(),
+        created_by_user_id=actor.user_id,
+    )
+    session.add(version)
+    _flush(session)
+
+    if source is not None:
+        for line in session.scalars(
+            select(ForecastLine).where(ForecastLine.forecast_version_id == source.id)
+        ):
+            session.add(
+                ForecastLine(
+                    project_id=project.id,
+                    forecast_version_id=version.id,
+                    cost_code_id=line.cost_code_id,
+                    forecast_remaining_amount_ex_tax=line.forecast_remaining_amount_ex_tax,
+                    note=line.note,
+                )
+            )
+        _flush(session)
+
+    record_event(
+        session,
+        action="construction.forecast_created",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=change_reason,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+#: The budget states a forecast may be measured against.
+#:
+#: ``superseded`` is here and matters: a forecast taken as at August is measured
+#: against whatever budget governed in August, and that budget has since been
+#: replaced. Refusing it would make a historical forecast impossible to
+#: reproduce, which is the thing the as-of date exists to protect.
+#:
+#: ``draft``, ``submitted`` and ``rejected`` are refused. A variance is a
+#: statement about an authorisation, so a denominator nobody approved makes the
+#: whole figure an opinion — and a rejected budget is one somebody explicitly
+#: declined to authorise.
+FORECAST_GOVERNED_BUDGETS = frozenset({BUDGET_APPROVED, BUDGET_ACTIVE, BUDGET_SUPERSEDED})
+
+
+def _require_governed_budget(budget: BudgetVersion) -> None:
+    """Refuse a forecast measured against a budget nobody approved.
+
+    Re-proved at submission and again at activation rather than only at
+    creation, because the budget can move underneath an open forecast: one
+    opened against an approved budget that is then rejected would otherwise be
+    activated with a denominator that had been withdrawn.
+    """
+    if budget.status not in FORECAST_GOVERNED_BUDGETS:
+        raise ConflictError(
+            f"Budget version {budget.version_number} is {budget.status}, and a forecast "
+            "cannot be governed against an unapproved budget. Its variance would be "
+            "measured against an authorisation nobody has given."
+        )
+
+
+def _open_forecast(session: Session, *, project_id: uuid.UUID) -> ForecastVersion | None:
+    """The forecast being drafted, checked or waiting to be activated."""
+    return session.scalars(
+        select(ForecastVersion).where(
+            ForecastVersion.project_id == project_id,
+            ForecastVersion.status.in_(tuple(FORECAST_OPEN)),
+        )
+    ).first()
+
+
+def set_forecast_line(
+    session: Session,
+    *,
+    project: Project,
+    version_id: uuid.UUID,
+    cost_code_id: uuid.UUID,
+    forecast_remaining_amount_ex_tax: Decimal,
+    note: str | None = None,
+) -> ForecastLine:
+    """Write what one cost code has left to spend, in Finance's judgement.
+
+    An explicit zero is a statement — nothing further expected here. It is not
+    the same as no line, which is why submission refuses until every governed
+    code has one.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status in FORECAST_FROZEN:
+        raise ConflictError(
+            "This forecast is no longer a draft. Open a revision to change what the "
+            "project expects to spend."
+        )
+    code = get_cost_code(session, project=project, cost_code_id=cost_code_id)
+
+    line = session.scalars(
+        select(ForecastLine).where(
+            ForecastLine.forecast_version_id == version.id,
+            ForecastLine.cost_code_id == code.id,
+        )
+    ).first()
+    if line is None:
+        line = ForecastLine(
+            project_id=project.id,
+            forecast_version_id=version.id,
+            cost_code_id=code.id,
+            forecast_remaining_amount_ex_tax=money(forecast_remaining_amount_ex_tax),
+            note=(note or "").strip() or None,
+        )
+        session.add(line)
+    else:
+        line.forecast_remaining_amount_ex_tax = money(forecast_remaining_amount_ex_tax)
+        line.note = (note or "").strip() or None
+    _flush(session)
+    return line
+
+
+def _require_forecast_coverage(
+    session: Session, *, project: Project, version: ForecastVersion
+) -> None:
+    """Refuse a forecast that leaves an active cost code unaddressed.
+
+    Same rule as the budget's, for the same reason: "we expect no further cost
+    here" and "nobody looked at this code" are different statements, and a
+    forecast that cannot tell them apart is a guess wearing a governed
+    version number.
+    """
+    active = {
+        code.id: code.code
+        for code in session.scalars(
+            select(CostCode).where(CostCode.project_id == project.id, CostCode.is_active.is_(True))
+        )
+    }
+    addressed = set(forecast_lines_by_cost_code(session, forecast_version_id=version.id))
+    missing = sorted(label for code_id, label in active.items() if code_id not in addressed)
+    if missing:
+        raise ValidationError(
+            "Every active cost code needs a forecast line, even if the answer is "
+            "zero — " + ", ".join(missing) + "."
+        )
+
+
+def forecast_position(
+    session: Session, *, project: Project, version: ForecastVersion
+) -> dict[uuid.UUID, calculator.CostCodePosition]:
+    """Each cost code's whole control position on this forecast's own basis.
+
+    Certified work is read as at the version's cutoff rather than as at today,
+    which is the property that makes a superseded forecast reproducible: asking
+    a year-old forecast what it thought is answered with what it actually
+    thought, not with today's certificates run through yesterday's judgement.
+    """
+    budget = session.get(BudgetVersion, version.budget_version_id)
+    budget_lines = (
+        budget_lines_by_cost_code(session, budget_version_id=budget.id)
+        if budget is not None
+        else {}
+    )
+    committed = committed_by_cost_code(session, project_id=project.id)
+    certified = certified_by_cost_code(session, project_id=project.id, as_of=version.as_of_date)
+    lines = forecast_lines_by_cost_code(session, forecast_version_id=version.id)
+
+    positions: dict[uuid.UUID, calculator.CostCodePosition] = {}
+    for cost_code_id in set(budget_lines) | set(lines) | set(committed) | set(certified):
+        budget_line = budget_lines.get(cost_code_id)
+        line = lines.get(cost_code_id)
+        positions[cost_code_id] = calculator.cost_code_position(
+            approved_budget=budget_line.approved_budget_amount if budget_line else ZERO,
+            contingency=budget_line.contingency_amount if budget_line else ZERO,
+            revised_commitment_amount=committed.get(cost_code_id, ZERO),
+            certified_to_date=certified.get(cost_code_id, ZERO),
+            forecast_remaining=(
+                line.forecast_remaining_amount_ex_tax if line is not None else ZERO
+            ),
+        )
+    return positions
+
+
+def submit_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Hand a draft forecast to a checker."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_DRAFT:
+        raise ConflictError("Only a draft forecast can be submitted.")
+    _require_governed_budget(
+        get_budget(session, project=project, version_id=version.budget_version_id)
+    )
+    _require_forecast_coverage(session, project=project, version=version)
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_SUBMITTED
+    version.submitted_at = _now()
+    version.submitted_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_submitted",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def approve_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Sign off a submitted forecast. Not the same act as putting it in force."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_SUBMITTED:
+        raise ConflictError("Only a submitted forecast can be approved.")
+    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_APPROVED
+    version.approved_at = _now()
+    version.approved_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_approved",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def reject_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    version_id: uuid.UUID,
+    reason: str,
+) -> ForecastVersion:
+    """Refuse a submitted forecast, with the reason on the record."""
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_SUBMITTED:
+        raise ConflictError("Only a submitted forecast can be rejected.")
+    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_REJECTED
+    version.rejected_at = _now()
+    version.rejected_by_user_id = actor.user_id
+    version.rejection_reason = reason.strip()
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_rejected",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def activate_forecast(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> ForecastVersion:
+    """Put an approved forecast into force, superseding the one it replaces.
+
+    Coverage is re-proved here rather than trusted from submission: a cost code
+    created while the version waited for approval is a code this forecast does
+    not address, and activating anyway would put a project estimate one line
+    short without saying so.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_APPROVED:
+        raise ConflictError("Only an approved forecast can be activated.")
+    if version.currency_id != project.base_currency_id:
+        raise ConflictError(
+            "This forecast was prepared in a currency the project no longer accounts "
+            "in. Prepare a revision in the project's base currency."
+        )
+    _require_governed_budget(
+        get_budget(session, project=project, version_id=version.budget_version_id)
+    )
+    _require_forecast_coverage(session, project=project, version=version)
+
+    current = active_forecast(session, project_id=project.id)
+    if current is not None:
+        current.status = FORECAST_SUPERSEDED
+        current.superseded_at = _now()
+        _flush(session)
+        record_event(
+            session,
+            action="construction.forecast_superseded",
+            entity_type=ENTITY_FORECAST,
+            entity_id=current.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            after=_snapshot(current, _FORECAST_FIELDS),
+        )
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_ACTIVE
+    version.activated_at = _now()
+    version.activated_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.forecast_activated",
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def hard_cost_estimate_at_completion(
+    session: Session, *, project_id: uuid.UUID
+) -> tuple[ForecastVersion, Decimal] | None:
+    """The project's governed hard-cost estimate at completion, for unit economics.
+
+    The public read contract in the other direction: unit economics may consume
+    this, and construction never writes a cost pool. Returns the version as well
+    as the amount, because a pool that cannot say which forecast it came from is
+    an amount with no provenance — and provenance is what stops a later forecast
+    appearing to rewrite a basis units were already sold against.
+
+    ``None`` where no forecast is in force. A missing estimate is a missing
+    estimate; answering zero would let a version be built on a hard cost of
+    nothing without anybody noticing.
+    """
+    version = active_forecast(session, project_id=project_id)
+    if version is None:
+        return None
+    return version, hard_cost_estimate_of(session, project_id=project_id, version=version)
+
+
+def hard_cost_estimate_of(
+    session: Session, *, project_id: uuid.UUID, version: ForecastVersion
+) -> Decimal:
+    """The hard-cost estimate at completion of one named forecast version.
+
+    The second half of the same contract, and the half staleness detection
+    needs. A consumer that pinned a forecast has to be able to ask what *that*
+    forecast says today, not only what the current one says — otherwise the two
+    ways a pinned amount can go wrong are indistinguishable. A newer forecast
+    having been activated is a decision somebody made and a basis somebody
+    should rebuild on purpose; the pinned forecast's own estimate having moved
+    underneath it, because a certificate dated on or before its as-of date was
+    reversed or added since, is a figure that was never re-approved. Both are
+    stale, and a caller that can only see the first would activate the second.
+    """
+    total = session.scalars(
+        select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax))
+        .join(CostCode, CostCode.id == ForecastLine.cost_code_id)
+        .where(
+            ForecastLine.forecast_version_id == version.id,
+            CostCode.cost_category == CATEGORY_HARD,
+        )
+    ).first()
+    remaining = money(total or ZERO)
+    certified = session.scalars(
+        select(func.sum(CertificateLine.current_work_value_ex_tax))
+        .join(Certificate, Certificate.id == CertificateLine.certificate_id)
+        .join(CostCode, CostCode.id == CertificateLine.cost_code_id)
+        .where(
+            CertificateLine.project_id == project_id,
+            # The same historical predicate the forecast basis uses, so a pinned
+            # cost basis and the forecast it was drawn from cannot disagree about
+            # what was certified at that cutoff — including after a reversal.
+            *_standing_certificate_conditions(version.as_of_date),
+            CostCode.cost_category == CATEGORY_HARD,
+        )
+    ).first()
+    return calculator.estimate_at_completion(
+        certified_to_date=money(certified or ZERO), forecast_remaining=remaining
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Project position
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CostControl:
+    """The project's cost side. Every figure ex tax, without exception."""
+
+    original_baseline: Decimal
+    current_approved_budget: Decimal
+    approved_contingency: Decimal
+    control_budget: Decimal
+    original_commitment: Decimal
+    approved_variation_delta: Decimal
+    revised_commitment: Decimal
+    #: Everything certified **now**. The live position, which moves the moment a
+    #: certificate is signed and does not wait for a forecast to be revised.
+    certified_to_date: Decimal
+    #: What was certified by the active forecast's own cutoff, and therefore the
+    #: basis its estimate at completion is built on. ``None`` where no forecast
+    #: is in force.
+    #:
+    #: Two fields rather than one because they answer different questions and
+    #: diverge the instant work is certified after the cutoff. Overloading a
+    #: single ``certified_to_date`` with both meanings is what made the command
+    #: centre report a stale figure: the screen said "certified to date" and
+    #: showed a number frozen at the forecast's as-of date.
+    forecast_certified_as_of: Decimal | None
+    forecast_remaining: Decimal | None
+    estimate_at_completion: Decimal | None
+    variance_at_completion: Decimal | None
+
+
+@dataclass(frozen=True)
+class Payable:
+    """The project's cash side. These carry tax, retention and deductions."""
+
+    approved_invoice_payable: Decimal
+    disputed_invoice_payable: Decimal
+    confirmed_paid: Decimal
+    invoice_outstanding: Decimal
+    retention_outstanding: Decimal
+    advance_paid: Decimal
+    advance_recovered: Decimal
+    advance_outstanding: Decimal
+
+
+def cost_control_position(session: Session, *, project: Project) -> CostControl:
+    """Assemble the project's cost position from the rows, on one basis: ex tax.
+
+    Nothing here is stored and nothing is a running total kept up to date by the
+    writes. Each figure is a sum over immutable rows taken at read time, which
+    is why a reversal is simply a row that stops counting rather than a
+    correction that has to find every place the number was cached.
+    """
+    budget = active_budget(session, project_id=project.id)
+    baseline = approved = contingency = ZERO
+    if budget is not None:
+        totals = session.execute(
+            select(
+                func.coalesce(func.sum(BudgetLine.baseline_amount), 0),
+                func.coalesce(func.sum(BudgetLine.approved_budget_amount), 0),
+                func.coalesce(func.sum(BudgetLine.contingency_amount), 0),
+            ).where(BudgetLine.budget_version_id == budget.id)
+        ).one()
+        baseline, approved, contingency = (money(value) for value in totals)
+
+    original = session.scalars(
+        select(func.sum(ContractLine.original_amount_ex_tax))
+        .join(Contract, Contract.id == ContractLine.contract_id)
+        .where(
+            ContractLine.project_id == project.id,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ).first()
+    variations = session.scalars(
+        select(func.sum(VariationLine.value_delta_ex_tax))
+        .join(Variation, Variation.id == VariationLine.variation_id)
+        .join(Contract, Contract.id == Variation.contract_id)
+        .where(
+            VariationLine.project_id == project.id,
+            Variation.status == VARIATION_APPROVED,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ).first()
+    original_commitment = money(original or ZERO)
+    variation_delta = money(variations or ZERO)
+
+    # Two certified figures, deliberately. The first is what has been certified
+    # as of now and is what the command centre reports; the second is what the
+    # standing forecast was built on, and is the only one its estimate may use.
+    # Adding work certified after the cutoff to a forecast remainder that was
+    # written before it counts that work twice.
+    certified = money(sum(certified_by_cost_code(session, project_id=project.id).values(), ZERO))
+
+    forecast = active_forecast(session, project_id=project.id)
+    forecast_certified: Decimal | None = None
+    remaining: Decimal | None = None
+    eac: Decimal | None = None
+    vac: Decimal | None = None
+    if forecast is not None:
+        forecast_certified = money(
+            sum(
+                certified_by_cost_code(
+                    session, project_id=project.id, as_of=forecast.as_of_date
+                ).values(),
+                ZERO,
+            )
+        )
+        total = session.scalars(
+            select(func.sum(ForecastLine.forecast_remaining_amount_ex_tax)).where(
+                ForecastLine.forecast_version_id == forecast.id
+            )
+        ).first()
+        remaining = money(total or ZERO)
+        eac = calculator.estimate_at_completion(
+            certified_to_date=forecast_certified, forecast_remaining=remaining
+        )
+        vac = calculator.variance_at_completion(
+            estimate_at_completion=eac,
+            control_budget=calculator.control_budget(
+                approved_budget=approved, contingency=contingency
+            ),
+        )
+
+    return CostControl(
+        original_baseline=baseline,
+        current_approved_budget=approved,
+        approved_contingency=contingency,
+        control_budget=calculator.control_budget(approved_budget=approved, contingency=contingency),
+        original_commitment=original_commitment,
+        approved_variation_delta=variation_delta,
+        revised_commitment=calculator.revised_commitment(
+            original_amount=original_commitment, approved_variation_delta=variation_delta
+        ),
+        certified_to_date=certified,
+        forecast_certified_as_of=forecast_certified,
+        forecast_remaining=remaining,
+        estimate_at_completion=eac,
+        variance_at_completion=vac,
+    )
+
+
+def payable_position(session: Session, *, project: Project) -> Payable:
+    """Assemble the project's cash position. Never added to the cost position."""
+    approved = session.scalars(
+        select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
+            Invoice.project_id == project.id, Invoice.status == INVOICE_APPROVED
+        )
+    ).first()
+    disputed = session.scalars(
+        select(func.sum(Invoice.amount_ex_tax + Invoice.tax_amount)).where(
+            Invoice.project_id == project.id, Invoice.status == INVOICE_DISPUTED
+        )
+    ).first()
+    paid = session.scalars(
+        select(func.sum(PaymentAllocation.amount))
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .where(PaymentAllocation.project_id == project.id, Payment.status == PAYMENT_CONFIRMED)
+    ).first()
+    approved_total = money(approved or ZERO)
+    disputed_total = money(disputed or ZERO)
+    paid_total = money(paid or ZERO)
+
+    held = released = advance_paid = advance_recovered = ZERO
+    for contract in session.scalars(
+        select(Contract).where(
+            Contract.project_id == project.id,
+            Contract.status.in_(tuple(CONTRACT_COMMITTING)),
+        )
+    ):
+        contract_held, contract_released = retention_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        held = money(held + contract_held)
+        released = money(released + contract_released)
+        contract_advance, contract_recovered = advance_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        advance_paid = money(advance_paid + contract_advance)
+        advance_recovered = money(advance_recovered + contract_recovered)
+
+    return Payable(
+        approved_invoice_payable=approved_total,
+        disputed_invoice_payable=disputed_total,
+        confirmed_paid=paid_total,
+        # A disputed invoice is still owed. Subtracting it would make the
+        # obligation fall the moment somebody objected to it.
+        invoice_outstanding=money(approved_total + disputed_total - paid_total),
+        retention_outstanding=calculator.retention_outstanding(held=held, released=released),
+        advance_paid=advance_paid,
+        advance_recovered=advance_recovered,
+        advance_outstanding=calculator.advance_outstanding(
+            paid=advance_paid, recovered=advance_recovered
+        ),
+    )
+
+
+def construction_controls(session: Session, *, project: Project) -> dict[str, int | bool]:
+    """The counts a screen may act on, each from a stored fact.
+
+    No severity, no score, no weighting. A health percentage over a set of
+    pass/fail questions tells a reader something is wrong without saying what,
+    and goes green while one of them is still failing.
+    """
+    today = business_today()
+    budget = active_budget(session, project_id=project.id)
+    forecast = active_forecast(session, project_id=project.id)
+
+    over_budget = 0
+    below_commitment = 0
+    if budget is not None:
+        lines = budget_lines_by_cost_code(session, budget_version_id=budget.id)
+        committed = committed_by_cost_code(session, project_id=project.id)
+        positions = (
+            forecast_position(session, project=project, version=forecast)
+            if forecast is not None
+            else {}
+        )
+        for cost_code_id, line in lines.items():
+            if committed.get(cost_code_id, ZERO) > calculator.control_budget(
+                approved_budget=line.approved_budget_amount,
+                contingency=line.contingency_amount,
+            ):
+                over_budget += 1
+        below_commitment = sum(
+            1 for position in positions.values() if position.forecast_below_commitment
+        )
+
+    open_variations = session.scalar(
+        select(func.count())
+        .select_from(Variation)
+        .where(Variation.project_id == project.id, Variation.status == VARIATION_SUBMITTED)
+    )
+    late = session.scalar(
+        select(func.count())
+        .select_from(Milestone)
+        .where(
+            Milestone.project_id == project.id,
+            Milestone.status.notin_((MILESTONE_CERTIFIED, MILESTONE_CANCELLED)),
+            Milestone.planned_date.is_not(None),
+            Milestone.planned_date < today,
+        )
+    )
+    uncertified = session.scalar(
+        select(func.count())
+        .select_from(Milestone)
+        .where(Milestone.project_id == project.id, Milestone.status == MILESTONE_ACHIEVED)
+    )
+    overdue_invoices = session.scalar(
+        select(func.count())
+        .select_from(Invoice)
+        .where(
+            Invoice.project_id == project.id,
+            Invoice.status == INVOICE_APPROVED,
+            Invoice.due_date.is_not(None),
+            Invoice.due_date < today,
+        )
+    )
+    escalated = 0
+    for variation in session.scalars(
+        select(Variation).where(
+            Variation.project_id == project.id, Variation.status == VARIATION_SUBMITTED
+        )
+    ):
+        needs, _threshold, _total = variation_requires_escalation(
+            session, project=project, variation_id=variation.id
+        )
+        if needs:
+            escalated += 1
+
+    return {
+        "open_variations": int(open_variations or 0),
+        "escalated_variations": escalated,
+        "over_budget_cost_codes": over_budget,
+        "forecast_below_commitment_cost_codes": below_commitment,
+        "late_milestones": int(late or 0),
+        "achieved_uncertified_milestones": int(uncertified or 0),
+        "overdue_approved_invoices": int(overdue_invoices or 0),
+        "has_active_budget": budget is not None,
+        "has_active_forecast": forecast is not None,
+    }
+
+
+def reconciliation(session: Session, *, project: Project) -> list[calculator.Check]:
+    """Explicit questions the rows must answer, with no tolerance anywhere.
+
+    Each check is a sentence somebody can act on rather than a contribution to a
+    score. A reconciliation that reported "94% healthy" would be green while a
+    contract's lines disagreed with its own header by a cent, which is exactly
+    the case this exists to surface.
+    """
+    checks: list[calculator.Check] = []
+
+    for contract in session.scalars(select(Contract).where(Contract.project_id == project.id)):
+        checks.append(
+            calculator.equality_check(
+                key=f"contract_lines:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: lines against header",
+                amount=contract_line_total(session, contract_id=contract.id),
+                expected=contract.original_contract_value_ex_tax,
+            )
+        )
+        committed = contract_committed_by_cost_code(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        certified = certified_by_cost_code(session, project_id=project.id, contract_id=contract.id)
+        checks.append(
+            calculator.limit_check(
+                key=f"certified:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: certified against commitment",
+                amount=money(sum(certified.values(), ZERO)),
+                limit=money(sum(committed.values(), ZERO)),
+            )
+        )
+        held, released = retention_position(session, project_id=project.id, contract_id=contract.id)
+        checks.append(
+            calculator.limit_check(
+                key=f"retention:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: retention released against held",
+                amount=released,
+                limit=held,
+            )
+        )
+        advance_paid, recovered = advance_position(
+            session, project_id=project.id, contract_id=contract.id
+        )
+        checks.append(
+            calculator.limit_check(
+                key=f"advance:{contract.contract_number}",
+                label=f"Contract {contract.contract_number}: advance recovered against paid",
+                amount=recovered,
+                limit=advance_paid,
+            )
+        )
+
+    for payment in session.scalars(
+        select(Payment).where(Payment.project_id == project.id, Payment.status == PAYMENT_CONFIRMED)
+    ):
+        checks.append(
+            calculator.equality_check(
+                key=f"payment_allocated:{payment.payment_reference}",
+                label=f"Payment {payment.payment_reference}: allocations against amount",
+                amount=payment_allocated(session, payment_id=payment.id),
+                expected=payment.amount,
+                detail="A confirmed disbursement must say in full what it settled.",
+            )
+        )
+
+    for invoice in session.scalars(
+        select(Invoice).where(
+            Invoice.project_id == project.id, Invoice.status.in_(tuple(INVOICE_STANDING))
+        )
+    ):
+        checks.append(
+            calculator.limit_check(
+                key=f"invoice_paid:{invoice.invoice_number}",
+                label=f"Invoice {invoice.invoice_number}: cash applied against payable",
+                amount=invoice_allocated(session, invoice_id=invoice.id),
+                limit=calculator.invoice_payable(
+                    amount_ex_tax=invoice.amount_ex_tax, tax=invoice.tax_amount
+                ),
+            )
+        )
+
+    forecast = active_forecast(session, project_id=project.id)
+    active_codes = session.scalar(
+        select(func.count())
+        .select_from(CostCode)
+        .where(CostCode.project_id == project.id, CostCode.is_active.is_(True))
+    )
+    if forecast is not None:
+        covered = len(forecast_lines_by_cost_code(session, forecast_version_id=forecast.id))
+        checks.append(
+            calculator.equality_check(
+                key="forecast_coverage",
+                label="Forecast addresses every active cost code",
+                amount=Decimal(covered),
+                expected=Decimal(int(active_codes or 0)),
+                detail="A missing line is not a forecast of zero.",
+            )
+        )
+
+    # No exchange rates exist anywhere in this platform, so a second
+    # denomination is a figure nothing could add to the project's position.
+    unlike = session.scalar(
+        select(func.count())
+        .select_from(Contract)
+        .where(
+            Contract.project_id == project.id,
+            Contract.currency_id != project.base_currency_id,
+        )
+    )
+    checks.append(
+        calculator.equality_check(
+            key="currency",
+            label="Every contract is in the project's base currency",
+            amount=Decimal(int(unlike or 0)),
+            expected=ZERO,
+            detail="There is no FX in this platform; unlike currencies are never added.",
+        )
+    )
+    return checks
+
+
+# --------------------------------------------------------------------------- #
+# Delivery
+# --------------------------------------------------------------------------- #
+
+#: The build states construction answers for. Handover — blocked, ready, handed
+#: over — belongs to sales, and nothing here can reach it: a module that could
+#: mark a unit handed over would be a second writer for a status somebody else
+#: is accountable for.
+CONSTRUCTION_DELIVERY_STATES = ("not_started", "under_construction", "ready")
+
+
+def milestone_scope_label(session: Session, *, milestone: Milestone) -> str | None:
+    """What a milestone is about, in words: a phase, a building, or the project."""
+    if milestone.building_id is not None:
+        building = session.get(Building, milestone.building_id)
+        if building is not None:
+            return building.code
+    if milestone.phase_id is not None:
+        phase = session.get(Phase, milestone.phase_id)
+        if phase is not None:
+            return phase.code
+    return None
+
+
+def apply_delivery(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    to_status: str,
+    unit_id: uuid.UUID | None,
+    building_id: uuid.UUID | None,
+    phase_id: uuid.UUID | None,
+    effective_date: date,
+    reason: str | None = None,
+    revoking: bool = False,
+) -> dict[str, object]:
+    """Move a unit, a building's units or a phase's units through the build.
+
+    Everything is validated before anything is applied. A bulk action that
+    updated eighty-seven units and failed on the eighty-eighth would leave a
+    building in two states with no record of which half moved, so the whole set
+    is proved first and then written — all of it or none.
+
+    Every write goes through inventory's public contract. Construction decides
+    which value follows from the build; inventory owns the column, the closed
+    set and the append-only event behind it, and there is no line here that
+    assigns ``unit.delivery_status``.
+    """
+    lock_project(session, project.id)
+    if to_status not in CONSTRUCTION_DELIVERY_STATES:
+        raise ValidationError(
+            "Construction moves units between not started, under construction and "
+            "ready. Handover states belong to sales."
+        )
+    named = [value for value in (unit_id, building_id, phase_id) if value is not None]
+    if len(named) != 1:
+        raise ValidationError("Name exactly one of a unit, a building or a phase.")
+
+    require_valid_scope(
+        session,
+        project=project,
+        actor=actor,
+        phase_id=phase_id,
+        building_id=building_id,
+    )
+
+    # A unit hangs off a floor, a floor off a building, a building off a phase.
+    # Every scope below reaches the unit through that chain rather than through
+    # a denormalised column, because there is no such column and inventing one
+    # here would be a second answer to where a unit sits.
+    in_building = select(Unit.id).join(Floor, Floor.id == Unit.floor_id)
+    statement = select(Unit).where(Unit.project_id == project.id)
+    if unit_id is not None:
+        statement = statement.where(Unit.id == unit_id)
+    elif building_id is not None:
+        statement = statement.where(
+            Unit.id.in_(in_building.where(Floor.building_id == building_id))
+        )
+    else:
+        statement = statement.where(
+            Unit.id.in_(
+                in_building.join(Building, Building.id == Floor.building_id).where(
+                    Building.phase_id == phase_id, Building.project_id == project.id
+                )
+            )
+        )
+    allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
+    if allowed is not None:
+        statement = statement.where(
+            Unit.id.in_(
+                select(Unit.id)
+                .join(Floor, Floor.id == Unit.floor_id)
+                .join(Building, Building.id == Floor.building_id)
+                .where(Building.phase_id.in_(allowed), Building.project_id == project.id)
+            )
+        )
+    # Deterministic order, so two concurrent bulk actions take the same unit
+    # locks in the same sequence rather than deadlocking against each other.
+    units = list(session.scalars(statement.order_by(Unit.id)))
+    if not units:
+        raise NotFoundError("No units found in that scope.")
+
+    blocked: list[str] = []
+    for unit in units:
+        current = unit.delivery_status
+        if current not in CONSTRUCTION_DELIVERY_STATES:
+            blocked.append(
+                f"{unit.unit_number}: {current} is a handover state and belongs to sales"
+            )
+            continue
+        if revoking and current != "ready":
+            blocked.append(f"{unit.unit_number}: is {current}, not ready")
+    if blocked:
+        raise ConflictError(
+            "This would not apply to every unit in the scope, so none of it was "
+            "applied — " + "; ".join(sorted(blocked)) + "."
+        )
+
+    moved: list[uuid.UUID] = []
+    for unit in units:
+        if unit.delivery_status == to_status:
+            continue
+        inventory_service.apply_delivery_status(
+            session,
+            project=project,
+            unit=unit,
+            to_status=to_status,
+            effective_date=effective_date,
+            actor_user_id=actor.user_id,
+            correlation_id=actor.correlation_id,
+            reason=reason,
+        )
+        moved.append(unit.id)
+    _flush(session)
+    return {"to_status": to_status, "unit_count": len(moved), "unit_ids": moved}

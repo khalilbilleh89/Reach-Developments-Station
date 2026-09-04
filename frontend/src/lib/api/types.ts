@@ -547,7 +547,12 @@ export type ImportReport = {
  * it never computes with them.
  * -------------------------------------------------------------------------- */
 
-export type PricingStatus = "draft" | "submitted" | "approved" | "active" | "superseded";
+export type PricingStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "active"
+  | "superseded";
 
 export interface PricingConfiguration {
   id: string;
@@ -1982,4 +1987,411 @@ export interface ProjectEconomics {
   return_on_cost_fraction: string | null;
 
   active_version: AllocationVersion | null;
+}
+
+// --------------------------------------------------------------------------- //
+// Construction (PR-MVP-09)
+// --------------------------------------------------------------------------- //
+
+export type CostCategory = "hard" | "soft" | "contingency" | "other";
+
+export interface CostCode {
+  id: string;
+  code: string;
+  name: string;
+  cost_category: CostCategory;
+  package: string | null;
+  parent_cost_code_id: string | null;
+  phase_id: string | null;
+  building_id: string | null;
+  notes: string | null;
+  is_active: boolean;
+}
+
+export interface BudgetVersion {
+  id: string;
+  version_number: number;
+  status: string;
+  effective_date: string;
+  change_reason: string;
+  source_version_id: string | null;
+  currency_code: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  activated_at: string | null;
+  superseded_at: string | null;
+}
+
+export interface BudgetLine {
+  cost_code_id: string;
+  cost_code: string;
+  cost_code_name: string;
+  cost_category: string;
+  baseline_amount: string;
+  approved_budget_amount: string;
+  contingency_amount: string;
+  control_budget: string;
+  revised_commitment: string;
+  /** Negative where a cost code is committed beyond its authorisation. */
+  headroom: string;
+  funding_source: string | null;
+  notes: string | null;
+}
+
+export interface BudgetDetail extends BudgetVersion {
+  lines: BudgetLine[];
+  total_baseline: string;
+  total_approved_budget: string;
+  total_contingency: string;
+  total_control_budget: string;
+}
+
+export interface ConstructionContract {
+  id: string;
+  contract_number: string;
+  contract_type: string;
+  vendor_name: string;
+  status: string;
+  currency_code: string | null;
+  original_contract_value_ex_tax: string;
+  approved_variation_delta: string;
+  revised_commitment: string;
+  certified_to_date: string;
+  advance_entitlement_amount: string;
+  retention_rate_fraction: string;
+  planned_start_date: string | null;
+  planned_completion_date: string | null;
+  actual_start_date: string | null;
+  actual_completion_date: string | null;
+}
+
+/** One contract line, carrying only what that line actually owns.
+ *
+ * No revised or certified figure: two lines may name the same cost code, and
+ * nothing allocates a variation or a certificate back to one of them, so a
+ * line-level figure could only be the cost code's total repeated. Those live on
+ * `ContractDetail.cost_code_position`.
+ */
+export interface ContractLine {
+  id: string;
+  sequence: number;
+  description: string;
+  cost_code_id: string;
+  cost_code: string;
+  original_amount_ex_tax: string;
+  notes: string | null;
+}
+
+/** One cost code's position on one contract — the grain these figures are true at. */
+export interface ContractCostCodePosition {
+  cost_code_id: string;
+  cost_code: string;
+  cost_code_name: string;
+  original_amount_ex_tax: string;
+  approved_variation_delta: string;
+  revised_commitment: string;
+  certified_to_date: string;
+}
+
+export interface ContractDetail extends ConstructionContract {
+  vendor_registration_reference: string | null;
+  vendor_tax_reference: string | null;
+  vendor_contact_reference: string | null;
+  payment_terms: string | null;
+  tax_rate_fraction: string;
+  notes: string | null;
+  lines: ContractLine[];
+  cost_code_position: ContractCostCodePosition[];
+  approved_invoice_payable: string;
+  disputed_invoice_payable: string;
+  confirmed_paid: string;
+  invoice_outstanding: string;
+  retention_held: string;
+  retention_released: string;
+  retention_outstanding: string;
+  advance_paid: string;
+  advance_recovered: string;
+  advance_outstanding: string;
+}
+
+export interface Variation {
+  id: string;
+  contract_id: string;
+  contract_number: string;
+  variation_number: string;
+  description: string;
+  cause: string | null;
+  instruction_reference: string | null;
+  requested_date: string;
+  time_impact_days: number | null;
+  funding_source: string | null;
+  status: string;
+  total_value_ex_tax: string;
+  /** Decided on the server, on the absolute value of the change. */
+  requires_escalation: boolean;
+  review_amount: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  withdrawn_at: string | null;
+  withdrawal_reason: string | null;
+}
+
+export interface VariationLine {
+  id: string;
+  sequence: number;
+  cost_code_id: string;
+  cost_code: string;
+  description: string;
+  value_delta_ex_tax: string;
+}
+
+export interface VariationDetail extends Variation {
+  lines: VariationLine[];
+}
+
+export interface Certificate {
+  id: string;
+  contract_id: string;
+  contract_number: string;
+  certificate_number: string;
+  period_start: string;
+  period_end: string;
+  certificate_date: string;
+  status: string;
+  certifier_name: string | null;
+  evidence_reference: string | null;
+  current_work_value_ex_tax: string;
+  tax_amount: string;
+  retention_release_amount: string;
+  retention_held_amount: string;
+  advance_recovery_amount: string;
+  other_deductions_amount: string;
+  /** The waterfall's result, computed by the server in one place. */
+  net_due: string;
+  uninvoiced_net_due: string;
+  certified_at: string | null;
+  rejection_reason: string | null;
+  reversal_reason: string | null;
+}
+
+export interface CertificateLine {
+  cost_code_id: string;
+  cost_code: string;
+  current_work_value_ex_tax: string;
+  previously_certified: string;
+  cumulative_certified: string;
+  revised_commitment: string;
+  notes: string | null;
+}
+
+export interface CertificateDetail extends Certificate {
+  lines: CertificateLine[];
+}
+
+export interface ConstructionInvoice {
+  id: string;
+  contract_id: string;
+  contract_number: string;
+  certificate_id: string | null;
+  invoice_number: string;
+  invoice_type: string;
+  invoice_date: string;
+  due_date: string | null;
+  status: string;
+  amount_ex_tax: string;
+  tax_amount: string;
+  net_payable: string;
+  allocated: string;
+  outstanding: string;
+  dispute_reason: string | null;
+  void_reason: string | null;
+  approved_at: string | null;
+}
+
+export interface PaymentAllocation {
+  invoice_id: string;
+  invoice_number: string;
+  amount: string;
+}
+
+export interface ConstructionPayment {
+  id: string;
+  contract_id: string;
+  contract_number: string;
+  payment_reference: string;
+  payment_date: string;
+  value_date: string | null;
+  amount: string;
+  status: string;
+  currency_code: string | null;
+  bank_reference: string | null;
+  proof_reference: string | null;
+  allocated: string;
+  unallocated: string;
+  confirmed_at: string | null;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+  allocations: PaymentAllocation[];
+}
+
+export interface ConstructionMilestone {
+  id: string;
+  code: string;
+  name: string;
+  milestone_type: string;
+  phase_id: string | null;
+  building_id: string | null;
+  scope_label: string | null;
+  planned_date: string | null;
+  forecast_date: string | null;
+  actual_achieved_date: string | null;
+  certified_date: string | null;
+  progress_fraction: string | null;
+  status: string;
+  delay_days: number | null;
+  evidence_reference: string | null;
+  linked_certificate_id: string | null;
+  depends_on: string[];
+}
+
+export interface MilestoneCertified {
+  milestone: ConstructionMilestone;
+  triggered_installment_count: number;
+  triggered_plan_count: number;
+}
+
+/** What a payment plan may point a `construction_milestone` trigger at.
+ *
+ * Deliberately carries no amount, no contract and no vendor: the person
+ * choosing it is scheduling a buyer's instalment, not reading the build's cost.
+ */
+export interface MilestoneTriggerOption {
+  code: string;
+  name: string;
+  scope_label: string | null;
+  planned_date: string | null;
+  forecast_date: string | null;
+  is_certified: boolean;
+  certified_date: string | null;
+}
+
+export interface ForecastVersion {
+  id: string;
+  version_number: number;
+  status: string;
+  as_of_date: string;
+  budget_version_id: string;
+  budget_version_number: number | null;
+  change_reason: string;
+  source_version_id: string | null;
+  currency_code: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  activated_at: string | null;
+  superseded_at: string | null;
+}
+
+export interface ForecastLine {
+  cost_code_id: string;
+  cost_code: string;
+  cost_code_name: string;
+  control_budget: string;
+  revised_commitment: string;
+  certified_to_date: string;
+  forecast_remaining_amount_ex_tax: string;
+  estimate_at_completion: string;
+  /** Positive is over budget. The convention never reverses between screens. */
+  variance_at_completion: string;
+  forecast_below_commitment: boolean;
+  uncovered_commitment: string;
+  note: string | null;
+}
+
+export interface ForecastDetail extends ForecastVersion {
+  lines: ForecastLine[];
+  total_control_budget: string;
+  total_certified: string;
+  total_forecast_remaining: string;
+  total_estimate_at_completion: string;
+  total_variance_at_completion: string;
+}
+
+/** The cost side. Every figure excludes tax, without exception. */
+export interface CostControlPosition {
+  original_baseline: string;
+  current_approved_budget: string;
+  approved_contingency: string;
+  control_budget: string;
+  original_commitment: string;
+  approved_variation_delta: string;
+  revised_commitment: string;
+  /** Everything certified as of now. Moves the moment a certificate is signed. */
+  certified_to_date: string;
+  /** What the active forecast's estimate rests on, frozen at its own cutoff. */
+  forecast_certified_as_of: string | null;
+  forecast_remaining: string | null;
+  estimate_at_completion: string | null;
+  variance_at_completion: string | null;
+}
+
+/** The cash side. Every figure includes tax, without exception. */
+export interface PayablePosition {
+  approved_invoice_payable: string;
+  disputed_invoice_payable: string;
+  confirmed_paid: string;
+  invoice_outstanding: string;
+  retention_outstanding: string;
+  advance_paid: string;
+  advance_recovered: string;
+  advance_outstanding: string;
+}
+
+export interface ConstructionControls {
+  open_variations: number;
+  escalated_variations: number;
+  over_budget_cost_codes: number;
+  forecast_below_commitment_cost_codes: number;
+  late_milestones: number;
+  achieved_uncertified_milestones: number;
+  overdue_approved_invoices: number;
+  has_active_budget: boolean;
+  has_active_forecast: boolean;
+}
+
+export interface ConstructionSummary {
+  currency_code: string | null;
+  budget_version_number: number | null;
+  forecast_version_number: number | null;
+  forecast_as_of: string | null;
+  cost_control: CostControlPosition;
+  payable: PayablePosition;
+  controls: ConstructionControls;
+}
+
+export interface ReconciliationCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  amount: string | null;
+  expected: string | null;
+  variance: string | null;
+  detail: string | null;
+}
+
+export interface ConstructionReconciliation {
+  ok: boolean;
+  checks: ReconciliationCheck[];
+}
+
+export interface DeliveryResult {
+  to_status: string;
+  unit_count: number;
+  unit_ids: string[];
 }

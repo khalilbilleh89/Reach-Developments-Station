@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
 | Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-08) |     9 |
-| Remaining                             |     3 |
+| Complete (PR-MVP-00 through PR-MVP-09) |    10 |
+| Remaining                             |     2 |
 
 Engineering PRs are counted separately and never renumber the functional
 sequence:
@@ -348,20 +348,63 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > construction control begins. It carries no MVP number; see
 > [Horizontal checkpoints](#horizontal-checkpoints).
 
-## PR-MVP-09 — Construction Control
+## PR-MVP-09 — Construction Control ✅
 
-- construction budget baseline
-- cost codes/WBS
-- vendor/contract
-- variations
-- progress certificates
-- retention
-- advance recovery
-- invoices
-- payments
-- construction milestones
-- committed/certified/invoiced/paid separation
-- forecast at completion
+- cost codes with a category and a governed retirement, never deleted
+- versioned budgets: baseline, approved budget and contingency held apart, with
+  every active cost code addressed before a version can be submitted
+- vendor contracts whose lines reconcile to the header to the cent, activated by
+  somebody other than the person who prepared them, and only within the budget's
+  headroom
+- variations escalated on the **absolute** value of the change, floored at
+  certified work and at zero commitment
+- progress certificates with the full waterfall — retention withheld, retention
+  released, advance recovered, other deductions — computed once on the server
+- retention and advance as cash timing, never as cost reductions
+- invoices that always name what authorises them, and are a liability only once
+  a second person approves them
+- payments confirmed by somebody other than the recorder, allocated in full, and
+  never beyond what an invoice owes
+- construction milestones, and the one path by which a certification makes a
+  buyer's instalment fall due
+- delivery status through inventory's contract: not started, under construction,
+  ready — and nothing above
+- versioned forecasts with an as-of date and a named budget, and an estimate at
+  completion with one sign convention
+- a project position with cost control and payable as two separate models, and a
+  reconciliation with no tolerance
+
+> **Six truths, kept apart.** Authorised, committed, certified, claimed, paid
+> and forecast are six different answers to six different questions, and the
+> module's whole shape is the refusal to collapse them into one "spent" figure.
+> A contract does not certify work; a certificate does not create a liability;
+> an approved invoice is not cash gone. Each transition has its own governance
+> ladder and its own maker and checker, compared by user identifier rather than
+> by role.
+>
+> **Two bases, never blended.** Cost control is stated excluding tax, because
+> tax is recoverable in most of the jurisdictions this product serves and a cost
+> figure carrying it overstates the build. Payable is stated including tax on a
+> cash basis, because that is what actually leaves the bank. They are separate
+> models in the response and separate compositions on the screen, so no handler
+> and no layout can produce a figure that is half one and half the other.
+>
+> **A positive variance at completion is over budget**, on every surface. The
+> sign is derived on the server and never re-derived in the browser.
+>
+> **Two contracts outward, one contract inward.** Construction calls payment
+> plans to make instalments due on a certified milestone, and calls inventory to
+> move a unit's delivery status; payment plans imports nothing of construction
+> and no instalment column is written outside that contract. In the other
+> direction unit economics reads construction's hard-cost estimate at completion
+> and pins the forecast version it came from, so a later forecast makes a draft
+> basis stale rather than silently rewriting one that units were already sold
+> against.
+>
+> **Not here:** no cashflow, IRR or NPV — PR-MVP-10 owns those; no FX, so every
+> contract is refused in any currency but the project's base; no second project
+> hierarchy, approval engine or generic cost engine; no handover — construction
+> stops at ready and sales owns everything above it.
 
 ## PR-MVP-10 — Integrated Cashflow & Management Reporting
 

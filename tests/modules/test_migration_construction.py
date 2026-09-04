@@ -42,13 +42,19 @@ CONSTRUCTION_TABLES = (
 
 
 class TestTheRevision:
-    def test_there_is_exactly_one_head_and_it_is_this_revision(self) -> None:
+    def test_there_is_exactly_one_head(self) -> None:
+        """The head moves with each revision; the *one* is the invariant.
+
+        Asserting a particular revision is the head belongs in one place, and
+        that place is ``tests/test_migrations.py``. Naming it here as well meant
+        this file broke every time a revision landed, which taught everybody to
+        update the string rather than to ask why it had moved.
+        """
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         assert len(script.get_heads()) == 1
-        assert script.get_current_head() == "0009_construction"
 
     def test_the_revision_sits_directly_on_unit_economics(self) -> None:
         from alembic.config import Config
@@ -57,6 +63,34 @@ class TestTheRevision:
         script = ScriptDirectory.from_config(Config("alembic.ini"))
         revision = script.get_revision("0009_construction")
         assert revision.down_revision == "0008_unit_economics"
+
+    def test_the_source_kind_correction_sits_directly_on_construction(self) -> None:
+        """0010 corrects 0009 by appending to it, never by editing it.
+
+        0009 is applied history. A database stamped at it will not run it again,
+        so the only correction that can reach one is a later revision — and the
+        chain has to say so.
+        """
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        script = ScriptDirectory.from_config(Config("alembic.ini"))
+        revision = script.get_revision("0010_construction_source_kind")
+        assert revision.down_revision == "0009_construction"
+
+    def test_0009_does_not_touch_the_source_enumeration(self) -> None:
+        """The proof that the shipped revision was left alone.
+
+        Read off the file rather than the database, because the database only
+        ever shows the *end* of the history. If a later refactor moves the
+        correction back into 0009, a fresh install still works and every
+        deployed database silently stays broken — this is the assertion that
+        fails instead.
+        """
+        from pathlib import Path
+
+        shipped = Path("app/db/migrations/versions/0009_construction.py").read_text()
+        assert "ck_unit_economics_cost_pools_source_ok" not in shipped
 
     def test_every_construction_table_exists(self) -> None:
         """Sixteen tables, because five financial truths need five records."""
@@ -174,7 +208,10 @@ class TestTheDatabaseRefusesTheseShapes:
                 )
             )
         db.rollback()
-        assert "cx_source_shape" in str(caught.value) or "violates" in str(caught.value)
+        # The named constraint, not merely "some constraint". An assertion that
+        # accepted any violation would have passed while the row was refused by
+        # a stale source enumeration that did not know this source exists.
+        assert "cx_source_shape" in str(caught.value)
 
     def test_provenance_is_required_by_that_source_and_forbidden_to_others(
         self, db: Session
@@ -192,7 +229,32 @@ class TestTheDatabaseRefusesTheseShapes:
                 )
             )
         db.rollback()
-        assert "cx_provenance_shape" in str(caught.value) or "violates" in str(caught.value)
+        assert "cx_provenance_shape" in str(caught.value)
+
+    def test_the_source_enumeration_admits_the_construction_forecast(self, db: Session) -> None:
+        """The widened column and the closed set have to agree.
+
+        Autogenerate sees a changed column type and not a changed CHECK, so the
+        two can drift apart: a column wide enough to hold
+        ``construction_forecast`` beside a constraint that still lists only two
+        sources. The row below is refused for its scope, which proves the source
+        itself got past the enumeration.
+        """
+        with pytest.raises(Exception) as caught:
+            db.execute(
+                text(
+                    "INSERT INTO unit_economics_cost_pools "
+                    "(id, project_id, allocation_version_id, pool_number, name, category, "
+                    " source_kind, amount, scope_kind, allocation_method, created_by_user_id, "
+                    " source_construction_forecast_version_id) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'X', 'X', "
+                    " 'hard', 'construction_forecast', 1, 'phase', 'unit_count', "
+                    " gen_random_uuid(), gen_random_uuid())"
+                )
+            )
+        db.rollback()
+        assert "source_ok" not in str(caught.value)
+        assert "cx_source_shape" in str(caught.value)
 
 
 class TestLineageIsProvenNotNoted:
