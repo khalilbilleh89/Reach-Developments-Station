@@ -1,0 +1,720 @@
+"use client";
+
+import { useState } from "react";
+
+import {
+  Badge,
+  Button,
+  ButtonRow,
+  Card,
+  EmptyState,
+  Field,
+  FieldRow,
+  FormDialog,
+  KeyValue,
+  KeyValueGrid,
+  Loading,
+  MoneyInput,
+  Notice,
+  PromptDialog,
+  RateInput,
+  SectionHeader,
+  TableScroll,
+} from "@/components/ui";
+import type { Answer } from "@/lib/answer";
+import type { CashflowForecastDetail, CashflowForecastVersion } from "@/lib/api";
+import { businessDate, money, percent } from "@/lib/format";
+
+import { categoryLabel, checkLabel, forecastLabel, forecastTone, sourceKindLabel } from "./labels";
+
+/**
+ * The governed statement of what the project expects to receive and spend.
+ *
+ * A forecast is a version with a ladder, not a spreadsheet: prepared, submitted,
+ * approved by somebody other than the preparer, and put in force. What it was
+ * measured against is pinned when it is created — the construction forecast
+ * whose remaining cost it schedules, and the buyer schedule frozen underneath
+ * it — so a version can be reopened years later and read exactly as it read
+ * when it was approved.
+ *
+ * Every governance action here is offered on role and decided by the server.
+ * The maker/checker rule in particular is enforced by user identifier, so a
+ * refusal is shown in the server's own words rather than predicted here.
+ */
+export function CashflowForecasts({
+  versions,
+  detail,
+  selected,
+  onSelect,
+  canPrepare,
+  canApprove,
+  canActivate,
+  busy,
+  error,
+  currency,
+  onCreate,
+  onSubmit,
+  onApprove,
+  onReject,
+  onActivate,
+  onRefreshSnapshot,
+  onSetLine,
+}: {
+  versions: Answer<CashflowForecastVersion[]>;
+  detail: Answer<CashflowForecastDetail>;
+  selected: string | null;
+  onSelect: (versionId: string) => void;
+  canPrepare: boolean;
+  canApprove: boolean;
+  canActivate: boolean;
+  busy: boolean;
+  error: string | null;
+  currency: string | null;
+  onCreate: (body: Record<string, unknown>) => void;
+  onSubmit: (versionId: string) => void;
+  onApprove: (versionId: string, reason: string) => void;
+  onReject: (versionId: string, reason: string) => void;
+  onActivate: (versionId: string) => void;
+  onRefreshSnapshot: (versionId: string) => void;
+  onSetLine: (versionId: string, body: Record<string, unknown>) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [reasonFor, setReasonFor] = useState<"approve" | "reject" | null>(null);
+
+  return (
+    <div className="stack">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+
+      <Card
+        title="Forecast versions"
+        description="Each one states what it was measured against, and stays readable exactly as approved."
+        actions={
+          canPrepare ? (
+            <Button small onClick={() => setCreating(true)} disabled={busy}>
+              New forecast
+            </Button>
+          ) : undefined
+        }
+      >
+        {versions.status === "loading" ? <Loading label="Loading forecasts" shape="rows" /> : null}
+        {versions.status === "denied" ? (
+          <Notice tone="info">Forecasts are not available to your role.</Notice>
+        ) : null}
+        {versions.status === "failed" ? <Notice tone="error">{versions.message}</Notice> : null}
+        {versions.status === "ready" ? (
+          versions.data.length === 0 ? (
+            <EmptyState
+              title="No forecast has been prepared"
+              hint="A forecast pins the construction forecast it schedules and freezes the buyer schedule it was built on. Until one is in force, only cash that has moved is reported."
+            />
+          ) : (
+            <TableScroll label="Cashflow forecast versions" compact>
+              <thead>
+                <tr>
+                  <th scope="col">Version</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">As at</th>
+                  <th scope="col">Horizon</th>
+                  <th scope="col" className="num">Opening usable</th>
+                  <th scope="col" className="num">Opening restricted</th>
+                  <th scope="col" className="num">Discount rate</th>
+                  <th scope="col">Construction basis</th>
+                  <th scope="col" className="num">Instalments</th>
+                  <th scope="col">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {versions.data.map((version) => (
+                  <tr key={version.id} aria-current={version.id === selected ? "true" : undefined}>
+                    <th scope="row">
+                      <button type="button" className="button-link" onClick={() => onSelect(version.id)}>
+                        Version {version.version_number}
+                      </button>
+                    </th>
+                    <td>
+                      <Badge tone={forecastTone(version.status)}>
+                        {forecastLabel(version.status)}
+                      </Badge>
+                    </td>
+                    <td>{businessDate(version.as_of_date)}</td>
+                    <td>
+                      {businessDate(version.forecast_start_month)} —{" "}
+                      {businessDate(version.forecast_end_month)}
+                    </td>
+                    <td className="num">
+                      {money(version.opening_unrestricted_cash, version.currency_code ?? currency)}
+                    </td>
+                    <td className="num">
+                      {money(version.opening_restricted_cash, version.currency_code ?? currency)}
+                    </td>
+                    <td className="num">{percent(version.discount_rate_per_period)}</td>
+                    <td>
+                      {version.construction_forecast_version_number === null
+                        ? "—"
+                        : `Version ${version.construction_forecast_version_number}`}
+                    </td>
+                    <td className="num">{version.installments_in_snapshot}</td>
+                    <td className="cell-prose">{version.change_reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          )
+        ) : null}
+      </Card>
+
+      {selected ? (
+        <ForecastDetail
+          detail={detail}
+          currency={currency}
+          canPrepare={canPrepare}
+          canApprove={canApprove}
+          canActivate={canActivate}
+          busy={busy}
+          onSubmit={() => onSubmit(selected)}
+          onAskApprove={() => setReasonFor("approve")}
+          onAskReject={() => setReasonFor("reject")}
+          onActivate={() => onActivate(selected)}
+          onRefreshSnapshot={() => onRefreshSnapshot(selected)}
+          onSetLine={(body) => onSetLine(selected, body)}
+        />
+      ) : null}
+
+      {creating ? (
+        <CreateForecastDialog
+          currency={currency}
+          busy={busy}
+          onCancel={() => setCreating(false)}
+          onSubmit={(body) => {
+            onCreate(body);
+            setCreating(false);
+          }}
+        />
+      ) : null}
+
+      {reasonFor && selected ? (
+        <PromptDialog
+          title={reasonFor === "approve" ? "Approve this forecast" : "Reject this forecast"}
+          label={reasonFor === "approve" ? "What was reviewed?" : "Why is it being rejected?"}
+          hint="Kept on the record against the version."
+          confirmLabel={reasonFor === "approve" ? "Approve" : "Reject"}
+          busy={busy}
+          onCancel={() => setReasonFor(null)}
+          onSubmit={(reason) => {
+            if (reasonFor === "approve") onApprove(selected, reason);
+            else onReject(selected, reason);
+            setReasonFor(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ForecastDetail({
+  detail,
+  currency,
+  canPrepare,
+  canApprove,
+  canActivate,
+  busy,
+  onSubmit,
+  onAskApprove,
+  onAskReject,
+  onActivate,
+  onRefreshSnapshot,
+  onSetLine,
+}: {
+  detail: Answer<CashflowForecastDetail>;
+  currency: string | null;
+  canPrepare: boolean;
+  canApprove: boolean;
+  canActivate: boolean;
+  busy: boolean;
+  onSubmit: () => void;
+  onAskApprove: () => void;
+  onAskReject: () => void;
+  onActivate: () => void;
+  onRefreshSnapshot: () => void;
+  onSetLine: (body: Record<string, unknown>) => void;
+}) {
+  const [editingLine, setEditingLine] = useState(false);
+
+  if (detail.status === "loading") return <Loading label="Loading the forecast" shape="rows" />;
+  if (detail.status === "denied") {
+    return <Notice tone="info">This forecast is not available to your role.</Notice>;
+  }
+  if (detail.status === "failed") return <Notice tone="error">{detail.message}</Notice>;
+  if (detail.status === "off") return null;
+
+  const version = detail.data;
+  const isDraft = version.status === "draft";
+  const failedChecks = version.construction_reconciliation.filter((check) => !check.passed);
+
+  return (
+    <Card
+      title={`Version ${version.version_number}`}
+      description={version.change_reason}
+      actions={
+        <ButtonRow>
+          {canPrepare && isDraft ? (
+            <Button small onClick={() => setEditingLine(true)} disabled={busy}>
+              Add or change a line
+            </Button>
+          ) : null}
+          {canPrepare && version.status !== "active" && version.status !== "superseded" ? (
+            <Button small variant="quiet" onClick={onRefreshSnapshot} disabled={busy}>
+              Refresh buyer schedule
+            </Button>
+          ) : null}
+          {canPrepare && isDraft ? (
+            <Button small onClick={onSubmit} disabled={busy}>
+              Submit
+            </Button>
+          ) : null}
+          {canApprove && version.status === "submitted" ? (
+            <>
+              <Button small onClick={onAskApprove} disabled={busy}>
+                Approve
+              </Button>
+              <Button small variant="danger" onClick={onAskReject} disabled={busy}>
+                Reject
+              </Button>
+            </>
+          ) : null}
+          {canActivate && version.status === "approved" ? (
+            <Button small onClick={onActivate} disabled={busy}>
+              Put in force
+            </Button>
+          ) : null}
+        </ButtonRow>
+      }
+    >
+      <div className="button-row">
+        <Badge tone={forecastTone(version.status)}>{forecastLabel(version.status)}</Badge>
+      </div>
+
+      <Staleness staleness={version.staleness} />
+
+      <KeyValueGrid columns={3}>
+        <KeyValue label="Taken as at" value={businessDate(version.as_of_date)} />
+        <KeyValue
+          label="Horizon"
+          value={`${businessDate(version.forecast_start_month)} — ${businessDate(version.forecast_end_month)}`}
+        />
+        <KeyValue
+          label="Discount rate per period"
+          value={percent(version.discount_rate_per_period)}
+          mono
+        />
+        <KeyValue
+          label="Opening usable cash"
+          value={money(version.opening_unrestricted_cash, currency)}
+          mono
+        />
+        <KeyValue
+          label="Opening restricted cash"
+          value={money(version.opening_restricted_cash, currency)}
+          mono
+        />
+        <KeyValue label="Opening total cash" value={money(version.opening_total_cash, currency)} mono />
+      </KeyValueGrid>
+
+      <SectionHeader title="Construction reconciliation" />
+      {version.construction_reconciliation.length === 0 ? (
+        <p className="footnote">
+          This forecast names no construction forecast, so there is nothing to
+          reconcile its build schedule against.
+        </p>
+      ) : (
+        <>
+          {failedChecks.length > 0 ? (
+            <Notice tone="warning">
+              {failedChecks.length === 1
+                ? "One check does not reconcile."
+                : `${failedChecks.length} checks do not reconcile.`}{" "}
+              Every cost code the construction forecast carries must appear here,
+              and its months must total its remaining cost exactly.
+            </Notice>
+          ) : null}
+          <TableScroll label="Construction reconciliation checks" compact>
+            <thead>
+              <tr>
+                <th scope="col">Check</th>
+                <th scope="col">Result</th>
+                <th scope="col" className="num">Expected</th>
+                <th scope="col" className="num">Scheduled</th>
+                <th scope="col">What it means</th>
+              </tr>
+            </thead>
+            <tbody>
+              {version.construction_reconciliation.map((check) => (
+                <tr key={check.name}>
+                  <th scope="row">{checkLabel(check.name)}</th>
+                  <td>
+                    <Badge tone={check.passed ? "success" : "danger"}>
+                      {check.passed ? "Reconciles" : "Does not reconcile"}
+                    </Badge>
+                  </td>
+                  <td className="num">{money(check.expected, currency)}</td>
+                  <td className="num">{money(check.actual, currency)}</td>
+                  <td className="cell-prose">{check.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </TableScroll>
+        </>
+      )}
+
+      <SectionHeader title="Forecast lines" />
+      {version.lines.length === 0 ? (
+        <EmptyState
+          title="Nothing scheduled yet"
+          hint="A forecast says when the project expects cash to move. Construction lines must name the cost code they schedule."
+        />
+      ) : (
+        <TableScroll label="Forecast lines" compact>
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Source</th>
+              <th scope="col">What</th>
+              <th scope="col">Cost code</th>
+              <th scope="col">Direction</th>
+              <th scope="col" className="num">Amount</th>
+              <th scope="col">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {version.lines.map((line) => (
+              <tr key={line.id}>
+                <th scope="row">{businessDate(line.period_month)}</th>
+                <td>{sourceKindLabel(line.source_kind)}</td>
+                <td>{categoryLabel(line.category)}</td>
+                <td>{line.construction_cost_code ?? "—"}</td>
+                <td>{line.flow_direction === "inflow" ? "Cash in" : "Cash out"}</td>
+                <td className="num">{money(line.amount, currency)}</td>
+                <td className="cell-prose">{line.note ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </TableScroll>
+      )}
+      <p className="footnote">
+        These are the amounts as approved. A live report shows what is still
+        expected against each of them — the governed figure less what has already
+        been paid or received since this forecast was cut.
+      </p>
+
+      <SectionHeader title="Buyer schedule frozen underneath this version" />
+      {version.customer_schedule.length === 0 ? (
+        <p className="footnote">No governing buyer instalments were in force at this cutoff.</p>
+      ) : (
+        <TableScroll label="Frozen buyer schedule" compact>
+          <thead>
+            <tr>
+              <th scope="col">Expected</th>
+              <th scope="col" className="num">Amount</th>
+              <th scope="col">Trigger</th>
+              <th scope="col">Standing</th>
+              <th scope="col">Contractual date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {version.customer_schedule.map((row) => (
+              <tr key={row.installment_id}>
+                <th scope="row">{businessDate(row.chosen_forecast_date)}</th>
+                <td className="num">{money(row.amount, currency)}</td>
+                <td>{row.trigger_type.replace(/_/g, " ")}</td>
+                <td>{row.trigger_status.replace(/_/g, " ")}</td>
+                <td>{row.contractual_due_date ? businessDate(row.contractual_due_date) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </TableScroll>
+      )}
+
+      {editingLine ? (
+        <ForecastLineDialog
+          currency={currency}
+          busy={busy}
+          onCancel={() => setEditingLine(false)}
+          onSubmit={(body) => {
+            onSetLine(body);
+            setEditingLine(false);
+          }}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
+/**
+ * Whether the sources underneath this version have moved, and which one.
+ *
+ * Two independent things can change while a forecast waits for a signature, and
+ * they need different answers: a customer schedule can be refreshed here, while
+ * a construction forecast that has been superseded needs a new cashflow version
+ * built on the current one. Saying only "Stale" would leave a preparer with no
+ * idea which.
+ */
+function Staleness({ staleness }: { staleness: CashflowForecastDetail["staleness"] }) {
+  if (!staleness.is_stale) return null;
+  return (
+    <Notice tone="warning">
+      <strong>The sources this version was built on have changed.</strong> Its
+      own figures are unchanged and are still reported exactly as approved.
+      {staleness.construction_is_stale ? (
+        <>
+          {" "}
+          It schedules construction forecast version{" "}
+          {staleness.pinned_construction_version_number ?? "—"}, and version{" "}
+          {staleness.active_construction_version_number ?? "—"} is now in force —
+          a new cashflow forecast has to be built on the current one, because
+          substituting a newer source under an approved version changes what was
+          approved.
+        </>
+      ) : null}
+      {staleness.customer_schedule_is_stale ? (
+        <>
+          {" "}
+          The governing buyer schedules have changed since this version froze
+          them. Refreshing is a deliberate act, not something that happens on its
+          own.
+        </>
+      ) : null}
+    </Notice>
+  );
+}
+
+function CreateForecastDialog({
+  currency,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  currency: string | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (body: Record<string, unknown>) => void;
+}) {
+  const [asOfDate, setAsOfDate] = useState("");
+  const [endMonth, setEndMonth] = useState("");
+  const [openingUnrestricted, setOpeningUnrestricted] = useState("");
+  const [openingRestricted, setOpeningRestricted] = useState("");
+  const [rate, setRate] = useState("");
+  const [reason, setReason] = useState("");
+
+  // The opening balance is cash at the start of the month the forecast is taken
+  // in, so the start month is that month and is not a separate decision. The
+  // server refuses any other pairing; offering the field would only invite a
+  // rejection.
+  const startMonth = asOfDate ? `${asOfDate.slice(0, 7)}-01` : "";
+
+  return (
+    <FormDialog
+      title="Prepare a cashflow forecast"
+      description="It pins the construction forecast in force and freezes today's buyer schedule underneath it."
+      confirmLabel="Create draft"
+      busy={busy}
+      disabled={!asOfDate || !endMonth || !openingUnrestricted || !openingRestricted || !reason}
+      onCancel={onCancel}
+      onSubmit={() =>
+        onSubmit({
+          as_of_date: asOfDate,
+          forecast_start_month: startMonth,
+          forecast_end_month: endMonth,
+          opening_unrestricted_cash: openingUnrestricted,
+          opening_restricted_cash: openingRestricted,
+          discount_rate_per_period: rate || "0.000000",
+          change_reason: reason,
+        })
+      }
+    >
+      <FieldRow>
+        <Field
+          label="Taken as at"
+          hint="The cutoff. Transactions confirmed after it are not inside this version."
+        >
+          <input
+            className="input"
+            type="date"
+            value={asOfDate}
+            onChange={(event) => setAsOfDate(event.target.value)}
+          />
+        </Field>
+        <Field
+          label="Horizon ends"
+          hint="The last month this forecast says anything about."
+        >
+          <input
+            className="input"
+            type="month"
+            value={endMonth ? endMonth.slice(0, 7) : ""}
+            onChange={(event) =>
+              setEndMonth(event.target.value ? `${event.target.value}-01` : "")
+            }
+          />
+        </Field>
+      </FieldRow>
+      <p className="footnote">
+        The horizon opens in {startMonth ? businessDate(startMonth) : "the month of the cutoff"},
+        because the opening balances below state cash held at the start of that month.
+      </p>
+      <FieldRow>
+        <Field label="Opening usable cash" hint="Spendable cash at the start of that month.">
+          <MoneyInput code={currency} value={openingUnrestricted} onChange={setOpeningUnrestricted} />
+        </Field>
+        <Field label="Opening restricted cash" hint="Held in escrow at the start of that month.">
+          <MoneyInput code={currency} value={openingRestricted} onChange={setOpeningRestricted} />
+        </Field>
+      </FieldRow>
+      <Field
+        label="Discount rate per period"
+        hint="Per month, not per year. The NPV is discounted at exactly this rate."
+        optional
+      >
+        <RateInput value={rate} onChange={setRate} />
+      </Field>
+      <Field label="Why this forecast is being prepared">
+        <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </Field>
+    </FormDialog>
+  );
+}
+
+const LINE_SOURCE_KINDS = [
+  { value: "construction", label: "Construction" },
+  { value: "development", label: "Development" },
+  { value: "financing", label: "Financing" },
+  { value: "unsold_customer", label: "Unsold stock" },
+];
+
+function ForecastLineDialog({
+  currency,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  currency: string | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (body: Record<string, unknown>) => void;
+}) {
+  const [sourceKind, setSourceKind] = useState("construction");
+  const [category, setCategory] = useState("construction");
+  const [periodMonth, setPeriodMonth] = useState("");
+  const [amount, setAmount] = useState("");
+  const [costCode, setCostCode] = useState("");
+  const [flowDirection, setFlowDirection] = useState("outflow");
+  const [note, setNote] = useState("");
+
+  const needsCostCode = sourceKind === "construction";
+  const needsDirection = sourceKind === "financing";
+
+  return (
+    <FormDialog
+      title="Set a forecast line"
+      description="One figure per month, per source and per category. Writing the same cell again replaces it."
+      confirmLabel="Save line"
+      busy={busy}
+      disabled={!periodMonth || !amount || (needsCostCode && !costCode)}
+      onCancel={onCancel}
+      onSubmit={() =>
+        onSubmit({
+          period_month: periodMonth,
+          source_kind: sourceKind,
+          category,
+          amount,
+          ...(needsDirection ? { flow_direction: flowDirection } : {}),
+          ...(needsCostCode ? { construction_cost_code_id: costCode } : {}),
+          note: note || null,
+        })
+      }
+    >
+      <FieldRow>
+        <Field label="What kind of cash">
+          <select
+            className="input"
+            value={sourceKind}
+            onChange={(event) => {
+              setSourceKind(event.target.value);
+              setCategory(
+                event.target.value === "construction"
+                  ? "construction"
+                  : event.target.value === "unsold_customer"
+                    ? "customer_collection"
+                    : "",
+              );
+              setCostCode("");
+            }}
+          >
+            {LINE_SOURCE_KINDS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Month">
+          <input
+            className="input"
+            type="month"
+            value={periodMonth ? periodMonth.slice(0, 7) : ""}
+            onChange={(event) =>
+              setPeriodMonth(event.target.value ? `${event.target.value}-01` : "")
+            }
+          />
+        </Field>
+      </FieldRow>
+
+      {sourceKind === "development" || sourceKind === "financing" ? (
+        <Field
+          label="Category"
+          hint="Exactly as the movement it will be measured against is categorised."
+        >
+          <input
+            className="input"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+          />
+        </Field>
+      ) : null}
+
+      {needsCostCode ? (
+        <Field
+          label="Construction cost code"
+          hint="A construction line has to name the code it schedules, or there is nothing to reconcile it against."
+        >
+          <input
+            className="input"
+            value={costCode}
+            onChange={(event) => setCostCode(event.target.value)}
+          />
+        </Field>
+      ) : null}
+
+      {needsDirection ? (
+        <Field label="Direction">
+          <select
+            className="input"
+            value={flowDirection}
+            onChange={(event) => setFlowDirection(event.target.value)}
+          >
+            <option value="inflow">Cash in</option>
+            <option value="outflow">Cash out</option>
+          </select>
+        </Field>
+      ) : null}
+
+      <FieldRow>
+        <Field label="Amount">
+          <MoneyInput code={currency} value={amount} onChange={setAmount} />
+        </Field>
+        <Field label="Note" optional>
+          <input className="input" value={note} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+      </FieldRow>
+    </FormDialog>
+  );
+}

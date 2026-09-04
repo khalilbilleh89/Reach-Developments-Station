@@ -2395,3 +2395,380 @@ export interface DeliveryResult {
   unit_count: number;
   unit_ids: string[];
 }
+
+// --------------------------------------------------------------------------- //
+// Cashflow and management reporting (PR-MVP-10)
+// --------------------------------------------------------------------------- //
+
+/**
+ * Money and rates arrive as strings and stay strings.
+ *
+ * The backend serialises every figure as a decimal string on purpose: a cash
+ * position put through a JavaScript float comes back subtly different from the
+ * one the ledger will enforce, and the difference appears in the least
+ * significant place — which is exactly where a reconciliation looks. These
+ * aliases are documentation, not enforcement, but they mark every field the
+ * browser may format and must never do arithmetic on.
+ */
+export type MoneyStr = string;
+export type RateStr = string;
+
+/** Where a month sits relative to the date a report was taken. */
+export type MonthBasis = "actual" | "actual_and_forecast" | "forecast";
+
+export type CashflowForecastStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "active"
+  | "superseded"
+  | "rejected";
+
+export type CashflowMovementStatus = "recorded" | "confirmed" | "reversed";
+
+export type FlowDirection = "inflow" | "outflow";
+
+export type ForecastSourceKind =
+  | "unsold_customer"
+  | "development"
+  | "construction"
+  | "financing";
+
+export type DevelopmentCategory =
+  | "land_acquisition"
+  | "land_fees"
+  | "design"
+  | "consultants"
+  | "permits"
+  | "insurance"
+  | "developer_overhead"
+  | "marketing"
+  | "commissions"
+  | "tax"
+  | "handover"
+  | "other";
+
+export type FinancingType =
+  | "equity_contribution"
+  | "debt_drawdown"
+  | "guarantee_cash_release"
+  | "equity_distribution"
+  | "debt_fee"
+  | "interest_payment"
+  | "principal_repayment"
+  | "guarantee_cash_posting";
+
+/** What every reporting response says about itself before its figures. */
+export interface CashflowBasis {
+  project_id: string;
+  as_of_date: string;
+  currency_code: string | null;
+  forecast_version_id: string | null;
+  forecast_version_number: number | null;
+  forecast_as_of_date: string | null;
+  from_month: string | null;
+  to_month: string | null;
+}
+
+export interface CashflowStaleness {
+  is_stale: boolean;
+  construction_is_stale: boolean;
+  pinned_construction_version_number: number | null;
+  active_construction_version_number: number | null;
+  customer_schedule_is_stale: boolean;
+  snapshot_plan_version_count: number;
+  governing_plan_version_count: number;
+}
+
+export interface CashflowCheck {
+  name: string;
+  passed: boolean;
+  expected: MoneyStr | null;
+  actual: MoneyStr | null;
+  detail: string;
+}
+
+export interface CashflowPosition {
+  total_cash: MoneyStr;
+  restricted_cash: MoneyStr;
+  unrestricted_cash: MoneyStr;
+  /** Null where nothing is forecast to go out: a ratio against zero is undefined. */
+  forecast_collection_coverage: RateStr | null;
+  coverage_numerator: MoneyStr;
+  coverage_denominator: MoneyStr;
+}
+
+export interface CashflowFundingWindow {
+  days: number;
+  from_date: string;
+  to_date: string;
+  opening_unrestricted_cash: MoneyStr;
+  usable_inflows: MoneyStr;
+  outflows: MoneyStr;
+  net_movement: MoneyStr;
+  /** The deepest point inside the window, which is what has to be funded. */
+  minimum_projected_unrestricted_cash: MoneyStr;
+  closing_projected_unrestricted_cash: MoneyStr;
+  funding_requirement: MoneyStr;
+}
+
+export interface CashflowPeakDeficit {
+  minimum_unrestricted_cash: MoneyStr;
+  peak_funding_deficit: MoneyStr;
+  peak_deficit_month: string | null;
+}
+
+export interface CashflowReturns {
+  npv_basis: string;
+  discount_rate_per_period: RateStr;
+  net_present_value: MoneyStr;
+  net_project_cashflow: MoneyStr;
+  equity_irr_basis: string;
+  /** Null with a reason beside it, never zero. */
+  equity_irr_per_period: RateStr | null;
+  equity_irr_unavailable_reason: string | null;
+  equity_contributed: MoneyStr;
+  equity_distributed: MoneyStr;
+  equity_net: MoneyStr;
+}
+
+export interface CashflowSummary {
+  basis: CashflowBasis;
+  position: CashflowPosition;
+  peak_deficit: CashflowPeakDeficit;
+  funding_windows: CashflowFundingWindow[];
+  returns: CashflowReturns;
+  has_active_forecast: boolean;
+  staleness: CashflowStaleness | null;
+}
+
+export interface CashflowMonthlyPosition {
+  period_month: string;
+  basis: MonthBasis;
+  opening_total_cash: MoneyStr;
+  customer_scheduled_due: MoneyStr;
+  customer_actual_receipts: MoneyStr;
+  customer_forecast_receipts: MoneyStr;
+  financing_actual_inflows: MoneyStr;
+  financing_forecast_inflows: MoneyStr;
+  development_actual_outflows: MoneyStr;
+  development_forecast_outflows: MoneyStr;
+  construction_actual_payments: MoneyStr;
+  construction_forecast_payments: MoneyStr;
+  customer_refunds: MoneyStr;
+  financing_actual_outflows: MoneyStr;
+  financing_forecast_outflows: MoneyStr;
+  total_inflows: MoneyStr;
+  total_outflows: MoneyStr;
+  net_cashflow: MoneyStr;
+  closing_total_cash: MoneyStr;
+  opening_restricted_cash: MoneyStr;
+  newly_restricted_customer_cash: MoneyStr;
+  escrow_releases: MoneyStr;
+  closing_restricted_cash: MoneyStr;
+  opening_unrestricted_cash: MoneyStr;
+  usable_inflows: MoneyStr;
+  unrestricted_outflows: MoneyStr;
+  closing_unrestricted_cash: MoneyStr;
+  funding_gap: MoneyStr;
+}
+
+export interface CashflowMonthly {
+  basis: CashflowBasis;
+  months: CashflowMonthlyPosition[];
+}
+
+/**
+ * One transaction behind a figure, named by the module that owns it.
+ *
+ * `source_type` is deliberately specific — a collection receipt, a construction
+ * payment, a payment-plan instalment — because cashflow consolidates records it
+ * does not own, and relabelling them all as "cashflow transaction" would hide
+ * where a correction has to be made.
+ */
+export interface CashflowSourceRow {
+  source_type: string;
+  source_id: string;
+  period_month: string;
+  business_date: string;
+  amount: MoneyStr;
+  flow_direction: string;
+  category: string;
+  basis: string;
+  status: string;
+  display_reference: string;
+}
+
+export interface CashflowDrilldown {
+  basis: CashflowBasis;
+  total: MoneyStr;
+  rows: CashflowSourceRow[];
+}
+
+export interface CashflowForecastVersion {
+  id: string;
+  version_number: number;
+  status: CashflowForecastStatus;
+  currency_code: string | null;
+  as_of_date: string;
+  forecast_start_month: string;
+  forecast_end_month: string;
+  opening_unrestricted_cash: MoneyStr;
+  opening_restricted_cash: MoneyStr;
+  opening_total_cash: MoneyStr;
+  discount_rate_per_period: RateStr;
+  construction_forecast_version_id: string | null;
+  construction_forecast_version_number: number | null;
+  source_version_id: string | null;
+  change_reason: string;
+  installments_in_snapshot: number;
+}
+
+export interface CashflowForecastLine {
+  id: string;
+  period_month: string;
+  flow_direction: FlowDirection;
+  category: string;
+  source_kind: ForecastSourceKind;
+  amount: MoneyStr;
+  phase_id: string | null;
+  construction_cost_code_id: string | null;
+  construction_cost_code: string | null;
+  note: string | null;
+}
+
+/** One frozen buyer instalment. No buyer name: a cash report does not need one. */
+export interface CashflowScheduleSnapshot {
+  installment_id: string;
+  payment_plan_version_id: string;
+  sale_contract_id: string;
+  unit_id: string | null;
+  amount: MoneyStr;
+  contractual_due_date: string | null;
+  forecast_due_date: string | null;
+  actual_due_date: string | null;
+  chosen_forecast_date: string;
+  trigger_type: string;
+  trigger_status: string;
+}
+
+export interface CashflowForecastDetail extends CashflowForecastVersion {
+  lines: CashflowForecastLine[];
+  customer_schedule: CashflowScheduleSnapshot[];
+  staleness: CashflowStaleness;
+  construction_reconciliation: CashflowCheck[];
+}
+
+export interface CashflowDevelopmentMovement {
+  id: string;
+  movement_reference: string;
+  category: DevelopmentCategory;
+  amount: MoneyStr;
+  currency_code: string | null;
+  movement_date: string;
+  value_date: string | null;
+  phase_id: string | null;
+  status: CashflowMovementStatus;
+  counterparty_reference: string | null;
+  invoice_reference: string | null;
+  bank_reference: string | null;
+  evidence_reference: string | null;
+  notes: string | null;
+  /** Recording is a claim. This is what says the money actually moved. */
+  counts_as_cash: boolean;
+}
+
+export interface CashflowFinancingMovement {
+  id: string;
+  movement_reference: string;
+  movement_type: FinancingType;
+  flow_direction: FlowDirection;
+  amount: MoneyStr;
+  currency_code: string | null;
+  movement_date: string;
+  value_date: string | null;
+  status: CashflowMovementStatus;
+  counterparty_reference: string | null;
+  facility_reference: string | null;
+  bank_reference: string | null;
+  evidence_reference: string | null;
+  notes: string | null;
+  counts_as_cash: boolean;
+}
+
+export interface CashflowRelease {
+  id: string;
+  restriction_id: string;
+  release_date: string;
+  amount: MoneyStr;
+  certification_reference: string | null;
+  evidence_reference: string | null;
+  status: CashflowMovementStatus;
+  /** Confirmed *and* freeing an escrow that still holds something. */
+  counts_as_released: boolean;
+  /** Whether that escrow currently holds anything, so a screen can say why. */
+  restriction_counts: boolean;
+}
+
+export interface CashflowRestriction {
+  id: string;
+  receipt_id: string;
+  receipt_number: string | null;
+  receipt_amount: MoneyStr | null;
+  restricted_amount: MoneyStr;
+  released_amount: MoneyStr;
+  outstanding_restricted: MoneyStr;
+  reason: string;
+  source_reference: string | null;
+  status: CashflowMovementStatus;
+  /** Confirmed *and* backed by a receipt that still stands. */
+  counts_as_restricted: boolean;
+  /** False is what a reader needs when a confirmed escrow stops counting. */
+  receipt_stands: boolean;
+  releases: CashflowRelease[];
+}
+
+export interface CashflowVariance {
+  forecast_amount: MoneyStr;
+  actual_amount: MoneyStr;
+  variance_amount: MoneyStr;
+  /** Null against a zero forecast: a percentage of nothing is not a number. */
+  variance_rate: RateStr | null;
+}
+
+export interface CashflowAccuracyRow {
+  period_month: string;
+  category_group: string;
+  variance: CashflowVariance;
+}
+
+export interface CashflowAccuracy {
+  basis: CashflowBasis;
+  rows: CashflowAccuracyRow[];
+}
+
+export interface CashflowReconciliation {
+  basis: CashflowBasis;
+  checks: CashflowCheck[];
+  failed_count: number;
+}
+
+export interface CashflowManagementMetric {
+  key: string;
+  label: string;
+  value: string | null;
+  unit: string;
+  /** The module that owns this figure. Kept so a total names its source. */
+  source_module: string;
+  drilldown_source_type: string | null;
+}
+
+export interface CashflowManagementGroup {
+  group: string;
+  metrics: CashflowManagementMetric[];
+}
+
+export interface CashflowManagement {
+  basis: CashflowBasis;
+  groups: CashflowManagementGroup[];
+}

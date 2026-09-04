@@ -2,8 +2,17 @@
 
 import type { ReactNode } from "react";
 
-import { collections, inventory, paymentPlans, pricing, sales, unitEconomics } from "@/lib/api";
+import {
+  cashflow,
+  collections,
+  inventory,
+  paymentPlans,
+  pricing,
+  sales,
+  unitEconomics,
+} from "@/lib/api";
 import type {
+  CashflowSummary,
   CollectionProjectSummary,
   PlanRegister,
   PriceRegister,
@@ -18,6 +27,7 @@ import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money, percent } from "@/lib/format";
 import {
+  CASHFLOW_READERS,
   COLLECTION_READERS,
   ECONOMICS_READERS,
   INTERNAL_PRICE_READERS,
@@ -94,6 +104,7 @@ export function ProjectCommandCenter({
   const seesPlans = hasAnyRole(roles, PLAN_READERS);
   const seesCollections = hasAnyRole(roles, COLLECTION_READERS);
   const seesEconomics = hasAnyRole(roles, ECONOMICS_READERS);
+  const seesCashflow = hasAnyRole(roles, CASHFLOW_READERS);
 
   // One request each, and only for the readers the server would answer. The
   // registers are asked for a single row: their counts cover the whole set.
@@ -118,6 +129,14 @@ export function ProjectCommandCenter({
   const economics = useAnswer<ProjectEconomics>(
     operational && seesEconomics,
     () => unitEconomics.summary(id),
+    [id, refreshKey],
+  );
+  // Asked only of a reader entitled to it. The request is never made and then
+  // hidden on a 403: a role that may not read the project's cash never has its
+  // figures reach the browser at all.
+  const projectCash = useAnswer<CashflowSummary>(
+    operational && seesCashflow,
+    () => cashflow.summary(id),
     [id, refreshKey],
   );
 
@@ -651,7 +670,78 @@ export function ProjectCommandCenter({
           </Section>
         </Card>
       ) : null}
+
+      {seesCashflow ? (
+        <Card
+          title="Cash"
+          description="What the project can spend, and what it must raise."
+          actions={
+            <Button small variant="quiet" onClick={() => onNavigate("cashflow")}>
+              Cashflow
+            </Button>
+          }
+        >
+          <Section answer={projectCash} name="Cashflow" off="Opens after setup.">
+            {(data) => <ProjectCashPosition summary={data} />}
+          </Section>
+        </Card>
+      ) : null}
       </div>
+    </>
+  );
+}
+
+/**
+ * The four cash figures worth putting on a project's front page.
+ *
+ * Usable cash leads, because it is the only one of the balances a developer can
+ * spend. The ninety-day requirement and the peak deficit are the two questions
+ * that follow it, and both arrive computed — this component adds nothing.
+ */
+function ProjectCashPosition({ summary }: { summary: CashflowSummary }) {
+  const code = summary.basis.currency_code;
+  const ninety = summary.funding_windows.find((window) => window.days === 90);
+  return (
+    <>
+      <Position compact>
+        <PositionFigure
+          lead
+          label="Usable cash"
+          value={money(summary.position.unrestricted_cash, code)}
+          tone={isPositive(summary.position.unrestricted_cash) ? "neutral" : "danger"}
+          note="Spendable today"
+        />
+        <PositionFigure label="Restricted" value={money(summary.position.restricted_cash, code)} note="Held in escrow" />
+        {ninety ? (
+          <PositionFigure
+            label="Funding required, 90 days"
+            value={money(ninety.funding_requirement, code)}
+            tone={isPositive(ninety.funding_requirement) ? "danger" : "neutral"}
+          />
+        ) : null}
+        <PositionFigure
+          label="Peak funding requirement"
+          value={money(summary.peak_deficit.peak_funding_deficit, code)}
+          tone={isPositive(summary.peak_deficit.peak_funding_deficit) ? "danger" : "neutral"}
+          note={
+            summary.peak_deficit.peak_deficit_month
+              ? `Expected ${businessDate(summary.peak_deficit.peak_deficit_month)}`
+              : "No month runs short"
+          }
+        />
+      </Position>
+      <PositionSupport>
+        <PositionSupportItem label="Total cash" value={money(summary.position.total_cash, code)} />
+        <PositionSupportItem
+          label="Forecast in force"
+          value={
+            summary.has_active_forecast && summary.basis.forecast_version_number !== null
+              ? `Version ${summary.basis.forecast_version_number}`
+              : "None"
+          }
+        />
+      </PositionSupport>
+      <p className="footnote">As at {businessDate(summary.basis.as_of_date)}.</p>
     </>
   );
 }
