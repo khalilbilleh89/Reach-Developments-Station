@@ -944,6 +944,78 @@ create, widen into, or certify.
 withdrawn — each with a reason on the record. There is no DELETE route anywhere
 in the module.
 
+### Cashflow and management reporting
+
+**Cashflow consolidates cash it does not own.** Payment plans owns what a buyer
+is scheduled to pay, collections owns what arrived, construction owns what was
+paid to contractors, sales owns the contract. Not one of those rows is copied
+here; they are read through named contracts each source module publishes, and
+the source modules import nothing of cashflow. What this module owns outright is
+the cash nothing else records — consultants, permits, insurance, equity, debt —
+and the governed statement of when Finance expects the rest of it to move.
+
+```text
+  payment_plans.cashflow_schedule_rows            instalments of the schedules
+                                                  governing at a stated cutoff
+  payment_plans.cashflow_governing_version_ids    which plan versions those were
+  collections.cashflow_receipt_rows               confirmed buyer cash, gross
+  collections.cashflow_refund_rows                confirmed money returned
+  collections.cashflow_unapplied_cash             confirmed cash not yet applied
+  construction.cashflow_payment_rows              confirmed construction cash
+  construction.cashflow_forecast_position         remaining cost by cost code
+```
+
+**Six different cash questions, and none of them collapses into another.** What
+the schedules say becomes due; what Finance expects to collect; what actually
+arrived; how much of it is restricted; what has actually been spent; and what is
+expected to be spent. A single "cash" figure would have to pick one and hide the
+other five.
+
+**Nothing becomes cash except a cash transaction.** A land valuation, a
+construction certificate, an approved invoice, a unit's cost allocation and a
+buyer's instalment are none of them evidence that money moved. Recording a
+movement is a claim; a second person confirming it is the cash.
+
+**Received and usable are different balances.** A restriction takes buyer money
+out of the spendable pool without taking it out of the bank, and a release puts
+it back — availability moves, project cash does not. Reporting a release as an
+inflow, which is tempting because it makes usable cash rise, would show the
+project collecting the same money twice. The funding gap is measured on
+unrestricted cash, because escrowed buyer money cannot pay a contractor.
+
+**Cash arrives once.** A confirmed receipt is already counted as cash that
+arrived. If the instalments it will eventually be applied to also stay in the
+forward forecast at full value, the same money is counted twice — so the forecast
+offsets confirmed unapplied cash against the remaining schedule, deterministically
+and for forecast purposes only. Nothing is written and no allocation is created:
+the operator's filing backlog is theirs, and a forecast is not permitted to clear
+it with an accounting entry.
+
+**A governed forecast pins its sources and stays reproducible.** It names the
+construction forecast whose remaining cost it schedules and freezes the buyer
+schedule it was built on, and both are re-proved at submission and again at
+activation. A source that moved makes the version stale and it is refused, never
+silently rebased: substituting a newer source under an approver changes what they
+are approving, and the newer source being more accurate does not make the
+substitution honest.
+
+**The construction schedule reconciles exactly.** Construction says how much is
+left on each cost code; cashflow says when. If the months do not total the
+remaining cost, the two documents disagree about the project and a tolerance
+would be a decision to stop noticing by how much. An explicit zero is a
+statement; a missing cost code is not.
+
+**Return states its basis.** Project NPV discounts operating and development
+cash and excludes every financing flow, because equity is how a project was
+funded and not what it earned. Equity IRR uses the investor's signs, reversed
+from the project's — feeding project-direction cash into an IRR gives the right
+magnitude with the wrong sign. IRR refuses with a named reason rather than
+answering 0%, 999% or NaN, and never appears without absolute figures beside it.
+
+**Bank cash is project cash.** There is no per-phase account, so a phase-scoped
+reader is refused every project cash surface rather than shown a filtered total —
+any per-phase balance would be an allocation the business does not have.
+
 ### Deferred by design
 
 **Company-scoped custom fields wait for a Company entity.** A definition may be

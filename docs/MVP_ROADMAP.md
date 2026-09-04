@@ -5,9 +5,9 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 
 | Scope                                 | Count |
 | ------------------------------------- | ----: |
-| Total planned MVP PRs                 |    12 |
-| Complete (PR-MVP-00 through PR-MVP-09) |    10 |
-| Remaining                             |     2 |
+| Total planned MVP PRs                  |    12 |
+| Complete (PR-MVP-00 through PR-MVP-10) |    11 |
+| Remaining                              |     1 |
 
 Engineering PRs are counted separately and never renumber the functional
 sequence:
@@ -406,27 +406,35 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > hierarchy, approval engine or generic cost engine; no handover — construction
 > stops at ready and sales owns everything above it.
 
-## PR-MVP-10 — Integrated Cashflow & Management Reporting
+## PR-MVP-10 — Integrated Cashflow & Management Reporting ✅
 
-- customer scheduled inflows
-- forecast collections
-- actual receipts
-- refunds
-- escrow/restricted cash fields
-- development outflows
-- financing flows
-- monthly opening/inflow/outflow/closing
-- cumulative cash
-- funding gap
-- peak deficit
-- next 30/60/90-day view
-- management dashboards
-- drill-down
-- exports
-- final Unit 360 integration
+- customer scheduled inflows, forecast collections and actual receipts, as three
+  separate series and never one
+- refunds as cash out, never a negative receipt
+- escrow restrictions and releases: cash received and cash usable, kept apart
+- development outflows this module owns, and construction cash read from the
+  module that governs it
+- financing flows, in and out, where cash genuinely moves
+- monthly opening / inflow / outflow / closing, derived and never stored
+- funding gap, peak deficit and literal 30 / 60 / 90-day windows, all measured on
+  unrestricted cash
+- NPV at the forecast's own per-period rate, and equity IRR under the investor
+  sign convention
+- forecast accuracy by month and group, with a null rate against a zero forecast
+- management reporting where every figure names the module that owns it
+- drill-down from every figure to the transactions that made it
+- CSV exports rendered from the same responses the screens read
 
-Do not build advanced forecasting AI. If scenario controls are included, keep
-them as simple explicit input cases — never a generic scenario engine.
+**Not here:** no general ledger, no revenue recognition, no bank feeds, no loan
+amortisation, no covenant monitoring, no FX — every movement is refused in any
+currency but the project's base — no generic scenario engine, no AI forecasting
+and no background scheduling. One governed forecast version is already a
+scenario in the ordinary business sense.
+
+**Deferred from this PR:** the Cashflow frontend workspace. The backend surface,
+its contracts and its sixteen test families are complete; the React workspace
+under `frontend/src/components/projects/cashflow/` is not, and no navigation
+entry has been added. See the pull request for the reasoning.
 
 ## PR-MVP-11 — Migration, UAT & Go-Live
 
