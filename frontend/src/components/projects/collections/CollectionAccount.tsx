@@ -34,6 +34,7 @@ import type {
   RestructurePreview,
 } from "@/lib/api";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
+import { CASHFLOW_RECORDERS, hasAnyRole } from "@/lib/roles";
 
 import { ReceiptPanel } from "./ReceiptPanel";
 import {
@@ -123,6 +124,11 @@ export function CollectionAccount({
   const canCollect = !historical && roles.has("collections");
   const canConfirm = !historical && roles.has("finance");
   const canDecideWaiver = !historical && roles.has("approver_cfo");
+  // Escrow is a Cashflow act recorded against a Collections receipt, so it is
+  // gated on the set that governs Cashflow recording rather than on being able
+  // to read this drawer. Naming the set rather than the role keeps the two from
+  // drifting apart if the recorder set ever widens.
+  const canRestrictCash = !historical && hasAnyRole(roles, CASHFLOW_RECORDERS);
 
   const load = useCallback(async () => {
     try {
@@ -248,6 +254,7 @@ export function CollectionAccount({
               currencyCode={currencyCode}
               canRecord={canCollect}
               canConfirm={canConfirm}
+              canRestrictCash={canRestrictCash}
               onChanged={() => void refresh()}
             />
           ) : null}

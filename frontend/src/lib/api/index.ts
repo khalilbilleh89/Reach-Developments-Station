@@ -11,6 +11,7 @@ import type {
   CashflowDevelopmentMovement,
   CashflowDrilldown,
   CashflowForecastDetail,
+  CashflowForecastLine,
   CashflowForecastVersion,
   CashflowFinancingMovement,
   CashflowManagement,
@@ -2067,7 +2068,8 @@ export const cashflow = {
     versionId: string,
     body: Record<string, unknown>,
   ) =>
-    put<CashflowForecastDetail>(
+    // One cell, not the whole file: the endpoint answers with the line it wrote.
+    put<CashflowForecastLine>(
       `${cashflowRoot(projectId)}/forecasts/${versionId}/lines`,
       body,
     ),

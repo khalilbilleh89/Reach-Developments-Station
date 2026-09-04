@@ -37,18 +37,21 @@ export function CashflowManagementView({
   management,
   reconciliation,
   accuracy,
+  forecastInForce,
   onOpenSource,
 }: {
   management: Answer<CashflowManagement>;
   reconciliation: Answer<CashflowReconciliation>;
   accuracy: Answer<CashflowAccuracy>;
+  /** Whether a governed forecast is active. `null` while the summary is unresolved. */
+  forecastInForce: boolean | null;
   onOpenSource: (sourceType: string) => void;
 }) {
   return (
     <div className="stack">
       <Reconciliation answer={reconciliation} />
       <Management answer={management} onOpenSource={onOpenSource} />
-      <Accuracy answer={accuracy} />
+      <Accuracy answer={accuracy} forecastInForce={forecastInForce} />
     </div>
   );
 }
@@ -233,7 +236,30 @@ function Management({
  * A variance rate against a zero forecast is null and says so. Rendering 0% or
  * 100% there would be a claim nobody made.
  */
-function Accuracy({ answer }: { answer: Answer<CashflowAccuracy> }) {
+function Accuracy({
+  answer,
+  forecastInForce,
+}: {
+  answer: Answer<CashflowAccuracy>;
+  forecastInForce: boolean | null;
+}) {
+  // Never having activated a forecast is a stage a project passes through, not
+  // a fault in the system, and it is the one case where there is nothing to ask
+  // the server for. It is answered from the summary rather than from a failed
+  // request, so a genuine fault below still reads as a fault.
+  if (forecastInForce === false) {
+    return (
+      <Card
+        title="Forecast accuracy"
+        description="What the forecast in force said would happen, against what did."
+      >
+        <EmptyState
+          title="No forecast in force"
+          hint="Forecast accuracy becomes available after a governed forecast has been activated and completed periods exist to compare."
+        />
+      </Card>
+    );
+  }
   if (answer.status === "loading") return <Loading label="Loading forecast accuracy" shape="rows" />;
   if (answer.status === "denied") {
     return <Notice tone="info">Forecast accuracy is not available to your role.</Notice>;

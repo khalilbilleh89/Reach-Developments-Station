@@ -13,8 +13,9 @@ import { CashflowMonthly } from "@/components/projects/cashflow/CashflowMonthly"
 import { CashflowMovements } from "@/components/projects/cashflow/CashflowMovements";
 import { CashflowOverview } from "@/components/projects/cashflow/CashflowOverview";
 import { ApiError, cashflow } from "@/lib/api";
-import type { ProjectDetail } from "@/lib/api";
+import type { CashflowAccuracy, ProjectDetail } from "@/lib/api";
 import { useAnswer } from "@/lib/answer";
+import type { Answer } from "@/lib/answer";
 import { Loading } from "@/components/ui";
 import {
   CASHFLOW_ACTIVATORS,
@@ -129,11 +130,40 @@ export function CashflowTab({
     () => cashflow.reconciliation(projectId, { asOf: query }),
     [projectId, query, revision, section],
   );
+  /**
+   * Whether a governed forecast is in force — `null` until the summary says.
+   *
+   * A project that has never activated one is an ordinary state, not a fault,
+   * but the accuracy endpoint has nothing to measure without a version and
+   * answers 404. Asking anyway would draw a red failure over a project whose
+   * only sin is being early, so the question waits until the summary is
+   * definite and is then not asked at all when the answer is known to be no.
+   */
+  const forecastInForce = summary.status === "ready" ? summary.data.has_active_forecast : null;
+
   const accuracy = useAnswer(
-    canRead && section === "management",
+    canRead && section === "management" && forecastInForce === true,
     () => cashflow.forecastAccuracy(projectId, { asOf: query }),
-    [projectId, query, revision, section],
+    [projectId, query, revision, section, forecastInForce],
   );
+
+  /**
+   * The accuracy card's answer, carrying the summary's own state while it has one.
+   *
+   * Gating the request on the summary means the accuracy answer reads "off"
+   * both before the summary lands and when it says there is no forecast. Those
+   * are different sentences on screen, so the summary's unresolved and failed
+   * states are passed through here rather than collapsing into silence — a
+   * summary that genuinely failed must not read as "no forecast in force".
+   */
+  const accuracyAnswer: Answer<CashflowAccuracy> =
+    summary.status === "loading"
+      ? { status: "loading" }
+      : summary.status === "failed"
+        ? { status: "failed", message: summary.message }
+        : summary.status === "denied"
+          ? { status: "denied" }
+          : accuracy;
 
   /**
    * Run a write, then reload from the server.
@@ -225,6 +255,7 @@ export function CashflowTab({
 
       {section === "forecast" ? (
         <CashflowForecasts
+          projectId={projectId}
           versions={versions}
           detail={detail}
           selected={selectedForecast}
@@ -306,7 +337,8 @@ export function CashflowTab({
         <CashflowManagementView
           management={management}
           reconciliation={reconciliation}
-          accuracy={accuracy}
+          accuracy={accuracyAnswer}
+          forecastInForce={forecastInForce}
           onOpenSource={(sourceType) => setDrilldown({ sourceType })}
         />
       ) : null}

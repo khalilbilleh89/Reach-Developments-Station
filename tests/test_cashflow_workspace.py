@@ -31,12 +31,48 @@ NAVIGATION = FRONTEND / "components" / "shell" / "navigation.ts"
 ROLES = FRONTEND / "lib" / "roles.ts"
 API = FRONTEND / "lib" / "api" / "index.ts"
 COMMAND_CENTRE = FRONTEND / "components" / "dashboard" / "ProjectCommandCenter.tsx"
+COLLECTIONS = FRONTEND / "components" / "projects" / "collections"
+RECEIPT_PANEL = COLLECTIONS / "ReceiptPanel.tsx"
+COLLECTION_ACCOUNT = COLLECTIONS / "CollectionAccount.tsx"
 BACKEND_PERMISSIONS = ROOT / "app" / "modules" / "cashflow" / "permissions.py"
+BACKEND_MODELS = ROOT / "app" / "modules" / "cashflow" / "models.py"
+BACKEND_API = ROOT / "app" / "modules" / "cashflow" / "api.py"
 
 
 def workspace_sources() -> list[Path]:
     """Every file that draws a cashflow figure."""
     return [*sorted(CASHFLOW.glob("*.tsx")), TAB]
+
+
+def cashflow_namespace() -> str:
+    """Just the ``cashflow`` namespace out of an API file that holds many."""
+    source = read(API)
+    block = source[source.index("export const cashflow = {") :]
+    depth = 0
+    for index, character in enumerate(block):
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return block[:index]
+    raise AssertionError("the cashflow namespace is unbalanced")
+
+
+def cashflow_api_methods() -> list[str]:
+    """The method names on the ``cashflow`` namespace, read from its own source."""
+    source = read(API)
+    block = source[source.index("export const cashflow = {") :]
+    depth = 0
+    for index, character in enumerate(block):
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                block = block[:index]
+                break
+    return re.findall(r"^  (\w+):", block, re.M)
 
 
 def read(path: Path) -> str:
@@ -393,3 +429,271 @@ class TestNoUnitLevelCashIsInvented:
                     f"{path.name} shows {forbidden}, which is a project figure with "
                     "no honest per-unit allocation"
                 )
+
+
+class TestEveryWriteTheApiOffersIsReachable:
+    """A recorded API method nobody calls is a feature the product does not have.
+
+    ``recordRestriction`` existed, was typed, and matched a working endpoint —
+    and no screen called it, so a project with no escrow had no way to record
+    its first one. The empty state even described the act. Nothing failed:
+    lint, types and the browser were all satisfied by a method that was simply
+    never reached, which is exactly why this is asserted rather than trusted.
+    """
+
+    def test_no_cashflow_api_method_is_dead(self) -> None:
+        names = cashflow_api_methods()
+        assert len(names) > 20, "the cashflow namespace moved; this guard needs its parser updated"
+        callers = "\n".join(read(path) for path in FRONTEND.rglob("*.ts*") if path != API)
+        dead = [name for name in names if f"cashflow.{name}(" not in callers]
+        assert dead == [], (
+            f"{', '.join(dead)} is offered by the API and called by nothing. Either "
+            "the product cannot perform it, or the method should not exist."
+        )
+
+
+class TestRestrictingCashStartsFromTheReceiptThatHoldsIt:
+    """Escrow attaches to a confirmed buyer receipt, so it is started from one.
+
+    The alternative — a form in the Cashflow workspace asking for a receipt
+    identifier — would ask a finance controller to paste a UUID, and would let
+    them paste the wrong one. The row already knows which receipt it is.
+    """
+
+    def test_a_confirmed_receipt_offers_the_action(self) -> None:
+        source = read(RECEIPT_PANEL)
+        assert 'receipt.status === "confirmed"' in source, (
+            "the escrow action must be offered on the same condition the server "
+            "enforces: only confirmed cash can be held back"
+        )
+        assert "Restrict cash" in source
+
+    def test_the_receipt_identifier_comes_from_the_row(self) -> None:
+        source = read(RECEIPT_PANEL)
+        assert "cashflow.recordRestriction(projectId, target.id" in source, (
+            "the receipt id must travel with the selected row"
+        )
+        for typed in ("receipt_id", "receiptId"):
+            assert f"value={{{typed}}}" not in source, (
+                f"{typed} is bound to an input: the operator is being asked to type an identifier"
+            )
+
+    def test_only_a_cashflow_recorder_is_offered_it(self) -> None:
+        """Being able to read Collections is not permission to move cash."""
+        panel = read(RECEIPT_PANEL)
+        assert "canRestrictCash && receipt.status" in panel
+
+        account = read(COLLECTION_ACCOUNT)
+        assert "hasAnyRole(roles, CASHFLOW_RECORDERS)" in account, (
+            "the gate must name the Cashflow recorder set, not a role that happens "
+            "to match it today"
+        )
+        assert "canCollect" not in account.split("canRestrictCash =")[1].split("\n")[0], (
+            "the escrow gate must not be derived from Collections access"
+        )
+
+    def test_the_amount_ceiling_is_left_to_the_server(self) -> None:
+        """The server knows the receipt's worth and what is already held."""
+        source = read(RECEIPT_PANEL)
+        dialog = source[source.index("function RestrictCashDialog") :]
+        for arithmetic in ("parseFloat", "Number(", " - ", "Math."):
+            assert arithmetic not in dialog.split("return (")[0], (
+                "the dialog is computing a ceiling rather than letting the server "
+                "refuse an amount it alone can judge"
+            )
+
+
+class TestAForecastLineIsChosenAndNotTyped:
+    """Every governed value is offered as a choice; only figures are typed.
+
+    The dialog previously asked for a construction cost code as free text and
+    sent it as ``construction_cost_code_id`` — which meant the only way to
+    schedule a trade was to know its UUID. It asked for a category as free text
+    against a closed backend set, and it asked the operator to state a financing
+    direction the server derives and refuses to be told.
+    """
+
+    def test_the_cost_code_is_picked_from_the_project(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "construction.costCodes(projectId)" in source, (
+            "the cost codes must be read from Construction rather than typed"
+        )
+        assert "{code.code} — {code.name}" in source, "the picker must show a readable label"
+
+    def test_the_cost_code_field_is_not_a_text_input(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        field = source[source.index("function CostCodeField") :]
+        assert "<select" in field
+        assert 'className="input"\n            value={costCode}' not in source
+
+    def test_a_project_with_no_cost_codes_says_so(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "has no construction cost codes yet" in source, (
+            "an empty picker is a dead end; the preparer has to be told where to go"
+        )
+
+    def test_the_category_is_a_governed_set(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "DEVELOPMENT_CATEGORY_OPTIONS" in source
+        assert "FINANCING_TYPE_OPTIONS" in source
+        field = source[source.index("{needsCategory ? (") : source.index("{needsCostCode ?")]
+        assert "<select" in field, (
+            "the category must be a select over the governed set, not a text input"
+        )
+        assert "<input" not in field, "the category is still typed"
+        assert "categoryOptions.map" in field, "the select must be built from the governed set"
+
+    def test_the_financing_direction_is_not_an_operator_choice(self) -> None:
+        """An equity contribution is cash in. That is a fact, not a preference.
+
+        Reading a stored line's direction back is fine and the register does it.
+        What may not happen is the preparer being asked to state one: the server
+        derives it from the movement type and refuses a stated one that
+        disagrees, so the control could only ever agree or be rejected.
+        """
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        dialog = source[
+            source.index("function ForecastLineDialog") : source.index("function CostCodeField")
+        ]
+        assert "flow_direction:" not in dialog, (
+            "the dialog is still sending a direction the server derives"
+        )
+        assert "setFlowDirection" not in source, "the direction is still operator state"
+        assert '<option value="inflow">' not in source, "the direction is still offered as a choice"
+
+    def test_an_incomplete_line_cannot_be_saved(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "disabled={!complete}" in source
+        assert "(!needsCategory || Boolean(category))" in source, (
+            "a blank category must be caught here rather than sent and 422'd"
+        )
+
+
+class TestARejectedForecastIsHistory:
+    """Terminal states are named, never inferred from what they are not.
+
+    ``status !== "active" && status !== "superseded"`` reads correctly and
+    admits ``rejected``, which the server answers with a 409 — and would admit
+    every terminal status invented after it.
+    """
+
+    def test_the_open_statuses_match_the_backend(self) -> None:
+        frontend = set(
+            re.findall(
+                r'"(\w+)"',
+                read(CASHFLOW / "labels.ts").split("FORECAST_OPEN_STATUSES")[1].split("]")[0],
+            )
+        )
+        backend = set(
+            re.findall(
+                r"FORECAST_(\w+)",
+                read(BACKEND_MODELS).split("FORECAST_OPEN = frozenset({")[1].split("})")[0],
+            )
+        )
+        assert frontend == {name.lower() for name in backend}, (
+            f"the workspace thinks {sorted(frontend)} are open; the server thinks "
+            f"{sorted(name.lower() for name in backend)}"
+        )
+
+    def test_no_action_is_offered_by_a_negative_status_check(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert 'version.status !== "active"' not in source, (
+            "a negative check silently admits every terminal status added later"
+        )
+        assert "canPrepare && isOpen" in source
+
+    def test_editing_a_line_is_narrower_than_refreshing(self) -> None:
+        """The server allows an edit on a draft alone, and a refresh while open."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "canPrepare && isDraft ?" in source
+        assert 'const isDraft = version.status === "draft";' in source
+
+
+class TestNoForecastYetIsNotAFailure:
+    """A project that has never activated a forecast is early, not broken.
+
+    The accuracy endpoint needs a version to measure and answers 404 without
+    one. Asking anyway drew a red fault over an ordinary state — and the fix
+    must not go the other way and swallow a real fault as an empty state.
+    """
+
+    def test_the_accuracy_request_waits_for_the_summary(self) -> None:
+        source = read(TAB)
+        assert "forecastInForce === true" in source, (
+            "the accuracy endpoint must not be asked until the summary says there "
+            "is a forecast to measure"
+        )
+        assert 'summary.status === "ready" ? summary.data.has_active_forecast : null' in source
+
+    def test_the_four_states_stay_apart(self) -> None:
+        """Loading, refused, failed and no-forecast are four different sentences."""
+        source = read(TAB)
+        block = source[
+            source.index("const accuracyAnswer") : source.index("const accuracyAnswer") + 700
+        ]
+        for state in ('status: "loading"', 'status: "failed"', 'status: "denied"'):
+            assert state in block, (
+                f"the summary's {state} must reach the accuracy card; gating the "
+                "request would otherwise render it as silence"
+            )
+
+    def test_a_genuine_failure_is_still_drawn_as_a_failure(self) -> None:
+        management = read(CASHFLOW / "CashflowManagement.tsx")
+        accuracy = management[management.index("function Accuracy(") :]
+        assert "if (forecastInForce === false)" in accuracy
+        assert 'answer.status === "failed"' in accuracy, (
+            "the empty state must not replace the error branch"
+        )
+        assert accuracy.index("forecastInForce === false") < accuracy.index(
+            'status === "failed"'
+        ), "only the known no-forecast case gets the empty state; it is checked first and by name"
+
+    def test_the_empty_state_says_what_unlocks_it(self) -> None:
+        management = read(CASHFLOW / "CashflowManagement.tsx")
+        assert "No forecast in force" in management
+        assert "after a governed forecast has been activated" in management
+
+
+class TestTheApiMirrorsWhatTheEndpointReturns:
+    """A wrong generic is invisible until somebody reads a field that is not there.
+
+    ``setForecastLine`` was typed as the whole forecast file. The endpoint
+    answers with the one line it wrote, so any caller trusting the type would
+    have found ``lines`` undefined at runtime with nothing to explain it.
+    """
+
+    def test_the_forecast_line_write_returns_a_line(self) -> None:
+        api = read(API)
+        call = api[api.index("setForecastLine:") : api.index("refreshCustomerSnapshot:")]
+        assert "put<CashflowForecastLine>" in call, (
+            "PUT /forecasts/{id}/lines answers with ForecastLineOut, not the detail"
+        )
+
+    def test_every_cashflow_generic_matches_the_backend_response_model(self) -> None:
+        """The whole namespace, so the next drift is caught rather than reviewed."""
+        routes = dict(
+            re.findall(
+                r'@router\.\w+\(\s*"([^"]+)",?\s*(?:\n\s*)?response_model=schemas\.(\w+)',
+                read(BACKEND_API),
+            )
+        )
+        assert routes, "the cashflow routes moved; this guard needs its parser updated"
+        pairs = {
+            "/forecasts/{version_id}/lines": "CashflowForecastLine",
+            "/forecasts/{version_id}": "CashflowForecastDetail",
+            "/summary": "CashflowSummary",
+            "/monthly": "CashflowMonthly",
+        }
+        # Scoped to the cashflow namespace: Construction has a forecast-line
+        # write of its own at a path that ends the same way, and matching the
+        # whole file would compare this module's route against that one's type.
+        namespace = cashflow_namespace()
+        for route, frontend_type in pairs.items():
+            assert route in routes, f"{route} is gone from the cashflow API"
+            path = route.replace("{version_id}", "${versionId}")
+            index = namespace.index(f"cashflowRoot(projectId)}}{path}")
+            window = namespace[max(0, index - 220) : index]
+            assert frontend_type in window, (
+                f"{route} answers with {routes[route]}; the frontend claims "
+                f"something other than {frontend_type}"
+            )

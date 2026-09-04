@@ -11,13 +11,14 @@ import {
   FieldRow,
   Form,
   FormActions,
+  FormDialog,
   MoneyInput,
   Notice,
   PromptDialog,
   SubPanel,
   TableScroll,
 } from "@/components/ui";
-import { ApiError, collections } from "@/lib/api";
+import { ApiError, cashflow, collections } from "@/lib/api";
 import type {
   CollectionInstallmentRow,
   CollectionSaleSummary,
@@ -48,6 +49,7 @@ export function ReceiptPanel({
   currencyCode,
   canRecord,
   canConfirm,
+  canRestrictCash,
   onChanged,
 }: {
   projectId: string;
@@ -56,6 +58,14 @@ export function ReceiptPanel({
   currencyCode: string | null;
   canRecord: boolean;
   canConfirm: boolean;
+  /**
+   * Whether this reader may hold buyer cash back as escrow.
+   *
+   * Finance alone, and not because they can read Collections: restricting cash
+   * is a Cashflow act recorded against the receipt, so the role that governs it
+   * is the Cashflow recorder set rather than anything this module owns.
+   */
+  canRestrictCash: boolean;
   onChanged: () => void;
 }) {
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
@@ -75,6 +85,7 @@ export function ReceiptPanel({
   const [reversing, setReversing] = useState<{ kind: "receipt" | "allocation"; id: string } | null>(
     null,
   );
+  const [restricting, setRestricting] = useState<Receipt | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -288,6 +299,11 @@ export function ReceiptPanel({
                           Apply
                         </Button>
                       ) : null}
+                      {canRestrictCash && receipt.status === "confirmed" ? (
+                        <Button disabled={busy} onClick={() => setRestricting(receipt)}>
+                          Restrict cash
+                        </Button>
+                      ) : null}
                     </ButtonRow>
                   </td>
               </tr>
@@ -484,6 +500,101 @@ export function ReceiptPanel({
           }}
         />
       ) : null}
+
+      {restricting ? (
+        <RestrictCashDialog
+          receipt={restricting}
+          currencyCode={currencyCode}
+          busy={busy}
+          onCancel={() => setRestricting(null)}
+          onSubmit={(body) => {
+            const target = restricting;
+            setRestricting(null);
+            void act(
+              () => cashflow.recordRestriction(projectId, target.id, body),
+              `Escrow recorded against ${target.receipt_number}. It holds cash back once Finance confirms it.`,
+            );
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Holding part of a confirmed receipt back as escrow.
+ *
+ * Started from the receipt rather than from the Cashflow workspace, because the
+ * receipt is the thing that owns the cash: the operator picks a row they can
+ * see and supplies the two facts only a person knows — how much is held and
+ * under what instrument. The identifier travels with the row and is never typed
+ * or shown.
+ *
+ * Every rule about the amount belongs to the server and is left there. It knows
+ * the receipt still stands, what it was worth, and what is already held against
+ * it; a ceiling copied into this form would be a second opinion that drifts.
+ */
+function RestrictCashDialog({
+  receipt,
+  currencyCode,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  receipt: Receipt;
+  currencyCode: string | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (body: Record<string, unknown>) => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [sourceReference, setSourceReference] = useState("");
+  const [notes, setNotes] = useState("");
+
+  return (
+    <FormDialog
+      title={`Restrict cash from ${receipt.receipt_number}`}
+      description="Escrowed cash stays in the project's total. It leaves the balance the developer may spend, which is the figure the workspace leads on."
+      confirmLabel="Record escrow"
+      busy={busy}
+      disabled={!amount || !reason.trim()}
+      onCancel={onCancel}
+      onSubmit={() =>
+        onSubmit({
+          restricted_amount: amount,
+          reason: reason.trim(),
+          source_reference: sourceReference.trim() || null,
+          notes: notes.trim() || null,
+        })
+      }
+    >
+      <FieldRow>
+        <Field
+          label="Amount held"
+          hint={`Out of ${money(receipt.amount, currencyCode)} received on ${businessDate(receipt.receipt_date)}.`}
+        >
+          <MoneyInput code={currencyCode} value={amount} onChange={setAmount} />
+        </Field>
+        <Field label="Reference" optional hint="The escrow account or trust deed, if there is one.">
+          <input
+            className="input"
+            value={sourceReference}
+            onChange={(event) => setSourceReference(event.target.value)}
+          />
+        </Field>
+      </FieldRow>
+      <Field label="Reason" hint="Why this cash may not be spent. An auditor reads this.">
+        <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </Field>
+      <Field label="Notes" optional>
+        <textarea
+          className="input"
+          rows={2}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+        />
+      </Field>
+    </FormDialog>
   );
 }

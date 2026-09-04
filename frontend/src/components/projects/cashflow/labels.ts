@@ -69,6 +69,29 @@ export function forecastTone(status: string): Tone {
 }
 
 /**
+ * The statuses a forecast is still open in — the backend's ``FORECAST_OPEN``.
+ *
+ * Stated as the set that is open, never as the ones that are closed. The
+ * negative form reads identically today and quietly admits every terminal
+ * status invented later, which is exactly how `rejected` came to be offered a
+ * buyer-schedule refresh the server answers with a 409: a rejected version is
+ * history, and history does not get re-pinned to today's schedule.
+ *
+ * Editing a line is narrower still — the server allows it on a draft alone,
+ * because a submitted version is what somebody is reviewing.
+ */
+export const FORECAST_OPEN_STATUSES: ReadonlySet<string> = new Set([
+  "draft",
+  "submitted",
+  "approved",
+]);
+
+/** Whether the server would still accept a preparer's act on this version. */
+export function forecastIsOpen(status: string): boolean {
+  return FORECAST_OPEN_STATUSES.has(status);
+}
+
+/**
  * A movement's status in words a reader will not mistake for cash.
  *
  * "Recorded" is a claim one person made. It is not money that has moved, and

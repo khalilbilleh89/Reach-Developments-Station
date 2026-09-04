@@ -1537,6 +1537,23 @@ def record_restriction(
             "confirmed is not yet money in the bank, so there is nothing to hold "
             "back."
         )
+    standing = session.scalars(
+        select(CashflowReceiptRestriction).where(
+            CashflowReceiptRestriction.receipt_id == receipt.id,
+            CashflowReceiptRestriction.status.in_((MOVEMENT_RECORDED, MOVEMENT_CONFIRMED)),
+        )
+    ).first()
+    if standing is not None:
+        # A partial unique index enforces this, but a constraint violation
+        # reaches the caller as a 500 naming an index. The rule is one a person
+        # can act on — release or reverse what is already held — and it is worth
+        # saying so at the boundary that can still explain it.
+        raise ConflictError(
+            f"{receipt.receipt_number} already has {standing.restricted_amount} held "
+            "against it. One escrow per receipt: two would each be measured against "
+            "the transfer on its own and could together hold back more than arrived. "
+            "Release or reverse the standing one first."
+        )
     amount = money(restricted_amount)
     if amount > receipt.amount:
         raise ValidationError(

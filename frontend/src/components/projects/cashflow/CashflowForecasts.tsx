@@ -21,11 +21,22 @@ import {
   SectionHeader,
   TableScroll,
 } from "@/components/ui";
+import { useAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
-import type { CashflowForecastDetail, CashflowForecastVersion } from "@/lib/api";
+import { construction } from "@/lib/api";
+import type { CashflowForecastDetail, CashflowForecastVersion, CostCode } from "@/lib/api";
 import { businessDate, money, percent } from "@/lib/format";
 
-import { categoryLabel, checkLabel, forecastLabel, forecastTone, sourceKindLabel } from "./labels";
+import {
+  categoryLabel,
+  checkLabel,
+  DEVELOPMENT_CATEGORY_OPTIONS,
+  FINANCING_TYPE_OPTIONS,
+  forecastIsOpen,
+  forecastLabel,
+  forecastTone,
+  sourceKindLabel,
+} from "./labels";
 
 /**
  * The governed statement of what the project expects to receive and spend.
@@ -42,6 +53,7 @@ import { categoryLabel, checkLabel, forecastLabel, forecastTone, sourceKindLabel
  * refusal is shown in the server's own words rather than predicted here.
  */
 export function CashflowForecasts({
+  projectId,
   versions,
   detail,
   selected,
@@ -60,6 +72,7 @@ export function CashflowForecasts({
   onRefreshSnapshot,
   onSetLine,
 }: {
+  projectId: string;
   versions: Answer<CashflowForecastVersion[]>;
   detail: Answer<CashflowForecastDetail>;
   selected: string | null;
@@ -165,6 +178,7 @@ export function CashflowForecasts({
 
       {selected ? (
         <ForecastDetail
+          projectId={projectId}
           detail={detail}
           currency={currency}
           canPrepare={canPrepare}
@@ -212,6 +226,7 @@ export function CashflowForecasts({
 }
 
 function ForecastDetail({
+  projectId,
   detail,
   currency,
   canPrepare,
@@ -225,6 +240,7 @@ function ForecastDetail({
   onRefreshSnapshot,
   onSetLine,
 }: {
+  projectId: string;
   detail: Answer<CashflowForecastDetail>;
   currency: string | null;
   canPrepare: boolean;
@@ -248,7 +264,12 @@ function ForecastDetail({
   if (detail.status === "off") return null;
 
   const version = detail.data;
+  // Two different permissions, and neither is "not yet finished". A line may be
+  // edited on a draft alone; the buyer schedule may be re-pinned while the
+  // version is still open. Rejected, active and superseded are history and
+  // offer nothing.
   const isDraft = version.status === "draft";
+  const isOpen = forecastIsOpen(version.status);
   const failedChecks = version.construction_reconciliation.filter((check) => !check.passed);
 
   return (
@@ -262,7 +283,7 @@ function ForecastDetail({
               Add or change a line
             </Button>
           ) : null}
-          {canPrepare && version.status !== "active" && version.status !== "superseded" ? (
+          {canPrepare && isOpen ? (
             <Button small variant="quiet" onClick={onRefreshSnapshot} disabled={busy}>
               Refresh buyer schedule
             </Button>
@@ -436,6 +457,7 @@ function ForecastDetail({
 
       {editingLine ? (
         <ForecastLineDialog
+          projectId={projectId}
           currency={currency}
           busy={busy}
           onCancel={() => setEditingLine(false)}
@@ -590,12 +612,29 @@ const LINE_SOURCE_KINDS = [
   { value: "unsold_customer", label: "Unsold stock" },
 ];
 
+/**
+ * One cell of a forecast: a month, a source, a category and an amount.
+ *
+ * Everything the server governs is offered as a governed choice. A preparer
+ * types a figure and a note; they never type a category code and never type an
+ * identifier. The previous form asked for both, which meant the only way to
+ * schedule external works was to know a cost code's UUID — a question no
+ * finance controller can answer, and one the product already knows.
+ *
+ * There is deliberately no direction control. Whether a financing line is cash
+ * in or cash out follows from the movement type — an equity contribution is
+ * money arriving, always — so the server derives it and refuses a stated
+ * direction that disagrees. Offering the choice invited a preparer to state a
+ * fact and be told they were wrong about it.
+ */
 function ForecastLineDialog({
+  projectId,
   currency,
   busy,
   onCancel,
   onSubmit,
 }: {
+  projectId: string;
   currency: string | null;
   busy: boolean;
   onCancel: () => void;
@@ -606,11 +645,27 @@ function ForecastLineDialog({
   const [periodMonth, setPeriodMonth] = useState("");
   const [amount, setAmount] = useState("");
   const [costCode, setCostCode] = useState("");
-  const [flowDirection, setFlowDirection] = useState("outflow");
   const [note, setNote] = useState("");
 
   const needsCostCode = sourceKind === "construction";
-  const needsDirection = sourceKind === "financing";
+  const needsCategory = sourceKind === "development" || sourceKind === "financing";
+  const categoryOptions =
+    sourceKind === "development" ? DEVELOPMENT_CATEGORY_OPTIONS : FINANCING_TYPE_OPTIONS;
+
+  // Asked only when a construction line is being written, and re-asked if the
+  // preparer comes back to construction — the codes are a small list and this
+  // keeps the workspace's rule that nothing is fetched before it is needed.
+  const costCodes = useAnswer(
+    needsCostCode,
+    () => construction.costCodes(projectId),
+    [projectId, needsCostCode],
+  );
+
+  const complete =
+    Boolean(periodMonth) &&
+    Boolean(amount) &&
+    (!needsCategory || Boolean(category)) &&
+    (!needsCostCode || Boolean(costCode));
 
   return (
     <FormDialog
@@ -618,7 +673,7 @@ function ForecastLineDialog({
       description="One figure per month, per source and per category. Writing the same cell again replaces it."
       confirmLabel="Save line"
       busy={busy}
-      disabled={!periodMonth || !amount || (needsCostCode && !costCode)}
+      disabled={!complete}
       onCancel={onCancel}
       onSubmit={() =>
         onSubmit({
@@ -626,7 +681,9 @@ function ForecastLineDialog({
           source_kind: sourceKind,
           category,
           amount,
-          ...(needsDirection ? { flow_direction: flowDirection } : {}),
+          // `flow_direction` is omitted on purpose: the server derives it from
+          // the movement type, and sending a guess can only ever agree or be
+          // refused.
           ...(needsCostCode ? { construction_cost_code_id: costCode } : {}),
           note: note || null,
         })
@@ -668,44 +725,27 @@ function ForecastLineDialog({
         </Field>
       </FieldRow>
 
-      {sourceKind === "development" || sourceKind === "financing" ? (
+      {needsCategory ? (
         <Field
-          label="Category"
-          hint="Exactly as the movement it will be measured against is categorised."
+          label={sourceKind === "development" ? "Category" : "Financing movement type"}
+          hint="The same set the actual movement will be recorded under, so the two can be compared."
         >
-          <input
+          <select
             className="input"
             value={category}
             onChange={(event) => setCategory(event.target.value)}
-          />
-        </Field>
-      ) : null}
-
-      {needsCostCode ? (
-        <Field
-          label="Construction cost code"
-          hint="A construction line has to name the code it schedules, or there is nothing to reconcile it against."
-        >
-          <input
-            className="input"
-            value={costCode}
-            onChange={(event) => setCostCode(event.target.value)}
-          />
-        </Field>
-      ) : null}
-
-      {needsDirection ? (
-        <Field label="Direction">
-          <select
-            className="input"
-            value={flowDirection}
-            onChange={(event) => setFlowDirection(event.target.value)}
           >
-            <option value="inflow">Cash in</option>
-            <option value="outflow">Cash out</option>
+            <option value="">Choose one</option>
+            {categoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </Field>
       ) : null}
+
+      {needsCostCode ? <CostCodeField answer={costCodes} value={costCode} onChange={setCostCode} /> : null}
 
       <FieldRow>
         <Field label="Amount">
@@ -716,5 +756,66 @@ function ForecastLineDialog({
         </Field>
       </FieldRow>
     </FormDialog>
+  );
+}
+
+/**
+ * The cost code a construction line schedules, chosen by name.
+ *
+ * A project with no cost codes cannot have a construction schedule prepared
+ * against it, and saying so is more use than an empty control: the preparer has
+ * to open Construction and author them before this line means anything.
+ */
+function CostCodeField({
+  answer,
+  value,
+  onChange,
+}: {
+  answer: Answer<CostCode[]>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const label = "Construction cost code";
+  const hint =
+    "A construction line has to name the code it schedules, or there is nothing to reconcile it against.";
+
+  if (answer.status === "loading") {
+    return (
+      <Field label={label} hint={hint}>
+        <Loading label="Loading the cost codes" shape="rows" />
+      </Field>
+    );
+  }
+  if (answer.status === "failed") {
+    return <Notice tone="error">{answer.message}</Notice>;
+  }
+  if (answer.status === "denied") {
+    return <Notice tone="info">The construction cost codes are not available to your role.</Notice>;
+  }
+  if (answer.status === "off") return null;
+
+  if (answer.data.length === 0) {
+    return (
+      <Notice tone="info">
+        This project has no construction cost codes yet. A construction line schedules cash against
+        one, so the codes have to be authored in Construction before this forecast can carry one.
+      </Notice>
+    );
+  }
+
+  const codes = [...answer.data].sort((left, right) => left.code.localeCompare(right.code));
+
+  return (
+    <Field label={label} hint={hint}>
+      <select className="input" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Choose one</option>
+        {codes.map((code) => (
+          <option key={code.id} value={code.id}>
+            {code.code} — {code.name}
+            {code.is_active ? "" : " (retired)"}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
 }
