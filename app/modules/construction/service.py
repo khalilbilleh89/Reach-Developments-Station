@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -4750,6 +4751,14 @@ class CashflowPaymentRow:
     vendor_name: str
     amount: Decimal
     business_date: date
+    #: How much of this payment settled certified work on each cost code, from
+    #: the documents rather than from a guess — see ``payment_cost_code_split``.
+    by_cost_code: dict[uuid.UUID, Decimal]
+    #: The part no cost code can be named for: an advance, or cash not yet
+    #: allocated to an invoice. Stated rather than distributed, because a reader
+    #: has to be able to tell a figure that was attributed from one that was
+    #: apportioned by whoever consumed this.
+    unattributed_amount: Decimal
 
 
 @dataclass(frozen=True)
@@ -4770,10 +4779,85 @@ class CashflowForecastPosition:
     cost_code_labels: dict[uuid.UUID, str]
 
 
+def payment_cost_code_split(
+    session: Session, *, project_id: uuid.UUID, payment_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, dict[uuid.UUID, Decimal]]:
+    """Which cost codes each payment settled work on, and for how much.
+
+    Construction cash is paid against an invoice, an invoice bills a
+    certificate, and a certificate says exactly what work was certified on each
+    cost code. So the attribution follows the documents: an allocation is split
+    across its certificate's lines in proportion to the work they certify, which
+    is the same proportion the invoice was raised on.
+
+    Two kinds of cash have no cost code and are deliberately left out rather than
+    spread. An **advance** is paid before any work is certified — there is no
+    certificate to attribute it to, and choosing one would be inventing the
+    breakdown. Cash **not yet allocated** to an invoice is in the same position.
+    Both are reported as ``unattributed_amount`` so a consumer can decide, in the
+    open, what to do with them.
+
+    Never by vendor name. A contractor working across three cost codes would have
+    every payment attributed to whichever code somebody guessed first.
+    """
+    if not payment_ids:
+        return {}
+    rows = session.execute(
+        select(
+            PaymentAllocation.payment_id,
+            PaymentAllocation.id,
+            PaymentAllocation.amount,
+            CertificateLine.cost_code_id,
+            CertificateLine.current_work_value_ex_tax,
+        )
+        .join(Invoice, Invoice.id == PaymentAllocation.invoice_id)
+        .join(Certificate, Certificate.id == Invoice.certificate_id)
+        .join(CertificateLine, CertificateLine.certificate_id == Certificate.id)
+        .where(
+            PaymentAllocation.project_id == project_id,
+            PaymentAllocation.payment_id.in_(payment_ids),
+        )
+        .order_by(PaymentAllocation.id, CertificateLine.cost_code_id)
+    ).all()
+
+    # Grouped by allocation, because the proportions are a property of the one
+    # certificate that allocation settled — not of everything the payment paid.
+    by_allocation: dict[uuid.UUID, tuple[uuid.UUID, Decimal, list[tuple[uuid.UUID, Decimal]]]] = {}
+    for payment_id, allocation_id, allocation_amount, cost_code_id, work_value in rows:
+        entry = by_allocation.setdefault(allocation_id, (payment_id, money(allocation_amount), []))
+        entry[2].append((cost_code_id, money(work_value or ZERO)))
+
+    split: dict[uuid.UUID, dict[uuid.UUID, Decimal]] = {}
+    for payment_id, allocation_amount, lines in by_allocation.values():
+        certified = sum((value for _, value in lines), ZERO)
+        if certified <= ZERO:
+            # A certificate of nothing settles nothing. Leaving the cash
+            # unattributed is honest; dividing by zero is not.
+            continue
+        target = split.setdefault(payment_id, {})
+        running = ZERO
+        for index, (cost_code_id, value) in enumerate(lines):
+            if index == len(lines) - 1:
+                # The last line absorbs the rounding, so the shares add to the
+                # allocation exactly rather than to a penny either side of it.
+                share = money(allocation_amount - running)
+            else:
+                share = money(allocation_amount * value / certified)
+                running = money(running + share)
+            target[cost_code_id] = money(target.get(cost_code_id, ZERO) + share)
+    return split
+
+
 def cashflow_payment_rows(
     session: Session, *, project_id: uuid.UUID, as_of: date | None = None
 ) -> list[CashflowPaymentRow]:
-    """Confirmed construction cash that was standing, now or at a cutoff."""
+    """Confirmed construction cash that was standing, now or at a cutoff.
+
+    Each row carries the cost codes the payment settled work on, so a cash
+    report can tell an expectation that has already been met from one that is
+    still ahead of it. See ``payment_cost_code_split`` for how the attribution is
+    derived and for the two cases it deliberately leaves unattributed.
+    """
     rows = session.execute(
         select(
             Payment.id,
@@ -4795,17 +4879,26 @@ def cashflow_payment_rows(
         )
         .order_by(Payment.payment_date, Payment.payment_reference)
     ).all()
-    return [
-        CashflowPaymentRow(
-            id=row[0],
-            reference=row[1],
-            contract_id=row[2],
-            vendor_name=row[3],
-            amount=row[4],
-            business_date=row[5],
+    split = payment_cost_code_split(
+        session, project_id=project_id, payment_ids=[row[0] for row in rows]
+    )
+    payments: list[CashflowPaymentRow] = []
+    for row in rows:
+        by_cost_code = split.get(row[0], {})
+        attributed = sum(by_cost_code.values(), ZERO)
+        payments.append(
+            CashflowPaymentRow(
+                id=row[0],
+                reference=row[1],
+                contract_id=row[2],
+                vendor_name=row[3],
+                amount=row[4],
+                business_date=row[5],
+                by_cost_code=by_cost_code,
+                unattributed_amount=money(max(ZERO, money(row[4]) - attributed)),
+            )
         )
-        for row in rows
-    ]
+    return payments
 
 
 def cashflow_forecast_position(

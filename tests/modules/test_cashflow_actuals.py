@@ -60,10 +60,18 @@ def cash_forecast(
     cost_codes: dict[str, str],
     flat_construction_forecast: str,
 ) -> str:
+    """A forecast cut at the start of last month, so a historical read has a bridge.
+
+    The opening balance names the month it is stated for, and the series may not
+    begin before it. A family whose transactions are days old therefore needs a
+    version cut in that month rather than in this one — which is what a company
+    with a governed forecast actually has.
+    """
     created = create_cashflow_forecast(
         finance_client,
         project_id,
-        forecast_start_month=month_named(-3),
+        as_of_date=month_named(-1),
+        forecast_start_month=month_named(-1),
         forecast_end_month=month_named(3),
     )
     assert created.status_code == 201, created.text

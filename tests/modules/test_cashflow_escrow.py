@@ -34,6 +34,17 @@ from tests.modules.conftest import (
 )
 
 
+def restriction_detail(
+    client: TestClient, project_id: str, restriction_id: str
+) -> dict[str, object]:
+    """One escrow out of the register, which is where this module publishes it."""
+    listed = client.get(f"{cashflow_url(project_id)}/restrictions")
+    assert listed.status_code == 200, listed.text
+    row = next((entry for entry in listed.json() if entry["id"] == restriction_id), None)
+    assert row is not None, "the restriction must appear in its own register"
+    return dict(row)
+
+
 def month_row(monthly: dict[str, object], month: str) -> dict[str, str]:
     months = monthly["months"]
     assert isinstance(months, list)
@@ -120,7 +131,8 @@ def historical_escrow(
     created = create_cashflow_forecast(
         finance_client,
         project_id,
-        forecast_start_month=month_named(-2),
+        as_of_date=past,
+        forecast_start_month=past,
         forecast_end_month=month_named(2),
     )
     assert created.status_code == 201, created.text
@@ -465,3 +477,107 @@ class TestAnEscrowCannotOutliveTheTransferBehindIt:
         row = month_row(cashflow_monthly(finance_client, project_id), historical_escrow["month"])
         assert row["closing_total_cash"] == "0.00"
         assert row["closing_restricted_cash"] == "0.00"
+
+
+class TestTheRecordAgreesWithTheReport:
+    """One current truth about an escrow, wherever a reader happens to look.
+
+    The reports learned that a restriction over a reversed receipt holds nothing.
+    The restriction's own record had not: it read its own confirmation status and
+    nothing else, so the project summary said the 80 no longer counted while the
+    escrow's file said ``counts_as_restricted: true`` and still showed 80
+    outstanding. Two screens, two answers, one amount of money — and the person
+    who has to reconcile them is the one least equipped to know which is right.
+
+    The persisted status is untouched. The restriction really was confirmed, and
+    rewriting that to tidy a screen would destroy the record of what happened;
+    what changes is only what the record claims about **now**.
+    """
+
+    def test_before_the_reversal_the_record_and_the_report_agree(
+        self, finance_client: TestClient, project_id: str, restricted_receipt: dict[str, str]
+    ) -> None:
+        row = month_row(cashflow_monthly(finance_client, project_id), month_named(0))
+        assert row["closing_restricted_cash"] == "80.00"
+
+        body = restriction_detail(finance_client, project_id, restricted_receipt["restriction"])
+        assert body["counts_as_restricted"] is True
+        assert body["receipt_stands"] is True
+        assert body["outstanding_restricted"] == "80.00"
+
+    def test_after_the_reversal_they_still_agree(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        restricted_receipt: dict[str, str],
+    ) -> None:
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+        row = month_row(cashflow_monthly(finance_client, project_id), month_named(0))
+        assert row["closing_restricted_cash"] == "0.00"
+
+        body = restriction_detail(finance_client, project_id, restricted_receipt["restriction"])
+        assert body["counts_as_restricted"] is False
+        assert body["receipt_stands"] is False
+        assert body["outstanding_restricted"] == "0.00"
+        assert body["status"] == "confirmed", "what happened is not rewritten"
+        assert body["restricted_amount"] == "80.00", "nor is the amount it was for"
+
+    def test_a_release_stops_claiming_to_free_anything(
+        self,
+        finance_client: TestClient,
+        second_finance_client: TestClient,
+        project_id: str,
+        restricted_receipt: dict[str, str],
+    ) -> None:
+        """A release frees an escrow. With no escrow there is nothing to free."""
+        release = release_restriction(
+            finance_client, project_id, restricted_receipt["restriction"], amount="30.00"
+        )
+        assert release.status_code == 201, release.text
+        release_id = release.json()["releases"][0]["id"]
+        assert (
+            second_finance_client.post(
+                f"{cashflow_url(project_id)}/releases/{release_id}/confirm", json={}
+            ).status_code
+            == 200
+        )
+        before = restriction_detail(finance_client, project_id, restricted_receipt["restriction"])
+        assert before["releases"][0]["counts_as_released"] is True
+        assert before["releases"][0]["restriction_counts"] is True
+
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+        after = restriction_detail(finance_client, project_id, restricted_receipt["restriction"])
+        assert after["releases"][0]["counts_as_released"] is False
+        assert after["releases"][0]["restriction_counts"] is False
+        assert after["releases"][0]["status"] == "confirmed"
+
+    def test_a_reconciliation_still_asks_somebody_to_correct_it(
+        self, finance_client: TestClient, project_id: str, restricted_receipt: dict[str, str]
+    ) -> None:
+        """Stopping to count it is not the same as nobody having a correction to make."""
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+        checks = finance_client.get(f"{cashflow_url(project_id)}/reconciliation").json()["checks"]
+        backing = next(
+            check
+            for check in checks
+            if check["name"] == "restrictions_backed_by_standing_customer_cash"
+        )
+        assert backing["passed"] is False

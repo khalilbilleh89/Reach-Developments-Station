@@ -275,7 +275,14 @@ class ReleaseOut(Response):
     certification_reference: str | None
     evidence_reference: str | None
     status: str
+    #: True only when this release is confirmed **and** the escrow it frees is
+    #: still holding cash. A release against a restriction whose receipt was
+    #: reversed frees nothing, whatever its own status says.
     counts_as_released: bool
+    #: Whether the escrow this release belongs to currently holds anything,
+    #: stated separately so a screen can say *why* a confirmed release is not
+    #: counting.
+    restriction_counts: bool
 
 
 class RestrictionOut(Response):
@@ -289,7 +296,13 @@ class RestrictionOut(Response):
     reason: str
     source_reference: str | None
     status: str
+    #: True only when the restriction is confirmed **and** the receipt behind it
+    #: still stands. One truth across the summary, the drill-down, the register
+    #: and this record: an escrow over a reversed transfer holds nothing.
     counts_as_restricted: bool
+    #: Whether the transfer this escrow was taken from is still standing. False
+    #: is what a reader needs to see when a confirmed restriction stops counting.
+    receipt_stands: bool
     releases: list[ReleaseOut]
 
 

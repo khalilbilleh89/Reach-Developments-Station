@@ -77,6 +77,7 @@ from app.modules.cashflow.models import (
     MOVEMENT_REVERSED,
     SOURCE_CONSTRUCTION,
     SOURCE_DEVELOPMENT,
+    SOURCE_FINANCING,
     SOURCE_UNSOLD_CUSTOMER,
     CashflowCustomerScheduleSnapshot,
     CashflowDevelopmentMovement,
@@ -336,6 +337,28 @@ def create_forecast(
     end = month_of(forecast_end_month)
     if end < start:
         raise ValidationError("A forecast horizon cannot end before it starts.")
+    # One temporal meaning for the opening balance, and only one. The figures
+    # entered here are cash held at the start of the horizon; every report then
+    # rolls that balance forward through what has moved since. If the horizon
+    # opened in a *later* month, that balance would be a statement about a month
+    # that has not happened, and the current cash position — which is the
+    # opening balance plus this month's movement — would be quoting it as money
+    # in the bank today. If it opened in an *earlier* month, the balance would be
+    # a figure from before the cutoff with a month of unexamined history between
+    # it and the report.
+    #
+    # Tying it to the cutoff's own month removes both without a second date
+    # field to keep in step: the balance is cash at the start of the month the
+    # forecast was taken in, and the days since are actual transactions.
+    if start != month_of(as_of_date):
+        raise ValidationError(
+            f"A cashflow forecast opens in the month of its as-of date. This one "
+            f"is taken as at {as_of_date} and opens in {start}, so its opening "
+            f"balance would describe a different month from the cash it is "
+            f"measured against. Set the start month to "
+            f"{month_of(as_of_date)}, or take the forecast as at a date inside "
+            f"{start}."
+        )
 
     construction = construction_service.cashflow_forecast_position(
         session,
@@ -2043,6 +2066,205 @@ def offset_unapplied_cash(
     return adjusted
 
 
+#: What a forecast line and an actual movement have to agree on before the one
+#: can be said to have happened as the other. Deliberately narrow: an offset at
+#: the wrong grain quietly cancels an expectation nobody has met.
+GRAIN_CONSTRUCTION = "construction_cost_code"
+GRAIN_DEVELOPMENT = "development_category"
+GRAIN_FINANCING = "financing_type"
+
+
+def _forecast_grain(line: CashflowForecastLine) -> tuple[str, object, object] | None:
+    """The key an actual movement must match to have met this line's expectation.
+
+    ``None`` for an unsold-customer line, and that is the interesting case. Such
+    a line is Finance's expectation of cash from units nobody has sold yet, and
+    no receipt in the system carries a link back to it — a buyer who signs next
+    month pays against a contract and a payment plan, and that cash reaches the
+    forecast through the schedule snapshot, not through this line. Offsetting it
+    against ordinary contracted receipts would cancel an expectation about
+    unsold stock using cash from sold stock, which is two different questions
+    answered with one number.
+    """
+    if line.source_kind == SOURCE_CONSTRUCTION:
+        return (GRAIN_CONSTRUCTION, line.construction_cost_code_id, None)
+    if line.source_kind == SOURCE_DEVELOPMENT:
+        return (GRAIN_DEVELOPMENT, line.category, line.phase_id)
+    if line.source_kind == SOURCE_FINANCING:
+        return (GRAIN_FINANCING, line.category, line.flow_direction)
+    return None
+
+
+def _post_cutoff_actuals(
+    session: Session,
+    *,
+    project: Project,
+    version: CashflowForecastVersion,
+    as_of: date,
+) -> tuple[dict[tuple[date, str, object, object], Decimal], dict[date, Decimal]]:
+    """Cash that has moved since the forecast was written, at the grain it was written on.
+
+    Only movements **after** the version's own cutoff. A payment the preparer
+    could already see when they wrote the figure is inside the figure: the
+    remaining expectation they stated was what was left *after* it, and
+    subtracting it again would halve a forecast that was already correct.
+
+    Returns the matched pool and, separately, construction cash no cost code can
+    be named for — an advance, or cash not yet allocated to an invoice. That
+    money left the bank and has to reduce *something*, or the month reports it
+    twice; it is kept apart here so the place that spreads it says so out loud.
+    """
+    cutoff = version.as_of_date
+    matched: dict[tuple[date, str, object, object], Decimal] = {}
+    unattributed: dict[date, Decimal] = {}
+
+    def add(key: tuple[date, str, object, object], amount: Decimal) -> None:
+        matched[key] = money(matched.get(key, ZERO) + amount)
+
+    for payment in construction_service.cashflow_payment_rows(
+        session, project_id=project.id, as_of=as_of
+    ):
+        if payment.business_date <= cutoff:
+            continue
+        month = month_of(payment.business_date)
+        for cost_code_id, amount in payment.by_cost_code.items():
+            add((month, GRAIN_CONSTRUCTION, cost_code_id, None), amount)
+        if payment.unattributed_amount > ZERO:
+            unattributed[month] = money(unattributed.get(month, ZERO) + payment.unattributed_amount)
+
+    for movement in session.scalars(
+        select(CashflowDevelopmentMovement).where(
+            *_standing_rows(
+                session, model=CashflowDevelopmentMovement, project_id=project.id, as_of=as_of
+            ),
+            CashflowDevelopmentMovement.movement_date > cutoff,
+        )
+    ):
+        add(
+            (
+                month_of(movement.movement_date),
+                GRAIN_DEVELOPMENT,
+                movement.category,
+                movement.phase_id,
+            ),
+            money(movement.amount),
+        )
+
+    for movement in session.scalars(
+        select(CashflowFinancingMovement).where(
+            *_standing_rows(
+                session, model=CashflowFinancingMovement, project_id=project.id, as_of=as_of
+            ),
+            CashflowFinancingMovement.movement_date > cutoff,
+        )
+    ):
+        add(
+            (
+                month_of(movement.movement_date),
+                GRAIN_FINANCING,
+                movement.movement_type,
+                movement.flow_direction,
+            ),
+            money(movement.amount),
+        )
+    return matched, unattributed
+
+
+def forecast_remainders(
+    session: Session,
+    *,
+    project: Project,
+    version: CashflowForecastVersion,
+    as_of: date,
+) -> dict[uuid.UUID, Decimal]:
+    """What is still expected on each forecast line, after what has already happened.
+
+    Cash happens once. The platform already enforces that for buyer receipts —
+    a confirmed receipt leaves the forward schedule by exactly its amount — and
+    this is the same rule for the figures Finance writes by hand.
+
+    A September line of 1,000,000 is the spend expected **for September, at the
+    moment the forecast was cut**. When 300,000 of it is paid on the 10th, a
+    live report of September is 300,000 that has gone and 700,000 still to go.
+    Reporting 300,000 actual *and* 1,000,000 forecast claims 1,300,000, and does
+    it on no evidence at all: nobody forecast a further million after paying the
+    first three hundred thousand. The governed figure is not touched — the
+    forecast file still says 1,000,000, because that is what was approved — this
+    is only how a projection reads it.
+
+    Matching is by grain and never by anything looser. Construction offsets at
+    the cost code the documents attribute the payment to; development at the
+    category, and at the phase where the line names one; financing at the
+    movement type and its direction. Cash that matches no line is not spread
+    around looking for one — with the single exception below, which is spread
+    deliberately and says so.
+
+    A remainder never goes negative. Spending more than was forecast does not
+    create expected cash; the overrun belongs to the variance and accuracy
+    layer, which reports it as an overrun rather than quietly enlarging the
+    forecast.
+    """
+    lines = forecast_lines(session, version_id=version.id)
+    matched, unattributed = _post_cutoff_actuals(
+        session, project=project, version=version, as_of=as_of
+    )
+    remaining = {line.id: money(line.amount) for line in lines}
+
+    # A phase-scoped line consumes before an unscoped one of the same category,
+    # so a payment attributable to a phase is not absorbed by the general line
+    # and then counted against the phase's as well.
+    for line in sorted(lines, key=lambda item: (item.phase_id is None, str(item.id))):
+        grain = _forecast_grain(line)
+        if grain is None:
+            continue
+        kind, first, second = grain
+        keys = [(line.period_month, kind, first, second)]
+        if kind == GRAIN_DEVELOPMENT and line.phase_id is None:
+            # An unscoped development line stands for the category across the
+            # whole project, so it answers for any phase's spend on it.
+            keys = sorted(
+                key
+                for key in matched
+                if key[0] == line.period_month and key[1] == kind and key[2] == first
+            )
+        for key in keys:
+            available = matched.get(key, ZERO)
+            if available <= ZERO:
+                continue
+            taken = min(available, remaining[line.id])
+            matched[key] = money(available - taken)
+            remaining[line.id] = money(remaining[line.id] - taken)
+
+    # Construction cash with no cost code — an advance, or cash not yet
+    # allocated — still left the bank. Spreading it across what the month still
+    # expects, in proportion to what each code has left, is the only reading
+    # that keeps the month's total honest: leaving it out would report the
+    # advance and the whole original forecast, which is the double count this
+    # function exists to prevent.
+    for month, pool in unattributed.items():
+        codes = [
+            line
+            for line in lines
+            if line.source_kind == SOURCE_CONSTRUCTION
+            and line.period_month == month
+            and remaining[line.id] > ZERO
+        ]
+        total = calculator.total(remaining[line.id] for line in codes)
+        if not codes or total <= ZERO:
+            continue
+        spread = min(pool, total)
+        running = ZERO
+        for index, line in enumerate(sorted(codes, key=lambda item: str(item.id))):
+            share = (
+                money(spread - running)
+                if index == len(codes) - 1
+                else money(spread * remaining[line.id] / total)
+            )
+            running = money(running + share)
+            remaining[line.id] = money(max(ZERO, remaining[line.id] - share))
+    return remaining
+
+
 def collect_source_rows(
     session: Session,
     *,
@@ -2293,14 +2515,22 @@ def collect_source_rows(
                     display_reference=str(row.installment_id),
                 )
             )
+    # The governed figure less what has already happened against it. The line
+    # itself is untouched — a forecast that quietly shrank would not be the one
+    # anybody approved — so the forecast file still reports the original amount
+    # and only the projection reads the remainder.
+    remainders = forecast_remainders(session, project=project, version=version, as_of=as_of)
     for line in forecast_lines(session, version_id=version.id):
+        remaining = remainders.get(line.id, money(line.amount))
+        if remaining <= ZERO:
+            continue
         rows.append(
             SourceRow(
                 source_type=SOURCE_FORECAST_LINE,
                 source_id=line.id,
                 period_month=line.period_month,
                 business_date=line.period_month,
-                amount=money(line.amount),
+                amount=remaining,
                 flow_direction=line.flow_direction,
                 category=line.category,
                 basis=BASIS_FORECAST,

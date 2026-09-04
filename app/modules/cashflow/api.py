@@ -23,7 +23,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.cashflow import permissions, read, schemas, service
+from app.modules.cashflow import models, permissions, read, schemas, service
 from app.modules.cashflow.permissions import CashflowProject
 
 router = APIRouter(prefix="/projects/{project_id}/cashflow", tags=["cashflow"])
@@ -666,6 +666,18 @@ def record_release(
     return read.restriction_out(session, restriction=restriction)
 
 
+def _release_backing(session: DbSession, release: models.CashflowRestrictionRelease) -> bool:
+    """Whether the escrow this release frees is still holding project cash.
+
+    A release answers for itself and for the chain above it, so the record and
+    the cash report cannot say different things about the same money.
+    """
+    restriction = session.get(models.CashflowReceiptRestriction, release.restriction_id)
+    if restriction is None:
+        return False
+    return read.restriction_stands(session, restriction=restriction)
+
+
 @router.post("/releases/{release_id}/confirm", response_model=schemas.ReleaseOut)
 def confirm_release(
     project: CashflowProject,
@@ -677,7 +689,7 @@ def confirm_release(
     permissions.require_cashflow_confirmer(actor)
     release = service.confirm_release(session, project=project, actor=actor, release_id=release_id)
     session.commit()
-    return read.release_out(release)
+    return read.release_out(release, restriction_counts=_release_backing(session, release))
 
 
 @router.post("/releases/{release_id}/reverse", response_model=schemas.ReleaseOut)
@@ -697,4 +709,4 @@ def reverse_release(
         reason=payload.reason,
     )
     session.commit()
-    return read.release_out(release)
+    return read.release_out(release, restriction_counts=_release_backing(session, release))

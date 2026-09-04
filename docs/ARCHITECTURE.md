@@ -1055,7 +1055,39 @@ over a reversed receipt it subtracts its own amount from a balance that no longe
 exists, and the harm doubles: the reversal removes the cash, and the escrow goes
 on holding a share of what is left. Both are asked of the same cutoff — a receipt
 confirmed in August and reversed in September *was* cash in August, and the
-escrow over it *was* holding it.
+escrow over it *was* holding it. The escrow's own record answers the same way as
+the cash report: `counts_as_restricted` needs the receipt as well as the
+confirmation, and a release needs the whole chain above it, so the register and
+the position cannot say different things about one amount of money. What is
+never rewritten is the persisted status — the restriction really was confirmed —
+which is why the reconciliation goes on naming it as a correction somebody owes.
+
+**A hand-written forecast is not exempt from cash happening once.** The platform
+already enforces this for buyer receipts: money that arrived leaves the forward
+schedule by exactly its amount. A forecast line is the same. A September line of
+1,000,000 is the spend expected *for September, at the moment the forecast was
+cut*; pay 300,000 of it on the 10th and a live report is 300,000 gone and 700,000
+to go, never 300,000 and 1,000,000 — which claims 1,300,000 on no evidence, and
+lands the error on the funding requirement. Matching is by grain and never looser:
+construction at the cost code the certificate attributes the payment to,
+development at the category and at the phase where the line names one, financing
+at the movement type and its direction. Cash that moved *before* the cutoff is
+already inside the figure and is not subtracted twice. A remainder never goes
+negative: spending more than was forecast does not create expected cash, and the
+overrun belongs to the accuracy report rather than to a forecast that quietly
+grew to absorb it. The governed line is untouched throughout — the forecast file
+still states what was approved, because that is what accuracy is measured
+against.
+
+**A forecast opens in the month it was taken in.** The opening balances are cash
+held at the start of the horizon, and every report rolls them forward through what
+has moved since. A horizon opening in a *later* month would state a balance for a
+month that has not happened while the current position quoted it as money in the
+bank today; one opening *earlier* would leave a stretch of unexamined history
+between the balance and the cutoff. Requiring the start month to be the as-of
+date's month removes both without a second date field to keep in step, and gives
+the current month its three clean terms: opening balance, month-to-date actual,
+and the forecast remainder still ahead.
 
 **Return states its basis.** Project NPV discounts operating and development
 cash and excludes every financing flow, because equity is how a project was

@@ -23,6 +23,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.standing import CONFIRMED as STANDING_CONFIRMED
 from app.modules.access.dependencies import ActorContext
 from app.modules.cashflow import calculator, schemas, service
 from app.modules.cashflow.calculator import ZERO, money
@@ -231,7 +232,36 @@ def financing_movement_out(
     )
 
 
-def release_out(release: CashflowRestrictionRelease) -> schemas.ReleaseOut:
+def restriction_stands(session: Session, *, restriction: CashflowReceiptRestriction) -> bool:
+    """Whether this escrow is holding project cash **now**.
+
+    Its own confirmation is half the question. A restriction is a claim over one
+    receipt, so it can only hold money that receipt still put in the bank: once
+    the transfer is reversed there is nothing left for the escrow to hold, and
+    saying otherwise subtracts an amount from a balance that no longer exists.
+
+    The same rule the reports use, asked here so the record and the report
+    cannot disagree. The persisted status is untouched — the restriction really
+    was confirmed, and rewriting that to tidy a screen would destroy the audit
+    trail — which is why the reconciliation goes on naming it as a correction
+    somebody owes.
+    """
+    if restriction.status != MOVEMENT_CONFIRMED:
+        return False
+    receipt = session.get(CollectionReceipt, restriction.receipt_id)
+    return receipt is not None and receipt.status == STANDING_CONFIRMED
+
+
+def release_out(
+    release: CashflowRestrictionRelease, *, restriction_counts: bool
+) -> schemas.ReleaseOut:
+    """One release, and whether it is currently freeing anything.
+
+    ``counts_as_released`` needs the parent chain and not only this row's own
+    status: a release frees an escrow, and an escrow whose receipt was reversed
+    is holding nothing to free. Passed in rather than looked up, so every caller
+    has to have decided.
+    """
     return schemas.ReleaseOut(
         id=release.id,
         restriction_id=release.restriction_id,
@@ -240,7 +270,8 @@ def release_out(release: CashflowRestrictionRelease) -> schemas.ReleaseOut:
         certification_reference=release.certification_reference,
         evidence_reference=release.evidence_reference,
         status=release.status,
-        counts_as_released=release.status == MOVEMENT_CONFIRMED,
+        counts_as_released=release.status == MOVEMENT_CONFIRMED and restriction_counts,
+        restriction_counts=restriction_counts,
     )
 
 
@@ -261,7 +292,7 @@ def restriction_out(
         )
     )
     released = service.released_against(session, restriction_id=restriction.id)
-    standing = restriction.status == MOVEMENT_CONFIRMED
+    standing = restriction_stands(session, restriction=restriction)
     return schemas.RestrictionOut(
         id=restriction.id,
         receipt_id=restriction.receipt_id,
@@ -276,7 +307,8 @@ def restriction_out(
         source_reference=restriction.source_reference,
         status=restriction.status,
         counts_as_restricted=standing,
-        releases=[release_out(release) for release in releases],
+        receipt_stands=receipt is not None and receipt.status == STANDING_CONFIRMED,
+        releases=[release_out(release, restriction_counts=standing) for release in releases],
     )
 
 

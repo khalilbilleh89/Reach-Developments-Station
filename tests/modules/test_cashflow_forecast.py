@@ -219,6 +219,75 @@ class TestTheConstructionScheduleReconcilesExactly:
         assert failing[0]["actual"] == "400000.00"
 
 
+class TestAForecastOpensInTheMonthItWasTakenIn:
+    """The opening balance has one temporal meaning, and the dates have to agree.
+
+    The figures a preparer types are cash held at the start of the horizon, and
+    every report rolls that balance forward through what has moved since. Let the
+    horizon open in a *later* month and the balance describes a month that has
+    not happened — while the current cash position, which is the opening balance
+    plus this month's movement, quotes it as money in the bank today. Let it open
+    in an *earlier* month and there is a stretch of unexamined history between
+    the balance and the cutoff it is measured against.
+
+    Tying the two together removes both without a second date field to keep in
+    step: the balance is cash at the start of the month the forecast was taken
+    in, and the days since it are actual transactions.
+    """
+
+    def test_a_forecast_opening_in_its_own_month_is_accepted(
+        self, finance_client: TestClient, project_id: str, active_construction_forecast: str
+    ) -> None:
+        created = create_cashflow_forecast(
+            finance_client,
+            project_id,
+            forecast_start_month=month_named(0),
+            forecast_end_month=month_named(6),
+        )
+        assert created.status_code == 201, created.text
+
+    def test_a_future_opening_month_is_refused(
+        self, finance_client: TestClient, project_id: str, active_construction_forecast: str
+    ) -> None:
+        """Otherwise next month's opening balance is today's cash position."""
+        refused = create_cashflow_forecast(
+            finance_client,
+            project_id,
+            forecast_start_month=month_named(1),
+            forecast_end_month=month_named(6),
+        )
+        assert refused.status_code == 422, refused.text
+        detail = refused.json()["detail"]
+        assert "opens in the month of its as-of date" in detail
+        assert month_named(1) in detail
+
+    def test_a_prior_opening_month_is_refused(
+        self, finance_client: TestClient, project_id: str, active_construction_forecast: str
+    ) -> None:
+        """A balance from before the cutoff, with a month of history in between."""
+        refused = create_cashflow_forecast(
+            finance_client,
+            project_id,
+            forecast_start_month=month_named(-1),
+            forecast_end_month=month_named(6),
+        )
+        assert refused.status_code == 422, refused.text
+        assert "opens in the month of its as-of date" in refused.json()["detail"]
+
+    def test_an_earlier_cutoff_may_open_in_its_own_month(
+        self, finance_client: TestClient, project_id: str, active_construction_forecast: str
+    ) -> None:
+        """The rule ties the two dates together; it does not pin them to today."""
+        created = create_cashflow_forecast(
+            finance_client,
+            project_id,
+            as_of_date=month_named(-1),
+            forecast_start_month=month_named(-1),
+            forecast_end_month=month_named(6),
+        )
+        assert created.status_code == 201, created.text
+
+
 class TestACodeNobodyOpenedIsNotACodeExpectingNothing:
     """Coverage and amount are two questions, and only one of them was being asked.
 

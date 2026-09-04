@@ -99,7 +99,7 @@ def cash_forecast(
     created = create_cashflow_forecast(
         finance_client,
         project_id,
-        forecast_start_month=month_named(-6),
+        forecast_start_month=month_named(0),
         forecast_end_month=month_named(18),
     )
     assert created.status_code == 201, created.text

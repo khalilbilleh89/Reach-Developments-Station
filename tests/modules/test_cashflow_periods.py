@@ -563,3 +563,79 @@ class TestTheOpeningBalanceAnchorsTheSeries:
         detail = refused.json()["detail"].lower()
         assert "opening balance" in detail
         assert "drill-down" in detail
+
+
+class TestTheOpeningBalanceCarriesIntoTheCurrentMonth:
+    """Opening plus what has moved plus what is still expected is where the month ends.
+
+    The whole point of tying the opening balance to the cutoff's own month: the
+    balance states cash on the first, the days since are actual transactions, and
+    the rest of the month is forecast. Three terms, and no pre-opening history
+    replayed through any of them.
+    """
+
+    def test_the_month_closes_where_its_three_terms_say(
+        self,
+        finance_client: TestClient,
+        second_finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        currency_id: str,
+        cost_codes: dict[str, str],
+        flat_construction_forecast: str,
+    ) -> None:
+        created = create_cashflow_forecast(
+            finance_client,
+            project_id,
+            opening_unrestricted_cash="500000.00",
+            forecast_start_month=month_named(0),
+            forecast_end_month=month_named(3),
+        )
+        assert created.status_code == 201, created.text
+        identifier = created.json()["id"]
+        assert (
+            set_cashflow_line(
+                finance_client,
+                project_id,
+                identifier,
+                period_month=month_named(0),
+                source_kind="development",
+                category="consultants",
+                amount="80000.00",
+            ).status_code
+            == 200
+        )
+        assert (
+            govern_cashflow_forecast(
+                finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+            ).status_code
+            == 200
+        )
+        # Marketing rather than consultants, deliberately: this test is about
+        # the three terms adding up, and an actual that meets the forecast would
+        # entangle it with the residual rule that
+        # ``test_cashflow_residual.py`` proves on its own.
+        movement = record_development(
+            finance_client, project_id, currency_id, category="marketing", amount="30000.00"
+        )
+        confirm_movement(second_finance_client, project_id, "development", movement.json()["id"])
+
+        row = month_row(cashflow_monthly(finance_client, project_id), month_named(0))
+        assert Decimal(row["opening_total_cash"]) == Decimal("500000.00")
+        assert Decimal(row["development_actual_outflows"]) == Decimal("30000.00")
+        assert Decimal(row["development_forecast_outflows"]) == Decimal("80000.00")
+        assert Decimal(row["closing_total_cash"]) == Decimal("390000.00"), (
+            "500,000 opening less 30,000 paid less 80,000 still expected"
+        )
+
+    def test_current_cash_is_the_opening_balance_plus_what_has_moved(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        opening_forecast: str,
+    ) -> None:
+        """Never a balance stated for a month that has not happened."""
+        summary = cashflow_summary(finance_client, project_id)
+        assert summary["position"]["total_cash"] == "1200.00"
+        assert summary["position"]["unrestricted_cash"] == "1000.00"
+        assert summary["position"]["restricted_cash"] == "200.00"
