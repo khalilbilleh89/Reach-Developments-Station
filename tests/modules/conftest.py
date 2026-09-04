@@ -2085,3 +2085,221 @@ def construction_summary(client: TestClient, project_id: str) -> dict[str, Any]:
     response = client.get(f"{construction_url(project_id)}/summary")
     assert response.status_code == 200, response.text
     return response.json()
+
+
+# --------------------------------------------------------------------------- #
+# Cashflow (PR-MVP-10)
+# --------------------------------------------------------------------------- #
+
+
+def cashflow_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/cashflow"
+
+
+def cover_construction_forecast(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    cost_codes: dict[str, str],
+    *,
+    hard: str = "1000000.00",
+    soft: str = "0.00",
+    contingency: str = "0.00",
+    other: str = "0.00",
+) -> None:
+    """Forecast every active cost code, which is what submission insists on."""
+    for category, amount in (
+        ("hard", hard),
+        ("soft", soft),
+        ("contingency", contingency),
+        ("other", other),
+    ):
+        response = set_forecast_line(
+            client,
+            project_id,
+            version_id,
+            cost_code_id=cost_codes[category],
+            forecast_remaining_amount_ex_tax=amount,
+        )
+        assert response.status_code == 200, response.text
+
+
+@pytest.fixture
+def active_construction_forecast(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    active_budget: str,
+) -> str:
+    """A construction forecast in force: 1,000,000 left on hard cost, nothing else.
+
+    The pin every cashflow forecast needs. Kept deliberately simple — one cost
+    code with a round number — so a cashflow test's monthly schedule can be read
+    at a glance against what it has to reconcile to.
+    """
+    version_id = create_forecast(finance_client, project_id).json()["id"]
+    cover_construction_forecast(finance_client, project_id, version_id, cost_codes)
+    governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+    assert governed.status_code == 200, governed.text
+    return version_id
+
+
+def create_cashflow_forecast(
+    client: TestClient,
+    project_id: str,
+    *,
+    as_of_date: str | None = None,
+    forecast_start_month: str | None = None,
+    forecast_end_month: str | None = None,
+    opening_unrestricted_cash: str = "0.00",
+    opening_restricted_cash: str = "0.00",
+    discount_rate_per_period: str = "0.000000",
+    change_reason: str = "Opening cash forecast",
+    **overrides: object,
+) -> Response:
+    today = date.today()
+    body: dict[str, Any] = {
+        "as_of_date": as_of_date or today.isoformat(),
+        "forecast_start_month": forecast_start_month or today.replace(day=1).isoformat(),
+        "forecast_end_month": forecast_end_month
+        or date(today.year + 1, today.month, 1).isoformat(),
+        "opening_unrestricted_cash": opening_unrestricted_cash,
+        "opening_restricted_cash": opening_restricted_cash,
+        "discount_rate_per_period": discount_rate_per_period,
+        "change_reason": change_reason,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/forecasts", json=body)
+
+
+def set_cashflow_line(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    period_month: str,
+    source_kind: str,
+    category: str,
+    amount: str,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "period_month": period_month,
+        "source_kind": source_kind,
+        "category": category,
+        "amount": amount,
+    }
+    body.update(overrides)
+    return client.put(f"{cashflow_url(project_id)}/forecasts/{version_id}/lines", json=body)
+
+
+def govern_cashflow_forecast(
+    preparer: TestClient,
+    approver: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    activator: TestClient | None = None,
+) -> Response:
+    """Submit, approve and activate one cashflow forecast."""
+    base = f"{cashflow_url(project_id)}/forecasts/{version_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = approver.post(f"{base}/approve", json={"reason": "Reviewed with Finance"})
+    assert approved.status_code == 200, approved.text
+    return (activator or preparer).post(f"{base}/activate", json={})
+
+
+def record_development(
+    client: TestClient,
+    project_id: str,
+    currency_id: str,
+    *,
+    category: str = "consultants",
+    amount: str = "50000.00",
+    movement_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "category": category,
+        "amount": amount,
+        "movement_date": movement_date or date.today().isoformat(),
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/development-movements", json=body)
+
+
+def record_financing(
+    client: TestClient,
+    project_id: str,
+    currency_id: str,
+    *,
+    movement_type: str = "equity_contribution",
+    amount: str = "1000000.00",
+    movement_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "movement_type": movement_type,
+        "amount": amount,
+        "movement_date": movement_date or date.today().isoformat(),
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/financing-movements", json=body)
+
+
+def restrict_receipt(
+    client: TestClient,
+    project_id: str,
+    receipt_id: str,
+    *,
+    restricted_amount: str,
+    reason: str = "Escrow account under the trust deed",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {"restricted_amount": restricted_amount, "reason": reason}
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/receipts/{receipt_id}/restriction", json=body)
+
+
+def release_restriction(
+    client: TestClient,
+    project_id: str,
+    restriction_id: str,
+    *,
+    amount: str,
+    release_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "amount": amount,
+        "release_date": release_date or date.today().isoformat(),
+    }
+    body.update(overrides)
+    return client.post(
+        f"{cashflow_url(project_id)}/restrictions/{restriction_id}/releases", json=body
+    )
+
+
+def cashflow_summary(client: TestClient, project_id: str, **params: str) -> dict[str, Any]:
+    response = client.get(f"{cashflow_url(project_id)}/summary", params=params)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def cashflow_monthly(client: TestClient, project_id: str, **params: str) -> dict[str, Any]:
+    response = client.get(f"{cashflow_url(project_id)}/monthly", params=params)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def month_named(offset: int) -> str:
+    """The first of the month ``offset`` months from this one, as an ISO date."""
+    today = date.today().replace(day=1)
+    month = today.month - 1 + offset
+    return date(today.year + month // 12, month % 12 + 1, 1).isoformat()

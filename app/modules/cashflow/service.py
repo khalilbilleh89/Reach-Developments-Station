@@ -903,6 +903,20 @@ def set_forecast_line(
             "the horizon, or the month would be invisible in every monthly report."
         )
     direction = _direction_for(source_kind=source_kind, category=category, stated=flow_direction)
+    # The database holds this too, but a CHECK violation reaches the caller as a
+    # 500 naming a constraint. The rule is worth stating in words at the boundary
+    # that can still explain what to do about it.
+    if source_kind == SOURCE_CONSTRUCTION and construction_cost_code_id is None:
+        raise ValidationError(
+            "A construction forecast line has to name the cost code it schedules. "
+            "Without one there is nothing to reconcile against the construction "
+            "forecast's remaining cost, and the month would be unattributable."
+        )
+    if source_kind != SOURCE_CONSTRUCTION and construction_cost_code_id is not None:
+        raise ValidationError(
+            f"A {source_kind} line does not belong to a construction cost code. "
+            "Only the construction schedule is reconciled code by code."
+        )
 
     existing = session.scalars(
         select(CashflowForecastLine).where(
