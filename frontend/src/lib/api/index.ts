@@ -2078,6 +2078,13 @@ export const cashflow = {
       `${cashflowRoot(projectId)}/forecasts/${versionId}/refresh-customer-snapshot`,
       {},
     ),
+  // The preparer's own way out of a draft that can no longer be submitted —
+  // distinct from the approver's reject, which a draft never reaches.
+  discardForecast: (projectId: string, versionId: string, reason: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/discard`,
+      { reason },
+    ),
   submitForecast: (projectId: string, versionId: string) =>
     post<CashflowForecastVersion>(
       `${cashflowRoot(projectId)}/forecasts/${versionId}/submit`,

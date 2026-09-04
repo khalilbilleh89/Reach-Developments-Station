@@ -45,6 +45,15 @@ from tests.modules.conftest import (
 )
 
 
+def _forecast_actions(db: Session, version_id: str) -> list[str]:
+    """Every audit action recorded against one forecast version, in order."""
+    rows = db.execute(
+        text("SELECT action FROM audit_events WHERE entity_id = :id ORDER BY occurred_at, id"),
+        {"id": version_id},
+    ).scalars()
+    return list(rows)
+
+
 def cover_construction_months(
     client: TestClient,
     project_id: str,
@@ -1316,3 +1325,293 @@ class TestAnApprovedScheduleDoesNotMoveUnderTheSignature:
         )
         assert refused.status_code == 409, refused.text
         assert "rejected version is a statement" in refused.json()["detail"]
+
+
+class TestADraftHasAPreparersWayOut:
+    """The same trap as a stranded approval, one state earlier and worse.
+
+    Submission re-proves the sources, so a construction forecast activated while
+    a draft is being prepared makes that draft unsubmittable. The draft still
+    counts as the project's one open version; its pin is deliberate provenance
+    and may not be swapped underneath it; and rejection belongs to an approver
+    who was never asked to look at it. Four doors, all shut, and the project
+    could prepare no cashflow forecast at all.
+
+    Discarding is the preparer's own act because a draft is preparatory work
+    nobody has been asked to review. Sending it to a CFO to be rejected would be
+    governance theatre and would blur a boundary worth keeping sharp.
+    """
+
+    def test_a_stale_draft_can_be_discarded_and_replaced(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+        active_construction_forecast: str,
+    ) -> None:
+        """The whole deadlock, and the one door that now opens."""
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        second = create_forecast(finance_client, project_id, change_reason="Revised build cost")
+        second_id = second.json()["id"]
+        cover_construction_forecast(
+            finance_client, project_id, second_id, cost_codes, hard="1200000.00"
+        )
+        assert govern_forecast(finance_client, cfo_client, project_id, second_id).status_code == 200
+
+        stale = finance_client.post(f"{base}/submit", json={})
+        assert stale.status_code == 409, "a draft on a superseded pin cannot be submitted"
+        blocked = create_cashflow_forecast(finance_client, project_id)
+        assert blocked.status_code == 409, "the draft still holds the project's open slot"
+        not_rejectable = cfo_client.post(f"{base}/reject", json={"reason": "Obsolete"})
+        assert not_rejectable.status_code == 409, "a draft was never put to an approver"
+
+        discarded = finance_client.post(
+            f"{base}/discard", json={"reason": "Construction forecast moved before submission"}
+        )
+        assert discarded.status_code == 200, discarded.text
+        assert discarded.json()["status"] == "rejected"
+
+        replacement = create_cashflow_forecast(finance_client, project_id)
+        assert replacement.status_code == 201, replacement.text
+        assert replacement.json()["construction_forecast_version_id"] == second_id, (
+            "the replacement is measured against the construction forecast in force"
+        )
+
+    def test_a_draft_refusal_names_the_action_that_applies(
+        self,
+        cfo_client: TestClient,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        """A refusal that does not say what to do instead is half an answer."""
+        refused = cfo_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/reject",
+            json={"reason": "Obsolete"},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "its preparer discards it instead" in refused.json()["detail"]
+
+    def test_nothing_the_draft_carried_is_deleted(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """A discarded draft stays an auditable record, not a hole in the numbering."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+
+        def counts() -> tuple[int, int]:
+            """The lines written here, and the buyer schedule frozen underneath."""
+            return (
+                db.execute(
+                    text(
+                        "SELECT count(*) FROM cashflow_forecast_lines "
+                        "WHERE forecast_version_id = :id"
+                    ),
+                    {"id": draft_forecast},
+                ).scalar_one(),
+                db.execute(
+                    text(
+                        "SELECT count(*) FROM cashflow_customer_schedule_snapshots "
+                        "WHERE forecast_version_id = :id"
+                    ),
+                    {"id": draft_forecast},
+                ).scalar_one(),
+            )
+
+        before = db.execute(
+            text(
+                "SELECT created_at, construction_forecast_version_id "
+                "FROM cashflow_forecast_versions WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        lines, snapshot = counts()
+        assert lines > 0
+
+        discarded = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Superseded by a change of programme"},
+        )
+        assert discarded.status_code == 200, discarded.text
+
+        after = db.execute(
+            text(
+                "SELECT created_at, construction_forecast_version_id, "
+                "rejected_at, rejected_by_user_id, rejection_reason "
+                "FROM cashflow_forecast_versions WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        assert after.created_at == before.created_at
+        assert after.construction_forecast_version_id == before.construction_forecast_version_id
+        assert after.rejected_at is not None
+        assert after.rejected_by_user_id is not None
+        assert after.rejection_reason == "Superseded by a change of programme"
+        assert counts() == (lines, snapshot), (
+            "the lines and the frozen buyer schedule are the version's evidence; "
+            "discarding closes it, it does not empty it"
+        )
+
+
+class TestWhoMayDiscardADraft:
+    """Preparation is Finance's half of the ladder, and only Finance's."""
+
+    def test_a_cashflow_preparer_may(
+        self, finance_client: TestClient, project_id: str, draft_forecast: str
+    ) -> None:
+        discarded = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Obsolete"},
+        )
+        assert discarded.status_code == 200, discarded.text
+
+    def test_an_approver_who_is_not_a_preparer_may_not(
+        self, cfo_client: TestClient, project_id: str, draft_forecast: str
+    ) -> None:
+        """The CFO governs decisions, not somebody else's working papers."""
+        refused = cfo_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Tidying up"},
+        )
+        assert refused.status_code == 403, refused.text
+
+    @pytest.mark.parametrize("client_name", ["collections_client", "sales_ops_client"])
+    def test_no_other_module_may(
+        self,
+        request: pytest.FixtureRequest,
+        client_name: str,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        client: TestClient = request.getfixturevalue(client_name)
+        refused = client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Not mine"},
+        )
+        assert refused.status_code == 403, refused.text
+
+    def test_only_a_draft_may_be_discarded(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Every other status belongs to somebody else's act, or to history."""
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        submitted = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert submitted.status_code == 409, "a submitted version is the approver's to refuse"
+        assert "must be rejected by the approver" in submitted.json()["detail"]
+
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+        approved = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert approved.status_code == 409, "an approved version needs its approval withdrawn"
+
+        assert finance_client.post(f"{base}/activate", json={}).status_code == 200
+        active = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert active.status_code == 409, "governed history cannot be discarded"
+        assert "governed history cannot be discarded" in active.json()["detail"]
+
+
+class TestTheThreeWaysAVersionStopsStayApart:
+    """Discarded, rejected and withdrawn are three different histories.
+
+    Collapsing them onto one audit action would leave an auditor unable to tell
+    a preparer tidying up their own draft from a CFO refusing a submission from
+    a CFO taking back a signature already given.
+    """
+
+    def _prepared(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        version_id: str,
+    ) -> str:
+        cover_construction_months(
+            finance_client,
+            project_id,
+            version_id,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        return f"{cashflow_url(project_id)}/forecasts/{version_id}"
+
+    def test_a_discarded_draft_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Obsolete"},
+        )
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_draft_discarded" in actions
+        assert "cashflow.forecast_rejected" not in actions
+        assert "cashflow.forecast_approval_withdrawn" not in actions
+
+    def test_a_rejected_submission_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        base = self._prepared(finance_client, project_id, cost_codes, draft_forecast)
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/reject", json={"reason": "Months do not match the programme"})
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_rejected" in actions
+        assert "cashflow.forecast_draft_discarded" not in actions
+        assert "cashflow.forecast_approval_withdrawn" not in actions
+
+    def test_a_withdrawn_approval_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        base = self._prepared(finance_client, project_id, cost_codes, draft_forecast)
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+        cfo_client.post(f"{base}/reject", json={"reason": "Basis moved"})
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_approval_withdrawn" in actions
+        assert "cashflow.forecast_approved" in actions, "the approval stays in the history"
+        assert "cashflow.forecast_rejected" not in actions
+        assert "cashflow.forecast_draft_discarded" not in actions

@@ -30,6 +30,8 @@ import { businessDate, money, percent } from "@/lib/format";
 import {
   categoryLabel,
   checkLabel,
+  FORECAST_OPEN_STATUSES,
+  FORECAST_REFRESHABLE_STATUSES,
   DEVELOPMENT_CATEGORY_OPTIONS,
   FINANCING_TYPE_OPTIONS,
   forecastIsRefreshable,
@@ -68,6 +70,7 @@ export function CashflowForecasts({
   onSubmit,
   onApprove,
   onReject,
+  onDiscard,
   onActivate,
   onRefreshSnapshot,
   onSetLine,
@@ -87,12 +90,24 @@ export function CashflowForecasts({
   onSubmit: (versionId: string) => void;
   onApprove: (versionId: string, reason: string) => void;
   onReject: (versionId: string, reason: string) => void;
+  onDiscard: (versionId: string, reason: string) => void;
   onActivate: (versionId: string) => void;
   onRefreshSnapshot: (versionId: string) => void;
   onSetLine: (versionId: string, body: Record<string, unknown>) => void;
 }) {
   const [creating, setCreating] = useState(false);
-  const [reasonFor, setReasonFor] = useState<"approve" | "reject" | "withdraw" | null>(null);
+  /**
+   * The version already occupying the project's one open slot, if the list says so.
+   *
+   * A convenience only: the server owns this rule and refuses regardless. What
+   * the screen adds is telling a preparer *which* version is in the way, before
+   * they fill in a form that cannot be saved.
+   */
+  const openVersion =
+    versions.status === "ready"
+      ? (versions.data.find((entry) => FORECAST_OPEN_STATUSES.has(entry.status)) ?? null)
+      : null;
+  const [reasonFor, setReasonFor] = useState<"approve" | "reject" | "withdraw" | "discard" | null>(null);
 
   return (
     <div className="stack">
@@ -103,12 +118,19 @@ export function CashflowForecasts({
         description="Each one states what it was measured against, and stays readable exactly as approved."
         actions={
           canPrepare ? (
-            <Button small onClick={() => setCreating(true)} disabled={busy}>
+            <Button small onClick={() => setCreating(true)} disabled={busy || openVersion !== null}>
               New forecast
             </Button>
           ) : undefined
         }
       >
+      {canPrepare && openVersion ? (
+          <Notice tone="info">
+            Version {openVersion.version_number} ({forecastLabel(openVersion.status)}) is still open.
+            Finish or close it before preparing another — two open forecasts are two answers to one
+            question.
+          </Notice>
+        ) : null}
         {versions.status === "loading" ? <Loading label="Loading forecasts" shape="rows" /> : null}
         {versions.status === "denied" ? (
           <Notice tone="info">Forecasts are not available to your role.</Notice>
@@ -189,6 +211,7 @@ export function CashflowForecasts({
           onAskApprove={() => setReasonFor("approve")}
           onAskReject={() => setReasonFor("reject")}
           onAskWithdraw={() => setReasonFor("withdraw")}
+          onAskDiscard={() => setReasonFor("discard")}
           onActivate={() => onActivate(selected)}
           onRefreshSnapshot={() => onRefreshSnapshot(selected)}
           onSetLine={(body) => onSetLine(selected, body)}
@@ -220,6 +243,7 @@ export function CashflowForecasts({
             // version will not proceed — and a different one to the reader,
             // because the approval it is undoing really happened.
             if (reasonFor === "approve") onApprove(selected, reason);
+            else if (reasonFor === "discard") onDiscard(selected, reason);
             else onReject(selected, reason);
             setReasonFor(null);
           }}
@@ -241,6 +265,7 @@ function ForecastDetail({
   onAskApprove,
   onAskReject,
   onAskWithdraw,
+  onAskDiscard,
   onActivate,
   onRefreshSnapshot,
   onSetLine,
@@ -256,6 +281,7 @@ function ForecastDetail({
   onAskApprove: () => void;
   onAskReject: () => void;
   onAskWithdraw: () => void;
+  onAskDiscard: () => void;
   onActivate: () => void;
   onRefreshSnapshot: () => void;
   onSetLine: (body: Record<string, unknown>) => void;
@@ -303,6 +329,11 @@ function ForecastDetail({
               Submit
             </Button>
           ) : null}
+          {canPrepare && isDraft ? (
+            <Button small variant="danger" onClick={onAskDiscard} disabled={busy}>
+              Discard draft
+            </Button>
+          ) : null}
           {canApprove && version.status === "submitted" ? (
             <>
               <Button small onClick={onAskApprove} disabled={busy}>
@@ -330,7 +361,7 @@ function ForecastDetail({
         <Badge tone={forecastTone(version.status)}>{forecastLabel(version.status)}</Badge>
       </div>
 
-      <Staleness staleness={version.staleness} />
+      <Staleness staleness={version.staleness} status={version.status} />
 
       <KeyValueGrid columns={3}>
         <KeyValue label="Taken as at" value={businessDate(version.as_of_date)} />
@@ -495,29 +526,48 @@ function ForecastDetail({
  * built on the current one. Saying only "Stale" would leave a preparer with no
  * idea which.
  */
-function Staleness({ staleness }: { staleness: CashflowForecastDetail["staleness"] }) {
+function Staleness({
+  staleness,
+  status,
+}: {
+  staleness: CashflowForecastDetail["staleness"];
+  status: string;
+}) {
   if (!staleness.is_stale) return null;
+  // The remedy depends on where the version stands, and the wrong one is worse
+  // than none: telling the preparer of a draft that a newer source "changes what
+  // was approved" describes a signature nobody gave, and telling an approver to
+  // refresh sends them at a refusal.
+  const approved = status === "approved";
+  const refreshable = FORECAST_REFRESHABLE_STATUSES.has(status);
   return (
     <Notice tone="warning">
-      <strong>The sources this version was built on have changed.</strong> Its
-      own figures are unchanged and are still reported exactly as approved.
+      <strong>The sources this version was built on have changed.</strong> Its own
+      figures are unchanged{approved ? " and are still reported exactly as approved" : ""}.
       {staleness.construction_is_stale ? (
         <>
           {" "}
           It schedules construction forecast version{" "}
           {staleness.pinned_construction_version_number ?? "—"}, and version{" "}
-          {staleness.active_construction_version_number ?? "—"} is now in force —
-          a new cashflow forecast has to be built on the current one, because
-          substituting a newer source under an approved version changes what was
-          approved.
+          {staleness.active_construction_version_number ?? "—"} is now in force. The
+          pin is fixed when a version is created, so the build schedule here can no
+          longer be reconciled against what construction expects to spend —{" "}
+          {approved
+            ? "withdraw the approval and prepare a forecast on the current one."
+            : refreshable
+              ? "this version cannot be submitted, and a forecast on the current construction forecast has to be prepared instead."
+              : "a later version was prepared on the current one."}
         </>
       ) : null}
       {staleness.customer_schedule_is_stale ? (
         <>
           {" "}
-          The governing buyer schedules have changed since this version froze
-          them. Refreshing is a deliberate act, not something that happens on its
-          own.
+          The governing buyer schedules have changed since this version froze them.{" "}
+          {approved
+            ? "They cannot be re-read under the approval this version carries: withdraw the approval, and the replacement is reviewed against the schedule as it now stands."
+            : refreshable
+              ? "Refreshing is a deliberate act, not something that happens on its own."
+              : "This version keeps the schedule it was governed on."}
         </>
       ) : null}
     </Notice>
@@ -629,7 +679,7 @@ function CreateForecastDialog({
  * approval precisely because it happened.
  */
 const REASON_WORDS: Record<
-  "approve" | "reject" | "withdraw",
+  "approve" | "reject" | "withdraw" | "discard",
   { title: string; label: string; hint: string; confirm: string }
 > = {
   approve: {
@@ -643,6 +693,12 @@ const REASON_WORDS: Record<
     label: "Why is it being rejected?",
     hint: "Kept on the record against the version.",
     confirm: "Reject",
+  },
+  discard: {
+    title: "Discard this draft",
+    label: "Why is this draft being discarded?",
+    hint: "The draft stays in history. It will no longer occupy the project's open forecast slot.",
+    confirm: "Discard draft",
   },
   withdraw: {
     title: "Withdraw this approval",

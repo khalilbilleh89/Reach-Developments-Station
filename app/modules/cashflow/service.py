@@ -865,8 +865,13 @@ def approve_forecast(
     return version
 
 
-#: A version that was never signed for, and one whose signature was taken back.
-#: An auditor reading the history has to be able to tell those apart.
+#: The three ways a version stops, and they are not one event.
+#:
+#: A draft discarded by its preparer was never put to anybody; a submitted
+#: version was reviewed and refused; an approved one was signed for and the
+#: signature taken back. An auditor asking "what happened to version 4?" is
+#: asking which of those, so each keeps its own name.
+_DISCARDED = "cashflow.forecast_draft_discarded"
 _REJECTED = "cashflow.forecast_rejected"
 _WITHDRAWN = "cashflow.forecast_approval_withdrawn"
 
@@ -903,9 +908,10 @@ def reject_forecast(
     withdrawing = version.status == FORECAST_APPROVED
     if version.status not in (FORECAST_SUBMITTED, FORECAST_APPROVED):
         raise ConflictError(
-            "Only a submitted or approved cashflow forecast can be rejected. An "
-            "active or superseded version is in the record as something the "
-            "company reported, and a rejected one is already closed."
+            "Only a submitted or approved cashflow forecast can be rejected. A "
+            "draft has not been put to an approver yet, so its preparer discards "
+            "it instead; an active or superseded version is in the record as "
+            "something the company reported; and a rejected one is already closed."
         )
     permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
 
@@ -921,6 +927,66 @@ def reject_forecast(
         # that a signature was given and later taken back, which is a different
         # event from a version that was never approved at all.
         action=_WITHDRAWN if withdrawing else _REJECTED,
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def discard_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    version_id: uuid.UUID,
+    reason: str,
+) -> CashflowForecastVersion:
+    """Close a draft its preparer no longer wants, freeing the project's open slot.
+
+    The same deadlock as a stranded approval, one state earlier. Submission
+    re-proves the sources, so a construction forecast activated while a draft was
+    being prepared makes that draft unsubmittable — and the draft still counts as
+    the project's one open version, its pin is deliberate provenance that may not
+    be swapped underneath it, and rejection belongs to an approver who was never
+    asked to look at it. Without this the project could prepare no cashflow
+    forecast at all.
+
+    It is the preparer's own act rather than the approver's, because a draft is
+    preparatory work that has not been put to anybody. Asking a CFO to reject
+    something they never reviewed would be governance theatre, and it would blur
+    a boundary worth keeping sharp: Finance owns preparation, the approver owns
+    the decision, and neither reaches into the other's half.
+
+    Nothing is deleted. The version keeps its creation, its creator, its
+    construction pin, its frozen buyer schedule and every line it carried, and
+    ``rejected`` is reused as the terminal state because the shape of a closed
+    version does not change with the reason it closed. The audit event is what
+    says which reason that was.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_DRAFT:
+        raise ConflictError(
+            "Only a draft cashflow forecast can be discarded by its preparer. A "
+            "submitted forecast must be rejected by the approver, an approved "
+            "forecast must have its approval withdrawn, and governed history "
+            "cannot be discarded."
+        )
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_REJECTED
+    version.rejected_at = _now()
+    version.rejected_by_user_id = actor.user_id
+    version.rejection_reason = reason.strip()
+    _flush(session)
+    record_event(
+        session,
+        action=_DISCARDED,
         entity_type=ENTITY_FORECAST,
         entity_id=version.id,
         correlation_id=actor.correlation_id,

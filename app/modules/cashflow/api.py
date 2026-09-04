@@ -360,6 +360,28 @@ def reject_forecast(
     return read.forecast_out(session, project=project, version=version)
 
 
+@router.post("/forecasts/{version_id}/discard", response_model=schemas.ForecastOut)
+def discard_forecast(
+    project: CashflowProject,
+    version_id: uuid.UUID,
+    payload: schemas.ReasonRequest,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.ForecastOut:
+    """Close a draft its preparer no longer wants, with the reason recorded.
+
+    The preparer's own act, not the approver's: a draft has not been put to
+    anybody, and it frees the project's one open forecast slot so a replacement
+    can be prepared against the sources now in force.
+    """
+    permissions.require_cashflow_preparer(actor)
+    version = service.discard_forecast(
+        session, project=project, actor=actor, version_id=version_id, reason=payload.reason
+    )
+    session.commit()
+    return read.forecast_out(session, project=project, version=version)
+
+
 @router.post("/forecasts/{version_id}/activate", response_model=schemas.ForecastOut)
 def activate_forecast(
     project: CashflowProject,

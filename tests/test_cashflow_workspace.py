@@ -794,3 +794,63 @@ class TestTheGovernanceMatrixMirrorsTheServer:
             )
         assert 'version.status !== "active"' not in source
         assert 'version.status !== "superseded"' not in source
+
+
+class TestADraftIsDiscardedThroughTheServer:
+    """The preparer's exit from a draft, and the boundary it keeps.
+
+    A draft that can no longer be submitted — its construction pin superseded
+    while it was being prepared — used to hold the project's one open forecast
+    slot with nothing able to move it. The exit is Finance's own act, because a
+    draft has not been put to an approver; and it is a real endpoint, because a
+    version hidden by the browser would still occupy the slot on the server.
+    """
+
+    def test_a_draft_offers_the_discard(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "Discard draft" in source
+        block = source[source.index("Discard draft") - 400 : source.index("Discard draft")]
+        assert "canPrepare && isDraft ?" in block, (
+            "the discard must be a draft-only, preparer-only action"
+        )
+
+    def test_it_calls_the_server_rather_than_hiding_the_version(self) -> None:
+        tab = read(TAB)
+        assert "cashflow.discardForecast(projectId, id, reason)" in tab, (
+            "a version the browser merely stops drawing still holds the open slot"
+        )
+        api = cashflow_namespace()
+        index = api.index("discardForecast")
+        assert "/discard" in api[index : index + 320]
+
+    def test_it_is_not_routed_through_the_approver_s_reject(self) -> None:
+        """Discard and reject are different acts by different people."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert 'if (reasonFor === "discard") onDiscard(selected, reason);' in source
+        assert "onDiscard: (versionId: string, reason: string) => void;" in source
+
+    def test_it_asks_for_a_reason_in_its_own_words(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        words = source[source.index("const REASON_WORDS") : source.index("const LINE_SOURCE_KINDS")]
+        discard = words[words.index("discard: {") :].split("},")[0]
+        assert "Discard this draft" in discard
+        assert "stays in history" in discard
+        assert "Reject" not in discard and "Withdraw" not in discard
+
+    def test_no_other_status_offers_it(self) -> None:
+        """Submitted belongs to the approver; approved needs a withdrawal."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        handlers = source.count("onClick={onAskDiscard}")
+        assert handlers == 1, f"the discard is offered from {handlers} places, expected one"
+        guard = source[: source.index("onClick={onAskDiscard}")].rsplit("{canPrepare", 1)[-1]
+        assert guard.startswith(" && isDraft ?"), (
+            "the discard button is not guarded by isDraft, so a status that should "
+            f"not offer it can reach it — guard reads: {guard[:40]!r}"
+        )
+
+    def test_the_open_slot_is_explained_before_the_form(self) -> None:
+        """A refusal after filling a form is a worse answer than a sentence before it."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "openVersion" in source
+        assert "Finish or close it before preparing another" in source
+        assert "disabled={busy || openVersion !== null}" in source

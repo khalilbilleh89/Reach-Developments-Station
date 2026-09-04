@@ -275,6 +275,7 @@ export function CashflowTab({
           onSubmit={(id) => void run(() => cashflow.submitForecast(projectId, id))}
           onApprove={(id, reason) => void run(() => cashflow.approveForecast(projectId, id, reason))}
           onReject={(id, reason) => void run(() => cashflow.rejectForecast(projectId, id, reason))}
+          onDiscard={(id, reason) => void run(() => cashflow.discardForecast(projectId, id, reason))}
           onActivate={(id) => void run(() => cashflow.activateForecast(projectId, id))}
           onRefreshSnapshot={(id) =>
             void run(() => cashflow.refreshCustomerSnapshot(projectId, id))
