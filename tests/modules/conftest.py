@@ -1291,6 +1291,12 @@ _HISTORICAL_TABLES = frozenset(
         # arranged here and every assertion afterwards goes through the ordinary
         # route. What is simulated is the passage of time, never a figure.
         "construction_certificates",
+        # Cashflow's own movements confirm at ``now`` like every other cash
+        # record in the platform, so a test that needs one to have been standing
+        # last week has to move the timestamp. What is simulated is the passage
+        # of time, never a figure.
+        "cashflow_development_movements",
+        "cashflow_financing_movements",
     }
 )
 
