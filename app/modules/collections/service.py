@@ -54,11 +54,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.standing import as_of_bound, standing_conditions
 from app.db.base import MONEY_EXPONENT
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
@@ -3472,3 +3473,181 @@ def project_summary(
         ),
         currencies=currencies,
     )
+
+
+# --------------------------------------------------------------------------- #
+# The cashflow read contract
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CashflowCashRow:
+    """One standing cash transaction, in the shape a cash report needs.
+
+    Deliberately narrow. Cashflow consolidates cash; it does not need a buyer's
+    name, a dispute, a waiver or an allocation, and handing it those would make
+    this contract a second collections API that drifts from the first.
+    """
+
+    id: uuid.UUID
+    reference: str
+    sale_contract_id: uuid.UUID
+    unit_id: uuid.UUID | None
+    amount: Decimal
+    business_date: date
+
+
+def _cashflow_cash_rows(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    model: type[CollectionReceipt] | type[CollectionRefund],
+    reference_column: InstrumentedAttribute[str],
+    date_column: InstrumentedAttribute[date],
+    as_of: date | None,
+) -> list[CashflowCashRow]:
+    """Standing rows of one cash table, joined to the unit through the sale."""
+    rows = session.execute(
+        select(
+            model.id,
+            reference_column,
+            model.sale_contract_id,
+            SaleContract.unit_id,
+            model.amount,
+            date_column,
+        )
+        .join(SaleContract, SaleContract.id == model.sale_contract_id)
+        .where(
+            model.project_id == project_id,
+            *standing_conditions(
+                status=model.status,
+                confirmed_at=model.confirmed_at,
+                reversed_at=model.reversed_at,
+                as_of=as_of,
+            ),
+        )
+        .order_by(date_column, reference_column)
+    ).all()
+    return [
+        CashflowCashRow(
+            id=row[0],
+            reference=row[1],
+            sale_contract_id=row[2],
+            unit_id=row[3],
+            amount=row[4],
+            business_date=row[5],
+        )
+        for row in rows
+    ]
+
+
+def cashflow_receipt_rows(
+    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+) -> list[CashflowCashRow]:
+    """Confirmed buyer cash that was standing, now or at a historical cutoff.
+
+    The **gross** receipt, never the sum of its allocations. Confirmed cash the
+    operator has not yet applied to an instalment is still cash in the bank, and
+    a cash report that counted only allocated money would understate the balance
+    by exactly the amount nobody has got round to filing.
+    """
+    return _cashflow_cash_rows(
+        session,
+        project_id=project_id,
+        model=CollectionReceipt,
+        reference_column=CollectionReceipt.receipt_number,
+        date_column=CollectionReceipt.receipt_date,
+        as_of=as_of,
+    )
+
+
+def cashflow_refund_rows(
+    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+) -> list[CashflowCashRow]:
+    """Confirmed money returned to buyers, standing now or at a cutoff.
+
+    Cash out, and never a negative receipt. "We received 100 and refunded 30" is
+    two transactions and two sentences; storing 70 would answer neither of the
+    questions a buyer or an auditor actually asks.
+    """
+    return _cashflow_cash_rows(
+        session,
+        project_id=project_id,
+        model=CollectionRefund,
+        reference_column=CollectionRefund.refund_number,
+        date_column=CollectionRefund.refund_date,
+        as_of=as_of,
+    )
+
+
+def cashflow_unapplied_cash(
+    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+) -> dict[uuid.UUID, Decimal]:
+    """Confirmed buyer cash not yet applied to an instalment, by sale contract.
+
+    Cashflow needs this for one purpose and it is worth naming, because the
+    figure is otherwise an operational curiosity. A confirmed receipt is already
+    counted as cash that arrived. If the instalments it will eventually be
+    applied to also stay in the forward collection forecast at their full value,
+    the same money is counted twice — once as received and once as expected.
+
+    What is returned here lets the forecast offset it. Nothing is written and no
+    allocation is created: the operator's filing backlog is theirs to clear, and
+    a forecast is not permitted to clear it for them.
+    """
+    received = dict(
+        session.execute(
+            select(
+                CollectionReceipt.sale_contract_id,
+                func.coalesce(func.sum(CollectionReceipt.amount), 0),
+            )
+            .where(
+                CollectionReceipt.project_id == project_id,
+                *standing_conditions(
+                    status=CollectionReceipt.status,
+                    confirmed_at=CollectionReceipt.confirmed_at,
+                    reversed_at=CollectionReceipt.reversed_at,
+                    as_of=as_of,
+                ),
+            )
+            .group_by(CollectionReceipt.sale_contract_id)
+        ).all()
+    )
+    # An allocation has no confirmation timestamp of its own — it is created
+    # against a receipt and superseded or reversed rather than confirmed — so
+    # the historical form asks when it was created and whether it had stopped
+    # standing by the cutoff.
+    allocation_conditions = [CollectionReceiptAllocation.project_id == project_id]
+    if as_of is None:
+        allocation_conditions.append(CollectionReceiptAllocation.status == ALLOCATION_ACTIVE)
+    else:
+        bound = as_of_bound(as_of)
+        allocation_conditions.extend(
+            [
+                CollectionReceiptAllocation.created_at < bound,
+                or_(
+                    CollectionReceiptAllocation.reversed_at.is_(None),
+                    CollectionReceiptAllocation.reversed_at >= bound,
+                ),
+                or_(
+                    CollectionReceiptAllocation.superseded_at.is_(None),
+                    CollectionReceiptAllocation.superseded_at >= bound,
+                ),
+            ]
+        )
+    applied = dict(
+        session.execute(
+            select(
+                CollectionReceiptAllocation.sale_contract_id,
+                func.coalesce(func.sum(CollectionReceiptAllocation.amount), 0),
+            )
+            .where(*allocation_conditions)
+            .group_by(CollectionReceiptAllocation.sale_contract_id)
+        ).all()
+    )
+    unapplied: dict[uuid.UUID, Decimal] = {}
+    for sale_id, cash in received.items():
+        remainder = _money(cash - applied.get(sale_id, ledger.ZERO))
+        if remainder > ledger.ZERO:
+            unapplied[sale_id] = remainder
+    return unapplied

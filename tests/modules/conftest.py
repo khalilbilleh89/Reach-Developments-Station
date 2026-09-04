@@ -1291,6 +1291,17 @@ _HISTORICAL_TABLES = frozenset(
         # arranged here and every assertion afterwards goes through the ordinary
         # route. What is simulated is the passage of time, never a figure.
         "construction_certificates",
+        # Cashflow's own movements confirm at ``now`` like every other cash
+        # record in the platform, so a test that needs one to have been standing
+        # last week has to move the timestamp. What is simulated is the passage
+        # of time, never a figure.
+        "cashflow_development_movements",
+        "cashflow_financing_movements",
+        # An escrow is standing at a cutoff only if it and the transfer behind it
+        # were both standing then, and proving that needs a restriction whose
+        # confirmation predates a later reversal of its receipt.
+        "cashflow_receipt_restrictions",
+        "cashflow_restriction_releases",
     }
 )
 
@@ -2085,3 +2096,405 @@ def construction_summary(client: TestClient, project_id: str) -> dict[str, Any]:
     response = client.get(f"{construction_url(project_id)}/summary")
     assert response.status_code == 200, response.text
     return response.json()
+
+
+# --------------------------------------------------------------------------- #
+# Cashflow (PR-MVP-10)
+# --------------------------------------------------------------------------- #
+
+
+def cashflow_url(project_id: str) -> str:
+    return f"{PROJECTS}/{project_id}/cashflow"
+
+
+def cover_construction_forecast(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    cost_codes: dict[str, str],
+    *,
+    hard: str = "1000000.00",
+    soft: str = "0.00",
+    contingency: str = "0.00",
+    other: str = "0.00",
+) -> None:
+    """Forecast every active cost code, which is what submission insists on."""
+    for category, amount in (
+        ("hard", hard),
+        ("soft", soft),
+        ("contingency", contingency),
+        ("other", other),
+    ):
+        response = set_forecast_line(
+            client,
+            project_id,
+            version_id,
+            cost_code_id=cost_codes[category],
+            forecast_remaining_amount_ex_tax=amount,
+        )
+        assert response.status_code == 200, response.text
+
+
+@pytest.fixture
+def active_construction_forecast(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    active_budget: str,
+) -> str:
+    """A construction forecast in force: 1,000,000 left on hard cost, nothing else.
+
+    The pin every cashflow forecast needs. Kept deliberately simple — one cost
+    code with a round number — so a cashflow test's monthly schedule can be read
+    at a glance against what it has to reconcile to.
+    """
+    version_id = create_forecast(finance_client, project_id).json()["id"]
+    cover_construction_forecast(finance_client, project_id, version_id, cost_codes)
+    governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+    assert governed.status_code == 200, governed.text
+    return version_id
+
+
+@pytest.fixture
+def flat_construction_forecast(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    active_budget: str,
+) -> str:
+    """A construction forecast in force with nothing left to spend.
+
+    The pin a cashflow forecast needs, without the build schedule that comes
+    with it. A test proving the cash bridge on real transactions should not also
+    have to schedule a million pounds of construction across its months to get a
+    forecast activated — and an explicit zero is a perfectly good statement:
+    the build is costed and finished.
+    """
+    version_id = create_forecast(finance_client, project_id).json()["id"]
+    cover_construction_forecast(finance_client, project_id, version_id, cost_codes, hard="0.00")
+    governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+    assert governed.status_code == 200, governed.text
+    return version_id
+
+
+def create_cashflow_forecast(
+    client: TestClient,
+    project_id: str,
+    *,
+    as_of_date: str | None = None,
+    forecast_start_month: str | None = None,
+    forecast_end_month: str | None = None,
+    opening_unrestricted_cash: str = "0.00",
+    opening_restricted_cash: str = "0.00",
+    discount_rate_per_period: str = "0.000000",
+    change_reason: str = "Opening cash forecast",
+    **overrides: object,
+) -> Response:
+    today = date.today()
+    body: dict[str, Any] = {
+        "as_of_date": as_of_date or today.isoformat(),
+        "forecast_start_month": forecast_start_month or today.replace(day=1).isoformat(),
+        "forecast_end_month": forecast_end_month
+        or date(today.year + 1, today.month, 1).isoformat(),
+        "opening_unrestricted_cash": opening_unrestricted_cash,
+        "opening_restricted_cash": opening_restricted_cash,
+        "discount_rate_per_period": discount_rate_per_period,
+        "change_reason": change_reason,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/forecasts", json=body)
+
+
+def set_cashflow_line(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    period_month: str,
+    source_kind: str,
+    category: str,
+    amount: str,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "period_month": period_month,
+        "source_kind": source_kind,
+        "category": category,
+        "amount": amount,
+    }
+    body.update(overrides)
+    return client.put(f"{cashflow_url(project_id)}/forecasts/{version_id}/lines", json=body)
+
+
+def cover_cashflow_construction(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    cost_codes: dict[str, str],
+    *,
+    month: str | None = None,
+) -> None:
+    """Write an explicit zero for every pinned cost code this version is silent on.
+
+    What a preparer has to do before a forecast can be governed, and what the
+    ``construction_schedule_covers_*`` check exists to insist on. A code the
+    forecast says nothing about is not a code expecting nothing — it is a code
+    nobody opened — so the difference has to be written down. Lines the test
+    already wrote are left exactly as they are.
+    """
+    detail = client.get(f"{cashflow_url(project_id)}/forecasts/{version_id}")
+    assert detail.status_code == 200, detail.text
+    already = {
+        line["construction_cost_code_id"]
+        for line in detail.json()["lines"]
+        if line["source_kind"] == "construction"
+    }
+    for cost_code_id in cost_codes.values():
+        if cost_code_id in already:
+            continue
+        response = set_cashflow_line(
+            client,
+            project_id,
+            version_id,
+            period_month=month or month_named(0),
+            source_kind="construction",
+            category="construction",
+            amount="0.00",
+            construction_cost_code_id=cost_code_id,
+        )
+        assert response.status_code == 200, response.text
+
+
+def govern_cashflow_forecast(
+    preparer: TestClient,
+    approver: TestClient,
+    project_id: str,
+    version_id: str,
+    *,
+    activator: TestClient | None = None,
+    cost_codes: dict[str, str] | None = None,
+) -> Response:
+    """Submit, approve and activate one cashflow forecast."""
+    if cost_codes is not None:
+        cover_cashflow_construction(preparer, project_id, version_id, cost_codes)
+    base = f"{cashflow_url(project_id)}/forecasts/{version_id}"
+    submitted = preparer.post(f"{base}/submit", json={})
+    assert submitted.status_code == 200, submitted.text
+    approved = approver.post(f"{base}/approve", json={"reason": "Reviewed with Finance"})
+    assert approved.status_code == 200, approved.text
+    return (activator or preparer).post(f"{base}/activate", json={})
+
+
+def record_development(
+    client: TestClient,
+    project_id: str,
+    currency_id: str,
+    *,
+    category: str = "consultants",
+    amount: str = "50000.00",
+    movement_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "category": category,
+        "amount": amount,
+        "movement_date": movement_date or date.today().isoformat(),
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/development-movements", json=body)
+
+
+def record_financing(
+    client: TestClient,
+    project_id: str,
+    currency_id: str,
+    *,
+    movement_type: str = "equity_contribution",
+    amount: str = "1000000.00",
+    movement_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "movement_type": movement_type,
+        "amount": amount,
+        "movement_date": movement_date or date.today().isoformat(),
+        "currency_id": currency_id,
+    }
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/financing-movements", json=body)
+
+
+def restrict_receipt(
+    client: TestClient,
+    project_id: str,
+    receipt_id: str,
+    *,
+    restricted_amount: str,
+    reason: str = "Escrow account under the trust deed",
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {"restricted_amount": restricted_amount, "reason": reason}
+    body.update(overrides)
+    return client.post(f"{cashflow_url(project_id)}/receipts/{receipt_id}/restriction", json=body)
+
+
+def release_restriction(
+    client: TestClient,
+    project_id: str,
+    restriction_id: str,
+    *,
+    amount: str,
+    release_date: str | None = None,
+    **overrides: object,
+) -> Response:
+    body: dict[str, Any] = {
+        "amount": amount,
+        "release_date": release_date or date.today().isoformat(),
+    }
+    body.update(overrides)
+    return client.post(
+        f"{cashflow_url(project_id)}/restrictions/{restriction_id}/releases", json=body
+    )
+
+
+def cashflow_summary(client: TestClient, project_id: str, **params: str) -> dict[str, Any]:
+    response = client.get(f"{cashflow_url(project_id)}/summary", params=params)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def cashflow_monthly(client: TestClient, project_id: str, **params: str) -> dict[str, Any]:
+    response = client.get(f"{cashflow_url(project_id)}/monthly", params=params)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def month_named(offset: int) -> str:
+    """The first of the month ``offset`` months from this one, as an ISO date."""
+    today = date.today().replace(day=1)
+    month = today.month - 1 + offset
+    return date(today.year + month // 12, month % 12 + 1, 1).isoformat()
+
+
+def approve_construction_invoice(client: TestClient, project_id: str, invoice_id: str) -> None:
+    response = client.post(f"{construction_url(project_id)}/invoices/{invoice_id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+
+def allocate_construction_payment(
+    client: TestClient,
+    project_id: str,
+    payment_id: str,
+    *,
+    invoice_id: str,
+    amount: str,
+) -> None:
+    response = client.put(
+        f"{construction_url(project_id)}/payments/{payment_id}/allocations",
+        json={"invoice_id": invoice_id, "amount": amount},
+    )
+    assert response.status_code == 200, response.text
+
+
+def confirm_construction_payment(client: TestClient, project_id: str, payment_id: str) -> Response:
+    return client.post(f"{construction_url(project_id)}/payments/{payment_id}/confirm", json={})
+
+
+def pay_construction(
+    finance: TestClient,
+    checker: TestClient,
+    project_id: str,
+    contract_id: str,
+    currency_id: str,
+    certificate_id: str,
+    *,
+    amount: str,
+    payment_date: str | None = None,
+    reference: str = "PMT-CF",
+    invoice_number: str = "INV-CF",
+) -> str:
+    """Drive a construction disbursement all the way to confirmed cash.
+
+    Cashflow reads construction's confirmed payments and never writes one, so a
+    cashflow test that needs construction cash out has to produce it the way the
+    business does: an invoice against a certificate, approved by a second
+    person, paid, allocated and confirmed.
+    """
+    invoice = record_invoice(
+        finance,
+        project_id,
+        contract_id,
+        certificate_id=certificate_id,
+        invoice_number=invoice_number,
+        amount_ex_tax=amount,
+    )
+    assert invoice.status_code == 201, invoice.text
+    invoice_id = invoice.json()["id"]
+    approve_construction_invoice(checker, project_id, invoice_id)
+    payment = record_payment(
+        finance,
+        project_id,
+        contract_id,
+        currency_id,
+        payment_reference=reference,
+        amount=amount,
+        payment_date=payment_date or date.today().isoformat(),
+    )
+    assert payment.status_code == 201, payment.text
+    payment_id: str = payment.json()["id"]
+    allocate_construction_payment(
+        finance, project_id, payment_id, invoice_id=invoice_id, amount=amount
+    )
+    confirmed = confirm_construction_payment(checker, project_id, payment_id)
+    assert confirmed.status_code == 200, confirmed.text
+    return payment_id
+
+
+def refund_buyer(
+    sales_ops: TestClient,
+    cfo: TestClient,
+    collections: TestClient,
+    finance: TestClient,
+    project_id: str,
+    sale_id: str,
+    *,
+    refund_due: str = "12000.00",
+    amount: str,
+    refund_date: str | None = None,
+) -> str:
+    """Cancel a sale and pay part of the refund. Cash out, never a negative receipt."""
+    opened = sales_ops.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/cancellation",
+        json={
+            "initiated_by_party": "buyer",
+            "initiation_date": "2026-01-05",
+            "reason": "Buyer withdrew",
+            "refund_due_amount": refund_due,
+            "forfeiture_amount": "0.00",
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    cancellation_id = opened.json()["id"]
+    approved = cfo.post(
+        f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+        json={"reason": "Terms reviewed"},
+    )
+    assert approved.status_code == 200, approved.text
+    recorded = collections.post(
+        f"{collections_url(project_id)}/sales/{sale_id}/refunds",
+        json={
+            "cancellation_id": cancellation_id,
+            "amount": amount,
+            "refund_date": refund_date or date.today().isoformat(),
+        },
+    )
+    assert recorded.status_code == 201, recorded.text
+    refund_id: str = recorded.json()["id"]
+    confirmed = finance.post(f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={})
+    assert confirmed.status_code == 200, confirmed.text
+    return refund_id

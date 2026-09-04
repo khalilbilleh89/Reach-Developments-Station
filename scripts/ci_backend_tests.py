@@ -95,6 +95,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "collections": ("collection", "migration_collections"),
     "unit_economics": ("unit_economics", "migration_unit_economics"),
     "construction": ("construction", "migration_construction"),
+    "cashflow": ("cashflow", "migration_cashflow"),
 }
 
 #: What each domain feeds **directly**. Read strictly downstream: a change here
@@ -124,11 +125,15 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # relationship and not the roadmap order: construction came later, but that
     # is not why its tests run.
     "payment_plans": ("collections", "construction"),
-    "collections": (),
+    "collections": ("cashflow",),
     # Unit economics may source a construction forecast's hard-cost estimate at
     # completion through a named reader, so a construction change reaches it.
-    "construction": ("unit_economics",),
+    # Cashflow reads construction's confirmed payments and its forecast position
+    # through two more, and pins the version its monthly schedule reconciles to.
+    "construction": ("unit_economics", "cashflow"),
     "unit_economics": (),
+    # Cashflow is the last consumer in the platform and feeds nothing.
+    "cashflow": (),
     "audit": (),
     "access": (),
 }

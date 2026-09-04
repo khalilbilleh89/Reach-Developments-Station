@@ -39,8 +39,9 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -53,6 +54,7 @@ from app.core.errors import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.core.standing import standing_conditions
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.construction import calculator, permissions
@@ -586,23 +588,6 @@ def committed_by_cost_code(
     return dict(committed)
 
 
-def as_of_bound(as_of: date) -> datetime:
-    """The first instant after ``as_of``, in UTC.
-
-    The same exclusive upper bound collections and sales use against their own
-    ``timestamptz`` columns, restated here rather than imported: the dependency
-    runs construction -> payment_plans and construction -> inventory, and it must
-    not be turned around for one two-line function.
-
-    Exclusive rather than end-of-day inclusive so there is no last-microsecond
-    gap to argue about, and one function so that a historical cutoff means the
-    same thing everywhere in this module — a business date compared against a
-    governed timestamp has exactly one correct reading, and two call sites each
-    inventing it is two readings waiting to disagree.
-    """
-    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
-
-
 def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[bool]]:
     """Which certificates were standing — now, or at a historical cutoff.
 
@@ -632,13 +617,13 @@ def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[b
     all, and ``NULL < bound`` is not true, so drafts, submitted claims and
     rejections stay out of the historical basis without a status test.
     """
-    if as_of is None:
-        return [Certificate.status == CERTIFICATE_CERTIFIED]
-    bound = as_of_bound(as_of)
-    return [
-        Certificate.certified_at < bound,
-        or_(Certificate.reversed_at.is_(None), Certificate.reversed_at >= bound),
-    ]
+    return standing_conditions(
+        status=Certificate.status,
+        confirmed_at=Certificate.certified_at,
+        reversed_at=Certificate.reversed_at,
+        as_of=as_of,
+        confirmed_value=CERTIFICATE_CERTIFIED,
+    )
 
 
 def certified_by_cost_code(
@@ -4744,3 +4729,225 @@ def apply_delivery(
         moved.append(unit.id)
     _flush(session)
     return {"to_status": to_status, "unit_count": len(moved), "unit_ids": moved}
+
+
+# --------------------------------------------------------------------------- #
+# The cashflow read contract
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CashflowPaymentRow:
+    """One standing construction disbursement, for a cash report.
+
+    Construction owns this cash. It is read here and never copied: a cashflow
+    module holding its own row for the same payment would let the two disagree
+    about an amount that has exactly one correct value.
+    """
+
+    id: uuid.UUID
+    reference: str
+    contract_id: uuid.UUID
+    vendor_name: str
+    amount: Decimal
+    business_date: date
+    #: How much of this payment settled certified work on each cost code, from
+    #: the documents rather than from a guess — see ``payment_cost_code_split``.
+    by_cost_code: dict[uuid.UUID, Decimal]
+    #: The part no cost code can be named for: an advance, or cash not yet
+    #: allocated to an invoice. Stated rather than distributed, because a reader
+    #: has to be able to tell a figure that was attributed from one that was
+    #: apportioned by whoever consumed this.
+    unattributed_amount: Decimal
+
+
+@dataclass(frozen=True)
+class CashflowForecastPosition:
+    """The governed construction forecast a cash schedule must reconcile to.
+
+    Construction owns *how much* is left to spend on each cost code. Cashflow
+    owns *when* that money is expected to leave. Pinning the version is what
+    keeps the two halves attached to one another: a later construction forecast
+    makes a cashflow draft stale rather than silently changing the total its
+    monthly schedule was built to match.
+    """
+
+    version_id: uuid.UUID
+    version_number: int
+    as_of_date: date
+    remaining_by_cost_code: dict[uuid.UUID, Decimal]
+    cost_code_labels: dict[uuid.UUID, str]
+
+
+def payment_cost_code_split(
+    session: Session, *, project_id: uuid.UUID, payment_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, dict[uuid.UUID, Decimal]]:
+    """Which cost codes each payment settled work on, and for how much.
+
+    Construction cash is paid against an invoice, an invoice bills a
+    certificate, and a certificate says exactly what work was certified on each
+    cost code. So the attribution follows the documents: an allocation is split
+    across its certificate's lines in proportion to the work they certify, which
+    is the same proportion the invoice was raised on.
+
+    Two kinds of cash have no cost code and are deliberately left out rather than
+    spread. An **advance** is paid before any work is certified — there is no
+    certificate to attribute it to, and choosing one would be inventing the
+    breakdown. Cash **not yet allocated** to an invoice is in the same position.
+    Both are reported as ``unattributed_amount`` so a consumer can decide, in the
+    open, what to do with them.
+
+    Never by vendor name. A contractor working across three cost codes would have
+    every payment attributed to whichever code somebody guessed first.
+    """
+    if not payment_ids:
+        return {}
+    rows = session.execute(
+        select(
+            PaymentAllocation.payment_id,
+            PaymentAllocation.id,
+            PaymentAllocation.amount,
+            CertificateLine.cost_code_id,
+            CertificateLine.current_work_value_ex_tax,
+        )
+        .join(Invoice, Invoice.id == PaymentAllocation.invoice_id)
+        .join(Certificate, Certificate.id == Invoice.certificate_id)
+        .join(CertificateLine, CertificateLine.certificate_id == Certificate.id)
+        .where(
+            PaymentAllocation.project_id == project_id,
+            PaymentAllocation.payment_id.in_(payment_ids),
+        )
+        .order_by(PaymentAllocation.id, CertificateLine.cost_code_id)
+    ).all()
+
+    # Grouped by allocation, because the proportions are a property of the one
+    # certificate that allocation settled — not of everything the payment paid.
+    by_allocation: dict[uuid.UUID, tuple[uuid.UUID, Decimal, list[tuple[uuid.UUID, Decimal]]]] = {}
+    for payment_id, allocation_id, allocation_amount, cost_code_id, work_value in rows:
+        entry = by_allocation.setdefault(allocation_id, (payment_id, money(allocation_amount), []))
+        entry[2].append((cost_code_id, money(work_value or ZERO)))
+
+    split: dict[uuid.UUID, dict[uuid.UUID, Decimal]] = {}
+    for payment_id, allocation_amount, lines in by_allocation.values():
+        certified = sum((value for _, value in lines), ZERO)
+        if certified <= ZERO:
+            # A certificate of nothing settles nothing. Leaving the cash
+            # unattributed is honest; dividing by zero is not.
+            continue
+        target = split.setdefault(payment_id, {})
+        running = ZERO
+        for index, (cost_code_id, value) in enumerate(lines):
+            if index == len(lines) - 1:
+                # The last line absorbs the rounding, so the shares add to the
+                # allocation exactly rather than to a penny either side of it.
+                share = money(allocation_amount - running)
+            else:
+                share = money(allocation_amount * value / certified)
+                running = money(running + share)
+            target[cost_code_id] = money(target.get(cost_code_id, ZERO) + share)
+    return split
+
+
+def cashflow_payment_rows(
+    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+) -> list[CashflowPaymentRow]:
+    """Confirmed construction cash that was standing, now or at a cutoff.
+
+    Each row carries the cost codes the payment settled work on, so a cash
+    report can tell an expectation that has already been met from one that is
+    still ahead of it. See ``payment_cost_code_split`` for how the attribution is
+    derived and for the two cases it deliberately leaves unattributed.
+    """
+    rows = session.execute(
+        select(
+            Payment.id,
+            Payment.payment_reference,
+            Payment.contract_id,
+            Contract.vendor_name,
+            Payment.amount,
+            Payment.payment_date,
+        )
+        .join(Contract, Contract.id == Payment.contract_id)
+        .where(
+            Payment.project_id == project_id,
+            *standing_conditions(
+                status=Payment.status,
+                confirmed_at=Payment.confirmed_at,
+                reversed_at=Payment.reversed_at,
+                as_of=as_of,
+            ),
+        )
+        .order_by(Payment.payment_date, Payment.payment_reference)
+    ).all()
+    split = payment_cost_code_split(
+        session, project_id=project_id, payment_ids=[row[0] for row in rows]
+    )
+    payments: list[CashflowPaymentRow] = []
+    for row in rows:
+        by_cost_code = split.get(row[0], {})
+        attributed = sum(by_cost_code.values(), ZERO)
+        payments.append(
+            CashflowPaymentRow(
+                id=row[0],
+                reference=row[1],
+                contract_id=row[2],
+                vendor_name=row[3],
+                amount=row[4],
+                business_date=row[5],
+                by_cost_code=by_cost_code,
+                unattributed_amount=money(max(ZERO, money(row[4]) - attributed)),
+            )
+        )
+    return payments
+
+
+def cashflow_forecast_position(
+    session: Session, *, project_id: uuid.UUID, version_id: uuid.UUID | None = None
+) -> CashflowForecastPosition | None:
+    """One construction forecast's remaining cost, split by cost code.
+
+    ``version_id`` names a specific forecast — which is how a governed cashflow
+    version re-reads the basis it pinned, years later, without asking what the
+    current forecast happens to say. Omitting it answers with the forecast in
+    force, which is what a draft uses while it is being prepared.
+
+    ``None`` where there is no such forecast. A cashflow forecast has nothing to
+    schedule until construction has said what is left to spend, and answering
+    zero would let a monthly schedule of nothing reconcile perfectly against a
+    project that has not forecast its build.
+    """
+    if version_id is None:
+        version = active_forecast(session, project_id=project_id)
+    else:
+        version = session.scalars(
+            select(ForecastVersion).where(
+                ForecastVersion.id == version_id, ForecastVersion.project_id == project_id
+            )
+        ).first()
+    if version is None:
+        return None
+
+    remaining = {
+        cost_code_id: money(amount or ZERO)
+        for cost_code_id, amount in session.execute(
+            select(
+                ForecastLine.cost_code_id,
+                func.sum(ForecastLine.forecast_remaining_amount_ex_tax),
+            )
+            .where(ForecastLine.forecast_version_id == version.id)
+            .group_by(ForecastLine.cost_code_id)
+        ).all()
+    }
+    labels = {
+        code.id: code.code
+        for code in session.scalars(
+            select(CostCode).where(CostCode.id.in_(tuple(remaining) or (uuid.uuid4(),)))
+        )
+    }
+    return CashflowForecastPosition(
+        version_id=version.id,
+        version_number=version.version_number,
+        as_of_date=version.as_of_date,
+        remaining_by_cost_code=remaining,
+        cost_code_labels=labels,
+    )

@@ -944,6 +944,162 @@ create, widen into, or certify.
 withdrawn — each with a reason on the record. There is no DELETE route anywhere
 in the module.
 
+### Cashflow and management reporting
+
+**Cashflow consolidates cash it does not own.** Payment plans owns what a buyer
+is scheduled to pay, collections owns what arrived, construction owns what was
+paid to contractors, sales owns the contract. Not one of those rows is copied
+here; they are read through named contracts each source module publishes, and
+the source modules import nothing of cashflow. What this module owns outright is
+the cash nothing else records — consultants, permits, insurance, equity, debt —
+and the governed statement of when Finance expects the rest of it to move.
+
+```text
+  payment_plans.cashflow_schedule_rows            instalments of the schedules
+                                                  governing at a stated cutoff
+  payment_plans.cashflow_governing_version_ids    which plan versions those were
+  collections.cashflow_receipt_rows               confirmed buyer cash, gross
+  collections.cashflow_refund_rows                confirmed money returned
+  collections.cashflow_unapplied_cash             confirmed cash not yet applied
+  construction.cashflow_payment_rows              confirmed construction cash
+  construction.cashflow_forecast_position         remaining cost by cost code
+```
+
+**Six different cash questions, and none of them collapses into another.** What
+the schedules say becomes due; what Finance expects to collect; what actually
+arrived; how much of it is restricted; what has actually been spent; and what is
+expected to be spent. A single "cash" figure would have to pick one and hide the
+other five.
+
+**Nothing becomes cash except a cash transaction.** A land valuation, a
+construction certificate, an approved invoice, a unit's cost allocation and a
+buyer's instalment are none of them evidence that money moved. Recording a
+movement is a claim; a second person confirming it is the cash.
+
+**Received and usable are different balances.** A restriction takes buyer money
+out of the spendable pool without taking it out of the bank, and a release puts
+it back — availability moves, project cash does not. Reporting a release as an
+inflow, which is tempting because it makes usable cash rise, would show the
+project collecting the same money twice. The funding gap is measured on
+unrestricted cash, because escrowed buyer money cannot pay a contractor.
+
+**Cash arrives once.** A confirmed receipt is already counted as cash that
+arrived. If the instalments it will eventually be applied to also stay in the
+forward forecast at full value, the same money is counted twice — so the forecast
+offsets confirmed unapplied cash against the remaining schedule, deterministically
+and for forecast purposes only. Nothing is written and no allocation is created:
+the operator's filing backlog is theirs, and a forecast is not permitted to clear
+it with an accounting entry.
+
+**A governed forecast pins its sources and stays reproducible.** It names the
+construction forecast whose remaining cost it schedules and freezes the buyer
+schedule it was built on, and both are re-proved at submission and again at
+activation. A source that moved makes the version stale and it is refused, never
+silently rebased: substituting a newer source under an approver changes what they
+are approving, and the newer source being more accurate does not make the
+substitution honest.
+
+**The construction schedule reconciles exactly, and coverage is asked
+separately.** Construction says how much is left on each cost code; cashflow says
+when. If the months do not total the remaining cost, the two documents disagree
+about the project and a tolerance would be a decision to stop noticing by how
+much. Whether a code appears at all is a *different* question from whether its
+months add up, and it has to be asked on its own: reading an absent code as a
+schedule of zero agrees exactly with a code that has nothing left to spend, so a
+build with one fully certified trade and one entirely forgotten trade reconciles
+green either way. An explicit zero is a preparer's decision; a missing cost code
+is nobody's.
+
+**Buyer cash that cannot be placed in a month blocks governance.** An instalment
+with no contractual, forecast or actual date is not an instalment worth nothing —
+the money is contractually owed and the snapshot simply has no month to put it
+in. Inventing one would place cash on no evidence, so it is left out and the
+version is silently short of it. That gap is a refusal at submission and again at
+activation, naming the instalments, rather than a note somebody may read.
+
+**A month is one of three things, never one of two.** A closed month is settled
+history and reports its actuals. A future month is expectation and reports its
+forecast. The month a report is taken in is *both* — cash that has moved, plus
+what is still expected before it ends — and it says so, as
+`basis = actual_and_forecast`. Reporting it as actual-only produces a real number
+made of real transactions that omits every payment still due, so a project read
+on the third of the month shows a funding cliff that disappears on the fourth.
+One rule decides which rows belong: a dated forecast row answers on its own date,
+a month-grained forecast line for the current month is the remainder of that
+month, and the same rule serves the bridge, the funding windows, the drill-down,
+the NPV and the equity IRR. Returns does not get a second interpretation — a
+project whose bridge and whose IRR disagree about what is actual has two answers
+and no way to tell which one a decision was taken on.
+
+**An opening balance is a statement about one moment, and the series begins
+there.** The transactions of the months before it are not additional to it; they
+are what produced it. Running the bridge backwards from a governed opening
+balance replays them through a figure that already contains them, and the error
+grows with how much history a project has — so the oldest and most valuable
+projects would report the worst numbers. A request for a month before the anchor
+is refused with the anchor named; the pre-opening transactions stay in the
+drill-down and in the modules that own them.
+
+**A funding requirement starts from the money in the bank and reads the worst
+point, not the last one.** Each 30/60/90-day window opens on the *unrestricted*
+cash actually held at the cutoff, projects movements through the literal date
+window a day at a time, and reports the deepest trough inside it. Netting
+expected inflows against expected outflows without the opening balance tells a
+project sitting on ten million that it must raise five; reading the closing
+position instead of the trough tells a company that a payment on day ten funded
+by a receipt on day twenty is affordable.
+
+**An escrow cannot outlive the transfer behind it.** A restriction is a claim
+over one receipt and stands exactly as long as that receipt does. Left standing
+over a reversed receipt it subtracts its own amount from a balance that no longer
+exists, and the harm doubles: the reversal removes the cash, and the escrow goes
+on holding a share of what is left. Both are asked of the same cutoff — a receipt
+confirmed in August and reversed in September *was* cash in August, and the
+escrow over it *was* holding it. The escrow's own record answers the same way as
+the cash report: `counts_as_restricted` needs the receipt as well as the
+confirmation, and a release needs the whole chain above it, so the register and
+the position cannot say different things about one amount of money. What is
+never rewritten is the persisted status — the restriction really was confirmed —
+which is why the reconciliation goes on naming it as a correction somebody owes.
+
+**A hand-written forecast is not exempt from cash happening once.** The platform
+already enforces this for buyer receipts: money that arrived leaves the forward
+schedule by exactly its amount. A forecast line is the same. A September line of
+1,000,000 is the spend expected *for September, at the moment the forecast was
+cut*; pay 300,000 of it on the 10th and a live report is 300,000 gone and 700,000
+to go, never 300,000 and 1,000,000 — which claims 1,300,000 on no evidence, and
+lands the error on the funding requirement. Matching is by grain and never looser:
+construction at the cost code the certificate attributes the payment to,
+development at the category and at the phase where the line names one, financing
+at the movement type and its direction. Cash that moved *before* the cutoff is
+already inside the figure and is not subtracted twice. A remainder never goes
+negative: spending more than was forecast does not create expected cash, and the
+overrun belongs to the accuracy report rather than to a forecast that quietly
+grew to absorb it. The governed line is untouched throughout — the forecast file
+still states what was approved, because that is what accuracy is measured
+against.
+
+**A forecast opens in the month it was taken in.** The opening balances are cash
+held at the start of the horizon, and every report rolls them forward through what
+has moved since. A horizon opening in a *later* month would state a balance for a
+month that has not happened while the current position quoted it as money in the
+bank today; one opening *earlier* would leave a stretch of unexamined history
+between the balance and the cutoff. Requiring the start month to be the as-of
+date's month removes both without a second date field to keep in step, and gives
+the current month its three clean terms: opening balance, month-to-date actual,
+and the forecast remainder still ahead.
+
+**Return states its basis.** Project NPV discounts operating and development
+cash and excludes every financing flow, because equity is how a project was
+funded and not what it earned. Equity IRR uses the investor's signs, reversed
+from the project's — feeding project-direction cash into an IRR gives the right
+magnitude with the wrong sign. IRR refuses with a named reason rather than
+answering 0%, 999% or NaN, and never appears without absolute figures beside it.
+
+**Bank cash is project cash.** There is no per-phase account, so a phase-scoped
+reader is refused every project cash surface rather than shown a filtered total —
+any per-phase balance would be an allocation the business does not have.
+
 ### Deferred by design
 
 **Company-scoped custom fields wait for a Company entity.** A definition may be

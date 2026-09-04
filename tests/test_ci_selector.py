@@ -37,6 +37,7 @@ AVAILABLE = [
     "tests/test_ux_copy.py",
     "tests/test_ci_selector.py",
     "tests/modules/test_construction_calculations.py",
+    "tests/modules/test_cashflow_forecast.py",
     "tests/modules/test_audit.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
@@ -95,6 +96,7 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
 
     assert result.full is False
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -121,6 +123,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
 
     assert result.full is False
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -138,6 +141,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
     result = chosen("app/modules/pricing/service.py")
 
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -156,6 +160,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
     result = chosen("app/modules/inventory/models.py")
 
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "inventory",
@@ -177,6 +182,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "app/modules/inventory/api.py",
     )
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "inventory",
@@ -211,10 +217,15 @@ def test_a_unit_economics_change_runs_only_unit_economics() -> None:
 
 
 def test_unit_economics_is_not_reached_from_collections() -> None:
-    """Roadmap order is not a dependency. PR-MVP-07 came first and feeds nothing here."""
+    """Roadmap order is not a dependency.
+
+    Collections reaches cashflow, because cashflow reads its receipts, refunds
+    and unapplied cash. It does not reach unit economics, which came earlier in
+    the roadmap and consumes nothing of it.
+    """
     result = chosen("app/modules/collections/service.py")
 
-    assert result.domains == ["collections"]
+    assert result.domains == ["cashflow", "collections"]
     assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
 
 
@@ -301,14 +312,15 @@ def test_an_unknown_backend_domain_falls_back_and_says_which() -> None:
     """Fail safe, not fail open: a new module runs everything until it is mapped.
 
     ``collections`` was the example here, then ``unit_economics``, then
-    ``construction``, and all three are real domains now. The example keeps
-    moving on purpose: the guard applies to whatever module arrives next, not to
-    a name somebody wrote down once. PR-MVP-10's cashflow is next.
+    ``construction``, then ``cashflow``, and all four are real domains now. The
+    example keeps moving on purpose: the guard applies to whatever module
+    arrives next, not to a name somebody wrote down once, so it uses a module
+    that does not exist yet rather than the newest one that does.
     """
-    result = chosen("app/modules/cashflow/service.py")
+    result = chosen("app/modules/whatever_comes_next/service.py")
 
     assert result.full is True
-    assert any("cashflow" in reason for reason in result.reasons)
+    assert any("whatever_comes_next" in reason for reason in result.reasons)
 
 
 def test_a_mapped_domain_with_no_test_family_falls_back() -> None:
@@ -533,12 +545,13 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
 
     Adding collections was two lines — one entry in DOMAIN_TEST_PREFIXES and one
     edge, ``payment_plans -> collections``. Adding unit economics was two more,
-    with its edge from sales. Nobody had to widen pricing, inventory, projects
-    or settings either time, because the closure is transitive. That was the
-    whole point of the fail-safe patch, and this is the case that proves it on
-    the map the build actually uses.
+    with its edge from sales. Cashflow took an entry and two edges, from
+    collections and from construction, and payment plans reaches it through
+    collections without a third. Nobody had to widen pricing, inventory,
+    projects or settings any of those times, because the closure is transitive.
     """
     assert selector.closure({"pricing"}) == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -548,6 +561,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
     ]
 
     assert selector.closure({"sales"}) == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -555,32 +569,38 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "unit_economics",
     ]
     assert selector.closure({"payment_plans"}) == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
         "unit_economics",
     ]
-    # Construction reaches unit economics and stops; nothing is downstream of
-    # unit economics, so the chain terminates there rather than looping back.
-    assert selector.closure({"construction"}) == ["construction", "unit_economics"]
-    # And still downstream only: neither leaf drags sales back in.
-    assert selector.closure({"collections"}) == ["collections"]
+    # Construction reaches unit economics and cashflow and stops; nothing is
+    # downstream of either, so the chain terminates rather than looping back.
+    assert selector.closure({"construction"}) == [
+        "cashflow",
+        "construction",
+        "unit_economics",
+    ]
+    # And still downstream only: no leaf drags sales back in.
+    assert selector.closure({"collections"}) == ["cashflow", "collections"]
     assert selector.closure({"unit_economics"}) == ["unit_economics"]
+    assert selector.closure({"cashflow"}) == ["cashflow"]
     assert selector.find_cycle() is None
 
 
 def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
-    """The case PR-MVP-07 lives in, and the fastest one the selector has.
+    """The narrowest closure the selector still has, and the shape that matters.
 
-    Nothing is downstream of collections yet, so an ordinary change to it
-    selects its own family and the always-run backbone — and none of pricing,
-    sales or payment plans, whose own tests already prove the public contracts
-    collections consumes.
+    Cashflow is downstream of collections and comes with it — it reads receipts,
+    refunds and unapplied cash through named contracts. Nothing *upstream* does:
+    pricing, sales and payment plans are unreachable from here, and their own
+    tests already prove the public contracts collections consumes.
     """
     result = chosen("app/modules/collections/service.py")
 
     assert result.full is False
-    assert result.domains == ["collections"]
+    assert result.domains == ["cashflow", "collections"]
     assert "tests/modules/test_collection_receipts.py" in result.paths
     assert "tests/modules/test_collection_allocations.py" in result.paths
     assert "tests/modules/test_collection_restructures.py" in result.paths
@@ -595,6 +615,7 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
     result = chosen("app/modules/payment_plans/service.py")
 
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -610,6 +631,7 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
     result = chosen("app/modules/sales/service.py")
 
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
@@ -624,6 +646,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
     result = chosen("app/modules/pricing/service.py")
 
     assert result.domains == [
+        "cashflow",
         "collections",
         "construction",
         "payment_plans",
