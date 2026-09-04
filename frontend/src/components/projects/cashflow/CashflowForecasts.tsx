@@ -356,8 +356,8 @@ function ForecastDetail({
                       {check.passed ? "Reconciles" : "Does not reconcile"}
                     </Badge>
                   </td>
-                  <td className="num">{money(check.expected, currency)}</td>
-                  <td className="num">{money(check.actual, currency)}</td>
+                  <td className="num">{check.expected ?? "—"}</td>
+                  <td className="num">{check.actual ?? "—"}</td>
                   <td className="cell-prose">{check.detail}</td>
                 </tr>
               ))}

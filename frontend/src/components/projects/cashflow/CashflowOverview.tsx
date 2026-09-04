@@ -52,18 +52,18 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
             lead
             label="Unrestricted cash"
             value={money(position.unrestricted_cash, currency)}
-            note="What the project can actually spend today."
+            note="Spendable today"
             tone={isPositive(position.unrestricted_cash) ? "neutral" : "danger"}
           />
           <PositionFigure
             label="Total cash"
             value={money(position.total_cash, currency)}
-            note="Everything in the bank, spendable or not."
+            note="In the bank"
           />
           <PositionFigure
             label="Restricted cash"
             value={money(position.restricted_cash, currency)}
-            note="Held in escrow against buyer receipts. Not available to spend."
+            note="Held in escrow"
           />
         </Position>
         <PositionSupport>
@@ -82,6 +82,12 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
             value={basis.forecast_as_of_date ? businessDate(basis.forecast_as_of_date) : "—"}
           />
         </PositionSupport>
+        <p className="footnote">
+          Unrestricted cash is the figure to act on: it is what the project can
+          pay a contractor with today. Restricted cash is buyer money held in
+          escrow against the receipts it came from — it is on the balance sheet
+          and cannot be spent.
+        </p>
       </Card>
 
       {summary.has_active_forecast ? null : (
@@ -112,13 +118,11 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
               label="Lowest projected cash position"
               value={money(peak.minimum_unrestricted_cash, currency)}
               tone={shortOfCash ? "danger" : "neutral"}
-              note="A signed balance: below zero means the project cannot meet its commitments that month."
             />
             <PositionFigure
               label="Peak funding requirement"
               value={money(peak.peak_funding_deficit, currency)}
               tone={shortOfCash ? "danger" : "success"}
-              note="What has to be raised so the balance never goes below zero."
             />
           </Position>
           <PositionSupport>
@@ -127,6 +131,11 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
               value={peak.peak_deficit_month ? businessDate(peak.peak_deficit_month) : "No month runs short"}
             />
           </PositionSupport>
+          <p className="footnote">
+            The lowest position is a signed balance: below zero means the project
+            cannot meet its commitments that month. The requirement is what has
+            to be raised so it never goes below zero.
+          </p>
         </Card>
 
         <Card
@@ -193,11 +202,7 @@ function FundingWindows({ summary }: { summary: CashflowSummary }) {
                   label="Funding required"
                   value={money(window.funding_requirement, currency)}
                   tone={needed ? "danger" : "success"}
-                  note={
-                    needed
-                      ? "The project goes below zero inside this window."
-                      : "The project stays in credit throughout this window."
-                  }
+                  note={needed ? "Goes below zero in this window" : "Stays in credit"}
                 />
               </Position>
               <KeyValueGrid columns={2}>

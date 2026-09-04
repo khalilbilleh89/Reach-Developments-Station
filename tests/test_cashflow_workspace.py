@@ -157,6 +157,23 @@ class TestUnavailableFiguresAreSaidAndNotInvented:
         assert "irrReasonLabel" in overview
         assert "Not available" in overview
 
+    def test_every_reason_the_calculator_can_return_has_words(self) -> None:
+        """The map is keyed on the strings the server sends, not on their names.
+
+        Keying it on the Python constant names instead — ``IRR_NO_RETURN``
+        rather than ``no_positive_equity_cashflow`` — is a mistake that type
+        checks, lints and builds cleanly, and then prints a raw identifier where
+        an explanation should be.
+        """
+        calculator = (ROOT / "app" / "modules" / "cashflow" / "calculator.py").read_text(
+            encoding="utf-8"
+        )
+        reasons = set(re.findall(r'^IRR_[A-Z_]+ = "([a-z_]+)"', calculator, re.MULTILINE))
+        assert reasons, "the IRR reason constants moved; this guard needs its pattern updated"
+        labels = read(CASHFLOW / "labels.ts")
+        for reason in reasons:
+            assert f"{reason}:" in labels, f"{reason} would render as a raw code"
+
     def test_a_null_coverage_is_explained(self) -> None:
         overview = read(CASHFLOW / "CashflowOverview.tsx")
         assert "forecast_collection_coverage === null" in overview
@@ -175,6 +192,42 @@ class TestUnavailableFiguresAreSaidAndNotInvented:
                 assert "Notice tone=\"error\"" in source, (
                     f"{path.name} handles a failure without saying so in words"
                 )
+
+
+class TestEveryFigureIsDenominated:
+    """A bare number beside a denominated one reads as a different currency.
+
+    `money(value, code)` prepends the real code; passing `null` prints the
+    figure alone. Types and lint are both happy with that, and the screen shows
+    "42,870.40" next to "JOD 1,868,858.34".
+    """
+
+    def test_no_component_formats_money_without_a_currency(self) -> None:
+        for path in workspace_sources():
+            for line in read(path).splitlines():
+                assert "money(" not in line or ", null)" not in line, (
+                    f"{path.name} renders an undenominated figure: {line.strip()}"
+                )
+
+
+class TestAControlCheckIsNotDenominated:
+    """A check's two figures are money on one check and a count on another.
+
+    `CheckOut` carries `expected` and `actual` for both kinds and the response
+    does not say which it is, so prefixing the project's currency prints
+    "JOD 1" for "one escrow lost its backing". The figures are therefore
+    rendered exactly as the server sent them, and the check's own sentence
+    carries the meaning. Narrowing that contract is noted as a follow-up rather
+    than guessed at here.
+    """
+
+    def test_check_figures_are_not_formatted_as_money(self) -> None:
+        for name in ("CashflowManagement.tsx", "CashflowForecasts.tsx"):
+            source = read(CASHFLOW / name)
+            assert "money(check." not in source, (
+                f"{name} denominates a control check's figure, which is a count "
+                "on some checks and money on others"
+            )
 
 
 class TestExportsComeFromTheServer:

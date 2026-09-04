@@ -15,7 +15,12 @@ import type { Answer } from "@/lib/answer";
 import type { CashflowAccuracy, CashflowManagement, CashflowReconciliation } from "@/lib/api";
 import { businessDate, money, percent } from "@/lib/format";
 
-import { accuracyGroupLabel, checkLabel, managementGroupLabel } from "./labels";
+import {
+  accuracyGroupLabel,
+  checkLabel,
+  managementGroupLabel,
+  sourceModuleLabel,
+} from "./labels";
 
 /**
  * The consolidated view, the controls behind it, and how well the last forecast held.
@@ -92,8 +97,8 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
             {failing.map((check) => (
               <tr key={check.name}>
                 <th scope="row">{checkLabel(check.name)}</th>
-                <td className="num">{money(check.expected, basis.currency_code)}</td>
-                <td className="num">{money(check.actual, basis.currency_code)}</td>
+                <td className="num">{check.expected ?? "—"}</td>
+                <td className="num">{check.actual ?? "—"}</td>
                 <td className="cell-prose">{check.detail}</td>
               </tr>
             ))}
@@ -121,8 +126,8 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
                     {check.passed ? "Reconciles" : "Does not reconcile"}
                   </Badge>
                 </td>
-                <td className="num">{money(check.expected, basis.currency_code)}</td>
-                <td className="num">{money(check.actual, basis.currency_code)}</td>
+                <td className="num">{check.expected ?? "—"}</td>
+                <td className="num">{check.actual ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -189,7 +194,7 @@ function Management({
                               ? businessDate(metric.value)
                               : (metric.value ?? "—")}
                       </td>
-                      <td>{metric.source_module}</td>
+                      <td>{sourceModuleLabel(metric.source_module)}</td>
                       <td>
                         {metric.drilldown_source_type ? (
                           <button

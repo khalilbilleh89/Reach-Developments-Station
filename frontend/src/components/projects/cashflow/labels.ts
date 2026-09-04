@@ -223,11 +223,13 @@ export const ROW_BASIS_OPTIONS = Object.entries(ROW_BASIS_LABELS).map(
  * Rendering 0% instead would be a claim about the investment.
  */
 const IRR_REASON_LABELS: Record<string, string> = {
-  IRR_NO_INVESTMENT: "No equity has been contributed yet, so there is nothing to earn a return on.",
-  IRR_NO_RETURN: "No equity has been returned yet, so there is no return to measure.",
-  IRR_AMBIGUOUS:
+  no_negative_equity_cashflow:
+    "No equity has been contributed yet, so there is nothing to earn a return on.",
+  no_positive_equity_cashflow:
+    "No equity has been returned yet, so there is no return to measure.",
+  multiple_sign_changes:
     "The equity flows change direction more than once, so more than one rate would satisfy them.",
-  IRR_NOT_BRACKETED: "No rate within a credible range balances these flows.",
+  no_root_in_searched_range: "No rate within a credible range balances these flows.",
 };
 
 export function irrReasonLabel(reason: string): string {
@@ -292,3 +294,17 @@ const CHECK_LABELS: Record<string, string> = {
   release_maker_is_not_checker: "Escrow releases confirmed by a second person",
   one_denomination_throughout: "Every movement is in the project's base currency",
 };
+
+/** The module a management figure belongs to, in the product's own words. */
+const SOURCE_MODULE_LABELS: Record<string, string> = {
+  cashflow: "Cashflow",
+  collections: "Collections",
+  construction: "Construction",
+  payment_plans: "Payment plans",
+  unit_economics: "Unit economics",
+  sales: "Sales & Legal",
+};
+
+export function sourceModuleLabel(module: string): string {
+  return SOURCE_MODULE_LABELS[module] ?? module;
+}

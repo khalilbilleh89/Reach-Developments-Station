@@ -43,6 +43,7 @@ import { movementLabel, movementTone } from "./labels";
  */
 export function CashflowEscrow({
   answer,
+  currency,
   canRecord,
   canConfirm,
   busy,
@@ -53,6 +54,7 @@ export function CashflowEscrow({
   onReverseRelease,
 }: {
   answer: Answer<CashflowRestriction[]>;
+  currency: string | null;
   canRecord: boolean;
   canConfirm: boolean;
   busy: boolean;
@@ -106,6 +108,7 @@ export function CashflowEscrow({
               <RestrictionCard
                 key={restriction.id}
                 restriction={restriction}
+                currency={currency}
                 canRecord={canRecord}
                 canConfirm={canConfirm}
                 busy={busy}
@@ -123,6 +126,7 @@ export function CashflowEscrow({
       {releasing ? (
         <ReleaseDialog
           restriction={releasing}
+          currency={currency}
           busy={busy}
           onCancel={() => setReleasing(null)}
           onSubmit={(body) => {
@@ -153,6 +157,7 @@ export function CashflowEscrow({
 
 function RestrictionCard({
   restriction,
+  currency,
   canRecord,
   canConfirm,
   busy,
@@ -163,6 +168,7 @@ function RestrictionCard({
   onReverseRelease,
 }: {
   restriction: CashflowRestriction;
+  currency: string | null;
   canRecord: boolean;
   canConfirm: boolean;
   busy: boolean;
@@ -213,12 +219,12 @@ function RestrictionCard({
       ) : null}
 
       <KeyValueGrid columns={3}>
-        <KeyValue label="Receipt amount" value={money(restriction.receipt_amount, null)} mono />
-        <KeyValue label="Restricted" value={money(restriction.restricted_amount, null)} mono />
-        <KeyValue label="Released" value={money(restriction.released_amount, null)} mono />
+        <KeyValue label="Receipt amount" value={money(restriction.receipt_amount, currency)} mono />
+        <KeyValue label="Restricted" value={money(restriction.restricted_amount, currency)} mono />
+        <KeyValue label="Released" value={money(restriction.released_amount, currency)} mono />
         <KeyValue
           label="Still held"
-          value={money(restriction.outstanding_restricted, null)}
+          value={money(restriction.outstanding_restricted, currency)}
           mono
         />
         <KeyValue label="Reason" value={restriction.reason} />
@@ -241,7 +247,7 @@ function RestrictionCard({
             {restriction.releases.map((release) => (
               <tr key={release.id}>
                 <td>{businessDate(release.release_date)}</td>
-                <td className="num">{money(release.amount, null)}</td>
+                <td className="num">{money(release.amount, currency)}</td>
                 <td>
                   <Badge tone={movementTone(release.status)}>{movementLabel(release.status)}</Badge>
                 </td>
@@ -285,11 +291,13 @@ function RestrictionCard({
 
 function ReleaseDialog({
   restriction,
+  currency,
   busy,
   onCancel,
   onSubmit,
 }: {
   restriction: CashflowRestriction;
+  currency: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
@@ -301,7 +309,7 @@ function ReleaseDialog({
   return (
     <FormDialog
       title="Release from escrow"
-      description={`Up to ${money(restriction.outstanding_restricted, null)} is still held against this receipt. The server re-proves that ceiling under lock.`}
+      description={`Up to ${money(restriction.outstanding_restricted, currency)} is still held against this receipt. The server re-proves that ceiling under lock.`}
       confirmLabel="Record release"
       busy={busy}
       disabled={!amount || !releaseDate}
@@ -316,7 +324,7 @@ function ReleaseDialog({
     >
       <FieldRow>
         <Field label="Amount">
-          <MoneyInput code={null} value={amount} onChange={setAmount} />
+          <MoneyInput code={currency} value={amount} onChange={setAmount} />
         </Field>
         <Field label="Release date">
           <input

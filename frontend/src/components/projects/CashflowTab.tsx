@@ -286,6 +286,7 @@ export function CashflowTab({
       {section === "escrow" ? (
         <CashflowEscrow
           answer={restrictions}
+          currency={currency}
           canRecord={canRecord}
           canConfirm={canConfirm}
           busy={busy}
