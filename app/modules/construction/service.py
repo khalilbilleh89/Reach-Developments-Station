@@ -40,7 +40,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -53,6 +53,7 @@ from app.core.errors import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.core.standing import standing_conditions
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.construction import calculator, permissions
@@ -586,23 +587,6 @@ def committed_by_cost_code(
     return dict(committed)
 
 
-def as_of_bound(as_of: date) -> datetime:
-    """The first instant after ``as_of``, in UTC.
-
-    The same exclusive upper bound collections and sales use against their own
-    ``timestamptz`` columns, restated here rather than imported: the dependency
-    runs construction -> payment_plans and construction -> inventory, and it must
-    not be turned around for one two-line function.
-
-    Exclusive rather than end-of-day inclusive so there is no last-microsecond
-    gap to argue about, and one function so that a historical cutoff means the
-    same thing everywhere in this module — a business date compared against a
-    governed timestamp has exactly one correct reading, and two call sites each
-    inventing it is two readings waiting to disagree.
-    """
-    return datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=UTC)
-
-
 def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[bool]]:
     """Which certificates were standing — now, or at a historical cutoff.
 
@@ -632,13 +616,13 @@ def _standing_certificate_conditions(as_of: date | None) -> list[ColumnElement[b
     all, and ``NULL < bound`` is not true, so drafts, submitted claims and
     rejections stay out of the historical basis without a status test.
     """
-    if as_of is None:
-        return [Certificate.status == CERTIFICATE_CERTIFIED]
-    bound = as_of_bound(as_of)
-    return [
-        Certificate.certified_at < bound,
-        or_(Certificate.reversed_at.is_(None), Certificate.reversed_at >= bound),
-    ]
+    return standing_conditions(
+        status=Certificate.status,
+        confirmed_at=Certificate.certified_at,
+        reversed_at=Certificate.reversed_at,
+        as_of=as_of,
+        confirmed_value=CERTIFICATE_CERTIFIED,
+    )
 
 
 def certified_by_cost_code(
@@ -4744,3 +4728,133 @@ def apply_delivery(
         moved.append(unit.id)
     _flush(session)
     return {"to_status": to_status, "unit_count": len(moved), "unit_ids": moved}
+
+
+# --------------------------------------------------------------------------- #
+# The cashflow read contract
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CashflowPaymentRow:
+    """One standing construction disbursement, for a cash report.
+
+    Construction owns this cash. It is read here and never copied: a cashflow
+    module holding its own row for the same payment would let the two disagree
+    about an amount that has exactly one correct value.
+    """
+
+    id: uuid.UUID
+    reference: str
+    contract_id: uuid.UUID
+    vendor_name: str
+    amount: Decimal
+    business_date: date
+
+
+@dataclass(frozen=True)
+class CashflowForecastPosition:
+    """The governed construction forecast a cash schedule must reconcile to.
+
+    Construction owns *how much* is left to spend on each cost code. Cashflow
+    owns *when* that money is expected to leave. Pinning the version is what
+    keeps the two halves attached to one another: a later construction forecast
+    makes a cashflow draft stale rather than silently changing the total its
+    monthly schedule was built to match.
+    """
+
+    version_id: uuid.UUID
+    version_number: int
+    as_of_date: date
+    remaining_by_cost_code: dict[uuid.UUID, Decimal]
+    cost_code_labels: dict[uuid.UUID, str]
+
+
+def cashflow_payment_rows(
+    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+) -> list[CashflowPaymentRow]:
+    """Confirmed construction cash that was standing, now or at a cutoff."""
+    rows = session.execute(
+        select(
+            Payment.id,
+            Payment.payment_reference,
+            Payment.contract_id,
+            Contract.vendor_name,
+            Payment.amount,
+            Payment.payment_date,
+        )
+        .join(Contract, Contract.id == Payment.contract_id)
+        .where(
+            Payment.project_id == project_id,
+            *standing_conditions(
+                status=Payment.status,
+                confirmed_at=Payment.confirmed_at,
+                reversed_at=Payment.reversed_at,
+                as_of=as_of,
+            ),
+        )
+        .order_by(Payment.payment_date, Payment.payment_reference)
+    ).all()
+    return [
+        CashflowPaymentRow(
+            id=row[0],
+            reference=row[1],
+            contract_id=row[2],
+            vendor_name=row[3],
+            amount=row[4],
+            business_date=row[5],
+        )
+        for row in rows
+    ]
+
+
+def cashflow_forecast_position(
+    session: Session, *, project_id: uuid.UUID, version_id: uuid.UUID | None = None
+) -> CashflowForecastPosition | None:
+    """One construction forecast's remaining cost, split by cost code.
+
+    ``version_id`` names a specific forecast — which is how a governed cashflow
+    version re-reads the basis it pinned, years later, without asking what the
+    current forecast happens to say. Omitting it answers with the forecast in
+    force, which is what a draft uses while it is being prepared.
+
+    ``None`` where there is no such forecast. A cashflow forecast has nothing to
+    schedule until construction has said what is left to spend, and answering
+    zero would let a monthly schedule of nothing reconcile perfectly against a
+    project that has not forecast its build.
+    """
+    if version_id is None:
+        version = active_forecast(session, project_id=project_id)
+    else:
+        version = session.scalars(
+            select(ForecastVersion).where(
+                ForecastVersion.id == version_id, ForecastVersion.project_id == project_id
+            )
+        ).first()
+    if version is None:
+        return None
+
+    remaining = {
+        cost_code_id: money(amount or ZERO)
+        for cost_code_id, amount in session.execute(
+            select(
+                ForecastLine.cost_code_id,
+                func.sum(ForecastLine.forecast_remaining_amount_ex_tax),
+            )
+            .where(ForecastLine.forecast_version_id == version.id)
+            .group_by(ForecastLine.cost_code_id)
+        ).all()
+    }
+    labels = {
+        code.id: code.code
+        for code in session.scalars(
+            select(CostCode).where(CostCode.id.in_(tuple(remaining) or (uuid.uuid4(),)))
+        )
+    }
+    return CashflowForecastPosition(
+        version_id=version.id,
+        version_number=version.version_number,
+        as_of_date=version.as_of_date,
+        remaining_by_cost_code=remaining,
+        cost_code_labels=labels,
+    )

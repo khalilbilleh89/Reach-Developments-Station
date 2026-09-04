@@ -30,10 +30,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.standing import as_of_bound
 from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import Role, User, UserRole
 from app.modules.audit.service import record_event
@@ -2397,4 +2398,134 @@ def apply_construction_milestone_certification(
     return MilestoneCertificationResult(
         triggered_installment_ids=tuple(row.id for row in installments),
         plan_ids=tuple(sorted(plan_ids, key=str)),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The cashflow read contract
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class CashflowScheduleRow:
+    """One buyer instalment, in the shape a cash forecast needs to place it.
+
+    All three dates are returned and none of them is chosen here. Which one a
+    forecast should use is a forecasting judgement, and payment plans has no
+    business making it: this module owns what the buyer is contractually
+    obliged to pay and when that obligation arises, and turning a
+    ``forecast_due_date`` into "when the cash will arrive" is a different claim
+    entirely — one that must never leak back and make a forecast date legally
+    due.
+
+    ``amount`` is the whole cash transfer the instalment calls for: principal
+    plus its tax and fee. A forecast placing only the principal would understate
+    every month by the tax the buyer actually pays.
+    """
+
+    installment_id: uuid.UUID
+    payment_plan_version_id: uuid.UUID
+    sale_contract_id: uuid.UUID
+    unit_id: uuid.UUID | None
+    sequence: int
+    label: str
+    amount: Decimal
+    contractual_due_date: date | None
+    forecast_due_date: date | None
+    actual_due_date: date | None
+    trigger_type: str
+    trigger_status: str
+
+
+def version_governing_on(as_of: date) -> ColumnElement[bool]:
+    """The schedule that was governing a sale on ``as_of``.
+
+    A version governs from the moment it is activated until the moment it is
+    superseded. Reading a March position against the schedule a June restructure
+    put in place would report instalments the buyer had never been given, so the
+    governing version is reconstructed from its own timestamps exactly as the
+    cash is.
+    """
+    bound = as_of_bound(as_of)
+    return (
+        PaymentPlanVersion.activated_at.is_not(None)
+        & (PaymentPlanVersion.activated_at < bound)
+        & (PaymentPlanVersion.superseded_at.is_(None) | (PaymentPlanVersion.superseded_at >= bound))
+    )
+
+
+def cashflow_schedule_rows(
+    session: Session, *, project_id: uuid.UUID, as_of: date
+) -> list[CashflowScheduleRow]:
+    """Every instalment of every schedule governing a sale in this project.
+
+    ``as_of`` is required rather than optional: a cash forecast is always taken
+    as at a date, and defaulting to today would let a version prepared in
+    October quietly answer with October's schedules while claiming an August
+    cutoff.
+    """
+    rows = session.execute(
+        select(
+            PaymentPlanInstallment.id,
+            PaymentPlanInstallment.payment_plan_version_id,
+            PaymentPlan.sale_contract_id,
+            SaleContract.unit_id,
+            PaymentPlanInstallment.sequence,
+            PaymentPlanInstallment.label,
+            PaymentPlanInstallment.principal_amount
+            + PaymentPlanInstallment.tax_amount
+            + PaymentPlanInstallment.fee_amount,
+            PaymentPlanInstallment.contractual_due_date,
+            PaymentPlanInstallment.forecast_due_date,
+            PaymentPlanInstallment.actual_due_date,
+            PaymentPlanInstallment.trigger_type,
+            PaymentPlanInstallment.trigger_status,
+        )
+        .join(
+            PaymentPlanVersion,
+            PaymentPlanVersion.id == PaymentPlanInstallment.payment_plan_version_id,
+        )
+        .join(PaymentPlan, PaymentPlan.id == PaymentPlanVersion.payment_plan_id)
+        .join(SaleContract, SaleContract.id == PaymentPlan.sale_contract_id)
+        .where(
+            PaymentPlanInstallment.project_id == project_id,
+            version_governing_on(as_of),
+        )
+        .order_by(PaymentPlan.sale_contract_id, PaymentPlanInstallment.sequence)
+    ).all()
+    return [
+        CashflowScheduleRow(
+            installment_id=row[0],
+            payment_plan_version_id=row[1],
+            sale_contract_id=row[2],
+            unit_id=row[3],
+            sequence=row[4],
+            label=row[5],
+            amount=row[6],
+            contractual_due_date=row[7],
+            forecast_due_date=row[8],
+            actual_due_date=row[9],
+            trigger_type=row[10],
+            trigger_status=row[11],
+        )
+        for row in rows
+    ]
+
+
+def cashflow_governing_version_ids(
+    session: Session, *, project_id: uuid.UUID, as_of: date
+) -> set[uuid.UUID]:
+    """Which plan versions were governing at ``as_of``, for a staleness check.
+
+    A cashflow forecast froze a set of schedules when it was prepared. If the
+    set governing the project has moved since, the version being approved was
+    built on a schedule that is no longer the contract, and silently refreshing
+    it underneath the approver would change what they are approving.
+    """
+    return set(
+        session.scalars(
+            select(PaymentPlanVersion.id)
+            .join(PaymentPlan, PaymentPlan.id == PaymentPlanVersion.payment_plan_id)
+            .where(PaymentPlan.project_id == project_id, version_governing_on(as_of))
+        ).all()
     )
