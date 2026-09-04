@@ -32,7 +32,7 @@ import {
   checkLabel,
   DEVELOPMENT_CATEGORY_OPTIONS,
   FINANCING_TYPE_OPTIONS,
-  forecastIsOpen,
+  forecastIsRefreshable,
   forecastLabel,
   forecastTone,
   sourceKindLabel,
@@ -92,7 +92,7 @@ export function CashflowForecasts({
   onSetLine: (versionId: string, body: Record<string, unknown>) => void;
 }) {
   const [creating, setCreating] = useState(false);
-  const [reasonFor, setReasonFor] = useState<"approve" | "reject" | null>(null);
+  const [reasonFor, setReasonFor] = useState<"approve" | "reject" | "withdraw" | null>(null);
 
   return (
     <div className="stack">
@@ -188,6 +188,7 @@ export function CashflowForecasts({
           onSubmit={() => onSubmit(selected)}
           onAskApprove={() => setReasonFor("approve")}
           onAskReject={() => setReasonFor("reject")}
+          onAskWithdraw={() => setReasonFor("withdraw")}
           onActivate={() => onActivate(selected)}
           onRefreshSnapshot={() => onRefreshSnapshot(selected)}
           onSetLine={(body) => onSetLine(selected, body)}
@@ -208,13 +209,16 @@ export function CashflowForecasts({
 
       {reasonFor && selected ? (
         <PromptDialog
-          title={reasonFor === "approve" ? "Approve this forecast" : "Reject this forecast"}
-          label={reasonFor === "approve" ? "What was reviewed?" : "Why is it being rejected?"}
-          hint="Kept on the record against the version."
-          confirmLabel={reasonFor === "approve" ? "Approve" : "Reject"}
+          title={REASON_WORDS[reasonFor].title}
+          label={REASON_WORDS[reasonFor].label}
+          hint={REASON_WORDS[reasonFor].hint}
+          confirmLabel={REASON_WORDS[reasonFor].confirm}
           busy={busy}
           onCancel={() => setReasonFor(null)}
           onSubmit={(reason) => {
+            // A withdrawal is the same act as a rejection to the server — this
+            // version will not proceed — and a different one to the reader,
+            // because the approval it is undoing really happened.
             if (reasonFor === "approve") onApprove(selected, reason);
             else onReject(selected, reason);
             setReasonFor(null);
@@ -236,6 +240,7 @@ function ForecastDetail({
   onSubmit,
   onAskApprove,
   onAskReject,
+  onAskWithdraw,
   onActivate,
   onRefreshSnapshot,
   onSetLine,
@@ -250,6 +255,7 @@ function ForecastDetail({
   onSubmit: () => void;
   onAskApprove: () => void;
   onAskReject: () => void;
+  onAskWithdraw: () => void;
   onActivate: () => void;
   onRefreshSnapshot: () => void;
   onSetLine: (body: Record<string, unknown>) => void;
@@ -264,12 +270,16 @@ function ForecastDetail({
   if (detail.status === "off") return null;
 
   const version = detail.data;
-  // Two different permissions, and neither is "not yet finished". A line may be
-  // edited on a draft alone; the buyer schedule may be re-pinned while the
-  // version is still open. Rejected, active and superseded are history and
-  // offer nothing.
+  // Three different permissions, and none of them is "not yet finished". A line
+  // may be edited on a draft alone. The buyer schedule may be re-pinned while
+  // the version is still refreshable — draft or submitted, never approved,
+  // because re-reading a schedule under a recorded signature changes what was
+  // signed for. And an approved version that can no longer be activated needs a
+  // way out, or it holds the project's one open slot with nothing able to move
+  // it. Rejected, active and superseded are history and offer nothing.
   const isDraft = version.status === "draft";
-  const isOpen = forecastIsOpen(version.status);
+  const isRefreshable = forecastIsRefreshable(version.status);
+  const isApproved = version.status === "approved";
   const failedChecks = version.construction_reconciliation.filter((check) => !check.passed);
 
   return (
@@ -283,7 +293,7 @@ function ForecastDetail({
               Add or change a line
             </Button>
           ) : null}
-          {canPrepare && isOpen ? (
+          {canPrepare && isRefreshable ? (
             <Button small variant="quiet" onClick={onRefreshSnapshot} disabled={busy}>
               Refresh buyer schedule
             </Button>
@@ -303,9 +313,14 @@ function ForecastDetail({
               </Button>
             </>
           ) : null}
-          {canActivate && version.status === "approved" ? (
+          {canActivate && isApproved ? (
             <Button small onClick={onActivate} disabled={busy}>
               Put in force
+            </Button>
+          ) : null}
+          {canApprove && isApproved ? (
+            <Button small variant="danger" onClick={onAskWithdraw} disabled={busy}>
+              Withdraw approval
             </Button>
           ) : null}
         </ButtonRow>
@@ -604,6 +619,38 @@ function CreateForecastDialog({
     </FormDialog>
   );
 }
+
+/**
+ * What each governance prompt asks for, in the words that fit the act.
+ *
+ * Withdrawal and rejection reach the same endpoint. Calling both of them
+ * "Reject" on screen would tell a reader the version was refused, when in fact
+ * a CFO approved it and the basis moved afterwards — and the record keeps the
+ * approval precisely because it happened.
+ */
+const REASON_WORDS: Record<
+  "approve" | "reject" | "withdraw",
+  { title: string; label: string; hint: string; confirm: string }
+> = {
+  approve: {
+    title: "Approve this forecast",
+    label: "What was reviewed?",
+    hint: "Kept on the record against the version.",
+    confirm: "Approve",
+  },
+  reject: {
+    title: "Reject this forecast",
+    label: "Why is it being rejected?",
+    hint: "Kept on the record against the version.",
+    confirm: "Reject",
+  },
+  withdraw: {
+    title: "Withdraw this approval",
+    label: "Why is the approval being withdrawn?",
+    hint: "The approval stays on the record. This is written beside it, not over it, and the version closes so a replacement can be prepared.",
+    confirm: "Withdraw approval",
+  },
+};
 
 const LINE_SOURCE_KINDS = [
   { value: "construction", label: "Construction" },

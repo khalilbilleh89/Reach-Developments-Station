@@ -344,7 +344,14 @@ def reject_forecast(
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.ForecastOut:
-    """Refuse a submitted forecast, with the reason on the record."""
+    """Refuse a submitted forecast, or withdraw an approval, with the reason recorded.
+
+    One endpoint because it is one authority taking one kind of decision: this
+    version will not proceed. Withdrawing is the governed way out of an approved
+    forecast that can no longer be activated — its sources moved while it waited
+    — and without it the project's one open slot would stay occupied by a version
+    nobody can activate, edit or replace.
+    """
     permissions.require_cashflow_approver(actor)
     version = service.reject_forecast(
         session, project=project, actor=actor, version_id=version_id, reason=payload.reason

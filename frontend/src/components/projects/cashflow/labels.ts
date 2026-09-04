@@ -86,9 +86,30 @@ export const FORECAST_OPEN_STATUSES: ReadonlySet<string> = new Set([
   "approved",
 ]);
 
-/** Whether the server would still accept a preparer's act on this version. */
-export function forecastIsOpen(status: string): boolean {
-  return FORECAST_OPEN_STATUSES.has(status);
+// No component branches on the set above, and it is kept anyway: it is the half
+// of the contrast that makes the other half legible. Read alone, a refreshable
+// set of draft and submitted looks like an arbitrary pair; read against the open
+// set it is obviously the open statuses less the one that has been signed for.
+
+/**
+ * The statuses whose sources may still be re-pinned — the backend's
+ * ``FORECAST_REFRESHABLE``.
+ *
+ * Deliberately not the open set, and the two must not be collapsed just because
+ * they nearly match. An approved version is open — a second forecast beside it
+ * would be a second answer to one question — and it is *not* refreshable,
+ * because the CFO approved the months a particular buyer schedule produced.
+ * "Occupies the slot" and "may still be changed" are different questions, and a
+ * button wired to the wrong one silently changes what somebody signed for.
+ */
+export const FORECAST_REFRESHABLE_STATUSES: ReadonlySet<string> = new Set([
+  "draft",
+  "submitted",
+]);
+
+/** Whether the buyer schedule under this version may still be re-frozen. */
+export function forecastIsRefreshable(status: string): boolean {
+  return FORECAST_REFRESHABLE_STATUSES.has(status);
 }
 
 /**

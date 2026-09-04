@@ -600,7 +600,10 @@ class TestARejectedForecastIsHistory:
         assert 'version.status !== "active"' not in source, (
             "a negative check silently admits every terminal status added later"
         )
-        assert "canPrepare && isOpen" in source
+        # Every governance action names the statuses it is for. The refresh gate
+        # is the narrower `isRefreshable` rather than the open set, because an
+        # approved version is open and must not be refreshed.
+        assert "canPrepare && isRefreshable ?" in source
 
     def test_editing_a_line_is_narrower_than_refreshing(self) -> None:
         """The server allows an edit on a draft alone, and a refresh while open."""
@@ -697,3 +700,97 @@ class TestTheApiMirrorsWhatTheEndpointReturns:
                 f"{route} answers with {routes[route]}; the frontend claims "
                 f"something other than {frontend_type}"
             )
+
+
+class TestTheGovernanceMatrixMirrorsTheServer:
+    """Six statuses, three different permissions, and none of them inferred.
+
+    An approved version is the interesting one. It is *open* — it holds the
+    project's one open forecast slot — and it is not *refreshable*, because the
+    CFO approved the months a particular buyer schedule produced. Wiring a
+    refresh button to the open set collapses those two questions into one and
+    silently changes what somebody signed for; that is why the two sets are
+    named separately on both sides of the wire.
+    """
+
+    def test_the_refreshable_set_matches_the_backend(self) -> None:
+        frontend = set(
+            re.findall(
+                r'"(\w+)"',
+                read(CASHFLOW / "labels.ts")
+                .split("FORECAST_REFRESHABLE_STATUSES")[1]
+                .split("]")[0],
+            )
+        )
+        backend = set(
+            re.findall(
+                r"FORECAST_(\w+)",
+                read(BACKEND_MODELS).split("FORECAST_REFRESHABLE = frozenset({")[1].split("})")[0],
+            )
+        )
+        assert frontend == {name.lower() for name in backend}, (
+            f"the workspace thinks {sorted(frontend)} may be refreshed; the server "
+            f"thinks {sorted(name.lower() for name in backend)}"
+        )
+
+    def test_the_two_sets_are_not_the_same_set(self) -> None:
+        """If they ever become equal, one of them has been redefined to suit a button."""
+        labels = read(CASHFLOW / "labels.ts")
+        open_statuses = set(
+            re.findall(r'"(\w+)"', labels.split("FORECAST_OPEN_STATUSES")[1].split("]")[0])
+        )
+        refreshable = set(
+            re.findall(r'"(\w+)"', labels.split("FORECAST_REFRESHABLE_STATUSES")[1].split("]")[0])
+        )
+        assert "approved" in open_statuses, "an approved version still holds the open slot"
+        assert "approved" not in refreshable, (
+            "an approved version's buyer schedule may not be re-pinned under the "
+            "signature it carries"
+        )
+
+    def test_the_refresh_button_is_gated_on_refreshable_not_open(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "forecastIsRefreshable(version.status)" in source
+        assert "canPrepare && isRefreshable ?" in source
+        assert "canPrepare && isOpen" not in source, (
+            "the refresh button is wired to the open set, which includes approved"
+        )
+
+    def test_an_approved_version_offers_activation_and_an_exit(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert "canActivate && isApproved ?" in source
+        assert "canApprove && isApproved ?" in source, (
+            "an approved version that cannot be activated needs a governed way out"
+        )
+        assert "Withdraw approval" in source
+
+    def test_a_withdrawal_is_not_called_a_rejection(self) -> None:
+        """The version really was approved. Saying "Reject" would deny that."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        words = source[source.index("const REASON_WORDS") : source.index("const LINE_SOURCE_KINDS")]
+        assert "Withdraw this approval" in words
+        assert "The approval stays on the record" in words
+        withdraw = words[words.index("withdraw: {") :]
+        assert "Reject" not in withdraw.split("},")[0]
+
+    def test_a_withdrawal_asks_for_its_reason(self) -> None:
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        assert '"approve" | "reject" | "withdraw"' in source
+        assert 'setReasonFor("withdraw")' in source, (
+            "withdrawal must go through the reason prompt, not straight to the server"
+        )
+
+    def test_no_mutation_is_offered_on_a_terminal_status(self) -> None:
+        """Rejected, active and superseded are history, for every role."""
+        source = read(CASHFLOW / "CashflowForecasts.tsx")
+        for guard in (
+            "canPrepare && isDraft ?",
+            "canPrepare && isRefreshable ?",
+            "canActivate && isApproved ?",
+            "canApprove && isApproved ?",
+        ):
+            assert guard in source, (
+                f"{guard} is the only thing standing between a terminal status and a button"
+            )
+        assert 'version.status !== "active"' not in source
+        assert 'version.status !== "superseded"' not in source
