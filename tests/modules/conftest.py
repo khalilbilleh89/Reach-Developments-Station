@@ -2145,6 +2145,29 @@ def active_construction_forecast(
     return version_id
 
 
+@pytest.fixture
+def flat_construction_forecast(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    active_budget: str,
+) -> str:
+    """A construction forecast in force with nothing left to spend.
+
+    The pin a cashflow forecast needs, without the build schedule that comes
+    with it. A test proving the cash bridge on real transactions should not also
+    have to schedule a million pounds of construction across its months to get a
+    forecast activated — and an explicit zero is a perfectly good statement:
+    the build is costed and finished.
+    """
+    version_id = create_forecast(finance_client, project_id).json()["id"]
+    cover_construction_forecast(finance_client, project_id, version_id, cost_codes, hard="0.00")
+    governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+    assert governed.status_code == 200, governed.text
+    return version_id
+
+
 def create_cashflow_forecast(
     client: TestClient,
     project_id: str,
@@ -2303,3 +2326,122 @@ def month_named(offset: int) -> str:
     today = date.today().replace(day=1)
     month = today.month - 1 + offset
     return date(today.year + month // 12, month % 12 + 1, 1).isoformat()
+
+
+def approve_construction_invoice(client: TestClient, project_id: str, invoice_id: str) -> None:
+    response = client.post(f"{construction_url(project_id)}/invoices/{invoice_id}/approve", json={})
+    assert response.status_code == 200, response.text
+
+
+def allocate_construction_payment(
+    client: TestClient,
+    project_id: str,
+    payment_id: str,
+    *,
+    invoice_id: str,
+    amount: str,
+) -> None:
+    response = client.put(
+        f"{construction_url(project_id)}/payments/{payment_id}/allocations",
+        json={"invoice_id": invoice_id, "amount": amount},
+    )
+    assert response.status_code == 200, response.text
+
+
+def confirm_construction_payment(client: TestClient, project_id: str, payment_id: str) -> Response:
+    return client.post(f"{construction_url(project_id)}/payments/{payment_id}/confirm", json={})
+
+
+def pay_construction(
+    finance: TestClient,
+    checker: TestClient,
+    project_id: str,
+    contract_id: str,
+    currency_id: str,
+    certificate_id: str,
+    *,
+    amount: str,
+    payment_date: str | None = None,
+    reference: str = "PMT-CF",
+    invoice_number: str = "INV-CF",
+) -> str:
+    """Drive a construction disbursement all the way to confirmed cash.
+
+    Cashflow reads construction's confirmed payments and never writes one, so a
+    cashflow test that needs construction cash out has to produce it the way the
+    business does: an invoice against a certificate, approved by a second
+    person, paid, allocated and confirmed.
+    """
+    invoice = record_invoice(
+        finance,
+        project_id,
+        contract_id,
+        certificate_id=certificate_id,
+        invoice_number=invoice_number,
+        amount_ex_tax=amount,
+    )
+    assert invoice.status_code == 201, invoice.text
+    invoice_id = invoice.json()["id"]
+    approve_construction_invoice(checker, project_id, invoice_id)
+    payment = record_payment(
+        finance,
+        project_id,
+        contract_id,
+        currency_id,
+        payment_reference=reference,
+        amount=amount,
+        payment_date=payment_date or date.today().isoformat(),
+    )
+    assert payment.status_code == 201, payment.text
+    payment_id: str = payment.json()["id"]
+    allocate_construction_payment(
+        finance, project_id, payment_id, invoice_id=invoice_id, amount=amount
+    )
+    confirmed = confirm_construction_payment(checker, project_id, payment_id)
+    assert confirmed.status_code == 200, confirmed.text
+    return payment_id
+
+
+def refund_buyer(
+    sales_ops: TestClient,
+    cfo: TestClient,
+    collections: TestClient,
+    finance: TestClient,
+    project_id: str,
+    sale_id: str,
+    *,
+    refund_due: str = "12000.00",
+    amount: str,
+    refund_date: str | None = None,
+) -> str:
+    """Cancel a sale and pay part of the refund. Cash out, never a negative receipt."""
+    opened = sales_ops.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/cancellation",
+        json={
+            "initiated_by_party": "buyer",
+            "initiation_date": "2026-01-05",
+            "reason": "Buyer withdrew",
+            "refund_due_amount": refund_due,
+            "forfeiture_amount": "0.00",
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    cancellation_id = opened.json()["id"]
+    approved = cfo.post(
+        f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+        json={"reason": "Terms reviewed"},
+    )
+    assert approved.status_code == 200, approved.text
+    recorded = collections.post(
+        f"{collections_url(project_id)}/sales/{sale_id}/refunds",
+        json={
+            "cancellation_id": cancellation_id,
+            "amount": amount,
+            "refund_date": refund_date or date.today().isoformat(),
+        },
+    )
+    assert recorded.status_code == 201, recorded.text
+    refund_id: str = recorded.json()["id"]
+    confirmed = finance.post(f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={})
+    assert confirmed.status_code == 200, confirmed.text
+    return refund_id

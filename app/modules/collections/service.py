@@ -3647,7 +3647,7 @@ def cashflow_unapplied_cash(
     )
     unapplied: dict[uuid.UUID, Decimal] = {}
     for sale_id, cash in received.items():
-        remainder = ledger.money(cash - applied.get(sale_id, ledger.ZERO))
+        remainder = _money(cash - applied.get(sale_id, ledger.ZERO))
         if remainder > ledger.ZERO:
             unapplied[sale_id] = remainder
     return unapplied
