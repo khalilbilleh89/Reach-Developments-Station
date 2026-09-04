@@ -57,6 +57,7 @@ def cash_forecast(
     finance_client: TestClient,
     cfo_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     flat_construction_forecast: str,
 ) -> str:
     created = create_cashflow_forecast(
@@ -68,7 +69,9 @@ def cash_forecast(
     assert created.status_code == 201, created.text
     identifier: str = created.json()["id"]
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     return identifier

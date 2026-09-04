@@ -320,8 +320,12 @@ class ReportBasis(Response):
 class MonthlyPositionOut(Response):
     period_month: date
     #: In words, never only in colour. A reader who cannot distinguish two
-    #: shades still has to be able to tell what happened from what is expected.
-    basis: Literal["actual", "forecast"]
+    #: shades still has to be able to tell what happened from what is expected —
+    #: and there are three answers, not two. The month the report was taken in
+    #: is ``actual_and_forecast``: cash that has moved, plus what is still
+    #: expected before it ends. Labelling it "actual" would present a part month
+    #: as a finished one.
+    basis: Literal["actual", "actual_and_forecast", "forecast"]
 
     opening_total_cash: SignedMoney
     customer_scheduled_due: Money
@@ -364,9 +368,18 @@ class FundingWindowOut(Response):
     days: int
     from_date: date
     to_date: date
+    #: What the project can actually spend on the day the window opens. A
+    #: funding requirement stated without it is a requirement to raise money
+    #: the company already has.
+    opening_unrestricted_cash: SignedMoney
     usable_inflows: Money
     outflows: Money
-    net: SignedMoney
+    net_movement: SignedMoney
+    #: The deepest point inside the window, not the last one. A window that
+    #: closes level can still be several million short in the middle of it, and
+    #: that trough is what has to be funded.
+    minimum_projected_unrestricted_cash: SignedMoney
+    closing_projected_unrestricted_cash: SignedMoney
     funding_requirement: Money
 
 

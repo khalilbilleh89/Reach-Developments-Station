@@ -39,7 +39,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from itertools import pairwise
 from typing import Any
@@ -48,6 +48,7 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.standing import CONFIRMED as STANDING_CONFIRMED
 from app.core.standing import standing_conditions
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
@@ -595,9 +596,18 @@ def construction_reconciliation(
     a rounding artefact — it is either a month somebody forgot or a cost nobody
     has scheduled. A tolerance here would be a decision to stop noticing which.
 
-    An explicit zero is a valid schedule: nothing expected to be paid on that
-    code inside the horizon. A *missing* code is not zero — it is a code nobody
-    considered — so every code with remaining cost must appear.
+    An explicit zero is a valid schedule: a preparer looked at the code and said
+    nothing is expected to be paid on it inside the horizon. A *missing* code is
+    not that — it is a code nobody looked at — and the two are indistinguishable
+    to any check that reads an absent code as zero, which is what comparing
+    ``scheduled.get(code, 0)`` against a remaining cost of ``0.00`` does. It
+    passes. Silently. On the one code the preparer never opened.
+
+    So coverage and amount are asked separately, and both are asked of every
+    code. Coverage asks whether the code appears in this forecast at all; the
+    amount check then asks whether what it schedules adds up. A code with
+    ``0.00`` left to spend passes the amount check either way and fails coverage
+    until somebody writes the zero down.
     """
     pinned = construction_service.cashflow_forecast_position(
         session, project_id=project.id, version_id=version.construction_forecast_version_id
@@ -617,6 +627,19 @@ def construction_reconciliation(
         key=lambda item: pinned.cost_code_labels.get(item[0], ""),
     ):
         label = pinned.cost_code_labels.get(cost_code_id, str(cost_code_id))
+        checks.append(
+            calculator.count_check(
+                name=f"construction_schedule_covers_{label}",
+                actual=0 if cost_code_id in scheduled else 1,
+                detail=(
+                    f"Construction forecast version {pinned.version_number} carries "
+                    f"{label}, and this cashflow forecast has no line for it at all. "
+                    "Schedule its months, or write an explicit zero to record that "
+                    "nothing is expected on it inside the horizon — an absent code "
+                    "is not a decision, it is an omission."
+                ),
+            )
+        )
         checks.append(
             calculator.equality_check(
                 name=f"construction_schedule_{label}",
@@ -673,20 +696,39 @@ def _require_ready_for_governance(
             "months before submitting — a schedule silently re-read underneath an "
             "approver changes what they are approving."
         )
+    unplaced = _unplaced_installments(session, project=project, version=version)
+    if unplaced:
+        detail = "; ".join(
+            f"sale {row.sale_contract_id} instalment {row.sequence} ({row.label})"
+            for row in unplaced[:5]
+        )
+        more = "" if len(unplaced) <= 5 else f" and {len(unplaced) - 5} more"
+        raise ConflictError(
+            f"{len(unplaced)} governing buyer instalment(s) carry cash this forecast "
+            f"could not place in any month, because they have no date of any kind — "
+            f"{detail}{more}. An instalment with no timing is not an instalment worth "
+            "nothing: the money is contractually owed and the forecast is silently "
+            "short of it, so every funding figure taken from this version would "
+            "understate what the project is owed and overstate what it needs to "
+            "raise. Give each one a contractual or forecast date, refresh the "
+            "customer snapshot, and submit again."
+        )
     failed = [
         check
         for check in construction_reconciliation(session, project=project, version=version)
         if not check.passed
     ]
     if failed:
-        detail = "; ".join(
-            f"{check.name}: expected {check.expected}, scheduled {check.actual}"
-            for check in failed[:5]
-        )
+        # The check's own words, not its two numbers: a coverage failure counts
+        # cost codes and an amount failure compares money, and one format that
+        # served both reported a missing code as "expected 0, scheduled 1".
+        detail = " ".join(check.detail for check in failed[:3])
+        more = "" if len(failed) <= 3 else f" ({len(failed) - 3} further failures.)"
         raise ConflictError(
-            "This forecast's monthly construction schedule does not add up to the "
-            f"construction forecast it is measured against — {detail}. Every cost "
-            "code's months must total its remaining cost exactly."
+            "This forecast's monthly construction schedule does not reconcile to the "
+            f"construction forecast it is measured against. {detail}{more} Every cost "
+            "code the construction forecast carries must appear here, and its months "
+            "must total its remaining cost exactly."
         )
 
 
@@ -1762,13 +1804,22 @@ class SourceRow:
     status: str
     display_reference: str
 
+    #: True when the row knows only which month it belongs to, not which day.
+    #: A forecast line is the only such source, and the distinction matters:
+    #: every rule that asks "has this happened yet?" has to ask it of a date,
+    #: and a month-grained row has to be told which day to answer for.
+    month_grain: bool = False
+
 
 @dataclass(frozen=True)
 class MonthlyPosition:
     """One month of the cash bridge, on both the total and the usable basis."""
 
     period_month: date
-    is_actual: bool
+    #: ``PERIOD_CLOSED``, ``PERIOD_CURRENT`` or ``PERIOD_FUTURE``. The month the
+    #: report was taken in is neither of the other two and must not be reported
+    #: as either — see ``period_state``.
+    period_state: str
 
     opening_total_cash: Decimal
     customer_scheduled_due: Decimal
@@ -1815,6 +1866,133 @@ SOURCE_FORECAST_LINE = "cashflow_forecast_line"
 BASIS_ACTUAL = "actual"
 BASIS_FORECAST = "forecast"
 BASIS_SCHEDULED = "scheduled"
+
+#: Availability moves rather than cash, so these two are never an inflow or an
+#: outflow — they only decide how much of the cash already counted is spendable.
+RESTRICTION_SOURCES = (SOURCE_RESTRICTION, SOURCE_RELEASE)
+
+#: Where a month sits relative to the date the report was taken. There are three
+#: of these and not two, which is the whole point of naming them.
+PERIOD_CLOSED = "closed"
+PERIOD_CURRENT = "current"
+PERIOD_FUTURE = "future"
+
+#: What a month's figures were assembled from, stated in the response. A closed
+#: month is settled history and a future month is entirely expectation; the month
+#: the report was taken in is both at once and needs a word of its own, because
+#: calling it "actual" hides every payment still due before the month ends.
+MONTH_BASIS_ACTUAL = "actual"
+MONTH_BASIS_ACTUAL_AND_FORECAST = "actual_and_forecast"
+MONTH_BASIS_FORECAST = "forecast"
+
+
+def period_state(month: date, *, as_of: date) -> str:
+    """Which of the three temporal states a month is in.
+
+    The month the as-of date falls in is a **partial** month, and treating it as
+    finished is the error this exists to prevent. A report taken on 3 April that
+    calls April "actual" reports one working week of collections as the month's
+    answer and drops every instalment due on the 15th — the figure is not merely
+    incomplete, it is confidently wrong in the direction of a cash shortfall
+    nobody will be able to reproduce a week later.
+    """
+    current = month_of(as_of)
+    if month < current:
+        return PERIOD_CLOSED
+    if month == current:
+        return PERIOD_CURRENT
+    return PERIOD_FUTURE
+
+
+def month_basis(state: str) -> str:
+    """The word a month of the bridge reports itself under."""
+    if state == PERIOD_CLOSED:
+        return MONTH_BASIS_ACTUAL
+    if state == PERIOD_CURRENT:
+        return MONTH_BASIS_ACTUAL_AND_FORECAST
+    return MONTH_BASIS_FORECAST
+
+
+def counts_as_cash(row: SourceRow, *, as_of: date) -> bool:
+    """**The** rule that decides whether a source row is cash in a report.
+
+    One rule, used by the monthly bridge, the cash position, the funding windows,
+    the drill-down, the NPV and the equity IRR. Every one of those answers the
+    same question — *does this row belong in the cash this report is about?* — and
+    the version of this platform that answered it in six places answered it two
+    different ways: the bridge zeroed a month's whole forecast series the moment
+    the month began, while Returns swept every equity row it could find whatever
+    its basis. The two numbers on one screen described different projects.
+
+    The rule itself:
+
+    A **scheduled** row is the contractual memo series — what buyers owe and
+    when it falls due — and is never cash. It is reported beside the cash so a
+    reader can see collection running ahead of or behind the contract.
+
+    An **actual** row is a confirmed movement and is always cash. It was already
+    filtered for what was standing at the cutoff when it was collected.
+
+    A **forecast** row is cash only while it is still ahead of the cutoff. A
+    dated row — a buyer instalment out of the frozen schedule — answers on its
+    own date, which is why an instalment due on the 20th survives a report taken
+    on the 3rd of the same month. A **month-grained** row has no date to answer
+    with, and the MVP rule is that a forecast line stated for the as-of month is
+    *the remainder of that month*: whatever the preparer expected to move, minus
+    nothing, because a preparer writing April's figure in April is writing what
+    is still to come. Months already closed are answered by their actuals.
+    """
+    if row.basis == BASIS_SCHEDULED:
+        return False
+    if row.basis == BASIS_ACTUAL:
+        return True
+    if row.month_grain:
+        return row.period_month >= month_of(as_of)
+    return row.business_date > as_of
+
+
+def window_date(row: SourceRow, *, as_of: date) -> date:
+    """The day a row is projected on inside a literal date window.
+
+    A month-grained forecast has no day, so it is placed on the earliest day it
+    could still occur — the day after the cutoff for the current month, the first
+    of the month for any later one. That is a placement, not a distribution: this
+    MVP does not know how a month's figure is spread across its days, and
+    pretending to would put a precision on the funding requirement that the input
+    does not carry. Stated once here so the bridge, the windows and any future
+    reader place it the same way.
+    """
+    if not row.month_grain:
+        return row.business_date
+    return max(row.period_month, as_of + timedelta(days=1))
+
+
+def opening_anchor_month(version: CashflowForecastVersion | None) -> date | None:
+    """The month a governed opening cash balance is stated as at, if there is one.
+
+    An opening balance is a **statement about one moment**: on the first of this
+    month the project held so much cash, so much of it restricted. Every figure
+    downstream is that balance plus what moved since.
+
+    Which makes running the bridge backwards from it incoherent. The transactions
+    of the months before the anchor are not additional to the opening balance —
+    they are what produced it. Replaying them through it counts each of them
+    twice, and the error grows with how much history the project has, so the
+    oldest and most valuable projects report the worst numbers. The earlier
+    version of this module did exactly that: it quietly moved the series start
+    back to the earliest transaction it could find while keeping the governed
+    opening balance at its stated value.
+
+    So the anchor is immutable and the bridge begins there. The pre-opening
+    transactions are not lost — they stay in the drill-down and in the modules
+    that own them — they are simply not replayed through a balance that already
+    contains them.
+
+    A project with no forecast in force has no governed opening balance at all
+    (it opens at zero), so there is nothing to anchor and the series may begin
+    wherever its history does.
+    """
+    return version.forecast_start_month if version is not None else None
 
 
 def _standing_rows(
@@ -1871,14 +2049,19 @@ def collect_source_rows(
     project: Project,
     version: CashflowForecastVersion | None,
     as_of: date,
-    first_forecast_month: date,
 ) -> list[SourceRow]:
-    """Every transaction and forecast line that contributes to a monthly figure.
+    """Every transaction and forecast line that could contribute to a figure.
 
     Assembled once and reused by the monthly bridge, the drill-down, the
     reconciliation and the export, so the four cannot disagree. A dashboard
     saying 5,420,000 and an export saying 5,419,999 is a failed control, and the
     only way to be sure they match is for them to be the same list.
+
+    This is the **register**: everything that was standing at the cutoff, on
+    whichever basis it carries. Which of these rows is cash *in a given report*
+    is not decided here — it is decided once, by ``counts_as_cash``, at every
+    place that adds them up. Deciding it here as well is how the two answers
+    started to differ.
     """
     rows: list[SourceRow] = []
 
@@ -1978,6 +2161,14 @@ def collect_source_rows(
 
     # Restrictions and releases move availability rather than cash, so they
     # carry their own basis and are never added to an inflow or an outflow.
+    #
+    # A restriction is standing only while the receipt it holds is: an escrow
+    # over a transfer that was reversed is holding money the project never had,
+    # and reporting it would take the reversal out of unrestricted cash twice —
+    # once because the receipt no longer counts, and again because the escrow
+    # still claims a share of what is left. At a historical cutoff both are asked
+    # of that cutoff, so an August report keeps an escrow over an August receipt
+    # that a September reversal later withdrew.
     for restriction, receipt_date, receipt_number in session.execute(
         select(
             CashflowReceiptRestriction,
@@ -1988,7 +2179,13 @@ def collect_source_rows(
         .where(
             *_standing_rows(
                 session, model=CashflowReceiptRestriction, project_id=project.id, as_of=as_of
-            )
+            ),
+            *standing_conditions(
+                status=CollectionReceipt.status,
+                confirmed_at=CollectionReceipt.confirmed_at,
+                reversed_at=CollectionReceipt.reversed_at,
+                as_of=as_of,
+            ),
         )
     ).all():
         rows.append(
@@ -2009,11 +2206,32 @@ def collect_source_rows(
                 display_reference=receipt_number,
             )
         )
+    # A release frees a restriction, so it is standing only while that
+    # restriction — and the receipt behind it — is. Freeing an escrow that no
+    # longer exists would raise unrestricted cash against nothing.
     for release in session.scalars(
-        select(CashflowRestrictionRelease).where(
+        select(CashflowRestrictionRelease)
+        .join(
+            CashflowReceiptRestriction,
+            CashflowReceiptRestriction.id == CashflowRestrictionRelease.restriction_id,
+        )
+        .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
+        .where(
             *_standing_rows(
                 session, model=CashflowRestrictionRelease, project_id=project.id, as_of=as_of
-            )
+            ),
+            *standing_conditions(
+                status=CashflowReceiptRestriction.status,
+                confirmed_at=CashflowReceiptRestriction.confirmed_at,
+                reversed_at=CashflowReceiptRestriction.reversed_at,
+                as_of=as_of,
+            ),
+            *standing_conditions(
+                status=CollectionReceipt.status,
+                confirmed_at=CollectionReceipt.confirmed_at,
+                reversed_at=CollectionReceipt.reversed_at,
+                as_of=as_of,
+            ),
         )
     ):
         rows.append(
@@ -2056,7 +2274,11 @@ def collect_source_rows(
             )
         )
         expected = adjusted.get(row.installment_id, money(row.amount))
-        if month >= first_forecast_month and expected > ZERO:
+        # No month test here. An instalment due on the 20th is still ahead of a
+        # report taken on the 3rd of the same month, and dropping it because its
+        # month has begun deletes three weeks of collections from the forecast.
+        # ``counts_as_cash`` asks the instalment's own date instead.
+        if expected > ZERO:
             rows.append(
                 SourceRow(
                     source_type=SOURCE_SCHEDULE,
@@ -2084,6 +2306,7 @@ def collect_source_rows(
                 basis=BASIS_FORECAST,
                 status=line.source_kind,
                 display_reference=f"{line.source_kind}:{line.category}",
+                month_grain=True,
             )
         )
     return rows
@@ -2091,6 +2314,87 @@ def collect_source_rows(
 
 def _sum(rows: Sequence[SourceRow], predicate: Callable[[SourceRow], bool]) -> Decimal:
     return calculator.total(row.amount for row in rows if predicate(row))
+
+
+@dataclass(frozen=True)
+class ActualCashPosition:
+    """Cash confirmed in hand at the as-of date, with no expectation in it."""
+
+    as_of: date
+    total_cash: Decimal
+    restricted_cash: Decimal
+    unrestricted_cash: Decimal
+
+
+def actual_cash_position(
+    rows: Sequence[SourceRow],
+    *,
+    version: CashflowForecastVersion | None,
+    as_of: date,
+) -> ActualCashPosition:
+    """The governed opening balance plus every confirmed movement since it.
+
+    Distinct from the current month's closing position, and deliberately so. The
+    month the report is taken in closes on a **blended** figure — cash that moved
+    plus cash still expected before the month ends — which is the right answer to
+    "where will this month end" and the wrong answer to "what can we pay a
+    contractor with today". Two different questions that a single "current cash"
+    number had been answering with one figure.
+
+    Built from the same row list and the same ``counts_as_cash`` rule as the
+    bridge, restricted to what had actually happened by the cutoff, so this
+    figure and the bridge cannot describe different projects.
+    """
+    anchor = opening_anchor_month(version)
+    opening_total = money(
+        (version.opening_unrestricted_cash + version.opening_restricted_cash)
+        if version is not None
+        else ZERO
+    )
+    opening_restricted = money(version.opening_restricted_cash if version is not None else ZERO)
+
+    def counted(row: SourceRow) -> bool:
+        if row.basis != BASIS_ACTUAL or not counts_as_cash(row, as_of=as_of):
+            return False
+        if anchor is not None and row.period_month < anchor:
+            return False
+        # A confirmed movement dated ahead of the cutoff is real cash in the
+        # month it is dated, and it is not in the bank today.
+        return row.business_date <= as_of
+
+    moved = [row for row in rows if counted(row)]
+    inflows = _sum(
+        moved,
+        lambda row: (
+            row.flow_direction == FLOW_INFLOW and row.source_type not in RESTRICTION_SOURCES
+        ),
+    )
+    outflows = _sum(
+        moved,
+        lambda row: (
+            row.flow_direction == FLOW_OUTFLOW and row.source_type not in RESTRICTION_SOURCES
+        ),
+    )
+    newly_restricted = _sum(moved, lambda row: row.source_type == SOURCE_RESTRICTION)
+    released = _sum(moved, lambda row: row.source_type == SOURCE_RELEASE)
+
+    total = calculator.closing_cash(
+        opening_cash=opening_total,
+        net_movement=calculator.net_cashflow(total_inflows=inflows, total_outflows=outflows),
+    )
+    restricted = calculator.closing_restricted_cash(
+        opening_restricted=opening_restricted,
+        newly_restricted=newly_restricted,
+        released=released,
+    )
+    return ActualCashPosition(
+        as_of=as_of,
+        total_cash=total,
+        restricted_cash=restricted,
+        unrestricted_cash=calculator.closing_unrestricted_cash(
+            closing_total=total, closing_restricted=restricted
+        ),
+    )
 
 
 def monthly_positions(
@@ -2104,34 +2408,58 @@ def monthly_positions(
 ) -> list[MonthlyPosition]:
     """The cash bridge, month by month, with no gaps and nothing stored.
 
-    A month is either **actual** or **forecast**, decided by whether it has
-    finished relative to the report's as-of date, and its totals come from that
-    basis alone. Adding both would count the same cash twice in the current
-    month; showing only one would leave the other invisible — so both series are
-    reported in every month and only the one that applies is added.
+    A month is in one of **three** states, not two. A **closed** month is
+    finished and its figures are its actuals. A **future** month has not started
+    and its figures are its forecast. The month the report was taken in is
+    **both**: the cash that has already moved, plus what is still expected before
+    the month ends. Reporting that month as actual-only is the error worth
+    naming, because it does not look like an error — the figure is a real number
+    made of real transactions, and it silently omits every instalment due later
+    in the month. A project reported on the 3rd would show a funding cliff that
+    disappears on the 4th.
+
+    The two series are never added to each other for the same cash. Which rows
+    belong is settled once by ``counts_as_cash``: an actual row is cash that
+    moved, a forecast row is cash still ahead of the cutoff, and no row can be
+    both.
 
     Every month between the bounds appears, including the empty ones. A quiet
     quarter that vanished from the series would make a chart's axis lie about
     elapsed time, and a reader would see three months of work compressed into
     three weeks.
+
+    The series may not begin before the governed opening balance is stated —
+    see ``opening_anchor_month``.
     """
-    first_forecast_month = next_month(month_of(as_of))
-    rows = collect_source_rows(
-        session,
-        project=project,
-        version=version,
-        as_of=as_of,
-        first_forecast_month=first_forecast_month,
-    )
+    rows = collect_source_rows(session, project=project, version=version, as_of=as_of)
+    anchor = opening_anchor_month(version)
 
     if start_month is None:
-        start_month = version.forecast_start_month if version else month_of(as_of)
-        earliest = min((row.period_month for row in rows), default=start_month)
-        start_month = min(start_month, earliest)
+        start_month = (
+            anchor
+            if anchor is not None
+            else min((row.period_month for row in rows), default=month_of(as_of))
+        )
+    else:
+        start_month = month_of(start_month)
+        if anchor is not None and start_month < anchor:
+            raise ValidationError(
+                f"This project's cash bridge opens in {anchor}, the month the "
+                f"forecast in force states its opening balance for. {start_month} "
+                "is before that. The months before an opening balance cannot be "
+                "rebuilt by replaying transactions through it — those transactions "
+                "are already inside it, and running them again would count them "
+                "twice. They remain in the transaction drill-down."
+            )
     if end_month is None:
         end_month = version.forecast_end_month if version else month_of(as_of)
         latest = max((row.period_month for row in rows), default=end_month)
-        end_month = max(end_month, latest)
+        end_month = max(end_month, latest, start_month)
+    else:
+        end_month = month_of(end_month)
+
+    # Anything before the anchor is inside the opening balance already.
+    rows = [row for row in rows if row.period_month >= start_month]
 
     by_month: dict[date, list[SourceRow]] = {}
     for row in rows:
@@ -2144,83 +2472,67 @@ def monthly_positions(
 
     positions: list[MonthlyPosition] = []
     for month in months_between(start_month, end_month):
-        month_rows = by_month.get(month, [])
-        is_actual = month <= month_of(as_of)
-        basis = BASIS_ACTUAL if is_actual else BASIS_FORECAST
+        all_rows = by_month.get(month, [])
+        # The one rule, asked once per month. Everything below sums what it
+        # returned, so no figure here can be built on a second reading of what
+        # "actual" and "forecast" mean.
+        month_rows = [row for row in all_rows if counts_as_cash(row, as_of=as_of)]
+        state = period_state(month, as_of=as_of)
 
-        # Bound as defaults rather than closed over: a closure inside this loop
+        # Bound as a default rather than closed over: a closure inside this loop
         # would read whichever month the loop finished on, and every month would
         # silently report the last one's figures.
-        def actual(
+        def summed(
             source_type: str,
+            row_basis: str,
             direction: str | None = None,
-            *,
-            rows_of_month: Sequence[SourceRow] = month_rows,
-        ) -> Decimal:
-            return calculator.total(
-                row.amount
-                for row in rows_of_month
-                if row.source_type == source_type
-                and row.basis == BASIS_ACTUAL
-                and (direction is None or row.flow_direction == direction)
-            )
-
-        def of_basis(
-            source_type: str,
-            direction: str,
             categories: tuple[str, ...] | None = None,
             *,
             rows_of_month: Sequence[SourceRow] = month_rows,
-            month_basis: str = basis,
         ) -> Decimal:
             return calculator.total(
                 row.amount
                 for row in rows_of_month
                 if row.source_type == source_type
-                and row.basis == month_basis
-                and row.flow_direction == direction
+                and row.basis == row_basis
+                and (direction is None or row.flow_direction == direction)
                 and (categories is None or row.category in categories)
             )
 
         customer_scheduled = _sum(
-            month_rows,
+            all_rows,
             lambda row: row.source_type == SOURCE_SCHEDULE and row.basis == BASIS_SCHEDULED,
         )
-        customer_actual = actual(SOURCE_RECEIPT)
-        customer_forecast = (
-            ZERO
-            if is_actual
-            else _sum(
-                month_rows,
-                lambda row: (
-                    (row.source_type == SOURCE_SCHEDULE and row.basis == BASIS_FORECAST)
+        customer_actual = summed(SOURCE_RECEIPT, BASIS_ACTUAL)
+        customer_forecast = _sum(
+            month_rows,
+            lambda row: (
+                row.basis == BASIS_FORECAST
+                and (
+                    row.source_type == SOURCE_SCHEDULE
                     or (
                         row.source_type == SOURCE_FORECAST_LINE
                         and row.category == CATEGORY_CUSTOMER_COLLECTION
                     )
-                ),
-            )
+                )
+            ),
         )
-        refunds = actual(SOURCE_REFUND)
-        construction_actual = actual(SOURCE_CONSTRUCTION_PAYMENT)
-        construction_forecast = (
-            ZERO
-            if is_actual
-            else of_basis(SOURCE_FORECAST_LINE, FLOW_OUTFLOW, (CATEGORY_CONSTRUCTION,))
+        refunds = summed(SOURCE_REFUND, BASIS_ACTUAL)
+        construction_actual = summed(SOURCE_CONSTRUCTION_PAYMENT, BASIS_ACTUAL)
+        construction_forecast = summed(
+            SOURCE_FORECAST_LINE, BASIS_FORECAST, FLOW_OUTFLOW, (CATEGORY_CONSTRUCTION,)
         )
-        development_actual = actual(SOURCE_DEVELOPMENT_MOVEMENT)
-        development_forecast = (
-            ZERO
-            if is_actual
-            else of_basis(SOURCE_FORECAST_LINE, FLOW_OUTFLOW, DEVELOPMENT_CATEGORIES)
+        development_actual = summed(SOURCE_DEVELOPMENT_MOVEMENT, BASIS_ACTUAL)
+        development_forecast = summed(
+            SOURCE_FORECAST_LINE, BASIS_FORECAST, FLOW_OUTFLOW, DEVELOPMENT_CATEGORIES
         )
-        financing_in_actual = actual(SOURCE_FINANCING_MOVEMENT, FLOW_INFLOW)
-        financing_out_actual = actual(SOURCE_FINANCING_MOVEMENT, FLOW_OUTFLOW)
-        financing_in_forecast = (
-            ZERO if is_actual else of_basis(SOURCE_FORECAST_LINE, FLOW_INFLOW, FINANCING_TYPES)
+        financing_in_actual = summed(SOURCE_FINANCING_MOVEMENT, BASIS_ACTUAL, FLOW_INFLOW)
+        financing_out_actual = summed(SOURCE_FINANCING_MOVEMENT, BASIS_ACTUAL, FLOW_OUTFLOW)
+        financing_in_forecast = summed(
+            SOURCE_FORECAST_LINE, BASIS_FORECAST, FLOW_INFLOW, FINANCING_TYPES
         )
-        financing_out_forecast = (
-            ZERO if is_actual else of_basis(SOURCE_FORECAST_LINE, FLOW_OUTFLOW, FINANCING_TYPES)
+        financing_out_forecast = summed(
+            SOURCE_FORECAST_LINE, BASIS_FORECAST, FLOW_OUTFLOW, FINANCING_TYPES
         )
 
         total_inflows = calculator.total(
@@ -2255,7 +2567,7 @@ def monthly_positions(
         positions.append(
             MonthlyPosition(
                 period_month=month,
-                is_actual=is_actual,
+                period_state=state,
                 opening_total_cash=opening_total,
                 customer_scheduled_due=customer_scheduled,
                 customer_actual_receipts=customer_actual,
@@ -2308,9 +2620,12 @@ class FundingWindow:
     days: int
     from_date: date
     to_date: date
+    opening_unrestricted_cash: Decimal
     usable_inflows: Decimal
     outflows: Decimal
-    net: Decimal
+    net_movement: Decimal
+    minimum_projected_unrestricted_cash: Decimal
+    closing_projected_unrestricted_cash: Decimal
     funding_requirement: Decimal
 
 
@@ -2321,38 +2636,82 @@ def funding_windows(
     version: CashflowForecastVersion | None,
     as_of: date,
     windows: Sequence[int] = (30, 60, 90),
+    rows: Sequence[SourceRow] | None = None,
 ) -> list[FundingWindow]:
-    """Expected cash in and out over literal day windows from the as-of date."""
-    from datetime import timedelta
+    """How much cash the project must raise to get through the next N days.
 
-    first_forecast_month = next_month(month_of(as_of))
-    rows = collect_source_rows(
-        session,
-        project=project,
-        version=version,
-        as_of=as_of,
-        first_forecast_month=first_forecast_month,
-    )
+    Three things this answers that the arithmetic it replaces did not.
+
+    **It starts from the money already in the bank.** A window that netted
+    expected inflows against expected outflows and called the shortfall a
+    funding requirement told a project sitting on ten million that it needed to
+    raise five, which is not a conservative error — it is an instruction to
+    raise debt against cash the company already holds, and somebody would have
+    paid arrangement fees for it. Only *unrestricted* cash opens the window:
+    escrowed buyer money is on the balance sheet and cannot pay a contractor.
+
+    **It walks the window in date order.** Cash is not fungible across time. A
+    two-million payment on day ten funded by a two-million receipt on day twenty
+    closes the window level and is insolvent in between, and the closing balance
+    — the figure this used to report — is exactly the one number that cannot see
+    it.
+
+    **It reports the worst point, not the last one.** The requirement is what it
+    takes to never go below zero, so it is driven by the deepest trough inside
+    the window. Movements are applied a day at a time and the position is read at
+    each day's end: within one day the order of two payments is not a fact this
+    system holds, and inventing one would make the answer depend on the order
+    rows happened to be written in.
+    """
+    if rows is None:
+        rows = collect_source_rows(session, project=project, version=version, as_of=as_of)
+    opening = actual_cash_position(rows, version=version, as_of=as_of).unrestricted_cash
+    live = [row for row in rows if counts_as_cash(row, as_of=as_of)]
+
     out: list[FundingWindow] = []
     for days in windows:
         end = as_of + timedelta(days=days)
-        in_window = [
-            row for row in rows if as_of < row.business_date <= end and row.basis == BASIS_FORECAST
-        ]
-        inflows = _sum(in_window, lambda row: row.flow_direction == FLOW_INFLOW)
-        restricted = ZERO  # Escrow is not forecast; expected inflows are usable.
-        outflows = _sum(in_window, lambda row: row.flow_direction == FLOW_OUTFLOW)
-        usable = money(inflows - restricted)
-        net = money(usable - outflows)
+        by_day: dict[date, list[SourceRow]] = {}
+        for row in live:
+            when = window_date(row, as_of=as_of)
+            if as_of < when <= end:
+                by_day.setdefault(when, []).append(row)
+
+        running = opening
+        minimum = opening
+        inflows = ZERO
+        outflows = ZERO
+        restricted = ZERO
+        released = ZERO
+        for day in sorted(by_day):
+            for row in by_day[day]:
+                if row.source_type == SOURCE_RESTRICTION:
+                    restricted = money(restricted + row.amount)
+                    running = money(running - row.amount)
+                elif row.source_type == SOURCE_RELEASE:
+                    released = money(released + row.amount)
+                    running = money(running + row.amount)
+                elif row.flow_direction == FLOW_INFLOW:
+                    inflows = money(inflows + row.amount)
+                    running = money(running + row.amount)
+                else:
+                    outflows = money(outflows + row.amount)
+                    running = money(running - row.amount)
+            minimum = min(minimum, running)
+
+        usable = money(inflows - restricted + released)
         out.append(
             FundingWindow(
                 days=days,
                 from_date=as_of,
                 to_date=end,
+                opening_unrestricted_cash=opening,
                 usable_inflows=usable,
                 outflows=outflows,
-                net=net,
-                funding_requirement=money(max(ZERO, -net)),
+                net_movement=money(usable - outflows),
+                minimum_projected_unrestricted_cash=minimum,
+                closing_projected_unrestricted_cash=running,
+                funding_requirement=calculator.funding_gap(closing_unrestricted=minimum),
             )
         )
     return out
@@ -2384,10 +2743,63 @@ NPV_BASIS = "project_operating_and_development"
 IRR_BASIS = "equity_investor_sign_convention"
 
 
+def equity_rows(
+    positions: Sequence[MonthlyPosition],
+    rows: Sequence[SourceRow],
+    *,
+    as_of: date,
+) -> list[SourceRow]:
+    """The equity movements the bridge is reporting, and no others.
+
+    Gated by ``counts_as_cash`` and confined to the bridge's own months, because
+    a return computed on a wider set than the cash bridge is a return on a
+    different project. The version this replaces swept every equity row in the
+    register regardless of basis, so a contribution that was both forecast and
+    then actually received counted twice in the IRR while the bridge counted it
+    once, and the two disagreed by exactly the amount that mattered most.
+    """
+    months = {position.period_month for position in positions}
+    return [
+        row
+        for row in rows
+        if row.period_month in months
+        and counts_as_cash(row, as_of=as_of)
+        and (
+            (row.category == EQUITY_CONTRIBUTION and row.flow_direction == FLOW_INFLOW)
+            or (row.category == EQUITY_DISTRIBUTION and row.flow_direction == FLOW_OUTFLOW)
+        )
+    ]
+
+
+def equity_flows_for(
+    positions: Sequence[MonthlyPosition],
+    rows: Sequence[SourceRow],
+    *,
+    as_of: date,
+) -> list[Decimal]:
+    """The investor-sign equity series an IRR is computed on, one per period.
+
+    Public because it is the thing that has to be provable. An IRR is a single
+    number derived from a series nobody can see, and "the IRR looks wrong" is not
+    a defect anyone can act on. Exposing the series lets a reader — and a test —
+    put the bridge's equity cash for a month beside the figure the IRR was given
+    for that month and check that they are the same cash with the sign turned
+    round.
+    """
+    by_month: dict[date, Decimal] = {}
+    for row in equity_rows(positions, rows, as_of=as_of):
+        # The signs are the investor's, not the project's. An equity
+        # contribution is cash the project received and the investor paid.
+        signed = -row.amount if row.category == EQUITY_CONTRIBUTION else row.amount
+        by_month[row.period_month] = money(by_month.get(row.period_month, ZERO) + signed)
+    return [by_month.get(position.period_month, ZERO) for position in positions]
+
+
 def return_position(
     positions: Sequence[MonthlyPosition],
     rows: Sequence[SourceRow],
     *,
+    as_of: date,
     discount_rate_per_period: Decimal,
 ) -> ReturnPosition:
     """Discounted return on the project, and the periodic return on equity.
@@ -2402,6 +2814,13 @@ def return_position(
     equity contribution is cash the project received and the investor paid out;
     feeding project-direction cash into an IRR produces the right magnitude with
     the wrong sign, which is the single easiest way to report a loss as a return.
+
+    Both are computed on the **same basis as the cash bridge**. The NPV reads the
+    bridge's own monthly figures; the equity series is gated by the same
+    ``counts_as_cash`` rule over the same months. Returns applies no second
+    interpretation of what is actual and what is forecast, because a project
+    whose bridge and whose IRR disagree about that has two answers and no way to
+    tell which one a decision was made on.
     """
     project_flows = [
         money(
@@ -2416,27 +2835,10 @@ def return_position(
         for position in positions
     ]
 
-    contributed = calculator.total(
-        row.amount
-        for row in rows
-        if row.category == EQUITY_CONTRIBUTION and row.flow_direction == FLOW_INFLOW
-    )
-    distributed = calculator.total(
-        row.amount
-        for row in rows
-        if row.category == EQUITY_DISTRIBUTION and row.flow_direction == FLOW_OUTFLOW
-    )
-    equity_by_month: dict[date, Decimal] = {}
-    for row in rows:
-        if row.category == EQUITY_CONTRIBUTION:
-            equity_by_month[row.period_month] = money(
-                equity_by_month.get(row.period_month, ZERO) - row.amount
-            )
-        elif row.category == EQUITY_DISTRIBUTION:
-            equity_by_month[row.period_month] = money(
-                equity_by_month.get(row.period_month, ZERO) + row.amount
-            )
-    equity_flows = [equity_by_month.get(position.period_month, ZERO) for position in positions]
+    equity = equity_rows(positions, rows, as_of=as_of)
+    contributed = _sum(equity, lambda row: row.category == EQUITY_CONTRIBUTION)
+    distributed = _sum(equity, lambda row: row.category == EQUITY_DISTRIBUTION)
+    equity_flows = equity_flows_for(positions, rows, as_of=as_of)
     irr = calculator.internal_rate_of_return(equity_flows=equity_flows)
 
     return ReturnPosition(
@@ -2532,6 +2934,30 @@ def reconciliation(session: Session, *, project: Project, as_of: date) -> list[c
             )
         )
 
+    # An escrow over a transfer that no longer stands is holding money the
+    # project does not have. The reads that build a report already exclude it;
+    # this is the independent count that says somebody has a correction to make.
+    unbacked = session.scalars(
+        select(func.count())
+        .select_from(CashflowReceiptRestriction)
+        .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
+        .where(
+            CashflowReceiptRestriction.project_id == project.id,
+            CashflowReceiptRestriction.status.in_((MOVEMENT_RECORDED, MOVEMENT_CONFIRMED)),
+            CollectionReceipt.status != STANDING_CONFIRMED,
+        )
+    ).first()
+    checks.append(
+        calculator.count_check(
+            name="restrictions_backed_by_standing_customer_cash",
+            actual=int(unbacked or 0),
+            detail=(
+                "A restriction can only hold customer cash that is still standing. "
+                "Reverse the restriction when the receipt behind it is withdrawn."
+            ),
+        )
+    )
+
     # Confirmed cash that has not been confirmed by a second person is cash one
     # person moved alone. The database refuses it; this proves none slipped past
     # an earlier revision of the constraint.
@@ -2602,14 +3028,25 @@ def reconciliation(session: Session, *, project: Project, as_of: date) -> list[c
     return checks
 
 
-def _unplaced_installment_count(
+def _unplaced_installments(
     session: Session, *, project: Project, version: CashflowForecastVersion
-) -> int:
-    """Governing instalments the snapshot could not place in any month."""
+) -> list[payment_plans_service.CashflowScheduleRow]:
+    """Governing instalments the snapshot could not place in any month.
+
+    Named rather than counted, because the count alone tells a preparer that
+    something is wrong and nothing about where to go and fix it.
+    """
     governing = payment_plans_service.cashflow_schedule_rows(
         session, project_id=project.id, as_of=version.as_of_date
     )
-    return sum(1 for row in governing if chosen_forecast_date(row) is None)
+    return [row for row in governing if chosen_forecast_date(row) is None]
+
+
+def _unplaced_installment_count(
+    session: Session, *, project: Project, version: CashflowForecastVersion
+) -> int:
+    """How many governing instalments have no date to be placed on."""
+    return len(_unplaced_installments(session, project=project, version=version))
 
 
 def _foreign_currency_count(session: Session, *, project: Project) -> int:
@@ -2662,21 +3099,24 @@ def forecast_accuracy(
 ) -> list[AccuracyRow]:
     """A prior forecast's months against the actuals that landed in them.
 
-    Compared only up to the as-of date. A month that has not finished has no
-    actual to be measured against, and reporting one would call a project behind
-    plan for the entirely ordinary reason that the month is still running.
+    Compared only up to the as-of date, and only from the version's own cutoff.
+    A month before the version existed was never forecast — a line written for it
+    is hindsight, and measuring hindsight tells a reader nothing about how well
+    this company plans. A month that has not finished has no actual to be
+    measured against, and reporting one would call a project behind plan for the
+    entirely ordinary reason that the month is still running.
+
+    The one partial period is the version's own as-of month, and both sides are
+    trimmed to it: ``counts_as_cash`` gives the forecast the version actually
+    made for the rest of that month, and ``measurable`` gives the actuals that
+    landed in the same stretch of it.
     """
     limit = month_of(as_of)
+    cutoff_month = month_of(version.as_of_date)
     forecast_rows = collect_source_rows(
-        session,
-        project=project,
-        version=version,
-        as_of=version.as_of_date,
-        first_forecast_month=next_month(month_of(version.as_of_date)),
+        session, project=project, version=version, as_of=version.as_of_date
     )
-    actual_rows = collect_source_rows(
-        session, project=project, version=None, as_of=as_of, first_forecast_month=limit
-    )
+    actual_rows = collect_source_rows(session, project=project, version=None, as_of=as_of)
 
     def group_of(row: SourceRow) -> str | None:
         if row.category == CATEGORY_CUSTOMER_COLLECTION and row.flow_direction == FLOW_INFLOW:
@@ -2689,22 +3129,41 @@ def forecast_accuracy(
             return ACCURACY_FINANCING
         return None
 
+    def in_scope(row: SourceRow) -> bool:
+        return cutoff_month <= row.period_month <= limit and group_of(row) is not None
+
+    def measurable(row: SourceRow) -> bool:
+        """Actual cash this version was in a position to have forecast.
+
+        Its own as-of month was already part spent when it was prepared, so it
+        only ever forecast the remainder of that month. Putting that remainder
+        beside the whole month's actuals would report every forecast as wildly
+        under, for the one reason that has nothing to do with how good the
+        forecast was — and the earlier in the month a forecast is taken, the
+        worse it would appear to have been.
+        """
+        if row.period_month != cutoff_month:
+            return True
+        return row.business_date > version.as_of_date
+
     forecast_totals: dict[tuple[date, str], Decimal] = {}
     for row in forecast_rows:
-        group = group_of(row)
-        if group is None or row.basis != BASIS_FORECAST or row.period_month > limit:
+        if not in_scope(row) or row.basis != BASIS_FORECAST:
             continue
-        key = (row.period_month, group)
+        # The same rule the bridge used when this version was the live one, so
+        # what is measured is what the version actually reported at the time.
+        if not counts_as_cash(row, as_of=version.as_of_date):
+            continue
+        key = (row.period_month, str(group_of(row)))
         forecast_totals[key] = money(forecast_totals.get(key, ZERO) + row.amount)
 
     actual_totals: dict[tuple[date, str], Decimal] = {}
     for row in actual_rows:
-        group = group_of(row)
-        if group is None or row.basis != BASIS_ACTUAL or row.period_month > limit:
+        if not in_scope(row) or row.basis != BASIS_ACTUAL or not measurable(row):
             continue
-        if row.source_type in (SOURCE_RESTRICTION, SOURCE_RELEASE):
+        if row.source_type in RESTRICTION_SOURCES:
             continue
-        key = (row.period_month, group)
+        key = (row.period_month, str(group_of(row)))
         actual_totals[key] = money(actual_totals.get(key, ZERO) + row.amount)
 
     return [

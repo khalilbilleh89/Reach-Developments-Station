@@ -72,7 +72,9 @@ def reported_project(
         == 200
     )
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     receipt = record_receipt(

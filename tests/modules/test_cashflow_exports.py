@@ -37,6 +37,7 @@ def project_with_cash(
     cfo_client: TestClient,
     collections_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     collecting_sale: str,
     flat_construction_forecast: str,
 ) -> str:
@@ -49,7 +50,9 @@ def project_with_cash(
     )
     identifier: str = created.json()["id"]
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     receipt = record_receipt(

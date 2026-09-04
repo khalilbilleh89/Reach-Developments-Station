@@ -63,17 +63,28 @@ def governed_forecast(
     finance_client: TestClient,
     cfo_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     flat_construction_forecast: str,
 ) -> str:
+    """A forecast taken last month, so there is something to measure it against.
+
+    Accuracy compares a *prior* forecast to what has happened since. A version
+    taken this morning has no finished month behind it and nothing to be right or
+    wrong about, and a report that answered anyway would be measuring a forecast
+    against the hours since it was written.
+    """
     created = create_cashflow_forecast(
         finance_client,
         project_id,
-        forecast_start_month=month_named(-3),
+        as_of_date=month_named(-1),
+        forecast_start_month=month_named(-1),
         forecast_end_month=month_named(3),
     )
     identifier: str = created.json()["id"]
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     return identifier

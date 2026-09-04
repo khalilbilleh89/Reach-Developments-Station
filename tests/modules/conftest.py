@@ -1297,6 +1297,11 @@ _HISTORICAL_TABLES = frozenset(
         # of time, never a figure.
         "cashflow_development_movements",
         "cashflow_financing_movements",
+        # An escrow is standing at a cutoff only if it and the transfer behind it
+        # were both standing then, and proving that needs a restriction whose
+        # confirmation predates a later reversal of its receipt.
+        "cashflow_receipt_restrictions",
+        "cashflow_restriction_releases",
     }
 )
 
@@ -2223,6 +2228,45 @@ def set_cashflow_line(
     return client.put(f"{cashflow_url(project_id)}/forecasts/{version_id}/lines", json=body)
 
 
+def cover_cashflow_construction(
+    client: TestClient,
+    project_id: str,
+    version_id: str,
+    cost_codes: dict[str, str],
+    *,
+    month: str | None = None,
+) -> None:
+    """Write an explicit zero for every pinned cost code this version is silent on.
+
+    What a preparer has to do before a forecast can be governed, and what the
+    ``construction_schedule_covers_*`` check exists to insist on. A code the
+    forecast says nothing about is not a code expecting nothing — it is a code
+    nobody opened — so the difference has to be written down. Lines the test
+    already wrote are left exactly as they are.
+    """
+    detail = client.get(f"{cashflow_url(project_id)}/forecasts/{version_id}")
+    assert detail.status_code == 200, detail.text
+    already = {
+        line["construction_cost_code_id"]
+        for line in detail.json()["lines"]
+        if line["source_kind"] == "construction"
+    }
+    for cost_code_id in cost_codes.values():
+        if cost_code_id in already:
+            continue
+        response = set_cashflow_line(
+            client,
+            project_id,
+            version_id,
+            period_month=month or month_named(0),
+            source_kind="construction",
+            category="construction",
+            amount="0.00",
+            construction_cost_code_id=cost_code_id,
+        )
+        assert response.status_code == 200, response.text
+
+
 def govern_cashflow_forecast(
     preparer: TestClient,
     approver: TestClient,
@@ -2230,8 +2274,11 @@ def govern_cashflow_forecast(
     version_id: str,
     *,
     activator: TestClient | None = None,
+    cost_codes: dict[str, str] | None = None,
 ) -> Response:
     """Submit, approve and activate one cashflow forecast."""
+    if cost_codes is not None:
+        cover_cashflow_construction(preparer, project_id, version_id, cost_codes)
     base = f"{cashflow_url(project_id)}/forecasts/{version_id}"
     submitted = preparer.post(f"{base}/submit", json={})
     assert submitted.status_code == 200, submitted.text

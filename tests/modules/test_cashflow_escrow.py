@@ -16,10 +16,14 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
+    at,
+    backdate,
     cashflow_monthly,
     cashflow_url,
+    collections_url,
     confirm_receipt,
     create_cashflow_forecast,
     govern_cashflow_forecast,
@@ -42,6 +46,7 @@ def cash_forecast(
     finance_client: TestClient,
     cfo_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     flat_construction_forecast: str,
 ) -> str:
     created = create_cashflow_forecast(
@@ -53,7 +58,9 @@ def cash_forecast(
     assert created.status_code == 201, created.text
     identifier: str = created.json()["id"]
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     return identifier
@@ -88,6 +95,67 @@ def restricted_receipt(
     )
     assert confirmed.status_code == 200, confirmed.text
     return {"receipt": receipt_id, "restriction": restriction_id}
+
+
+@pytest.fixture
+def historical_escrow(
+    db: Session,
+    finance_client: TestClient,
+    second_finance_client: TestClient,
+    cfo_client: TestClient,
+    collections_client: TestClient,
+    project_id: str,
+    cost_codes: dict[str, str],
+    flat_construction_forecast: str,
+    collecting_sale: str,
+) -> dict[str, str]:
+    """100 received and 80 escrowed last month, both confirmed last month.
+
+    The timestamps are moved rather than the figures: confirming stamps ``now``
+    and there is no route that can produce a confirmation in the past, so a test
+    about what a cutoff saw has to arrange the passage of time and then ask
+    through the ordinary API.
+    """
+    past = month_named(-1)
+    created = create_cashflow_forecast(
+        finance_client,
+        project_id,
+        forecast_start_month=month_named(-2),
+        forecast_end_month=month_named(2),
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["id"]
+    assert (
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, version_id, cost_codes=cost_codes
+        ).status_code
+        == 200
+    )
+
+    receipt = record_receipt(
+        collections_client, project_id, collecting_sale, "100.00", receipt_date=past
+    )
+    receipt_id = receipt.json()["id"]
+    assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+    restriction = restrict_receipt(
+        finance_client, project_id, receipt_id, restricted_amount="80.00"
+    )
+    assert restriction.status_code == 201, restriction.text
+    restriction_id = restriction.json()["id"]
+    assert (
+        second_finance_client.post(
+            f"{cashflow_url(project_id)}/restrictions/{restriction_id}/confirm", json={}
+        ).status_code
+        == 200
+    )
+    backdate(db, table="collection_receipts", row_id=receipt_id, confirmed_at=at(past))
+    backdate(
+        db,
+        table="cashflow_receipt_restrictions",
+        row_id=restriction_id,
+        confirmed_at=at(past),
+    )
+    return {"receipt": receipt_id, "restriction": restriction_id, "month": past}
 
 
 class TestARestrictionMovesAvailabilityNotCash:
@@ -258,3 +326,142 @@ class TestReversal:
         assert row["closing_total_cash"] == "100.00"
         assert row["closing_restricted_cash"] == "0.00"
         assert row["closing_unrestricted_cash"] == "100.00"
+
+
+class TestAnEscrowCannotOutliveTheTransferBehindIt:
+    """A restriction is a claim over one receipt, and it lives exactly as long.
+
+    Reversing the receipt withdraws money the project never had. An escrow that
+    survives it holds a share of a balance that no longer exists, and the harm is
+    doubled: the reversal removes the cash from total, and the surviving escrow
+    goes on subtracting its own amount from what is left. A project reporting 20
+    of usable cash after a 100 receipt was withdrawn is reporting minus 80.
+    """
+
+    def test_reversing_the_receipt_takes_the_escrow_with_it(
+        self,
+        finance_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        restricted_receipt: dict[str, str],
+    ) -> None:
+        """100 in, 80 held, receipt withdrawn: every balance returns to nothing."""
+        reversed_receipt = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+            json={"reason": "Bank returned the transfer unpaid"},
+        )
+        assert reversed_receipt.status_code == 200, reversed_receipt.text
+
+        row = month_row(cashflow_monthly(finance_client, project_id), month_named(0))
+        assert row["closing_total_cash"] == "0.00"
+        assert row["closing_restricted_cash"] == "0.00"
+        assert row["closing_unrestricted_cash"] == "0.00"
+        assert row["newly_restricted_customer_cash"] == "0.00"
+
+    def test_a_release_goes_with_it_too(
+        self,
+        finance_client: TestClient,
+        second_finance_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        restricted_receipt: dict[str, str],
+    ) -> None:
+        """A release frees an escrow. With no escrow there is nothing to free."""
+        release = release_restriction(
+            finance_client, project_id, restricted_receipt["restriction"], amount="30.00"
+        )
+        assert release.status_code == 201, release.text
+        release_id = release.json()["releases"][0]["id"]
+        assert (
+            second_finance_client.post(
+                f"{cashflow_url(project_id)}/releases/{release_id}/confirm", json={}
+            ).status_code
+            == 200
+        )
+        reversed_receipt = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+            json={"reason": "Bank returned the transfer unpaid"},
+        )
+        assert reversed_receipt.status_code == 200, reversed_receipt.text
+
+        row = month_row(cashflow_monthly(finance_client, project_id), month_named(0))
+        assert row["escrow_releases"] == "0.00"
+        assert row["closing_restricted_cash"] == "0.00"
+        assert row["closing_unrestricted_cash"] == "0.00"
+
+    def test_the_reconciliation_says_an_escrow_has_lost_its_backing(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        restricted_receipt: dict[str, str],
+    ) -> None:
+        """The reports stop counting it; somebody still has a correction to make."""
+        before = finance_client.get(f"{cashflow_url(project_id)}/reconciliation").json()
+        backing = next(
+            check
+            for check in before["checks"]
+            if check["name"] == "restrictions_backed_by_standing_customer_cash"
+        )
+        assert backing["passed"] is True
+
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{restricted_receipt['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+
+        after = finance_client.get(f"{cashflow_url(project_id)}/reconciliation").json()
+        backing = next(
+            check
+            for check in after["checks"]
+            if check["name"] == "restrictions_backed_by_standing_customer_cash"
+        )
+        assert backing["passed"] is False
+        assert backing["actual"] == "1"
+
+    def test_a_historical_report_keeps_the_escrow_that_stood_then(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        historical_escrow: dict[str, str],
+    ) -> None:
+        """The cutoff asks both questions of the cutoff, not of today.
+
+        A receipt confirmed last month and reversed today **was** cash last
+        month, and the escrow taken over it **was** holding it. Answering either
+        with today's status would rewrite a month somebody signed off — and the
+        two are asked together, because an escrow standing over a receipt that
+        had not yet been confirmed would be just as wrong the other way.
+        """
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{historical_escrow['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+        past = historical_escrow["month"]
+        row = month_row(cashflow_monthly(finance_client, project_id, as_of=past), past)
+        assert row["closing_total_cash"] == "100.00", "the receipt was standing then"
+        assert row["closing_restricted_cash"] == "80.00", "and so was the escrow over it"
+        assert row["closing_unrestricted_cash"] == "20.00"
+
+    def test_todays_report_has_dropped_both(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        historical_escrow: dict[str, str],
+    ) -> None:
+        """History is preserved; the live position is not. Both, from one rule."""
+        assert (
+            finance_client.post(
+                f"{collections_url(project_id)}/receipts/{historical_escrow['receipt']}/reverse",
+                json={"reason": "Bank returned the transfer unpaid"},
+            ).status_code
+            == 200
+        )
+        row = month_row(cashflow_monthly(finance_client, project_id), historical_escrow["month"])
+        assert row["closing_total_cash"] == "0.00"
+        assert row["closing_restricted_cash"] == "0.00"

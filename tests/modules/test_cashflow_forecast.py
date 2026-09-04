@@ -32,10 +32,14 @@ from tests.modules.conftest import (
     cover_construction_forecast,
     create_cashflow_forecast,
     create_forecast,
+    current_version_id,
+    fixed_row,
     govern_cashflow_forecast,
     govern_forecast,
     month_named,
+    plans_url,
     set_cashflow_line,
+    write_schedule,
 )
 
 
@@ -47,7 +51,14 @@ def cover_construction_months(
     *,
     months: tuple[tuple[str, str], ...],
 ) -> None:
-    """Schedule the hard cost code across months, in the shape a test states."""
+    """Schedule the hard cost code across months, in the shape a test states.
+
+    The other three codes are written down as explicit zeros, because that is
+    what a preparer has to do: the pinned construction forecast carries all four,
+    and a code this version says nothing about fails its coverage check. Leaving
+    them out would make every test here fail on the same three codes rather than
+    on the thing it is about.
+    """
     for month, amount in months:
         response = set_cashflow_line(
             client,
@@ -60,12 +71,27 @@ def cover_construction_months(
             construction_cost_code_id=cost_codes_by_category["hard"],
         )
         assert response.status_code == 200, response.text
+    for category, cost_code_id in cost_codes_by_category.items():
+        if category == "hard":
+            continue
+        response = set_cashflow_line(
+            client,
+            project_id,
+            version_id,
+            period_month=months[0][0],
+            source_kind="construction",
+            category="construction",
+            amount="0.00",
+            construction_cost_code_id=cost_code_id,
+        )
+        assert response.status_code == 200, response.text
 
 
 @pytest.fixture
 def draft_forecast(
     finance_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     active_construction_forecast: str,
 ) -> str:
     """A cashflow forecast in draft, pinned to the construction forecast in force."""
@@ -133,7 +159,9 @@ class TestTheConstructionScheduleReconcilesExactly:
             cost_codes,
             months=((month_named(1), "400000.00"), (month_named(2), "600000.00")),
         )
-        activated = govern_cashflow_forecast(finance_client, cfo_client, project_id, draft_forecast)
+        activated = govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, draft_forecast, cost_codes=cost_codes
+        )
         assert activated.status_code == 200, activated.text
         assert activated.json()["status"] == "active"
 
@@ -189,6 +217,145 @@ class TestTheConstructionScheduleReconcilesExactly:
         assert failing, "400,000 scheduled against 1,000,000 remaining must fail"
         assert failing[0]["expected"] == "1000000.00"
         assert failing[0]["actual"] == "400000.00"
+
+
+class TestACodeNobodyOpenedIsNotACodeExpectingNothing:
+    """Coverage and amount are two questions, and only one of them was being asked.
+
+    ``scheduled.get(code, 0)`` reads an absent cost code as a schedule of zero.
+    Against a code with nothing left to spend it agrees exactly, so the check
+    passes — on the one code the preparer never opened. A build with a fully
+    certified trade and a fully *forgotten* trade produced identical, green
+    reconciliations.
+
+    The fix is not a stricter amount check. It is a second question: does this
+    forecast say anything at all about this code? An explicit zero answers it.
+    """
+
+    @pytest.fixture
+    def settled_build(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_budget: str,
+    ) -> str:
+        """A construction forecast in force with nothing left on any code."""
+        version_id = create_forecast(finance_client, project_id).json()["id"]
+        cover_construction_forecast(finance_client, project_id, version_id, cost_codes, hard="0.00")
+        governed = govern_forecast(finance_client, cfo_client, project_id, version_id)
+        assert governed.status_code == 200, governed.text
+        return version_id
+
+    @pytest.fixture
+    def settled_cash_forecast(
+        self, finance_client: TestClient, project_id: str, settled_build: str
+    ) -> str:
+        created = create_cashflow_forecast(finance_client, project_id)
+        assert created.status_code == 201, created.text
+        identifier: str = created.json()["id"]
+        return identifier
+
+    def test_a_code_with_nothing_left_still_has_to_be_written_down(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        settled_cash_forecast: str,
+    ) -> None:
+        """Nothing scheduled, nothing remaining, and it is still not covered.
+
+        This is the case the old arithmetic could not see: every amount agrees at
+        0.00 and every code is missing. It passed.
+        """
+        checks = finance_client.get(
+            f"{cashflow_url(project_id)}/forecasts/{settled_cash_forecast}"
+        ).json()["construction_reconciliation"]
+        coverage = [
+            check for check in checks if check["name"].startswith("construction_schedule_covers_")
+        ]
+        assert len(coverage) == 4, "every pinned cost code is asked about"
+        assert all(check["passed"] is False for check in coverage)
+        amounts = [
+            check
+            for check in checks
+            if check["name"].startswith("construction_schedule_")
+            and not check["name"].startswith("construction_schedule_covers_")
+        ]
+        assert all(check["passed"] is True for check in amounts), (
+            "the amounts agree at zero, which is exactly why coverage is a separate question"
+        )
+
+    def test_a_forecast_of_a_settled_build_cannot_be_governed_until_it_says_so(
+        self, finance_client: TestClient, project_id: str, settled_cash_forecast: str
+    ) -> None:
+        refused = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{settled_cash_forecast}/submit", json={}
+        )
+        assert refused.status_code == 409, refused.text
+        assert "no line for it at all" in refused.json()["detail"]
+
+    def test_writing_the_zero_down_is_a_valid_schedule(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        settled_cash_forecast: str,
+    ) -> None:
+        """The distinction is a decision recorded, not an amount above zero."""
+        for cost_code_id in cost_codes.values():
+            assert (
+                set_cashflow_line(
+                    finance_client,
+                    project_id,
+                    settled_cash_forecast,
+                    period_month=month_named(0),
+                    source_kind="construction",
+                    category="construction",
+                    amount="0.00",
+                    construction_cost_code_id=cost_code_id,
+                ).status_code
+                == 200
+            )
+        activated = govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, settled_cash_forecast
+        )
+        assert activated.status_code == 200, activated.text
+
+    def test_a_code_with_cost_left_and_no_line_fails_both_questions(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Coverage and amount are independent, and a missing code fails both."""
+        assert (
+            set_cashflow_line(
+                finance_client,
+                project_id,
+                draft_forecast,
+                period_month=month_named(1),
+                source_kind="construction",
+                category="construction",
+                amount="1000000.00",
+                construction_cost_code_id=cost_codes["hard"],
+            ).status_code
+            == 200
+        )
+        checks = {
+            check["name"]: check
+            for check in finance_client.get(
+                f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+            ).json()["construction_reconciliation"]
+        }
+        assert checks["construction_schedule_covers_HRD-01"]["passed"] is True
+        assert checks["construction_schedule_HRD-01"]["passed"] is True
+        assert checks["construction_schedule_covers_SFT-01"]["passed"] is False
+        assert checks["construction_schedule_SFT-01"]["passed"] is True, (
+            "soft cost has nothing left to spend, so the amount agrees while the code is absent"
+        )
 
 
 class TestASourceThatMovesMakesItStale:
@@ -262,7 +429,7 @@ class TestASourceThatMovesMakesItStale:
         )
         assert (
             govern_cashflow_forecast(
-                finance_client, cfo_client, project_id, draft_forecast
+                finance_client, cfo_client, project_id, draft_forecast, cost_codes=cost_codes
             ).status_code
             == 200
         )
@@ -325,7 +492,7 @@ class TestGovernance:
         )
         assert (
             govern_cashflow_forecast(
-                finance_client, cfo_client, project_id, draft_forecast
+                finance_client, cfo_client, project_id, draft_forecast, cost_codes=cost_codes
             ).status_code
             == 200
         )
@@ -341,7 +508,9 @@ class TestGovernance:
             months=((month_named(2), "1000000.00"),),
         )
         assert (
-            govern_cashflow_forecast(finance_client, cfo_client, project_id, second_id).status_code
+            govern_cashflow_forecast(
+                finance_client, cfo_client, project_id, second_id, cost_codes=cost_codes
+            ).status_code
             == 200
         )
 
@@ -366,7 +535,9 @@ class TestGovernance:
             cost_codes,
             months=((month_named(1), "1000000.00"),),
         )
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, draft_forecast)
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, draft_forecast, cost_codes=cost_codes
+        )
         refused = set_cashflow_line(
             finance_client,
             project_id,
@@ -481,3 +652,191 @@ class TestForecastLines:
         )
         assert refused.status_code == 422, refused.text
         assert "cost code" in refused.json()["detail"]
+
+
+UNDATED_SCHEDULE = [
+    fixed_row(1, "0.500000", month_named(1)),
+    {
+        "sequence": 2,
+        "label": "On structural completion",
+        "trigger_type": "construction_milestone",
+        "trigger_reference": "SLAB-L3",
+        "principal_fraction": "0.500000",
+    },
+]
+
+
+def govern_plan_version(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    plan_id: str,
+    version_id: str,
+) -> None:
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Terms reviewed"}).status_code == 200
+    assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+
+
+class TestBuyerCashWithNoTimingBlocksGovernance:
+    """An instalment nobody can place in a month is not an instalment worth nothing.
+
+    The snapshot cannot invent a month for it — putting money in a period on no
+    evidence is worse than leaving it out — so it is left out, and the version is
+    quietly short of contractually owed cash. Every figure taken from it then
+    understates what the project is owed and overstates what it needs to raise,
+    and the report gives no sign: the months add up, the bridge balances and the
+    arithmetic is impeccable.
+
+    So the count is a gate, not a note. An explicit dated zero is a decision;
+    missing timing is an omission, and the difference is the whole rule.
+    """
+
+    @pytest.fixture
+    def undated_plan(
+        self,
+        collections_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        active_sale: str,
+        plan_id: str,
+    ) -> str:
+        """A governing schedule half of which waits on a milestone nobody has dated."""
+        version_id = current_version_id(collections_client, project_id, plan_id)
+        written = write_schedule(
+            collections_client, project_id, plan_id, version_id, UNDATED_SCHEDULE
+        )
+        assert written.status_code == 200, written.text
+        govern_plan_version(collections_client, cfo_client, project_id, plan_id, version_id)
+        return version_id
+
+    @pytest.fixture
+    def restructured_under_a_governed_forecast(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_plan: tuple[str, str],
+        draft_forecast: str,
+    ) -> str:
+        """A forecast put in force on a placeable schedule, then the schedule moved.
+
+        The ordinary case rather than a contrived one: a buyer renegotiates terms
+        after Finance has signed a forecast off, and the new terms hang an
+        instalment on a milestone nobody has forecast a date for yet.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        assert (
+            govern_cashflow_forecast(
+                finance_client, cfo_client, project_id, draft_forecast, cost_codes=cost_codes
+            ).status_code
+            == 200
+        )
+        plan_id, _ = active_plan
+        revised = collections_client.post(
+            f"{plans_url(project_id)}/{plan_id}/versions",
+            json={"change_reason": "Milestone terms agreed with the buyer"},
+        )
+        assert revised.status_code == 201, revised.text
+        revised_id: str = revised.json()["version"]["id"]
+        written = write_schedule(
+            collections_client, project_id, plan_id, revised_id, UNDATED_SCHEDULE
+        )
+        assert written.status_code == 200, written.text
+        govern_plan_version(collections_client, cfo_client, project_id, plan_id, revised_id)
+        return draft_forecast
+
+    def test_the_reconciliation_says_the_snapshot_is_incomplete(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        restructured_under_a_governed_forecast: str,
+    ) -> None:
+        """Counted and named, not dropped quietly into a total that looks right."""
+        checks = finance_client.get(f"{cashflow_url(project_id)}/reconciliation").json()["checks"]
+        completeness = next(
+            check for check in checks if check["name"] == "customer_schedule_snapshot_complete"
+        )
+        assert completeness["passed"] is False
+        assert completeness["actual"] == "1"
+
+    def test_submission_is_refused_and_says_which_instalment(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        undated_plan: str,
+        draft_forecast: str,
+    ) -> None:
+        """A count alone tells a preparer something is wrong and not where to go."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        refused = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/submit", json={}
+        )
+        assert refused.status_code == 409, refused.text
+        detail = refused.json()["detail"]
+        assert "1 governing buyer instalment" in detail
+        assert "On structural completion" in detail
+
+    def test_activation_re_proves_it_after_the_schedule_moved(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_plan: tuple[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """A plan restructured while a forecast waits for a signature is the ordinary case.
+
+        Approval is not a promise that the sources will hold still. Checking only
+        at submission would put a forecast in force against a schedule it was
+        never measured on — and the refresh that clears the staleness refusal
+        would carry the omission in with it.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+
+        plan_id, _ = active_plan
+        revised = collections_client.post(
+            f"{plans_url(project_id)}/{plan_id}/versions",
+            json={"change_reason": "Milestone terms agreed with the buyer"},
+        )
+        assert revised.status_code == 201, revised.text
+        revised_id = revised.json()["version"]["id"]
+        written = write_schedule(
+            collections_client, project_id, plan_id, revised_id, UNDATED_SCHEDULE
+        )
+        assert written.status_code == 200, written.text
+        govern_plan_version(collections_client, cfo_client, project_id, plan_id, revised_id)
+
+        refreshed = finance_client.post(f"{base}/refresh-customer-snapshot", json={})
+        assert refreshed.status_code == 200, refreshed.text
+
+        refused = finance_client.post(f"{base}/activate", json={})
+        assert refused.status_code == 409, refused.text
+        assert "no date of any kind" in refused.json()["detail"]

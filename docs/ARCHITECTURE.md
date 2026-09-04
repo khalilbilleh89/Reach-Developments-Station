@@ -999,11 +999,63 @@ silently rebased: substituting a newer source under an approver changes what the
 are approving, and the newer source being more accurate does not make the
 substitution honest.
 
-**The construction schedule reconciles exactly.** Construction says how much is
-left on each cost code; cashflow says when. If the months do not total the
-remaining cost, the two documents disagree about the project and a tolerance
-would be a decision to stop noticing by how much. An explicit zero is a
-statement; a missing cost code is not.
+**The construction schedule reconciles exactly, and coverage is asked
+separately.** Construction says how much is left on each cost code; cashflow says
+when. If the months do not total the remaining cost, the two documents disagree
+about the project and a tolerance would be a decision to stop noticing by how
+much. Whether a code appears at all is a *different* question from whether its
+months add up, and it has to be asked on its own: reading an absent code as a
+schedule of zero agrees exactly with a code that has nothing left to spend, so a
+build with one fully certified trade and one entirely forgotten trade reconciles
+green either way. An explicit zero is a preparer's decision; a missing cost code
+is nobody's.
+
+**Buyer cash that cannot be placed in a month blocks governance.** An instalment
+with no contractual, forecast or actual date is not an instalment worth nothing —
+the money is contractually owed and the snapshot simply has no month to put it
+in. Inventing one would place cash on no evidence, so it is left out and the
+version is silently short of it. That gap is a refusal at submission and again at
+activation, naming the instalments, rather than a note somebody may read.
+
+**A month is one of three things, never one of two.** A closed month is settled
+history and reports its actuals. A future month is expectation and reports its
+forecast. The month a report is taken in is *both* — cash that has moved, plus
+what is still expected before it ends — and it says so, as
+`basis = actual_and_forecast`. Reporting it as actual-only produces a real number
+made of real transactions that omits every payment still due, so a project read
+on the third of the month shows a funding cliff that disappears on the fourth.
+One rule decides which rows belong: a dated forecast row answers on its own date,
+a month-grained forecast line for the current month is the remainder of that
+month, and the same rule serves the bridge, the funding windows, the drill-down,
+the NPV and the equity IRR. Returns does not get a second interpretation — a
+project whose bridge and whose IRR disagree about what is actual has two answers
+and no way to tell which one a decision was taken on.
+
+**An opening balance is a statement about one moment, and the series begins
+there.** The transactions of the months before it are not additional to it; they
+are what produced it. Running the bridge backwards from a governed opening
+balance replays them through a figure that already contains them, and the error
+grows with how much history a project has — so the oldest and most valuable
+projects would report the worst numbers. A request for a month before the anchor
+is refused with the anchor named; the pre-opening transactions stay in the
+drill-down and in the modules that own them.
+
+**A funding requirement starts from the money in the bank and reads the worst
+point, not the last one.** Each 30/60/90-day window opens on the *unrestricted*
+cash actually held at the cutoff, projects movements through the literal date
+window a day at a time, and reports the deepest trough inside it. Netting
+expected inflows against expected outflows without the opening balance tells a
+project sitting on ten million that it must raise five; reading the closing
+position instead of the trough tells a company that a payment on day ten funded
+by a receipt on day twenty is affordable.
+
+**An escrow cannot outlive the transfer behind it.** A restriction is a claim
+over one receipt and stands exactly as long as that receipt does. Left standing
+over a reversed receipt it subtracts its own amount from a balance that no longer
+exists, and the harm doubles: the reversal removes the cash, and the escrow goes
+on holding a share of what is left. Both are asked of the same cutoff — a receipt
+confirmed in August and reversed in September *was* cash in August, and the
+escrow over it *was* holding it.
 
 **Return states its basis.** Project NPV discounts operating and development
 cash and excludes every financing flow, because equity is how a project was

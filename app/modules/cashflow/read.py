@@ -17,7 +17,6 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 
@@ -311,7 +310,7 @@ def report_basis(
 def position_out(position: service.MonthlyPosition) -> schemas.MonthlyPositionOut:
     return schemas.MonthlyPositionOut(
         period_month=position.period_month,
-        basis="actual" if position.is_actual else "forecast",
+        basis=service.month_basis(position.period_state),
         opening_total_cash=position.opening_total_cash,
         customer_scheduled_due=position.customer_scheduled_due,
         customer_actual_receipts=position.customer_actual_receipts,
@@ -451,17 +450,15 @@ def drilldown_out(
     copy written for reporting, which would be one more thing to keep in step.
     """
     version = service.active_forecast(session, project_id=project.id)
-    rows = service.collect_source_rows(
-        session,
-        project=project,
-        version=version,
-        as_of=as_of,
-        first_forecast_month=service.next_month(service.month_of(as_of)),
-    )
+    rows = service.collect_source_rows(session, project=project, version=version, as_of=as_of)
+    # A drill-down that does not add up to the figure it opened from is worse
+    # than no drill-down, so it shows exactly the rows the bridge counted — plus
+    # the contractual schedule, which is a memo series and is labelled one.
     filtered = [
         row
         for row in rows
-        if (period_month is None or row.period_month == service.month_of(period_month))
+        if (row.basis == service.BASIS_SCHEDULED or service.counts_as_cash(row, as_of=as_of))
+        and (period_month is None or row.period_month == service.month_of(period_month))
         and (category is None or row.category == category)
         and (basis is None or row.basis == basis)
         and (source_type is None or row.source_type == source_type)
@@ -505,17 +502,6 @@ def drilldown_csv(drilldown: schemas.DrilldownOut) -> str:
     return buffer.getvalue()
 
 
-def _current_position(
-    positions: Sequence[service.MonthlyPosition], *, as_of: date
-) -> service.MonthlyPosition | None:
-    """The month the as-of date falls in, which is where "now" is stated."""
-    target = service.month_of(as_of)
-    for position in positions:
-        if position.period_month == target:
-            return position
-    return None
-
-
 def summary_out(session: Session, *, project: Project, as_of: date) -> schemas.SummaryOut:
     """The command surface: where cash stands, when it runs short, what it earns.
 
@@ -526,24 +512,36 @@ def summary_out(session: Session, *, project: Project, as_of: date) -> schemas.S
     """
     version = service.active_forecast(session, project_id=project.id)
     positions = service.monthly_positions(session, project=project, version=version, as_of=as_of)
-    current = _current_position(positions, as_of=as_of)
-    future = [position for position in positions if not position.is_actual]
+    rows = service.collect_source_rows(session, project=project, version=version, as_of=as_of)
 
-    coverage_numerator = calculator.total(position.usable_inflows for position in future)
-    coverage_denominator = calculator.total(position.total_outflows for position in future)
+    # What is in the bank, not where this month will end. The month the report
+    # is taken in closes on a blended figure — cash that moved plus cash still
+    # expected — and reporting that as the position would tell a developer they
+    # can pay a contractor with money that has not arrived.
+    held = service.actual_cash_position(rows, version=version, as_of=as_of)
+
+    # Coverage is a forward question, so it is asked of forward cash only. The
+    # current month contributes the part of itself that has not happened yet.
+    ahead = [position for position in positions if position.period_state != service.PERIOD_CLOSED]
+    coverage_numerator = calculator.total(
+        money(position.customer_forecast_receipts + position.financing_forecast_inflows)
+        for position in ahead
+    )
+    coverage_denominator = calculator.total(
+        money(
+            position.construction_forecast_payments
+            + position.development_forecast_outflows
+            + position.financing_forecast_outflows
+        )
+        for position in ahead
+    )
     peak = calculator.peak_deficit(
         [(position.period_month, position.closing_unrestricted_cash) for position in positions]
-    )
-    rows = service.collect_source_rows(
-        session,
-        project=project,
-        version=version,
-        as_of=as_of,
-        first_forecast_month=service.next_month(service.month_of(as_of)),
     )
     returns = service.return_position(
         positions,
         rows,
+        as_of=as_of,
         discount_rate_per_period=version.discount_rate_per_period if version else ZERO,
     )
 
@@ -557,9 +555,9 @@ def summary_out(session: Session, *, project: Project, as_of: date) -> schemas.S
             to_month=positions[-1].period_month if positions else None,
         ),
         position=schemas.CashPositionOut(
-            total_cash=current.closing_total_cash if current else ZERO,
-            restricted_cash=current.closing_restricted_cash if current else ZERO,
-            unrestricted_cash=current.closing_unrestricted_cash if current else ZERO,
+            total_cash=held.total_cash,
+            restricted_cash=held.restricted_cash,
+            unrestricted_cash=held.unrestricted_cash,
             forecast_collection_coverage=calculator.forecast_collection_coverage(
                 usable_customer_inflows=coverage_numerator,
                 project_outflows=coverage_denominator,
@@ -577,13 +575,16 @@ def summary_out(session: Session, *, project: Project, as_of: date) -> schemas.S
                 days=window.days,
                 from_date=window.from_date,
                 to_date=window.to_date,
+                opening_unrestricted_cash=window.opening_unrestricted_cash,
                 usable_inflows=window.usable_inflows,
                 outflows=window.outflows,
-                net=window.net,
+                net_movement=window.net_movement,
+                minimum_projected_unrestricted_cash=(window.minimum_projected_unrestricted_cash),
+                closing_projected_unrestricted_cash=(window.closing_projected_unrestricted_cash),
                 funding_requirement=window.funding_requirement,
             )
             for window in service.funding_windows(
-                session, project=project, version=version, as_of=as_of
+                session, project=project, version=version, as_of=as_of, rows=rows
             )
         ],
         returns=schemas.ReturnOut(

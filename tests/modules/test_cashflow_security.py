@@ -30,6 +30,7 @@ from tests.factories import client_for, make_user
 from tests.modules.conftest import (
     PROJECTS,
     cashflow_url,
+    cover_cashflow_construction,
     create_cashflow_forecast,
     grant_access,
     project_payload,
@@ -157,12 +158,14 @@ class TestWhoDoesWhat:
         self,
         manager_member_client: TestClient,
         project_id: str,
+        cost_codes: dict[str, str],
         flat_construction_forecast: str,
     ) -> None:
         """The monthly shape of build spend is a delivery judgement first."""
         created = create_cashflow_forecast(manager_member_client, project_id)
         assert created.status_code == 201, created.text
         version_id = created.json()["id"]
+        cover_cashflow_construction(manager_member_client, project_id, version_id, cost_codes)
         submitted = manager_member_client.post(
             f"{cashflow_url(project_id)}/forecasts/{version_id}/submit", json={}
         )

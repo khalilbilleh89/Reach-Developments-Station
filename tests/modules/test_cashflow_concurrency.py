@@ -43,6 +43,7 @@ from app.modules.projects.models import Project
 from tests.modules.conftest import (
     cashflow_url,
     confirm_receipt,
+    cover_cashflow_construction,
     create_cashflow_forecast,
     month_named,
     record_development,
@@ -128,6 +129,7 @@ def cash_forecast(
     finance_client: TestClient,
     cfo_client: TestClient,
     project_id: str,
+    cost_codes: dict[str, str],
     flat_construction_forecast: str,
 ) -> str:
     from tests.modules.conftest import govern_cashflow_forecast
@@ -141,7 +143,9 @@ def cash_forecast(
     assert created.status_code == 201, created.text
     identifier: str = created.json()["id"]
     assert (
-        govern_cashflow_forecast(finance_client, cfo_client, project_id, identifier).status_code
+        govern_cashflow_forecast(
+            finance_client, cfo_client, project_id, identifier, cost_codes=cost_codes
+        ).status_code
         == 200
     )
     return identifier
@@ -338,6 +342,7 @@ class TestOneActiveForecast:
         cfo_client: TestClient,
         db: Session,
         project_id: str,
+        cost_codes: dict[str, str],
         flat_construction_forecast: str,
         finance: User,
         cfo: User,
@@ -354,6 +359,7 @@ class TestOneActiveForecast:
             forecast_start_month=month_named(0),
             forecast_end_month=month_named(2),
         ).json()["id"]
+        cover_cashflow_construction(finance_client, project_id, first_id, cost_codes)
         base = f"{cashflow_url(project_id)}/forecasts/{first_id}"
         assert finance_client.post(f"{base}/submit", json={}).status_code == 200
         assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
