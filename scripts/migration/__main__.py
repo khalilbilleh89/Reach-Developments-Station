@@ -1,6 +1,6 @@
 """The cutover's one operational surface.
 
-    python -m scripts.migration preflight --bundle ./work --manifest ./work/manifest.json
+    python -m scripts.migration preflight --bundle ./work --manifest ./work/manifest.json --target
 
 One entry point, and the safety property is the shape rather than a flag: an
 action declares whether it may change the system being migrated into, and
@@ -19,10 +19,18 @@ allowed to look like it covers both.
 ``--json`` prints one machine-readable object on stdout and nothing else, so the
 runbook can pipe it. Without it the same result is written for a person.
 
+``--target`` runs the checks that need the system being migrated into. It is
+opt-in because preparing a bundle offline is a real thing to do and hashing a
+directory should not require a production connection. What it is *not* is a way
+to get a green light cheaply: without it the result is ``INCOMPLETE`` rather
+than ``PASS``, and ``INCOMPLETE`` exits non-zero like any other reason a batch
+may not proceed. A source-only preflight has not established that a batch is
+safe; it has established half of it, and says so.
+
 Exit codes are the operational contract:
 
-    0   the action passed
-    1   a blocking failure — the batch may not proceed
+    0   the action passed — every check, both halves
+    1   the batch may not proceed: a blocking failure, or checks not run
     2   the command was wrong (argparse)
     3   the run happened but could not be filed — nothing was recorded
 
@@ -85,10 +93,14 @@ def _path(argument: str) -> Path:
 def preflight(args: argparse.Namespace) -> dict[str, Any]:
     """Read-only: is this batch safe to take further?
 
-    Source-side today — the manifest parses, every declared name is a canonical
-    intake name, and every file is present with the hash it was sealed with. The
-    target-side checks land with batch identity, because "has this batch already
-    been applied?" is a question only the audit trail can answer.
+    The source half always runs: the manifest parses, every declared name is a
+    canonical intake name, every file is present with the hash it was sealed
+    with. The target half runs on ``--target`` and asks what only the system
+    being migrated into can answer — the schema this code expects, the project,
+    the declared currencies, and whether this batch already landed.
+
+    Both halves read. Neither takes a lock: an operator asking whether last
+    night's batch landed must not be able to change anything by asking.
     """
     bundle = _path(args.bundle)
     manifest_path = _path(args.manifest)
@@ -130,16 +142,37 @@ def preflight(args: argparse.Namespace) -> dict[str, Any]:
             except ManifestError as error:
                 record("source_unchanged", False, str(error))
 
+    target_checked = bool(args.target) and manifest is not None
+    if target_checked:
+        # Imported here so the source-only path needs neither the application
+        # nor a configured database: an operator sealing a bundle on a laptop is
+        # doing something legitimate and should not need production to do it.
+        from scripts.migration import target as target_side
+
+        assert manifest is not None
+        checks.extend(target_side.inspect(manifest))
+
     blocking = [check for check in checks if check["result"] == "FAIL"]
+    if blocking:
+        result = "FAIL"
+    elif not target_checked:
+        # Every check that ran, passed — and half of them did not run. Saying
+        # PASS here would let a runbook proceed on a preflight that never looked
+        # at the target, which is the whole failure this word exists to prevent.
+        result = "INCOMPLETE"
+    else:
+        result = "PASS"
+
     return {
         "action": "preflight",
         "batch_id": str(manifest.batch_id) if manifest else None,
         "project_code": manifest.project_code if manifest else None,
         "cutover_date": manifest.cutover_date.isoformat() if manifest else None,
         "contract_version": manifest.contract_version if manifest else None,
+        "target_checked": target_checked,
         "checks": checks,
         "blocking": len(blocking),
-        "result": "PASS" if not blocking else "FAIL",
+        "result": result,
     }
 
 
@@ -228,6 +261,15 @@ def build_parser() -> argparse.ArgumentParser:
         child.add_argument(
             "--out",
             help="Directory to file evidence under, as <out>/<batch id>/<action>.json.",
+        )
+        # Opt-in because hashing a bundle offline should not need a production
+        # connection — never because a source-only run is enough. Without it the
+        # result is INCOMPLETE, which exits non-zero like any other reason a
+        # batch may not proceed.
+        child.add_argument(
+            "--target",
+            action="store_true",
+            help="Also run the checks that need the system being migrated into.",
         )
         child.set_defaults(_action=action)
     return parser
