@@ -435,8 +435,11 @@ def spare_currency(admin_client: TestClient) -> str:
 
 
 #: The first write of each kind that makes a project's jurisdiction permanent,
-#: and the table it lands in. Every one validates a code against the project's
-#: country pack, so every one has to be decided against the locked project.
+#: and the table it lands in. Every one is decided against the locked project:
+#: a permit or document validates a code against the country pack, and a parcel
+#: takes its area unit from it. PR-V2-01 made a parcel's ownership, title and
+#: zoning free text, which removed one reason for that lock and none of the
+#: others — the jurisdiction still reaches the row.
 _FIRST_CHILD_WRITES = {
     "parcel": (
         lambda session, project, admin: service.create_parcel(
@@ -446,7 +449,7 @@ _FIRST_CHILD_WRITES = {
             correlation_id=uuid.uuid4(),
             plot_number="PLOT-1",
             land_area=Decimal("4500.0000"),
-            ownership_type_code="FREEHOLD",
+            ownership_type="Freehold",
         ),
         LandParcel,
     ),

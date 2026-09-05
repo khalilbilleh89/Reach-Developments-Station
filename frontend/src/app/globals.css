@@ -317,6 +317,14 @@ textarea {
   gap: var(--content-gap);
 }
 
+/* A vertical stack never squashes what it holds; the surface it sits in
+   scrolls instead. Without this, a child whose overflow is not `visible` — an
+   attention card, say — has an automatic minimum size of zero, and inside a
+   scrolling drawer the flex algorithm compresses it to its own borders. */
+.stack > * {
+  flex-shrink: 0;
+}
+
 .stack-tight {
   gap: var(--space-3);
 }
@@ -2375,19 +2383,31 @@ input[type="file"].input {
   white-space: nowrap;
 }
 
-.cell-prose,
-.cell-prose .cell-secondary {
-  white-space: normal;
-}
 
 .cell-secondary .badge,
 .cell-secondary .status-dot {
   margin-top: 0.15rem;
 }
 
-.cell-prose {
+/* A cell of words rather than a figure. Qualified by `.table td` so it beats
+   the register's own `white-space: nowrap`; a bare `.cell-prose` loses that
+   cascade and the text runs across its neighbours instead of wrapping. */
+.table td.cell-prose,
+.table td.cell-prose .cell-secondary {
+  white-space: normal;
+}
+
+.table td.cell-prose {
   min-width: 14rem;
   max-width: 28rem;
+}
+
+/* A prose column a register carries several of: an operator-typed
+   classification, not a paragraph. Bounded tighter so three of them side by
+   side still leave the figures on screen. */
+.table td.cell-prose-tight {
+  min-width: 9rem;
+  max-width: 15rem;
 }
 
 .row-actions {

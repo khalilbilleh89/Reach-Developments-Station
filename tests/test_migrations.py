@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0011_cashflow_reporting"
+HEAD_REVISION = "0012_land_classification_text"
 
 #: The revision that shipped ``unit_economics_cost_pools`` wide enough to hold
 #: ``construction_forecast`` while its CHECK still listed two sources, and the
@@ -36,6 +36,63 @@ HEAD_REVISION = "0011_cashflow_reporting"
 #: one leaves behind, not merely that the history runs.
 CONSTRUCTION_REVISION = "0009_construction"
 SOURCE_KIND_REVISION = "0010_construction_source_kind"
+
+#: The revision that turns a parcel's ownership, title status and zoning from
+#: country-pack codes into the wording on the record, and the one a deployed
+#: database stands at before it runs.
+CASHFLOW_REVISION = "0011_cashflow_reporting"
+LAND_TEXT_REVISION = "0012_land_classification_text"
+
+#: One project, one country pack, one reference value per land category, and a
+#: parcel carrying all three codes — the state a deployed database is in when
+#: 0012 reaches it. Written as SQL rather than through the API because the
+#: application no longer has columns to put these codes in: the whole question
+#: is whether the *migration* carries them across.
+_A_PARCEL_CLASSIFIED_BY_CODE = """
+    WITH currency AS (
+      INSERT INTO currencies (id, code, name, minor_units, is_active)
+      VALUES (gen_random_uuid(), 'JOD', 'Jordanian dinar', 2, true)
+      RETURNING id
+    ), pack AS (
+      INSERT INTO country_packs (id, country_code, name, locale, timezone,
+                                 default_currency_id, area_unit,
+                                 fiscal_year_start_month, is_active)
+      SELECT gen_random_uuid(), 'JO', 'Jordan', 'en-JO', 'Asia/Amman',
+             currency.id, 'sqm', 1, true
+      FROM currency
+      RETURNING id
+    ), actor AS (
+      INSERT INTO users (id, email, email_normalized, display_name, password_hash,
+                         is_active, must_change_password)
+      VALUES (gen_random_uuid(), 'migration@example.com', 'migration@example.com',
+              'Migration', 'x', true, false)
+      RETURNING id
+    ), configured AS (
+      INSERT INTO reference_values (id, country_pack_id, category, code, label,
+                                    sort_order, is_active)
+      SELECT gen_random_uuid(), pack.id, category, code, label, 0, true
+      FROM pack, (VALUES
+        ('ownership_type', 'FREEHOLD', 'Freehold'),
+        ('title_status', 'REGISTERED', 'Registered')
+      ) AS v(category, code, label)
+      RETURNING id
+    ), project AS (
+      INSERT INTO projects (id, code, name, developer_entity, country_pack_id,
+                            base_currency_id, reporting_currency_id, status,
+                            fiscal_year_start_month, created_by_user_id)
+      SELECT gen_random_uuid(), 'MIG-01', 'Migration', 'Reach', pack.id,
+             currency.id, currency.id, 'predevelopment', 1, actor.id
+      FROM pack, currency, actor
+      RETURNING id
+    )
+    INSERT INTO land_parcels (id, project_id, plot_number, land_area, area_unit,
+                              ownership_type_code, title_status_code, zoning_class_code,
+                              is_active)
+    SELECT gen_random_uuid(), project.id, 'PLOT-MIG', 4500, 'sqm',
+           'FREEHOLD', 'REGISTERED', 'UNCONFIGURED_ZONE', true
+    FROM project, configured
+    LIMIT 1
+"""
 
 #: The CHECK under test, and the row that distinguishes the two enumerations.
 SOURCE_CONSTRAINT = "ck_unit_economics_cost_pools_source_ok"
@@ -268,6 +325,173 @@ def at_construction_revision(postgres: None) -> Iterator[None]:
     command.upgrade(config, CONSTRUCTION_REVISION)
     yield
     command.upgrade(config, "head")
+
+
+@pytest.fixture
+def at_cashflow_revision(postgres: None) -> Iterator[None]:
+    """A database standing where one deployed before PR-V2-01 stands.
+
+    Stops at 0011 so the land parcel below can still be written with the code
+    columns 0012 removes, then restores head so the rest of the suite keeps its
+    schema.
+    """
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, CASHFLOW_REVISION)
+    yield
+    command.upgrade(config, "head")
+
+
+def _seed_a_parcel_classified_by_code() -> None:
+    with get_engine().begin() as connection:
+        connection.execute(text(_A_PARCEL_CLASSIFIED_BY_CODE))
+
+
+def _parcel_classification() -> tuple[str | None, str | None, str | None]:
+    with get_engine().connect() as connection:
+        return connection.execute(
+            text(
+                "SELECT ownership_type, title_status, zoning FROM land_parcels "
+                "WHERE plot_number = 'PLOT-MIG'"
+            )
+        ).one()
+
+
+def _parcel_codes() -> tuple[str | None, str | None, str | None]:
+    with get_engine().connect() as connection:
+        return connection.execute(
+            text(
+                "SELECT ownership_type_code, title_status_code, zoning_class_code "
+                "FROM land_parcels WHERE plot_number = 'PLOT-MIG'"
+            )
+        ).one()
+
+
+class TestLandClassificationSurvivesBecomingText:
+    """0012 carries every stored classification across, or does not run.
+
+    The migration is the only place this data exists during the change: the
+    application before it has three code columns and the application after it
+    has three text columns, so a value dropped here is a value nobody notices
+    until somebody opens a parcel and finds its title status blank. Each test
+    below stands a database at 0011 with real data and then runs the revision
+    the way a deployment would.
+    """
+
+    def test_a_configured_code_becomes_the_label_that_was_on_screen(
+        self, at_cashflow_revision: None
+    ) -> None:
+        """Given codes with reference values, then the text is their label.
+
+        ``FREEHOLD`` was never what an operator read — the register resolved it
+        to "Freehold" and printed that. Storing the label keeps the screen
+        identical across the migration, which is the only outcome that needs no
+        explaining to the person who opens the parcel afterwards.
+        """
+        _seed_a_parcel_classified_by_code()
+
+        command.upgrade(_alembic_config(), LAND_TEXT_REVISION)
+
+        ownership, title, _zoning = _parcel_classification()
+        assert ownership == "Freehold"
+        assert title == "Registered"
+
+    def test_a_code_with_no_configured_value_is_kept_verbatim(
+        self, at_cashflow_revision: None
+    ) -> None:
+        """Given a code nothing configures, then the code itself is the text.
+
+        The parcel is seeded with a zoning code that has no reference row —
+        exactly what a retired or hand-inserted value looks like. There is no
+        label to resolve and no honest way to invent one, so the raw code
+        survives. ``UNCONFIGURED_ZONE`` is a poor description and an infinitely
+        better one than a guess or a null.
+        """
+        _seed_a_parcel_classified_by_code()
+
+        command.upgrade(_alembic_config(), LAND_TEXT_REVISION)
+
+        _ownership, _title, zoning = _parcel_classification()
+        assert zoning == "UNCONFIGURED_ZONE"
+
+    def test_the_old_columns_are_gone_rather_than_left_beside_the_new_ones(
+        self, at_cashflow_revision: None
+    ) -> None:
+        """Given the revision ran, then no ``_code`` column remains.
+
+        Two editable truths per classification is the failure this PR exists to
+        avoid. Leaving the old columns behind "for safety" is how a reader ends
+        up asking which one the register believes.
+        """
+        command.upgrade(_alembic_config(), LAND_TEXT_REVISION)
+
+        with get_engine().connect() as connection:
+            remaining = {
+                row[0]
+                for row in connection.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name = 'land_parcels'"
+                    )
+                )
+            }
+        assert {"ownership_type", "title_status", "zoning"} <= remaining
+        assert not remaining & {
+            "ownership_type_code",
+            "title_status_code",
+            "zoning_class_code",
+        }
+
+    def test_a_translated_value_round_trips_back_to_its_code(
+        self, at_cashflow_revision: None
+    ) -> None:
+        """Given text matching a configured label, then the downgrade restores the code.
+
+        The reverse of the first test, and the reason the downgrade is written
+        as a reverse mapping rather than a refusal in every case: a database
+        that only ever held configured values can go back exactly.
+        """
+        _seed_a_parcel_classified_by_code()
+        config = _alembic_config()
+        command.upgrade(config, LAND_TEXT_REVISION)
+
+        command.downgrade(config, CASHFLOW_REVISION)
+
+        ownership, title, zoning = _parcel_codes()
+        assert ownership == "FREEHOLD"
+        assert title == "REGISTERED"
+        assert zoning == "UNCONFIGURED_ZONE"
+
+    def test_the_downgrade_refuses_rather_than_truncate_a_description(
+        self, at_cashflow_revision: None
+    ) -> None:
+        """A description the old column cannot hold stops the downgrade, and says why.
+
+        The pre-V2 column is 64 characters. Truncating a planning description
+        to fit, nulling it, or mapping it to a catch-all would each destroy
+        what the authority issued — and the parcel would still read as
+        classified. So the downgrade stops, names how many parcels are in the
+        way, and leaves the schema at 0012.
+        """
+        _seed_a_parcel_classified_by_code()
+        config = _alembic_config()
+        command.upgrade(config, LAND_TEXT_REVISION)
+        with get_engine().begin() as connection:
+            connection.execute(
+                text("UPDATE land_parcels SET zoning = :zoning WHERE plot_number = 'PLOT-MIG'"),
+                {
+                    "zoning": (
+                        "Special development zone under the 2026 comprehensive plan, "
+                        "sub-area C, subject to the consolidated height schedule as issued"
+                    )
+                },
+            )
+
+        with pytest.raises(RuntimeError, match="land parcel"):
+            command.downgrade(config, CASHFLOW_REVISION)
+
+        assert _current_revision() == LAND_TEXT_REVISION
+        assert _parcel_classification()[2].startswith("Special development zone")
 
 
 class TestTheSourceEnumerationIsCorrectedByARevision:

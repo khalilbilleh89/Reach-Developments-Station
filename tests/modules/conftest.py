@@ -138,9 +138,9 @@ def parcel_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "plot_number": "PLOT-1",
         "land_area": "4500.0000",
-        "ownership_type_code": "FREEHOLD",
-        "title_status_code": "REGISTERED",
-        "zoning_class_code": "RES_B",
+        "ownership_type": "Freehold",
+        "title_status": "Registered",
+        "zoning": "Residential B",
     }
     payload.update(overrides)
     return payload
