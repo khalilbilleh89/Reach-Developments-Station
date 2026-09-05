@@ -126,17 +126,30 @@ def _plain(value: object) -> object:
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Write one of the evidence artifacts.
+    """Write one of the evidence artifacts, and never over another one.
 
     Sorted keys and a trailing newline so two runs of the same batch produce
     files a person can diff, which is how "did anything change between the
     trial and the real thing?" gets answered.
+
+    The file is created exclusively, and an existing one is refused rather than
+    replaced. Evidence that can be overwritten is not evidence: the second run
+    leaves a file indistinguishable from the first, and nothing anywhere records
+    that the first said something different. Refusing costs the operator one
+    command; replacing costs the only account of what was proved.
     """
+    text = json.dumps(_plain(payload), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(_plain(payload), indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    try:
+        # "x" rather than a prior ``exists()`` test: the check and the write are
+        # one operation, so two runs racing for the same artifact cannot both
+        # find it absent.
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError:
+        raise FileExistsError(
+            f"{path} already exists and evidence is never replaced in place."
+        ) from None
 
 
 @dataclass(frozen=True)
