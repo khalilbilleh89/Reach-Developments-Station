@@ -146,6 +146,56 @@ def test_every_domain_the_cutover_imports_can_reach_it() -> None:
         )
 
 
+def test_a_runbook_edit_runs_the_guard_that_checks_the_runbook() -> None:
+    """``docs/`` is inert, and this one directory deliberately is not.
+
+    ``test_cutover_runbook.py`` asserts the runbook's exit codes, action names,
+    flags and refusal table against the tool. The change most likely to break
+    that agreement is an edit to the runbook — so if ``docs/go_live/`` fell
+    through to the inert prefix like the rest of ``docs/``, the guard would run
+    on every change except the one it exists for.
+
+    The carve-out has to sit before the inert check to work at all, which is the
+    ordering this asserts by behaviour rather than by reading the file.
+    """
+    assert chosen("docs/go_live/RUNBOOK.md").domains == [CUTOVER]
+    assert chosen("docs/go_live/README.md").domains == [CUTOVER]
+
+
+def test_the_rest_of_docs_stays_inert() -> None:
+    """One directory, not a prefix. Architecture notes run nothing."""
+    for path in ("docs/ARCHITECTURE.md", "docs/ENGINEERING_RULES.md", "docs/MVP_ROADMAP.md"):
+        result = chosen(path)
+        assert result.full is False, path
+        assert result.domains == [], path
+
+
+def test_only_the_cutover_family_reads_the_cutover_fixtures() -> None:
+    """The honesty condition on the second selector exception.
+
+    ``tests/fixtures/cutover/`` is named out of the "anything under tests/ that
+    is not a test is shared support" fallback, so editing a row of fictional
+    data costs a targeted run rather than two and a half hours. That is only
+    safe while the fixtures are read by the cutover family alone: the moment
+    another domain's test reads them, a change to a CSV could break it and the
+    fast run would not have covered it.
+
+    The same shape as the guard above, for the same reason. An exception nobody
+    re-checks stops being an exception and becomes a hole.
+    """
+    readers = sorted(
+        path.name
+        for path in ROOT.glob("tests/**/*.py")
+        if "tests/fixtures/cutover" in path.read_text(encoding="utf-8")
+    )
+    assert readers, "nothing reads the fixtures — has the carve-out outlived its bundle?"
+    strangers = [name for name in readers if not name.startswith("test_cutover_")]
+    assert not strangers, (
+        f"{strangers} read tests/fixtures/cutover/, which a cutover-only fast run "
+        "would not cover — either move the fixture or drop the selector exception."
+    )
+
+
 def test_the_cutover_feeds_nothing_back_into_the_platform() -> None:
     """Edges point into the cutover, never out of it.
 

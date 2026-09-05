@@ -146,7 +146,9 @@ def test_nothing_is_written_unless_the_operator_named_somewhere_to_write_it(
     """``--out`` is the whole of the filesystem opt-in."""
     bundle, manifest = batch(tmp_path)
     before = sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*"))
-    assert main(["preflight", "--bundle", str(bundle), "--manifest", str(manifest)]) == 0
+    # INCOMPLETE, not zero: no ``--target``, so half the checks did not run.
+    # What this test is about is the tree, which is unchanged either way.
+    assert main(["preflight", "--bundle", str(bundle), "--manifest", str(manifest)]) != 0
     assert sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*")) == before
 
 
@@ -155,13 +157,23 @@ def test_nothing_is_written_unless_the_operator_named_somewhere_to_write_it(
 # --------------------------------------------------------------------------- #
 
 
-def test_preflight_passes_on_an_untouched_batch(
+def test_an_untouched_batch_with_no_target_check_is_incomplete_not_passed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Every check that ran, passed — and half of them did not run.
+
+    This test previously asserted ``PASS`` and exit 0, which is what made the
+    word worth adding: a runbook written against that would have applied a batch
+    on a preflight that never looked at the target. Passing the source half is
+    not passing.
+    """
     bundle, manifest = batch(tmp_path)
     code = main(["preflight", "--bundle", str(bundle), "--manifest", str(manifest)])
-    assert code == 0
-    assert "preflight: PASS" in capsys.readouterr().out
+
+    out = capsys.readouterr().out
+    assert "preflight: INCOMPLETE" in out
+    assert "source_unchanged" in out, "the checks that did run are still reported"
+    assert code == EXIT_BLOCKED, "a batch may not proceed on half a preflight"
 
 
 def test_preflight_blocks_when_the_source_moved(
@@ -295,9 +307,10 @@ def test_json_prints_one_object_and_nothing_else(
     main(["--json", "preflight", "--bundle", str(bundle), "--manifest", str(manifest)])
     payload = json.loads(capsys.readouterr().out)
     assert payload["action"] == "preflight"
-    assert payload["result"] == "PASS"
+    assert payload["result"] == "INCOMPLETE"
+    assert payload["target_checked"] is False
     assert payload["contract_version"] == CONTRACT_VERSION
-    assert payload["blocking"] == 0
+    assert payload["blocking"] == 0, "nothing failed; half the checks simply did not run"
 
 
 def test_the_report_names_the_batch_it_describes(
@@ -326,9 +339,10 @@ def test_every_action_takes_the_same_options_and_requires_the_same_two() -> None
     for action in ACTIONS:
         child = subcommands.choices[action.name]
         options = {a.dest: a for a in child._actions}
-        assert {"bundle", "manifest", "out"} <= set(options)
+        assert {"bundle", "manifest", "out", "target"} <= set(options)
         assert options["bundle"].required and options["manifest"].required
         assert not options["out"].required
+        assert not options["target"].required
 
 
 # --------------------------------------------------------------------------- #
@@ -342,11 +356,11 @@ def test_evidence_is_filed_under_the_batch_it_describes(tmp_path: Path) -> None:
     code = main(
         ["preflight", "--bundle", str(bundle), "--manifest", str(manifest), "--out", str(out)]
     )
-    assert code == 0
+    assert code == EXIT_BLOCKED, "no --target, so INCOMPLETE"
 
     artifact = out / DECLARATION["batch_id"] / "preflight.json"
     written = json.loads(artifact.read_text(encoding="utf-8"))
-    assert written["result"] == "PASS"
+    assert written["result"] == "INCOMPLETE"
     # The path and the contents have to agree, or the directory name is a label
     # somebody could trust while the file underneath describes something else.
     assert written["batch_id"] == artifact.parent.name
@@ -367,7 +381,9 @@ def test_two_batches_filed_together_do_not_overwrite_one_another(tmp_path: Path)
     )
 
     for b, m in ((first_bundle, first_manifest), (second_bundle, second_manifest)):
-        assert main(["preflight", "--bundle", str(b), "--manifest", str(m), "--out", str(out)]) == 0
+        # INCOMPLETE without --target; the artifact is filed either way, which is
+        # the whole point of this test.
+        main(["preflight", "--bundle", str(b), "--manifest", str(m), "--out", str(out)])
 
     written = {
         path.parent.name: json.loads(path.read_text(encoding="utf-8"))
@@ -393,7 +409,7 @@ def test_a_rerun_refuses_rather_than_replacing_its_own_earlier_evidence(
     artifact = out / DECLARATION["batch_id"] / "preflight.json"
     argv = ["preflight", "--bundle", str(bundle), "--manifest", str(manifest), "--out", str(out)]
 
-    assert main(argv) == 0
+    assert main(argv) == EXIT_BLOCKED, "INCOMPLETE without --target; the artifact is still filed"
     first = artifact.read_text(encoding="utf-8")
 
     (bundle / "units.csv").write_text("moved\n", encoding="utf-8")

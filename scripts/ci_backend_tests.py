@@ -75,6 +75,13 @@ ALWAYS_RUN = (
     # Pure text reading, and it guards the machinery every other entry in this
     # tuple depends on to be run in the first place.
     "tests/test_ci_workflow.py",
+    # The canonical intake contract's disposition of every table in the schema.
+    # It belongs here rather than to the ``cutover`` domain because of what it
+    # guards: a new table that nobody classified. The change that adds a table
+    # touches some other domain's models, so a domain-selected run would never
+    # reach this file, and the one defect it exists to catch would land
+    # unnoticed. Text and metadata reading, four seconds.
+    "tests/modules/test_cutover_intake_contract.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with
@@ -137,7 +144,10 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
 #: not by being written out.
 DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "settings": ("projects",),
-    "projects": ("inventory",),
+    # ``inventory`` for the obvious reason; ``cutover`` because a batch takes
+    # the project row lock through ``lock_project`` and resolves the project a
+    # manifest names, so this module's contract is one the cutover depends on.
+    "projects": ("inventory", "cutover"),
     "inventory": ("pricing",),
     "pricing": ("sales",),
     "sales": ("payment_plans", "unit_economics"),
@@ -153,9 +163,16 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # through two more, and pins the version its monthly schedule reconciles to.
     "construction": ("unit_economics", "cashflow"),
     "unit_economics": (),
-    # Cashflow is the last consumer in the platform and feeds nothing.
-    "cashflow": (),
-    "audit": (),
+    # Cashflow was the last consumer in the platform and fed nothing. It now
+    # feeds the cutover, whose reconciliation orchestrator calls
+    # ``cashflow.service.reconciliation`` — and, through the ``construction ->
+    # cashflow`` edge above, this one line is also what carries a construction
+    # change to the cutover. One edge, because the closure is transitive.
+    "cashflow": ("cutover",),
+    # The cutover claims a batch through ``record_event``, so a change to the
+    # audit write contract can break it. The edge points *into* the cutover,
+    # never out: nothing in ``app/`` imports this package.
+    "audit": ("cutover",),
     "access": (),
     # The cutover tooling consumes the platform and feeds nothing back into it.
     # As it grows importers it will gain edges *into* it — ``sales -> cutover``
@@ -215,6 +232,23 @@ SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
 #: full-suite fallback that everything else under ``scripts/`` gets.
 CUTOVER_PACKAGE = "scripts/migration/"
 CUTOVER_DOMAIN = "cutover"
+
+#: The synthetic cutover bundle. Data files rather than code, so the generic
+#: "anything under tests/ that is not a test is shared support" fallback would
+#: claim them — and that fallback is about ``conftest.py`` and ``factories.py``,
+#: which rewrite the ground every test stands on. These CSVs are read by one
+#: test file. Editing a row of fictional data is not worth two and a half
+#: hours, and the guard in ``test_cutover_selector.py`` keeps the exception
+#: honest by requiring that nothing else reads them.
+CUTOVER_FIXTURES = "tests/fixtures/cutover/"
+
+#: The cutover's operational documentation. Mapped to the domain rather than
+#: left with the other docs because ``test_cutover_runbook.py`` checks the
+#: runbook against the tool — the exit codes, the action names, the flags, the
+#: checks it explains — and the change most likely to break that agreement is an
+#: edit to the runbook itself. Left unmapped, that edit runs the always-run set
+#: and not the guard.
+CUTOVER_DOCS = "docs/go_live/"
 
 #: Selector domains that own no database schema. ``domain_of_migration`` reads a
 #: revision's own file name to decide whose schema it reshapes, and it does that
@@ -415,6 +449,14 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is database infrastructure")
             continue
 
+        if path.startswith(CUTOVER_DOCS):
+            domains.add(CUTOVER_DOMAIN)
+            continue
+        if path.startswith(CUTOVER_FIXTURES):
+            # Named before the tests/ fallback below, and only this one
+            # directory: a fixture anywhere else stays shared support.
+            domains.add(CUTOVER_DOMAIN)
+            continue
         if path.startswith("tests/"):
             if Path(path).name.startswith("test_"):
                 # A changed or new test always runs, whatever else selects.
