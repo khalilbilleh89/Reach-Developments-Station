@@ -66,6 +66,11 @@ ALWAYS_RUN = (
     # repository is claimed by some domain. Running it every time is what stops
     # this map rotting into a fast suite that quietly covers less each month.
     "tests/test_ci_selector.py",
+    # The workflow's own shape: which event runs which backend job, that a
+    # commit reaching main is tested at all, and that no job may run unbounded.
+    # Pure text reading, and it guards the machinery every other entry in this
+    # tuple depends on to be run in the first place.
+    "tests/test_ci_workflow.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with

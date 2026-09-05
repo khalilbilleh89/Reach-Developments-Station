@@ -12,9 +12,11 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 Engineering PRs are counted separately and never renumber the functional
 sequence:
 
-| Engineering                | State |
-| -------------------------- | ----- |
-| PR-ENG-01 — Two-Speed CI   | ✅    |
+| Engineering                          | State |
+| ------------------------------------ | ----- |
+| PR-ENG-01 — Two-Speed CI             | ✅    |
+| PR-ENG-02 — Pin anyio for TestClient | ✅    |
+| PR-ENG-03 — Post-Merge CI on main    | 🚧    |
 
 Branch naming follows the roadmap:
 
@@ -233,11 +235,36 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 - no migration, no dependency, no runtime behaviour change
 
 > **Why it sits here.** At roughly fifteen hundred backend tests the full suite
-> takes about forty-five minutes, and running it on every push made a one-line
-> correction cost the same as a whole feature. Merge safety is unchanged: the
+> was estimated at about forty-five minutes, and running it on every push made a
+> one-line correction cost the same as a whole feature. (PR-ENG-03 measured it
+> for the first time: two hours thirty minutes. The case for two speeds was
+> stronger than anybody knew.) Merge safety is unchanged: the
 > full suite is still mandatory before merge, and any commit pushed after a
 > pull request is marked ready re-runs it, so the green tick always belongs to
 > the exact commit somebody would merge.
+
+## PR-ENG-03 — Post-Merge CI on main 🚧
+
+Horizontal engineering hardening. **Does not change the functional MVP count.**
+
+- a push to `main` runs `Backend` (full) and `Frontend`, so every merged commit
+  gets a verdict of its own
+- the two backend jobs now name the event they answer for instead of inferring
+  it from an absent pull request payload
+- a `main` run is never cancelled by the next merge; pull request runs still are
+- every job declares `timeout-minutes`, replacing GitHub's six-hour default,
+  bounded from the first full-suite measurement this repository has ever had:
+  two hours thirty minutes, not the forty-five it was documented at
+- `tests/test_ci_workflow.py` guards the workflow's shape, in the always-run set
+- no migration, no dependency, no runtime behaviour change
+
+> **Why it sits here.** PR-ENG-01's rule — the full suite before any merge —
+> describes what a person should wait for, and nothing enforces it. PR-MVP-10B
+> was marked ready for review and merged thirty-three seconds later, so the full
+> job's test step began after the merge had already landed and `main` carried a
+> commit no run had ever reported on. Pre-merge CI asks *may this merge?* and
+> binds only while somebody waits; post-merge CI asks *is main sound right now?*
+> and becomes true without anybody's patience. A release is cut from `main`.
 
 ## PR-MVP-07 — Collections ✅
 
