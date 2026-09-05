@@ -409,6 +409,10 @@ def foreign_country_pack(admin_client: TestClient, currency_id: str) -> str:
     Deliberately bare: a permit validated against Jordan must become invalid the
     moment the project is said to belong here, which is the whole point of
     refusing to move a project that already has children.
+
+    Its area unit differs from Jordan's on purpose. Since PR-V2-01 that is the
+    only fact a parcel still takes from its country pack, so a test that cannot
+    tell the two packs apart on it cannot tell whether the lock was held.
     """
     response = admin_client.post(
         f"{SETTINGS}/country-packs",
@@ -418,7 +422,7 @@ def foreign_country_pack(admin_client: TestClient, currency_id: str) -> str:
             "locale": "en-AE",
             "timezone": "Asia/Dubai",
             "default_currency_id": currency_id,
-            "area_unit": "sqm",
+            "area_unit": "sqft",
         },
     )
     assert response.status_code == 201, response.text
@@ -434,25 +438,18 @@ def spare_currency(admin_client: TestClient) -> str:
     return response.json()["id"]
 
 
-#: The first write of each kind that makes a project's jurisdiction permanent,
-#: and the table it lands in. Every one is decided against the locked project:
-#: a permit or document validates a code against the country pack, and a parcel
-#: takes its area unit from it. PR-V2-01 made a parcel's ownership, title and
-#: zoning free text, which removed one reason for that lock and none of the
-#: others — the jurisdiction still reaches the row.
+#: The first write of each kind that validates a *code* against the project's
+#: country pack, and the table it lands in. Without the project lock each of
+#: these validates against the pack it read before a concurrent jurisdiction
+#: change and commits a record whose codes are legal nowhere the project
+#: belongs.
+#:
+#: A parcel used to be here. PR-V2-01 made its ownership, title status and
+#: zoning free text, so it has no code left to be refused for — but it still
+#: reads its area unit from the pack, and it is still created under the lock.
+#: What that lock now guarantees for a parcel is a different outcome, so it has
+#: its own test below rather than a weakened assertion in this one.
 _FIRST_CHILD_WRITES = {
-    "parcel": (
-        lambda session, project, admin: service.create_parcel(
-            session,
-            project=project,
-            actor_user_id=admin.id,
-            correlation_id=uuid.uuid4(),
-            plot_number="PLOT-1",
-            land_area=Decimal("4500.0000"),
-            ownership_type="Freehold",
-        ),
-        LandParcel,
-    ),
     "permit": (
         lambda session, project, admin: service.create_permit(
             session,
@@ -520,6 +517,104 @@ def test_a_first_child_cannot_be_created_under_a_jurisdiction_the_project_has_le
     db.expire_all()
     assert db.scalars(select(model)).all() == []
     assert db.scalars(select(Project)).one().country_pack_id == uuid.UUID(foreign_country_pack)
+
+
+def test_the_first_parcel_takes_the_area_unit_of_the_jurisdiction_that_won(
+    admin: User, project_id: str, foreign_country_pack: str, db: Session
+) -> None:
+    """Given the country change commits first, then the parcel is measured in its units.
+
+    The parcel's half of the same race. Since PR-V2-01 a parcel carries no code
+    the country pack can refuse, so the lock does not produce a refusal here —
+    and a test asserting one would have to be deleted rather than corrected,
+    which is how a concurrency guarantee quietly stops being tested.
+
+    What the lock still buys is this: the one fact a parcel takes from its
+    jurisdiction is decided against the jurisdiction that committed, not the one
+    the writer happened to read first. Jordan measures in square metres and this
+    second pack in square feet, so a parcel recorded as 4500 sqm under a project
+    that is now in the square-foot jurisdiction is off by a factor of ten — a
+    land area nobody would question and every downstream figure would be wrong
+    about. Remove ``lock_project`` from ``create_parcel`` and this fails.
+    """
+    factory = get_session_factory()
+    holder = factory()
+    project_row = holder.scalars(
+        select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+    ).one()
+
+    def create_first_parcel(session: Session) -> str:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        service.create_parcel(
+            session,
+            project=project,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            plot_number="PLOT-1",
+            land_area=Decimal("4500.0000"),
+            ownership_type="Freehold",
+        )
+        return "created"
+
+    thread, outcome = _run(create_first_parcel)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        project_row.country_pack_id = uuid.UUID(foreign_country_pack)
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+
+    assert blocked, "creating the first parcel read the country pack without the project lock"
+    assert outcome[0] == "created", outcome[0]
+
+    db.expire_all()
+    parcel = db.scalars(select(LandParcel)).one()
+    assert parcel.area_unit == "sqft"
+    assert db.scalars(select(Project)).one().country_pack_id == uuid.UUID(foreign_country_pack)
+
+
+def test_a_classification_the_reference_data_never_knew_is_still_recorded(
+    admin: User, project_id: str, foreign_country_pack: str, db: Session
+) -> None:
+    """Given the project moves to a bare jurisdiction, then the parcel still saves.
+
+    The point of the change, asserted where it would break: the second pack
+    configures nothing at all, and under the old model a parcel created into it
+    could not name an ownership type. It can now, because ownership is what the
+    deed says rather than a row somebody configured.
+    """
+    factory = get_session_factory()
+    holder = factory()
+    project_row = holder.scalars(
+        select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+    ).one()
+    project_row.country_pack_id = uuid.UUID(foreign_country_pack)
+    holder.commit()
+    holder.close()
+
+    session = get_session_factory()()
+    try:
+        project = session.scalars(select(Project).where(Project.id == uuid.UUID(project_id))).one()
+        service.create_parcel(
+            session,
+            project=project,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            plot_number="PLOT-1",
+            land_area=Decimal("4500.0000"),
+            ownership_type="Long lease, 99 years from 2004",
+            title_status="Under registration, file 2026/4471",
+            zoning="Special development zone",
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    db.expire_all()
+    parcel = db.scalars(select(LandParcel)).one()
+    assert parcel.ownership_type == "Long lease, 99 years from 2004"
+    assert parcel.area_unit == "sqft"
 
 
 def test_a_country_change_waits_for_a_first_permit_in_flight(
