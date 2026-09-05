@@ -551,7 +551,7 @@ is all a bound is for.
 Raising it again is not the response to a run that approaches it. Read
 `--durations=20` first: at four hours the suite's own cost is the finding.
 
-`Backend Fast` carries the same two-hour ceiling, and has to. *Fast* names a
+`Backend Fast` carries the same four-hour ceiling, and has to. *Fast* names a
 selection, not a duration: an unrecognised change deliberately falls back to
 `pytest -q tests`, so the fast job's worst case is the entire suite. A bound set
 from its usual targeted run — twenty-six minutes at the largest observed —
