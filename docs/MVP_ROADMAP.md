@@ -6,8 +6,8 @@ Canonical delivery sequence. Twelve pull requests, `PR-MVP-00` through
 | Scope                                  | Count |
 | -------------------------------------- | ----: |
 | Total planned MVP PRs                  |    12 |
-| Complete (PR-MVP-00 through PR-MVP-09) |    10 |
-| Remaining                              |     2 |
+| Complete (PR-MVP-00 through PR-MVP-10) |    11 |
+| Remaining                              |     1 |
 
 Engineering PRs are counted separately and never renumber the functional
 sequence:
@@ -406,7 +406,7 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > hierarchy, approval engine or generic cost engine; no handover — construction
 > stops at ready and sales owns everything above it.
 
-## PR-MVP-10 — Integrated Cashflow & Management Reporting
+## PR-MVP-10 — Integrated Cashflow & Management Reporting ✅
 
 - customer scheduled inflows, forecast collections and actual receipts, as three
   separate series and never one
@@ -431,14 +431,12 @@ currency but the project's base — no generic scenario engine, no AI forecastin
 and no background scheduling. One governed forecast version is already a
 scenario in the ordinary business sense.
 
-**Delivered in two parts, and counted as complete only when both are in.**
-PR-MVP-10A is the backend spine: the models, the migration, the calculator, the
-source contracts, the service, the API, the exports and the test families.
-PR-MVP-10B is the Cashflow workspace under
-`frontend/src/components/projects/cashflow/`, its navigation entry and its
-browser validation. Until 10B merges, this row stays open — a roadmap that
-counted a module complete while the people who use it had no screen to see it on
-would be counting the wrong thing.
+**Delivered in two parts, and both are in.** PR-MVP-10A is the backend spine:
+the models, the migration, the calculator, the source contracts, the service, the
+API, the exports and the eighteen test families. PR-MVP-10B is the Cashflow
+workspace under `frontend/src/components/projects/cashflow/`, its Finance
+navigation entry, the cash tiles on Project Overview, and the presentation
+contract that keeps financial arithmetic out of the browser.
 
 ## PR-MVP-11 — Migration, UAT & Go-Live
 

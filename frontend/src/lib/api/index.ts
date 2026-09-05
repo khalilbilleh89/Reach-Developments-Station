@@ -7,6 +7,19 @@
 import { get, patch, post, postCsv, put, remove } from "./client";
 import type {
   AdminUser,
+  CashflowAccuracy,
+  CashflowDevelopmentMovement,
+  CashflowDrilldown,
+  CashflowForecastDetail,
+  CashflowForecastLine,
+  CashflowForecastVersion,
+  CashflowFinancingMovement,
+  CashflowManagement,
+  CashflowMonthly,
+  CashflowReconciliation,
+  CashflowRestriction,
+  CashflowRelease,
+  CashflowSummary,
   BudgetDetail,
   BudgetVersion,
   Certificate,
@@ -1996,3 +2009,218 @@ export const construction = {
       body,
     ),
 };
+
+/**
+ * Cashflow and management reporting (PR-MVP-10).
+ *
+ * Every figure this namespace returns is computed by the server. Nothing here
+ * adds, nets, discounts or projects: the monthly bridge, the funding trough,
+ * the NPV and the equity IRR all arrive finished, because a cash position
+ * recomputed in a browser is a position that can disagree with the one Finance
+ * will act on — and the difference would appear in the least significant digit,
+ * which is exactly where a reconciliation looks.
+ *
+ * The two CSV exports are deliberately absent. They are plain links: the server
+ * renders the file from the same response the screen draws and sends it with a
+ * `Content-Disposition`, so the browser downloads the backend's own bytes
+ * rather than a second rendering of them. See `csvHref` below.
+ */
+export const cashflow = {
+  summary: (projectId: string, params: { asOf?: string } = {}) =>
+    get<CashflowSummary>(`${cashflowRoot(projectId)}/summary${query(params)}`),
+
+  monthly: (
+    projectId: string,
+    params: { asOf?: string; fromMonth?: string; toMonth?: string } = {},
+  ) => get<CashflowMonthly>(`${cashflowRoot(projectId)}/monthly${query(params)}`),
+
+  drilldown: (
+    projectId: string,
+    params: {
+      asOf?: string;
+      periodMonth?: string;
+      category?: string;
+      basis?: string;
+      sourceType?: string;
+      flowDirection?: string;
+    } = {},
+  ) => get<CashflowDrilldown>(`${cashflowRoot(projectId)}/drilldown${query(params)}`),
+
+  reconciliation: (projectId: string, params: { asOf?: string } = {}) =>
+    get<CashflowReconciliation>(`${cashflowRoot(projectId)}/reconciliation${query(params)}`),
+
+  management: (projectId: string, params: { asOf?: string } = {}) =>
+    get<CashflowManagement>(`${cashflowRoot(projectId)}/management${query(params)}`),
+
+  forecastAccuracy: (
+    projectId: string,
+    params: { asOf?: string; forecastVersionId?: string } = {},
+  ) => get<CashflowAccuracy>(`${cashflowRoot(projectId)}/forecast-accuracy${query(params)}`),
+
+  forecasts: (projectId: string) =>
+    get<CashflowForecastVersion[]>(`${cashflowRoot(projectId)}/forecasts`),
+  forecast: (projectId: string, versionId: string) =>
+    get<CashflowForecastDetail>(`${cashflowRoot(projectId)}/forecasts/${versionId}`),
+  createForecast: (projectId: string, body: Record<string, unknown>) =>
+    post<CashflowForecastVersion>(`${cashflowRoot(projectId)}/forecasts`, body),
+  setForecastLine: (
+    projectId: string,
+    versionId: string,
+    body: Record<string, unknown>,
+  ) =>
+    // One cell, not the whole file: the endpoint answers with the line it wrote.
+    put<CashflowForecastLine>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/lines`,
+      body,
+    ),
+  refreshCustomerSnapshot: (projectId: string, versionId: string) =>
+    post<CashflowForecastDetail>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/refresh-customer-snapshot`,
+      {},
+    ),
+  // The preparer's own way out of a draft that can no longer be submitted —
+  // distinct from the approver's reject, which a draft never reaches.
+  discardForecast: (projectId: string, versionId: string, reason: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/discard`,
+      { reason },
+    ),
+  submitForecast: (projectId: string, versionId: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/submit`,
+      {},
+    ),
+  approveForecast: (projectId: string, versionId: string, reason: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/approve`,
+      { reason },
+    ),
+  rejectForecast: (projectId: string, versionId: string, reason: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/reject`,
+      { reason },
+    ),
+  activateForecast: (projectId: string, versionId: string) =>
+    post<CashflowForecastVersion>(
+      `${cashflowRoot(projectId)}/forecasts/${versionId}/activate`,
+      {},
+    ),
+
+  developmentMovements: (projectId: string) =>
+    get<CashflowDevelopmentMovement[]>(`${cashflowRoot(projectId)}/development-movements`),
+  recordDevelopmentMovement: (projectId: string, body: Record<string, unknown>) =>
+    post<CashflowDevelopmentMovement>(
+      `${cashflowRoot(projectId)}/development-movements`,
+      body,
+    ),
+  confirmDevelopmentMovement: (projectId: string, movementId: string) =>
+    post<CashflowDevelopmentMovement>(
+      `${cashflowRoot(projectId)}/development-movements/${movementId}/confirm`,
+      {},
+    ),
+  reverseDevelopmentMovement: (projectId: string, movementId: string, reason: string) =>
+    post<CashflowDevelopmentMovement>(
+      `${cashflowRoot(projectId)}/development-movements/${movementId}/reverse`,
+      { reason },
+    ),
+
+  financingMovements: (projectId: string) =>
+    get<CashflowFinancingMovement[]>(`${cashflowRoot(projectId)}/financing-movements`),
+  recordFinancingMovement: (projectId: string, body: Record<string, unknown>) =>
+    post<CashflowFinancingMovement>(
+      `${cashflowRoot(projectId)}/financing-movements`,
+      body,
+    ),
+  confirmFinancingMovement: (projectId: string, movementId: string) =>
+    post<CashflowFinancingMovement>(
+      `${cashflowRoot(projectId)}/financing-movements/${movementId}/confirm`,
+      {},
+    ),
+  reverseFinancingMovement: (projectId: string, movementId: string, reason: string) =>
+    post<CashflowFinancingMovement>(
+      `${cashflowRoot(projectId)}/financing-movements/${movementId}/reverse`,
+      { reason },
+    ),
+
+  restrictions: (projectId: string) =>
+    get<CashflowRestriction[]>(`${cashflowRoot(projectId)}/restrictions`),
+  recordRestriction: (projectId: string, receiptId: string, body: Record<string, unknown>) =>
+    post<CashflowRestriction>(
+      `${cashflowRoot(projectId)}/receipts/${receiptId}/restriction`,
+      body,
+    ),
+  confirmRestriction: (projectId: string, restrictionId: string) =>
+    post<CashflowRestriction>(
+      `${cashflowRoot(projectId)}/restrictions/${restrictionId}/confirm`,
+      {},
+    ),
+  reverseRestriction: (projectId: string, restrictionId: string, reason: string) =>
+    post<CashflowRestriction>(
+      `${cashflowRoot(projectId)}/restrictions/${restrictionId}/reverse`,
+      { reason },
+    ),
+  recordRelease: (projectId: string, restrictionId: string, body: Record<string, unknown>) =>
+    post<CashflowRestriction>(
+      `${cashflowRoot(projectId)}/restrictions/${restrictionId}/releases`,
+      body,
+    ),
+  confirmRelease: (projectId: string, releaseId: string) =>
+    post<CashflowRelease>(`${cashflowRoot(projectId)}/releases/${releaseId}/confirm`, {}),
+  reverseRelease: (projectId: string, releaseId: string, reason: string) =>
+    post<CashflowRelease>(`${cashflowRoot(projectId)}/releases/${releaseId}/reverse`, {
+      reason,
+    }),
+};
+
+/** Where every cashflow route for one project hangs. */
+function cashflowRoot(projectId: string): string {
+  return `/projects/${projectId}/cashflow`;
+}
+
+/**
+ * The query string for a cashflow read, empty when nothing is filtered.
+ *
+ * The keys are the server's, spelled the server's way. The camel-cased argument
+ * names above are the only translation, and it happens here rather than at nine
+ * call sites.
+ */
+const QUERY_KEYS: Record<string, string> = {
+  asOf: "as_of",
+  fromMonth: "from_month",
+  toMonth: "to_month",
+  periodMonth: "period_month",
+  category: "category",
+  basis: "basis",
+  sourceType: "source_type",
+  flowDirection: "flow_direction",
+  forecastVersionId: "forecast_version_id",
+};
+
+function query(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    const key = QUERY_KEYS[name];
+    if (key && value) search.set(key, value);
+  }
+  const suffix = search.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+/**
+ * The address of a backend-rendered CSV, for an ordinary link.
+ *
+ * A plain `href` rather than a fetch: the server sends the file with a
+ * `Content-Disposition`, the session cookie rides along, and the bytes the
+ * reader saves are the bytes the server produced from the same response the
+ * screen is showing. Rebuilding the CSV in JavaScript would create a second
+ * rendering of the same figures that could drift from the first.
+ */
+export function cashflowCsvHref(
+  projectId: string,
+  report: "monthly" | "drilldown",
+  params: Record<string, string | undefined> = {},
+): string {
+  return `/api/v1${cashflowRoot(projectId)}/${report}.csv${query(params)}`;
+}
+
+

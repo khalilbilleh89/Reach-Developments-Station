@@ -344,9 +344,38 @@ def reject_forecast(
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.ForecastOut:
-    """Refuse a submitted forecast, with the reason on the record."""
+    """Refuse a submitted forecast, or withdraw an approval, with the reason recorded.
+
+    One endpoint because it is one authority taking one kind of decision: this
+    version will not proceed. Withdrawing is the governed way out of an approved
+    forecast that can no longer be activated — its sources moved while it waited
+    — and without it the project's one open slot would stay occupied by a version
+    nobody can activate, edit or replace.
+    """
     permissions.require_cashflow_approver(actor)
     version = service.reject_forecast(
+        session, project=project, actor=actor, version_id=version_id, reason=payload.reason
+    )
+    session.commit()
+    return read.forecast_out(session, project=project, version=version)
+
+
+@router.post("/forecasts/{version_id}/discard", response_model=schemas.ForecastOut)
+def discard_forecast(
+    project: CashflowProject,
+    version_id: uuid.UUID,
+    payload: schemas.ReasonRequest,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.ForecastOut:
+    """Close a draft its preparer no longer wants, with the reason recorded.
+
+    The preparer's own act, not the approver's: a draft has not been put to
+    anybody, and it frees the project's one open forecast slot so a replacement
+    can be prepared against the sources now in force.
+    """
+    permissions.require_cashflow_preparer(actor)
+    version = service.discard_forecast(
         session, project=project, actor=actor, version_id=version_id, reason=payload.reason
     )
     session.commit()

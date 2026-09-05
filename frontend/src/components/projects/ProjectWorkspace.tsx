@@ -27,6 +27,7 @@ import type { ProjectSection } from "@/components/shell/navigation";
 import { Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
 import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCenter";
 import { AccessTab } from "@/components/projects/AccessTab";
+import { CashflowTab } from "@/components/projects/CashflowTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
@@ -307,6 +308,7 @@ export function ProjectWorkspace({
         {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
         {section === "construction" ? <ConstructionTab projectId={projectId} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
+        {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
       </>

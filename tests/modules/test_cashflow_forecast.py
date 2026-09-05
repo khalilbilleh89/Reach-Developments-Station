@@ -26,6 +26,8 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
     cashflow_url,
@@ -41,6 +43,15 @@ from tests.modules.conftest import (
     set_cashflow_line,
     write_schedule,
 )
+
+
+def _forecast_actions(db: Session, version_id: str) -> list[str]:
+    """Every audit action recorded against one forecast version, in order."""
+    rows = db.execute(
+        text("SELECT action FROM audit_events WHERE entity_id = :id ORDER BY occurred_at, id"),
+        {"id": version_id},
+    ).scalars()
+    return list(rows)
 
 
 def cover_construction_months(
@@ -862,34 +873,14 @@ class TestBuyerCashWithNoTimingBlocksGovernance:
         assert "1 governing buyer instalment" in detail
         assert "On structural completion" in detail
 
-    def test_activation_re_proves_it_after_the_schedule_moved(
+    def _restructure_with_undated_instalments(
         self,
-        finance_client: TestClient,
-        cfo_client: TestClient,
         collections_client: TestClient,
+        cfo_client: TestClient,
         project_id: str,
-        cost_codes: dict[str, str],
         active_plan: tuple[str, str],
-        draft_forecast: str,
     ) -> None:
-        """A plan restructured while a forecast waits for a signature is the ordinary case.
-
-        Approval is not a promise that the sources will hold still. Checking only
-        at submission would put a forecast in force against a schedule it was
-        never measured on — and the refresh that clears the staleness refusal
-        would carry the omission in with it.
-        """
-        cover_construction_months(
-            finance_client,
-            project_id,
-            draft_forecast,
-            cost_codes,
-            months=((month_named(1), "1000000.00"),),
-        )
-        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
-        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
-        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
-
+        """Move the buyer schedule under a forecast, leaving one instalment undated."""
         plan_id, _ = active_plan
         revised = collections_client.post(
             f"{plans_url(project_id)}/{plan_id}/versions",
@@ -903,9 +894,724 @@ class TestBuyerCashWithNoTimingBlocksGovernance:
         assert written.status_code == 200, written.text
         govern_plan_version(collections_client, cfo_client, project_id, plan_id, revised_id)
 
+    def test_approval_re_proves_it_after_the_schedule_moved(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_plan: tuple[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """A plan restructured while a forecast waits for a signature is the ordinary case.
+
+        Submission is not a promise that the sources will hold still, and the
+        refresh that clears the staleness refusal would carry the omission in
+        with it. Submitted is the last point at which a schedule may be
+        re-pinned, so it is the point this has to be caught — before a signature
+        is attached to months that are short of contractually owed money.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+
+        self._restructure_with_undated_instalments(
+            collections_client, cfo_client, project_id, active_plan
+        )
         refreshed = finance_client.post(f"{base}/refresh-customer-snapshot", json={})
-        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.status_code == 200, "a submitted version may still be re-pinned"
+
+        refused = cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+        assert refused.status_code == 409, refused.text
+        assert "no date of any kind" in refused.json()["detail"]
+
+    def test_an_approved_version_cannot_take_the_omission_in_at_all(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        active_plan: tuple[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Past the signature the schedule is closed, so there is nothing to smuggle.
+
+        This used to be reachable: an approved version could be refreshed, which
+        pulled the restructured schedule — undated instalments and all — in
+        underneath the approval, and only activation caught it. Closing the
+        refresh closes the route, and the two refusals here say so in the order
+        an operator meets them.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+
+        self._restructure_with_undated_instalments(
+            collections_client, cfo_client, project_id, active_plan
+        )
+
+        refused_refresh = finance_client.post(f"{base}/refresh-customer-snapshot", json={})
+        assert refused_refresh.status_code == 409, refused_refresh.text
+        assert "already been approved" in refused_refresh.json()["detail"]
+
+        refused_activation = finance_client.post(f"{base}/activate", json={})
+        assert refused_activation.status_code == 409, refused_activation.text
+        assert "Withdraw the approval" in refused_activation.json()["detail"], (
+            "the version is stranded, and the refusal has to name the way out"
+        )
+
+
+class TestAnApprovedForecastIsNotATrap:
+    """The lifecycle needs a way out of *approved*, or a project can be stranded.
+
+    Approval is not the last gate: activation re-proves the sources, so a
+    construction forecast activated while a cashflow version waited for its
+    signature makes that version unactivatable. Meanwhile the one-open-forecast
+    rule counts it as the project's open version, and only a draft may be
+    edited. Without a governed exit the version sits in the open slot with
+    nothing able to move it, and cashflow forecasting stops for that
+    development — no activation, no edit, no replacement.
+
+    These prove the exit exists, that it is the CFO's to take, and that it does
+    not quietly rewrite the approval it is undoing.
+    """
+
+    def test_the_deadlock_has_a_governed_way_out(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """The whole sequence, end to end, as an operator would hit it."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        approved = cfo_client.post(f"{base}/approve", json={"reason": "Reviewed with Finance"})
+        assert approved.status_code == 200, approved.text
+
+        # Construction moves on while the cashflow version waits.
+        second = create_forecast(finance_client, project_id, change_reason="Revised build cost")
+        second_id = second.json()["id"]
+        cover_construction_forecast(
+            finance_client, project_id, second_id, cost_codes, hard="1200000.00"
+        )
+        assert govern_forecast(finance_client, cfo_client, project_id, second_id).status_code == 200
+
+        stranded = finance_client.post(f"{base}/activate", json={})
+        assert stranded.status_code == 409, stranded.text
+        assert "no longer matches" in stranded.json()["detail"]
+
+        blocked = create_cashflow_forecast(finance_client, project_id)
+        assert blocked.status_code == 409, "the approved version still holds the open slot"
+
+        withdrawn = cfo_client.post(
+            f"{base}/reject", json={"reason": "Construction forecast moved underneath it"}
+        )
+        assert withdrawn.status_code == 200, withdrawn.text
+        assert withdrawn.json()["status"] == "rejected"
+
+        replacement = create_cashflow_forecast(finance_client, project_id)
+        assert replacement.status_code == 201, replacement.text
+        assert replacement.json()["construction_forecast_version_id"] == second_id, (
+            "the replacement must be measured against the construction forecast now "
+            "in force, not the one that stranded its predecessor"
+        )
+
+    def test_a_stranded_forecast_is_told_to_withdraw_rather_than_rebase(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Advice a reader cannot act on is worse than none.
+
+        "Rebase this forecast" is right for a draft and impossible for an
+        approved version, whose pin is fixed and whose lines are frozen.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+        second_id = create_forecast(finance_client, project_id, change_reason="Revised").json()[
+            "id"
+        ]
+        cover_construction_forecast(
+            finance_client, project_id, second_id, cost_codes, hard="1200000.00"
+        )
+        govern_forecast(finance_client, cfo_client, project_id, second_id)
 
         refused = finance_client.post(f"{base}/activate", json={})
         assert refused.status_code == 409, refused.text
-        assert "no date of any kind" in refused.json()["detail"]
+        assert "Withdraw the approval" in refused.json()["detail"]
+
+    def test_the_approval_is_kept_on_the_record(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """A withdrawal is written beside the approval, never over it.
+
+        The CFO did approve it. Erasing that to make the row tidy would leave an
+        auditor unable to see that a signature was given and later taken back,
+        which is exactly the sequence worth seeing — so this is asserted against
+        the stored row rather than the response, because keeping the record is
+        the promise and the read model does not publish those columns.
+        """
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        finance_client.post(f"{base}/submit", json={})
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+        approved_at, approved_by = db.execute(
+            text(
+                "SELECT approved_at, approved_by_user_id FROM cashflow_forecast_versions "
+                "WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        assert approved_at is not None and approved_by is not None
+
+        withdrawn = cfo_client.post(f"{base}/reject", json={"reason": "Basis moved"})
+        assert withdrawn.status_code == 200, withdrawn.text
+        assert withdrawn.json()["status"] == "rejected"
+
+        after = db.execute(
+            text(
+                "SELECT approved_at, approved_by_user_id, rejected_at, rejection_reason "
+                "FROM cashflow_forecast_versions WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        assert after.approved_at == approved_at, "the approval is not erased"
+        assert after.approved_by_user_id == approved_by
+        assert after.rejected_at is not None
+        assert after.rejection_reason == "Basis moved"
+
+    def test_only_the_approver_may_withdraw(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Withdrawal is the same authority as approval, not a preparer's escape."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+
+        refused = finance_client.post(f"{base}/reject", json={"reason": "Let me out"})
+        assert refused.status_code == 403, refused.text
+
+    def test_a_governed_version_still_cannot_be_rejected(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Widening the exit must not reach what the company already reported."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert (
+            govern_cashflow_forecast(
+                finance_client, cfo_client, project_id, draft_forecast
+            ).status_code
+            == 200
+        )
+        refused = cfo_client.post(f"{base}/reject", json={"reason": "Changed my mind"})
+        assert refused.status_code == 409, refused.text
+
+
+class TestApprovalReprovesTheSources:
+    """A signature may not be attached to a basis already known to have moved.
+
+    The sources were proved at submission and again at activation, and not in
+    between — so a construction forecast replaced while a version waited could
+    be approved, and the problem surfaced only at activation, with the CFO's
+    approval already recorded against something nobody could use.
+    """
+
+    def test_a_stale_construction_source_refuses_the_approval(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+
+        second_id = create_forecast(finance_client, project_id, change_reason="Revised").json()[
+            "id"
+        ]
+        cover_construction_forecast(
+            finance_client, project_id, second_id, cost_codes, hard="1200000.00"
+        )
+        assert govern_forecast(finance_client, cfo_client, project_id, second_id).status_code == 200
+
+        refused = cfo_client.post(f"{base}/approve", json={"reason": "Looks fine to me"})
+        assert refused.status_code == 409, refused.text
+        assert "no longer matches" in refused.json()["detail"]
+
+    def test_an_unmoved_source_still_approves(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """The new gate must not refuse the ordinary case."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        finance_client.post(f"{base}/submit", json={})
+        approved = cfo_client.post(f"{base}/approve", json={"reason": "Reviewed with Finance"})
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["status"] == "approved"
+
+
+class TestAnApprovedScheduleDoesNotMoveUnderTheSignature:
+    """Refreshing the buyer snapshot re-reads what the CFO approved.
+
+    An approved version is structurally open — it holds the project's one open
+    slot — and that is a different question from whether it may still be
+    changed. Refreshing under the approval would alter the monthly inflows, the
+    funding requirement and the returns that the approval was given for, with
+    nobody approving the result.
+    """
+
+    def test_an_approved_version_refuses_the_refresh(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+
+        refused = finance_client.post(f"{base}/refresh-customer-snapshot", json={})
+        assert refused.status_code == 409, refused.text
+        detail = refused.json()["detail"]
+        assert "already been approved" in detail
+        assert "Withdraw the approval" in detail, (
+            "the refusal has to name the way out, not just say no"
+        )
+
+    def test_a_draft_and_a_submitted_version_may_still_refresh(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """The gate closes on approval, not before it."""
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        assert finance_client.post(f"{base}/refresh-customer-snapshot", json={}).status_code == 200
+
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        finance_client.post(f"{base}/submit", json={})
+        assert finance_client.post(f"{base}/refresh-customer-snapshot", json={}).status_code == 200
+
+    def test_a_governed_version_refuses_it_as_history(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        assert (
+            govern_cashflow_forecast(
+                finance_client, cfo_client, project_id, draft_forecast
+            ).status_code
+            == 200
+        )
+        refused = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/refresh-customer-snapshot",
+            json={},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "rejected version is a statement" in refused.json()["detail"]
+
+
+class TestADraftHasAPreparersWayOut:
+    """The same trap as a stranded approval, one state earlier and worse.
+
+    Submission re-proves the sources, so a construction forecast activated while
+    a draft is being prepared makes that draft unsubmittable. The draft still
+    counts as the project's one open version; its pin is deliberate provenance
+    and may not be swapped underneath it; and rejection belongs to an approver
+    who was never asked to look at it. Four doors, all shut, and the project
+    could prepare no cashflow forecast at all.
+
+    Discarding is the preparer's own act because a draft is preparatory work
+    nobody has been asked to review. Sending it to a CFO to be rejected would be
+    governance theatre and would blur a boundary worth keeping sharp.
+    """
+
+    def test_a_stale_draft_can_be_discarded_and_replaced(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+        active_construction_forecast: str,
+    ) -> None:
+        """The whole deadlock, and the one door that now opens."""
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        second = create_forecast(finance_client, project_id, change_reason="Revised build cost")
+        second_id = second.json()["id"]
+        cover_construction_forecast(
+            finance_client, project_id, second_id, cost_codes, hard="1200000.00"
+        )
+        assert govern_forecast(finance_client, cfo_client, project_id, second_id).status_code == 200
+
+        stale = finance_client.post(f"{base}/submit", json={})
+        assert stale.status_code == 409, "a draft on a superseded pin cannot be submitted"
+        blocked = create_cashflow_forecast(finance_client, project_id)
+        assert blocked.status_code == 409, "the draft still holds the project's open slot"
+        not_rejectable = cfo_client.post(f"{base}/reject", json={"reason": "Obsolete"})
+        assert not_rejectable.status_code == 409, "a draft was never put to an approver"
+
+        discarded = finance_client.post(
+            f"{base}/discard", json={"reason": "Construction forecast moved before submission"}
+        )
+        assert discarded.status_code == 200, discarded.text
+        assert discarded.json()["status"] == "rejected"
+
+        replacement = create_cashflow_forecast(finance_client, project_id)
+        assert replacement.status_code == 201, replacement.text
+        assert replacement.json()["construction_forecast_version_id"] == second_id, (
+            "the replacement is measured against the construction forecast in force"
+        )
+
+    def test_a_draft_refusal_names_the_action_that_applies(
+        self,
+        cfo_client: TestClient,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        """A refusal that does not say what to do instead is half an answer."""
+        refused = cfo_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/reject",
+            json={"reason": "Obsolete"},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "its preparer discards it instead" in refused.json()["detail"]
+
+    def test_nothing_the_draft_carried_is_deleted(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """A discarded draft stays an auditable record, not a hole in the numbering."""
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+
+        def counts() -> tuple[int, int]:
+            """The lines written here, and the buyer schedule frozen underneath."""
+            return (
+                db.execute(
+                    text(
+                        "SELECT count(*) FROM cashflow_forecast_lines "
+                        "WHERE forecast_version_id = :id"
+                    ),
+                    {"id": draft_forecast},
+                ).scalar_one(),
+                db.execute(
+                    text(
+                        "SELECT count(*) FROM cashflow_customer_schedule_snapshots "
+                        "WHERE forecast_version_id = :id"
+                    ),
+                    {"id": draft_forecast},
+                ).scalar_one(),
+            )
+
+        before = db.execute(
+            text(
+                "SELECT created_at, construction_forecast_version_id "
+                "FROM cashflow_forecast_versions WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        lines, snapshot = counts()
+        assert lines > 0
+
+        discarded = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Superseded by a change of programme"},
+        )
+        assert discarded.status_code == 200, discarded.text
+
+        after = db.execute(
+            text(
+                "SELECT created_at, construction_forecast_version_id, "
+                "rejected_at, rejected_by_user_id, rejection_reason "
+                "FROM cashflow_forecast_versions WHERE id = :id"
+            ),
+            {"id": draft_forecast},
+        ).one()
+        assert after.created_at == before.created_at
+        assert after.construction_forecast_version_id == before.construction_forecast_version_id
+        assert after.rejected_at is not None
+        assert after.rejected_by_user_id is not None
+        assert after.rejection_reason == "Superseded by a change of programme"
+        assert counts() == (lines, snapshot), (
+            "the lines and the frozen buyer schedule are the version's evidence; "
+            "discarding closes it, it does not empty it"
+        )
+
+
+class TestWhoMayDiscardADraft:
+    """Preparation is Finance's half of the ladder, and only Finance's."""
+
+    def test_a_cashflow_preparer_may(
+        self, finance_client: TestClient, project_id: str, draft_forecast: str
+    ) -> None:
+        discarded = finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Obsolete"},
+        )
+        assert discarded.status_code == 200, discarded.text
+
+    def test_an_approver_who_is_not_a_preparer_may_not(
+        self, cfo_client: TestClient, project_id: str, draft_forecast: str
+    ) -> None:
+        """The CFO governs decisions, not somebody else's working papers."""
+        refused = cfo_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Tidying up"},
+        )
+        assert refused.status_code == 403, refused.text
+
+    @pytest.mark.parametrize("client_name", ["collections_client", "sales_ops_client"])
+    def test_no_other_module_may(
+        self,
+        request: pytest.FixtureRequest,
+        client_name: str,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        client: TestClient = request.getfixturevalue(client_name)
+        refused = client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Not mine"},
+        )
+        assert refused.status_code == 403, refused.text
+
+    def test_only_a_draft_may_be_discarded(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        """Every other status belongs to somebody else's act, or to history."""
+        base = f"{cashflow_url(project_id)}/forecasts/{draft_forecast}"
+        cover_construction_months(
+            finance_client,
+            project_id,
+            draft_forecast,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        submitted = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert submitted.status_code == 409, "a submitted version is the approver's to refuse"
+        assert "must be rejected by the approver" in submitted.json()["detail"]
+
+        assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+        approved = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert approved.status_code == 409, "an approved version needs its approval withdrawn"
+
+        assert finance_client.post(f"{base}/activate", json={}).status_code == 200
+        active = finance_client.post(f"{base}/discard", json={"reason": "Changed my mind"})
+        assert active.status_code == 409, "governed history cannot be discarded"
+        assert "governed history cannot be discarded" in active.json()["detail"]
+
+
+class TestTheThreeWaysAVersionStopsStayApart:
+    """Discarded, rejected and withdrawn are three different histories.
+
+    Collapsing them onto one audit action would leave an auditor unable to tell
+    a preparer tidying up their own draft from a CFO refusing a submission from
+    a CFO taking back a signature already given.
+    """
+
+    def _prepared(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        version_id: str,
+    ) -> str:
+        cover_construction_months(
+            finance_client,
+            project_id,
+            version_id,
+            cost_codes,
+            months=((month_named(1), "1000000.00"),),
+        )
+        return f"{cashflow_url(project_id)}/forecasts/{version_id}"
+
+    def test_a_discarded_draft_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        project_id: str,
+        draft_forecast: str,
+    ) -> None:
+        finance_client.post(
+            f"{cashflow_url(project_id)}/forecasts/{draft_forecast}/discard",
+            json={"reason": "Obsolete"},
+        )
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_draft_discarded" in actions
+        assert "cashflow.forecast_rejected" not in actions
+        assert "cashflow.forecast_approval_withdrawn" not in actions
+
+    def test_a_rejected_submission_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        base = self._prepared(finance_client, project_id, cost_codes, draft_forecast)
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/reject", json={"reason": "Months do not match the programme"})
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_rejected" in actions
+        assert "cashflow.forecast_draft_discarded" not in actions
+        assert "cashflow.forecast_approval_withdrawn" not in actions
+
+    def test_a_withdrawn_approval_records_its_own_action(
+        self,
+        db: Session,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+        draft_forecast: str,
+    ) -> None:
+        base = self._prepared(finance_client, project_id, cost_codes, draft_forecast)
+        finance_client.post(f"{base}/submit", json={})
+        cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"})
+        cfo_client.post(f"{base}/reject", json={"reason": "Basis moved"})
+        actions = _forecast_actions(db, draft_forecast)
+        assert "cashflow.forecast_approval_withdrawn" in actions
+        assert "cashflow.forecast_approved" in actions, "the approval stays in the history"
+        assert "cashflow.forecast_rejected" not in actions
+        assert "cashflow.forecast_draft_discarded" not in actions

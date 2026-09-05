@@ -599,9 +599,32 @@ Status words live with the module that owns them, next to the labels:
   budget**) and `headroomTone` (negative is committed past the authorisation).
   Both live in one place because a second copy would eventually disagree, and
   the disagreement would print an overrun in the colour used for good news.
+- `components/projects/cashflow/labels.ts` — forecasts, movements, escrow,
+  source ownership, and the two rules below
 
 A status the interface has not been taught falls through unchanged and is
 drawn neutral. It is still a status somebody needs to see.
+
+**A period that is part settled and part expected gets a third word, not the
+nearer of two.** The cashflow bridge labels a month `Actual`,
+`Actual + Forecast` or `Forecast`, because the month a report is taken in is
+genuinely both — cash that has moved, plus what is still expected before it
+ends. Reducing it to the nearer label reads as a finished month and silently
+drops the rest of it; a project read on the third would show a shortfall that
+disappears on the fourth. Wherever a figure spans a boundary like this, name the
+boundary. And name it in prose beside the table, not in a `title` attribute: a
+tooltip is invisible to a keyboard, to a touch screen and to most screen
+readers, which is the wrong place for the one distinction a reader must not
+miss.
+
+**A persisted status is not a current financial effect, and the interface shows
+both.** An escrow restriction stays `confirmed` on the record after the receipt
+it was taken from is reversed — what happened is never rewritten to tidy a
+screen — but it has stopped holding anything. The screen therefore reports the
+*effect* (`counts_as_restricted`, `counts_as_released`) beside the *status*, and
+says which fact changed: "Confirmed · Not currently counted · Underlying receipt
+reversed". Reading the status alone would report cash the project does not have,
+and would contradict the position on the same page.
 
 A unit's four dimensions — commercial, legal, collection, delivery — are always
 shown side by side and never merged. "Sold" is not one fact in this product: a

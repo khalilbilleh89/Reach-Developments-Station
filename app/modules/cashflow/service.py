@@ -68,6 +68,7 @@ from app.modules.cashflow.models import (
     FORECAST_APPROVED,
     FORECAST_DRAFT,
     FORECAST_OPEN,
+    FORECAST_REFRESHABLE,
     FORECAST_REJECTED,
     FORECAST_SOURCE_KINDS,
     FORECAST_SUBMITTED,
@@ -501,8 +502,24 @@ def refresh_customer_snapshot(
     """
     lock_project(session, project.id)
     version = _lock_forecast(session, project_id=project.id, version_id=version_id)
-    if version.status not in FORECAST_OPEN:
-        raise ConflictError("Only an open forecast's customer schedule can be refreshed.")
+    if version.status == FORECAST_APPROVED:
+        # Not "only an open forecast can be refreshed": an approved one *is*
+        # open, and a reader told that would go looking for the wrong problem.
+        # The reason is governance, not structure, so the refusal says so and
+        # names the way out.
+        raise ConflictError(
+            "This forecast has already been approved. Its buyer schedule cannot be "
+            "changed under that approval — the months the CFO signed for are the "
+            "months that schedule produced. Withdraw the approval and prepare or "
+            "review the updated forecast instead."
+        )
+    if version.status not in FORECAST_REFRESHABLE:
+        raise ConflictError(
+            "Only a draft or submitted cashflow forecast's customer schedule can be "
+            "refreshed. An active, superseded or rejected version is a statement "
+            "about what the company expected at the time, and re-reading its "
+            "sources now would rewrite that."
+        )
     written = _write_customer_snapshot(session, project=project, version=version)
     record_event(
         session,
@@ -703,21 +720,37 @@ def _require_ready_for_governance(
     construction forecast can be activated and a payment plan can be
     restructured while this one sits waiting for a signature.
     """
+    # What to do about a moved source depends on where the version stands. A
+    # draft or submitted one can be re-pinned in place; an approved one cannot,
+    # because its schedule is what the CFO signed for — so telling an approver
+    # to refresh it would send them at a refusal. Say the right thing for the
+    # state the version is actually in.
+    approved = version.status == FORECAST_APPROVED
     staleness = source_staleness(session, project=project, version=version)
     if staleness.construction_is_stale:
+        remedy = (
+            "Withdraw the approval and prepare a forecast on the current one."
+            if approved
+            else "Rebase this forecast on the current one."
+        )
         raise ConflictError(
             f"This forecast schedules construction forecast version "
             f"{staleness.pinned_construction_version_number}, but version "
             f"{staleness.active_construction_version_number} is now in force. Its "
             "monthly build schedule no longer matches what construction expects to "
-            "spend. Rebase this forecast on the current one."
+            f"spend. {remedy}"
         )
     if staleness.customer_schedule_is_stale:
+        remedy = (
+            "Withdraw the approval and review the updated forecast — an approved "
+            "version's schedule cannot be re-pinned under the signature it carries."
+            if approved
+            else "Refresh the customer snapshot and re-check the months."
+        )
         raise ConflictError(
             "The buyer schedules governing this project have changed since this "
-            "forecast froze them. Refresh the customer snapshot and re-check the "
-            "months before submitting — a schedule silently re-read underneath an "
-            "approver changes what they are approving."
+            f"forecast froze them. {remedy} A schedule silently re-read underneath "
+            "an approver changes what they are approving."
         )
     unplaced = _unplaced_installments(session, project=project, version=version)
     if unplaced:
@@ -796,12 +829,22 @@ def approve_forecast(
     version_id: uuid.UUID,
     reason: str,
 ) -> CashflowForecastVersion:
-    """Approve a submitted forecast. Never by the person who submitted it."""
+    """Approve a submitted forecast. Never by the person who submitted it.
+
+    The sources are re-proved here as well, and this is the gate that was
+    missing. They were checked at submission and again at activation, so a
+    construction forecast replaced in between could be signed for and only
+    discovered at activation — the approval already recorded against a version
+    everybody then had to withdraw. An approver should not be able to put their
+    name to a basis that is known to have moved, and the cheapest place to say
+    so is before the signature rather than after it.
+    """
     lock_project(session, project.id)
     version = _lock_forecast(session, project_id=project.id, version_id=version_id)
     if version.status != FORECAST_SUBMITTED:
         raise ConflictError("Only a submitted cashflow forecast can be approved.")
     permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    _require_ready_for_governance(session, project=project, version=version)
 
     before = _snapshot(version, _FORECAST_FIELDS)
     version.status = FORECAST_APPROVED
@@ -822,6 +865,17 @@ def approve_forecast(
     return version
 
 
+#: The three ways a version stops, and they are not one event.
+#:
+#: A draft discarded by its preparer was never put to anybody; a submitted
+#: version was reviewed and refused; an approved one was signed for and the
+#: signature taken back. An auditor asking "what happened to version 4?" is
+#: asking which of those, so each keeps its own name.
+_DISCARDED = "cashflow.forecast_draft_discarded"
+_REJECTED = "cashflow.forecast_rejected"
+_WITHDRAWN = "cashflow.forecast_approval_withdrawn"
+
+
 def reject_forecast(
     session: Session,
     *,
@@ -830,11 +884,35 @@ def reject_forecast(
     version_id: uuid.UUID,
     reason: str,
 ) -> CashflowForecastVersion:
-    """Refuse a submitted forecast, with the reason on the record."""
+    """Refuse a submitted forecast, or withdraw an approval that cannot be acted on.
+
+    Both close a version that will not proceed, and both are the CFO's to take,
+    so they are one act with two meanings rather than two code paths.
+
+    Withdrawal exists because approval is not the last gate. Activation re-proves
+    the sources, and a construction forecast activated while this one waited for
+    a signature makes it unactivatable — while the one-open-forecast rule counts
+    it as the project's open version, and only a draft may be edited. Without a
+    way out of *approved*, a project in that state could neither activate what it
+    had nor prepare anything else: the version would sit in the open slot forever
+    and cashflow forecasting would stop for that development.
+
+    The approval itself is not erased. ``approved_at`` and ``approved_by_user_id``
+    stay exactly as they were, because the CFO did approve it and the record of
+    that is not ours to revise; the withdrawal is a later event recorded on top,
+    so the audit reads submitted → approved → withdrawn rather than pretending
+    the middle step never happened.
+    """
     lock_project(session, project.id)
     version = _lock_forecast(session, project_id=project.id, version_id=version_id)
-    if version.status != FORECAST_SUBMITTED:
-        raise ConflictError("Only a submitted cashflow forecast can be rejected.")
+    withdrawing = version.status == FORECAST_APPROVED
+    if version.status not in (FORECAST_SUBMITTED, FORECAST_APPROVED):
+        raise ConflictError(
+            "Only a submitted or approved cashflow forecast can be rejected. A "
+            "draft has not been put to an approver yet, so its preparer discards "
+            "it instead; an active or superseded version is in the record as "
+            "something the company reported; and a rejected one is already closed."
+        )
     permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
 
     before = _snapshot(version, _FORECAST_FIELDS)
@@ -845,7 +923,70 @@ def reject_forecast(
     _flush(session)
     record_event(
         session,
-        action="cashflow.forecast_rejected",
+        # Named apart on purpose: an auditor reading the history needs to see
+        # that a signature was given and later taken back, which is a different
+        # event from a version that was never approved at all.
+        action=_WITHDRAWN if withdrawing else _REJECTED,
+        entity_type=ENTITY_FORECAST,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+        after=_snapshot(version, _FORECAST_FIELDS),
+    )
+    return version
+
+
+def discard_forecast(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    version_id: uuid.UUID,
+    reason: str,
+) -> CashflowForecastVersion:
+    """Close a draft its preparer no longer wants, freeing the project's open slot.
+
+    The same deadlock as a stranded approval, one state earlier. Submission
+    re-proves the sources, so a construction forecast activated while a draft was
+    being prepared makes that draft unsubmittable — and the draft still counts as
+    the project's one open version, its pin is deliberate provenance that may not
+    be swapped underneath it, and rejection belongs to an approver who was never
+    asked to look at it. Without this the project could prepare no cashflow
+    forecast at all.
+
+    It is the preparer's own act rather than the approver's, because a draft is
+    preparatory work that has not been put to anybody. Asking a CFO to reject
+    something they never reviewed would be governance theatre, and it would blur
+    a boundary worth keeping sharp: Finance owns preparation, the approver owns
+    the decision, and neither reaches into the other's half.
+
+    Nothing is deleted. The version keeps its creation, its creator, its
+    construction pin, its frozen buyer schedule and every line it carried, and
+    ``rejected`` is reused as the terminal state because the shape of a closed
+    version does not change with the reason it closed. The audit event is what
+    says which reason that was.
+    """
+    lock_project(session, project.id)
+    version = _lock_forecast(session, project_id=project.id, version_id=version_id)
+    if version.status != FORECAST_DRAFT:
+        raise ConflictError(
+            "Only a draft cashflow forecast can be discarded by its preparer. A "
+            "submitted forecast must be rejected by the approver, an approved "
+            "forecast must have its approval withdrawn, and governed history "
+            "cannot be discarded."
+        )
+
+    before = _snapshot(version, _FORECAST_FIELDS)
+    version.status = FORECAST_REJECTED
+    version.rejected_at = _now()
+    version.rejected_by_user_id = actor.user_id
+    version.rejection_reason = reason.strip()
+    _flush(session)
+    record_event(
+        session,
+        action=_DISCARDED,
         entity_type=ENTITY_FORECAST,
         entity_id=version.id,
         correlation_id=actor.correlation_id,
@@ -1536,6 +1677,23 @@ def record_restriction(
             "Only confirmed buyer cash can be restricted. A receipt nobody has "
             "confirmed is not yet money in the bank, so there is nothing to hold "
             "back."
+        )
+    standing = session.scalars(
+        select(CashflowReceiptRestriction).where(
+            CashflowReceiptRestriction.receipt_id == receipt.id,
+            CashflowReceiptRestriction.status.in_((MOVEMENT_RECORDED, MOVEMENT_CONFIRMED)),
+        )
+    ).first()
+    if standing is not None:
+        # A partial unique index enforces this, but a constraint violation
+        # reaches the caller as a 500 naming an index. The rule is one a person
+        # can act on — release or reverse what is already held — and it is worth
+        # saying so at the boundary that can still explain it.
+        raise ConflictError(
+            f"{receipt.receipt_number} already has {standing.restricted_amount} held "
+            "against it. One escrow per receipt: two would each be measured against "
+            "the transfer on its own and could together hold back more than arrived. "
+            "Release or reverse the standing one first."
         )
     amount = money(restricted_amount)
     if amount > receipt.amount:

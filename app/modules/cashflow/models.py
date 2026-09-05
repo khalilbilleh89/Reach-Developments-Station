@@ -90,6 +90,16 @@ FORECAST_REJECTED = "rejected"
 
 #: Being prepared, checked, or waiting to be put in force. One per project.
 FORECAST_OPEN = frozenset({FORECAST_DRAFT, FORECAST_SUBMITTED, FORECAST_APPROVED})
+#: Whose sources may still be re-pinned underneath it.
+#:
+#: Deliberately not ``FORECAST_OPEN``. "Occupies the project's one open slot" and
+#: "may still be changed" are different questions, and an approved version
+#: answers them differently: it is open, because a second forecast alongside it
+#: would be a second answer to one question — and it is not changeable, because
+#: the CFO approved the months a particular buyer schedule produced. Refreshing
+#: that schedule under a recorded approval changes what was approved without
+#: anybody approving it again.
+FORECAST_REFRESHABLE = frozenset({FORECAST_DRAFT, FORECAST_SUBMITTED})
 #: Governed and no longer editable — what a historical read may draw on.
 FORECAST_GOVERNED = frozenset({FORECAST_ACTIVE, FORECAST_SUPERSEDED})
 

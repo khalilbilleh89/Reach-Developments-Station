@@ -1,6 +1,7 @@
 import type { IconName } from "@/components/ui/Icon";
 import {
   AUDIT_READERS,
+  CASHFLOW_READERS,
   COLLECTION_READERS,
   CONSTRUCTION_READERS,
   ECONOMICS_READERS,
@@ -22,9 +23,9 @@ import type { Roles } from "@/lib/roles";
  * them and nothing else does.
  *
  * This is UI composition, not a plugin system. PR-MVP-09 added Construction as
- * the one entry under Delivery; when PR-MVP-10 lands, Cashflow & Reporting is a
- * second entry under Finance. A group with no visible entries is not drawn, so
- * nothing is ever advertised before it exists.
+ * the one entry under Delivery, and PR-MVP-10 added Cashflow as the second
+ * entry under Finance. A group with no visible entries is not drawn, so nothing
+ * is ever advertised before it exists.
  *
  * `visible` mirrors the backend's reader sets for the module. A person whose
  * every request to a module would be refused is not shown the door — that is
@@ -42,6 +43,7 @@ export type ProjectSection =
   | "collections"
   | "construction"
   | "economics"
+  | "cashflow"
   | "documents"
   | "access";
 
@@ -170,6 +172,14 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description:
           "What each unit costs, what it earns, and the governed basis that says so.",
         visible: (roles) => hasAnyRole(roles, ECONOMICS_READERS),
+      },
+      {
+        key: "cashflow",
+        label: "Cashflow",
+        icon: "money",
+        description:
+          "Where the project's usable cash stands, what it expects to receive and spend, and when it needs funding.",
+        visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
       },
     ],
   },

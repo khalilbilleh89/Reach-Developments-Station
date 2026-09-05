@@ -133,6 +133,49 @@ export const ECONOMICS_READERS: Roles = new Set([
   "auditor",
 ]);
 
+/**
+ * Roles that may read the project's cash: what it holds, expects and must raise.
+ *
+ * Mirrors `CASHFLOW_READER_ROLES` on the server. Collections is deliberately
+ * absent and is the one omission worth explaining: it keeps every collections
+ * surface it has, because chasing a buyer needs that buyer's ledger — and does
+ * not need the project's development spend, its equity return or the month it
+ * runs short of cash. Sales, Legal and Design / Engineering are absent for the
+ * same reason in the other direction: none of them acts on a bank balance.
+ */
+export const CASHFLOW_READERS: Roles = new Set([
+  "system_admin",
+  "project_manager",
+  "finance",
+  "approver_cfo",
+  "executive_viewer",
+  "auditor",
+]);
+
+/** Roles that may prepare a cashflow forecast and record the cash this module owns. */
+export const CASHFLOW_PREPARERS: Roles = new Set([
+  "finance",
+  "project_manager",
+]);
+
+/** Roles that may record a movement, a restriction or a release. Finance alone. */
+export const CASHFLOW_RECORDERS: Roles = new Set(["finance"]);
+
+/**
+ * Roles that may confirm somebody else's movement — the second pair of eyes.
+ *
+ * Being in this set is not permission to confirm a particular row: the server
+ * compares the confirmer against the recorder by user identifier, so one person
+ * holding both Finance and Approver / CFO is still one person and is refused.
+ */
+export const CASHFLOW_CONFIRMERS: Roles = new Set(["finance", "approver_cfo"]);
+
+/** The one role that may sanction a cashflow forecast. */
+export const CASHFLOW_APPROVERS: Roles = new Set(["approver_cfo"]);
+
+/** Roles that may put an approved forecast in force. */
+export const CASHFLOW_ACTIVATORS: Roles = new Set(["finance", "approver_cfo"]);
+
 /** Roles that may read the audit history. */
 export const AUDIT_READERS: Roles = new Set(["system_admin", "auditor"]);
 

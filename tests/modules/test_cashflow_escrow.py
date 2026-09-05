@@ -259,6 +259,56 @@ class TestTheCeiling:
         )
         assert refused.status_code == 409, refused.text
 
+    def test_a_receipt_cannot_carry_two_standing_escrows(
+        self,
+        finance_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        cash_forecast: str,
+    ) -> None:
+        """Refused in words, not as a constraint violation.
+
+        A partial unique index already forbids it, and until now that was the
+        only thing that did: the second attempt reached the caller as a 500
+        naming a database index. Two escrows would each be measured against the
+        receipt on its own and could together hold back more than arrived, which
+        is a rule a person can act on — so it is stated where it can be
+        explained.
+        """
+        receipt = record_receipt(collections_client, project_id, collecting_sale, "100.00")
+        receipt_id = receipt.json()["id"]
+        confirm_receipt(finance_client, project_id, receipt_id)
+        first = restrict_receipt(finance_client, project_id, receipt_id, restricted_amount="30.00")
+        assert first.status_code == 201, first.text
+
+        second = restrict_receipt(finance_client, project_id, receipt_id, restricted_amount="20.00")
+        assert second.status_code == 409, second.text
+        assert "already has" in second.json()["detail"]
+
+    def test_a_reversed_escrow_frees_the_receipt_for_another(
+        self,
+        finance_client: TestClient,
+        second_finance_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        cash_forecast: str,
+    ) -> None:
+        """The rule is one *standing* escrow, not one ever."""
+        receipt = record_receipt(collections_client, project_id, collecting_sale, "100.00")
+        receipt_id = receipt.json()["id"]
+        confirm_receipt(finance_client, project_id, receipt_id)
+        first = restrict_receipt(finance_client, project_id, receipt_id, restricted_amount="30.00")
+        reversed_response = second_finance_client.post(
+            f"{cashflow_url(project_id)}/restrictions/{first.json()['id']}/reverse",
+            json={"reason": "Held against the wrong trust account"},
+        )
+        assert reversed_response.status_code == 200, reversed_response.text
+
+        again = restrict_receipt(finance_client, project_id, receipt_id, restricted_amount="20.00")
+        assert again.status_code == 201, again.text
+
     def test_only_a_confirmed_restriction_can_be_released(
         self,
         finance_client: TestClient,

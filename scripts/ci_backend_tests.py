@@ -52,6 +52,11 @@ ALWAYS_RUN = (
     "tests/test_migrations.py",
     "tests/test_static_frontend.py",
     "tests/test_ux_copy.py",
+    # The Cashflow workspace's presentation contract. Pure source reading, so
+    # it costs nothing to run, and what it guards — no arithmetic in the
+    # browser, no role asking for cash it may not read — would otherwise be
+    # caught by nobody until a figure on a screen disagreed with the ledger.
+    "tests/test_cashflow_workspace.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
     "tests/modules/test_audit.py",
