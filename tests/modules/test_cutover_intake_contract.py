@@ -28,11 +28,16 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
 
 CONTRACT = Path("docs/CANONICAL_INTAKE_CONTRACT.md")
+
+#: Asked of git from a fixed root rather than the working directory, so the
+#: answer does not depend on where pytest was started.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Sections of the disposition, by the anchor that opens them. Together they must
 #: account for the whole schema.
@@ -246,3 +251,74 @@ def test_the_native_provenance_pointers_are_still_mandatory(table: str, column: 
         f"{table}.{column} is nullable now — the B+ seam has landed and the "
         f"contract's blocked-work section needs updating with it"
     )
+
+
+# --------------------------------------------------------------------------- #
+# What may and may not be committed
+# --------------------------------------------------------------------------- #
+
+
+def ignored(path: str) -> bool:
+    """Whether git would ignore ``path``, asked of git rather than of a regex.
+
+    ``.gitignore`` precedence is not something to reimplement in a test: a later
+    negation, a directory pattern, a leading slash all change the answer, and a
+    test that got it subtly wrong would report a protection this repository does
+    not have.
+    """
+    return (
+        subprocess.run(
+            ["git", "check-ignore", "-q", "--no-index", path],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def test_the_cutover_working_directory_is_ignored() -> None:
+    """Where the client's live commercial data sits while a batch is prepared."""
+    assert ignored("migration-work/units.csv")
+    assert ignored("migration-work/manifest.json")
+    assert ignored("migration-work/evidence/preflight.json")
+
+
+def test_a_source_workbook_is_ignored_wherever_it_is_dropped() -> None:
+    """The realistic accident: a workbook in the root, swept up by ``git add -A``."""
+    for path in ("Sales Data.xlsx", "extract.xls", "book.xlsm", "docs/whatever.xlsx"):
+        assert ignored(path), path
+
+
+def test_csv_is_not_ignored_because_the_fixture_has_to_be_committed() -> None:
+    """The tightening that would look like an improvement and is not.
+
+    The canonical bundle is CSV and the synthetic fixture is committed as CSV. A
+    blanket ``*.csv`` rule would silently exclude the one form of this data that
+    is supposed to be present, and the absence would be noticed late or never.
+    Real bundles are kept out by *where* they live, not by their extension.
+
+    Asked of git, and only of git. A first draft also asserted the literal
+    ``*.csv`` was absent from the file, which failed immediately — the string is
+    in the comment explaining why the rule is not there. That is the same shape
+    as the guard in this repository that once searched for "force" and found the
+    docstring promising there is no force flag. A behavioural check does not
+    have that problem, and it is the behaviour that matters: a commented-out
+    pattern ignores nothing.
+    """
+    assert not ignored("tests/fixtures/cutover/units.csv")
+    assert not ignored("docs/example.csv")
+    assert not ignored("migration-work-notes.csv"), "the rule is the directory, not a prefix"
+
+
+def test_nothing_already_tracked_is_ignored() -> None:
+    """A rule added for the cutover may not quietly shadow the repository.
+
+    Checked against what git actually tracks rather than a sample: a pattern
+    broad enough to hide an existing file is broad enough to hide the next one.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    ).stdout.split()
+    shadowed = [path for path in tracked if ignored(path)]
+    assert not shadowed, f"the ignore rules shadow tracked file(s): {shadowed[:10]}"

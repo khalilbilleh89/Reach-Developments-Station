@@ -451,6 +451,33 @@ prevent.
 | Opening cash position | The source | Derived from receipts and restrictions. If it does not reconcile, that is the finding. |
 | Every reconciliation's expected value | The source | All seven, individually. |
 
+## Where the data lives, and what may be committed
+
+Everything a cutover reads or writes locally lives under **`migration-work/`**,
+at the repository root, and that directory is ignored. The source extract, the
+canonical bundle built from it, the manifest, the reject reports, the evidence
+artifacts — all of it is the client's live commercial data, and none of it
+belongs in a repository, on any branch, ever. There is no branch on which a
+buyer's identity document number is acceptable.
+
+`.xlsx`, `.xls` and `.xlsm` are ignored repository-wide as well, because a
+workbook dropped in the root and swept up by `git add -A` is the realistic
+accident and no spreadsheet is a legitimate fixture here.
+
+**`*.csv` is deliberately not ignored**, and the reason is worth stating so
+nobody adds it later as an apparent tightening. The canonical bundle is CSV, and
+the synthetic fixture — obviously fictional people, obviously fictional
+projects — is committed as CSV so the importer has something to be tested
+against. Ignoring the extension would silently exclude the one form of this data
+that is supposed to be present, and the exclusion would be discovered by its
+absence, which is the worst way to discover anything.
+
+What may be committed: templates, schemas, this document, mapping documentation,
+synthetic fixtures containing obviously fake people and projects, and code. What
+may not: buyer names, emails, phone numbers, passport or identity numbers, SPA
+files, bank references, receipt data, real financial values, source workbooks,
+and cutover exports.
+
 ## Reject behaviour
 
 A batch is all or nothing. A reject does not skip a row; it fails the batch,
