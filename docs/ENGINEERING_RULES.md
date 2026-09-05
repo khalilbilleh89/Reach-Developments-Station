@@ -418,11 +418,14 @@ Ready for review    Backend        structural checks, then every test
 Pushed to main      Backend        the same full suite, after the fact
 ```
 
-The reason is arithmetic. At roughly fifteen hundred backend tests the full
-suite takes around forty-five minutes, and running it on every push turned a
-one-line correction into a forty-five-minute wait. A wait long enough to walk
-away from is a wait that stops being read, which is how a team ends up merging
-on a stale green tick.
+The reason is arithmetic, and the arithmetic is worse than PR-ENG-01 thought.
+It estimated the full suite at around forty-five minutes. The first full run
+ever allowed to finish — PR-MVP-10B's, on 2026-09-05 — took **two hours and
+thirty minutes**, and the estimate had gone unchecked because until then no full
+job had ever completed: they were skipped on drafts and cancelled or merged past
+on everything else. Running that on every push would turn a one-line correction
+into a half-day wait. A wait long enough to walk away from is a wait that stops
+being read, which is how a team ends up merging on a stale green tick.
 
 **Fast CI is not weaker CI.** It answers a narrower question — *did I break the
 area this change can reasonably affect?* — and the broad question is still
@@ -538,13 +541,15 @@ weekend. An unbounded job that hangs reports nothing and costs everything,
 while a bounded one fails — which is at least an answer somebody can act on.
 Every job therefore declares `timeout-minutes`.
 
-The full suite's bound is **provisional at two hours**. The documented budget is
-about forty-five minutes, but the full job has never once been observed
-finishing on CI — the run for PR #251 was still inside its test step two hours
-in — so there is no measurement to set it from. Two hours bounds the waste at a
-third of the default while leaving well over twice the documented time. A suite
-that genuinely needs longer than that is a finding to act on, not a number to
-raise. Tighten it once one run has finished and said what the suite costs.
+The backend bound is **four hours**, set from the one measurement that exists:
+two hours thirty minutes, PR-MVP-10B's run on 2026-09-05, the first full job
+this repository ever let finish. One sample against a suite whose cost varies
+with runner and cache warmth, so the bound sits at about 1.6x it rather than
+hugging it. That still halves GitHub's default and still catches a hang, which
+is all a bound is for.
+
+Raising it again is not the response to a run that approaches it. Read
+`--durations=20` first: at four hours the suite's own cost is the finding.
 
 `Backend Fast` carries the same two-hour ceiling, and has to. *Fast* names a
 selection, not a duration: an unrecognised change deliberately falls back to

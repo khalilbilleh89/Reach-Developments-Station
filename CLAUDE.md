@@ -12,7 +12,7 @@ there.
 ```text
 Draft               Backend Fast   structural checks + the tests this change
                                    can plausibly break        (minutes)
-Ready for review    Backend        structural checks + every test    (~45 min)
+Ready for review    Backend        structural checks + every test   (~2h 30m)
 Pushed to main      Backend        the same full suite, after the fact
 ```
 

@@ -156,4 +156,4 @@ def test_every_job_is_bounded(job: str) -> None:
     """
     limit = setting(job, "timeout-minutes")
     assert limit is not None, f"{job} has no timeout-minutes"
-    assert 0 < int(limit) <= 120, f"{job} bound is {limit} minutes"
+    assert 0 < int(limit) <= 240, f"{job} bound is {limit} minutes"

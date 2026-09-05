@@ -235,8 +235,10 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 - no migration, no dependency, no runtime behaviour change
 
 > **Why it sits here.** At roughly fifteen hundred backend tests the full suite
-> takes about forty-five minutes, and running it on every push made a one-line
-> correction cost the same as a whole feature. Merge safety is unchanged: the
+> was estimated at about forty-five minutes, and running it on every push made a
+> one-line correction cost the same as a whole feature. (PR-ENG-03 measured it
+> for the first time: two hours thirty minutes. The case for two speeds was
+> stronger than anybody knew.) Merge safety is unchanged: the
 > full suite is still mandatory before merge, and any commit pushed after a
 > pull request is marked ready re-runs it, so the green tick always belongs to
 > the exact commit somebody would merge.
@@ -250,7 +252,9 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 - the two backend jobs now name the event they answer for instead of inferring
   it from an absent pull request payload
 - a `main` run is never cancelled by the next merge; pull request runs still are
-- every job declares `timeout-minutes`, replacing GitHub's six-hour default
+- every job declares `timeout-minutes`, replacing GitHub's six-hour default,
+  bounded from the first full-suite measurement this repository has ever had:
+  two hours thirty minutes, not the forty-five it was documented at
 - `tests/test_ci_workflow.py` guards the workflow's shape, in the always-run set
 - no migration, no dependency, no runtime behaviour change
 

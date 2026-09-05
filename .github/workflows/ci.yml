@@ -21,9 +21,11 @@
 # describes what a person should wait for, and a person who does not wait breaks
 # nothing: PR #251 was marked ready and merged thirty-three seconds later, so
 # the full job's test step began after the merge had already landed and nothing
-# it went on to conclude could have stopped anything. Until now, that left main
-# in a state no run had ever reported on — not red, which would at least be a
-# fact, but unmeasured.
+# it went on to conclude could have stopped anything. It concluded success, two
+# and a half hours after the merge — which is the shape of the problem exactly:
+# the proof arrived, and it arrived long after the decision it was meant to
+# inform. Until now that left main in a state no run had ever reported on. Not
+# red, which would at least be a fact. Unmeasured.
 #
 # The two triggers ask different questions and neither answers the other's.
 # Pre-merge CI asks *may this merge?* and is only binding while somebody is
@@ -74,7 +76,7 @@ jobs:
     # not a promise about duration: an unrecognised change deliberately falls
     # back to `pytest -q tests`, so this job's worst case *is* the whole suite.
     # A tighter bound here would kill exactly the fallback runs that matter most.
-    timeout-minutes: 120
+    timeout-minutes: 240
 
     services:
       postgres:
@@ -161,15 +163,19 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.draft == false
-    # Provisional, and deliberately generous. The documented budget is about
-    # forty-five minutes, but the full suite has never once been observed
-    # finishing on CI — the run for PR #251 was still inside this job's test
-    # step two hours in — so there is no measurement to set this from. Two hours
-    # bounds the waste at a third of the six-hour default while leaving well
-    # over twice the documented time. A suite that genuinely needs longer than
-    # this is a finding to act on, not a number to raise. Tighten it once one
-    # run has finished and said what the suite actually costs.
-    timeout-minutes: 120
+    # Four hours, from the only measurement this repository has. The full suite
+    # finished for the first time on 2026-09-05 — PR #251's run, test step
+    # 06:00:50Z to 08:30:54Z — in two hours thirty minutes, not the forty-five
+    # this workflow was documented at for the whole of PR-ENG-01's life. Nobody
+    # had seen the number before, because until that run no full job had ever
+    # been allowed to finish.
+    #
+    # One sample against a suite that varies with runner and cache warmth, so
+    # the bound is 1.6x it rather than a tight fit. That still halves the
+    # six-hour default and it still catches a hang, which is all a bound is for.
+    # If a run ever approaches four hours, read `--durations=20` before raising
+    # this: at that point the suite's cost is the finding.
+    timeout-minutes: 240
 
     services:
       postgres:
