@@ -238,6 +238,14 @@ CUTOVER_DOMAIN = "cutover"
 #: honest by requiring that nothing else reads them.
 CUTOVER_FIXTURES = "tests/fixtures/cutover/"
 
+#: The cutover's operational documentation. Mapped to the domain rather than
+#: left with the other docs because ``test_cutover_runbook.py`` checks the
+#: runbook against the tool — the exit codes, the action names, the flags, the
+#: checks it explains — and the change most likely to break that agreement is an
+#: edit to the runbook itself. Left unmapped, that edit runs the always-run set
+#: and not the guard.
+CUTOVER_DOCS = "docs/go_live/"
+
 #: Selector domains that own no database schema. ``domain_of_migration`` reads a
 #: revision's own file name to decide whose schema it reshapes, and it does that
 #: by matching against the domain map — so the moment an operational domain
@@ -437,6 +445,9 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is database infrastructure")
             continue
 
+        if path.startswith(CUTOVER_DOCS):
+            domains.add(CUTOVER_DOMAIN)
+            continue
         if path.startswith(CUTOVER_FIXTURES):
             # Named before the tests/ fallback below, and only this one
             # directory: a fixture anywhere else stays shared support.
