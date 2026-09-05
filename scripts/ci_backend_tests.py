@@ -140,7 +140,10 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
 #: not by being written out.
 DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "settings": ("projects",),
-    "projects": ("inventory",),
+    # ``inventory`` for the obvious reason; ``cutover`` because a batch takes
+    # the project row lock through ``lock_project`` and resolves the project a
+    # manifest names, so this module's contract is one the cutover depends on.
+    "projects": ("inventory", "cutover"),
     "inventory": ("pricing",),
     "pricing": ("sales",),
     "sales": ("payment_plans", "unit_economics"),
@@ -158,7 +161,10 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "unit_economics": (),
     # Cashflow is the last consumer in the platform and feeds nothing.
     "cashflow": (),
-    "audit": (),
+    # The cutover claims a batch through ``record_event``, so a change to the
+    # audit write contract can break it. The edge points *into* the cutover,
+    # never out: nothing in ``app/`` imports this package.
+    "audit": ("cutover",),
     "access": (),
     # The cutover tooling consumes the platform and feeds nothing back into it.
     # As it grows importers it will gain edges *into* it — ``sales -> cutover``
