@@ -10,6 +10,7 @@ finance team, and it would do it using the client's own data.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import json
 from datetime import date, datetime
 from decimal import Decimal
@@ -118,18 +119,37 @@ def test_columns_are_declared_not_inferred(tmp_path: Path) -> None:
     assert rows == [["a", "b"], ["1", ""], ["2", "3"]]
 
 
-def test_a_reject_carries_a_locator_and_a_code_and_no_identity() -> None:
-    """Nothing on this record can hold a name, an email or a passport number."""
-    assert set(REJECT_COLUMNS) == {
-        "source_file",
-        "row",
-        "reference",
-        "field",
-        "value",
-        "code",
-        "reason",
-        "severity",
-    }
+#: The complete reject record. A closed set, asserted as one, because the
+#: protection here is structural: a field that does not exist cannot be filled
+#: in later by somebody being helpful.
+EXPECTED_REJECT_FIELDS = {
+    "source_file",
+    "row",
+    "reference",
+    "field",
+    "code",
+    "reason",
+    "severity",
+}
+
+
+def test_the_reject_record_is_a_closed_set_of_locators_and_codes() -> None:
+    """Nothing here is a general-purpose carrier of source content.
+
+    An earlier version had a ``value`` field for "the supplied value where
+    safe". That is the right long-term rule and it is not yet provable: deciding
+    which fields are safe to quote needs a canonical intake contract that says
+    which of them can hold identity, and no such contract exists until the real
+    source does. So the field is gone rather than guarded by a comment.
+    """
+    assert set(REJECT_COLUMNS) == EXPECTED_REJECT_FIELDS
+    assert {f.name for f in dataclasses.fields(Reject)} == EXPECTED_REJECT_FIELDS
+
+
+def test_no_field_exists_to_echo_a_source_value() -> None:
+    """The specific field that was removed, named so it does not come back quietly."""
+    assert "value" not in REJECT_COLUMNS
+    assert "value" not in {f.name for f in dataclasses.fields(Reject)}
     for forbidden in ("name", "email", "phone", "passport", "iban", "bank", "raw", "row_data"):
         assert not any(forbidden in column for column in REJECT_COLUMNS), forbidden
 
@@ -144,7 +164,6 @@ def test_the_reject_report_reads_the_way_an_operator_needs_it(tmp_path: Path) ->
                 row=42,
                 reference="SPA-00147",
                 field="unit_reference",
-                value="U-999",
                 code="UNKNOWN_UNIT",
                 reason="Sale references a unit not found in the validated inventory source.",
             )
@@ -181,3 +200,23 @@ def test_two_runs_of_one_batch_produce_a_diffable_file(tmp_path: Path) -> None:
     write_json(second, {"a": 2, "b": 1})
     assert first.read_text(encoding="utf-8") == second.read_text(encoding="utf-8")
     assert first.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_a_set_is_refused_rather_than_serialised_in_some_order(tmp_path: Path) -> None:
+    """The writer promises diffable evidence, so it may not accept an unordered container.
+
+    Two runs of the same batch could serialise the same finding differently, and
+    the difference would look like a change in the data rather than in the
+    iteration. Ordering it here would be a coin toss; ordering it at the call
+    site is a decision somebody made.
+    """
+    with pytest.raises(TypeError, match="no order"):
+        write_json(tmp_path / "r.json", {"codes": {"UNKNOWN_UNIT", "BAD_DATE"}})
+    with pytest.raises(TypeError, match="no order"):
+        write_json(tmp_path / "r.json", {"codes": frozenset({"A"})})
+
+
+def test_an_explicitly_ordered_list_is_accepted(tmp_path: Path) -> None:
+    path = tmp_path / "r.json"
+    write_json(path, {"codes": sorted({"UNKNOWN_UNIT", "BAD_DATE"})})
+    assert json.loads(path.read_text(encoding="utf-8"))["codes"] == ["BAD_DATE", "UNKNOWN_UNIT"]

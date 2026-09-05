@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -43,9 +44,45 @@ from scripts.migration import CONTRACT_VERSION
 #: not forming.
 _BLOCK = 1024 * 1024
 
+#: What a canonical intake file may be called. Deliberately narrow: the bundle
+#: is a flat set of named files, so a name is a name and never a path. Anything
+#: with a separator, a drive letter, a leading dot or a traversal segment is
+#: refused before it is ever joined to a directory — a manifest is an
+#: operator-supplied document, and joining an operator-supplied string to a
+#: directory is how a hash of ``../../etc/passwd`` ends up in migration
+#: evidence looking exactly like a hash of a source file.
+_BUNDLE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9]+$")
+
+#: Lowercase hex, the length SHA-256 actually produces.
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+#: Which canonical intake contracts this code can validate a batch against.
+#: One entry today. When the contract changes, this set is where somebody
+#: decides whether old sealed manifests may still be applied — a decision, not
+#: a version-migration framework.
+SUPPORTED_CONTRACT_VERSIONS = frozenset({CONTRACT_VERSION})
+
 
 class ManifestError(Exception):
     """The manifest is unusable, and saying why is the whole job."""
+
+
+def bundle_name(name: object, *, where: str) -> str:
+    """The one place a bundle filename is proved to be a filename.
+
+    Used by every path that turns a name into a path — parsing a manifest,
+    sealing a bundle, verifying one before apply — because a check applied at
+    two of those three is not a check.
+    """
+    if not isinstance(name, str):
+        raise ManifestError(f"{where}: a file name must be a string, not {type(name).__name__}.")
+    if not _BUNDLE_NAME.fullmatch(name):
+        raise ManifestError(
+            f"{where}: {name!r} is not a canonical intake file name. The bundle is a flat set "
+            "of named files such as 'units.csv'; a name may not be a path, contain a separator "
+            "or a drive letter, begin with a dot, or traverse out of the bundle."
+        )
+    return name
 
 
 def hash_file(path: Path) -> str:
@@ -101,18 +138,20 @@ class Manifest:
     operator: str
     #: Why this batch exists, for the audit record.
     reason: str
+    #: The canonical intake contract this batch was validated against. Declared,
+    #: never defaulted: a manifest sealed against an older contract must not be
+    #: readable as though it had been sealed against today's, because the whole
+    #: point of recording it is to answer "which rules was this proved under?"
+    #: months later, when the answer is no longer obvious.
+    contract_version: str
     #: The files, with the hashes they had at validation.
     files: tuple[SourceFile, ...] = ()
-    #: The canonical intake contract these files were validated against.
-    contract_version: str = CONTRACT_VERSION
     #: Free notes. Never source data.
     notes: str | None = None
     #: Set once an adapter exists; until then the operator produced the
     #: canonical bundle some other way and that is recorded as unknown rather
     #: than as a version that does not exist.
     adapter_version: str | None = None
-    #: Populated only by ``verify_unchanged``; not part of the declaration.
-    _verified: bool = field(default=False, compare=False, repr=False)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -140,7 +179,85 @@ _REQUIRED = (
     "expected_currencies",
     "operator",
     "reason",
+    "contract_version",
 )
+
+
+def _text(raw: dict[str, object], field: str) -> str:
+    """One declared string, required to actually be one.
+
+    ``str(value)`` would turn ``{"name": "x"}`` into ``"{'name': 'x'}"`` and
+    record it as the operator. A manifest is evidence; a value that is not the
+    type it claims to be is a malformed manifest, not a formatting problem.
+    """
+    value = raw.get(field)
+    if not isinstance(value, str):
+        raise ManifestError(f"{field} must be a string, not {type(value).__name__}.")
+    text = value.strip()
+    if not text:
+        raise ManifestError(f"{field} must not be blank.")
+    return text
+
+
+def _currencies(raw: dict[str, object]) -> tuple[str, ...]:
+    """The currencies this batch may contain.
+
+    Normalised, never converted: there is no FX in this system and a cutover is
+    not where one appears. A duplicate is refused rather than folded away,
+    because two entries that differ only in case mean the operator was unsure
+    what they were declaring.
+    """
+    value = raw.get("expected_currencies")
+    if not isinstance(value, list) or not value:
+        raise ManifestError("expected_currencies must be a non-empty list of currency codes.")
+    codes: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ManifestError("Every expected currency must be a non-blank string.")
+        code = entry.strip().upper()
+        if code in codes:
+            raise ManifestError(f"expected_currencies lists {code} more than once.")
+        codes.append(code)
+    return tuple(codes)
+
+
+def _files(raw: dict[str, object]) -> tuple[SourceFile, ...]:
+    """The sealed hashes, parsed fail-closed.
+
+    A manifest declaring ten files of which nine parse is not a nine-file
+    manifest. It is a broken manifest, and quietly becoming the smaller one is
+    the worst available outcome: apply would verify the nine it could read,
+    report success, and write a batch nobody had proved.
+    """
+    value = raw.get("files", [])
+    if not isinstance(value, list):
+        raise ManifestError("files must be a list.")
+
+    parsed: list[SourceFile] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(value, start=1):
+        where = f"files[{index}]"
+        if not isinstance(entry, dict):
+            raise ManifestError(f"{where}: every entry must be an object.")
+        missing = sorted({"name", "sha256", "bytes"} - set(entry))
+        if missing:
+            raise ManifestError(f"{where}: missing {', '.join(missing)}.")
+
+        name = bundle_name(entry["name"], where=where)
+        if name in seen:
+            raise ManifestError(f"{where}: {name} is listed more than once.")
+        seen.add(name)
+
+        digest = entry["sha256"]
+        if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+            raise ManifestError(f"{where}: sha256 must be 64 lowercase hex characters.")
+
+        size = entry["bytes"]
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ManifestError(f"{where}: bytes must be a non-negative whole number.")
+
+        parsed.append(SourceFile(name=name, sha256=digest, bytes=size))
+    return tuple(parsed)
 
 
 def load(path: Path) -> Manifest:
@@ -166,42 +283,55 @@ def load(path: Path) -> Manifest:
         )
 
     try:
-        batch_id = uuid.UUID(str(raw["batch_id"]))
+        batch_id = uuid.UUID(_text(raw, "batch_id"))
     except ValueError as error:
         raise ManifestError("batch_id must be a UUID.") from error
 
     try:
-        extracted_at = datetime.fromisoformat(str(raw["extracted_at"]))
-        cutover_date = date.fromisoformat(str(raw["cutover_date"]))
+        extracted_at = datetime.fromisoformat(_text(raw, "extracted_at"))
     except ValueError as error:
+        raise ManifestError(f"extracted_at must be an ISO 8601 timestamp: {error}.") from error
+    if extracted_at.tzinfo is None:
         raise ManifestError(
-            "extracted_at must be an ISO 8601 timestamp and cutover_date an ISO 8601 "
-            f"date: {error}."
-        ) from error
+            "extracted_at must carry a timezone offset. It is the moment the source was taken "
+            "and it is read by people in other places; a naive timestamp is a different claim "
+            "depending on who reads it."
+        )
 
-    currencies = raw["expected_currencies"]
-    if not isinstance(currencies, list) or not all(isinstance(code, str) for code in currencies):
-        raise ManifestError("expected_currencies is a list of currency codes.")
+    try:
+        cutover_date = date.fromisoformat(_text(raw, "cutover_date"))
+    except ValueError as error:
+        raise ManifestError(f"cutover_date must be an ISO 8601 date: {error}.") from error
 
-    files = tuple(
-        SourceFile(name=str(entry["name"]), sha256=str(entry["sha256"]), bytes=int(entry["bytes"]))
-        for entry in raw.get("files", [])
-        if isinstance(entry, dict) and {"name", "sha256", "bytes"} <= set(entry)
-    )
+    contract_version = _text(raw, "contract_version")
+    if contract_version not in SUPPORTED_CONTRACT_VERSIONS:
+        raise ManifestError(
+            f"This manifest was validated against canonical intake contract {contract_version!r}, "
+            f"which this code cannot apply. Supported: "
+            f"{', '.join(sorted(SUPPORTED_CONTRACT_VERSIONS))}. Validate the batch again under "
+            "the current contract rather than applying it under rules it was never proved against."
+        )
+
+    notes = raw.get("notes")
+    if notes is not None and not isinstance(notes, str):
+        raise ManifestError("notes must be a string when present.")
+    adapter_version = raw.get("adapter_version")
+    if adapter_version is not None and not isinstance(adapter_version, str):
+        raise ManifestError("adapter_version must be a string when present.")
 
     return Manifest(
         batch_id=batch_id,
-        project_code=str(raw["project_code"]),
-        source_system=str(raw["source_system"]),
+        project_code=_text(raw, "project_code"),
+        source_system=_text(raw, "source_system"),
         extracted_at=extracted_at,
         cutover_date=cutover_date,
-        expected_currencies=tuple(str(code).upper() for code in currencies),
-        operator=str(raw["operator"]),
-        reason=str(raw["reason"]),
-        files=files,
-        contract_version=str(raw.get("contract_version", CONTRACT_VERSION)),
-        notes=raw.get("notes"),
-        adapter_version=raw.get("adapter_version"),
+        expected_currencies=_currencies(raw),
+        operator=_text(raw, "operator"),
+        reason=_text(raw, "reason"),
+        contract_version=contract_version,
+        files=_files(raw),
+        notes=notes,
+        adapter_version=adapter_version,
     )
 
 
@@ -212,7 +342,8 @@ def seal(manifest: Manifest, *, directory: Path, names: list[str]) -> Manifest:
     the validation report, and it is what ``apply`` will be handed.
     """
     files: list[SourceFile] = []
-    for name in sorted(names):
+    for raw_name in sorted(names):
+        name = bundle_name(raw_name, where="bundle")
         source = directory / name
         if not source.is_file():
             raise ManifestError(f"The bundle is missing {name}.")
@@ -249,7 +380,7 @@ def verify_unchanged(manifest: Manifest, *, directory: Path) -> None:
 
     moved: list[str] = []
     for source_file in manifest.files:
-        path = directory / source_file.name
+        path = directory / bundle_name(source_file.name, where="manifest")
         if not path.is_file():
             moved.append(f"{source_file.name} is gone")
             continue

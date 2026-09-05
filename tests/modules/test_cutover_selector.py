@@ -159,3 +159,38 @@ def test_the_cutover_feeds_nothing_back_into_the_platform() -> None:
         for source in ROOT.glob("app/**/*.py")
         if "scripts.migration" in source.read_text(encoding="utf-8")
     )
+
+
+# --------------------------------------------------------------------------- #
+# An operational domain is not a schema domain
+# --------------------------------------------------------------------------- #
+
+
+def test_an_alembic_revision_cannot_be_claimed_by_the_cutover_domain() -> None:
+    """The regression this file's own change introduced, and its fix.
+
+    ``domain_of_migration`` decides whose schema a revision reshapes by matching
+    the revision's file name against the domain map. Adding ``cutover`` to that
+    map made ``0012_legacy_cutover.py`` claimable by tooling that owns no
+    tables — and PR-MVP-11 may well add a revision with exactly that name, since
+    the legacy commercial provenance seam is on its way. It would have run three
+    text-reading tests in place of the full suite an unrecognised schema change
+    deserves.
+    """
+    assert selector.domain_of_migration("app/db/migrations/versions/0012_legacy_cutover.py") is None
+    assert chosen("app/db/migrations/versions/0012_legacy_cutover.py").full is True
+
+
+def test_schema_domains_still_claim_their_own_revisions() -> None:
+    """The exclusion is one named domain, not a hole in the mechanism."""
+    assert selector.domain_of_migration("app/db/migrations/versions/0006_payment_plans.py") == (
+        "payment_plans"
+    )
+    assert selector.domain_of_migration("app/db/migrations/versions/0003_inventory.py") == (
+        "inventory"
+    )
+
+
+def test_only_operational_domains_are_excluded_from_schema_inference() -> None:
+    assert frozenset({CUTOVER}) == selector.NON_SCHEMA_DOMAINS
+    assert CUTOVER in selector.DOMAIN_TEST_PREFIXES

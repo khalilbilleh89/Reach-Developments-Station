@@ -211,6 +211,17 @@ SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
 #: full-suite fallback that everything else under ``scripts/`` gets.
 CUTOVER_PACKAGE = "scripts/migration/"
 CUTOVER_DOMAIN = "cutover"
+
+#: Selector domains that own no database schema. ``domain_of_migration`` reads a
+#: revision's own file name to decide whose schema it reshapes, and it does that
+#: by matching against the domain map — so the moment an operational domain
+#: joined that map, a revision called ``0012_legacy_cutover.py`` became claimable
+#: by tooling that has no tables. It would then have run three text-reading
+#: tests in place of the full suite a schema change of unknown reach deserves.
+#: A domain here is never the answer to "whose schema is this?"; an unrecognised
+#: revision falls back to everything, which is the conservative behaviour that
+#: was always intended.
+NON_SCHEMA_DOMAINS = frozenset({CUTOVER_DOMAIN})
 SELECTOR_TESTS = "tests/test_ci_selector.py"
 
 
@@ -261,6 +272,8 @@ def domain_of_migration(path: str) -> str | None:
     """
     stem = Path(path).stem
     for domain in DOMAIN_TEST_PREFIXES:
+        if domain in NON_SCHEMA_DOMAINS:
+            continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
     if stem.endswith("_sales_legal"):

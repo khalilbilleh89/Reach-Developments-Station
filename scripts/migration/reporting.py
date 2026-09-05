@@ -113,7 +113,14 @@ def _plain(value: object) -> object:
         return value.isoformat()
     if isinstance(value, Mapping):
         return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, list | tuple | set | frozenset):
+    if isinstance(value, set | frozenset):
+        raise TypeError(
+            "A set has no order, so a report containing one is not the diffable evidence this "
+            "writer claims to produce: two runs of the same batch could serialise the same "
+            "finding differently. Sort it into a list at the point where the ordering is a "
+            "decision somebody made, rather than here where it would be a coin toss."
+        )
+    if isinstance(value, list | tuple):
         return [_plain(item) for item in value]
     return value
 
@@ -143,9 +150,17 @@ class Reject:
     enough to find the row in the source; the source is where the identity
     lives, and it stays there.
 
-    ``value`` is the one field that carries source text, and it is for the
-    field that failed alone — the unit reference that was not found, the date
-    that would not parse. Never a whole row.
+    **No field on this record echoes source content.** An earlier version
+    carried the value that failed — the date that would not parse, the code that
+    was not found — which reads as helpful and is not yet defensible: deciding
+    which fields are safe to quote needs the canonical intake contract to say
+    which fields can hold identity, and that contract does not exist until the
+    real source does. "The supplied value where safe" is the right long-term
+    rule; today nothing can prove *where safe*, so nothing is quoted.
+
+    What survives is enough to act on: the file and row locate it, the reference
+    names it in the operator's own vocabulary, and the code says what is wrong.
+    Fixing the row means opening the source, which is where the value already is.
     """
 
     #: The canonical intake file the row came from, e.g. ``sales.csv``.
@@ -153,14 +168,17 @@ class Reject:
     #: 1-based row number within that file, header excluded. For navigation
     #: only: a spreadsheet row is not an identity and is never used as one.
     row: int
-    #: The safe business key that identifies the record — an SPA number, a unit
+    #: The business key that identifies the record — an SPA number, a unit
     #: reference, a receipt number. ``None`` when the row is too broken to have
     #: one, which is itself worth seeing.
+    #:
+    #: This is the one field whose content comes from the source, and it is a
+    #: key rather than a value. Keeping it free of identity is the mapping's
+    #: job, not this record's: a source that keyed its contracts by buyer name
+    #: is a mapping decision to refuse, and there is no mapping yet.
     reference: str | None
     #: The column that failed, or ``None`` when the whole row is the problem.
     field: str | None
-    #: What was supplied for that one field, when it is safe to echo.
-    value: str | None
     #: A stable machine-readable code, e.g. ``UNKNOWN_UNIT``. Codes are how a
     #: thousand rejects become five problems.
     code: str
@@ -176,7 +194,6 @@ class Reject:
             "row": self.row,
             "reference": self.reference,
             "field": self.field,
-            "value": self.value,
             "code": self.code,
             "reason": self.reason,
             "severity": self.severity,
@@ -190,7 +207,6 @@ REJECT_COLUMNS: tuple[str, ...] = (
     "row",
     "reference",
     "field",
-    "value",
     "code",
     "reason",
     "severity",
