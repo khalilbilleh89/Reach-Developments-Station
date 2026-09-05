@@ -71,9 +71,52 @@ AVAILABLE = [
     "tests/modules/test_unit_economics_concurrency.py",
     "tests/modules/test_unit_economics_history.py",
     "tests/modules/test_migration_unit_economics.py",
+    # The cutover family. Absent until a ``cashflow -> cutover`` edge made some
+    # other domain's closure reach it, at which point every one of those
+    # closures fell back to the whole suite with "no test family exists for
+    # changed domain cutover" — the selector working correctly on a fixture
+    # that had drifted. ``test_every_domain_has_a_representative_here`` below
+    # is what stops that happening again.
+    "tests/modules/test_cutover_cli.py",
+    "tests/modules/test_cutover_manifest.py",
+    "tests/modules/test_cutover_intake_contract.py",
 ]
 
 SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
+
+
+def test_every_domain_has_a_representative_in_the_available_fixture() -> None:
+    """``AVAILABLE`` models the repository's test files, and it had drifted.
+
+    The cutover family was added in PR-MVP-11 and never listed here. That cost
+    nothing while no other domain's closure reached ``cutover`` — and the moment
+    one did, ``select`` correctly fell back to the whole suite with "no test
+    family exists for changed domain cutover". A hand-maintained fixture that
+    silently turns targeted runs into full ones is worse than no fixture: every
+    test in this file would have gone on passing while the thing they describe
+    quietly stopped happening.
+
+    So every domain has to appear here. The fixture stays hand-written — reading
+    the real directory would make these tests assert the selector against
+    itself — but it may not omit a domain.
+    """
+    missing = sorted(
+        domain
+        for domain in selector.DOMAIN_TEST_PREFIXES
+        if not selector.tests_for_domain(domain, AVAILABLE)
+    )
+    assert not missing, (
+        f"AVAILABLE names no test file for {missing}. Any closure reaching one of those "
+        "falls back to the full suite, and every targeted-selection test here would pass "
+        "while proving nothing."
+    )
+
+
+def test_the_available_fixture_names_only_files_that_exist() -> None:
+    """The other direction: a renamed test file leaves a fixture describing a ghost."""
+    root = Path(__file__).resolve().parents[1]
+    absent = sorted(path for path in AVAILABLE if not (root / path).is_file())
+    assert not absent, f"AVAILABLE names file(s) that do not exist: {absent}"
 
 
 def chosen(*changed: str) -> object:
