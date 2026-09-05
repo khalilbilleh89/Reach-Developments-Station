@@ -254,6 +254,74 @@ def test_the_native_provenance_pointers_are_still_mandatory(table: str, column: 
 
 
 # --------------------------------------------------------------------------- #
+# The document and the code have to agree
+# --------------------------------------------------------------------------- #
+
+#: Target-side preflight checks that assert a thing *already exists*, paired
+#: with the table each is about. A table named here may not also be in the
+#: bundle: the check would refuse the batch that was about to create it.
+PRE_EXISTING = {
+    "project_known": "projects",
+    "currencies_configured": "currencies",
+}
+
+_EMITTED_CHECK = re.compile(r'_check\(\s*\n?\s*"([a-z_]+)"')
+
+
+def test_the_bundle_contains_nothing_the_preflight_requires_to_pre_exist() -> None:
+    """The contradiction that shipped in the first draft of this contract.
+
+    ``projects.csv`` was step one of the import order while ``resolve_project``
+    refused an unknown code and ``project_known`` was a blocking preflight
+    check — so the preflight of any first batch would have refused the very
+    project the bundle was about to create. Both could not be right, and the
+    guards above did not notice, because every one of them compares the document
+    against itself.
+
+    This compares it against the code. A check that asserts something already
+    exists and a bundle file that creates that thing are a contradiction
+    whichever of the two is wrong.
+    """
+    bundle = set(disposition()["BUNDLE"])
+    clashes = sorted(
+        f"{table} (asserted pre-existing by {check})"
+        for check, table in PRE_EXISTING.items()
+        if table in bundle
+    )
+    assert not clashes, f"the bundle creates what preflight requires to exist: {clashes}"
+
+
+def test_every_pre_existing_table_is_classified_platform() -> None:
+    """Not merely absent from the bundle — positively placed.
+
+    A table dropped from the bundle and left unclassified would fail the
+    partition guard; one classified DERIVED would say Reach computes it, which
+    for a project or a currency is false. PLATFORM is the claim that matches
+    the code: administered before any batch, resolved by it, never created.
+    """
+    platform = set(disposition()["PLATFORM"])
+    misplaced = sorted(table for table in PRE_EXISTING.values() if table not in platform)
+    assert not misplaced, f"asserted pre-existing but not classified PLATFORM: {misplaced}"
+
+
+def test_the_named_checks_are_ones_the_preflight_actually_emits() -> None:
+    """Keeps the map above honest as ``target.py`` changes.
+
+    Read from the source rather than by running the checks, so this needs no
+    database and no fixture: the point is whether the names still exist, and a
+    renamed check would otherwise leave a rule here guarding nothing.
+    """
+    emitted = set(
+        _EMITTED_CHECK.findall(
+            (REPO_ROOT / "scripts/migration/target.py").read_text(encoding="utf-8")
+        )
+    )
+    assert emitted, "no checks found in target.py — has it been rewritten?"
+    unknown = sorted(set(PRE_EXISTING) - emitted)
+    assert not unknown, f"PRE_EXISTING names check(s) target.py does not emit: {unknown}"
+
+
+# --------------------------------------------------------------------------- #
 # What may and may not be committed
 # --------------------------------------------------------------------------- #
 

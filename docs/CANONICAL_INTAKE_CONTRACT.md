@@ -79,6 +79,7 @@ administrator, and are refused if a bundle tries to supply them.
 | `reference_values` | The controlled vocabularies (`*_code` columns) are configuration. |
 | `tax_rules` | Tax treatment is configuration in force at a date, not a per-row value. |
 | `roles`, `user_roles` | Authorisation is never a side effect of a data load. |
+| The project itself | Its country pack, base and reporting currency, fiscal year start and manager are decisions. A cutover that can bring a project into existence can bring the wrong one. |
 
 `preflight` proves these are present and refuses the batch when they are not.
 That is target-side preflight, and it is why preflight has a target half at all.
@@ -103,6 +104,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `reference_values` | The controlled vocabularies behind every `*_code` column. |
 | `tax_rules` | Configuration in force at a date. |
 | `audit_events` | Reach writes it. The cutover writes its own batch rows here and reads nothing from the source. |
+| `projects` | **Corrected.** Creating one is a set of governance decisions — jurisdiction, base and reporting currency, fiscal year, manager — not data anybody extracts. The manifest *names* a project; it does not bring one into being. |
 
 <!-- /disposition -->
 
@@ -148,7 +150,6 @@ That is target-side preflight, and it is why preflight has a target half at all.
 
 | Table | Group | Why |
 |---|---|---|
-| `projects` | A | The root. Everything is scoped to a project. |
 | `phases` | A | Physical hierarchy. |
 | `buildings` | A | Physical hierarchy. |
 | `floors` | A | Physical hierarchy. |
@@ -223,16 +224,15 @@ already exist when it is read, so a failure at step *n* leaves nothing from
 steps 1..*n*-1 behind. The whole batch is one transaction.
 
 ```text
-1  projects.csv
-2  area_types.csv          -> projects
-3  phases.csv              -> projects
-4  buildings.csv           -> phases
-5  floors.csv              -> buildings
-6  units.csv               -> floors
-7  unit_area_schedules.csv -> units
-8  unit_area_values.csv    -> unit_area_schedules, area_types
-9  clients.csv             -> projects
-10 client_parties.csv      -> clients
+1  area_types.csv          -> the project named in the manifest
+2  phases.csv              -> the project named in the manifest
+3  buildings.csv           -> phases
+4  floors.csv              -> buildings
+5  units.csv               -> floors
+6  unit_area_schedules.csv -> units
+7  unit_area_values.csv    -> unit_area_schedules, area_types
+8  clients.csv             -> the project named in the manifest
+9  client_parties.csv      -> clients
 ```
 
 ### Conventions that apply to every file
@@ -250,33 +250,30 @@ steps 1..*n*-1 behind. The whole batch is one transaction.
 | Duplicates | A natural key appearing twice in one file refuses the file. |
 | Unknown columns | Refuse. A column nobody mapped is a column somebody expected to be read. |
 
-### 1. `projects.csv`
+### There is no `projects.csv`, and the first draft of this document was wrong
 
-**Purpose.** The root scope. One row per project being migrated.
+An earlier revision listed `projects.csv` as step one of the bundle. That
+contradicted `scripts/migration/batch.py`, where `resolve_project` refuses an
+unknown code, and `scripts/migration/target.py`, where `project_known` is a
+blocking preflight check — so on the first run of any batch, the target-side
+check would have refused the very project the bundle was about to create. Both
+could not be right.
 
-**Natural key.** `code` — unique across the system, upper case
-(`ck_projects_code_upper`).
+The check is right and the bundle was wrong. Creating a project means choosing a
+country pack, a base currency, a reporting currency, a fiscal year start and a
+manager: five governance decisions, none of which anybody extracts from a legacy
+workbook, and each of which is wrong in a different expensive way if guessed. The
+manifest declares `project_code` because a batch *belongs to* a project, not
+because it brings one into being.
 
-| Field | Required | Notes |
-|---|---|---|
-| `code` | yes | Upper case, non-blank, unique. |
-| `name` | yes | Non-blank. |
-| `developer_entity` | yes | |
-| `country_pack_code` | yes | Resolved against `country_packs`. Reject if absent. |
-| `base_currency_code` | yes | Resolved against `currencies`. |
-| `reporting_currency_code` | yes | Resolved against `currencies`. |
-| `fiscal_year_start_month` | yes | 1–12. |
-| `status` | yes | One of `setup`, `predevelopment`, `active`, `on_hold`, `completed`, `cancelled`. |
-| `city`, `location`, `project_type_code` | no | |
-| `latitude`, `longitude` | no | Both or neither. Ranges enforced by the schema. |
-| `planned_start`, `planned_completion` | no | Completion may not precede start. |
+So the project is set up in the application before a batch runs, like the
+currencies and the country pack it depends on, and the batch resolves it. One
+batch, one project, already there.
 
-`created_by_user_id` is the cutover operator. `project_manager_user_id` is left
-null unless the bundle names a user who already exists.
+This was found by trying to build a synthetic fixture that exercised both halves
+at once, which is a reasonable argument for building fixtures early.
 
-**Privacy.** Public-internal. No personal data.
-
-### 2. `area_types.csv`
+### 1. `area_types.csv`
 
 **Purpose.** The measurement vocabulary. A schedule's values mean nothing
 without it, which is why it is imported before units.
@@ -301,7 +298,7 @@ surfacing an integrity error.
 
 **Privacy.** Public-internal.
 
-### 3–5. `phases.csv`, `buildings.csv`, `floors.csv`
+### 2–4. `phases.csv`, `buildings.csv`, `floors.csv`
 
 **Purpose.** The physical hierarchy. Every unit hangs off a floor.
 
@@ -318,7 +315,7 @@ attached to a phase in another project even by a malformed import.
 
 **Privacy.** Public-internal.
 
-### 6. `units.csv`
+### 5. `units.csv`
 
 **Purpose.** The thing that is sold. The largest file in a typical batch and the
 one whose statuses are the most consequential.
@@ -358,7 +355,7 @@ future sales.
 
 **Privacy.** Public-internal.
 
-### 7–8. `unit_area_schedules.csv`, `unit_area_values.csv`
+### 6–7. `unit_area_schedules.csv`, `unit_area_values.csv`
 
 **Purpose.** The measured areas. Pricing derives from the approved schedule, so
 this is the first file where the governance-actor rule bites.
@@ -387,7 +384,7 @@ one row per type per schedule.
 
 **Privacy.** Public-internal.
 
-### 9. `clients.csv`
+### 8. `clients.csv`
 
 **Purpose.** The counterparty. **The highest privacy class in the bundle.**
 
@@ -413,7 +410,7 @@ the runbook should assume it will need.
 **Privacy.** Personal data. Never logged. Reject records for this file carry the
 row number and `client_number` and nothing else — no name, no email, no phone.
 
-### 10. `client_parties.csv`
+### 9. `client_parties.csv`
 
 **Purpose.** Who actually signs, and for what share. Carries identity documents.
 
