@@ -159,8 +159,12 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # through two more, and pins the version its monthly schedule reconciles to.
     "construction": ("unit_economics", "cashflow"),
     "unit_economics": (),
-    # Cashflow is the last consumer in the platform and feeds nothing.
-    "cashflow": (),
+    # Cashflow was the last consumer in the platform and fed nothing. It now
+    # feeds the cutover, whose reconciliation orchestrator calls
+    # ``cashflow.service.reconciliation`` — and, through the ``construction ->
+    # cashflow`` edge above, this one line is also what carries a construction
+    # change to the cutover. One edge, because the closure is transitive.
+    "cashflow": ("cutover",),
     # The cutover claims a batch through ``record_event``, so a change to the
     # audit write contract can break it. The edge points *into* the cutover,
     # never out: nothing in ``app/`` imports this package.
