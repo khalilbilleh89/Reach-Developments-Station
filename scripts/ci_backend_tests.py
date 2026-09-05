@@ -71,6 +71,13 @@ ALWAYS_RUN = (
     # Pure text reading, and it guards the machinery every other entry in this
     # tuple depends on to be run in the first place.
     "tests/test_ci_workflow.py",
+    # The canonical intake contract's disposition of every table in the schema.
+    # It belongs here rather than to the ``cutover`` domain because of what it
+    # guards: a new table that nobody classified. The change that adds a table
+    # touches some other domain's models, so a domain-selected run would never
+    # reach this file, and the one defect it exists to catch would land
+    # unnoticed. Text and metadata reading, four seconds.
+    "tests/modules/test_cutover_intake_contract.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with
