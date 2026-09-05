@@ -79,6 +79,19 @@ def schema_constraint_names() -> frozenset[str]:
     return frozenset(names)
 
 
+def import_order() -> list[str]:
+    """The bundle files, in the order the contract says they are read.
+
+    Module level rather than inline in one test because the fixture guards read
+    it too: the synthetic bundle has to hold exactly these files, and two copies
+    of this parsing would eventually disagree about which document is right.
+    """
+    text = CONTRACT.read_text(encoding="utf-8")
+    block = re.search(r"```text\n(?P<body>[^`]*?\.csv[^`]*?)```", text, re.DOTALL)
+    assert block is not None, "the import-order block is missing"
+    return re.findall(r"^\s*\d+\s+([a-z_]+)\.csv", block.group("body"), re.MULTILINE)
+
+
 def disposition() -> dict[str, list[str]]:
     """The document's classification, as ``{section: [table, ...]}``."""
     text = CONTRACT.read_text(encoding="utf-8")
@@ -181,10 +194,7 @@ def test_the_import_order_is_a_total_order_over_the_bundle() -> None:
     point at which it is read, which for a single-transaction batch means its
     references may not exist yet.
     """
-    text = CONTRACT.read_text(encoding="utf-8")
-    block = re.search(r"```text\n(?P<body>[^`]*?\.csv[^`]*?)```", text, re.DOTALL)
-    assert block is not None, "the import-order block is missing"
-    ordered = re.findall(r"^\s*\d+\s+([a-z_]+)\.csv", block.group("body"), re.MULTILINE)
+    ordered = import_order()
     assert ordered, "the import-order block lists no files"
     assert len(ordered) == len(set(ordered)), f"a file is listed twice: {ordered}"
 
@@ -208,9 +218,7 @@ def test_the_unblocked_bundle_is_exactly_what_the_order_covers() -> None:
     seen_groups = set(groups.values())
     assert seen_groups == {"A", "B", "C", "D"}, f"unexpected bundle groups: {sorted(seen_groups)}"
 
-    block = re.search(r"```text\n(?P<body>[^`]*?\.csv[^`]*?)```", text, re.DOTALL)
-    assert block is not None
-    ordered = set(re.findall(r"^\s*\d+\s+([a-z_]+)\.csv", block.group("body"), re.MULTILINE))
+    ordered = set(import_order())
     unblocked = {t for t, g in groups.items() if g in {"A", "B"}}
     blocked = {t for t, g in groups.items() if g in {"C", "D"}}
 

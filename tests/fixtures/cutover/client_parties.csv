@@ -1,0 +1,4 @@
+project_code,client_number,share_sequence,party_role,name_as_identification,share_fraction,is_primary,nationality_code,residency_code,tax_id,identity_document_type,identity_document_number,representative_name,poa_reference
+GALINI-BLU,CL-0001,1,purchaser,Sample Buyer Alpha,1.000000,true,,,TAX-SAMPLE-0001,passport,ID-SAMPLE-0001,,
+GALINI-BLU,CL-0002,1,purchaser,Sample Buyer Beta,0.600000,true,,,TAX-SAMPLE-0002,passport,ID-SAMPLE-0002,,
+GALINI-BLU,CL-0002,2,joint_purchaser,Sample Joint Buyer Beta-Two,0.400000,false,,,TAX-SAMPLE-0003,passport,ID-SAMPLE-0003,,

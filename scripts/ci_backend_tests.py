@@ -225,6 +225,15 @@ SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
 CUTOVER_PACKAGE = "scripts/migration/"
 CUTOVER_DOMAIN = "cutover"
 
+#: The synthetic cutover bundle. Data files rather than code, so the generic
+#: "anything under tests/ that is not a test is shared support" fallback would
+#: claim them — and that fallback is about ``conftest.py`` and ``factories.py``,
+#: which rewrite the ground every test stands on. These CSVs are read by one
+#: test file. Editing a row of fictional data is not worth two and a half
+#: hours, and the guard in ``test_cutover_selector.py`` keeps the exception
+#: honest by requiring that nothing else reads them.
+CUTOVER_FIXTURES = "tests/fixtures/cutover/"
+
 #: Selector domains that own no database schema. ``domain_of_migration`` reads a
 #: revision's own file name to decide whose schema it reshapes, and it does that
 #: by matching against the domain map — so the moment an operational domain
@@ -424,6 +433,11 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is database infrastructure")
             continue
 
+        if path.startswith(CUTOVER_FIXTURES):
+            # Named before the tests/ fallback below, and only this one
+            # directory: a fixture anywhere else stays shared support.
+            domains.add(CUTOVER_DOMAIN)
+            continue
         if path.startswith("tests/"):
             if Path(path).name.startswith("test_"):
                 # A changed or new test always runs, whatever else selects.
