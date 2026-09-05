@@ -10,6 +10,7 @@ import {
   INTERNAL_PRICE_READERS,
   PRICING_APPROVERS,
   PRICING_WRITERS,
+  PROJECT_FINANCIAL_READERS,
   PROJECT_WRITERS,
   ROLE_SYSTEM_ADMIN,
   TECHNICAL_WRITERS,
@@ -267,9 +268,9 @@ export function ProjectWorkspace({
         {section === "land" ? (
           <LandTab
             projectId={projectId}
-            baseCurrencyCode={project.base_currency_code}
             canWriteLand={canWriteProject}
             canWritePlanning={canWriteTechnical}
+            canSeeCost={hasAnyRole(roles, PROJECT_FINANCIAL_READERS)}
           />
         ) : null}
         {section === "permits" ? <PermitsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}

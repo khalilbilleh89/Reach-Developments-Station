@@ -6,9 +6,9 @@ through `PR-V2-11`, each merged into `main` on its own short-lived branch.
 | Scope                       | Count |
 | --------------------------- | ----: |
 | Total planned MVP 2 PRs     |    12 |
-| Complete                    |     0 |
-| Current                     | PR-V2-00 |
-| Remaining after the current |    11 |
+| Complete                    |     1 |
+| Current                     | PR-V2-01 |
+| Remaining after the current |    10 |
 
 MVP 1 application development is frozen as the baseline. MVP 2 starts from
 `main` after PR #254 (`7d053ecfd52234fa142f1cf4b804318bd8a12714`).
@@ -46,7 +46,7 @@ Branch naming: `v2/pr-NN-slug`.
 
 ---
 
-## PR-V2-00 — Product Experience 3.0 / Premium UI Foundation 🚧
+## PR-V2-00 — Product Experience 3.0 / Premium UI Foundation ✅
 
 Section: horizontal product experience / frontend foundation. No backend
 business feature.
@@ -107,11 +107,76 @@ No migration, no schema change, no backend logic, no API contract change, no
 financial formula change, no dependency of any kind added, and no financial
 arithmetic added to the browser.
 
-## PR-V2-01 — Land & Permit Workspace
+## PR-V2-01 — Land & Permit Workspace 🚧
 
-- flexible ownership / title / zoning presentation
-- configurable permit types
-- simplified land and regulatory workflow
+Section: Land & Permits. One migration, one new API surface, no new
+dependency, no change to financial redaction, audit, concurrency or the permit
+state machine.
+
+**Land classification becomes the wording on the record.** `ownership_type`,
+`title_status` and `zoning` stop being country-pack reference codes and become
+free text (500 characters). A title office writes "Mortgage release pending";
+a deal is "75% acquired, balance under negotiation"; faced with a closed list
+an operator picks the nearest wrong option and puts the truth in a notes
+field, which is how a register stops being the record. One truth per concept:
+the columns were **renamed**, not shadowed by a parallel `_text` field, and
+the old `_code` names are now refused as unknown fields rather than silently
+accepted.
+
+- `0012_land_classification_text` renames the three columns and backfills each
+  stored code to the *label that was already on screen*, resolved with the
+  application's own precedence (a country-scoped value shadows a global one).
+  A code with no configured value behind it keeps its own text verbatim.
+  Nothing is dropped and nothing is guessed.
+- the downgrade reverses what it genuinely can and **raises rather than lying**
+  when a description cannot be a 64-character code — truncating, nulling or
+  mapping to a catch-all would each destroy what the title document says
+- the Settings categories survive as *suggestions*: the Land form offers the
+  usual phrasings through a native `<datalist>` and accepts anything, and a
+  parcel still saves when Settings cannot be reached
+- three `CHECK` constraints keep a blank string out; the service trims and
+  nulls empty input rather than storing whitespace
+
+**Permit types stay a controlled vocabulary and gain a way in.** A permit's
+type is filtered, counted and reported on; left open it becomes "Building
+Permit", "building permit" and "BLDG" inside a month. What changes is the
+detour through system-wide Settings, not the vocabulary.
+
+- `GET`/`POST /projects/{id}/permit-types`, scoped to the project. The two
+  facts deciding what the row is — its **category** and its **jurisdiction** —
+  come from the route's project and are refused in the body, so this cannot
+  become a general-purpose Settings write
+- `POST` requires technical write (the role already trusted with permits), not
+  System Administrator. The generic `/settings/reference-values` write is
+  **unchanged** and still administrator-only
+- no second permit-type table: the route delegates to the Settings service, so
+  normalisation, uniqueness and the single audit event stay where they live. A
+  duplicate code is `409`, never `BUILDING_2`
+- retired types are returned marked inactive rather than dropped: a permit
+  filed in 2019 still renders its label, and no new permit may be filed
+  under it
+
+**Land, Planning and Permits on Product Experience 3.0.**
+
+- Land rebuilt as register → parcel record file: ownership, title, zoning and
+  area in the register; the parcel opened as a `Drawer` with Overview,
+  Planning, Site & utilities and Documents
+- Planning is read-first — the controls as issued, with the variance stated —
+  and reveals its form on intent. Nothing is multiplied out into a buildable
+  area: development capacity is a feasibility question, and this is the
+  authority record it would be based on
+- Permits: the statutory position as the record's headline, the next action
+  above the dates rather than seventeen fields down, and status history drawn
+  as a timeline newest-first with a withdrawal struck through rather than
+  removed
+- adding a permit type happens inside the permit form: the dialog opens over
+  it, the new type is selected on success, and nothing already typed is lost.
+  An unconfigured jurisdiction says so and offers the way out instead of
+  showing a dead empty dropdown
+- `tests/test_product_experience.py` gains the two decisions as structural
+  contracts: land classification is typed rather than chosen and never gates
+  on suggestions; permit types are added through the project route and no
+  screen outside Settings writes reference data
 
 ## PR-V2-02 — Project Structure & Inventory
 
@@ -193,7 +258,7 @@ arithmetic added to the browser.
 
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
-| Complete               | 0 / 12                                        |
-| Current                | PR-V2-00 — Product Experience 3.0 / Premium UI Foundation |
-| After PR-V2-00 merges  | 1 / 12 complete, 11 remaining                 |
-| Next                   | PR-V2-01 — Land & Permit Workspace            |
+| Complete               | 1 / 12                                        |
+| Current                | PR-V2-01 — Land & Permit Workspace            |
+| After PR-V2-01 merges  | 2 / 12 complete, 10 remaining                 |
+| Next                   | PR-V2-02 — Project Structure & Inventory      |

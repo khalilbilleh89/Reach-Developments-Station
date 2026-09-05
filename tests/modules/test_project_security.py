@@ -122,7 +122,7 @@ def test_restricted_callers_still_read_the_operational_facts(
 
     assert parcel["plot_number"] == "PLOT-1"
     assert parcel["land_area"] == "4500.0000"
-    assert parcel["title_status_code"] == "REGISTERED"
+    assert parcel["title_status"] == "Registered"
 
 
 def test_a_single_parcel_read_redacts_as_the_list_does(
