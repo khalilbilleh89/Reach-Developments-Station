@@ -31,7 +31,7 @@ export function Field({
   grow?: boolean;
   className?: string;
 }) {
-  const classes = ["field", grow ? "filter-bar-grow" : "", className ?? ""].filter(Boolean).join(" ");
+  const classes = ["field", grow ? "field-grow" : "", className ?? ""].filter(Boolean).join(" ");
   return (
     <label className={classes}>
       <span className="field-label">
@@ -227,18 +227,6 @@ export function ToolbarFilter({
       <span className="visually-hidden">{label}</span>
       {children}
     </label>
-  );
-}
-
-/**
- * The long-standing filter strip, kept for the screens that still use it.
- */
-export function FilterBar({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
-  return (
-    <div className="filter-bar" role="search">
-      {children}
-      {actions ? <div className="filter-bar-actions button-row">{actions}</div> : null}
-    </div>
   );
 }
 

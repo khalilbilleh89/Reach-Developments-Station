@@ -1,804 +1,773 @@
-# UX System 2.0 — Reach Developments Station
+# Product Experience 3.0 — Reach Developments Station
 
-The product's design system, second edition: one light working surface, one
-dark navigation rail, one token layer, and a small set of hand-written
-primitives. No component library, no icon package, no CSS framework, no chart
-library, no client state library.
+The product's design system, third edition. One light working surface, one
+deep navigation rail, one token layer, one set of hand-written primitives, and
+no framework: no component library, no icon package, no CSS framework, no
+chart library, no client state library.
 
-The first edition (PR-UX-01) made the product consistent. This edition
-(PR-UX-02) makes it a workspace: a place a developer's teams live in all day,
-where a project is read at a glance, a module is one click away, and a record
-opens as a file with its own headline figures. The business truth underneath
-did not move; the way in was rebuilt around it.
+The first edition (PR-UX-01) made the product consistent. The second
+(PR-UX-02, PR-UX-03) made it a workspace. This edition (PR-V2-00, the first
+pull request of MVP 2) makes it a premium operating environment: the same
+governance-grade engine underneath, presented the way the strongest modern
+enterprise and fintech products present theirs. It is not a colour change. It
+is a deliberate upgrade to hierarchy, density, typography, spatial rhythm,
+record presentation, forms, registers, states and action placement — and it
+made the system simpler, not larger.
+
+The principle in one line:
+
+> **Serious backend. Simple operating experience. Premium product presentation.**
 
 Everything here lives in a few places:
 
-| What                          | Where                                              |
-| ----------------------------- | -------------------------------------------------- |
-| Tokens and classes            | `frontend/src/app/globals.css`                     |
-| Primitives                    | `frontend/src/components/ui/`                      |
-| Shell, rail, switcher, crumbs | `frontend/src/components/shell/`                   |
-| Role sets the shell mirrors   | `frontend/src/lib/roles.ts`                        |
-| One request, five answers     | `frontend/src/lib/answer.ts`                       |
-| Presentation of figures       | `frontend/src/lib/format.ts`, `frontend/src/lib/currency` |
-| Project command centre        | `frontend/src/components/dashboard/`               |
+| What                          | Where                                                         |
+| ----------------------------- | ------------------------------------------------------------- |
+| Tokens and every class        | `frontend/src/app/globals.css`                                |
+| Primitives                    | `frontend/src/components/ui/`                                 |
+| Shell, rail, switcher, crumbs | `frontend/src/components/shell/`                              |
+| Role sets the shell mirrors   | `frontend/src/lib/roles.ts`                                   |
+| One request, five answers     | `frontend/src/lib/answer.ts`                                  |
+| Presentation of figures       | `frontend/src/lib/format.ts`, `frontend/src/lib/currency.tsx` |
+| Project command centre        | `frontend/src/components/dashboard/`                          |
+| The system's structural guard | `tests/test_product_experience.py`                            |
 
 If a screen needs something this document does not describe, the answer is
-almost always a new composition of what is here — not a new dependency.
+almost always a new composition of what is here — not a new primitive, and
+never a new dependency.
 
 ---
 
 ## 1. What this product is, and what that means for its interface
 
 This is the record of what a real estate developer owns, what it is selling,
-what it has agreed, and what it is owed. People use it to answer questions they
-will later have to defend: to a board, to a lender, to a buyer's lawyer, to an
-auditor.
+what it has agreed, what it is owed, and what it is spending to build. People
+use it to answer questions they will later have to defend: to a board, to a
+lender, to a buyer's lawyer, to an auditor.
 
-Four consequences run through every decision below.
+Four consequences run through every decision below, and PR-V2-00 changed none
+of them.
 
 **Nothing on screen may be invented.** Every figure, status, blocker, gate and
 total is a value the API returned on that request. The browser lays out and
 labels; it never calculates a price, a discount, a tax, a margin, a total, an
-allocation, a release eligibility or an approval requirement. There is exactly
-one implementation of each of those, and it is on the server. A second one in
-React would eventually disagree with it, and the disagreement would be
-discovered by somebody signing a contract.
+allocation, a release eligibility, a funding gap or an approval requirement.
+There is exactly one implementation of each of those, and it is on the server.
 
-**Empty space beats a plausible number.** There are no placeholder cards, no
-sample series, no charts drawn from nothing, no "0%" standing in for "not
-measured". Where a total cannot honestly be produced — a project whose
-contracts are in two currencies — the screen says so and shows nothing.
+**Empty space beats a plausible number.** No placeholder cards, no sample
+series, no charts drawn from nothing, no health scores, no trends, no "0%"
+standing in for "not measured". Where a total cannot honestly be produced — a
+project whose contracts are in two currencies — the screen says so and shows
+nothing.
 
 **What a role may not read, the browser does not ask for.** Navigation,
-sections and record tabs mirror the backend's permission sets. A Sales Advisor
-has no Unit Economics entry, no Economics tab on a unit, no margin in a unit's
-header and no request to the economics endpoints at all. Hiding a figure after
-fetching it is not restriction; it is a leak waiting for a refactor.
+sections, record tabs and record headlines mirror the backend's permission
+sets. Hiding a figure after fetching it is not restriction; it is a leak
+waiting for a refactor. The rule is *do not ask*, never *fetch then hide*.
 
 **A word carries the meaning; colour only repeats it.** Nothing on any screen
-is understood by hue alone. Status is always written out, and the badge or dot
-behind it is a skim aid.
+is understood by hue alone.
 
 ---
 
-## 2. Theme
+## 2. The operating experience
 
-**A light workspace and a dark rail.** `html { color-scheme: light; }`, and
-there is no `prefers-color-scheme` rule anywhere in the stylesheet.
+The previous editions frequently presented a page as: box, heading, small
+explanation, another box, table, another form. Product Experience 3.0
+organises every major page around one sequence:
 
-The working surface is light because it gets printed, screenshotted into board
-packs and shared as evidence, and a document that looks different on the
+```
+CONTEXT   →   ANSWER   →   ACTION   →   DETAIL
+```
+
+Every major page makes three things obvious without parsing ten cards:
+
+1. **Where am I?** — the rail, the context bar and the page header.
+2. **What is the current position?** — one command surface, set large.
+3. **What can or should I do next?** — one primary action, visibly primary.
+
+Ask on every page: *what decision or action is this person here to make?*
+Then make that answer visually dominant, and let everything else recede.
+
+**Modern does not mean more decoration. Modern means better hierarchy.** The
+system avoids excessive borders, card-within-card, grey boxes everywhere,
+tiny text everywhere, pill badges sprayed across a screen, dead empty areas,
+arbitrary shadows, decorative gradients, glassmorphism and dashboard
+furniture. It reaches for whitespace, typography, hairlines, ruled bands,
+grouped statements and structured rows instead.
+
+### The anti-card rule
+
+A card is a meaningful surface, not a border. A page does not get an
+individual card for every number, status, heading, field group or tiny
+subsection. Two things that belong together are composed together — as a
+ruled band, a position with its support line, a statement with its total —
+and a card is used only where a surface genuinely changes: the answer the
+page exists to give, a register, an attention list, a form that opened.
+
+The stylesheet enforces the spirit of this: there is one container primitive
+(`Card`), one ruled band inside it (`SubPanel`), and the guard test fails if a
+second copy of either appears anywhere.
+
+---
+
+## 3. Theme
+
+**A light workspace and a deep rail.** `html { color-scheme: light; }`, and
+there is no `prefers-color-scheme` rule and no `data-theme` hook anywhere in
+the stylesheet — the guard test checks both.
+
+The working surface is light because it gets printed, screenshotted into
+board packs and shared as evidence, and a document that looks different on the
 reviewer's machine than on the preparer's is a document somebody has to
-explain. The rail is dark because it is chrome, not content: it frames the
-work without competing with it, and it reads as the same object whether the
-person is on Inventory or on Collections.
+explain. The rail is a deep charcoal-navy because it is chrome, not content:
+it frames the work without competing with it.
 
-A dark theme is a real piece of work — every token, every status colour, every
-contrast pair — and half of one is worse than none. If one is ever added, the
-token layer is where it goes: redefine the tokens in section 3 under both
-`@media (prefers-color-scheme: dark)` and an explicit `[data-theme="dark"]`,
-and change nothing else.
+A dark theme is a real piece of work — every token, every status colour,
+every contrast pair — and half of one is worse than none. If one is ever
+added, it is added at the token layer, deliberately, with every pair checked.
 
 ---
 
-## 3. Tokens
+## 4. Tokens
 
-All tokens are CSS custom properties on `:root`. Components never hard-code a
-colour, a radius, a spacing step or a duration.
+All tokens are CSS custom properties, declared **once**, on a single `:root`.
+Components never hard-code a colour, a radius, a spacing step, a size or a
+duration; the guard fails the build on a literal hex colour outside the token
+block, on an inline visual style in a component, and on a token block split
+in two.
 
 ### Canvas and surfaces
 
 | Token                 | Value     | Use                                                  |
 | --------------------- | --------- | ---------------------------------------------------- |
-| `--canvas`            | `#f4f4f1` | The warm page behind everything.                      |
-| `--surface`           | `#ffffff` | Cards, the context bar, drawers, dialogs.             |
-| `--surface-secondary` | `#f8f8f6` | Forms, filter strips, facts strips, nested regions.   |
-| `--surface-hover`     | `#f1f2ef` | Row and control hover.                                |
-| `--surface-selected`  | `#eaf0fc` | The selected row, tile or segment.                    |
+| `--canvas`            | `#f5f6f8` | The cool neutral page behind everything.              |
+| `--surface`           | `#ffffff` | Cards, the context bar, drawers, dialogs, registers.  |
+| `--surface-secondary` | `#f8f9fb` | Affixes, notices, the empty-state icon well.          |
+| `--surface-hover`     | `#f2f4f7` | Row and control hover.                                |
+| `--surface-selected`  | `#edf2ff` | The selected row, option or segment.                  |
+| `--surface-command`   | `#fbfcfe` | The command surface and the record facts strip.       |
+
+The canvas moved from a warm administrative beige to a cool high-end neutral;
+the working surface stays white and sits a hair above it.
 
 ### Lines
 
 | Token            | Value     | Use                                               |
 | ---------------- | --------- | ------------------------------------------------- |
-| `--line-soft`    | `#ebebe7` | Dividing one thing from the next.                 |
-| `--line-default` | `#dcddd8` | The edge of a card or a strip.                    |
-| `--line-strong`  | `#c1c4c9` | The edge of something you can type in or press.   |
+| `--line-soft`    | `#eceef2` | Dividing one thing from the next.                 |
+| `--line-default` | `#dfe3e9` | The edge of a card, the rule under a page header. |
+| `--line-strong`  | `#c3c9d3` | The edge of something you can type in or press.   |
 
 ### Text
 
-| Token              | Value     | Use                                         |
-| ------------------ | --------- | ------------------------------------------- |
-| `--text-primary`   | `#141922` | The answer.                                 |
-| `--text-secondary` | `#4b5462` | Supporting prose, field labels.             |
-| `--text-muted`     | `#676f7d` | Column headers, term labels, footnotes, placeholders. |
-| `--text-faint`     | `#9aa1ad` | Decorative only — a muted dot, a rule. Never text. |
-| `--text-inverse`   | `#ffffff` | On a filled accent.                         |
+| Token              | Value     | Use                                                 |
+| ------------------ | --------- | --------------------------------------------------- |
+| `--text-primary`   | `#131820` | The answer, and every heading.                      |
+| `--text-secondary` | `#4a5261` | Supporting prose.                                   |
+| `--text-muted`     | `#6b7484` | Labels, column headers, footnotes.                  |
+| `--text-faint`     | `#9aa3b2` | Decorative only — a chevron, a separator. Never text. |
+| `--text-inverse`   | `#ffffff` | On a filled accent or the rail.                     |
 
 ### Intent
 
-Each intent has a solid colour for text and a soft one for a fill.
+Each intent has a solid colour for text and a soft one for a fill. Status
+colour always reinforces a word, never replaces it.
 
 | Intent    | Solid     | Soft      | Means                                              |
 | --------- | --------- | --------- | -------------------------------------------------- |
-| `accent`  | `#2454d0` | `#e8eefc` | The product's one action colour. Also `info`.       |
-| `success` | `#177245` | `#e3f3ea` | Done, given, cleared, available, approved.          |
-| `warning` | `#8a5300` | `#fbf0dc` | Waiting on somebody, held, past due but not failed. |
-| `danger`  | `#a3221a` | `#fbe9e7` | Refused, expired, cancelled, blocked, a loss.       |
+| `accent`  | `#2454d0` | `#e9effc` | The product's one action colour. Also `info`.       |
+| `success` | `#157347` | `#e3f4ea` | Done, given, cleared, available, approved.          |
+| `warning` | `#8a5300` | `#fbf1dc` | Waiting on somebody, held, past due but not failed. |
+| `danger`  | `#a8231a` | `#fbe9e7` | Refused, expired, cancelled, blocked, a loss.       |
 
-`--accent-hover` (`#1b43ad`) is the pressed and hovered accent;
-`--accent-ring` is the focus ring.
+The accent is used with restraint: the one primary button on a surface, the
+selected tab, a record link, a focus ring. It is not sprayed across headings
+and icons.
 
 ### Navigation rail
 
-| Token                | Value                   | Use                                     |
-| -------------------- | ----------------------- | --------------------------------------- |
-| `--nav-bg`           | `#131a2b`               | The rail.                               |
-| `--nav-bg-hover`     | `rgb(255 255 255 / 6%)` | A hovered item.                         |
-| `--nav-bg-selected`  | `rgb(255 255 255 / 11%)`| The current section.                    |
-| `--nav-line`         | `rgb(255 255 255 / 9%)` | Dividers inside the rail.               |
-| `--nav-text`         | `#e7eaf1`               | Item labels.                            |
-| `--nav-text-muted`   | `#98a2b8`               | Group labels, the person's roles.       |
-| `--nav-accent`       | `#8db0ff`               | The current item's bar and icon.        |
-| `--nav-focus`        | `#cfdcff`               | Focus ring on the dark rail.            |
+| Token                | Value                    | Use                                    |
+| -------------------- | ------------------------ | -------------------------------------- |
+| `--nav-bg`           | `#0e1422`                | The rail. Also `--ink`.                 |
+| `--nav-bg-hover`     | `rgb(255 255 255 / 6%)`  | A hovered item.                         |
+| `--nav-bg-selected`  | `rgb(255 255 255 / 11%)` | The current section.                    |
+| `--nav-line`         | `rgb(255 255 255 / 8%)`  | Dividers inside the rail.               |
+| `--nav-text`         | `#e6e9f0`                | Item labels.                            |
+| `--nav-text-strong`  | `#ffffff`                | The current item, the brand, the name.  |
+| `--nav-text-muted`   | `#97a1b6`                | Group labels, the person's roles.       |
+| `--nav-accent`       | `#93b3ff`                | The current item's bar and icon.        |
+| `--nav-focus`        | `#d2ddff`                | Focus ring on the dark rail.            |
 
-### Spacing, radius, elevation
+**The ink hairline is the product's signature.** `--ink` is the rail's
+colour, and it reappears as the two-pixel rule over a command surface: the
+one place the navigation's material shows up inside the working area, and the
+reason the most important block on a page reads as part of the same object
+the reader navigated with. It is the only gradient in the stylesheet.
+
+### Spacing, radius, elevation, layout, motion
 
 `--space-1` … `--space-8` = `0.25 / 0.5 / 0.75 / 1 / 1.5 / 2 / 3 / 4 rem`.
 
-`--radius-control: 6px` for anything you type in or press, `--radius-card:
-10px` for a container, `--radius-tag: 5px` for a badge, `--radius-pill: 999px`
-for a chip.
+`--radius-control: 6px` for anything you type in or press; `--radius-card:
+12px` for a surface; `--radius-tag: 5px` for a badge; `--radius-pill` for a
+chip.
 
-`--shadow-xs` for a card at rest, `--shadow-sm` for a raised block,
-`--shadow-md` for a menu or dialog, `--shadow-lg` for a drawer. Elevation is
-nearly flat on purpose: the hierarchy comes from spacing and rules, not from
-stacked shadows.
+`--shadow-xs` for a card at rest, `--shadow-md` for a menu or dialog,
+`--shadow-lg` for a drawer. Elevation is nearly flat on purpose.
 
-### Typography
+`--sidebar-width: 16rem`, `--sidebar-collapsed-width: 4.25rem`,
+`--context-bar-height: 3.25rem`, `--content-max: 112rem`, `--content-pad:
+2rem`, `--content-gap: 1.5rem`, `--prose-max: 60rem`, `--drawer-width: 64rem`,
+`--drawer-width-narrow: 46rem`, `--control-height: 2.25rem` (`-sm: 1.75rem`,
+`-lg: 2.5rem` for form fields).
 
-Two families: `--font-sans` (the system stack) for everything a person reads,
-figures included, and `--font-mono` for an identifier a person matches
-against a document — a unit reference, a contract number, a receipt number.
-Figures are sans with `font-variant-numeric: tabular-nums` (`.num`, `.figure`,
-the metric value) so they line up down a column without looking like code.
+`--motion-fast: 120ms` for hover and colour, `--motion-base: 180ms` for a
+drawer, a dialog or a menu entering. Nothing bounces, nothing counts up, and
+`prefers-reduced-motion` reduces all of it to nothing.
 
-Scale, in rem: `--text-2xs` `.6875` · `--text-xs` `.75` · `--text-sm` `.8125` ·
-`--text-base` `.875` · `--text-md` `.9375` · `--text-lg` `1.0625` · `--text-xl`
-`1.25` · `--text-2xl` `1.5` · `--text-3xl` `1.75`.
+---
 
-Named sizes for the things that carry hierarchy: `--title-page` `1.375rem`,
-`--title-record` `1.5rem`, `--title-section` `.9375rem`, `--metric`
-`1.375rem`, `--metric-lg` `1.75rem`.
+## 5. Typography
+
+Typography is the main reason the previous edition could feel institutional,
+and the main thing this edition changed.
+
+Two families: `--font-sans` (Inter where installed, otherwise the system
+stack) for everything a person reads, figures included, and `--font-mono` for
+an identifier a person matches against a document — a unit reference, a
+contract number, a receipt. Figures are sans with tabular digits (`.num`,
+`.figure`, every metric and position value) so they line up down a column
+without looking like code.
 
 Body text is `--text-base` (14px). This is a register-heavy product used at a
 desk; a 16px body would push a fourteen-column register off the screen.
+Registers keep their density. Hierarchy comes from the levels above the body,
+not from making everything larger.
 
-### Layout and motion
+| Role                    | Token               | Size       |
+| ----------------------- | ------------------- | ---------- |
+| Project plate title     | `--title-plate`     | 1.875rem   |
+| Page title              | `--title-page`      | 1.5rem     |
+| Record title            | `--title-record`    | 1.625rem   |
+| Section/card title      | `--title-section`   | 1rem       |
+| The figure a page is for| `--metric-hero-lg`  | 2.5rem     |
+| A position figure       | `--metric-hero`     | 2rem       |
+| A metric                | `--metric`          | 1.375rem   |
 
-`--sidebar-width: 16.5rem`, `--sidebar-collapsed-width: 4.5rem`,
-`--context-bar-height: 3.25rem`, `--content-max: 118rem`, `--content-pad:
-1.5rem`, `--content-narrow: 26rem` (sign-in), `--drawer-width: 62rem`,
-`--drawer-width-narrow: 46rem`.
-
-`--motion-fast: 120ms` for hover and colour, `--motion-base: 160ms` for
-anything larger, `--ease` for both. The rail's width and a drawer's entrance
-are the only things that move; `prefers-reduced-motion` reduces everything to
-nothing.
-
----
-
-## 3a. Surfaces
-
-The shell frames the work. This is the work itself, in five weights. A surface
-earns its treatment from what it holds, never from a wish to be noticed, and a
-page has at most one of the strong ones — giving everything a tone is the same
-as giving nothing one.
-
-| Surface | Where | Treatment |
-| --- | --- | --- |
-| **Command** | The one thing a page exists to answer: a project's position, a pricing policy, a collections balance, a unit economics result. | `Card tone="command"` — a cool near-white ground and a two-pixel hairline of the navigation rail's own ink across the top. |
-| **Operational** | Ordinary workflow: a commercial position, a development summary, a form that opened. | The plain `Card`. Most blocks are this. |
-| **Data** | A register. | `Card flush` around a `TableScroll`: the frame recedes and the rows carry the page. |
-| **Attention** | Something owed, blocked or past its date. | `Card tone="attention"` — a narrow warm rail and the faintest tint. Never a red page. |
-| **Record** | A unit, a deal, a plan, a version. | The `Drawer`, opened over the register that led to it, with a facts strip on the command ground. |
-
-`tone="subtle"` is the fifth, and the quietest: a supporting block beside
-something that matters more.
-
-**The ink hairline is the product's signature.** The rail is `--nav-bg`, and the
-same colour reappears as the rule above a command surface. It is the one place
-the navigation's material shows up inside the working area, and it is what
-makes the most important block on a page read as part of the same object the
-reader navigated with rather than as a card that happens to be there.
-
-### Figures are set like a tear sheet
-
-A reported figure that a page is opened for is large, tightly tracked, tabular,
-and carries **its label underneath**. That inversion is the whole difference
-between a dashboard statistic and a financial statement: the number is what the
-reader came for, and the word only confirms which number it is.
-
-Ordinary metrics keep the label above the value. The two treatments are how a
-page says which of its figures is the answer and which are the supporting cast.
-
-```
-37.3044%            JOD 6,975,559.30        59.5009%
-MARGIN              PROFIT                  RETURN ON COST
-Minimum 18%         After finance
-──────────────────────────────────────────────────────────────
-Revenue JOD 18,699,007.38   Total cost JOD 11,723,448.08   Covered 118 of 126
-```
-
-`Position` lays those out; `PositionSupport` is the ruled line of facts beneath
-them. `Position compact` steps the figures down for a composition of four or
-five money amounts, where four full-size ones would wrap.
-
-### The compositions, and what each is for
-
-- **`StatStrip`** — four or five counts in one band: "126 Units · 88 Available ·
-  6 Held · 10 Unreleased". Counts are not findings, and four cards for four
-  integers is four times the furniture the information deserves.
-- **`Breakdown`** — the parts of a total, each with a dotted leader to its
-  amount and the server's own total ruled off underneath. The leader is a
-  financial-document convention, and it is why the block reads as a statement
-  rather than as two columns that happen to be near each other.
-- **`Waterfall`** — a sequence the server applied in order to reach a figure.
-  Different from a breakdown, which is a set of parts beside their total.
-- **`Distribution`** — a balance across the bands the server aged it into, with
-  a two-pixel rule above each band that warms as the money gets older. **The
-  rule is a band marker, not a measurement.** No width anywhere encodes an
-  amount, because the browser would have to divide to know one.
-- **`Meter`** — the only bar in the product, and it is not a chart: the fill is
-  a whole-number percentage the API returned for that record, and the figure is
-  printed beside it because a bar alone is not a number anybody can quote.
-- **`IdentityCell`** / **`PlaceCell`** — a register row's reference with the two
-  or three words that say which record it is, and where in the development it
-  sits. The anchor of every register in the product.
-
-### What is deliberately absent
-
-No charts. No sparklines, trends, deltas, health scores, projections or
-occupancy dials. Where the API returns no series, none is drawn — and none of
-these modules returns one. Premium information design does not require invented
-analytics, and a plausible line is worse than an empty space, because somebody
-will quote it.
+**Fewer tiny uppercase labels.** Column headers, metric labels, position
+labels, key/value terms, record facts and section headings are set in
+sentence case at `--text-xs` or `--text-sm`, semibold, muted. Uppercase
+tracking is reserved for the genuine eyebrows — the rail's group labels, a
+page's or a record's eyebrow, the brand line — where it says "this is chrome"
+and nothing else. A section heading is now a heading: sentence case, primary
+colour, clearly a level above the rows beneath it.
 
 ---
 
-## 4. The shell
+## 6. The shell
 
 ```
-.app                                data-rail="auto | expanded | collapsed"
+.app                                data-rail="auto | expanded | collapsed" · .app-narrow
 ├── .sidebar                        the rail
 │   ├── brand
 │   ├── ProjectSwitcher             inside a project; "Projects" outside one
 │   ├── nav groups                  Overview · Development · Commercial · Delivery · Finance · Governance
 │   └── footer                      who you are · Settings · Sign out
-├── .context-bar                    menu (phone) · rail toggle · breadcrumbs · utilities
-└── .content                        PageHeader, then the section's cards
+├── .context-bar                    menu (phone) · rail toggle · breadcrumbs · status · base currency
+└── .app-content                    PageHeader, then the page
 ```
 
-**The rail replaces the project-wide tab strip.** Twelve modules do not fit
-in a row of tabs, and a row of tabs cannot say which ones belong together. The
-groups are the developer's own departments — Development (Land, Permits,
+**The rail is the developer's departments.** Development (Land, Permits,
 Inventory), Commercial (Pricing, Sales & Legal, Payment Plans, Collections),
-Delivery (Construction), Finance (Unit Economics), Governance (Documents,
-Access) — with Overview on its own at the top. A group with nothing the reader
-may open is not drawn.
-
-Delivery is its own group rather than an entry under Finance because the people
-who open it are not the people who open Unit Economics. Construction is what the
-build costs the developer; unit economics is what a unit earns. Design /
-Engineering can read the first and cannot read the second, and a rail that put
-them under one heading would suggest one permission where there are two.
+Delivery (Construction), Finance (Unit Economics, Cashflow), Governance
+(Documents, Access), with Overview on its own at the top. The order is the
+lifecycle of a development and the guard test pins it. A group with nothing
+the reader may open is not drawn.
 
 **The project switcher is first-class.** It sits under the brand, shows the
 project's code, status and city, and opens a searchable menu of the projects
-the reader may access. Choosing one keeps the current section, because a
-Finance user comparing two projects' economics should not be sent back to
-Overview each time.
+the reader may access. Choosing one keeps the current section.
 
-**The context bar is quiet.** Breadcrumbs (`Projects / RG-01 / Inventory`),
-the project's status badge and its base currency, and nothing else. The page
-header underneath says where you are in words; the bar only keeps that
-visible while a register scrolls.
+**The context bar is white and quiet.** Breadcrumbs (`Projects / Galini Blu /
+Inventory` — the project's name, because a name is what a person recognises),
+the project's status badge and its base currency. The page header underneath
+says where you are in words; the bar keeps that visible while a register
+scrolls. It is not a second menu.
 
-**Three rail states.** `auto` follows the viewport: full above 75rem, icons
-only between 64rem and 75rem. A person can pin it `expanded` or `collapsed`
-with the toggle in the context bar; the choice is kept in `localStorage`
-(`reach.rail`) and read inside a `try`, so a browser that refuses storage
-still gets the automatic behaviour. Collapsed items show their label as a
-tooltip (`data-label`) and keep their accessible name.
+**Three rail states, two signals.** `data-rail` carries the person's
+preference (`auto`, `expanded`, `collapsed`; kept in `localStorage` under
+`reach.rail`, read inside a `try`). `app-narrow` carries the viewport's
+verdict below 75rem. The stylesheet draws the collapsed rail from one set of
+rules that name the sticky rail — so the phone's navigation drawer, which is
+the same content inside the same shell, keeps its labels. Collapsed items
+show their label as a tooltip and keep their accessible name.
 
 **Below 64rem the rail becomes a drawer.** The context bar grows a menu
 button; the rail opens as a focus-trapped `dialog` over a scrim, closes on
 Escape, on the scrim and on choosing a destination, and is mounted only while
-open so it never takes the keyboard from the page behind it.
+open.
 
-**Routing is the query string.** The frontend is a static export, so an open
-project and its section travel as `/projects/?project=<id>&section=<key>` and
-settings as `/settings/?section=<key>`; `projectHref` and `settingsHref` in
+**Routing is the query string.** `/projects/?project=<id>&section=<key>` and
+`/settings/?section=<key>`; `projectHref` and `settingsHref` in
 `components/shell/navigation.ts` are the only places those strings are built.
-Every rail item is a real link, so a middle click, a bookmark and the back
-button all behave.
 
 ### Visibility mirrors the server
 
-`lib/roles.ts` holds the same sets as `app/modules/*/permissions.py` — project
-writers, technical writers, financial readers, pricing writers and approvers,
-internal and list price readers, sales readers, plan and collection readers,
-economics readers, audit readers — and every navigation item, section, tab and
-request is gated by one of them. The rule is not "hide it": it is *do not ask*.
-A role that may not read Unit Economics never calls its endpoints; a role that
-may not see internal prices is not offered the pricing register; a role
-without the list price does not request it for the unit file's header. The
-server checks everything again regardless, and a refusal it still returns is
-drawn as "Not available to your role", never as a blank and never as a row of
-zeros. "Withheld" and "not recorded" are different facts and must never look
-the same.
+`lib/roles.ts` holds the same sets as `app/modules/*/permissions.py`, and
+every navigation item, section, record tab, record headline and request is
+gated by one of them. The guard test compares the construction and cashflow
+reader sets against the backend by reading both files, checks that every
+gated navigation item names its reader set, and checks that every summary the
+command centre requests is gated on the matching flag.
 
 ---
 
-## 5. Page anatomy
+## 7. Page anatomy
 
 ```
-PageHeader        title · subtitle · actions          (compact on module screens)
-Metric strip      the section's reported figures       Card > MetricGroup
-DataToolbar       search · two or three filters · count · clear
-Register          Card flush > TableScroll fixedFirst compact
+PageHeader        eyebrow · title · status · subtitle · facts · actions
+Command           the one answer the page exists to give        (Card tone="command")
+Counts            a compact ruled strip, not a row of cards      (StatStrip)
+DataToolbar       search · two or three filters · count · clear  (framed)
+Register          Card flush > TableScroll fixedFirst
 ```
 
-Exactly one `<h1>` per screen, in the `PageHeader`. Cards use `<h2>`,
-sections inside them `<h3>`, and the uppercase section heading (`SectionHeader`)
-divides a card or a drawer body without adding weight.
+**`PageHeader` composes title, status, description, facts and actions.** The
+title is strong; the page's current state sits beside it as a badge where a
+page has one; the primary action is visibly primary and there is at most one;
+everything else on the right is quiet. `meta` carries the small facts that
+identify the place — a code, a currency, a date — never figures. `compact`
+trims the chrome on register-heavy pages.
 
-**Registers are the product.** A register is a `Card flush` around a
-`TableScroll` with the identity column pinned (`fixedFirst`) and, where rows
-are many, the compact density. Cells do not wrap: a figure broken across two
-lines is misread as two figures, so every cell is `white-space: nowrap` and
-only a cell marked `.cell-prose` — a reason, a note — may wrap. The identity
-cell is the record's reference as a `button-link` with its secondary name
-underneath; that link opens the record file.
+**Exactly one `<h1>` per screen**, in the header. Cards use `<h2>`, sections
+inside them `<h3>`.
 
-**The toolbar is one instrument.** `DataToolbar framed` draws search, the two
-or three filters that narrow the register, and the count of what survived as a
-single command surface. Five independently bordered boxes read as five
-unrelated questions; a filter that is currently narrowing the register carries
-a quiet accent so a reader who cannot find a row can see why without opening
-every control.
+### The command surface
 
-**A register row is an object.** The identity is an `IdentityCell` inside the
-link that opens the record, the row whose record is open carries an accent rail
-and a tinted ground so closing the drawer lands the reader where they were, and
-a chevron appears at the far right on hover. A row the server flagged — a permit
-past its statutory period, one holding the programme — takes a warm rail and
-nothing else: the status and flag columns already carry the words, and tinting
-the whole row turns a register into an alarm panel where nothing stands out
-because everything does.
+A page has one answer, and the answer is a `Card tone="command"`: the cool
+near-white ground, the ink hairline, and inside it a `Position` — two to four
+reported figures set large with the label **beneath**, the way a tear sheet
+sets them — over a `PositionSupport` line of the facts that produced them.
+That inversion is the whole difference between a dashboard statistic and a
+financial statement: the number is what the reader came for, and the word
+only confirms which number it is.
 
-**Secondary states are dots.** A `Badge` is for the state the row is about —
-commercial status on Inventory, sale status on Sales. Every other state on the
-same row (legal, collection, delivery, a gate) is a `StatusDot`: the same
-words, a coloured dot instead of a filled tag, so a row with five states does
-not read as five alarms.
+```
+-427.9618%          JOD -7,266,150.00        -81.0592%
+Margin              Profit                    Return on cost
+Minimum 18%         After finance
+────────────────────────────────────────────────────────────
+Contracted 1 of 12 units   Revenue JOD 1,697,850.00   Total cost JOD 8,964,000.00
+```
 
-**Metrics are a strip, not a grid.** `MetricGroup` is a flex row; each
-`Metric` is a label over a tabular figure with an optional note, and a figure
-never wraps mid-number. `size="lg"` is the one number a screen is opened for,
-`md` the row it belongs to, `sm` the supporting counts. A `tone` colours the
-figure only when the server said something is wrong — a loss, an overdue
-balance, a breach of the margin floor.
+Do not put five equal KPI cards at the top of a screen. Counts belong in a
+`StatStrip` — a ruled band of four or five figures with hairlines between —
+unless one of them genuinely deserves to be the position.
 
-**The project's identity is a plate, not a card.** Inside a project the Overview
-opens with `ProjectPlate`: the name, who is developing it, where it is, and then
-code, status, type, programme, currency and manager as inline facts. No figure
-appears on it — figures are labelled and belong in the position beneath.
+### Figures are the server's
 
-**Where a project is, is a place.** The location field has always been free
-text, so half of them hold "Abdoun, Amman" and half hold a hundred characters of
-map query string that somebody pasted because it was the fastest way to record
-the site. Both are useful and neither is a name: `isUrl` decides which of the
-two a screen is holding, the address goes into an `ExternalLink` labelled "Open
-location", and the plate says the place.
+Every figure in a `Metric`, a `Position`, a `StatStrip`, a `Breakdown`, a
+`Waterfall`, a `Distribution` or a `Meter` arrived on the request that drew
+it. The guard test reads the representative screens and fails on
+`parseFloat`, `toFixed`, `Intl.NumberFormat`, `.reduce(` and arithmetic on a
+response field, and reads every `PositionFigure` on the overview for an
+operator.
 
 ---
 
-## 6. The command centre
+## 8. Registers
 
-The project Overview is composed **only** from summary endpoints that already
-exist — the inventory register's totals, the pricing overview and register
-totals, the sales register totals, the payment plan register, the collections
-summary and the unit economics summary — each requested once, and each
-requested only for a role the server answers. There are no charts and no
-placeholders; where a module has nothing to say yet the card says so.
+Registers are the product's centre of gravity, and PR-V2-00 made them read as
+a premium operating ledger rather than a spreadsheet clone.
 
-**Needs attention** is a list, in lifecycle order, of the counts the server
-already reports as problems: permits past their statutory period or flagged as
-blocking, units needing repricing, units without a live price, reservations
-needing closure, cancellations in progress, accounts overdue or disputed,
-units below the margin floor or making a loss. Each row links to the section
-that owns it. When nothing is flagged the card says "Nothing is flagged", which
-is a finding, not an absence.
+- **The identity cell anchors the row.** `IdentityCell` sets the reference a
+  person says out loud (`A-304`, `SPA-000147`, `Rana Haddad`) as the link that
+  opens the record, with the two or three words that say which record it is
+  beneath. `PlaceCell` says where a record sits in the development.
+- **The header is a label strip in sentence case**, muted, with a single rule
+  beneath it. No uppercase tracking, no tinted band.
+- **The only lines are the hairlines between rows.** No cell borders, no
+  grid.
+- **Figures sit right, tabular, and never wrap.** `.num` on the header and
+  the cell. A figure broken across two lines is misread as two figures.
+- **Density is the register's.** Rows are 0.625rem of padding; `compact`
+  steps them down for a schedule or a history. Command surfaces, record
+  headers and forms get more room; registers do not.
+- **Row states.** Hover tints the row; the row whose record is open carries an
+  accent rail and the selected ground; a row the server flagged carries a
+  warm rail and nothing else; a chevron appears at the far right on hover.
+- **Status is compact.** A `Badge` for the state the row is about, a
+  `StatusDot` for every other state on the row, plain text for a fact that
+  is not a state. A register is never a bag of coloured pills.
+- **Actions do not own a column.** A row's action is small and quiet, and
+  the identity link is the way in.
+- **Wide is fine.** A register scrolls inside `TableScroll` with the identity
+  column pinned; the page body itself never scrolls sideways at any width,
+  and the walkthrough asserts it at 1600, 1440, 1280, 1024, 768 and 390.
+- **A footnote under a register** (`.table-foot`) sits inside the flush card
+  with a rule above it, never as an inline-styled paragraph.
 
-**Commercial position**, **Economic position**, **Collections** and
-**Development** are metric strips over the same figures those sections show
-in full. Collections is drawn per currency and never totalled across them.
+### The toolbar
 
-Every card's request is one `Answer` (section 9): off, loading, ready,
-denied, failed. A denial — the server refusing a role the browser thought
-could read — draws "Not available to your role". A failure is said in words.
+`DataToolbar framed` is one instrument: search on the left, the two or three
+filters that narrow the register, the count of what survived, and the way to
+clear everything. A filter that is currently narrowing the register is tinted
+(`ToolbarFilter active`) so a reader who cannot find a row can see why. Below
+60rem the instrument stacks; nothing in it takes a height it was not given.
+It is not a query builder and will not become one.
 
 ---
 
-## 7. Record files
+## 9. The record file
 
-A record — a unit, a deal, a payment plan, a collections account, a permit —
-opens over the register that led to it, in a `Drawer`, and keeps the register
-where it was. The header is the record's identity and stays put; the body
-scrolls under it.
+A record — a unit, a deal, a payment plan, a collections account, a contract,
+a certificate, a permit, a new project — opens over the register that led to
+it, in a `Drawer`. Opening one should feel like opening a file, not opening a
+modal full of forms.
 
 ```
 Drawer
-├── eyebrow            "Unit" · "Deal file" · "Payment plan" · "Collections account"
-├── title              the reference
-├── subtitle           what it is, where it is, who it is with
-├── meta               the state badges
-├── facts strip        three or four figures somebody opened it for
-├── tabs               the sections
-└── body               the selected section
+├── identity      eyebrow · title · where it is · state          (left)
+├── headline      the one value the record is about              (right, large)
+├── actions       the one or two things this record invites      (right)
+├── facts strip   three or four supporting figures, on the command ground
+├── sections      the departments, as a real tablist
+└── body          the selected section, scrolling under the fixed header
 ```
 
-**The facts strip is role-shaped.** A unit's header shows the list price, the
-margin, the outstanding balance and the weighted area — but each fact is
-present only for a role entitled to it, because each is fetched only for a
-role entitled to it. A Sales Advisor's unit header has the list price and the
-area; a Collections officer's has the outstanding balance and the area; a
-Finance user's has all four.
+**The headline is role-shaped, and so is the strip.** A unit's headline is
+its current list price, with the version and basis in words beneath — present
+only for a role the server answers with the price, because the price is
+requested only for that role. Legal and Collections open the same file with
+no headline and nothing hidden. The facts strip carries the areas, the margin
+for economics readers, the outstanding balance for collection readers. A
+failed request is said as a failure, never drawn as "not priced".
 
-**Unit 360** — Overview (the four status dimensions side by side, release
-readiness, the price, an economics snapshot, a collections snapshot, the
-commitment), Areas & features, Pricing (the live price and how it was built,
-as a server-ordered waterfall with the arithmetic one click away), Sales &
-legal, Collections, Economics (from revenue to profit as the server's own
-waterfall, the cost composition, the unit's own costs), Release and History.
-Sections a role cannot read are not offered.
+**Unit 360 is the flagship.** `A-101` · `2BR · 2 bedroom · Phase P1 /
+Building A / Floor 01` · Contracted · Releasable, with `JOD 214,912.50 ·
+Current list price · v1 · ex tax` beside it and `Edit unit` for a role that
+may. Then internal area, weighted saleable area, attached parking, margin and
+outstanding on the strip; then Overview, Areas & features, Pricing, Sales &
+legal, Collections, Economics, Release and History. The Overview's four
+status dimensions sit side by side on one ruled band, never merged and never
+boxed. Nothing in the file calculates, and it does not yet orchestrate
+Buyer → Reserve → Sell: that is PR-V2-04 and PR-V2-05, and this file is the
+visual pattern they will build on.
 
-**The deal file** — a lifecycle strip (Reserved · Contracted · Registered ·
-Handed over, drawn from the server's statuses), then Commercial (the
-reservation, the quote as a waterfall, the commercial inputs and what happens
-next), Buyers, Contract (the frozen terms and taxes), Legal (the timeline and
-the milestone form), Payment plan, Collections (for collection readers only),
-Cancellation and Handover, each present only when the record exists.
+**A new record is a file too.** Creating a project opens a narrow drawer
+over the portfolio register with a grouped form inside, so the register stays
+where it was.
 
-**The payment plan** carries the contract principal, the total buyer payable,
-the instalment count with its reconciliation and the effective date in its
-header; the schedule editor types shares as percentages and money in the
-contract's currency. **The collections account** carries outstanding,
-collected, unapplied cash and the next follow-up.
-
-**The contract file** — Position (commitment, certification and cash as three
-separate compositions with their bases written above them), Lines, Variations,
-Certificates, and Invoices & payments. The Position tab is the record's whole
-argument: this is the screen where somebody is most tempted to treat the three
-as one, so they never share a row and the reader is never invited to subtract
-one from another. Retention and advance sit under cash, not under cost.
-
-**The certificate file** carries the waterfall in the server's order — work
-certified, retention withheld, retention released, advance recovered, other
-deductions, tax, net due — and recomputes none of it. Applying those deductions
-in a different sequence gives a different answer on the same inputs, and
-`net_due` is the ceiling an invoice is approved within, so a browser-side sum
-disagreeing by a cent would offer an approvable claim the server then refuses.
-Its lines carry previously certified, this period and cumulative as three
-columns, because a single column labelled "certified" is read as whichever one
-the reader expected.
-
-**Narrow drawers** (`narrow`) are for records with less to say — a permit.
-Below 64rem every drawer takes the whole screen, and the way back is a button
-at the top left, where a thumb expects it.
+**Below 64rem every drawer takes the whole screen**, the headline drops under
+the identity, and the way back is a button at the top left.
 
 ---
 
-## 8. Forms
+## 10. Status presentation
+
+Not every status is a pill. Three treatments, by importance:
+
+| Treatment            | For                                                   | Primitive     |
+| -------------------- | ----------------------------------------------------- | ------------- |
+| Primary current state| The state a surface is about: commercial status on a unit, sale status on a deal, a project's lifecycle state beside the page title | `Badge`       |
+| Secondary fact       | Every other state on the same row or record           | `StatusDot`   |
+| A fact that is not a state | A version, a date, a basis                       | plain text    |
+
+Status words live with the module that owns them, next to the labels
+(`inventory/statusLabels.ts`, `sales/labels.ts`, `payments/labels.ts`,
+`collections/labels.ts`, `economics/labels.ts`, `construction/labels.ts`,
+`cashflow/labels.ts`). A status the interface has not been taught falls
+through unchanged and is drawn neutral. The two that decide something rather
+than name it — `varianceTone` (positive is over budget) and `headroomTone`
+(negative is committed past the authorisation) — live in one place because a
+second copy would eventually disagree.
+
+A unit's four dimensions — commercial, legal, collection, delivery — are
+always shown side by side and never merged.
+
+---
+
+## 11. Actions
+
+Every surface understands three levels:
+
+| Level        | Treatment                                    | Rule                                        |
+| ------------ | -------------------------------------------- | ------------------------------------------- |
+| Primary      | `Button variant="primary"` — filled accent   | One per surface. Rare.                      |
+| Secondary    | `default` — white, outlined; `quiet` beside data | Everything else.                        |
+| Destructive  | `danger` — an outline, never a fill          | Never visually competes with the happy path. |
+
+`link` is a record identifier that opens the record: it reads as data and
+behaves as a link. In-table actions are `small`, and `quiet` where they sit
+beside data they must not outweigh. Major actions live in the page header or
+the record header, never scattered across unrelated cards.
+
+---
+
+## 12. Forms
 
 ```
 Form
-├── FormSection        a titled group: Identity · Financial basis · Features
+├── FormSection        a titled group, ruled from the next: Identity · Financial basis · Location
 │   └── FieldRow       two, three or four fields side by side; one column on a phone
-│       └── Field      label · control · hint · error · "optional"
-└── FormActions        the primary action, and the way out
+│       └── Field      label · control · hint · error · "Optional"
+└── FormActions        a rule, the primary action, and the way out
 ```
 
-**Money is entered denominated.** `MoneyInput` shows the record's currency
-code beside the control and keeps the exact string the person typed; nothing
-is parsed into a float on the way to the server.
-
-**Rates are entered as percentages.** `RateInput` shows `%` and the person
-types `5` or `18.5`; the caller sends the server's fraction of one through
-`fractionFromPercent`, which moves the decimal point by string manipulation and
-never multiplies. The reverse, `percentInput`, fills the control from a stored
-fraction. A factor — a weighting, a share — is not a rate and is entered as
-the fraction it is.
-
-**Edit forms are grouped.** `EditForm` takes fields with a `group`, a `width`
-and an `affix`, draws one `FormSection` per group, and sends only the fields
-that changed.
-
-**Validation is the server's.** The browser sends what was typed; the message
-on refusal is the server's own words, in a `Notice`. The only thing a form
-decides locally is whether a required control is empty.
+- Labels are strong and primary-coloured; hints are muted and used only where
+  a label alone would not say enough; placeholder text never acts as a label.
+- Everything is required unless marked `Optional`. That is the one marker.
+- Controls in a form are `--control-height-lg`; controls in a toolbar or a
+  schedule keep their compact height.
+- Two columns where the content genuinely benefits; a form does not run as a
+  single column down a desktop screen.
+- A group is a rule and a title (`FormSection`, `SubPanel`), never a bordered
+  panel around every field group.
+- `MoneyInput` shows the record's currency code beside the control and keeps
+  the exact string typed; `RateInput` shows `%` and the caller sends the
+  server's fraction through `fractionFromPercent`, a string operation.
+- Validation is the server's. The message on refusal is the server's own
+  words, in a `Notice` tied to the form that failed.
 
 ---
 
-## 9. Primitives
+## 13. Dialogs
 
-Imported from `@/components/ui`. Each has one responsibility, and none of them
-knows a business rule.
+`ConfirmDialog` (`alertdialog`, focus lands on the safe button) for the
+irreversible; `PromptDialog` (labelled, with an optional description of what
+the reason is for) for the one reason an action needs; `FormDialog` for the
+several things an attestation needs. All three sit on the shared overlay
+helper: focus moves in, Tab stays inside, Escape closes the topmost overlay
+only, focus returns to the control that opened it. A dialog's actions sit
+under a rule. No screen uses `window.prompt`, `window.confirm` or
+`window.alert`; the guard test reads for them.
 
-| Primitive                                   | What it is for                                                        |
-| ------------------------------------------- | --------------------------------------------------------------------- |
-| `PageHeader` (`compact`)                    | Where you are. One per screen.                                         |
-| `SectionHeader`                             | A division inside a card or a drawer, with room for actions.           |
-| `Card` / `SubPanel`                         | The one container, and a bordered region inside it.                    |
-| `Tabs` / `TabPanel`                         | Sections of a place. A real tablist; arrow keys work.                  |
-| `Drawer` (`facts`, `actions`, `narrow`)     | A record file opened over the register it came from.                   |
-| `Button` / `ButtonRow`                      | Every action. `default`, `primary`, `danger`, `quiet`, `link`.         |
-| `Field` / `FieldRow` / `FormSection`        | A control with its label; controls side by side; a titled group.       |
-| `MoneyInput` / `RateInput`                  | Money with its denomination; a rate typed as a percentage.             |
-| `FormActions` / `StickyActions`             | The way a form ends.                                                   |
-| `DataToolbar` / `ToolbarFilter`             | The strip that narrows a register: search, filters, count, clear.      |
-| `TableScroll` (`fixedFirst`, `compact`)     | A wide register that scrolls inside itself.                            |
-| `KeyValueGrid` / `KeyValue`                 | Labelled facts about one record.                                       |
-| `Metric` / `MetricGroup`                    | One reported number, labelled; a strip of them.                        |
-| `Position` / `PositionFigure`               | The figures a page is opened for, label beneath, tear-sheet style.     |
-| `PositionSupport` / `PositionSupportItem`   | The ruled line of supporting facts under a position.                   |
-| `StatStrip` / `StatStripItem`               | Four or five counts in one compact band.                               |
-| `Breakdown` / `BreakdownRow`                | The parts of a total, with a leader to each amount.                    |
-| `Distribution` / `DistributionBand`         | A balance across the bands the server aged it into.                    |
-| `Meter`                                     | A percentage the server reported, drawn at the width it reported.      |
-| `IdentityCell` / `PlaceCell`                | A register row's reference and where it sits.                          |
-| `ExternalLink`                              | A destination outside the product, named rather than addressed.        |
-| `InlineMeta` / `InlineMetaItem`             | Small facts in a line: "Code RG-01 · Status Active".                   |
-| `Waterfall` / `WaterfallRow`                | The lines a figure is made of, in the server's order, to the total.    |
-| `Badge` / `StatusDot`                       | The state a row is about; every other state on the same row.           |
-| `Notice`                                    | Something the system needs to say.                                     |
-| `EmptyState` (`compact`) / `Loading` (shapes) | Nothing here yet; waiting, in the shape of what is coming.           |
-| `Timeline` / `TimelineItem` / `Steps`       | What happened to a record, in order; the named steps it passes.        |
-| `ConfirmDialog` / `PromptDialog`            | Confirm something irreversible; collect the reason an action needs.    |
-| `Icon`                                      | Hand-drawn inline SVGs, one per navigation item and control.           |
+---
 
-`Stat`/`StatRow` remain as aliases of `Metric`/`MetricGroup`; `Panel` of
-`Card`; `FilterBar` for the two forms that have not yet moved to the toolbar.
+## 14. Empty, loading, denied, failed
 
-### Buttons
+`lib/answer.ts` names the five ways one request answers a screen — `off`,
+`loading`, `ready`, `denied`, `failed` — and every card on the command
+centre and every role-shaped section of a record is one `Answer`.
 
-One `primary` per view. Everything else is `default`. In-table and in-list
-actions are `small`, and `quiet` where they sit beside data they must not
-outweigh. `link` is a record identifier that opens the record — it reads as
-data and behaves as a link, and it is the only button that may be under 24px
-tall, because it is text in a row.
+**Empty states explain.** `EmptyState` says what is missing, why it matters
+and what to do, with an icon from the product's own set and an action where
+one exists: "No payment plan yet", never "0 records". It is not boxed: an
+empty state is an absence, and a bordered absence reads as a broken widget.
 
-`danger` is an outline, not a fill: a red-filled button in a register reads as
-an alarm rather than an option.
+**Loading states have the shape of what is coming.** `Loading` draws the
+silhouette of a page header (`header`), a metric strip (`metrics`), a
+register (`rows`), a record file (`record`) or a page (`page`), so the page
+does not jump when the answer arrives. No animation library; the pulse is one
+keyframe and reduced motion removes it.
 
-### Status vocabulary
+**Errors are calm and local.** A `Notice tone="error"` is tied to the surface
+that failed and carries the server's own words. A failed subsection gets a
+small notice, never a red page. `denied` is drawn as "Not available to your
+role", never as a blank and never as a row of zeros; "withheld" and "not
+recorded" must never look the same.
 
-Status words live with the module that owns them, next to the labels:
+---
 
-- `components/projects/inventory/statusLabels.ts` — the four unit dimensions
-- `components/projects/sales/labels.ts` — reservations, sales, gates,
-  exceptions, legal events, cancellations, handovers, clearances, KYC
-- `components/projects/payments/labels.ts` — versions, triggers, allocation
-- `components/projects/collections/labels.ts` — receipts, instalments,
-  buckets, disputes, waivers, restructures, refunds, clearance
-- `components/projects/economics/labels.ts` — versions, pools, profitability
-- `components/projects/construction/labels.ts` — budgets, contracts, variations,
-  certificates, invoices, payments, milestones, forecasts — and the two that
-  decide something rather than name it: `varianceTone` (**positive is over
-  budget**) and `headroomTone` (negative is committed past the authorisation).
-  Both live in one place because a second copy would eventually disagree, and
-  the disagreement would print an overrun in the colour used for good news.
-- `components/projects/cashflow/labels.ts` — forecasts, movements, escrow,
-  source ownership, and the two rules below
+## 15. The command centre
 
-A status the interface has not been taught falls through unchanged and is
-drawn neutral. It is still a status somebody needs to see.
+The project Overview is a developer's command centre, read top to bottom:
 
-**A period that is part settled and part expected gets a third word, not the
-nearer of two.** The cashflow bridge labels a month `Actual`,
-`Actual + Forecast` or `Forecast`, because the month a report is taken in is
-genuinely both — cash that has moved, plus what is still expected before it
-ends. Reducing it to the nearer label reads as a finished month and silently
-drops the rest of it; a project read on the third would show a shortfall that
-disappears on the fourth. Wherever a figure spans a boundary like this, name the
-boundary. And name it in prose beside the table, not in a `title` attribute: a
-tooltip is invisible to a keyboard, to a touch screen and to most screen
-readers, which is the wrong place for the one distinction a reader must not
-miss.
+1. **Context** — `ProjectPlate`: name, developer, place (with the map link
+   beside it, never as the name), then code, status, type, programme,
+   currency and manager as inline facts. No figure appears here.
+2. **Position** — the command surface: margin, profit and return on cost
+   where Finance has given a basis; units, available, contracted and
+   contracted value where it has not.
+3. **Attention** — beside the position, a list of the counts the server
+   already reports as problems, in lifecycle order, each with its way in.
+   Permits, pricing, sales, collections, construction and economics all
+   contribute. Nothing is scored or ranked.
+4. **Departments** — one card, four ruled sections: Commercial (inventory,
+   sales, pricing), Development (consents, programme), Delivery (the build's
+   variance at completion, control budget, commitment, certified to date —
+   for construction readers), Finance (usable cash, restricted cash, funding
+   required — for cashflow readers). Each has one "Open".
+5. **Collections** — per currency, never totalled across them, with the
+   ageing bands the server named.
 
-**A persisted status is not a current financial effect, and the interface shows
-both.** An escrow restriction stays `confirmed` on the record after the receipt
-it was taken from is reversed — what happened is never rewritten to tidy a
-screen — but it has stopped holding anything. The screen therefore reports the
-*effect* (`counts_as_restricted`, `counts_as_released`) beside the *status*, and
-says which fact changed: "Confirmed · Not currently counted · Underlying receipt
-reversed". Reading the status alone would report cash the project does not have,
-and would contradict the position on the same page.
+Every section is requested once, only on behalf of a role the server answers,
+and the guard test pins each request to its reader flag.
 
-A unit's four dimensions — commercial, legal, collection, delivery — are always
-shown side by side and never merged. "Sold" is not one fact in this product: a
-unit can be contracted, unpaid, unregistered and undelivered at the same time,
-and three different teams need their own answer without reading somebody
-else's as theirs.
+---
 
-### Numbers, money and dates
+## 16. Primitives
+
+Imported from `@/components/ui`. One name per primitive; there are no
+aliases, and the guard fails the build on `Panel`, `Stat`, `StatRow`,
+`FilterBar` or any `Card2`-shaped name.
+
+| Primitive                                   | What it is for                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------- |
+| `PageHeader` (`status`, `meta`, `compact`)  | Where you are, where it stands, what you can do. One per screen.        |
+| `SectionHeader`                             | A sentence-case division inside a card or a record, with one action.    |
+| `Card` (`tone`, `flush`) / `SubPanel`       | The one surface, and the ruled band inside it.                          |
+| `Tabs` / `TabPanel`                         | Sections of a place. A real tablist; arrow keys work.                   |
+| `Drawer` (`headline`, `facts`, `actions`, `narrow`) | A record file opened over the register it came from.            |
+| `Button` / `ButtonRow`                      | `primary`, `default`, `quiet`, `danger`, `link`.                        |
+| `Field` / `FieldRow` / `FormSection`        | A control with its label; controls side by side; a titled group.        |
+| `MoneyInput` / `RateInput`                  | Money with its denomination; a rate typed as a percentage.              |
+| `FormActions` / `StickyActions`             | The way a form ends.                                                    |
+| `DataToolbar` / `ToolbarFilter`             | The instrument that narrows a register.                                 |
+| `TableScroll` (`fixedFirst`, `compact`)     | A wide register that scrolls inside itself.                             |
+| `IdentityCell` / `PlaceCell`                | A register row's anchor, and where it sits.                             |
+| `KeyValueGrid` / `KeyValue`                 | Labelled facts about one record.                                        |
+| `Metric` / `MetricGroup`                    | One reported number, labelled; a strip of them.                         |
+| `Position` / `PositionFigure` / `PositionSupport` / `PositionSupportItem` | The figures a page is opened for, label beneath. |
+| `StatStrip` / `StatStripItem` / `StatStripNote` | Four or five counts on one ruled band.                             |
+| `Breakdown` / `BreakdownRow`                | The parts of a total, with a leader to each amount.                     |
+| `Waterfall` / `WaterfallRow`                | A sequence the server applied to reach a figure.                        |
+| `Distribution` / `DistributionBand`         | A balance across the bands the server aged it into.                     |
+| `Meter`                                     | A percentage the server reported, drawn at the width it reported.       |
+| `InlineMeta` / `InlineMetaItem`             | Small facts in a line: "Code GB-01 · Status Active".                    |
+| `ExternalLink`                              | A destination outside the product, named rather than addressed.         |
+| `Badge` / `StatusDot`                       | The state a surface is about; every other state.                        |
+| `Notice`                                    | Something the system needs to say, tied to where it happened.           |
+| `EmptyState` (`icon`, `compact`) / `Loading` (`shape`) | Nothing here yet; waiting, in the shape of what is coming.  |
+| `Timeline` / `TimelineItem` / `Steps`       | What happened, in order; the named steps a record passes, as one track. |
+| `ConfirmDialog` / `PromptDialog` / `FormDialog` | Confirm the irreversible; collect a reason; collect an attestation. |
+| `Icon`                                      | Hand-drawn inline SVGs. No icon package.                                |
+
+### Retired in PR-V2-00
+
+`Panel` (was `Card`), `Stat` and `StatRow` (were `Metric` and
+`MetricGroup`), `FilterBar` (was the pre-toolbar strip), the project tiles,
+the twelve-column grid's unused spans, and the "refinements" section that
+re-declared thirteen selectors at the foot of the stylesheet. The stylesheet
+is one layer again: no top-level selector is declared twice, every class it
+declares is used, and every class a component uses is declared. The guard
+checks all three.
+
+---
+
+## 17. Numbers, money and dates
 
 **Calculation and presentation are different things, and only one of them is
-allowed here.** React performs no financial arithmetic — no totals, no tax, no
-discounts, no margins, no allocations, no currency conversion, ever.
-Presentation formatting is allowed, and `lib/format.ts` is the only place it
-happens:
+allowed here.** `lib/format.ts` is the only place presentation happens:
 
-- **Money** — `money(value, code)` turns the server's exact Decimal string into
-  `JOD 228,000.00`: integer digits are grouped, the sign is kept, every
-  decimal digit the server sent is preserved, and the real currency code is
-  prepended. The value is never passed through `Number()`, `parseFloat` or
+- **Money** — `money(value, code)` turns the server's exact decimal string
+  into `JOD 228,000.00`: digits grouped, sign kept, every decimal preserved,
+  the real currency code prepended. Never `Number()`, `parseFloat` or
   `Intl.NumberFormat`. No rounding, no scale change, no FX.
-- **Denomination is resolved, never assumed.** Price versions, reservations,
-  contracts, tax lines, plans, receipts and benchmarks each carry their own
-  `currency_id`; the project workspace loads the currency register once and
-  `useCurrencyCode` resolves each record's own denomination. An id the map
-  cannot resolve renders the figure grouped but undenominated — never labelled
-  with a guess. Amounts in different currencies are never added, and a
-  collections summary is drawn per currency.
-- **Rates and fractions are not money.** A stored fraction is shown as a
-  percentage through `percent()`, which moves the decimal point by string
-  manipulation; a factor or a share is shown as the server sent it.
-- **Business dates** — `businessDate("2026-08-30")` renders `30 Aug 2026`,
-  parsed as calendar components and never constructed into a JavaScript
-  `Date`. Date inputs and API payloads stay ISO; only presentation changes.
-- **System timestamps** are instants, not calendar dates, and are never fed
-  through `businessDate`.
+- **Denomination is resolved, never assumed.** Every record that carries
+  money carries its own `currency_id`; `useCurrencyCode` resolves it. An id
+  the map cannot resolve renders undenominated, never labelled with a guess.
+  Amounts in different currencies are never added.
+- **Rates** are shown through `percent()`, a string operation.
+- **Business dates** render as `30 Aug 2026` from calendar components, never
+  through a JavaScript `Date`.
+- **Financial presentation** is statement-like: strong primary figures,
+  tabular numerics, clean alignment, the denomination beside every amount,
+  the basis in words beneath. A CFO should be able to screenshot a position
+  and understand it immediately. No donuts, no arbitrary progress bars, no
+  chart furniture.
 
 ---
 
-## 10. Interaction
+## 18. Interaction and motion
 
-**Records open over the register, not under it.** Escape closes, the scrim
-closes, the page behind stops scrolling, and focus moves in and comes back.
+Records open over the register, not under it. Progressive disclosure is by
+section, not by accordion. Confirmation is reserved for the irreversible.
+Affordances mirror the server and never replace it.
 
-**Progressive disclosure by section, not by accordion.** A record's sections
-are its tabs, because the person opening one is usually one of five teams and
-only needs their own. Sections that do not exist yet — a cancellation that was
-never opened — are not offered; sections a role may not read are not offered.
-
-**Reasons are collected in a labelled dialog.** `PromptDialog` says what the
-reason is for and stores it beside the change.
-
-**Overlays stack, and only the top of the stack owns the keyboard.** Drawer,
-the mobile navigation, the switcher menu, `ConfirmDialog` and `PromptDialog`
-all sit on one shared helper (`components/ui/overlay.ts`). A reason dialog
-inside a drawer nests correctly: the first Escape closes the dialog, the
-second closes the drawer, and one press never closes both.
-
-**Confirmation is reserved for the irreversible.** Everything reversible just
-happens; a dialog in front of a reversible action teaches people to dismiss
-dialogs.
-
-**Affordances mirror the server; they never replace it.** A button is hidden
-when the server would refuse it. The server checks again regardless, and the
-message the person sees on refusal is the server's own words.
+Motion is restrained: the rail's width, a drawer's entrance, a dialog
+settling, a menu dropping, hover and focus transitions, the selected tab's
+underline. No bouncing, no springs, no animated counters, no moving
+gradients. Premium software feels fast because nothing gets in the way.
 
 ---
 
-## 11. Empty, loading, denied, failed
+## 19. Iconography
 
-`lib/answer.ts` names the five ways one request answers a screen — `off`
-(never asked, because the role could not be answered or the record has
-nothing to ask about), `loading`, `ready`, `denied`, `failed` — and
-`useAnswer(enabled, load, deps)` asks once, only when enabled. Every card on
-the command centre and every role-shaped section of a record file is one
-`Answer`.
-
-`EmptyState` names what is missing and what to do about it — never a
-placeholder figure or an invented row. `compact` is for an empty section
-inside a record, where a full-height empty state would shout.
-
-`Loading` takes a label and a `shape` — `metrics`, `rows` or `page` — so the
-skeleton is the shape of what is coming and the page does not jump when it
-arrives.
-
-`Notice` has four tones. `error` is announced to assistive technology; the
-others are polite status updates. Error text is the server's message wherever
-there is one.
+`Icon` is a map of hand-drawn stroke paths on a 16×16 grid, one per
+navigation item and control, drawn at a consistent weight and hidden from
+assistive technology because an icon here only ever repeats something the
+adjacent text already says. Adding a glyph is adding a path. There is no icon
+package, and the guard test reads `package.json` to make sure none arrives.
 
 ---
 
-## 12. Responsive behaviour
+## 20. Responsive behaviour
 
-| Width         | Behaviour                                                                        |
-| ------------- | -------------------------------------------------------------------------------- |
-| ≥ 75rem (1200)| Full rail with labels. Twelve-column page grid. Drawers at `--drawer-width`.      |
-| 64–75rem      | Rail collapses to icons (`auto`); labels become tooltips. Grids drop a column.    |
-| < 64rem (1024)| Rail becomes a drawer behind a menu button. Record drawers take the full width.   |
-| < 48rem (768) | Single-column forms and key/value grids; metric strips and facts wrap.            |
-| < 34rem (544) | The brand keeps its mark; tabs scroll sideways; the page header stacks.           |
+Desktop is primary. The product is validated at six widths.
 
-Registers are wide because the data is wide. They scroll sideways inside
-`TableScroll`, with the identity column pinned. **The page body itself never
-scrolls sideways at any width**; the browser walkthrough asserts this on every
-screen at 1600, 1440, 1280, 1024, 768 and 390 wide.
+| Width          | Behaviour                                                                          |
+| -------------- | ---------------------------------------------------------------------------------- |
+| ≥ 75rem (1200) | Full rail with labels. Drawers at `--drawer-width`.                                 |
+| 64–75rem       | Rail collapses to icons (`auto`); labels become tooltips.                          |
+| < 64rem (1024) | Rail becomes a drawer behind a menu button. Record drawers take the full width.     |
+| < 60rem        | The framed toolbar stacks.                                                         |
+| < 48rem (768)  | Single-column forms and key/value grids; the department band stacks; the record headline drops under the identity. |
+| < 34rem (544)  | Phone: compact padding; the stat strip and the standing band wrap as pairs.        |
+
+Phone does not reproduce a fourteen-column register; it keeps the register
+scrolling inside itself with the identity pinned, keeps the primary action
+reachable, and opens every record full-screen. There is no separate mobile
+application.
 
 ---
 
-## 13. Accessibility
+## 21. Accessibility
 
 - One `<h1>` per screen; headings descend without skipping.
 - The rail is a `<nav>` with a label; the current item carries
   `aria-current="page"`; the breadcrumbs are a `<nav aria-label="Breadcrumb">`
-  around an ordered list; the collapsed rail keeps every item's accessible
-  name.
-- Tabs are a real `tablist`: ArrowLeft/ArrowRight move both selection and
-  focus, Home and End jump to the ends, `aria-selected` and roving `tabIndex`
-  stay in step, ids are namespaced per group, and the selected tab is scrolled
-  into view when the row overflows.
+  around an ordered list; the collapsed rail keeps every item's name.
+- Tabs are a real `tablist` with arrow, Home and End keys, roving `tabIndex`,
+  namespaced ids, and the selected tab kept in view.
 - Drawers, the mobile navigation, the switcher menu and dialogs are
-  `role="dialog"`/`alertdialog` with `aria-modal` and an accessible name, on
-  the shared overlay helper: focus moves in on open, Tab and Shift+Tab are
-  contained inside the topmost overlay, Escape closes the topmost overlay
-  only, and on close focus returns to the control that opened it.
-- Every table has a `<caption>` (visually hidden) and `scope`d headers;
-  `TableScroll` is focusable so a keyboard can scroll it.
-- Every control is at least 24px tall; the rail's items and the context bar's
-  buttons are 40px.
+  `dialog`/`alertdialog` with `aria-modal` and an accessible name, on the
+  shared overlay helper: focus in, Tab contained, Escape closes the topmost
+  only, focus returned on close.
+- Every table has a hidden `<caption>` and scoped headers; `TableScroll` is
+  focusable so a keyboard can scroll it.
+- Every control is at least 24px tall; controls in forms are 40px.
 - Focus is always visible: a 2px accent ring on the light surface, a light
   ring on the dark rail.
-- Text and its background meet WCAG AA on every token pair used together:
-  the rail's text on `--nav-bg`, the muted text on `--surface-secondary`,
-  every intent's solid colour on its soft fill.
+- Text and its background meet WCAG AA on every token pair used together.
 - Colour is never the only carrier of meaning.
 - `prefers-reduced-motion` removes all transitions and animation.
 
 ---
 
-## 14. What this system deliberately does not have
+## 22. What this system deliberately does not have
 
-No component library (MUI, Ant, Chakra, Mantine, shadcn, Radix, Headless UI).
-No CSS framework (Tailwind, Bootstrap). No CSS-in-JS. No icon package — the
-`Icon` primitive is a map of hand-drawn paths. No chart library, and no
-charts: a bar drawn from server counts would be the first step towards a bar
-drawn from nothing. No table, form, date or animation library. No client
-state library (Redux, Zustand, React Query). Data is fetched in the component
-that shows it, through `lib/api`, and held in `useState`. No dark theme. No
-FX. No construction screens before PR-MVP-09 exists to record what they would
-show.
+No component library, no CSS framework, no CSS-in-JS, no icon package, no
+chart library and no charts, no table, form, date or animation library, no
+client state library, no dark theme, no FX, no health scores, no trends, no
+projections, no command palette, no generic workflow engine. Adding any of
+them is a decision with a cost, argued for in a pull request of its own.
 
-The frontend is a **static export** (`output: "export"`, `trailingSlash:
-true`) served by FastAPI from `frontend/out`. There are no server components,
-no server actions, no SSR and no dynamic route segments.
-
-Adding any of the above is a decision with a cost, and it should be argued for
-in a pull request of its own rather than arriving as a transitive dependency of
-a button.
+The frontend is a **static export** served by FastAPI from `frontend/out`.
+There are no server components, no server actions, no SSR and no dynamic
+route segments.
 
 ---
 
-## 15. Extending it
+## 23. Extending it
 
-1. Compose from the primitives first. Most "new components" are a `Card` with a
-   `SectionHeader`, a `MetricGroup` and a `TableScroll`.
-2. If a genuinely new primitive is needed, add it to `components/ui/`, export it
-   from `components/ui/index.ts`, and give it exactly one responsibility.
-3. Style it with the tokens in section 3. If a token is missing, add it to
-   `:root` — never a literal colour, radius or duration in a rule.
-4. Keep business rules out of it. A primitive that knows what a price is, or who
-   may approve one, is a primitive in the wrong place.
-5. Gate by role before you fetch. A new module gets a set in `lib/roles.ts`
-   that mirrors its `permissions.py`, a `visible` rule on its navigation item,
-   and `useAnswer` around every request a role might be refused.
-6. Never total, convert or derive a figure in the browser. If the screen needs
-   a number the API does not return, the API grows the number.
-7. Run the checks: `npm run lint`, `npx tsc --noEmit`, `npm run build`, and the
-   browser walkthrough — every role, six widths, every drawer — reading the
-   console and the overflow report before calling anything done.
+1. Compose from the primitives first. Most "new components" are a
+   `PageHeader`, a command `Card` with a `Position`, a `StatStrip`, a
+   `DataToolbar` and a flush `Card` around a `TableScroll`.
+2. If a genuinely new primitive is needed, add it to `components/ui/`, export
+   it from `components/ui/index.ts`, give it one responsibility and one name.
+   Never a second version of an existing one.
+3. Style it with tokens. If a token is missing, add it to `:root` — never a
+   literal colour, size or duration in a rule, and never an inline style.
+4. One rule per selector. A variation is a modifier class, not a later copy.
+5. Keep business rules out of it. A primitive that knows what a price is, or
+   who may approve one, is in the wrong place.
+6. Gate by role before you fetch. A new module gets a set in `lib/roles.ts`
+   that mirrors its `permissions.py`, a `visible` rule on its navigation
+   item, and `useAnswer` around every request a role might be refused.
+7. Never total, convert or derive a figure in the browser. If the screen
+   needs a number the API does not return, the API grows the number.
+8. Run the checks: `npm run lint`, `npm run build`,
+   `pytest -q tests/test_product_experience.py`, and the browser walkthrough
+   — every role, six widths, every drawer — reading the console, the failed
+   requests and the overflow report before calling anything done.

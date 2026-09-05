@@ -54,10 +54,11 @@ export function Card({
   );
 }
 
-/** The long-standing name for the same container. */
-export const Panel = Card;
-
-/** A bordered region inside a card: a form that opened, or a nested register. */
+/**
+ * A ruled band inside a card or a record: a form that opened, a nested
+ * register. A rule above and a title, never a second box inside the first —
+ * box-in-box is the one composition this system refuses.
+ */
 export function SubPanel({
   title,
   actions,

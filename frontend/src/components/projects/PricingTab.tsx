@@ -452,7 +452,7 @@ export function PricingTab({
                 </tbody>
               </TableScroll>
               {register.total > register.rows.length ? (
-                <p className="footnote" style={{ padding: "0.75rem 1.5rem" }}>
+                <p className="table-foot">
                   Showing the first {register.rows.length} of {register.total} units. Narrow the filter to
                   reach the rest.
                 </p>

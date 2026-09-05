@@ -158,7 +158,7 @@ function SwitcherMenu({
         style={{ top: anchor.top, left: anchor.left }}
       >
         <div className="switcher-search">
-          <div className="toolbar-search" style={{ maxWidth: "none" }}>
+          <div className="toolbar-search">
             <Icon name="search" />
             <input
               className="input"
@@ -172,17 +172,13 @@ function SwitcherMenu({
         </div>
         <ul className="switcher-list">
           {rows === null ? (
-            <li className="loading" style={{ padding: "0.5rem 0.75rem" }}>
+            <li className="switcher-note" role="status">
               Loading projects…
             </li>
           ) : error ? (
-            <li className="hint" style={{ padding: "0.5rem 0.75rem" }}>
-              {error}
-            </li>
+            <li className="switcher-note">{error}</li>
           ) : shown.length === 0 ? (
-            <li className="hint" style={{ padding: "0.5rem 0.75rem" }}>
-              No project matches.
-            </li>
+            <li className="switcher-note">No project matches.</li>
           ) : (
             shown.map((row) => (
               <li key={row.id}>

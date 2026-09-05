@@ -178,7 +178,7 @@ export function ProjectWorkspace({
     ...(section === "overview"
       ? [{ label: project?.name ?? "Project" }]
       : [
-          { label: project?.code ?? "Project", href: projectHref(projectId) },
+          { label: project?.name ?? "Project", href: projectHref(projectId) },
           { label: item?.label ?? "Section" },
         ]),
   ];

@@ -612,7 +612,7 @@ export function DealFile({
   if (reservation === null && sale === null) {
     return (
       <Drawer eyebrow="Deal file" title={unitReference ?? "Loading the deal…"} onClose={onClose}>
-        <Loading label="Loading the deal…" shape="page" />
+        <Loading label="Loading the deal…" shape="record" />
       </Drawer>
     );
   }

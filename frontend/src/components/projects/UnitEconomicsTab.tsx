@@ -634,13 +634,12 @@ function Versions({
               />
             </div>
           ) : (
-            <ul className="version-list" style={{ margin: 0, padding: "0.25rem 0" }}>
+            <ul className="version-list">
               {versions.map((version) => (
                 <li key={version.id}>
                   <button
                     type="button"
                     className="switcher-option"
-                    style={{ borderRadius: 0, padding: "0.625rem 1.5rem" }}
                     aria-current={version.id === open ? "true" : undefined}
                     onClick={() => {
                       setOpen(version.id);

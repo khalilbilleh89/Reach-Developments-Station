@@ -22,6 +22,7 @@ import { useOverlay } from "./overlay";
  */
 export function PromptDialog({
   title,
+  description,
   label,
   hint,
   confirmLabel = "Record",
@@ -31,6 +32,8 @@ export function PromptDialog({
   onCancel,
 }: {
   title: string;
+  /** What the reason is for, in a sentence, where the title alone would not say. */
+  description?: string;
   label: string;
   hint?: string;
   confirmLabel?: string;
@@ -61,6 +64,7 @@ export function PromptDialog({
         }}
       >
         <h2 className="dialog-title">{title}</h2>
+        {description ? <p className="dialog-description">{description}</p> : null}
         <label className="field">
           <span className="field-label">{label}</span>
           <input

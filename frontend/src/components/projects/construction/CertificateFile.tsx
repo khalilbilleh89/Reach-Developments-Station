@@ -101,7 +101,7 @@ export function CertificateFile({
         onOpenContract ? (
           <button
             type="button"
-            className="link-button"
+            className="button-link"
             onClick={() => onOpenContract(certificate.contract_id)}
           >
             {certificate.contract_number}
@@ -202,16 +202,16 @@ export function CertificateFile({
               <thead>
                 <tr>
                   <th scope="col">Cost code</th>
-                  <th scope="col" className="numeric">
+                  <th scope="col" className="num">
                     Previously certified
                   </th>
-                  <th scope="col" className="numeric">
+                  <th scope="col" className="num">
                     This period
                   </th>
-                  <th scope="col" className="numeric">
+                  <th scope="col" className="num">
                     Cumulative
                   </th>
-                  <th scope="col" className="numeric">
+                  <th scope="col" className="num">
                     Revised commitment
                   </th>
                 </tr>
@@ -220,16 +220,16 @@ export function CertificateFile({
                 {certificate.lines.map((line) => (
                   <tr key={line.cost_code_id}>
                     <td>{line.cost_code}</td>
-                    <td className="numeric">
+                    <td className="num">
                       {money(line.previously_certified)}
                     </td>
-                    <td className="numeric">
+                    <td className="num">
                       {money(line.current_work_value_ex_tax)}
                     </td>
-                    <td className="numeric">
+                    <td className="num">
                       {money(line.cumulative_certified)}
                     </td>
-                    <td className="numeric">
+                    <td className="num">
                       {money(line.revised_commitment)}
                     </td>
                   </tr>

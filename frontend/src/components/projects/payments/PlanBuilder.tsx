@@ -351,7 +351,7 @@ export function PlanBuilder({
         title="Loading the payment plan…"
         onClose={onClose}
       >
-        <Loading label="Loading the payment plan…" shape="page" />
+        <Loading label="Loading the payment plan…" shape="record" />
       </Drawer>
     );
   }
