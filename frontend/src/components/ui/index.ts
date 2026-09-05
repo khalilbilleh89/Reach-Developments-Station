@@ -5,16 +5,21 @@
  * icon package, no CSS-in-JS. Each piece has one responsibility and none of
  * them knows a business rule: nothing in here decides what a price is, whether
  * a unit may be released, or who may do either.
+ *
+ * One name per primitive. There are no aliases here: a second name for the
+ * same component is how two screens drift apart while both believing they use
+ * the canonical one, and `tests/test_product_experience.py` fails the build
+ * if one appears.
  */
 
 export { Badge, StatusDot } from "./Badge";
 export type { Tone } from "./Badge";
 export { Button, ButtonRow } from "./Button";
-export { Card, Panel, SubPanel } from "./Card";
+export { Card, SubPanel } from "./Card";
 export type { CardTone } from "./Card";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { Drawer } from "./Drawer";
-export type { DrawerFact } from "./Drawer";
+export type { DrawerFact, DrawerHeadline } from "./Drawer";
 export {
   Breakdown,
   BreakdownRow,
@@ -33,8 +38,6 @@ export {
   PositionFigure,
   PositionSupport,
   PositionSupportItem,
-  Stat,
-  StatRow,
   StatStrip,
   StatStripItem,
   StatStripNote,
@@ -49,7 +52,6 @@ export {
   DataToolbar,
   Field,
   FieldRow,
-  FilterBar,
   Form,
   FormActions,
   FormSection,

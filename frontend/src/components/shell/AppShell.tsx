@@ -40,7 +40,9 @@ const NARROW_RAIL = "(width < 75rem)";
  *
  * On a wide screen the rail can be collapsed to icons and the choice is kept
  * in the browser; under 1200px it starts collapsed; under 1024px it leaves the
- * page and becomes a drawer behind a menu button.
+ * page and becomes a drawer behind a menu button. `data-rail` carries the
+ * person's preference and `app-narrow` the viewport's verdict, so the
+ * stylesheet can draw the collapsed rail from one set of rules.
  */
 export function AppShell({
   user,
@@ -124,7 +126,7 @@ export function AppShell({
   };
 
   return (
-    <div className="app" data-rail={rail}>
+    <div className={narrow ? "app app-narrow" : "app"} data-rail={rail}>
       <AppSidebar {...sidebarProps} />
       {navOpen ? (
         <MobileNavigation {...sidebarProps} onClose={() => setNavOpen(false)} />
@@ -150,7 +152,9 @@ export function SessionScreen({ status }: { status: "loading" | "anonymous" }) {
   return (
     <div className="shell">
       {status === "loading" ? (
-        <Loading label="Loading…" />
+        <div className="panel panel-narrow">
+          <Loading label="Establishing your session…" shape="page" />
+        </div>
       ) : (
         <div className="panel panel-narrow">
           <Notice tone="info">Your session has ended. Please sign in again.</Notice>

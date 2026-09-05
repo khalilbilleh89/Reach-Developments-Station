@@ -76,23 +76,6 @@ export function MetricGroup({ children, compact }: { children: ReactNode; compac
   return <div className={compact ? "metric-group metric-group-compact" : "metric-group"}>{children}</div>;
 }
 
-/** The long-standing names for a metric and a row of them. */
-export function Stat({
-  label,
-  value,
-  note,
-  small,
-}: {
-  label: string;
-  value: ReactNode;
-  note?: string;
-  small?: boolean;
-}) {
-  return <Metric label={label} value={value} note={note} size={small ? "sm" : "md"} />;
-}
-
-export const StatRow = MetricGroup;
-
 /**
  * A wide table that scrolls inside itself.
  *

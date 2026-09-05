@@ -914,7 +914,7 @@ function EscalationRuleForm({
       <Field label="Uplift">
         <RateInput required value={form.uplift_percent} onChange={(value) => setForm({ ...form, uplift_percent: value })} />
       </Field>
-      <label className="checkbox" style={{ alignSelf: "center" }}>
+      <label className="checkbox checkbox-inline">
         <input
           type="checkbox"
           checked={form.cumulative}

@@ -8,7 +8,7 @@ import { Icon } from "./Icon";
 import { useOverlay } from "./overlay";
 import { TabPanel, Tabs } from "./Tabs";
 
-/** One headline fact about the record: a price, a margin, a balance. */
+/** One supporting fact about the record: an area, a balance, a date. */
 export interface DrawerFact {
   label: string;
   value: ReactNode;
@@ -18,12 +18,27 @@ export interface DrawerFact {
 }
 
 /**
+ * The one value a record is about — a unit's price, an account's balance —
+ * set large beside the identity, with its basis in words beneath.
+ *
+ * Present only when the reader's role may see it. A role that is refused the
+ * figure never has it fetched, so there is nothing here to hide.
+ */
+export interface DrawerHeadline {
+  value: ReactNode;
+  label: string;
+  tone?: "danger" | "muted";
+}
+
+/**
  * A record file, opened over the register that led to it.
  *
- * The header is the record's identity and stays put: what it is, the state it
- * is in, the three or four figures somebody opened it to read, and the
- * sections beneath. The body scrolls under it. On a phone it takes the whole
- * screen and the way back is at the top left, where a thumb expects it.
+ * Opening a record should feel like opening a file, not a modal full of
+ * forms. The header is the record's identity and stays put: what it is,
+ * where it sits, the state it is in, the one value it is about, the action it
+ * invites, the three or four supporting figures somebody opened it to read,
+ * and the sections beneath. The body scrolls under it. On a phone it takes the
+ * whole screen and the way back is at the top left, where a thumb expects it.
  *
  * Modal behaviour — Escape on the topmost overlay only, focus contained while
  * open and returned to the opening control on close — comes from `useOverlay`,
@@ -37,6 +52,7 @@ export function Drawer({
   title,
   subtitle,
   meta,
+  headline,
   facts,
   actions,
   tabs,
@@ -50,6 +66,7 @@ export function Drawer({
   title: string;
   subtitle?: ReactNode;
   meta?: ReactNode;
+  headline?: DrawerHeadline;
   facts?: DrawerFact[];
   /** Contextual actions beside Close: the one or two things this record invites. */
   actions?: ReactNode;
@@ -103,6 +120,12 @@ export function Drawer({
               {subtitle ? <p className="drawer-subtitle">{subtitle}</p> : null}
               {meta ? <div className="drawer-meta">{meta}</div> : null}
             </div>
+            {headline ? (
+              <div className={headline.tone ? `drawer-headline drawer-headline-${headline.tone}` : "drawer-headline"}>
+                <p className="drawer-headline-value">{headline.value}</p>
+                <p className="drawer-headline-label">{headline.label}</p>
+              </div>
+            ) : null}
             <div className="drawer-head-actions">
               {actions}
               <Button className="drawer-close-desktop" onClick={onClose}>
@@ -111,7 +134,7 @@ export function Drawer({
             </div>
           </div>
           {shownFacts.length > 0 ? (
-            <dl className="drawer-facts drawer-facts-strong">
+            <dl className="drawer-facts">
               {shownFacts.map((fact) => (
                 <div key={fact.label} className={fact.tone ? `drawer-fact-${fact.tone}` : undefined}>
                   <dt className="drawer-fact-label">{fact.label}</dt>
