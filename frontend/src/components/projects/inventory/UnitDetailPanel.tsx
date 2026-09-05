@@ -31,7 +31,7 @@ import {
   hasAnyRole,
 } from "@/lib/roles";
 import { Badge, Button, Card, Drawer, Loading, Notice, StatusDot } from "@/components/ui";
-import type { DrawerFact } from "@/components/ui";
+import type { DrawerFact, DrawerHeadline } from "@/components/ui";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -309,8 +309,8 @@ export function UnitDetailPanel({
 
   if (unit === null) {
     return (
-      <Drawer title="Loading unit…" onClose={onClose}>
-        <Loading label="Loading unit…" shape="page" />
+      <Drawer eyebrow="Unit" title="Loading…" onClose={onClose}>
+        <Loading label="Loading unit…" shape="record" />
       </Drawer>
     );
   }
@@ -343,19 +343,53 @@ export function UnitDetailPanel({
     note: "Could not be loaded",
     tone: "muted",
   });
+  // The one value the file is about, set beside the identity. The list price
+  // is requested only for a role the server answers, so for Legal and
+  // Collections there is no headline and nothing to hide; a failed request is
+  // said as a failure, never drawn as "not priced".
+  const headline: DrawerHeadline | undefined = unitPricing
+    ? {
+        value: price ? money(price.reference_price_ex_tax, priceCode) : "Not priced",
+        label: price
+          ? unitPricing.repricing_required
+            ? "List price · repricing required"
+            : `Current list price · v${price.version_number} · ex tax`
+          : unitPricing.has_active_configuration
+            ? "No live price yet"
+            : "No pricing configuration",
+        tone: unitPricing.repricing_required ? "danger" : price ? undefined : "muted",
+      }
+    : pricingAnswer.status === "failed"
+      ? { value: "Unavailable", label: "List price could not be loaded", tone: "muted" }
+      : undefined;
   const facts: DrawerFact[] = [
-    ...(unitPricing
+    {
+      label: "Internal area",
+      value: unit.internal_area === null ? "Not measured" : `${unit.internal_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
+      tone: unit.internal_area === null ? ("muted" as const) : undefined,
+    },
+    {
+      label: "Weighted saleable",
+      value:
+        unit.weighted_saleable_area === null
+          ? "Not measured"
+          : `${unit.weighted_saleable_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
+      tone: unit.weighted_saleable_area === null ? ("muted" as const) : undefined,
+    },
+    ...(unit.parking_count > 0 || unit.storage_count > 0
       ? [
           {
-            label: "List price",
-            value: price ? money(price.reference_price_ex_tax, priceCode) : "Not priced",
-            note: price ? (unitPricing.repricing_required ? "Repricing required" : `v${price.version_number} · ex tax`) : undefined,
-            tone: unitPricing.repricing_required ? ("danger" as const) : price ? undefined : ("muted" as const),
+            label: "Attached",
+            value: [
+              unit.parking_count > 0 ? `${unit.parking_count} parking` : null,
+              unit.storage_count > 0 ? `${unit.storage_count} storage` : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            note: "Excluded from area",
           },
         ]
-      : pricingAnswer.status === "failed"
-        ? [unavailable("List price")]
-        : []),
+      : []),
     ...(economics.status === "ready"
       ? [
           {
@@ -392,13 +426,6 @@ export function UnitDetailPanel({
       : collection.status === "failed"
         ? [unavailable("Outstanding")]
         : []),
-    {
-      label: "Weighted area",
-      value:
-        unit.weighted_saleable_area === null
-          ? "Not measured"
-          : `${unit.weighted_saleable_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
-    },
   ];
 
   return (
@@ -406,13 +433,31 @@ export function UnitDetailPanel({
       eyebrow="Unit"
       title={unit.unit_reference}
       subtitle={[
-        [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`].filter(Boolean).join(" · ") || unit.asset_class,
-        unit.phase_code ? `Phase ${unit.phase_code}` : null,
-        unit.building_code ? `Building ${unit.building_code}` : null,
-        unit.floor_code ? `Floor ${unit.floor_code}` : null,
+        [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bedroom`].filter(Boolean).join(" · ") ||
+          unit.asset_class,
+        [
+          unit.phase_code ? `Phase ${unit.phase_code}` : null,
+          unit.building_code ? `Building ${unit.building_code}` : null,
+          unit.floor_code ? `Floor ${unit.floor_code}` : null,
+        ]
+          .filter(Boolean)
+          .join(" / "),
       ]
         .filter(Boolean)
         .join(" · ")}
+      headline={headline}
+      actions={
+        canWriteStructure ? (
+          <Button
+            onClick={() => {
+              setSection("detail");
+              setEditing(editing === "unit" ? "none" : "unit");
+            }}
+          >
+            Edit unit
+          </Button>
+        ) : undefined
+      }
       meta={
         <>
           <Badge tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</Badge>
@@ -421,7 +466,6 @@ export function UnitDetailPanel({
           ) : (
             <StatusDot tone="muted">Not releasable</StatusDot>
           )}
-          {unitPricing?.repricing_required ? <Badge tone="danger">Repricing required</Badge> : null}
         </>
       }
       facts={facts}

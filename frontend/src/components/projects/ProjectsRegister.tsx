@@ -11,14 +11,20 @@ import {
   Button,
   Card,
   DataToolbar,
+  Drawer,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
   FormSection,
+  Icon,
+  IdentityCell,
   Loading,
   Notice,
   PageHeader,
+  PlaceCell,
+  StatusDot,
+  TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
 import { PROJECT_STATUSES, projectStatusLabel, projectStatusTone } from "./projectStatus";
@@ -42,14 +48,22 @@ function emptyForm() {
   };
 }
 
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 /**
  * The portfolio: every development this person may open.
  *
- * One tile per project, carrying the identity the API returns — code, name,
- * developer, city, status, programme, base currency — and the permit counts
- * the server already derives, because those are what tell a manager which
- * project needs attention today. No portfolio analytics and no invented
- * metrics; a tile with nothing to flag says nothing.
+ * A register rather than a wall of tiles, because a portfolio is read the way
+ * every other register in the product is read — down the identity column,
+ * with the facts that distinguish one development from the next beside it:
+ * where it stands, where it is, when it runs, and what the server already
+ * flags about its consents. No portfolio analytics and no invented metrics;
+ * a row with nothing to flag says nothing.
+ *
+ * Creating a project opens a file over the register, the way every other
+ * record in the product does, so the portfolio stays where it was.
  */
 export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => void; roles: Set<string> }) {
   const canCreate = hasAnyRole(roles, PROJECT_WRITERS);
@@ -62,6 +76,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
   const [form, setForm] = useState(emptyForm());
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -87,7 +102,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
       setTypes(referenceList.filter((value) => value.is_active && value.category === "project_type"));
     } catch {
       // Configuration is only needed to open the create form and to name a
-      // tile's base currency; the register itself still works without it.
+      // row's base currency; the register itself still works without it.
     }
   }, []);
 
@@ -111,7 +126,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
-    setError(null);
+    setFormError(null);
     setNotice(null);
     try {
       const payload: Record<string, unknown> = {
@@ -140,7 +155,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
       setCreating(false);
       await load();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not create the project.");
+      setFormError(caught instanceof ApiError ? caught.message : "Could not create the project.");
     } finally {
       setBusy(false);
     }
@@ -153,30 +168,173 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
     <>
       <PageHeader
         title="Projects"
-        subtitle="Manage the developments you can access."
+        subtitle="The developments you can open. Choose one to work inside it."
         actions={
           canCreate ? (
-            <Button variant="primary" onClick={() => setCreating((open) => !open)}>
-              {creating ? "Cancel" : "New project"}
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New project
             </Button>
           ) : undefined
         }
       />
 
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
+      <div className="stack">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+        <DataToolbar
+          framed
+          search={{ value: search, onChange: setSearch, placeholder: "Code or name", label: "Search projects" }}
+          count={rows ? { shown: rows.length, noun: "project" } : undefined}
+          onReset={
+            filtered
+              ? () => {
+                  setSearch("");
+                  setStatus("");
+                }
+              : undefined
+          }
+        >
+          <ToolbarFilter label="Status" active={status !== ""}>
+            <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">Any status</option>
+              {PROJECT_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {projectStatusLabel(value)}
+                </option>
+              ))}
+            </select>
+          </ToolbarFilter>
+        </DataToolbar>
+
+        <Card flush>
+          {rows === null ? (
+            <Loading label="Loading projects…" shape="rows" rows={6} />
+          ) : rows.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                icon="projects"
+                title={filtered ? "No project matches" : "No projects yet"}
+                hint={
+                  filtered
+                    ? "Widen the search, or clear the filters to see every project you can access."
+                    : "Projects you are given access to appear here. An administrator grants access per project."
+                }
+                actions={
+                  canCreate && !filtered ? (
+                    <Button variant="primary" onClick={() => setCreating(true)}>
+                      New project
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </div>
+          ) : (
+            <TableScroll label="Project register" fixedFirst>
+              <thead>
+                <tr>
+                  <th scope="col">Project</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Where</th>
+                  <th scope="col">Programme</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col">Land and consents</th>
+                  <th scope="col">Flags</th>
+                  <th scope="col">
+                    <span className="visually-hidden">Open</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((project) => {
+                  const base = currencyCode(project.base_currency_id);
+                  const reporting = currencyCode(project.reporting_currency_id);
+                  const flagged = project.overdue_permit_count > 0 || project.blocking_permit_count > 0;
+                  return (
+                    <tr key={project.id} className={flagged ? "row-flag" : undefined}>
+                      <th scope="row">
+                        <button
+                          className="button-link"
+                          type="button"
+                          onClick={() => onOpen(project.id)}
+                          aria-label={`Open ${project.name}`}
+                        >
+                          <IdentityCell
+                            name={project.name}
+                            meta={
+                              <>
+                                <span className="mono">{project.code}</span> · {project.developer_entity}
+                              </>
+                            }
+                          />
+                        </button>
+                      </th>
+                      <td>
+                        <Badge tone={projectStatusTone(project.status)}>{projectStatusLabel(project.status)}</Badge>
+                      </td>
+                      <td>
+                        <PlaceCell main={project.city} sub={typeLabel(project.project_type_code) ?? undefined} />
+                      </td>
+                      <td className="figure">
+                        {project.planned_start || project.planned_completion
+                          ? `${businessDate(project.planned_start)} → ${businessDate(project.planned_completion)}`
+                          : "Not planned"}
+                      </td>
+                      <td className="figure">
+                        {base ?? "—"}
+                        {reporting && reporting !== base ? (
+                          <span className="cell-secondary">Reports in {reporting}</span>
+                        ) : null}
+                      </td>
+                      <td>
+                        {plural(project.parcel_count, "parcel")} · {plural(project.permit_count, "permit")}
+                      </td>
+                      <td>
+                        {project.overdue_permit_count > 0 ? (
+                          <StatusDot tone="danger">
+                            {plural(project.overdue_permit_count, "permit")} past statutory period
+                          </StatusDot>
+                        ) : null}
+                        {project.blocking_permit_count > 0 ? (
+                          <span className={project.overdue_permit_count > 0 ? "cell-secondary" : undefined}>
+                            <StatusDot tone="warning">
+                              {plural(project.blocking_permit_count, "blocking permit")}
+                            </StatusDot>
+                          </span>
+                        ) : null}
+                        {!flagged ? <span className="muted">—</span> : null}
+                      </td>
+                      <td className="row-go" aria-hidden="true">
+                        <Icon name="chevron" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableScroll>
+          )}
+        </Card>
+      </div>
 
       {creating ? (
-        configurationMissing ? (
-          <Notice tone="info">
-            A project needs an active country pack and currency first. Configure them under
-            Settings, then come back.
-          </Notice>
-        ) : (
-          <Card title="New project" description="The code is issued once and never changes. Everything else can be edited later.">
+        <Drawer
+          narrow
+          eyebrow="New record"
+          title="New project"
+          subtitle="The code is issued once and never changes. Everything else can be edited later."
+          onClose={() => setCreating(false)}
+        >
+          {configurationMissing ? (
+            <EmptyState
+              icon="settings"
+              title="Configure the basis first"
+              hint="A project needs an active country pack and an active currency before it can be created. Both are set under Settings."
+            />
+          ) : (
             <form onSubmit={submit}>
+              {formError ? <Notice tone="error">{formError}</Notice> : null}
               <FormSection title="Identity">
-                <FieldRow columns={3}>
+                <FieldRow columns={2}>
                   <Field label="Project code" hint="Letters, digits, hyphen or underscore.">
                     <input
                       className="input input-medium"
@@ -185,14 +343,29 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                       onChange={(event) => setForm({ ...form, code: event.target.value })}
                     />
                   </Field>
-                  <Field label="Name">
-                    <input
+                  <Field label="Status">
+                    <select
                       className="input"
-                      required
-                      value={form.name}
-                      onChange={(event) => setForm({ ...form, name: event.target.value })}
-                    />
+                      value={form.status}
+                      onChange={(event) => setForm({ ...form, status: event.target.value })}
+                    >
+                      {PROJECT_STATUSES.map((value) => (
+                        <option key={value} value={value}>
+                          {projectStatusLabel(value)}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
+                </FieldRow>
+                <Field label="Name">
+                  <input
+                    className="input"
+                    required
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  />
+                </Field>
+                <FieldRow columns={2}>
                   <Field label="Developer entity">
                     <input
                       className="input"
@@ -215,19 +388,6 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                       ))}
                     </select>
                   </Field>
-                  <Field label="Status">
-                    <select
-                      className="input"
-                      value={form.status}
-                      onChange={(event) => setForm({ ...form, status: event.target.value })}
-                    >
-                      {PROJECT_STATUSES.map((value) => (
-                        <option key={value} value={value}>
-                          {projectStatusLabel(value)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
                 </FieldRow>
               </FormSection>
 
@@ -235,22 +395,22 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 title="Financial basis"
                 description="Every amount on this project is denominated in its base currency. There is no conversion anywhere."
               >
-                <FieldRow columns={3}>
-                  <Field label="Country pack">
-                    <select
-                      className="input"
-                      required
-                      value={form.country_pack_id}
-                      onChange={(event) => setForm({ ...form, country_pack_id: event.target.value })}
-                    >
-                      <option value="">Choose…</option>
-                      {packs.map((pack) => (
-                        <option key={pack.id} value={pack.id}>
-                          {pack.name} ({pack.country_code})
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                <Field label="Country pack">
+                  <select
+                    className="input"
+                    required
+                    value={form.country_pack_id}
+                    onChange={(event) => setForm({ ...form, country_pack_id: event.target.value })}
+                  >
+                    <option value="">Choose…</option>
+                    {packs.map((pack) => (
+                      <option key={pack.id} value={pack.id}>
+                        {pack.name} ({pack.country_code})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <FieldRow columns={2}>
                   <Field label="Base currency">
                     <select
                       className="input"
@@ -284,7 +444,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
               </FormSection>
 
               <FormSection title="Location and programme">
-                <FieldRow columns={4}>
+                <FieldRow columns={2}>
                   <Field label="City" optional>
                     <input
                       className="input"
@@ -292,7 +452,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                       onChange={(event) => setForm({ ...form, city: event.target.value })}
                     />
                   </Field>
-                  <Field label="Location" optional>
+                  <Field label="Location" optional hint="A place name, or a map link.">
                     <input
                       className="input"
                       value={form.location}
@@ -342,114 +502,9 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 </Button>
               </FormActions>
             </form>
-          </Card>
-        )
+          )}
+        </Drawer>
       ) : null}
-
-      <DataToolbar
-        search={{ value: search, onChange: setSearch, placeholder: "Code or name", label: "Search projects" }}
-        count={rows ? { shown: rows.length, noun: "project" } : undefined}
-        onReset={filtered ? () => {
-          setSearch("");
-          setStatus("");
-        } : undefined}
-      >
-        <ToolbarFilter label="Status">
-          <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Any status</option>
-            {PROJECT_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {projectStatusLabel(value)}
-              </option>
-            ))}
-          </select>
-        </ToolbarFilter>
-      </DataToolbar>
-
-      {rows === null ? (
-        <Loading label="Loading projects…" shape="metrics" />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={filtered ? "No project matches" : "No projects yet"}
-          hint={
-            filtered
-              ? "Widen the search, or clear the filters to see every project you can access."
-              : "Projects you are given access to appear here. An administrator grants access per project."
-          }
-        />
-      ) : (
-        <div className="project-tiles">
-          {rows.map((project) => {
-            const base = currencyCode(project.base_currency_id);
-            const reporting = currencyCode(project.reporting_currency_id);
-            return (
-              <button
-                key={project.id}
-                type="button"
-                className="project-tile"
-                onClick={() => onOpen(project.id)}
-                aria-label={`Open ${project.name}`}
-              >
-                <div className="project-tile-head">
-                  <div style={{ minWidth: 0 }}>
-                    <p className="project-tile-code">{project.code}</p>
-                    <h2 className="project-tile-name">{project.name}</h2>
-                    <p className="project-tile-sub">
-                      {project.developer_entity}
-                      {project.city ? ` · ${project.city}` : ""}
-                    </p>
-                  </div>
-                  <Badge tone={projectStatusTone(project.status)}>{projectStatusLabel(project.status)}</Badge>
-                </div>
-                <dl className="project-tile-facts">
-                  <div>
-                    <dt>Type</dt>
-                    <dd>{typeLabel(project.project_type_code) ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt>Currency</dt>
-                    <dd>
-                      {base ?? "—"}
-                      {reporting && reporting !== base ? ` · reports ${reporting}` : ""}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Programme</dt>
-                    <dd>
-                      {project.planned_start || project.planned_completion
-                        ? `${businessDate(project.planned_start)} → ${businessDate(project.planned_completion)}`
-                        : "Not planned"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Land and consents</dt>
-                    <dd>
-                      {project.parcel_count} parcel{project.parcel_count === 1 ? "" : "s"} ·{" "}
-                      {project.permit_count} permit{project.permit_count === 1 ? "" : "s"}
-                    </dd>
-                  </div>
-                </dl>
-                {project.blocking_permit_count > 0 || project.overdue_permit_count > 0 ? (
-                  <div className="project-tile-flags">
-                    {project.overdue_permit_count > 0 ? (
-                      <Badge tone="danger">
-                        {project.overdue_permit_count} permit{project.overdue_permit_count === 1 ? "" : "s"} past
-                        statutory period
-                      </Badge>
-                    ) : null}
-                    {project.blocking_permit_count > 0 ? (
-                      <Badge tone="warning">
-                        {project.blocking_permit_count} blocking permit
-                        {project.blocking_permit_count === 1 ? "" : "s"}
-                      </Badge>
-                    ) : null}
-                  </div>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </>
   );
 }

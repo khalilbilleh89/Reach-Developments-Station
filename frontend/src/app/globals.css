@@ -1,16 +1,29 @@
 /*
- * Reach Developments Station — UX System 2.0.
+ * Reach Developments Station — Product Experience 3.0.
  *
- * One light workspace, one dark navigation rail, one token layer, no
+ * One light workspace, one deep navigation rail, one token layer, no
  * framework. Every screen composes from the tokens below, so one change here
  * changes the whole product. The file is organised top to bottom in the order
  * a screen is built: tokens, base, the application shell, page structure,
- * primitives, forms, data, feedback, overlays, domain compositions, and
- * finally the responsive and motion rules that adjust all of it.
+ * surfaces, actions, status, forms, registers, figures, feedback, overlays,
+ * the record file, the command centre, the domain compositions, and finally
+ * the motion and responsive rules that adjust all of it.
  *
- * Nothing in this file encodes a business rule. Colour never decides whether a
- * unit may be released; it only repeats what the server already said, beside
- * a word that says it first.
+ * Three rules hold everywhere in this file.
+ *
+ * Nothing here encodes a business rule. Colour never decides whether a unit
+ * may be released; it only repeats what the server already said, beside a
+ * word that says it first.
+ *
+ * Nothing here is a magic value. A colour, a size, a radius or a duration is
+ * a token, declared once in `:root` and consumed everywhere else. The one
+ * literal colour outside the token block is inside a data URI, where a custom
+ * property cannot reach.
+ *
+ * Nothing here is declared twice. A rule lives in one place; a screen that
+ * needs a variation gets a modifier class, never a second copy of the rule
+ * further down that wins by being later. `tests/test_product_experience.py`
+ * fails the build if a top-level selector appears twice.
  *
  * Light only. The rail is dark because it is chrome, not content: the working
  * surface — the thing that gets printed, screenshotted into a board pack and
@@ -19,54 +32,63 @@
 
 :root {
   /* ---- Canvas and surfaces ------------------------------------------- */
-  --canvas: #f4f4f1;
+  /* A cool, high-end neutral rather than a warm administrative beige. The
+   * working surface is white and sits a hair above it. */
+  --canvas: #f5f6f8;
   --surface: #ffffff;
-  --surface-primary: #ffffff;
-  --surface-secondary: #f8f8f6;
+  --surface-secondary: #f8f9fb;
+  --surface-hover: #f2f4f7;
+  --surface-selected: #edf2ff;
+  --surface-command: #fbfcfe;
   --surface-elevated: #ffffff;
-  --surface-hover: #f1f2ef;
-  --surface-selected: #eaf0fc;
-  --surface-sunken: var(--surface-secondary);
 
   /* ---- Lines --------------------------------------------------------- */
-  --line-soft: #ebebe7;
-  --line-default: #dcddd8;
-  --line-strong: #c1c4c9;
-  --border-subtle: var(--line-soft);
-  --border-strong: var(--line-strong);
+  --line-soft: #eceef2;
+  --line-default: #dfe3e9;
+  --line-strong: #c3c9d3;
 
   /* ---- Text ---------------------------------------------------------- */
-  --text-primary: #141922;
-  --text-secondary: #4b5462;
-  --text-muted: #676f7d;
-  --text-faint: #9aa1ad; /* decorative only: dots and rules, never text */
+  --text-primary: #131820;
+  --text-secondary: #4a5261;
+  --text-muted: #6b7484;
+  --text-faint: #9aa3b2; /* decorative only: dots and rules, never text */
   --text-inverse: #ffffff;
 
   /* ---- Intent -------------------------------------------------------- */
   --accent: #2454d0;
-  --accent-hover: #1b43ad;
-  --accent-soft: #e8eefc;
-  --accent-ring: rgb(36 84 208 / 22%);
+  --accent-hover: #1c44ad;
+  --accent-soft: #e9effc;
+  --accent-ring: rgb(36 84 208 / 24%);
   --accent-contrast: #ffffff;
 
-  --success: #177245;
-  --success-soft: #e3f3ea;
+  --success: #157347;
+  --success-soft: #e3f4ea;
   --warning: #8a5300;
-  --warning-soft: #fbf0dc;
-  --danger: #a3221a;
+  --warning-soft: #fbf1dc;
+  --danger: #a8231a;
   --danger-soft: #fbe9e7;
-  --info: #2454d0;
-  --info-soft: #e8eefc;
+  --info: var(--accent);
+  --info-soft: var(--accent-soft);
 
   /* ---- Navigation rail ----------------------------------------------- */
-  --nav-bg: #131a2b;
+  /* Deep charcoal-navy. The same ink reappears as the hairline over a command
+   * surface, which is what ties the working area to the navigation. */
+  --nav-bg: #0e1422;
   --nav-bg-hover: rgb(255 255 255 / 6%);
   --nav-bg-selected: rgb(255 255 255 / 11%);
-  --nav-line: rgb(255 255 255 / 9%);
-  --nav-text: #e7eaf1;
-  --nav-text-muted: #98a2b8;
-  --nav-accent: #8db0ff;
-  --nav-focus: #cfdcff;
+  --nav-line: rgb(255 255 255 / 8%);
+  --nav-text: #e6e9f0;
+  --nav-text-strong: #ffffff;
+  --nav-text-muted: #97a1b6;
+  --nav-accent: #93b3ff;
+  --nav-focus: #d2ddff;
+  --nav-glyph-bg: rgb(255 255 255 / 9%);
+  --nav-glyph-bg-strong: rgb(255 255 255 / 14%);
+  --nav-scrollbar: rgb(255 255 255 / 18%);
+  --ink: var(--nav-bg);
+
+  /* ---- Scrims -------------------------------------------------------- */
+  --scrim: rgb(14 20 34 / 42%);
 
   /* ---- Spacing ------------------------------------------------------- */
   --space-1: 0.25rem;
@@ -80,20 +102,22 @@
 
   /* ---- Radius -------------------------------------------------------- */
   --radius-control: 6px;
-  --radius-card: 10px;
+  --radius-card: 12px;
   --radius-tag: 5px;
   --radius-pill: 999px;
 
   /* ---- Elevation ----------------------------------------------------- */
-  --shadow-xs: 0 1px 1px rgb(20 25 34 / 4%);
-  --shadow-sm: 0 1px 2px rgb(20 25 34 / 6%), 0 1px 3px rgb(20 25 34 / 4%);
-  --shadow-md: 0 2px 4px rgb(20 25 34 / 6%), 0 8px 24px rgb(20 25 34 / 10%);
-  --shadow-lg: 0 8px 16px rgb(20 25 34 / 8%), 0 24px 56px rgb(20 25 34 / 18%);
+  /* Nearly flat on purpose. Hierarchy comes from spacing and rules, and a
+   * shadow is reserved for something that genuinely floats. */
+  --shadow-xs: 0 1px 1px rgb(19 24 32 / 4%);
+  --shadow-sm: 0 1px 2px rgb(19 24 32 / 6%), 0 1px 3px rgb(19 24 32 / 4%);
+  --shadow-md: 0 2px 4px rgb(19 24 32 / 6%), 0 8px 24px rgb(19 24 32 / 10%);
+  --shadow-lg: 0 8px 16px rgb(19 24 32 / 8%), 0 24px 56px rgb(19 24 32 / 18%);
 
   /* ---- Typography ---------------------------------------------------- */
   --font-sans:
-    system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue", arial,
-    sans-serif;
+    "Inter", system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue",
+    arial, sans-serif;
   --font-mono:
     ui-monospace, sfmono-regular, "SF Mono", menlo, consolas, monospace;
 
@@ -105,29 +129,43 @@
   --text-lg: 1.0625rem;
   --text-xl: 1.25rem;
   --text-2xl: 1.5rem;
-  --text-3xl: 1.75rem;
+  --text-3xl: 1.875rem;
 
-  --title-page: 1.375rem;
-  --title-record: 1.5rem;
-  --title-section: 0.9375rem;
+  /* The sizes that carry hierarchy. A page title is clearly a page title, a
+   * record title clearly a record's, and the figure a page is opened for is
+   * the largest thing on it. Body stays at 14px: this is a desk product. */
+  --title-plate: 1.875rem;
+  --title-page: 1.5rem;
+  --title-record: 1.625rem;
+  --title-section: 1rem;
   --metric: 1.375rem;
   --metric-lg: 1.75rem;
+  --metric-hero: 2rem;
+  --metric-hero-lg: 2.5rem;
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-body: 1.5;
 
   /* ---- Layout -------------------------------------------------------- */
-  --sidebar-width: 16.5rem;
-  --sidebar-collapsed-width: 4.5rem;
+  --sidebar-width: 16rem;
+  --sidebar-collapsed-width: 4.25rem;
   --sidebar-current: var(--sidebar-width);
   --context-bar-height: 3.25rem;
-  --content-max: 118rem;
-  --content-pad: 1.5rem;
-  --content-gap: 1.25rem;
+  --content-max: 112rem;
+  --content-pad: 2rem;
+  --content-gap: 1.5rem;
   --content-narrow: 26rem;
-  --drawer-width: 62rem;
+  --prose-max: 60rem;
+  --drawer-width: 64rem;
   --drawer-width-narrow: 46rem;
+  --control-height: 2.25rem;
+  --control-height-sm: 1.75rem;
+  --control-height-lg: 2.5rem;
 
   /* ---- Motion -------------------------------------------------------- */
   --motion-fast: 120ms;
-  --motion-base: 160ms;
+  --motion-base: 180ms;
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
 }
 
@@ -152,7 +190,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: 1.5;
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizelegibility;
 }
@@ -163,8 +201,8 @@ h3,
 h4 {
   margin: 0;
   font-weight: 650;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
+  letter-spacing: -0.012em;
+  line-height: var(--leading-snug);
 }
 
 p {
@@ -187,7 +225,8 @@ textarea {
 
 /* The rail is dark, so its focus ring is drawn in a light tint of the accent
  * rather than the accent itself, which would vanish against navy. */
-.sidebar :focus-visible {
+.sidebar :focus-visible,
+.nav-drawer :focus-visible {
   outline-color: var(--nav-focus);
 }
 
@@ -229,6 +268,12 @@ textarea {
   white-space: nowrap;
 }
 
+/* A figure the server flagged: an overrun, a delay, a loss. */
+.figure-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -241,14 +286,9 @@ textarea {
   white-space: nowrap;
 }
 
-.divider {
-  margin: var(--space-5) 0;
-  border: 0;
-  border-top: 1px solid var(--line-soft);
-}
-
 .footnote {
   margin: var(--space-3) 0 0;
+  max-width: var(--prose-max);
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
@@ -279,10 +319,6 @@ textarea {
 
 .stack-tight {
   gap: var(--space-3);
-}
-
-.stack-loose {
-  gap: var(--space-6);
 }
 
 /* --------------------------------------------------------------------------
@@ -337,6 +373,7 @@ textarea {
   overflow: hidden;
   background-color: var(--nav-bg);
   color: var(--nav-text);
+  transition: width var(--motion-base) var(--ease);
 }
 
 .sidebar-scroll {
@@ -345,7 +382,7 @@ textarea {
   overflow-y: auto;
   padding-bottom: var(--space-3);
   scrollbar-width: thin;
-  scrollbar-color: rgb(255 255 255 / 18%) transparent;
+  scrollbar-color: var(--nav-scrollbar) transparent;
 }
 
 .brand {
@@ -369,17 +406,18 @@ textarea {
   font-size: var(--text-sm);
   font-weight: 750;
   letter-spacing: 0.02em;
+  text-decoration: none;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.15;
+  line-height: var(--leading-tight);
 }
 
 .brand-name {
-  color: #ffffff;
+  color: var(--nav-text-strong);
   font-size: var(--text-md);
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -417,7 +455,7 @@ textarea {
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -448,12 +486,12 @@ textarea {
 
 .nav-item:hover {
   background-color: var(--nav-bg-hover);
-  color: #ffffff;
+  color: var(--nav-text-strong);
 }
 
 .nav-item[aria-current="page"] {
   background-color: var(--nav-bg-selected);
-  color: #ffffff;
+  color: var(--nav-text-strong);
   font-weight: 600;
 }
 
@@ -509,8 +547,8 @@ textarea {
   width: 1.875rem;
   height: 1.875rem;
   border-radius: 50%;
-  background-color: rgb(255 255 255 / 12%);
-  color: #ffffff;
+  background-color: var(--nav-glyph-bg-strong);
+  color: var(--nav-text-strong);
   font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -525,7 +563,7 @@ textarea {
 
 .sidebar-user-name {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--nav-text-strong);
   font-size: var(--text-sm);
   font-weight: 600;
   text-overflow: ellipsis;
@@ -546,29 +584,44 @@ textarea {
 
 /* ---- Collapsed rail ---------------------------------------------------- */
 
-.app[data-rail="collapsed"] .brand {
+/* Two ways to be collapsed: the person pinned it, or the viewport is narrow
+ * and the rail is on automatic. Both share one set of rules, and the rules
+ * name the sticky rail so the phone's navigation drawer — the same content,
+ * drawn inside the same shell — keeps its labels. */
+.app[data-rail="collapsed"] .sidebar .brand,
+.app[data-rail="auto"].app-narrow .sidebar .brand {
   justify-content: center;
   padding: 0;
 }
 
-.app[data-rail="collapsed"] .brand-text,
-.app[data-rail="collapsed"] .nav-group-label,
-.app[data-rail="collapsed"] .nav-label,
-.app[data-rail="collapsed"] .sidebar-user-text,
-.app[data-rail="collapsed"] .switcher-text,
-.app[data-rail="collapsed"] .switcher-chevron {
+.app[data-rail="collapsed"] .sidebar .brand-text,
+.app[data-rail="collapsed"] .sidebar .nav-group-label,
+.app[data-rail="collapsed"] .sidebar .nav-label,
+.app[data-rail="collapsed"] .sidebar .sidebar-user-text,
+.app[data-rail="collapsed"] .sidebar .switcher-text,
+.app[data-rail="collapsed"] .sidebar .switcher-chevron,
+.app[data-rail="auto"].app-narrow .sidebar .brand-text,
+.app[data-rail="auto"].app-narrow .sidebar .nav-group-label,
+.app[data-rail="auto"].app-narrow .sidebar .nav-label,
+.app[data-rail="auto"].app-narrow .sidebar .sidebar-user-text,
+.app[data-rail="auto"].app-narrow .sidebar .switcher-text,
+.app[data-rail="auto"].app-narrow .sidebar .switcher-chevron {
   display: none;
 }
 
-.app[data-rail="collapsed"] .nav-item,
-.app[data-rail="collapsed"] .sidebar-user,
-.app[data-rail="collapsed"] .switcher-button {
+.app[data-rail="collapsed"] .sidebar .nav-item,
+.app[data-rail="collapsed"] .sidebar .sidebar-user,
+.app[data-rail="collapsed"] .sidebar .switcher-button,
+.app[data-rail="auto"].app-narrow .sidebar .nav-item,
+.app[data-rail="auto"].app-narrow .sidebar .sidebar-user,
+.app[data-rail="auto"].app-narrow .sidebar .switcher-button {
   justify-content: center;
   padding-right: 0;
   padding-left: 0;
 }
 
-.app[data-rail="collapsed"] .nav-group + .nav-group {
+.app[data-rail="collapsed"] .sidebar .nav-group + .nav-group,
+.app[data-rail="auto"].app-narrow .sidebar .nav-group + .nav-group {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px solid var(--nav-line);
@@ -576,8 +629,10 @@ textarea {
 
 /* A label the rail no longer has room for is shown beside the icon on hover
  * and on keyboard focus, so a collapsed rail is still navigable by name. */
-.app[data-rail="collapsed"] .nav-item[data-label]:hover::after,
-.app[data-rail="collapsed"] .nav-item[data-label]:focus-visible::after {
+.app[data-rail="collapsed"] .sidebar .nav-item[data-label]:hover::after,
+.app[data-rail="collapsed"] .sidebar .nav-item[data-label]:focus-visible::after,
+.app[data-rail="auto"].app-narrow .sidebar .nav-item[data-label]:hover::after,
+.app[data-rail="auto"].app-narrow .sidebar .nav-item[data-label]:focus-visible::after {
   content: attr(data-label);
   position: absolute;
   top: 50%;
@@ -611,7 +666,7 @@ textarea {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--nav-line);
   border-radius: 8px;
-  background-color: rgb(255 255 255 / 4%);
+  background-color: var(--nav-glyph-bg);
   color: var(--nav-text);
   text-align: left;
   cursor: pointer;
@@ -621,7 +676,7 @@ textarea {
 }
 
 .switcher-button:hover {
-  border-color: rgb(255 255 255 / 18%);
+  border-color: var(--nav-scrollbar);
   background-color: var(--nav-bg-hover);
 }
 
@@ -632,7 +687,7 @@ textarea {
   width: 1.875rem;
   height: 1.875rem;
   border-radius: 7px;
-  background-color: rgb(255 255 255 / 9%);
+  background-color: var(--nav-glyph-bg);
   color: var(--nav-accent);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
@@ -649,7 +704,7 @@ textarea {
 
 .switcher-name {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--nav-text-strong);
   font-size: var(--text-sm);
   font-weight: 600;
   text-overflow: ellipsis;
@@ -694,6 +749,10 @@ textarea {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.switcher-search .toolbar-search {
+  max-width: none;
+}
+
 .switcher-list {
   flex: 1;
   overflow-y: auto;
@@ -701,6 +760,12 @@ textarea {
   padding: var(--space-2);
   list-style: none;
   scrollbar-width: thin;
+}
+
+.switcher-note {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .switcher-option {
@@ -713,6 +778,8 @@ textarea {
   border-radius: var(--radius-control);
   background: none;
   text-align: left;
+  text-decoration: none;
+  color: inherit;
   cursor: pointer;
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -755,8 +822,19 @@ textarea {
   border-top: 1px solid var(--line-soft);
 }
 
+/* A transparent scrim behind a floating menu, so a click anywhere else closes
+ * it without the page beneath receiving the click. */
+.menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+}
+
 /* ---- Context bar ------------------------------------------------------- */
 
+/* Quiet, white, and always there. It carries where you are, the open
+ * project's state and denomination, and the way to the navigation when the
+ * rail is hidden. It is not a second menu. */
 .context-bar {
   position: sticky;
   top: 0;
@@ -767,8 +845,7 @@ textarea {
   min-height: var(--context-bar-height);
   padding: 0 var(--content-pad);
   border-bottom: 1px solid var(--line-soft);
-  background-color: color-mix(in srgb, var(--canvas) 84%, white);
-  backdrop-filter: blur(8px);
+  background-color: var(--surface);
 }
 
 .crumbs {
@@ -790,9 +867,13 @@ textarea {
   min-width: 0;
 }
 
+/* A breadcrumb is a link a finger has to hit: never shorter than 24px. */
 .crumb {
+  display: inline-flex;
+  align-items: center;
   overflow: hidden;
   max-width: 22rem;
+  min-height: 1.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -803,6 +884,7 @@ textarea {
   background: none;
   color: var(--text-secondary);
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -818,13 +900,13 @@ textarea {
 
 .crumb-sep {
   flex: none;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 .context-utilities {
   display: flex;
   flex: none;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-items: center;
   margin-left: auto;
 }
@@ -840,6 +922,7 @@ textarea {
 .context-fact strong {
   color: var(--text-primary);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .icon-button {
@@ -875,7 +958,7 @@ textarea {
 
 .icon-button-nav:hover {
   background-color: var(--nav-bg-hover);
-  color: #ffffff;
+  color: var(--nav-text-strong);
 }
 
 .menu-button {
@@ -888,7 +971,7 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 44;
-  background-color: rgb(20 25 34 / 42%);
+  background-color: var(--scrim);
 }
 
 .nav-drawer {
@@ -926,9 +1009,7 @@ textarea {
   justify-content: center;
   min-height: 100dvh;
   padding: var(--space-6) var(--space-4);
-  background:
-    radial-gradient(60rem 30rem at 50% -10rem, rgb(36 84 208 / 7%), transparent 70%),
-    var(--canvas);
+  background-color: var(--canvas);
 }
 
 .signin {
@@ -968,7 +1049,7 @@ textarea {
   width: 100%;
   padding: var(--space-6);
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--surface);
   box-shadow: var(--shadow-md);
 }
@@ -1008,6 +1089,10 @@ textarea {
 
 /* --------------------------------------------------------------------------
  * Page structure
+ *
+ *   PageHeader      where you are · what it is for · status · actions · facts
+ *   Command         the one answer the page exists to give
+ *   Body            the sections, registers and forms beneath
  * ------------------------------------------------------------------------ */
 
 .page-head {
@@ -1018,7 +1103,7 @@ textarea {
   justify-content: space-between;
   margin-bottom: var(--content-gap);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-default);
 }
 
 .page-head-main {
@@ -1035,18 +1120,25 @@ textarea {
   text-transform: uppercase;
 }
 
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
 .page-title {
   margin: 0;
   font-size: var(--title-page);
   font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: -0.022em;
+  line-height: var(--leading-tight);
   overflow-wrap: anywhere;
 }
 
 .page-subtitle {
-  margin: var(--space-1) 0 0;
-  max-width: 60rem;
+  margin: var(--space-2) 0 0;
+  max-width: var(--prose-max);
   color: var(--text-secondary);
   font-size: var(--text-base);
 }
@@ -1058,17 +1150,28 @@ textarea {
   align-items: center;
 }
 
+/* The small facts that identify the place — a code, a currency, a date. Not
+ * figures: figures are labelled and belong in a position beneath. */
 .page-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2) var(--space-5);
   align-items: center;
   margin-top: var(--space-3);
 }
 
 .page-head-compact {
+  margin-bottom: var(--space-5);
   padding-bottom: var(--space-3);
-  margin-bottom: var(--space-4);
+}
+
+.page-head-compact .page-title {
+  font-size: var(--text-xl);
+}
+
+.page-head-compact .page-subtitle {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
 }
 
 /* The two-column composition a working screen defaults to: a wide main
@@ -1076,7 +1179,7 @@ textarea {
 .split {
   display: grid;
   gap: var(--content-gap);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
   align-items: start;
 }
 
@@ -1084,6 +1187,8 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* A card sizes to what it holds. Stretching one to match a taller neighbour
+ * buys a void under two lines of text, and a void reads as missing data. */
 .grid-12 {
   display: grid;
   gap: var(--content-gap);
@@ -1091,23 +1196,20 @@ textarea {
   align-items: start;
 }
 
-.span-3 { grid-column: span 3; }
 .span-4 { grid-column: span 4; }
 .span-5 { grid-column: span 5; }
-.span-6 { grid-column: span 6; }
 .span-7 { grid-column: span 7; }
 .span-8 { grid-column: span 8; }
-.span-9 { grid-column: span 9; }
 .span-12 { grid-column: span 12; }
 
-/* Section headings inside a card: small caps that name a group of facts. */
+/* A section heading inside a card or a record: sentence case, clearly a
+ * heading, never a whisper in small caps. */
 .section-heading {
   margin: var(--space-5) 0 var(--space-3);
-  color: var(--text-secondary);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  letter-spacing: -0.005em;
 }
 
 .section-heading:first-child {
@@ -1133,17 +1235,31 @@ textarea {
 
 .section-description {
   margin: calc(var(--space-2) * -1) 0 var(--space-3);
-  max-width: 60rem;
+  max-width: var(--prose-max);
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
 
 section + section {
-  margin-top: var(--space-5);
+  margin-top: var(--space-6);
+}
+
+/* Sections inside a stack already carry the stack's gap. */
+.stack > section + section {
+  margin-top: 0;
 }
 
 /* --------------------------------------------------------------------------
- * Cards and panels
+ * Surfaces
+ *
+ * A card is a meaningful surface, not a border. Five weights, and a page has
+ * at most one of the strong ones:
+ *
+ *   command      the one thing a page exists to answer — a position, a result
+ *   (plain)      ordinary workflow
+ *   flush        a register, where the rows dominate and the frame recedes
+ *   attention    something owed, blocked or past its date
+ *   subtle       a supporting block beside something that matters more
  * ------------------------------------------------------------------------ */
 
 .card {
@@ -1151,6 +1267,7 @@ section + section {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
   background-color: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .card-header {
@@ -1159,7 +1276,7 @@ section + section {
   gap: var(--space-3);
   align-items: flex-start;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-5) var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-3);
 }
 
 .card-header-main {
@@ -1170,12 +1287,12 @@ section + section {
   margin: 0;
   font-size: var(--title-section);
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
 }
 
 .card-description {
   margin: var(--space-1) 0 0;
-  max-width: 60rem;
+  max-width: var(--prose-max);
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
@@ -1208,17 +1325,65 @@ section + section {
   border-top: 1px solid var(--line-soft);
 }
 
-.card-tone-attention {
-  border-color: color-mix(in srgb, var(--warning) 35%, var(--line-soft));
+/* The rail's ink, two pixels of it: this block belongs to the same product as
+ * the navigation, and it is the answer the page was opened for. */
+.card-command {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--line-default);
+  background-color: var(--surface-command);
 }
 
-/* A bordered region inside a card: a form that opened, a nested register. */
+.card-command::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background-image: linear-gradient(
+    90deg,
+    var(--ink) 0%,
+    color-mix(in srgb, var(--accent) 65%, var(--ink)) 100%
+  );
+}
+
+.card-command > .card-header {
+  padding-top: var(--space-5);
+}
+
+.card-subtle {
+  border-color: var(--line-soft);
+  background-color: var(--surface-secondary);
+  box-shadow: none;
+}
+
+/* Something owed, blocked or past its date. A narrow rail and the faintest
+ * warm ground — enough to find on a page, never enough to make the page red. */
+.card-attention {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--line-soft));
+  background-color: color-mix(in srgb, var(--warning-soft) 30%, var(--surface));
+}
+
+.card-attention::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background-color: var(--warning);
+}
+
+.card-attention > .card-header,
+.card-attention > .card-body {
+  padding-left: calc(var(--space-5) + 3px);
+}
+
+/* A ruled band inside a card or a record: a form that opened, a nested
+ * register. A rule above and a title, never a second box inside the first. */
 .subpanel {
   margin-bottom: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background-color: var(--surface-secondary);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-default);
 }
 
 .subpanel:last-child {
@@ -1236,8 +1401,9 @@ section + section {
 
 .subpanel-title {
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 /* --------------------------------------------------------------------------
@@ -1248,7 +1414,7 @@ section + section {
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
   border-bottom: 1px solid var(--line-soft);
   scrollbar-width: thin;
 }
@@ -1266,7 +1432,9 @@ section + section {
   font-weight: 550;
   white-space: nowrap;
   cursor: pointer;
-  transition: color var(--motion-fast) var(--ease);
+  transition:
+    color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
 }
 
 .tab:hover {
@@ -1313,7 +1481,14 @@ section + section {
 }
 
 /* --------------------------------------------------------------------------
- * Buttons
+ * Actions
+ *
+ *   primary      the one thing this surface invites. Rare.
+ *   default      an ordinary action
+ *   quiet        an action beside data it must not outweigh
+ *   danger       an exception. An outline, never a fill: a red-filled button
+ *                in a register reads as an alarm rather than an option.
+ *   link         a record identifier that opens the record
  * ------------------------------------------------------------------------ */
 
 .button {
@@ -1321,8 +1496,8 @@ section + section {
   gap: var(--space-2);
   align-items: center;
   justify-content: center;
-  min-height: 2.125rem;
-  padding: 0 var(--space-3);
+  min-height: var(--control-height);
+  padding: 0 var(--space-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   background-color: var(--surface);
@@ -1331,7 +1506,9 @@ section + section {
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
+  box-shadow: var(--shadow-xs);
   transition:
     background-color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease),
@@ -1346,6 +1523,7 @@ section + section {
 
 .button:active:not(:disabled) {
   background-color: var(--line-soft);
+  box-shadow: none;
 }
 
 .button:disabled {
@@ -1380,12 +1558,11 @@ section + section {
   color: var(--danger);
 }
 
-/* Chrome-free: for the many in-table actions, where a row of outlined boxes
- * reads as more important than the data it sits beside. */
 .button-quiet {
   border-color: transparent;
   background-color: transparent;
   color: var(--accent);
+  box-shadow: none;
 }
 
 .button-quiet:hover:not(:disabled) {
@@ -1393,7 +1570,6 @@ section + section {
   background-color: var(--accent-soft);
 }
 
-/* A record identifier that opens the record. Reads as data, behaves as a link. */
 .button-link {
   min-height: 0;
   padding: 0;
@@ -1405,6 +1581,7 @@ section + section {
   font-weight: 600;
   text-align: left;
   white-space: normal;
+  box-shadow: none;
   cursor: pointer;
 }
 
@@ -1416,8 +1593,8 @@ section + section {
 }
 
 .button-small {
-  min-height: 1.75rem;
-  padding: 0 var(--space-2);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
   font-size: var(--text-xs);
 }
 
@@ -1435,13 +1612,17 @@ section + section {
 
 /* --------------------------------------------------------------------------
  * Status
+ *
+ * A word carries the meaning; colour only repeats it. Three treatments by
+ * importance: a badge for the state a surface is about, a dot beside a word
+ * for every other state, and plain text for a fact that is not a state.
  * ------------------------------------------------------------------------ */
 
 .badge {
   display: inline-flex;
   gap: var(--space-1);
   align-items: center;
-  padding: 0.1rem 0.45rem;
+  padding: 0.125rem 0.5rem;
   border-radius: var(--radius-tag);
   background-color: var(--surface-secondary);
   color: var(--text-secondary);
@@ -1450,7 +1631,7 @@ section + section {
   letter-spacing: 0.01em;
   line-height: 1.5;
   white-space: nowrap;
-  box-shadow: inset 0 0 0 1px var(--line-soft);
+  box-shadow: inset 0 0 0 1px var(--line-default);
 }
 
 .badge-neutral {
@@ -1493,8 +1674,6 @@ section + section {
   box-shadow: none;
 }
 
-/* A dot beside a word: the lighter status treatment, for a secondary state
- * or a status column where the heading already says it is a status. */
 .status-dot {
   display: inline-flex;
   gap: 0.4rem;
@@ -1562,8 +1741,7 @@ section + section {
   list-style: none;
 }
 
-.inline-meta > li,
-.inline-meta-item {
+.inline-meta > li {
   display: inline-flex;
   gap: var(--space-2);
   align-items: baseline;
@@ -1575,8 +1753,6 @@ section + section {
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .inline-meta-value {
@@ -1587,21 +1763,31 @@ section + section {
 
 /* --------------------------------------------------------------------------
  * Forms
+ *
+ *   Form
+ *   ├── FormSection     a titled group, ruled from the next
+ *   │   └── FieldRow    two, three or four fields side by side
+ *   │       └── Field   label · control · hint · error · "optional"
+ *   └── FormActions     the primary action, and the way out
  * ------------------------------------------------------------------------ */
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   min-width: 0;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.field-grow {
+  flex: 1 1 12rem;
 }
 
 .field-label {
   display: flex;
   gap: var(--space-2);
   align-items: baseline;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--text-sm);
   font-weight: 600;
 }
@@ -1625,7 +1811,7 @@ section + section {
 
 .input {
   width: 100%;
-  min-height: 2.125rem;
+  min-height: var(--control-height);
   padding: 0 var(--space-3);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
@@ -1654,11 +1840,18 @@ section + section {
 }
 
 .input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 .input[aria-invalid="true"] {
   border-color: var(--danger);
+}
+
+/* Form controls get the height a hand expects; the compact ones inside a
+ * register and a toolbar keep theirs. */
+.field > .input,
+.field > .input-shell {
+  min-height: var(--control-height-lg);
 }
 
 textarea.input {
@@ -1669,7 +1862,7 @@ textarea.input {
 
 select.input {
   padding-right: 2rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e7684' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7484' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.55rem center;
   background-size: 1rem;
@@ -1703,7 +1896,7 @@ input[type="file"].input {
   display: flex;
   align-items: stretch;
   width: 100%;
-  min-height: 2.125rem;
+  min-height: var(--control-height);
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
@@ -1786,23 +1979,15 @@ input[type="file"].input {
   accent-color: var(--accent);
 }
 
-.filter-checks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  min-height: 2.125rem;
-}
-
-.filter-checks .checkbox {
-  white-space: nowrap;
+.checkbox-inline {
+  align-self: center;
 }
 
 /* Fields in columns. The column count is a custom property so a form decides
  * its own shape, and every column collapses on a phone. */
 .field-row {
   display: grid;
-  gap: 0 var(--space-4);
+  gap: 0 var(--space-5);
   grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
 }
 
@@ -1828,7 +2013,7 @@ input[type="file"].input {
 
 /* A titled group of related fields inside one form. */
 .form-section {
-  padding: var(--space-4) 0;
+  padding: var(--space-5) 0;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -1842,27 +2027,21 @@ input[type="file"].input {
 }
 
 .form-section-head {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .form-section-title {
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .form-section-description {
   margin: 0.125rem 0 0;
+  max-width: var(--prose-max);
   color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-/* The compact grid a quick create form uses. Two columns by default, three
- * on a wide screen with `.form-grid-3`. */
-.form-grid {
-  display: grid;
-  gap: 0 var(--space-4);
-  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
 }
 
 .form-inline {
@@ -1881,12 +2060,15 @@ input[type="file"].input {
   flex-basis: 100%;
 }
 
+/* The way a form ends: a rule, the primary action, and the way out. */
 .form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  margin-top: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-soft);
   grid-column: 1 / -1;
 }
 
@@ -1979,31 +2161,83 @@ input[type="file"].input {
   align-items: center;
 }
 
-/* Legacy name for the same strip, kept so a register can gain the new toolbar
- * one at a time. */
-.filter-bar {
+/* One command row, not five separate controls: search, the two or three
+ * filters that narrow the register, and the count of what survived. */
+.toolbar-framed {
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.toolbar-framed .toolbar-search {
+  flex: 1 1 16rem;
+  max-width: none;
+}
+
+.toolbar-framed .toolbar-search .input {
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  font-size: var(--text-md);
+}
+
+.toolbar-framed .toolbar-search .input:focus {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.toolbar-framed .toolbar-filter {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
-  align-items: flex-end;
-  margin-bottom: var(--space-4);
+  align-items: center;
+  border-left: 1px solid var(--line-soft);
 }
 
-.filter-bar .field {
-  min-width: 9rem;
-  margin-bottom: 0;
+.toolbar-framed .toolbar-filter .input {
+  min-height: 2.75rem;
+  min-width: 8.5rem;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
-.filter-bar-grow {
-  flex: 1 1 12rem;
+.toolbar-framed .toolbar-filter .input:focus {
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.filter-bar-actions {
-  margin-left: auto;
+/* A filter that is narrowing the register says so, quietly. */
+.toolbar-framed .toolbar-filter-active {
+  background-color: var(--accent-soft);
+}
+
+.toolbar-framed .toolbar-filter-active .input {
+  color: var(--accent);
+}
+
+.toolbar-framed .toolbar-meta {
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-left: 1px solid var(--line-soft);
+  align-self: stretch;
+  align-items: center;
+}
+
+.toolbar-framed .toolbar-actions {
+  padding-right: var(--space-3);
 }
 
 /* --------------------------------------------------------------------------
- * Tables
+ * Registers
+ *
+ * The product's centre of gravity. The identity cell anchors the row, figures
+ * sit right and tabular, the header is a quiet label strip in sentence case,
+ * and the only lines are the hairlines between rows.
  * ------------------------------------------------------------------------ */
 
 .table-scroll {
@@ -2032,7 +2266,7 @@ input[type="file"].input {
 
 .table th,
 .table td {
-  padding: 0.55rem var(--space-3);
+  padding: 0.625rem var(--space-3);
   border-bottom: 1px solid var(--line-soft);
   text-align: left;
   vertical-align: middle;
@@ -2058,13 +2292,14 @@ input[type="file"].input {
   position: sticky;
   top: 0;
   z-index: 1;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--line-default);
   background-color: var(--surface);
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -2124,17 +2359,7 @@ input[type="file"].input {
 
 .table-compact th,
 .table-compact td {
-  padding: 0.4rem var(--space-3);
-}
-
-.table-in-panel th:first-child,
-.table-in-panel td:first-child {
-  padding-left: var(--space-3);
-}
-
-.table-in-panel th:last-child,
-.table-in-panel td:last-child {
-  padding-right: var(--space-3);
+  padding: 0.45rem var(--space-3);
 }
 
 .table .hint {
@@ -2160,6 +2385,11 @@ input[type="file"].input {
   margin-top: 0.15rem;
 }
 
+.cell-prose {
+  min-width: 14rem;
+  max-width: 28rem;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2167,9 +2397,134 @@ input[type="file"].input {
   align-items: center;
 }
 
-.cell-prose {
-  min-width: 14rem;
-  max-width: 28rem;
+/* A row that opens a record when pressed anywhere on it. */
+.row-clickable {
+  cursor: pointer;
+}
+
+/* The far-right affordance on a register row: the record opens. */
+.row-go {
+  width: 1.5rem;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.row-go .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.table tbody tr:hover .row-go,
+.table tbody tr:focus-within .row-go {
+  opacity: 1;
+}
+
+/* The row whose record is open behind the drawer, so closing it lands the
+ * reader back where they were. */
+.table tbody tr[aria-selected="true"] {
+  background-color: var(--surface-selected);
+}
+
+.table tbody tr[aria-selected="true"] > :first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.table-fixed-first tbody tr[aria-selected="true"] th:first-child,
+.table-fixed-first tbody tr[aria-selected="true"] td:first-child {
+  background-color: var(--surface-selected);
+  box-shadow:
+    inset 2px 0 0 var(--accent),
+    inset -1px 0 0 var(--line-soft);
+}
+
+/* A row the server flagged: a rail, and nothing else. The status and the flag
+ * columns already carry the words, and a tinted row on top of them turns a
+ * register into an alarm panel where nothing stands out because everything
+ * does. */
+.table tbody tr.row-flag > :first-child {
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+
+.table-fixed-first tbody tr.row-flag th:first-child,
+.table-fixed-first tbody tr.row-flag td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--warning),
+    inset -1px 0 0 var(--line-soft);
+}
+
+.table tbody tr.row-flag[aria-selected="true"] > :first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A register row's identity is a link that carries two lines. */
+.table .button-link .identity-cell-name {
+  color: var(--accent);
+}
+
+.table .button-link:hover .identity-cell-name {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.table .button-link .identity-cell-meta {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+/* A footnote under a register, inside the flush card. */
+.table-foot {
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* -- Register cells -------------------------------------------------------- */
+
+/* A row's identity: the reference a person says out loud, and under it the
+ * two or three words that tell them which one it is. A buyer's registered
+ * name can run to seventy characters, so the measure is capped and the
+ * secondary line wraps rather than truncating — the name on a contract is
+ * not a detail to elide. */
+.identity-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 9rem;
+  max-width: 22rem;
+}
+
+.identity-cell-name {
+  font-size: var(--text-base);
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.identity-cell-meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  white-space: normal;
+}
+
+/* Where a unit sits in the development: the container first, the path under. */
+.place-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.place-main {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.place-sub {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
@@ -2178,7 +2533,7 @@ input[type="file"].input {
 
 .kv {
   display: grid;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--space-4) var(--space-5);
   margin: 0;
   padding: 0;
 }
@@ -2188,11 +2543,10 @@ input[type="file"].input {
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 .kv-value {
-  margin: 0.125rem 0 0;
+  margin: 0.15rem 0 0;
   color: var(--text-primary);
   font-size: var(--text-base);
   overflow-wrap: anywhere;
@@ -2204,10 +2558,19 @@ input[type="file"].input {
 
 /* --------------------------------------------------------------------------
  * Figures
+ *
+ * Every figure on screen is a value the API returned on this request. Nothing
+ * is derived, totalled or projected in the browser.
+ *
+ *   Metric        one reported number, label above
+ *   Position      the figures a page is opened for, set large, label beneath
+ *   StatStrip     four or five counts in one band
+ *   Breakdown     the parts of a total, with a leader to each amount
+ *   Waterfall     a sequence the server applied to reach a figure
+ *   Distribution  a balance across the bands the server aged it into
+ *   Meter         a percentage the server reported, at the width it reported
  * ------------------------------------------------------------------------ */
 
-/* One reported number with its label. Never a calculated one: every figure on
- * screen is a value the API returned. */
 /* A flex row rather than an equal-column grid, so a wide figure takes the room
  * it needs and a narrow one gives it up. A figure is never broken across two
  * lines: "1,668,701.3 / 8" is not a number anybody should read. */
@@ -2240,7 +2603,6 @@ input[type="file"].input {
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 .metric-value {
@@ -2249,7 +2611,7 @@ input[type="file"].input {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: var(--leading-tight);
   white-space: nowrap;
 }
 
@@ -2283,7 +2645,230 @@ input[type="file"].input {
   color: var(--text-muted);
 }
 
-/* The lines a price or a profit is made of, read top to bottom. */
+/* -- Position: the dominant composition on a page -------------------------- */
+
+/* Figures share the line and wrap onto the next when they run out of it.
+ *
+ * `min-width: max-content` is load-bearing, not tidying: a reported figure is
+ * set on one line and never breaks mid-number, so a track narrower than the
+ * figure would let one amount print over the next. A grid with fixed tracks
+ * does exactly that as soon as a project's profit runs to eight digits. */
+.position {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5) var(--space-7);
+  align-items: flex-start;
+}
+
+.position-figure {
+  flex: 1 1 auto;
+  min-width: max-content;
+}
+
+/* Four money figures on one line, where four percentages would have fitted at
+ * full size. The lead keeps its weight; the rest step down rather than wrap. */
+.position-compact .position-value {
+  font-size: var(--metric);
+}
+
+.position-compact .position-figure-lead .position-value {
+  font-size: var(--metric-hero);
+}
+
+.position-value {
+  margin: 0;
+  font-size: var(--metric-hero);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.position-figure-lead .position-value {
+  font-size: var(--metric-hero-lg);
+}
+
+/* The label sits under the figure, the way a tear sheet sets it: the number is
+ * what a reader came for, and the word only confirms which number it is. */
+.position-label {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.position-note {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.position-value-danger {
+  color: var(--danger);
+}
+
+.position-value-warning {
+  color: var(--warning);
+}
+
+.position-value-success {
+  color: var(--success);
+}
+
+.position-support {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-soft);
+}
+
+.position-support-item {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: max-content;
+}
+
+.position-support-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.position-support-value {
+  font-size: var(--text-base);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* -- Stat strip: counts, integrated, in one band --------------------------- */
+
+/* A ruled band rather than a box: the counts sit on the page, separated by
+ * hairlines, and the rule beneath hands over to the register. */
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.stat-strip-item {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: max-content;
+  padding: 0.25rem var(--space-5) 0.25rem 0;
+  margin-right: var(--space-5);
+  border-right: 1px solid var(--line-soft);
+}
+
+.stat-strip-item:last-of-type {
+  border-right: 0;
+}
+
+.stat-strip-value {
+  font-size: var(--text-xl);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.stat-strip-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stat-strip-item-danger .stat-strip-value {
+  color: var(--danger);
+}
+
+.stat-strip-item-warning .stat-strip-value {
+  color: var(--warning);
+}
+
+.stat-strip-note {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* -- Breakdown: what a total is made of ------------------------------------ */
+
+.breakdown {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breakdown-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.breakdown-label {
+  flex: none;
+  font-size: var(--text-base);
+  font-weight: 550;
+}
+
+.breakdown-note {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+/* The leader that carries the eye from a line to its amount. A financial
+ * document convention, and the reason this reads as a statement rather than
+ * as two columns that happen to be near each other. */
+.breakdown-lead {
+  flex: 1 1 auto;
+  min-width: var(--space-4);
+  border-bottom: 1px dotted var(--line-default);
+  translate: 0 -0.28rem;
+}
+
+.breakdown-amount {
+  flex: none;
+  font-size: var(--text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.breakdown-row-total {
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line-strong);
+  border-bottom: 0;
+}
+
+.breakdown-row-total .breakdown-label,
+.breakdown-row-total .breakdown-amount {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.breakdown-row-total .breakdown-lead {
+  border-bottom-style: none;
+}
+
+/* -- Waterfall: the lines a price or a profit is made of ------------------- */
+
 .waterfall {
   margin: 0;
   padding: 0;
@@ -2337,8 +2922,154 @@ input[type="file"].input {
   color: var(--text-primary);
 }
 
+/* -- Distribution: an aged balance, band by band --------------------------- */
+
+.distribution {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  list-style: none;
+  background-color: var(--surface);
+}
+
+.distribution-band {
+  position: relative;
+  flex: 1 1 8rem;
+  min-width: max-content;
+  padding: var(--space-3) var(--space-4);
+  border-left: 1px solid var(--line-soft);
+}
+
+.distribution-band:first-child {
+  border-left: 0;
+}
+
+/* The rule is a band marker, not a measurement: no width here encodes an
+ * amount, because the browser would have to divide to know one. */
+.distribution-band::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background-color: var(--line-default);
+}
+
+.distribution-band-warm::before {
+  background-color: color-mix(in srgb, var(--warning) 55%, var(--line-default));
+}
+
+.distribution-band-hot::before {
+  background-color: var(--warning);
+}
+
+.distribution-band-late::before {
+  background-color: var(--danger);
+}
+
+.distribution-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.distribution-value {
+  margin: 0.25rem 0 0;
+  font-size: var(--text-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.distribution-band-late .distribution-value {
+  color: var(--danger);
+}
+
+.distribution-note {
+  margin: 0.15rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* -- Meter: a percentage the server reported --------------------------------- */
+
+.meter-block {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.meter {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.meter-track {
+  flex: none;
+  width: 3rem;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background-color: var(--line-default);
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background-color: var(--accent);
+}
+
+.meter-fill-complete {
+  background-color: var(--success);
+}
+
+.meter-fill-low {
+  background-color: var(--warning);
+}
+
+.meter-text {
+  font-size: var(--text-xs);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-note {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* -- External destination ------------------------------------------------- */
+
+.link-external {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  min-height: 1.5rem;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-external:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.link-external .icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+}
+
 /* --------------------------------------------------------------------------
- * Notices, empty and loading states
+ * Feedback: notices, empty and loading states
  * ------------------------------------------------------------------------ */
 
 .notice {
@@ -2346,7 +3077,7 @@ input[type="file"].input {
   gap: var(--space-2);
   align-items: flex-start;
   margin: 0 0 var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--line-strong);
   border-radius: var(--radius-control);
@@ -2404,12 +3135,31 @@ input[type="file"].input {
   color: var(--info);
 }
 
+/* Nothing here — what is missing, why it matters, and what to do next. No
+ * box around it: an empty state is an absence, and a bordered absence reads
+ * as a broken widget. */
 .empty-state {
-  padding: var(--space-6) var(--space-4);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background-color: var(--surface-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-7) var(--space-4);
   text-align: center;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: var(--space-3);
+  border-radius: 50%;
+  background-color: var(--surface-secondary);
+  color: var(--text-muted);
+}
+
+.empty-icon .icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .empty-title {
@@ -2436,6 +3186,12 @@ input[type="file"].input {
 
 .empty-state-compact {
   padding: var(--space-4);
+}
+
+.empty-state-compact .empty-icon {
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: var(--space-2);
 }
 
 .loading {
@@ -2503,7 +3259,7 @@ input[type="file"].input {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: 8rem 1fr 6rem 6rem;
-  padding: 0.8rem var(--space-5);
+  padding: 0.85rem var(--space-5);
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -2516,19 +3272,43 @@ input[type="file"].input {
   height: 1.25rem;
 }
 
-@keyframes skeleton-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
+/* The silhouette of a page header: an eyebrow, a title, a sentence. */
+.skeleton-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--content-gap);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line-default);
+}
 
-  50% {
-    opacity: 0.45;
-  }
+.skeleton-header .skeleton:first-child {
+  width: 6rem;
+  height: 0.6rem;
+}
+
+.skeleton-header .skeleton:nth-child(2) {
+  width: 32%;
+  height: 1.5rem;
+}
+
+.skeleton-header .skeleton:nth-child(3) {
+  width: 48%;
+}
+
+/* The silhouette of a record: a title, a line of facts, a few rows. */
+.skeleton-record {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skeleton-record .skeleton-title {
+  width: 28%;
 }
 
 /* --------------------------------------------------------------------------
- * Timeline and progress
+ * Timeline and progression
  * ------------------------------------------------------------------------ */
 
 .timeline {
@@ -2604,39 +3384,81 @@ input[type="file"].input {
   font-size: var(--text-sm);
 }
 
+/* The named steps a record passes, as one connected track. The server decides
+ * which step has been reached; this only draws it. */
 .steps {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-2) 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .step {
+  position: relative;
   display: inline-flex;
   gap: var(--space-2);
   align-items: center;
-  padding: 0.2rem var(--space-3);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-pill);
+  padding: 0.2rem var(--space-4) 0.2rem 0;
+  margin-right: var(--space-4);
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
+  font-weight: 500;
   white-space: nowrap;
 }
 
+.step::before {
+  content: "";
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background-color: var(--surface);
+}
+
+.step::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--space-4);
+  height: 1px;
+  background-color: var(--line-default);
+}
+
+.step:last-child {
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.step:last-child::after {
+  display: none;
+}
+
 .step-done {
-  border-color: color-mix(in srgb, var(--success) 30%, transparent);
-  background-color: var(--success-soft);
-  color: var(--success);
-  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.step-done::before {
+  border-color: var(--success);
+  background-color: var(--success);
+}
+
+.step-done::after {
+  background-color: var(--success);
 }
 
 .step-current {
-  border-color: var(--accent);
-  background-color: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-primary);
   font-weight: 650;
+}
+
+.step-current::before {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 /* --------------------------------------------------------------------------
@@ -2663,10 +3485,8 @@ input[type="file"].input {
 .snapshot-title {
   margin: 0 0 var(--space-2);
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .snapshot-list {
@@ -2705,7 +3525,7 @@ input[type="file"].input {
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  background-color: rgb(20 25 34 / 44%);
+  background-color: var(--scrim);
 }
 
 .dialog {
@@ -2713,7 +3533,7 @@ input[type="file"].input {
   max-width: 28rem;
   padding: var(--space-5);
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--surface-elevated);
   box-shadow: var(--shadow-lg);
   animation: dialog-in var(--motion-base) var(--ease);
@@ -2723,6 +3543,7 @@ input[type="file"].input {
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
   font-weight: 650;
+  letter-spacing: -0.015em;
 }
 
 .dialog-body {
@@ -2746,15 +3567,23 @@ input[type="file"].input {
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: flex-end;
-  margin-top: var(--space-4);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-soft);
 }
 
 /* --------------------------------------------------------------------------
- * Drawer — the record file
+ * Record file — the drawer
  *
  * Unit 360, the deal file, a payment plan and a collections account open over
- * the register that led to them. The header is the record's identity and
- * stays put; the body scrolls beneath it.
+ * the register that led to them. Opening one should feel like opening a file:
+ *
+ *   identity      eyebrow · title · where it is · state
+ *   headline      the one value the record is about, where the role may see it
+ *   actions       the one or two things this record invites
+ *   facts strip   three or four supporting figures
+ *   sections      the departments, as tabs
+ *   body          the selected section, scrolling under the fixed header
  * ------------------------------------------------------------------------ */
 
 .drawer-scrim {
@@ -2763,7 +3592,7 @@ input[type="file"].input {
   z-index: 50;
   display: flex;
   justify-content: flex-end;
-  background-color: rgb(20 25 34 / 40%);
+  background-color: var(--scrim);
 }
 
 .drawer {
@@ -2790,7 +3619,7 @@ input[type="file"].input {
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;
-  padding: var(--space-4) var(--space-5) 0;
+  padding: var(--space-5) var(--space-6) 0;
 }
 
 .drawer-back {
@@ -2815,23 +3644,58 @@ input[type="file"].input {
   margin: 0;
   font-size: var(--title-record);
   font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: -0.024em;
+  line-height: var(--leading-tight);
   overflow-wrap: anywhere;
 }
 
 .drawer-subtitle {
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .drawer-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
   align-items: center;
   margin-top: var(--space-3);
+}
+
+/* The one value the record is about — a price, a balance — set large beside
+ * the identity, with its basis in words beneath. Present only when the role
+ * may read it: a role refused the figure never has it fetched. */
+.drawer-headline {
+  flex: none;
+  min-width: max-content;
+  text-align: right;
+}
+
+.drawer-headline-value {
+  margin: 0;
+  font-size: var(--metric-hero);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.drawer-headline-label {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.drawer-headline-danger .drawer-headline-value {
+  color: var(--danger);
+}
+
+.drawer-headline-muted .drawer-headline-value {
+  color: var(--text-muted);
+  font-weight: 550;
 }
 
 .drawer-head-actions {
@@ -2841,31 +3705,30 @@ input[type="file"].input {
   align-items: center;
 }
 
-/* The record's headline facts: a price, a margin, a balance. */
+/* The record's supporting facts, on one ruled strip. */
 .drawer-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-5);
+  gap: var(--space-3) var(--space-7);
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--line-soft);
-  background-color: var(--surface-secondary);
+  background-color: var(--surface-command);
 }
 
 .drawer-fact-label {
   margin: 0;
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .drawer-fact-value {
-  margin: 0.1rem 0 0;
-  font-size: var(--text-md);
+  margin: 0.15rem 0 0;
+  font-size: var(--text-lg);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
   white-space: nowrap;
 }
 
@@ -2875,8 +3738,17 @@ input[type="file"].input {
   font-size: var(--text-xs);
 }
 
+.drawer-fact-danger .drawer-fact-value {
+  color: var(--danger);
+}
+
+.drawer-fact-muted .drawer-fact-value {
+  color: var(--text-muted);
+  font-weight: 550;
+}
+
 .drawer-sections {
-  padding: 0 var(--space-5);
+  padding: 0 var(--space-6);
   border-top: 1px solid var(--line-soft);
 }
 
@@ -2886,13 +3758,13 @@ input[type="file"].input {
 }
 
 .drawer-head-pad {
-  height: var(--space-4);
+  height: var(--space-5);
 }
 
 .drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: var(--space-6);
   scrollbar-width: thin;
 }
 
@@ -2916,31 +3788,33 @@ input[type="file"].input {
   border-radius: var(--radius-control);
 }
 
-/* The four status dimensions of a unit, side by side, never collapsed. */
+/* The four status dimensions of a unit, side by side, never collapsed. A
+ * ruled band, not four boxes. */
 .standing {
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .standing-cell {
-  padding: var(--space-3);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background-color: var(--surface-secondary);
+  flex: 1 1 8rem;
+  min-width: max-content;
+  padding: var(--space-1) var(--space-5) var(--space-1) 0;
+  margin-right: var(--space-5);
+  border-right: 1px solid var(--line-soft);
+}
+
+.standing-cell:last-child {
+  margin-right: 0;
+  border-right: 0;
 }
 
 .standing-label {
-  margin: 0 0 var(--space-1);
+  margin: 0 0 var(--space-2);
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.standing-value {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -2948,46 +3822,113 @@ input[type="file"].input {
  * Command centre
  * ------------------------------------------------------------------------ */
 
-.identity {
+/* The development's identity plate: what this project is, in the order a
+ * person would say it out loud. No figure appears here. */
+.plate {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
-  align-items: flex-end;
+  gap: var(--space-4) var(--space-5);
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: var(--content-gap);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line-default);
 }
 
-.identity-main {
+.plate-main {
   min-width: 0;
-  flex: 1 1 28rem;
+  flex: 1 1 24rem;
 }
 
-.identity-title {
+.plate-eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plate-title {
   margin: 0;
-  font-size: var(--text-2xl);
+  font-size: var(--title-plate);
   font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+  letter-spacing: -0.026em;
+  line-height: var(--leading-tight);
 }
 
-.identity-sub {
+.plate-org {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+}
+
+/* Where the development is, said as a place. The map link the operator saved
+ * is an affordance beside it, never the identity itself. */
+.plate-place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
   font-size: var(--text-base);
 }
 
-.identity-facts {
-  margin-top: var(--space-3);
+.plate-place .icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  color: var(--text-muted);
 }
 
-.identity-actions {
+.plate-facts {
+  margin-top: var(--space-4);
+}
+
+.plate-actions {
   display: flex;
-  flex: none;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+}
+
+/* The modules of a project, as ruled sections rather than a card each. */
+.module-band {
+  display: grid;
+  gap: 0 var(--space-6);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.module-section {
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Sections in the band sit on the grid, not under the generic section gap. */
+.module-band > .module-section + .module-section {
+  margin-top: 0;
+}
+
+.module-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.module-section-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.module-section-description {
+  margin: 0.125rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .attention-list {
@@ -3074,80 +4015,9 @@ input[type="file"].input {
   font-weight: 650;
 }
 
-/* The aging bands, in order, as a strip. Heat rises to the right. */
-.aging {
-  display: grid;
-  gap: var(--space-2);
-  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
-}
-
-.aging-cell {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background-color: var(--surface);
-}
-
-.aging-cell-label {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.aging-cell-value {
-  margin: 0.15rem 0 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.aging-cell-warm {
-  border-color: color-mix(in srgb, var(--warning) 35%, var(--line-soft));
-  background-color: var(--warning-soft);
-}
-
-.aging-cell-hot {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--line-soft));
-  background-color: var(--danger-soft);
-}
-
-.aging-cell-hot .aging-cell-value {
-  color: var(--danger);
-}
-
-.aging-cell-quiet {
-  background-color: var(--surface-secondary);
-}
-
-/* Cost composition: a small horizontal bar per category. Presentation only —
- * the width is the server's share of a server-computed total. */
-.composition {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.composition-row {
-  display: grid;
-  gap: var(--space-2) var(--space-3);
-  align-items: center;
-  padding: 0.35rem 0;
-  grid-template-columns: 7rem minmax(0, 1fr) auto;
-  font-size: var(--text-sm);
-}
-
-.composition-label {
-  color: var(--text-secondary);
-}
-
-.composition-amount {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
+/* --------------------------------------------------------------------------
+ * Domain compositions
+ * ------------------------------------------------------------------------ */
 
 /* Reconciliation: calm when it balances, impossible to miss when it does not. */
 .reconcile {
@@ -3194,10 +4064,7 @@ input[type="file"].input {
   margin-bottom: var(--space-1);
 }
 
-/* --------------------------------------------------------------------------
- * Payment plan builder
- * ------------------------------------------------------------------------ */
-
+/* Payment plan builder. */
 .schedule-editor {
   overflow-x: auto;
   border: 1px solid var(--line-soft);
@@ -3290,128 +4157,23 @@ input[type="file"].input {
   margin-bottom: var(--space-3);
 }
 
+/* A list of records that opens when pressed, drawn as rows on the card. */
 .version-list {
-  margin: 0 0 var(--space-3);
-  padding: 0;
+  margin: 0;
+  padding: var(--space-1) 0;
   list-style: none;
 }
 
-.version-entry {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
-  align-items: center;
-  padding: var(--space-2) 0;
-}
-
-.version-entry + .version-entry {
-  border-top: 1px solid var(--line-soft);
-}
-
-/* --------------------------------------------------------------------------
- * Settings
- * ------------------------------------------------------------------------ */
-
-.settings-lead {
-  margin: 0 0 var(--content-gap);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-/* --------------------------------------------------------------------------
- * Projects landing
- * ------------------------------------------------------------------------ */
-
-.project-tiles {
-  display: grid;
-  gap: var(--content-gap);
-  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
-}
-
-.project-tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-card);
-  background-color: var(--surface);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--motion-fast) var(--ease),
-    box-shadow var(--motion-fast) var(--ease);
-}
-
-.project-tile:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-sm);
-}
-
-.project-tile-head {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.project-tile-code {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.04em;
-}
-
-.project-tile-name {
-  margin: 0.15rem 0 0;
-  font-size: var(--text-md);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-}
-
-.project-tile-sub {
-  margin: 0.15rem 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.project-tile-facts {
-  display: grid;
-  gap: var(--space-2) var(--space-4);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line-soft);
-}
-
-.project-tile-facts dt {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.project-tile-facts dd {
-  margin: 0.1rem 0 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.project-tile-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+.version-list .button {
+  border-radius: 0;
+  padding: 0.625rem var(--space-5);
 }
 
 /* --------------------------------------------------------------------------
  * Motion
+ *
+ * Restrained: a drawer enters, a dialog settles, a menu drops. Nothing bounces
+ * and nothing counts up. Reduced motion removes all of it.
  * ------------------------------------------------------------------------ */
 
 @keyframes drawer-in {
@@ -3462,6 +4224,17 @@ input[type="file"].input {
   }
 }
 
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -3477,17 +4250,13 @@ input[type="file"].input {
  *   ≥ 90rem (1440)  full rail, full command centre, registers use the width
  *   ≥ 80rem (1280)  full rail; registers begin to scroll inside themselves
  *   < 75rem (1200)  the rail collapses by default and can be expanded
- *   < 64rem (1024)  the rail becomes a drawer; drawers take the full width
+ *   < 64rem (1024)  the rail becomes a drawer; record drawers take the width
  *   < 48rem (768)   single-column forms, stacked facts, tab rows scroll
  *   < 34rem (544)   phone: compact padding, metrics in two columns
  * ------------------------------------------------------------------------ */
 
 @media (width >= 48rem) {
   .kv {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3506,62 +4275,9 @@ input[type="file"].input {
   }
 }
 
-@media (width >= 75rem) {
-  .form-grid-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (width < 75rem) {
   .app[data-rail="auto"] {
     --sidebar-current: var(--sidebar-collapsed-width);
-  }
-
-  .app[data-rail="auto"] .brand {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .app[data-rail="auto"] .brand-text,
-  .app[data-rail="auto"] .nav-group-label,
-  .app[data-rail="auto"] .nav-label,
-  .app[data-rail="auto"] .sidebar-user-text,
-  .app[data-rail="auto"] .switcher-text,
-  .app[data-rail="auto"] .switcher-chevron {
-    display: none;
-  }
-
-  .app[data-rail="auto"] .nav-item,
-  .app[data-rail="auto"] .sidebar-user,
-  .app[data-rail="auto"] .switcher-button {
-    justify-content: center;
-    padding-right: 0;
-    padding-left: 0;
-  }
-
-  .app[data-rail="auto"] .nav-group + .nav-group {
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
-    border-top: 1px solid var(--nav-line);
-  }
-
-  .app[data-rail="auto"] .nav-item[data-label]:hover::after,
-  .app[data-rail="auto"] .nav-item[data-label]:focus-visible::after {
-    content: attr(data-label);
-    position: absolute;
-    top: 50%;
-    left: calc(100% + 0.625rem);
-    z-index: 60;
-    padding: 0.3rem 0.625rem;
-    border-radius: var(--radius-control);
-    background-color: var(--text-primary);
-    color: var(--text-inverse);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    white-space: nowrap;
-    box-shadow: var(--shadow-md);
-    translate: 0 -50%;
-    pointer-events: none;
   }
 }
 
@@ -3583,7 +4299,8 @@ input[type="file"].input {
   }
 
   .split,
-  .split-even {
+  .split-even,
+  .module-band {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -3606,6 +4323,31 @@ input[type="file"].input {
 
   .context-utilities .context-fact {
     display: none;
+  }
+}
+
+@media (width < 60rem) {
+  .toolbar-framed {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* In a column the flex basis would become a height. */
+  .toolbar-framed .toolbar-search,
+  .toolbar-framed .toolbar-filter,
+  .toolbar-framed .toolbar-meta {
+    flex: none;
+  }
+
+  .toolbar-framed .toolbar-filter,
+  .toolbar-framed .toolbar-meta {
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .toolbar-framed .toolbar-meta {
+    margin-left: 0;
+    justify-content: space-between;
   }
 }
 
@@ -3647,6 +4389,11 @@ input[type="file"].input {
     padding-right: var(--space-4);
   }
 
+  .table-foot {
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+  }
+
   .field-row {
     --cols: 1;
   }
@@ -3661,7 +4408,14 @@ input[type="file"].input {
   }
 
   .drawer-head-top {
+    flex-wrap: wrap;
     padding: var(--space-3) var(--space-4) 0;
+  }
+
+  .drawer-headline {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
   }
 
   .drawer-facts,
@@ -3678,7 +4432,7 @@ input[type="file"].input {
     font-size: var(--text-xl);
   }
 
-  .identity-title {
+  .plate-title {
     font-size: var(--title-page);
   }
 
@@ -3688,10 +4442,6 @@ input[type="file"].input {
   }
 
   .toolbar-meta {
-    margin-left: 0;
-  }
-
-  .filter-bar-actions {
     margin-left: 0;
   }
 
@@ -3707,824 +4457,6 @@ input[type="file"].input {
     align-items: flex-start;
   }
 
-  .composition-row {
-    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
-  }
-}
-
-@media (width < 34rem) {
-  .metric-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .drawer-facts {
-    gap: var(--space-2) var(--space-5);
-  }
-
-  .standing {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .aging {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .project-tiles {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dialog {
-    padding: var(--space-4);
-  }
-}
-
-/* A transparent scrim behind a floating menu, so a click anywhere else closes
- * it without the page beneath receiving the click. */
-.menu-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 65;
-}
-
-.drawer-facts {
-  margin-bottom: 0;
-}
-
-.card-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-/* A breadcrumb is a link a finger has to hit: never shorter than 24px. */
-.crumbs a,
-.crumbs span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.5rem;
-}
-
-/* ==========================================================================
- * Interior surfaces — the Reach product language
- *
- * The shell frames the work; this layer is the work itself. Five surfaces,
- * each earning its treatment from what it holds rather than from decoration:
- *
- *   command      the one thing a page exists to answer — a position, a result
- *   operational  ordinary workflow, compact and quiet
- *   data         a register, where the rows dominate and the frame recedes
- *   attention    something owed, blocked or past due
- *   record       a dossier: a unit, a deal, a version
- *
- * Two devices carry the identity. The rail's ink reappears as a hairline over
- * a command surface, so the most important block on a page belongs visibly to
- * the same object as the navigation. And every reported figure is set large,
- * tight and tabular with its label beneath it, the way a tear sheet does it,
- * because a development's margin is not a dashboard statistic.
- *
- * Nothing here draws a figure the server did not send. A meter's width is a
- * percentage the API returned; a breakdown's rows are amounts it returned in
- * the order it returned them. There are no charts, and no proportions derived
- * in the browser.
- * ------------------------------------------------------------------------ */
-
-:root {
-  /* A cool near-white, so a command surface reads as a different material
-   * from the ordinary white card beside it rather than a louder one. */
-  --surface-command: #fbfbfe;
-  --surface-command-foot: #f6f7fb;
-  --ink: var(--nav-bg);
-
-  --metric-hero: 1.875rem;
-  --metric-hero-lg: 2.25rem;
-}
-
-/* -- Card tones ----------------------------------------------------------- */
-
-.card-command {
-  position: relative;
-  overflow: hidden;
-  border-color: var(--line-default);
-  background-image: linear-gradient(180deg, var(--surface-command) 0%, var(--surface-command-foot) 100%);
-  box-shadow: var(--shadow-xs);
-}
-
-/* The rail's ink, three pixels of it: this block belongs to the same product
- * as the navigation, and it is the answer the page was opened for. */
-.card-command::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 2px;
-  background-image: linear-gradient(
-    90deg,
-    var(--ink) 0%,
-    color-mix(in srgb, var(--accent) 65%, var(--ink)) 100%
-  );
-}
-
-.card-command > .card-header {
-  padding-top: var(--space-5);
-}
-
-.card-subtle {
-  border-color: var(--line-soft);
-  background-color: var(--surface-secondary);
-}
-
-/* Something owed, blocked or past its date. A narrow rail and the faintest
- * warm ground — enough to find on a page, never enough to make the page red. */
-.card-attention {
-  position: relative;
-  overflow: hidden;
-  border-color: color-mix(in srgb, var(--warning) 30%, var(--line-soft));
-  background-color: color-mix(in srgb, var(--warning-soft) 30%, var(--surface));
-}
-
-.card-attention::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background-color: var(--warning);
-}
-
-.card-attention > .card-header,
-.card-attention > .card-body {
-  padding-left: calc(var(--space-5) + 3px);
-}
-
-/* -- Project identity plate ----------------------------------------------- */
-
-.plate {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-5);
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line-default);
-}
-
-.plate-main {
-  min-width: 0;
-  flex: 1 1 24rem;
-}
-
-.plate-eyebrow {
-  margin: 0 0 var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.plate-title {
-  margin: 0;
-  font-size: 1.625rem;
-  font-weight: 650;
-  letter-spacing: -0.022em;
-  line-height: 1.15;
-}
-
-.plate-org {
-  margin: var(--space-2) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-md);
-}
-
-/* Where the development is, said as a place. The map link the operator saved
- * is an affordance beside it, never the identity itself: a hundred characters
- * of query string is not the name of anywhere. */
-.plate-place {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  align-items: center;
-  margin: var(--space-1) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-}
-
-.plate-place .icon {
-  width: 0.9375rem;
-  height: 0.9375rem;
-  color: var(--text-muted);
-}
-
-.plate-facts {
-  margin-top: var(--space-4);
-}
-
-.plate-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-/* -- External destination ------------------------------------------------- */
-
-.link-external {
-  display: inline-flex;
-  gap: 0.3rem;
-  align-items: center;
-  min-height: 1.5rem;
-  color: var(--accent);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.link-external:hover {
-  color: var(--accent-hover);
-  text-decoration: underline;
-}
-
-.link-external .icon {
-  width: 0.8125rem;
-  height: 0.8125rem;
-}
-
-/* -- Position: the dominant composition on a page -------------------------- */
-
-/* Figures share the line and wrap onto the next when they run out of it.
- *
- * `min-width: max-content` is load-bearing, not tidying: a reported figure is
- * set on one line and never breaks mid-number, so a track narrower than the
- * figure would let one amount print over the next. A grid with fixed tracks
- * does exactly that as soon as a project's profit runs to eight digits. */
-.position {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5) var(--space-6);
-  align-items: flex-start;
-}
-
-.position-figure {
-  flex: 1 1 auto;
-  min-width: max-content;
-}
-
-/* Four money figures on one line, where four percentages would have fitted at
- * full size. The lead keeps its weight; the rest step down rather than wrap. */
-.position-compact .position-value {
-  font-size: var(--metric);
-}
-
-.position-compact .position-figure-lead .position-value {
-  font-size: var(--metric-hero);
-}
-
-.position-value {
-  margin: 0;
-  font-size: var(--metric-hero);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  white-space: nowrap;
-}
-
-.position-figure-lead .position-value {
-  font-size: var(--metric-hero-lg);
-}
-
-/* The label sits under the figure, the way a tear sheet sets it: the number is
- * what a reader came for, and the word only confirms which number it is. */
-.position-label {
-  margin: var(--space-2) 0 0;
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.position-note {
-  margin: 0.2rem 0 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-.position-value-danger {
-  color: var(--danger);
-}
-
-.position-value-warning {
-  color: var(--warning);
-}
-
-.position-value-success {
-  color: var(--success);
-}
-
-.position-support {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line-soft);
-}
-
-.position-support-item {
-  display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
-  min-width: max-content;
-}
-
-.position-support-label {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-}
-
-.position-support-value {
-  font-size: var(--text-base);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* -- Stat strip: counts, integrated, in one band --------------------------- */
-
-.stat-strip {
-  display: flex;
-  flex-wrap: wrap;
-  width: fit-content;
-  max-width: 100%;
-  overflow: hidden;
-  margin-bottom: var(--space-4);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-card);
-  background-color: var(--surface);
-}
-
-.stat-strip-item {
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--space-2);
-  align-items: baseline;
-  min-width: max-content;
-  padding: 0.6rem var(--space-4);
-  border-left: 1px solid var(--line-soft);
-}
-
-.stat-strip-item:first-child {
-  border-left: 0;
-}
-
-.stat-strip-value {
-  font-size: var(--text-xl);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.stat-strip-label {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.stat-strip-item-danger .stat-strip-value {
-  color: var(--danger);
-}
-
-.stat-strip-item-warning .stat-strip-value {
-  color: var(--warning);
-}
-
-.stat-strip-note {
-  display: flex;
-  align-items: center;
-  padding: 0.6rem var(--space-4);
-  border-left: 1px solid var(--line-soft);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-/* -- Breakdown: what a total is made of ------------------------------------ */
-
-.breakdown {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.breakdown-row {
-  display: flex;
-  gap: var(--space-3);
-  align-items: baseline;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.breakdown-label {
-  flex: none;
-  font-size: var(--text-base);
-  font-weight: 550;
-}
-
-.breakdown-note {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 400;
-}
-
-/* The leader that carries the eye from a line to its amount. A financial
- * document convention, and the reason this reads as a statement rather than
- * as two columns that happen to be near each other. */
-.breakdown-lead {
-  flex: 1 1 auto;
-  min-width: var(--space-4);
-  border-bottom: 1px dotted var(--line-default);
-  translate: 0 -0.28rem;
-}
-
-.breakdown-amount {
-  flex: none;
-  font-size: var(--text-base);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.breakdown-row-total {
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--line-strong);
-  border-bottom: 0;
-}
-
-.breakdown-row-total .breakdown-label,
-.breakdown-row-total .breakdown-amount {
-  font-size: var(--text-md);
-  font-weight: 700;
-}
-
-.breakdown-row-total .breakdown-lead {
-  border-bottom-style: none;
-}
-
-/* -- Distribution: an aged balance, band by band --------------------------- */
-
-.distribution {
-  display: flex;
-  flex-wrap: wrap;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  list-style: none;
-  background-color: var(--surface);
-}
-
-.distribution-band {
-  position: relative;
-  flex: 1 1 8rem;
-  min-width: max-content;
-  padding: var(--space-3) var(--space-4);
-  border-left: 1px solid var(--line-soft);
-}
-
-.distribution-band:first-child {
-  border-left: 0;
-}
-
-.distribution-band::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 2px;
-  background-color: var(--line-default);
-}
-
-.distribution-band-warm::before {
-  background-color: color-mix(in srgb, var(--warning) 55%, var(--line-default));
-}
-
-.distribution-band-hot::before {
-  background-color: var(--warning);
-}
-
-.distribution-band-late::before {
-  background-color: var(--danger);
-}
-
-.distribution-label {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.distribution-value {
-  margin: 0.25rem 0 0;
-  font-size: var(--text-md);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.distribution-band-late .distribution-value {
-  color: var(--danger);
-}
-
-.distribution-note {
-  margin: 0.15rem 0 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-/* -- Register cells -------------------------------------------------------- */
-
-/* A row's identity: the reference a person says out loud, and under it the
- * two or three words that tell them which one it is. */
-.identity-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.identity-cell-name {
-  font-size: var(--text-base);
-  font-weight: 650;
-  letter-spacing: -0.005em;
-}
-
-.identity-cell-meta {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 400;
-  white-space: nowrap;
-}
-
-/* Where a unit sits in the development: the container first, the path under. */
-.place-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.place-main {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.place-sub {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-/* A percentage the server reported, drawn at the width it reported. */
-.meter {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.meter-track {
-  flex: none;
-  width: 3rem;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background-color: var(--line-default);
-}
-
-.meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background-color: var(--accent);
-}
-
-.meter-fill-complete {
-  background-color: var(--success);
-}
-
-.meter-fill-low {
-  background-color: var(--warning);
-}
-
-.meter-text {
-  font-size: var(--text-xs);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.meter-note {
-  display: block;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-/* The far-right affordance on a register row: the record opens. */
-.row-go {
-  width: 1.5rem;
-  color: var(--text-faint);
-  opacity: 0;
-  transition: opacity var(--motion-fast) var(--ease);
-}
-
-.row-go .icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.table tbody tr:hover .row-go,
-.table tbody tr:focus-within .row-go {
-  opacity: 1;
-}
-
-/* The row whose record is open behind the drawer, so closing it lands the
- * reader back where they were. */
-.table tbody tr[aria-selected="true"] {
-  background-color: var(--surface-selected);
-}
-
-.table tbody tr[aria-selected="true"] > :first-child {
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.table-fixed-first tbody tr[aria-selected="true"] th:first-child,
-.table-fixed-first tbody tr[aria-selected="true"] td:first-child {
-  background-color: var(--surface-selected);
-  box-shadow:
-    inset 2px 0 0 var(--accent),
-    inset -1px 0 0 var(--line-soft);
-}
-
-/* -- Toolbar: one command row, not five separate controls ------------------ */
-
-.toolbar-framed {
-  gap: 0;
-  overflow: hidden;
-  margin-bottom: var(--space-4);
-  padding: 0;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-card);
-  background-color: var(--surface);
-}
-
-.toolbar-framed .toolbar-search {
-  flex: 1 1 16rem;
-  max-width: none;
-}
-
-.toolbar-framed .toolbar-search .input {
-  min-height: 2.75rem;
-  border: 0;
-  border-radius: 0;
-  background-color: transparent;
-  font-size: var(--text-md);
-}
-
-.toolbar-framed .toolbar-search .input:focus {
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-.toolbar-framed .toolbar-filter {
-  display: flex;
-  align-items: center;
-  border-left: 1px solid var(--line-soft);
-}
-
-.toolbar-framed .toolbar-filter .field {
-  flex-direction: row;
-  gap: 0;
-  align-items: center;
-}
-
-.toolbar-framed .toolbar-filter .input {
-  min-height: 2.75rem;
-  min-width: 8.5rem;
-  border: 0;
-  border-radius: 0;
-  background-color: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.toolbar-framed .toolbar-filter .input:focus {
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
-/* A filter that is narrowing the register says so, quietly. */
-.toolbar-framed .toolbar-filter-active {
-  background-color: var(--accent-soft);
-}
-
-.toolbar-framed .toolbar-filter-active .input {
-  color: var(--accent);
-}
-
-.toolbar-framed .toolbar-meta {
-  gap: var(--space-3);
-  padding: 0 var(--space-4);
-  border-left: 1px solid var(--line-soft);
-  align-self: stretch;
-  align-items: center;
-}
-
-.toolbar-framed .toolbar-actions {
-  padding-right: var(--space-3);
-}
-
-/* -- Record dossier -------------------------------------------------------- */
-
-.drawer-facts-strong {
-  gap: var(--space-3) var(--space-7);
-  padding: var(--space-4) var(--space-5);
-  background-image: linear-gradient(180deg, var(--surface-command) 0%, var(--surface-command-foot) 100%);
-}
-
-.drawer-facts-strong .drawer-fact-value {
-  font-size: var(--text-xl);
-  letter-spacing: -0.02em;
-}
-
-.drawer-fact-danger .drawer-fact-value {
-  color: var(--danger);
-}
-
-.drawer-fact-muted .drawer-fact-value {
-  color: var(--text-muted);
-  font-weight: 550;
-}
-
-/* -- Refinements ----------------------------------------------------------- */
-
-/* A register's header is a label strip, not a row of data: it takes the warm
- * tint so the white rows beneath it read as the content. */
-.table thead th {
-  background-color: var(--surface-secondary);
-}
-
-.table-fixed-first thead th:first-child {
-  background-color: var(--surface-secondary);
-}
-
-/* Form controls get the height a hand expects; the compact ones inside a
- * register and a toolbar keep theirs. */
-.field > .input,
-.field > .input-shell {
-  min-height: 2.5rem;
-}
-
-.field-label {
-  font-size: var(--text-xs);
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.section-heading {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.card-title {
-  font-size: var(--text-md);
-}
-
-/* -- Responsive ------------------------------------------------------------ */
-
-@media (max-width: 60rem) {
-  .toolbar-framed {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .toolbar-framed .toolbar-filter,
-  .toolbar-framed .toolbar-meta {
-    border-left: 0;
-    border-top: 1px solid var(--line-soft);
-  }
-
-  .toolbar-framed .toolbar-meta {
-    margin-left: 0;
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 48rem) {
   .distribution-band {
     flex-basis: 100%;
     border-left: 0;
@@ -4535,95 +4467,29 @@ input[type="file"].input {
     border-top: 0;
   }
 
-  .plate-title {
-    font-size: 1.375rem;
+  .stat-strip {
+    gap: var(--space-2) var(--space-5);
   }
 
   .stat-strip-item {
-    flex-basis: 50%;
+    margin-right: 0;
+    padding-right: 0;
+    border-right: 0;
   }
 }
 
-.meter-block {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
+@media (width < 34rem) {
+  .drawer-facts {
+    gap: var(--space-2) var(--space-5);
+  }
 
-/* A card sizes to what it holds. Stretching one to match a taller neighbour
- * buys a void under two lines of text, and a void reads as missing data. */
-.grid-12 {
-  align-items: start;
-}
+  .standing-cell {
+    margin-right: 0;
+    padding-right: var(--space-4);
+    border-right: 0;
+  }
 
-/* A register row's identity is a link that carries two lines. */
-.table .button-link .identity-cell-name {
-  color: var(--accent);
-}
-
-.table .button-link:hover .identity-cell-name {
-  color: var(--accent-hover);
-  text-decoration: underline;
-}
-
-.table .button-link .identity-cell-meta {
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.attention-item {
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-}
-
-.attention-hint {
-  font-size: var(--text-xs);
-}
-
-/* A row the server flagged: a rail, and nothing else. The status and the flag
- * columns already carry the words, and a tinted row on top of them turns a
- * register into an alarm panel where nothing stands out because everything
- * does. */
-.table tbody tr.row-flag > :first-child {
-  box-shadow: inset 2px 0 0 var(--warning);
-}
-
-.table-fixed-first tbody tr.row-flag th:first-child,
-.table-fixed-first tbody tr.row-flag td:first-child {
-  box-shadow:
-    inset 2px 0 0 var(--warning),
-    inset -1px 0 0 var(--line-soft);
-}
-
-.table tbody tr.row-flag[aria-selected="true"] > :first-child {
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-/* A buyer's registered name can run to seventy characters. The identity cell
- * caps its measure and lets the secondary line wrap rather than dragging the
- * pinned first column across half the register — and it wraps rather than
- * truncating, because the name on a contract is not a detail to elide. */
-.identity-cell {
-  min-width: 9rem;
-  max-width: 22rem;
-}
-
-.identity-cell-meta {
-  white-space: normal;
-}
-
-/* Tiles in a row end level with each other. A card whose title runs to three
- * lines should not leave the two beside it looking unfinished, so the facts
- * are pushed to the foot and the flags sit under them. */
-.project-tile-facts {
-  margin-top: auto;
-}
-
-.project-tile:focus-visible {
-  border-color: var(--accent);
-}
-
-/* An empty state inside a card body that is otherwise a register. */
-.card-body > .empty:only-child {
-  padding-block: var(--space-6);
+  .dialog {
+    padding: var(--space-4);
+  }
 }

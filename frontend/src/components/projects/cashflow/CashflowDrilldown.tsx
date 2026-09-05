@@ -6,7 +6,7 @@ import {
   Badge,
   Drawer,
   EmptyState,
-  FilterBar,
+  DataToolbar,
   Loading,
   Notice,
   TableScroll,
@@ -123,7 +123,7 @@ export function CashflowDrilldown({
       }
       onClose={onClose}
     >
-      <FilterBar>
+      <DataToolbar>
         <ToolbarFilter label="Source" active={Boolean(filters.sourceType)}>
           <select
             className="input"
@@ -175,7 +175,7 @@ export function CashflowDrilldown({
             <option value="outflow">Cash out</option>
           </select>
         </ToolbarFilter>
-      </FilterBar>
+      </DataToolbar>
 
       {answer.status === "loading" ? (
         <Loading label="Loading the transactions" shape="rows" />

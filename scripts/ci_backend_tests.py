@@ -57,6 +57,10 @@ ALWAYS_RUN = (
     # browser, no role asking for cash it may not read — would otherwise be
     # caught by nobody until a figure on a screen disagreed with the ledger.
     "tests/test_cashflow_workspace.py",
+    # Product Experience 3.0's structural contract: one primitive system, one
+    # token layer, no arithmetic in the browser, no request a role may not
+    # make, and the overlays' semantics. Source reading only, so it is free.
+    "tests/test_product_experience.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
     "tests/modules/test_audit.py",

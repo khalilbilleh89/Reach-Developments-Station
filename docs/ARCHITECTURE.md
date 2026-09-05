@@ -111,7 +111,8 @@ a dynamic segment would need them at build time.
 
 Since PR-UX-02 the shell is a grouped vertical rail with a project switcher, a
 context bar carrying breadcrumbs and the project's status and base currency,
-and a working surface that never scrolls sideways. Records — a unit, a deal, a
+and a working surface that never scrolls sideways; PR-V2-00 rebuilt its
+presentation as Product Experience 3.0 without changing that structure. Records — a unit, a deal, a
 payment plan, a collections account — open as files over the register that led
 to them. The pieces live in `frontend/src/components/shell/` (`AppShell`,
 `AppSidebar`, `ProjectSwitcher`, `ContextBar`, `navigation.ts`) and the
@@ -126,6 +127,22 @@ hides it afterwards. And the browser never calculates: every price, tax,
 margin, total, allocation and approval requirement on screen is a value the
 API returned on that request, and `frontend/src/lib/format.ts` only formats
 the server's decimal strings.
+
+**The V2 frontend principle (from PR-V2-00).** Backend modules remain
+normalised; the frontend may orchestrate several domain APIs around the
+operator's real-world record or workflow. Unit 360 is the case in point: one
+record file reads inventory, pricing, sales, collections and unit economics —
+each through its own module's contract, each only on behalf of a role that
+module's permissions answer — and composes them around the unit the operator
+is actually looking at. That composition lives in the frontend and is
+presentation; it creates no cross-module dependency on the server, moves no
+calculation into the browser, and does not make the frontend a monolith: each
+module's screen still speaks only to its module, and the orchestrating record
+is a thin layer of `useAnswer` calls over the same contracts. Where a screen
+needs a figure no module returns, the owning module grows the figure; the
+orchestrator never derives it. `docs/UX_SYSTEM.md` (Product Experience 3.0)
+is the reference, and `tests/test_product_experience.py` reads the sources to
+hold the line.
 
 ## 6. Backend module shape
 

@@ -248,22 +248,22 @@ function BudgetSection({ projectId }: { projectId: string }) {
           <tr>
             <th scope="col">Cost code</th>
             <th scope="col">Category</th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Baseline
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Approved
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Contingency
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Control budget
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Committed
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Headroom
             </th>
           </tr>
@@ -278,22 +278,22 @@ function BudgetSection({ projectId }: { projectId: string }) {
                 />
               </td>
               <td>{line.cost_category}</td>
-              <td className="numeric">{money(line.baseline_amount, code)}</td>
-              <td className="numeric">
+              <td className="num">{money(line.baseline_amount, code)}</td>
+              <td className="num">
                 {money(line.approved_budget_amount, code)}
               </td>
-              <td className="numeric">
+              <td className="num">
                 {money(line.contingency_amount, code)}
               </td>
-              <td className="numeric">{money(line.control_budget, code)}</td>
-              <td className="numeric">
+              <td className="num">{money(line.control_budget, code)}</td>
+              <td className="num">
                 {money(line.revised_commitment, code)}
               </td>
               <td
                 className={
                   headroomTone(line.headroom) === "danger"
-                    ? "numeric figure-danger"
-                    : "numeric"
+                    ? "num figure-danger"
+                    : "num"
                 }
               >
                 {money(line.headroom, code)}
@@ -306,16 +306,16 @@ function BudgetSection({ projectId }: { projectId: string }) {
             <th scope="row" colSpan={2}>
               Project
             </th>
-            <td className="numeric">{money(detail.total_baseline, code)}</td>
-            <td className="numeric">
+            <td className="num">{money(detail.total_baseline, code)}</td>
+            <td className="num">
               {money(detail.total_approved_budget, code)}
             </td>
-            <td className="numeric">{money(detail.total_contingency, code)}</td>
-            <td className="numeric">
+            <td className="num">{money(detail.total_contingency, code)}</td>
+            <td className="num">
               {money(detail.total_control_budget, code)}
             </td>
-            <td className="numeric" />
-            <td className="numeric" />
+            <td className="num" />
+            <td className="num" />
           </tr>
         </tfoot>
       </TableScroll>
@@ -419,16 +419,16 @@ function ContractsSection({ projectId }: { projectId: string }) {
             <tr>
               <th scope="col">Contract</th>
               <th scope="col">Vendor</th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Original
               </th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Variations
               </th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Revised commitment
               </th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Certified
               </th>
               <th scope="col">Status</th>
@@ -448,16 +448,16 @@ function ContractsSection({ projectId }: { projectId: string }) {
                   />
                 </td>
                 <td>{row.vendor_name}</td>
-                <td className="numeric">
+                <td className="num">
                   {money(row.original_contract_value_ex_tax, row.currency_code)}
                 </td>
-                <td className="numeric">
+                <td className="num">
                   {money(row.approved_variation_delta, row.currency_code)}
                 </td>
-                <td className="numeric">
+                <td className="num">
                   {money(row.revised_commitment, row.currency_code)}
                 </td>
-                <td className="numeric">
+                <td className="num">
                   {money(row.certified_to_date, row.currency_code)}
                 </td>
                 <td>
@@ -565,7 +565,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
               <th scope="col">Contract</th>
               <th scope="col">Description</th>
               <th scope="col">Requested</th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Value
               </th>
               <th scope="col">Approval</th>
@@ -579,7 +579,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
                 <td>{row.contract_number}</td>
                 <td>{row.description}</td>
                 <td>{businessDate(row.requested_date)}</td>
-                <td className="numeric">{money(row.total_value_ex_tax)}</td>
+                <td className="num">{money(row.total_value_ex_tax)}</td>
                 <td>
                   {row.requires_escalation ? (
                     <Badge tone="warning">
@@ -682,13 +682,13 @@ function CertificatesSection({ projectId }: { projectId: string }) {
               <th scope="col">Certificate</th>
               <th scope="col">Contract</th>
               <th scope="col">Period</th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Work
               </th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Retention held
               </th>
-              <th scope="col" className="numeric">
+              <th scope="col" className="num">
                 Net due
               </th>
               <th scope="col">Status</th>
@@ -707,11 +707,11 @@ function CertificatesSection({ projectId }: { projectId: string }) {
                   {businessDate(row.period_start)} to{" "}
                   {businessDate(row.period_end)}
                 </td>
-                <td className="numeric">
+                <td className="num">
                   {money(row.current_work_value_ex_tax)}
                 </td>
-                <td className="numeric">{money(row.retention_held_amount)}</td>
-                <td className="numeric">{money(row.net_due)}</td>
+                <td className="num">{money(row.retention_held_amount)}</td>
+                <td className="num">{money(row.net_due)}</td>
                 <td>
                   <Badge tone={certificateTone(row.status)}>
                     {certificateLabel(row.status)}
@@ -805,10 +805,10 @@ function CashSection({ projectId }: { projectId: string }) {
                 <th scope="col">Contract</th>
                 <th scope="col">Type</th>
                 <th scope="col">Dated</th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Payable
                 </th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Outstanding
                 </th>
                 <th scope="col">Status</th>
@@ -821,8 +821,8 @@ function CashSection({ projectId }: { projectId: string }) {
                   <td>{row.contract_number}</td>
                   <td>{row.invoice_type}</td>
                   <td>{businessDate(row.invoice_date)}</td>
-                  <td className="numeric">{money(row.net_payable)}</td>
-                  <td className="numeric">{money(row.outstanding)}</td>
+                  <td className="num">{money(row.net_payable)}</td>
+                  <td className="num">{money(row.outstanding)}</td>
                   <td>
                     <Badge tone={invoiceTone(row.status)}>
                       {invoiceLabel(row.status)}
@@ -848,10 +848,10 @@ function CashSection({ projectId }: { projectId: string }) {
                 <th scope="col">Reference</th>
                 <th scope="col">Contract</th>
                 <th scope="col">Dated</th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Amount
                 </th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Unallocated
                 </th>
                 <th scope="col">Status</th>
@@ -863,10 +863,10 @@ function CashSection({ projectId }: { projectId: string }) {
                   <td>{row.payment_reference}</td>
                   <td>{row.contract_number}</td>
                   <td>{businessDate(row.payment_date)}</td>
-                  <td className="numeric">
+                  <td className="num">
                     {money(row.amount, row.currency_code)}
                   </td>
-                  <td className="numeric">
+                  <td className="num">
                     {money(row.unallocated, row.currency_code)}
                   </td>
                   <td>
@@ -940,7 +940,7 @@ function MilestonesSection({ projectId }: { projectId: string }) {
           <th scope="col">Forecast</th>
           <th scope="col">Reported</th>
           <th scope="col">Certified</th>
-          <th scope="col" className="numeric">
+          <th scope="col" className="num">
             Delay
           </th>
           <th scope="col">Status</th>
@@ -960,8 +960,8 @@ function MilestonesSection({ projectId }: { projectId: string }) {
             <td
               className={
                 row.delay_days && row.delay_days > 0
-                  ? "numeric figure-danger"
-                  : "numeric"
+                  ? "num figure-danger"
+                  : "num"
               }
             >
               {row.delay_days === null ? "—" : `${row.delay_days} d`}
@@ -1049,22 +1049,22 @@ function ForecastSection({ projectId }: { projectId: string }) {
         <thead>
           <tr>
             <th scope="col">Cost code</th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Control budget
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Committed
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Certified
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Forecast remaining
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Estimate at completion
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="num">
               Variance
             </th>
           </tr>
@@ -1082,22 +1082,22 @@ function ForecastSection({ projectId }: { projectId: string }) {
                   }
                 />
               </td>
-              <td className="numeric">{money(line.control_budget, code)}</td>
-              <td className="numeric">
+              <td className="num">{money(line.control_budget, code)}</td>
+              <td className="num">
                 {money(line.revised_commitment, code)}
               </td>
-              <td className="numeric">{money(line.certified_to_date, code)}</td>
-              <td className="numeric">
+              <td className="num">{money(line.certified_to_date, code)}</td>
+              <td className="num">
                 {money(line.forecast_remaining_amount_ex_tax, code)}
               </td>
-              <td className="numeric">
+              <td className="num">
                 {money(line.estimate_at_completion, code)}
               </td>
               <td
                 className={
                   varianceTone(line.variance_at_completion) === "danger"
-                    ? "numeric figure-danger"
-                    : "numeric"
+                    ? "num figure-danger"
+                    : "num"
                 }
               >
                 {money(line.variance_at_completion, code)}
@@ -1108,22 +1108,22 @@ function ForecastSection({ projectId }: { projectId: string }) {
         <tfoot>
           <tr>
             <th scope="row">Project</th>
-            <td className="numeric">
+            <td className="num">
               {money(detail.total_control_budget, code)}
             </td>
-            <td className="numeric" />
-            <td className="numeric">{money(detail.total_certified, code)}</td>
-            <td className="numeric">
+            <td className="num" />
+            <td className="num">{money(detail.total_certified, code)}</td>
+            <td className="num">
               {money(detail.total_forecast_remaining, code)}
             </td>
-            <td className="numeric">
+            <td className="num">
               {money(detail.total_estimate_at_completion, code)}
             </td>
             <td
               className={
                 varianceTone(detail.total_variance_at_completion) === "danger"
-                  ? "numeric figure-danger"
-                  : "numeric"
+                  ? "num figure-danger"
+                  : "num"
               }
             >
               {money(detail.total_variance_at_completion, code)}

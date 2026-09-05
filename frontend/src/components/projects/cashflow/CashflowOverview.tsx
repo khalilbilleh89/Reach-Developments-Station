@@ -6,7 +6,6 @@ import {
   KeyValue,
   KeyValueGrid,
   Notice,
-  Panel,
   Position,
   PositionFigure,
   PositionSupport,
@@ -265,7 +264,7 @@ function Returns({
   return (
     <Card title="Return" description="What the project earns, and what the investor earns.">
       <div className="split split-even">
-        <Panel title="Project NPV">
+        <SubPanel title="Project NPV">
           <Position compact>
             <PositionFigure
               label="Net present value"
@@ -290,9 +289,9 @@ function Returns({
             monthly rate. Financing flows are excluded: equity is how the project
             was funded, not what it earned.
           </p>
-        </Panel>
+        </SubPanel>
 
-        <Panel title="Equity IRR">
+        <SubPanel title="Equity IRR">
           {returns.equity_irr_per_period === null ? (
             <>
               <Badge tone="neutral">Not available</Badge>
@@ -320,7 +319,7 @@ function Returns({
             Stated from the investor&rsquo;s side: a contribution is cash they paid
             out and a distribution is cash they received back.
           </p>
-        </Panel>
+        </SubPanel>
       </div>
       <SectionHeader title="Basis" />
       <KeyValueGrid columns={2}>

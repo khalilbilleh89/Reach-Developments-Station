@@ -322,7 +322,7 @@ export function ContractFile({
                     <th scope="col">#</th>
                     <th scope="col">Description</th>
                     <th scope="col">Cost code</th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Original
                     </th>
                   </tr>
@@ -333,7 +333,7 @@ export function ContractFile({
                       <td>{line.sequence}</td>
                       <td>{line.description}</td>
                       <td>{line.cost_code}</td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(line.original_amount_ex_tax, code)}
                       </td>
                     </tr>
@@ -358,16 +358,16 @@ export function ContractFile({
                 <thead>
                   <tr>
                     <th scope="col">Cost code</th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Original
                     </th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Approved variations
                     </th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Revised commitment
                     </th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Certified
                     </th>
                   </tr>
@@ -381,16 +381,16 @@ export function ContractFile({
                           meta={row.cost_code_name}
                         />
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(row.original_amount_ex_tax, code)}
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(row.approved_variation_delta, code)}
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(row.revised_commitment, code)}
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(row.certified_to_date, code)}
                       </td>
                     </tr>
@@ -421,7 +421,7 @@ export function ContractFile({
                 <th scope="col">Number</th>
                 <th scope="col">Description</th>
                 <th scope="col">Requested</th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Value
                 </th>
                 <th scope="col">Status</th>
@@ -433,7 +433,7 @@ export function ContractFile({
                   <td>{variation.variation_number}</td>
                   <td>{variation.description}</td>
                   <td>{businessDate(variation.requested_date)}</td>
-                  <td className="numeric">
+                  <td className="num">
                     {money(variation.total_value_ex_tax, code)}
                   </td>
                   <td>
@@ -460,10 +460,10 @@ export function ContractFile({
               <tr>
                 <th scope="col">Number</th>
                 <th scope="col">Period</th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Work
                 </th>
-                <th scope="col" className="numeric">
+                <th scope="col" className="num">
                   Net due
                 </th>
                 <th scope="col">Status</th>
@@ -477,10 +477,10 @@ export function ContractFile({
                     {businessDate(certificate.period_start)} to{" "}
                     {businessDate(certificate.period_end)}
                   </td>
-                  <td className="numeric">
+                  <td className="num">
                     {money(certificate.current_work_value_ex_tax, code)}
                   </td>
-                  <td className="numeric">
+                  <td className="num">
                     {money(certificate.net_due, code)}
                   </td>
                   <td>
@@ -511,10 +511,10 @@ export function ContractFile({
                     <th scope="col">Number</th>
                     <th scope="col">Type</th>
                     <th scope="col">Dated</th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Payable
                     </th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Outstanding
                     </th>
                     <th scope="col">Status</th>
@@ -526,10 +526,10 @@ export function ContractFile({
                       <td>{invoice.invoice_number}</td>
                       <td>{invoice.invoice_type}</td>
                       <td>{businessDate(invoice.invoice_date)}</td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(invoice.net_payable, code)}
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(invoice.outstanding, code)}
                       </td>
                       <td>
@@ -557,10 +557,10 @@ export function ContractFile({
                   <tr>
                     <th scope="col">Reference</th>
                     <th scope="col">Dated</th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Amount
                     </th>
-                    <th scope="col" className="numeric">
+                    <th scope="col" className="num">
                       Unallocated
                     </th>
                     <th scope="col">Status</th>
@@ -571,10 +571,10 @@ export function ContractFile({
                     <tr key={payment.id}>
                       <td>{payment.payment_reference}</td>
                       <td>{businessDate(payment.payment_date)}</td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(payment.amount, payment.currency_code)}
                       </td>
-                      <td className="numeric">
+                      <td className="num">
                         {money(payment.unallocated, payment.currency_code)}
                       </td>
                       <td>

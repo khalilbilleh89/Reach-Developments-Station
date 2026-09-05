@@ -231,7 +231,7 @@ export function CollectionAccount({
         </Notice>
       ) : null}
       {summary === null ? (
-        <Loading label="Loading the account" shape="page" />
+        <Loading label="Loading the account" shape="record" />
       ) : (
         <>
           {tab === "position" ? (

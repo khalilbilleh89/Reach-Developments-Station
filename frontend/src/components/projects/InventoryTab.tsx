@@ -433,7 +433,7 @@ export function InventoryTab({
                 </tbody>
               </TableScroll>
               {register.total > register.units.length ? (
-                <p className="footnote" style={{ padding: "0.75rem 1.5rem" }}>
+                <p className="table-foot">
                   Showing the first {register.units.length} of {register.total} units. Narrow the filter to
                   reach the rest.
                 </p>
