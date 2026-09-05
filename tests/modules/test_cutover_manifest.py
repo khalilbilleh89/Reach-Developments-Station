@@ -151,6 +151,18 @@ def test_sealing_records_every_file_in_the_bundle(tmp_path: Path) -> None:
     assert sealed.files[1].bytes == (directory / "units.csv").stat().st_size
 
 
+def test_sealing_refuses_the_same_file_twice(tmp_path: Path) -> None:
+    """The invariant holds where the manifest is made, not where it is next read.
+
+    ``load`` would refuse the serialised form, but a Manifest that is wrong in
+    memory is wrong now, and whatever sits between sealing and re-reading is
+    what would apply it.
+    """
+    directory = bundle(tmp_path, units="unit_reference\nU-1\n")
+    with pytest.raises(ManifestError, match="more than once"):
+        seal(declared(tmp_path), directory=directory, names=["units.csv", "units.csv"])
+
+
 def test_sealing_refuses_a_bundle_that_is_missing_a_file(tmp_path: Path) -> None:
     directory = bundle(tmp_path, units="unit_reference\nU-1\n")
     with pytest.raises(ManifestError, match=r"missing sales\.csv"):

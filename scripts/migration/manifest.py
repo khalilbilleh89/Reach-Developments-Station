@@ -341,9 +341,19 @@ def seal(manifest: Manifest, *, directory: Path, names: list[str]) -> Manifest:
     Called by ``validate``. The returned manifest is what gets written beside
     the validation report, and it is what ``apply`` will be handed.
     """
-    files: list[SourceFile] = []
-    for raw_name in sorted(names):
+    # Proved before anything is hashed, so the invariant holds where the manifest
+    # is made rather than where it is next read. Serialising and re-loading would
+    # catch a duplicate, but a Manifest that is wrong in memory is wrong now —
+    # and the caller between here and there is the one that would apply it.
+    canonical: list[str] = []
+    for raw_name in names:
         name = bundle_name(raw_name, where="bundle")
+        if name in canonical:
+            raise ManifestError(f"The bundle lists {name} more than once.")
+        canonical.append(name)
+
+    files: list[SourceFile] = []
+    for name in sorted(canonical):
         source = directory / name
         if not source.is_file():
             raise ManifestError(f"The bundle is missing {name}.")
