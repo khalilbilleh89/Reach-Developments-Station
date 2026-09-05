@@ -3,11 +3,13 @@
 # Intentionally lightweight: lint, compile, migrate, test, build. Nothing here
 # deploys. Render remains solely responsible for deployment.
 #
-# CI runs at two speeds, and GitHub's own draft state is the switch.
+# CI runs at two speeds on a pull request, and GitHub's own draft state is the
+# switch. A commit that reaches main runs the full suite unconditionally.
 #
 #   Draft               Backend Fast  — structural checks, then the tests the
 #                                       change can plausibly break
 #   Ready for review    Backend       — structural checks, then every test
+#   Pushed to main      Backend       — the same full suite, after the fact
 #
 # A draft cannot be merged, so a draft does not need the whole suite; a pull
 # request marked ready is a merge candidate, so it gets all of it. Every push
@@ -15,8 +17,22 @@
 # the green tick attached to the exact commit somebody would merge rather than
 # to an older one.
 #
-# Only one backend job ever runs for a given pull request state. Fast is not a
-# preview of Full; it is the other half of the same decision.
+# The main trigger exists because that promise was never self-enforcing. It
+# describes what a person should wait for, and a person who does not wait breaks
+# nothing: PR #251 was marked ready and merged thirty-three seconds later, so
+# the full job's test step began after the merge had already landed and nothing
+# it went on to conclude could have stopped anything. Until now, that left main
+# in a state no run had ever reported on — not red, which would at least be a
+# fact, but unmeasured.
+#
+# The two triggers ask different questions and neither answers the other's.
+# Pre-merge CI asks *may this merge?* and is only binding while somebody is
+# waiting for it. Post-merge CI asks *is main sound right now?* and becomes true
+# without anybody's patience. A release is cut from main, so main is the branch
+# whose health has to be a matter of record.
+#
+# Only one backend job ever runs for a given event. Fast is not a preview of
+# Full; it is the other half of the same decision.
 
 name: CI
 
@@ -29,19 +45,36 @@ on:
       - reopened
       - ready_for_review
       - converted_to_draft
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded pull request run is waste: nobody will read a verdict on a
+  # commit that has already been replaced. A superseded main run is evidence.
+  # Each merged commit is the only commit that will ever be tested as itself,
+  # and cancelling one leaves a gap in main's record that nothing later refills.
+  # So pull request runs still cancel each other, and main runs queue instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend_fast:
     name: Backend Fast
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == true
+    # Drafts only, and named against `github.event_name` rather than left to be
+    # inferred. On a push there is no pull request in the payload, and Actions
+    # coerces a missing value to a number before comparing — so `null == true`
+    # is false here by arithmetic rather than by intent. Both backend jobs name
+    # the event instead of selecting themselves on that coincidence.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+    # The same ceiling as the full job, and it has to be. "Fast" is a selection,
+    # not a promise about duration: an unrecognised change deliberately falls
+    # back to `pytest -q tests`, so this job's worst case *is* the whole suite.
+    # A tighter bound here would kill exactly the fallback runs that matter most.
+    timeout-minutes: 120
 
     services:
       postgres:
@@ -127,7 +160,16 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    # Provisional, and deliberately generous. The documented budget is about
+    # forty-five minutes, but the full suite has never once been observed
+    # finishing on CI — the run for PR #251 was still inside this job's test
+    # step two hours in — so there is no measurement to set this from. Two hours
+    # bounds the waste at a third of the six-hour default while leaving well
+    # over twice the documented time. A suite that genuinely needs longer than
+    # this is a finding to act on, not a number to raise. Tighten it once one
+    # run has finished and said what the suite actually costs.
+    timeout-minutes: 120
 
     services:
       postgres:
@@ -200,6 +242,8 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+    # Observed at about a minute. Anything near this ceiling is hung, not slow.
+    timeout-minutes: 15
 
     defaults:
       run:

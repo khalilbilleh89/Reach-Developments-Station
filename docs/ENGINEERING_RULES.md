@@ -406,14 +406,16 @@ Tests protect business behaviour, not implementation trivia.
 
 ## 10a. Two-speed CI
 
-Continuous integration runs at two speeds, and GitHub's own draft state is the
-switch. Nothing else selects it: no label, no slash command, no bot, no comment
-parser.
+Continuous integration runs at two speeds on a pull request, and GitHub's own
+draft state is the switch. Nothing else selects it: no label, no slash command,
+no bot, no comment parser. A commit that reaches `main` runs the full suite
+regardless of how it got there.
 
 ```text
 Draft               Backend Fast   structural checks, then the tests this
                                    change can plausibly break
 Ready for review    Backend        structural checks, then every test
+Pushed to main      Backend        the same full suite, after the fact
 ```
 
 The reason is arithmetic. At roughly fifteen hundred backend tests the full
@@ -483,7 +485,11 @@ mark ready for review
   ↓
 Backend (full) + Frontend          on the exact merge candidate
   ↓
+wait for it to conclude            the step everything else assumes
+  ↓
 merge
+  ↓
+Backend (full) + Frontend          again, on main, reporting not gating
 ```
 
 - **A draft is an iteration state and is never a merge candidate.** It does not
@@ -493,8 +499,63 @@ merge
   green tick therefore belongs to the exact commit somebody would merge, never
   to an older one. Never merge on a full run whose head SHA is not the PR's
   current head.
+- **A run that has not concluded has not checked anything.** A merge landing
+  while the full job is still inside its test step is unchecked by it, whatever
+  the job goes on to say. Started is not green.
 - If substantial iteration resumes, convert back to draft to get the fast cycle
   again.
+
+### Why main is tested again after the merge
+
+Everything above describes what a person should wait for, and a person who does
+not wait breaks nothing that the workflow can see. PR #251 is the case: marked
+ready for review and merged thirty-three seconds later, so the full job's test
+step began *after* the merge had landed. Nothing was violated — the run was
+started, the reviewer merged a pull request whose checks had started — and the
+result was a commit on `main` that no run had ever reported on. Not red, which
+would at least be a fact. Unmeasured.
+
+So a push to `main` runs the full suite too, and the two triggers answer
+different questions:
+
+- **Pre-merge CI asks *may this merge?*** It is a gate, and a gate binds only
+  while somebody is waiting at it.
+- **Post-merge CI asks *is main sound right now?*** It gates nothing — the
+  commit has already landed — and it becomes true without anybody's patience.
+
+A release is cut from `main`, so `main` is the branch whose health has to be a
+matter of record. Neither trigger replaces the other: post-merge CI cannot stop
+a bad merge, and pre-merge CI cannot tell you what `main` is today.
+
+**A red `main` is the most urgent thing in the repository.** Nothing else is
+worked on until it is green, and the fix is a normal pull request through the
+normal gates, never a push to `main`.
+
+### Every job is bounded
+
+GitHub's default job timeout is six hours, which is not a timeout so much as a
+weekend. An unbounded job that hangs reports nothing and costs everything,
+while a bounded one fails — which is at least an answer somebody can act on.
+Every job therefore declares `timeout-minutes`.
+
+The full suite's bound is **provisional at two hours**. The documented budget is
+about forty-five minutes, but the full job has never once been observed
+finishing on CI — the run for PR #251 was still inside its test step two hours
+in — so there is no measurement to set it from. Two hours bounds the waste at a
+third of the default while leaving well over twice the documented time. A suite
+that genuinely needs longer than that is a finding to act on, not a number to
+raise. Tighten it once one run has finished and said what the suite costs.
+
+`Backend Fast` carries the same two-hour ceiling, and has to. *Fast* names a
+selection, not a duration: an unrecognised change deliberately falls back to
+`pytest -q tests`, so the fast job's worst case is the entire suite. A bound set
+from its usual targeted run — twenty-six minutes at the largest observed —
+would kill exactly the fallback runs the fallback exists for.
+
+`tests/test_ci_workflow.py` guards all of this: which event runs which backend
+job, that a commit reaching `main` is tested at all, that a `main` run is never
+cancelled by the next merge, that the fast job's bound is never set below the
+full job's, and that no job may run unbounded.
 
 Locally the same idea applies: run the affected domain's tests and the linters
 while implementing, and the full suite once before declaring the work final.
