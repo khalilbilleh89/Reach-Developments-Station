@@ -106,6 +106,13 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "unit_economics": ("unit_economics", "migration_unit_economics"),
     "construction": ("construction", "migration_construction"),
     "cashflow": ("cashflow", "migration_cashflow"),
+    # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
+    # named ``test_cutover_*`` rather than ``test_migration_*`` because that
+    # prefix is already spoken for: the ten ``migration_<domain>`` entries above
+    # are Alembic schema-revision tests, each claimed by the domain it revises.
+    # A "migration" domain here would have claimed all ten away from them and
+    # quietly narrowed every one of those fast runs.
+    "cutover": ("cutover",),
 }
 
 #: What each domain feeds **directly**. Read strictly downstream: a change here
@@ -146,6 +153,11 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "cashflow": (),
     "audit": (),
     "access": (),
+    # The cutover tooling consumes the platform and feeds nothing back into it.
+    # As it grows importers it will gain edges *into* it — ``sales -> cutover``
+    # and so on — never out of it. ``test_cutover_selector.py`` fails if an
+    # import lands without its edge.
+    "cutover": (),
 }
 
 #: Paths whose blast radius a targeted selection cannot honestly bound. A shared
@@ -194,6 +206,22 @@ INERT_FILES = (".gitignore", ".gitattributes", "LICENSE", "LICENSE.md", "LICENSE
 
 #: The one script that decides which tests run, and the tests that prove it.
 SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
+
+#: The one-time legacy cutover package. Its own domain rather than the
+#: full-suite fallback that everything else under ``scripts/`` gets.
+CUTOVER_PACKAGE = "scripts/migration/"
+CUTOVER_DOMAIN = "cutover"
+
+#: Selector domains that own no database schema. ``domain_of_migration`` reads a
+#: revision's own file name to decide whose schema it reshapes, and it does that
+#: by matching against the domain map — so the moment an operational domain
+#: joined that map, a revision called ``0012_legacy_cutover.py`` became claimable
+#: by tooling that has no tables. It would then have run three text-reading
+#: tests in place of the full suite a schema change of unknown reach deserves.
+#: A domain here is never the answer to "whose schema is this?"; an unrecognised
+#: revision falls back to everything, which is the conservative behaviour that
+#: was always intended.
+NON_SCHEMA_DOMAINS = frozenset({CUTOVER_DOMAIN})
 SELECTOR_TESTS = "tests/test_ci_selector.py"
 
 
@@ -244,6 +272,8 @@ def domain_of_migration(path: str) -> str | None:
     """
     stem = Path(path).stem
     for domain in DOMAIN_TEST_PREFIXES:
+        if domain in NON_SCHEMA_DOMAINS:
+            continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
     if stem.endswith("_sales_legal"):
@@ -393,6 +423,16 @@ def select(changed: list[str], available: list[str]) -> Selection:
         if path == SELECTOR_SCRIPT:
             if SELECTOR_TESTS in available_set:
                 direct.add(SELECTOR_TESTS)
+            continue
+        if path.startswith(CUTOVER_PACKAGE):
+            # One-time cutover tooling. Named rather than left to the fallback
+            # below, whose reasoning is about deployment: render-build.sh and
+            # render-start.sh run the live application, and this package never
+            # does. Nothing in ``app/`` imports it, so a change here cannot
+            # reach a domain — and on the day it imports one, the guard in
+            # ``test_cutover_selector.py`` requires the edge before the fast
+            # run is allowed to stay narrow.
+            domains.add(CUTOVER_DOMAIN)
             continue
         if path.startswith("scripts/"):
             # Everything else under scripts/ builds or starts the deployed
