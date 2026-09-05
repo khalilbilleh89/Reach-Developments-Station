@@ -36,6 +36,7 @@ and refuses a second claim; what the batch then does is ``apply``'s problem, and
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -46,6 +47,8 @@ from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
 
     from scripts.migration.manifest import Manifest
@@ -73,6 +76,10 @@ class BatchRefused(Exception):
 
 class UnknownProject(BatchRefused):
     """The manifest names a project this system does not have."""
+
+
+class SessionNotClean(BatchRefused):
+    """The caller's session already holds work this batch would commit."""
 
 
 class BatchAlreadyApplied(BatchRefused):
@@ -184,3 +191,47 @@ def claim(session: Session, manifest: Manifest, *, actor_user_id: uuid.UUID) -> 
         before=None,
         after=describe(manifest),
     )
+
+
+@contextmanager
+def applying(
+    session: Session, manifest: Manifest, *, actor_user_id: uuid.UUID
+) -> Iterator[AuditEvent]:
+    """One transaction for the claim and everything the batch writes.
+
+    The property this exists to make structural: **the claim and the data are
+    durable together or neither is.** ``claim`` already declines to commit, so a
+    disciplined caller could get this right by hand — and a caller at two in the
+    morning, adding a step, is the one who commits half way through "just to see
+    where it got to" and leaves a batch that is neither applied nor retryable.
+
+    On the way out, either the whole batch commits or the whole batch is rolled
+    back and the exception re-raised. Nothing is swallowed: a batch that failed
+    must look like a batch that failed.
+
+    A rolled-back attempt leaves no claim, so the retry — the correct next
+    action — is allowed. A committed attempt leaves one, so the second run is
+    refused. Those two are the same mechanism read from opposite sides, and both
+    are asserted.
+
+    Refuses a session that already holds uncommitted work. A batch that swept up
+    somebody else's pending changes would make them durable under a cutover's
+    correlation id, and if the batch then failed it would roll them back as
+    well — the caller's work destroyed by an operation that never mentioned it.
+    """
+    pending = len(session.new) + len(session.dirty) + len(session.deleted)
+    if pending:
+        raise SessionNotClean(
+            f"This session holds {pending} uncommitted change(s). A batch owns its "
+            "transaction: committing here would make somebody else's work durable under "
+            "this batch's correlation id, and failing here would destroy it. Commit or roll "
+            "back before applying a batch."
+        )
+
+    record = claim(session, manifest, actor_user_id=actor_user_id)
+    try:
+        yield record
+    except BaseException:
+        session.rollback()
+        raise
+    session.commit()
