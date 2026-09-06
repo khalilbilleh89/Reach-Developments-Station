@@ -57,11 +57,15 @@ export function UnitCommitment({
   projectId,
   commercialStatus,
   answer,
+  roles,
+  onOpenPlan,
 }: {
   projectId: string;
   /** The unit's own commercial status, so a withheld record is not reported as no record. */
   commercialStatus: string;
   answer: Answer<Commitment>;
+  roles: Set<string>;
+  onOpenPlan: (planId: string) => void;
 }) {
   const currencyCodeOf = useCurrencyCode();
 
@@ -187,7 +191,7 @@ export function UnitCommitment({
 
           <section>
             <SectionHeader title="Payment plan" description="Scheduled, not collected." />
-            <PlanSummary projectId={projectId} saleId={sale.sale.id} compact />
+            <PlanSummary projectId={projectId} saleId={sale.sale.id} compact roles={roles} saleStatus={sale.sale.status} onOpenPlan={onOpenPlan} />
           </section>
 
           <section>

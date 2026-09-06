@@ -1589,6 +1589,8 @@ export interface CollectionSaleSummary {
   active_payment_plan_version_id: string | null;
   scheduled_total: string;
   confirmed_receipts_total: string;
+  spa_total_payable: string;
+  collected_percentage: string | null;
   allocated_total: string;
   unapplied_cash: string;
   outstanding_total: string;

@@ -47,6 +47,7 @@ import type { DrawerFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
 import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
+import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { DealCollections } from "@/components/projects/collections/DealCollections";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -466,6 +467,7 @@ export function DealFile({
   saleId,
   roles,
   unitReference,
+  initialSection,
   onClose,
   onChanged,
 }: {
@@ -475,15 +477,17 @@ export function DealFile({
   roles: Set<string>;
   /** The unit the register row named, so the header can say it before the deal loads. */
   unitReference?: string | null;
+  initialSection?: string;
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
   const [reservation, setReservation] = useState<ReservationDetail | null>(null);
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [client, setClient] = useState<SalesClient | null>(null);
   const [parties, setParties] = useState<PartyRow[]>([]);
   const [shares, setShares] = useState<string | null>(null);
-  const [section, setSection] = useState<string | null>(null);
+  const [section, setSection] = useState<string | null>(initialSection ?? null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -603,6 +607,9 @@ export function DealFile({
       },
     });
   };
+
+  if (openPlan) return <PlanBuilder projectId={projectId} planId={openPlan} roles={roles}
+    onClose={() => setOpenPlan(null)} onChanged={async () => { await load(); await onChanged(); }} />;
 
   if (error && reservation === null && sale === null) {
     return (
@@ -1474,7 +1481,7 @@ export function DealFile({
             title="Payment plan"
             description="What the buyer agreed to pay, and when. Not what has been collected."
           />
-          <PlanSummary projectId={projectId} saleId={sale.sale.id} />
+          <PlanSummary projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={setOpenPlan} />
         </section>
       ) : null}
 
@@ -1484,7 +1491,7 @@ export function DealFile({
             title="Collections"
             description="What actually arrived, where it was applied, and what is still owed."
           />
-          <DealCollections projectId={projectId} saleId={sale.sale.id} />
+          <DealCollections projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} />
         </section>
       ) : null}
 

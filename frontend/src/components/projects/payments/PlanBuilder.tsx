@@ -522,7 +522,7 @@ export function PlanBuilder({
                   ? "The standing schedule"
                   : isHistory
                     ? "Where this version ended"
-                    : "Where this version stands"
+                    : "Schedule approval"
               }
             />
             <Steps
@@ -555,8 +555,8 @@ export function PlanBuilder({
 
           <section>
             <SectionHeader
-              title="Reconciliation"
-              description="Computed by the server from the stored schedule. Nothing here is totalled in the browser."
+              title="Schedule totals"
+              description="The saved instalments must match the SPA amount before approval."
             />
             <ReconciliationStrip
               reconciliation={shownDetail.reconciliation}
@@ -660,8 +660,8 @@ export function PlanBuilder({
               <>
                 <FieldRow columns={2}>
                   <Field
-                    label="Allocation"
-                    hint="Whichever you choose, the server derives the other."
+                    label="Enter instalments as"
+                    hint="Choose percentages or principal amounts from the SPA."
                   >
                     <select
                       className="input"

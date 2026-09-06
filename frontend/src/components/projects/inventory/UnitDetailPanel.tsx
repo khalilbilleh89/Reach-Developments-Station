@@ -39,6 +39,7 @@ import { statusLabel, statusTone } from "@/components/projects/inventory/statusL
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
+import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
 import { DealFile } from "@/components/projects/sales/DealFile";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
@@ -105,8 +106,9 @@ export function UnitDetailPanel({
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
   const [reserving, setReserving] = useState(false);
-  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null } | null>(null);
+  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null; initialSection?: string } | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [schedules, setSchedules] = useState<AreaSchedule[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
@@ -304,8 +306,11 @@ export function UnitDetailPanel({
     );
   }
 
+  if (openPlan) return <PlanBuilder projectId={projectId} planId={openPlan} roles={roles}
+    onClose={() => { setOpenPlan(null); void load(); }} onChanged={async () => { await load(); await onChanged(); }} />;
+
   if (deal) return <DealFile projectId={projectId} reservationId={deal.reservationId} saleId={deal.saleId}
-    roles={roles} unitReference={unit.unit_reference} onClose={() => { setDeal(null); void load(); }}
+    roles={roles} unitReference={unit.unit_reference} initialSection={deal.initialSection} onClose={() => { setDeal(null); void load(); }}
     onChanged={async () => { await load(); await onChanged(); }} />;
 
   const editableValues = values.filter((value) => value.is_editable);
@@ -592,11 +597,11 @@ export function UnitDetailPanel({
                 : <Button variant="primary" onClick={() => setReserving(true)}>Add buyer & reserve</Button>
             ) : null
           ) : null}
-          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} /> : null}
+          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} onOpenPlan={setOpenPlan} /> : null}
         </>
       ) : null}
 
-      {activeSection === "collections" ? <UnitCollections answer={collection} /> : null}
+      {activeSection === "collections" ? <UnitCollections answer={collection} onOpenCollections={liveSale ? () => setDeal({ saleId: liveSale.id, reservationId: liveSale.reservation_id, initialSection: "collections" }) : undefined} /> : null}
 
 
       {activeSection === "history" ? <UnitHistory history={history} /> : null}

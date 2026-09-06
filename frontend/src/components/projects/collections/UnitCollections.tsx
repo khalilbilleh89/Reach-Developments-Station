@@ -14,6 +14,7 @@ import {
   Notice,
   SectionHeader,
 } from "@/components/ui";
+import { CollectionProgress } from "./CollectionProgress";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money } from "@/lib/format";
 
@@ -74,6 +75,7 @@ export function UnitCollections({
 
   return (
     <>
+      <CollectionProgress summary={summary} />
       <section>
         <SectionHeader
           title="Position"
@@ -85,7 +87,7 @@ export function UnitCollections({
               </Badge>
               {onOpenCollections ? (
                 <Button small onClick={onOpenCollections}>
-                  Collections account
+                  Open receipt journal
                 </Button>
               ) : null}
             </>
