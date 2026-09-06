@@ -1,5 +1,7 @@
 "use client";
 
+import { LegalSummary } from "@/components/projects/sales/LegalSummary";
+import { SpaDetailsForm } from "@/components/projects/sales/SpaDetailsForm";
 import { RequoteForm } from "@/components/projects/sales/RequoteForm";
 import { useCallback, useEffect, useState } from "react";
 
@@ -635,8 +637,8 @@ export function DealFile({
   const sections = [
     ...(terms ? [{ key: "commercial", label: "Commercial" }] : []),
     { key: "buyers", label: "Buyers" },
-    ...(sale ? [{ key: "contract", label: "Contract" }] : []),
-    ...(sale ? [{ key: "legal", label: "Legal" }] : []),
+    ...(sale ? [{ key: "contract", label: "Sale / SPA" }] : []),
+    ...(sale ? [{ key: "legal", label: "SPA & registry" }] : []),
     ...(sale ? [{ key: "plan", label: "Payment plan" }] : []),
     ...(sale && seesCollections ? [{ key: "collections", label: "Collections" }] : []),
     ...(sale?.cancellation ? [{ key: "closure", label: "Cancellation" }] : []),
@@ -711,6 +713,7 @@ export function DealFile({
 
       {activeSection === "commercial" && terms ? (
         <>
+          {preparing && terms.deposit_gate_status === "pending" ? <Notice tone="info">Sales Operations must record deposit evidence, or the approver must waive the deposit, before this unit can be reserved.</Notice> : null}
           <section>
             <SectionHeader
               title="Reservation"
@@ -788,7 +791,8 @@ export function DealFile({
             ) : null}
           </section>
 
-          <section>
+          <details>
+            <summary>Discounts, packages & other commercial inputs</summary>
             <SectionHeader title="Commercial inputs" />
             {reservation && reservation.adjustments.length > 0 ? (
               <TableScroll label="Commercial inputs" compact>
@@ -891,7 +895,7 @@ export function DealFile({
                 </form>
               </SubPanel>
             ) : null}
-          </section>
+          </details>
 
           <section>
             <SectionHeader title="What happens next" />
@@ -992,7 +996,7 @@ export function DealFile({
               {canPrepare && preparing ? (
                 <Button
                   variant="primary"
-                  disabled={busy}
+                  disabled={busy || terms.deposit_gate_status === "pending"}
                   onClick={() =>
                     void run(
                       () => sales.activateReservation(projectId, terms.id),
@@ -1000,7 +1004,7 @@ export function DealFile({
                     )
                   }
                 >
-                  Activate reservation
+                  Reserve this unit
                 </Button>
               ) : null}
               {canPrepare && live && lockExpired ? (
@@ -1020,7 +1024,7 @@ export function DealFile({
                     )
                   }
                 >
-                  Draw up contract
+                  Convert reservation to sale / SPA
                 </Button>
               ) : null}
               {canPrepare && live ? (
@@ -1032,6 +1036,7 @@ export function DealFile({
                       {
                         title: "Cancel this reservation",
                         label: "Why is the reservation being cancelled?",
+                        hint: "The unit returns to Available if its release gates pass; otherwise it is Held.",
                         confirmLabel: "Cancel reservation",
                       },
                       (reason) => sales.cancelReservation(projectId, terms.id, reason),
@@ -1096,6 +1101,10 @@ export function DealFile({
 
       {activeSection === "contract" && sale ? (
         <>
+          <LegalSummary timeline={sale.legal} />
+          {canWriteSale && sale.sale.status === "draft" ? <SpaDetailsForm key={sale.sale.id} sale={sale.sale} busy={busy}
+            onSave={(body) => run(() => sales.updateContract(projectId, sale.sale.id, body), "SPA details saved.")} /> : null}
+          {sale.sale.status === "signature_pending" ? <Notice tone="info">Legal must record the SPA preparation and both signatures under SPA & registry. Sales Operations can then complete the sale after the required payment evidence is recorded.</Notice> : null}
           <section>
             <SectionHeader
               title="Sale contract"
@@ -1241,7 +1250,7 @@ export function DealFile({
                     )
                   }
                 >
-                  Activate contract
+                  Complete sale
                 </Button>
               ) : null}
               {canWriteSale && sale.sale.status === "active" && sale.handover === null ? (
@@ -1359,6 +1368,8 @@ export function DealFile({
 
       {activeSection === "legal" && sale ? (
         <>
+          <LegalSummary timeline={sale.legal} />
+          <Notice tone="info">Land registry lodging records the submission date and reference. Registry acceptance, registration and title transfer remain separate events.</Notice>
           <section>
             <SectionHeader
               title="Legal timeline"
@@ -1388,6 +1399,11 @@ export function DealFile({
 
           {canRecordLegal && sale.sale.status !== "draft" ? (
             <SubPanel title="Record a milestone">
+              <ButtonRow>
+                {[["buyer_signed", "Record buyer SPA signing"], ["seller_signed", "Record seller SPA signing"], ["land_registry_lodged", "Record land registry lodging"]].map(([type, label]) => (
+                  <Button key={type} disabled={busy} onClick={() => setLegalForm({ event_type: type, event_date: todayISO(), authority_reference: "", document_reference: "" })}>{label}</Button>
+                ))}
+              </ButtonRow>
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -1421,6 +1437,7 @@ export function DealFile({
                     <input
                       className="input"
                       type="date"
+                      required
                       value={legalForm.event_date}
                       onChange={(event) => setLegalForm({ ...legalForm, event_date: event.target.value })}
                     />

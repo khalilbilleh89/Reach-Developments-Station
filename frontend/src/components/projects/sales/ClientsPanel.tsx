@@ -22,6 +22,7 @@ import {
   SubPanel,
   TableScroll,
 } from "@/components/ui";
+import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { kycLabel, kycTone } from "@/components/projects/sales/labels";
 
 /**
@@ -57,7 +58,6 @@ export function ClientsPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [registering, setRegistering] = useState(false);
-  const [form, setForm] = useState({ display_name: "", email: "", phone: "" });
   const [party, setParty] = useState({
     name_as_identification: "",
     share_fraction: "1.000000",
@@ -152,58 +152,12 @@ export function ClientsPanel({
 
       {canWrite && registering ? (
         <SubPanel title="Register a buyer">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(
-                () =>
-                  sales.createClient(projectId, {
-                    display_name: form.display_name,
-                    ...(form.email ? { email: form.email } : {}),
-                    ...(form.phone ? { phone: form.phone } : {}),
-                  }),
-                "Buyer registered. Add the named parties next.",
-              ).then(() => {
-                setRegistering(false);
-                setForm({ display_name: "", email: "", phone: "" });
-              });
-            }}
-          >
-            <FieldRow columns={3}>
-              <Field label="Display name">
-                <input
-                  className="input"
-                  required
-                  value={form.display_name}
-                  onChange={(event) => setForm({ ...form, display_name: event.target.value })}
-                />
-              </Field>
-              <Field label="Email" optional>
-                <input
-                  className="input"
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                />
-              </Field>
-              <Field label="Phone" optional>
-                <input
-                  className="input"
-                  value={form.phone}
-                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                />
-              </Field>
-            </FieldRow>
-            <FormActions>
-              <Button variant="primary" type="submit" disabled={busy}>
-                Register buyer
-              </Button>
-            </FormActions>
-            <p className="footnote">
-              The client number is issued by the server. Identity is the stable identifier behind
-              it, never the human reference.
-            </p>
-          </form>
+          <BuyerForm projectId={projectId} onCancel={() => setRegistering(false)} onSaved={(buyer) => {
+            setRegistering(false);
+            setSelected(buyer.id);
+            void load();
+            void onChanged();
+          }} />
         </SubPanel>
       ) : null}
 

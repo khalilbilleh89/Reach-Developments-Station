@@ -14,6 +14,8 @@ import {
   Timeline,
   TimelineItem,
 } from "@/components/ui";
+import { LegalSummary } from "@/components/projects/sales/LegalSummary";
+import { BuyerContact } from "@/components/projects/sales/BuyerContact";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
@@ -39,9 +41,8 @@ export type Commitment = { reservation: Reservation | null; sale: SaleDetail | n
 /**
  * The deal on this unit, as inventory is allowed to see it.
  *
- * A read-only view: reserving, contracting, cancelling and handing over all
- * happen in Sales, on the deal file, where the whole transaction is in one
- * place. This exists so somebody looking at a unit is not left guessing why it
+ * The summary beside the unit workspace commercial actions. The deal file
+ * opens in place for reserving, contracting, cancelling and handing over. This exists so somebody looking at a unit is not left guessing why it
  * is not available.
  *
  * Buyer identity is shown only where the API returned it. A field the server
@@ -97,7 +98,7 @@ export function UnitCommitment({
     return (
       <EmptyState
         title="No active commercial commitment"
-        hint="Nothing is reserved or contracted on this unit. A reservation is opened from the project's Sales section."
+        hint="Nothing is reserved or contracted on this unit. Choose Add buyer & reserve to prepare a reservation."
       />
     );
   }
@@ -106,6 +107,8 @@ export function UnitCommitment({
 
   return (
     <>
+      <BuyerContact key={sale?.sale.client_id ?? commitment.reservation?.client_id} projectId={projectId} clientId={(sale?.sale.client_id ?? commitment.reservation?.client_id)!} />
+      {sale ? <LegalSummary timeline={sale.legal} /> : null}
       {commitment.reservation ? (
         <section>
           <SectionHeader

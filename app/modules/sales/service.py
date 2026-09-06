@@ -518,6 +518,7 @@ def create_client(
     project = lock_project(session, project.id)
 
     advisor_user_id = fields.pop("owner_advisor_user_id", None)
+    sole_purchaser_name = fields.pop("sole_purchaser_name", None)
     if advisor_user_id is None and "sales_advisor" in actor.role_keys:
         # An advisor creating a buyer owns it. Leaving it unassigned would make
         # the row invisible to the person who just created it.
@@ -559,6 +560,29 @@ def create_client(
         actor_user_id=actor.user_id,
         after=_snapshot(client, _CLIENT_FIELDS),
     )
+    if sole_purchaser_name is not None:
+        # Explicit single-purchaser registration is one transaction. Joint
+        # buyers continue to use the existing party editor and reconciliation.
+        party = ClientParty(
+            project_id=project.id,
+            client_id=client.id,
+            name_as_identification=sole_purchaser_name,
+            share_fraction=ONE,
+            party_role="purchaser",
+            is_primary=True,
+            created_by_user_id=actor.user_id,
+        )
+        session.add(party)
+        _flush(session)
+        record_event(
+            session,
+            action="client_party.created",
+            entity_type=ENTITY_CLIENT_PARTY,
+            entity_id=party.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            after=_snapshot(party, _PARTY_FIELDS),
+        )
     session.commit()
     session.refresh(client)
     return client
