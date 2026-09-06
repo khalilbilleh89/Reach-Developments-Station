@@ -1,0 +1,3 @@
+project_code,client_number,display_name,email,phone,address,preferred_language_code,kyc_status,privacy_consent_at,privacy_consent_reference,notes
+GALINI-BLU,CL-0001,Sample Buyer Alpha,alpha@example.invalid,+1-555-0101,1 Sample Street,,not_started,,,Synthetic fixture data.
+GALINI-BLU,CL-0002,Sample Buyer Beta,beta@example.invalid,+1-555-0102,2 Sample Street,,not_started,,,Synthetic fixture data.

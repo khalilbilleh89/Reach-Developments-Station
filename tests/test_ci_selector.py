@@ -71,9 +71,52 @@ AVAILABLE = [
     "tests/modules/test_unit_economics_concurrency.py",
     "tests/modules/test_unit_economics_history.py",
     "tests/modules/test_migration_unit_economics.py",
+    # The cutover family. Absent until a ``cashflow -> cutover`` edge made some
+    # other domain's closure reach it, at which point every one of those
+    # closures fell back to the whole suite with "no test family exists for
+    # changed domain cutover" — the selector working correctly on a fixture
+    # that had drifted. ``test_every_domain_has_a_representative_here`` below
+    # is what stops that happening again.
+    "tests/modules/test_cutover_cli.py",
+    "tests/modules/test_cutover_manifest.py",
+    "tests/modules/test_cutover_intake_contract.py",
 ]
 
 SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
+
+
+def test_every_domain_has_a_representative_in_the_available_fixture() -> None:
+    """``AVAILABLE`` models the repository's test files, and it had drifted.
+
+    The cutover family was added in PR-MVP-11 and never listed here. That cost
+    nothing while no other domain's closure reached ``cutover`` — and the moment
+    one did, ``select`` correctly fell back to the whole suite with "no test
+    family exists for changed domain cutover". A hand-maintained fixture that
+    silently turns targeted runs into full ones is worse than no fixture: every
+    test in this file would have gone on passing while the thing they describe
+    quietly stopped happening.
+
+    So every domain has to appear here. The fixture stays hand-written — reading
+    the real directory would make these tests assert the selector against
+    itself — but it may not omit a domain.
+    """
+    missing = sorted(
+        domain
+        for domain in selector.DOMAIN_TEST_PREFIXES
+        if not selector.tests_for_domain(domain, AVAILABLE)
+    )
+    assert not missing, (
+        f"AVAILABLE names no test file for {missing}. Any closure reaching one of those "
+        "falls back to the full suite, and every targeted-selection test here would pass "
+        "while proving nothing."
+    )
+
+
+def test_the_available_fixture_names_only_files_that_exist() -> None:
+    """The other direction: a renamed test file leaves a fixture describing a ghost."""
+    root = Path(__file__).resolve().parents[1]
+    absent = sorted(path for path in AVAILABLE if not (root / path).is_file())
+    assert not absent, f"AVAILABLE names file(s) that do not exist: {absent}"
 
 
 def chosen(*changed: str) -> object:
@@ -99,6 +142,7 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "unit_economics",
     ]
@@ -126,6 +170,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "sales",
         "unit_economics",
@@ -144,6 +189,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "pricing",
         "sales",
@@ -163,6 +209,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "inventory",
         "payment_plans",
         "pricing",
@@ -185,6 +232,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "inventory",
         "payment_plans",
         "pricing",
@@ -225,7 +273,7 @@ def test_unit_economics_is_not_reached_from_collections() -> None:
     """
     result = chosen("app/modules/collections/service.py")
 
-    assert result.domains == ["cashflow", "collections"]
+    assert result.domains == ["cashflow", "collections", "cutover"]
     assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
 
 
@@ -549,11 +597,17 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
     collections and from construction, and payment plans reaches it through
     collections without a third. Nobody had to widen pricing, inventory,
     projects or settings any of those times, because the closure is transitive.
+
+    The cutover is the fifth instance and the clearest: its reconciliation
+    orchestrator calls ``cashflow.service.reconciliation``, so one edge —
+    ``cashflow -> cutover`` — is what carries a *pricing* change to it, through
+    four hops nobody had to name.
     """
     assert selector.closure({"pricing"}) == [
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "pricing",
         "sales",
@@ -564,6 +618,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "sales",
         "unit_economics",
@@ -572,20 +627,27 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "unit_economics",
     ]
-    # Construction reaches unit economics and cashflow and stops; nothing is
-    # downstream of either, so the chain terminates rather than looping back.
+    # Construction reaches unit economics and cashflow, and cashflow reaches
+    # the cutover; nothing is downstream of unit economics or the cutover, so
+    # the chain terminates rather than looping back.
     assert selector.closure({"construction"}) == [
         "cashflow",
         "construction",
+        "cutover",
         "unit_economics",
     ]
     # And still downstream only: no leaf drags sales back in.
-    assert selector.closure({"collections"}) == ["cashflow", "collections"]
+    assert selector.closure({"collections"}) == ["cashflow", "collections", "cutover"]
     assert selector.closure({"unit_economics"}) == ["unit_economics"]
-    assert selector.closure({"cashflow"}) == ["cashflow"]
+    # Cashflow is no longer a leaf: it feeds the cutover, and the cutover feeds
+    # nothing. Unit economics still terminates, which is what keeps the two
+    # sinks distinguishable.
+    assert selector.closure({"cashflow"}) == ["cashflow", "cutover"]
+    assert selector.closure({"cutover"}) == ["cutover"]
     assert selector.find_cycle() is None
 
 
@@ -600,7 +662,7 @@ def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
     result = chosen("app/modules/collections/service.py")
 
     assert result.full is False
-    assert result.domains == ["cashflow", "collections"]
+    assert result.domains == ["cashflow", "collections", "cutover"]
     assert "tests/modules/test_collection_receipts.py" in result.paths
     assert "tests/modules/test_collection_allocations.py" in result.paths
     assert "tests/modules/test_collection_restructures.py" in result.paths
@@ -618,6 +680,7 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "unit_economics",
     ]
@@ -634,6 +697,7 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "sales",
         "unit_economics",
@@ -649,6 +713,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
         "cashflow",
         "collections",
         "construction",
+        "cutover",
         "payment_plans",
         "pricing",
         "sales",
