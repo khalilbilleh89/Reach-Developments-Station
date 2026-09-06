@@ -16,6 +16,10 @@
 
 export type Roles = ReadonlySet<string>;
 
+/** Physical stage configuration and progress; no financial approval rights. */
+export const CONSTRUCTION_STAGE_CONFIGURERS: Roles = new Set(["project_manager"]);
+export const CONSTRUCTION_STAGE_WRITERS: Roles = new Set(["project_manager", "design_engineering", "finance"]);
+
 export const ROLE_SYSTEM_ADMIN = "system_admin";
 
 /** Roles that may change project identity and the land record. */

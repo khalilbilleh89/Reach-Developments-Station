@@ -32,6 +32,7 @@ from fastapi import APIRouter, status
 from app.core.errors import ValidationError
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.construction import permissions, schemas, service
+from app.modules.construction import stages as stage_service
 from app.modules.construction.models import BudgetVersion
 from app.modules.construction.permissions import (
     ConstructionProject,
@@ -53,8 +54,50 @@ from app.modules.construction.read import (
     variation_detail,
     variation_out,
 )
+from app.modules.inventory.permissions import InventoryProject
 
 router = APIRouter(prefix="/projects/{project_id}/construction", tags=["construction"])
+
+
+@router.get("/stages", response_model=list[schemas.StageOut])
+def read_stages(project: InventoryProject, session: DbSession, actor: ActiveActor) -> list:
+    """Physical project checklist only; no construction financial fields."""
+    return stage_service.list_stages(session, project)
+
+
+@router.post("/stages", response_model=schemas.StageOut, status_code=201)
+def create_stage(
+    project: InventoryProject, session: DbSession, actor: ActiveActor, payload: schemas.StageCreate
+) -> object:
+    return stage_service.create_stage(session, project, actor, payload.name, payload.planned_date)
+
+
+@router.get("/units/{unit_id}/stages", response_model=schemas.UnitProgressOut)
+def read_unit_stages(
+    project: InventoryProject, session: DbSession, actor: ActiveActor, unit_id: uuid.UUID
+) -> dict:
+    return stage_service.unit_progress(session, project, actor, unit_id)
+
+
+@router.post("/units/{unit_id}/stages/{stage_id}/completion", status_code=204)
+def record_unit_stage(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    unit_id: uuid.UUID,
+    stage_id: uuid.UUID,
+    payload: schemas.StageCompletion,
+) -> None:
+    stage_service.record_completion(
+        session,
+        project,
+        actor,
+        unit_id,
+        stage_id,
+        payload.completed_date,
+        payload.reason,
+        payload.expected_revision,
+    )
 
 
 # --------------------------------------------------------------------------- #

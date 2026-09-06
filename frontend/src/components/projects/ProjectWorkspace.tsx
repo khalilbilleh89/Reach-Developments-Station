@@ -31,6 +31,7 @@ import { AccessTab } from "@/components/projects/AccessTab";
 import { CashflowTab } from "@/components/projects/CashflowTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
+import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -260,6 +261,7 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
+          <ProjectStages projectId={projectId} roles={roles} />
         </>
       );
     }

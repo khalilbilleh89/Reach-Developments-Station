@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { UnitStages } from "@/components/projects/construction/StageWorkspace";
 
 import { ApiError, collections, inventory, pricing, sales } from "@/lib/api";
 import type {
@@ -323,6 +324,7 @@ export function UnitDetailPanel({
   const sections = [
     { key: "summary", label: "Overview" },
     { key: "detail", label: "Physical record" },
+    { key: "construction", label: "Construction" },
     ...(seesListPrice ? [{ key: "pricing", label: "Pricing" }] : []),
     ...(seesSales ? [{ key: "commercial", label: "Sales & legal" }] : []),
     ...(seesCollections && hasSale ? [{ key: "collections", label: "Collections" }] : []),
@@ -463,6 +465,7 @@ export function UnitDetailPanel({
         </Notice>
       ) : null}
 
+      {activeSection === "construction" ? <UnitStages projectId={projectId} unitId={unitId} roles={roles} /> : null}
       {activeSection === "summary" ? (
         <UnitSummary
           unit={unit}
