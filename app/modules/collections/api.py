@@ -97,6 +97,8 @@ def _summary_read(
         active_payment_plan_version_id=summary.active_payment_plan_version_id,
         scheduled_total=summary.scheduled_total,
         confirmed_receipts_total=summary.confirmed_receipts_total,
+        spa_total_payable=summary.spa_total_payable,
+        collected_percentage=summary.collected_percentage,
         allocated_total=summary.allocated_total,
         unapplied_cash=summary.unapplied_cash,
         outstanding_total=summary.outstanding_total,

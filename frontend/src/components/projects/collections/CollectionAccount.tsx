@@ -36,6 +36,7 @@ import type {
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
 import { CASHFLOW_RECORDERS, hasAnyRole } from "@/lib/roles";
 
+import { CollectionProgress } from "./CollectionProgress";
 import { ReceiptPanel } from "./ReceiptPanel";
 import {
   ACTION_TYPES,
@@ -61,8 +62,8 @@ import {
 } from "./labels";
 
 const TABS = [
+  { key: "receipts", label: "Receipt journal" },
   { key: "position", label: "Position" },
-  { key: "receipts", label: "Receipts" },
   { key: "actions", label: "Follow-up" },
   { key: "exceptions", label: "Disputes & waivers" },
   { key: "restructure", label: "Restructure" },
@@ -110,7 +111,7 @@ export function CollectionAccount({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [tab, setTab] = useState("position");
+  const [tab, setTab] = useState(asOf && asOf !== todayISO() ? "position" : "receipts");
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -234,6 +235,7 @@ export function CollectionAccount({
         <Loading label="Loading the account" shape="record" />
       ) : (
         <>
+          {!historical || tab === "position" ? <CollectionProgress summary={summary} /> : null}
           {tab === "position" ? (
             <PositionTab
               projectId={projectId}

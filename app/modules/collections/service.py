@@ -781,6 +781,8 @@ class SaleSummary:
     active_payment_plan_version_id: uuid.UUID | None
     scheduled_total: Decimal
     confirmed_receipts_total: Decimal
+    spa_total_payable: Decimal
+    collected_percentage: Decimal | None
     allocated_total: Decimal
     unapplied_cash: Decimal
     outstanding_total: Decimal
@@ -952,6 +954,10 @@ def summarise(
         active_payment_plan_version_id=position.version.id if position.version else None,
         scheduled_total=sum((r.scheduled for r in rows), ZERO),
         confirmed_receipts_total=confirmed_total,
+        spa_total_payable=position.sale.total_contract_price,
+        collected_percentage=ledger.collected_percentage(
+            confirmed_receipts=confirmed_total, spa_payable=position.sale.total_contract_price
+        ),
         allocated_total=allocated_total,
         unapplied_cash=unapplied,
         outstanding_total=outstanding,

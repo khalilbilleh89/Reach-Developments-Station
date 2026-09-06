@@ -10,7 +10,7 @@ five grouped pull requests, each on its own short-lived branch.
 | Total planned MVP 2 PRs      |     8 |
 | Merged PRs                  |     3 |
 | Remaining PRs (including current) | 5 |
-| Current milestones          | PR-V2-03 + PR-V2-04 in review; PR-V2-05 + PR-V2-06 in development |
+| Current milestones          | Batches 1 (#259) and 2 (#260) open; batch 3 (V2-07 + V2-08) implemented for draft review |
 
 ## Five remaining delivery batches
 
@@ -306,8 +306,9 @@ Developed on batch 1 while #259 completes CI; merge order remains unchanged.
 
 - simple receipt journal
 - buyer and payment-plan context
-- collected total, and collected as a percentage of selling price — both the
-  server's figures
+- collected total, and confirmed receipts as a percentage of total SPA payable
+  including tax and buyer fees (owner-confirmed basis); refunds shown separately
+- both figures calculated by the server, including dated historical positions
 - allocations and unapplied cash remain authoritative underneath
 
 ## PR-V2-09 — Construction Stage Experience

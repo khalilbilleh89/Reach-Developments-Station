@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 
 import { Badge, Metric, MetricGroup, Notice, TableScroll } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
-import type { CollectionSaleSummary, Receipt } from "@/lib/api";
+import type { CollectionSaleSummary } from "@/lib/api";
+import { ReceiptPanel } from "./ReceiptPanel";
+import { CollectionProgress } from "./CollectionProgress";
+import { CASHFLOW_RECORDERS, hasAnyRole } from "@/lib/roles";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money } from "@/lib/format";
 
@@ -13,20 +16,18 @@ import {
   clearanceTone,
   installmentLabel,
   installmentTone,
-  receiptLabel,
-  receiptTone,
   unitCollectionLabel,
   unitCollectionTone,
 } from "./labels";
 
 /**
- * The collections position on the deal file: a summary, not a second workspace.
+ * The sale receipt journal reuses the Collections receipt and allocation editor.
  *
  * The deal file already answers what was agreed. This answers what arrived,
  * with the four figures that must never be conflated — scheduled, confirmed,
  * applied, outstanding — plus the unapplied balance sitting between the second
  * and third. Everything below it is drill-down: the instalments and the last
- * few receipts, enough to answer "which receipt proves that?" without leaving
+ * receipt journal, enough to answer "which receipt proves that?" without leaving
  * the record.
  *
  * If the contract was cancelled, what is owed back and what has actually left
@@ -34,12 +35,14 @@ import {
  * "refunded", and merging the two here would undo that.
  *
  * Mounted only for a role the server answers: the deal file checks the
- * reader's roles before this section exists, so a Sales Advisor's deal file
- * never requests the account at all.
+ * reader's roles before this section exists. Mutation controls retain their
+ * own department roles; read access never confers confirmation authority.
  */
-export function DealCollections({ projectId, saleId }: { projectId: string; saleId: string }) {
+export function DealCollections({ projectId, saleId, roles, saleStatus }: {
+  projectId: string; saleId: string; roles: Set<string>; saleStatus: string;
+}) {
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [revision, setRevision] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
   const currencyCodeOf = useCurrencyCode();
 
@@ -47,13 +50,9 @@ export function DealCollections({ projectId, saleId }: { projectId: string; sale
     let live = true;
     void (async () => {
       try {
-        const [position, rows] = await Promise.all([
-          collections.account(projectId, saleId),
-          collections.receipts(projectId, saleId).catch(() => [] as Receipt[]),
-        ]);
+        const position = await collections.account(projectId, saleId);
         if (!live) return;
         setSummary(position);
-        setReceipts(rows);
         setProblem(null);
       } catch (caught) {
         // A 403 is a fact about this reader; anything else is a fault, and
@@ -74,7 +73,7 @@ export function DealCollections({ projectId, saleId }: { projectId: string; sale
     return () => {
       live = false;
     };
-  }, [projectId, saleId]);
+  }, [projectId, saleId, revision]);
 
   if (problem !== null) {
     return <p className="subtle">{problem}</p>;
@@ -82,19 +81,16 @@ export function DealCollections({ projectId, saleId }: { projectId: string; sale
   if (summary === null) {
     return <p className="subtle">Loading the collections position.</p>;
   }
-  if (summary.active_payment_plan_version_id === null) {
-    return (
-      <p className="subtle">
-        There is no active payment schedule on this contract, so there is nothing to collect
-        against yet.
-      </p>
-    );
-  }
-
   const code = currencyCodeOf(summary.currency_id);
 
   return (
     <div className="stack">
+      <CollectionProgress summary={summary} />
+      {summary.active_payment_plan_version_id === null ? <Notice tone="info">No active SPA schedule yet. Confirmed receipts remain unapplied until they are allocated to an active schedule.</Notice> : null}
+      <ReceiptPanel projectId={projectId} saleId={saleId} summary={summary} currencyCode={code}
+        canRecord={roles.has("collections") && ["signature_pending", "active", "termination_pending"].includes(saleStatus)}
+        canConfirm={roles.has("finance")} canRestrictCash={hasAnyRole(roles, CASHFLOW_RECORDERS)}
+        onChanged={() => setRevision((value) => value + 1)} />
       <MetricGroup>
         <Metric
           label="Position"
@@ -106,12 +102,6 @@ export function DealCollections({ projectId, saleId }: { projectId: string; sale
           size="sm"
         />
         <Metric label="Scheduled" value={money(summary.scheduled_total, code)} size="sm" />
-        <Metric
-          label="Confirmed receipts"
-          value={money(summary.confirmed_receipts_total, code)}
-          note="Cash Finance accepted"
-          size="sm"
-        />
         <Metric
           label="Applied"
           value={money(summary.allocated_total, code)}
@@ -183,39 +173,6 @@ export function DealCollections({ projectId, saleId }: { projectId: string; sale
           ))}
         </tbody>
       </TableScroll>
-
-      {receipts.length > 0 ? (
-        <TableScroll label="Receipts" compact>
-          <thead>
-            <tr>
-              <th scope="col">Receipt</th>
-              <th scope="col">Date</th>
-              <th scope="col" className="num">
-                Amount
-              </th>
-              <th scope="col" className="num">
-                Unapplied
-              </th>
-              <th scope="col">State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {receipts.slice(0, 8).map((receipt) => (
-              <tr key={receipt.id}>
-                <th scope="row" className="mono">
-                  {receipt.receipt_number}
-                </th>
-                <td className="figure">{businessDate(receipt.receipt_date)}</td>
-                <td className="num">{money(receipt.amount, code)}</td>
-                <td className="num">{money(receipt.unapplied_amount, code)}</td>
-                <td>
-                  <Badge tone={receiptTone(receipt.status)}>{receiptLabel(receipt.status)}</Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      ) : null}
 
       {isPositive(summary.refund_due_total) || isPositive(summary.refund_confirmed_total) ? (
         <MetricGroup compact>

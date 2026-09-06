@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { MilestoneTriggerOption, PlanInstallment } from "@/lib/api";
 import {
   Badge,
@@ -115,12 +116,20 @@ export function ScheduleEditor({
   onRemove: (key: string) => void;
 }) {
   const currencyCodeOf = useCurrencyCode();
+  const [advanced, setAdvanced] = useState(false);
+  const needsAdvanced = rows.some((row) => row.trigger_type !== "fixed_date" || (row.grace_days !== "0" && row.grace_days !== ""));
+  const showAdvanced = advanced || needsAdvanced;
   const code = currencyCodeOf(currencyId);
   const byPercentage = allocationMode === "percentage";
   const manualCharges = chargeMode === "manual";
 
   return (
     <div className="schedule-editor">
+      <label className="checkbox">
+        <input type="checkbox" checked={showAdvanced} disabled={needsAdvanced} onChange={(event) => setAdvanced(event.target.checked)} />
+        <span>Show milestone, relative-date and grace-period options</span>
+      </label>
+      {needsAdvanced ? <p className="hint">These options stay visible while an instalment uses an event, relative date or grace period.</p> : null}
       <table className="table">
         <caption className="visually-hidden">Draft instalments</caption>
         <thead>
@@ -129,8 +138,8 @@ export function ScheduleEditor({
               #
             </th>
             <th scope="col">Label</th>
-            <th scope="col">Trigger</th>
-            <th scope="col">Trigger detail</th>
+            {showAdvanced ? <th scope="col">Trigger</th> : null}
+            <th scope="col">{showAdvanced ? "Trigger detail" : "Due date"}</th>
             <th scope="col" className="num">
               {byPercentage ? "Share" : "Principal"}
             </th>
@@ -144,9 +153,7 @@ export function ScheduleEditor({
                 </th>
               </>
             ) : null}
-            <th scope="col" className="num">
-              Grace days
-            </th>
+            {showAdvanced ? <th scope="col" className="num">Grace days</th> : null}
             <th scope="col">Remove</th>
           </tr>
         </thead>
@@ -166,6 +173,7 @@ export function ScheduleEditor({
                   }
                 />
               </td>
+              {showAdvanced ? (
               <td>
                 <select
                   className="input"
@@ -182,6 +190,7 @@ export function ScheduleEditor({
                   ))}
                 </select>
               </td>
+              ) : null}
               <td>
                 <TriggerDetail
                   row={row}
@@ -235,6 +244,7 @@ export function ScheduleEditor({
                   </td>
                 </>
               ) : null}
+              {showAdvanced ? (
               <td className="num">
                 <input
                   className="input input-short"
@@ -246,6 +256,7 @@ export function ScheduleEditor({
                   }
                 />
               </td>
+              ) : null}
               <td>
                 <Button
                   small
@@ -263,7 +274,7 @@ export function ScheduleEditor({
       {code ? (
         <p className="footnote">
           Amounts are denominated in {code}, taken from the contract. Shares are
-          typed as percentages and sent as fractions of one. The server derives{" "}
+          entered as percentages. Saving the schedule calculates{" "}
           {byPercentage
             ? "each amount from its share"
             : "each share from its amount"}

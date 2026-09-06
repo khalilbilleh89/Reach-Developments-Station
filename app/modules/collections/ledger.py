@@ -42,9 +42,23 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 ZERO = Decimal("0.00")
+
+
+def collected_percentage(*, confirmed_receipts: Decimal, spa_payable: Decimal) -> Decimal | None:
+    """Gross confirmed cash as a percentage of total SPA payable, refunds separate.
+
+    A zero-price contract has no meaningful denominator. An overpayment remains
+    above 100 percent rather than being hidden by a cap. This is not clearance.
+    """
+    if spa_payable <= ZERO:
+        return None
+    return (confirmed_receipts / spa_payable * Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
 
 # --------------------------------------------------------------------------- #
 # Aging buckets

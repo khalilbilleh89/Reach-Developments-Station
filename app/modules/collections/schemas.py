@@ -194,6 +194,9 @@ class CollectionSaleSummary(BaseModel):
     active_payment_plan_version_id: uuid.UUID | None
     scheduled_total: Money
     confirmed_receipts_total: Money
+    spa_total_payable: Money
+    #: Confirmed receipts / SPA payable * 100. Refunds stay separate; not capped.
+    collected_percentage: DecimalStr | None
     allocated_total: Money
     unapplied_cash: Money
     outstanding_total: Money

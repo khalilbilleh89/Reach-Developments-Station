@@ -115,9 +115,11 @@ export function ReceiptPanel({
       await run();
       setNotice(done);
       await refresh();
+      return true;
     } catch (caught) {
       setNotice(null);
       setError(caught instanceof ApiError ? caught.message : "That did not work.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -143,7 +145,7 @@ export function ReceiptPanel({
 
       {canRecord ? (
         <SubPanel
-          title="Record cash"
+          title="Receipt journal"
           actions={
             <Button onClick={() => setRecording((open) => !open)}>
               {recording ? "Cancel" : "Record a receipt"}
@@ -163,7 +165,8 @@ export function ReceiptPanel({
                       notes: form.notes || null,
                     }),
                   "Receipt recorded. It counts as cash once Finance confirms it.",
-                ).then(() => {
+                ).then((saved) => {
+                  if (!saved) return;
                   setRecording(false);
                   setForm({
                     amount: "",
@@ -230,7 +233,7 @@ export function ReceiptPanel({
           hint="No cash has been recorded for this sale yet."
         />
       ) : (
-        <TableScroll label="Receipts">
+        <TableScroll label="Receipt journal">
           <thead>
             <tr>
               <th scope="col">Receipt</th>
