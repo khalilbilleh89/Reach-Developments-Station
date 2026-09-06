@@ -795,3 +795,115 @@ class TestLandAndPermitsKeepTheirShape:
         assert "permit.financials_visible" in permits
         for path, source in ((LAND_TAB, land), (PERMITS_TAB, permits)):
             assert "display: none" not in source, f"{path.name} hides a figure with CSS"
+
+
+class TestInventoryShowsTheObjectsItNames:
+    """Four object views, not one register wearing four labels.
+
+    The defect this replaces was invisible to every test the repository had:
+    the screen rendered, the filters worked, and choosing "Phase" produced the
+    unit register filtered by phase. Nothing was broken — the mental model was.
+    The guards here are about structure rather than appearance, so they survive
+    restyling and still fail if Inventory quietly collapses back to one table.
+    """
+
+    INVENTORY = PROJECTS / "InventoryTab.tsx"
+    STRUCTURE = PROJECTS / "inventory" / "StructureViews.tsx"
+    IMPORT_PANEL = PROJECTS / "inventory" / "ImportPanel.tsx"
+
+    def test_all_four_levels_are_first_class_views(self) -> None:
+        source = read(self.INVENTORY)
+
+        for key, label in (
+            ("phases", "Phases"),
+            ("buildings", "Buildings"),
+            ("floors", "Floors"),
+            ("units", "Units"),
+        ):
+            assert f'{{ key: "{key}", label: "{label}" }}' in source, key
+
+    def test_each_hierarchy_view_has_a_register_of_its_own_objects(self) -> None:
+        """A phase register labelled "Unit register" is the old defect returning."""
+        source = read(self.STRUCTURE)
+
+        for label in ("Phase register", "Building register", "Floor register"):
+            assert f'label="{label}"' in source, label
+        assert 'label="Unit register"' not in source
+
+    def test_the_hierarchy_views_do_not_render_the_unit_register(self) -> None:
+        source = read(self.STRUCTURE)
+
+        assert "UnitSummary" not in source
+        assert "commercial_status" not in source
+        assert "inventory.units(" not in source
+
+    def test_drill_down_carries_context_and_offers_a_way_out(self) -> None:
+        source = read(self.INVENTORY)
+
+        assert "onViewBuildings" in source
+        assert "onViewFloors" in source
+        assert "onViewUnits" in source
+        assert "Clear context" in source
+
+    def test_the_normal_import_action_downloads_a_real_workbook(self) -> None:
+        """Asserted on the call, not on the label.
+
+        A first attempt asserted the words "Load template" were absent and
+        matched the paragraph in this file's own docstring explaining why they
+        were removed — a guard reading its own documentation and reporting
+        success. What distinguishes the two designs is which endpoint the
+        button calls: one downloads a file, the other pasted CSV text into a
+        textarea.
+        """
+        source = read(self.IMPORT_PANEL)
+
+        assert "inventory.workbookTemplate(" in source
+        assert "Download Excel template" in source
+        # The CSV template endpoint returns JSON text for a textarea. It has no
+        # place in the normal path, whatever the button says.
+        assert "inventory.importTemplate(" not in source
+        # CSV survives behind one affordance rather than being the first thing
+        # an operator loading a development is asked to choose.
+        assert "Advanced CSV import" in source
+        assert source.index("Download Excel template") < source.index("Advanced CSV import")
+
+    def test_the_generic_add_structure_path_is_gone(self) -> None:
+        """One operating path, never two.
+
+        Contextual creation and a generic "Add structure" dialog doing the same
+        job is how two screens drift apart while both look right.
+
+        Asserted on the component and the state it was driven by rather than on
+        the words: the phrase still appears in a comment saying what was
+        removed, and a guard that the comment satisfies guards nothing.
+        """
+        assert not (PROJECTS / "inventory" / "HierarchyForms.tsx").exists()
+        for path in frontend_sources():
+            assert "HierarchyForms" not in read(path), path.name
+        source = read(self.INVENTORY)
+        assert '"hierarchy"' not in source
+
+    def test_creation_is_contextual_from_each_register(self) -> None:
+        """Each register offers the one record it is about, and no other."""
+        source = read(self.STRUCTURE)
+
+        for action in ("Add phase", "Add building", "Add floor"):
+            assert action in source, action
+        # The forms preselect the parent the register is already filtered to,
+        # so nobody restates context the screen already holds.
+        assert "defaultPhaseId" in source
+        assert "defaultBuildingId" in source
+
+    def test_the_import_report_is_read_by_sheet_row_and_column(self) -> None:
+        """A workbook has four sheets and four row 7s."""
+        source = read(self.IMPORT_PANEL)
+
+        assert 'scope="col">Sheet<' in source
+        assert "issue.sheet" in source
+
+    def test_the_review_counts_come_from_the_server(self) -> None:
+        """Counted rows and reported rows would be two answers to one question."""
+        source = read(self.IMPORT_PANEL)
+
+        assert "report?.structure.records" in source
+        assert "report.create_count" in source

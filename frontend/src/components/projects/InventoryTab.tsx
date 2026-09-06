@@ -23,22 +23,40 @@ import {
   StatStripNote,
   StatusDot,
   TableScroll,
+  Tabs,
   ToolbarFilter,
 } from "@/components/ui";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
-import { HierarchyForms } from "@/components/projects/inventory/HierarchyForms";
 import { ImportPanel } from "@/components/projects/inventory/ImportPanel";
+import {
+  BuildingsView,
+  FloorsView,
+  PhasesView,
+} from "@/components/projects/inventory/StructureViews";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 const PAGE = "200";
 
 /**
- * The inventory register, inside the project workspace.
+ * The inventory workspace, inside the project workspace.
  *
- * One toolbar and one table rather than a tree: a development is
- * Phase → Building → Floor → Unit, and three narrowing selects say that as
- * clearly as a component library would, without the component library.
+ * A development is Phase → Building → Floor → Unit, and until now this screen
+ * showed that as one unit register with three narrowing selects. It read as
+ * four levels and behaved as one: choosing "Phase" produced units filtered by
+ * phase, so an operator clicking into a hierarchy concept always arrived back
+ * at the same table and could never see what a phase or a building *was*.
+ *
+ * Four object views now, one workspace. Phases shows phases. Buildings shows
+ * buildings. Floors shows floors. Units shows units, unchanged — it is the
+ * record the business runs on and it stays the default.
+ *
+ * Drill-down is a filter carried between views, not a navigation stack: "View
+ * buildings" from a phase moves to the buildings register with that phase
+ * selected, the selection is stated above the register in words, and one
+ * action clears it. There is no tree component and no recursive hierarchy
+ * engine; this domain has exactly four levels and knows all four of their
+ * names.
  *
  * The register is built to be scanned down: the unit's identity pinned on the
  * left, where it sits and how big it is in the middle, and its four status
@@ -76,8 +94,13 @@ export function InventoryTab({
     search: "",
   });
   const [selected, setSelected] = useState<UnitSummary | null>(null);
-  const [open, setOpen] = useState<"none" | "hierarchy" | "areas" | "import">("none");
+  const [open, setOpen] = useState<"none" | "areas" | "import">("none");
   const [error, setError] = useState<string | null>(null);
+  // The unit is the record this business runs on, so it stays the view an
+  // operator lands on. The other three are beside it and equally first-class,
+  // which is the whole correction: they are no longer hidden inside a dialog
+  // called "Add structure".
+  const [view, setView] = useState<"phases" | "buildings" | "floors" | "units">("units");
 
   // Typing in the search box fires a request per change, and responses can come
   // back out of order. Without this ticket the register can end up showing the
@@ -147,6 +170,23 @@ export function InventoryTab({
     : floors;
   const filtered = Object.values(filters).some((value) => value !== "");
 
+  //: What the current parent selection is, said in codes rather than left for
+  //: the operator to read out of three dropdowns. Nothing here is derived from
+  //: a rendered row: these are the records the server returned.
+  const noun = {
+    phases: "phases",
+    buildings: "buildings",
+    floors: "floors",
+    units: "units",
+  } as const;
+  const context = [
+    phases.find((phase) => phase.id === filters.phase_id)?.code,
+    buildings.find((building) => building.id === filters.building_id)?.code,
+    floors.find((floor) => floor.id === filters.floor_id)?.code,
+  ].filter((code): code is string => Boolean(code));
+  const clearContext = () =>
+    setFilters({ ...filters, phase_id: "", building_id: "", floor_id: "" });
+
   // Inventory is refused while the project is in setup, because that is the
   // window in which its country and currencies can still change under whatever
   // was validated against them. Saying so beats eleven identical 409s.
@@ -186,15 +226,6 @@ export function InventoryTab({
                 Import
               </Button>
             ) : null}
-            {canWriteStructure ? (
-              <Button
-                variant="primary"
-                onClick={() => setOpen(open === "hierarchy" ? "none" : "hierarchy")}
-                aria-expanded={open === "hierarchy"}
-              >
-                Add structure
-              </Button>
-            ) : null}
           </>
         }
       />
@@ -202,22 +233,6 @@ export function InventoryTab({
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        {open === "hierarchy" ? (
-          <Card
-            title="Add structure"
-            description="A phase, a building, a floor or a unit. For a whole development, import a CSV instead."
-            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
-          >
-            <HierarchyForms
-              projectId={projectId}
-              phases={phases}
-              buildings={buildings}
-              floors={floors}
-              canConfigure={canConfigure}
-              onChanged={refresh}
-            />
-          </Card>
-        ) : null}
         {open === "areas" ? (
           <Card
             title="Area types"
@@ -230,14 +245,89 @@ export function InventoryTab({
         {open === "import" ? (
           <Card
             title="Import inventory"
-            description="Validate a CSV, read what is wrong, fix the file, apply. Nothing is written until the batch is clean."
+            description="Download the workbook, fill it in, validate, read what is wrong, fix it, apply. Nothing is written until the batch is clean."
             actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
           >
             <ImportPanel projectId={projectId} onApplied={refresh} />
           </Card>
         ) : null}
 
-        {register ? (
+        <Tabs
+          label="Inventory views"
+          group="inventory"
+          active={view}
+          onSelect={(key) => setView(key as typeof view)}
+          tabs={[
+            { key: "phases", label: "Phases" },
+            { key: "buildings", label: "Buildings" },
+            { key: "floors", label: "Floors" },
+            { key: "units", label: "Units" },
+          ]}
+        />
+
+        {context.length > 0 ? (
+          <Notice tone="info">
+            Showing {noun[view]} in {context.join(" · ")}.{" "}
+            <button className="button-link" type="button" onClick={clearContext}>
+              Clear context
+            </button>
+          </Notice>
+        ) : null}
+
+        {view === "phases" ? (
+          <PhasesView
+            projectId={projectId}
+            phases={phases}
+            canConfigure={canConfigure}
+            onChanged={refresh}
+            onViewBuildings={(phase) => {
+              setFilters({ ...filters, phase_id: phase.id, building_id: "", floor_id: "" });
+              setView("buildings");
+            }}
+          />
+        ) : null}
+
+        {view === "buildings" ? (
+          <BuildingsView
+            projectId={projectId}
+            phases={phases}
+            buildings={buildings}
+            phaseId={filters.phase_id}
+            onPhase={(phase_id) => setFilters({ ...filters, phase_id, building_id: "", floor_id: "" })}
+            canWriteStructure={canWriteStructure}
+            onChanged={refresh}
+            onViewFloors={(building) => {
+              setFilters({
+                ...filters,
+                phase_id: building.phase_id,
+                building_id: building.id,
+                floor_id: "",
+              });
+              setView("floors");
+            }}
+          />
+        ) : null}
+
+        {view === "floors" ? (
+          <FloorsView
+            projectId={projectId}
+            phases={phases}
+            buildings={buildings}
+            floors={floors}
+            phaseId={filters.phase_id}
+            buildingId={filters.building_id}
+            onPhase={(phase_id) => setFilters({ ...filters, phase_id, building_id: "", floor_id: "" })}
+            onBuilding={(building_id) => setFilters({ ...filters, building_id, floor_id: "" })}
+            canWriteStructure={canWriteStructure}
+            onChanged={refresh}
+            onViewUnits={(floor) => {
+              setFilters({ ...filters, building_id: floor.building_id, floor_id: floor.id });
+              setView("units");
+            }}
+          />
+        ) : null}
+
+        {view === "units" && register ? (
           <StatStrip>
             <StatStripItem label="Units" value={register.total} />
             <StatStripItem label="Available" value={register.available_count} />
@@ -253,6 +343,8 @@ export function InventoryTab({
           </StatStrip>
         ) : null}
 
+        {view === "units" ? (
+        <>
         <DataToolbar
           framed
           search={{
@@ -441,6 +533,8 @@ export function InventoryTab({
             </>
           )}
         </Card>
+        </>
+        ) : null}
       </div>
 
       {selected ? (
