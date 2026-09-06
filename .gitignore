@@ -44,3 +44,27 @@ npm-debug.log*
 .vscode/
 .DS_Store
 *.swp
+
+# ---------------------------------------------------------------------------
+# Cutover working directory — never commit real migration data
+# ---------------------------------------------------------------------------
+# Everything a cutover reads or writes locally lives here: the source extract,
+# the canonical bundle built from it, the manifest, the reject reports and the
+# evidence artifacts. All of it is the client's live commercial data — buyer
+# names, identity documents, bank references, contract values — and none of it
+# belongs in a repository, on any branch, ever.
+migration-work/
+
+# The source extract itself, wherever somebody drops it. A workbook landing in
+# the repository root and going in with `git add -A` is the realistic accident,
+# and no spreadsheet is a legitimate fixture here: the canonical bundle is CSV
+# and test data is Python.
+*.xlsx
+*.xls
+*.xlsm
+
+# NOT `*.csv`, deliberately. The canonical intake bundle is CSV, and the
+# synthetic fixture — obviously fictional people, obviously fictional projects —
+# is committed as CSV so the importer has something to be tested against.
+# Ignoring the extension would silently exclude the one form of this data that
+# is supposed to be here, and the exclusion would be discovered by its absence.

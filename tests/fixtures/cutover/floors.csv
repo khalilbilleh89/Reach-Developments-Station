@@ -1,0 +1,3 @@
+project_code,phase_code,building_code,code,label,level_number,sequence
+GALINI-BLU,P1,B1,G,Ground floor,0,1
+GALINI-BLU,P1,B1,L1,Level one,1,2

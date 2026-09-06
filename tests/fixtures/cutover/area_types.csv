@@ -1,0 +1,4 @@
+project_code,code,label,area_role,unit_of_measure,weight_factor,required_for_release,sort_order
+GALINI-BLU,NSA,Net saleable area,internal,sqm,1.000000,true,1
+GALINI-BLU,BALC,Balcony,outdoor,sqm,0.500000,false,2
+GALINI-BLU,TERR,Terrace,outdoor,sqm,0.250000,false,3

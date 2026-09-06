@@ -1,0 +1,5 @@
+project_code,phase_code,building_code,floor_code,unit_reference,unit_number,asset_class,unit_type_code,bedrooms,bathrooms,has_maid_room,is_duplex,is_penthouse,is_corner,pool_access,commercial_status,legal_status,collection_status,delivery_status,release_date,release_batch,block_reason
+GALINI-BLU,P1,B1,G,GB-P1-B1-G-01,G01,apartment,,1,1,false,false,false,true,false,available,no_spa,not_started,under_construction,2025-03-01,SAMPLE-RELEASE-1,
+GALINI-BLU,P1,B1,G,GB-P1-B1-G-02,G02,apartment,,2,2,false,false,false,false,false,available,no_spa,not_started,under_construction,2025-03-01,SAMPLE-RELEASE-1,
+GALINI-BLU,P1,B1,L1,GB-P1-B1-L1-01,101,apartment,,2,2,false,false,false,true,false,available,no_spa,not_started,under_construction,2025-03-01,SAMPLE-RELEASE-1,
+GALINI-BLU,P1,B1,L1,GB-P1-B1-L1-02,102,apartment,,3,3,true,false,false,false,false,held,no_spa,not_started,under_construction,,,Held for a sample block reason.

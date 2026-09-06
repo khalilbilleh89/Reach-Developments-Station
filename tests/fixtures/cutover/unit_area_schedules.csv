@@ -1,0 +1,5 @@
+project_code,unit_reference,revision_code,status,measurement_standard,plan_revision,source,measured_date,notes
+GALINI-BLU,GB-P1-B1-G-01,R1,approved,Sample measurement standard,PLAN-R1,Synthetic fixture,2025-02-01,
+GALINI-BLU,GB-P1-B1-G-02,R1,approved,Sample measurement standard,PLAN-R1,Synthetic fixture,2025-02-01,
+GALINI-BLU,GB-P1-B1-L1-01,R1,approved,Sample measurement standard,PLAN-R1,Synthetic fixture,2025-02-01,
+GALINI-BLU,GB-P1-B1-L1-02,R1,draft,Sample measurement standard,PLAN-R2,Synthetic fixture,2025-04-01,A draft schedule so the fixture covers both states.
