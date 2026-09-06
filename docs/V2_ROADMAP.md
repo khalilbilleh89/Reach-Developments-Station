@@ -129,7 +129,13 @@ accepted.
   A code with no configured value behind it keeps its own text verbatim.
   Nothing is dropped and nothing is guessed.
 - the downgrade reverses what it genuinely can and **raises rather than lying**
-  when a description cannot be a 64-character code — truncating, nulling or
+  in either case where it cannot. `code → label` is deterministic because
+  `code` is unique within a scope; `label → code` is not, because nothing
+  constrains `label` and two codes may legitimately read the same to a person.
+  So a label belonging to one code goes back to it, a label belonging to two
+  refuses — restoring either would rewrite a parcel's history to a
+  classification it may never have carried — and a description that matches
+  nothing and cannot be a 64-character code refuses too. Truncating, nulling or
   mapping to a catch-all would each destroy what the title document says
 - the Settings categories survive as *suggestions*: the Land form offers the
   usual phrasings through a native `<datalist>` and accepts anything, and a
