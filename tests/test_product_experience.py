@@ -38,6 +38,9 @@ DASHBOARD = FRONTEND / "components" / "dashboard"
 COMMAND_CENTRE = DASHBOARD / "ProjectCommandCenter.tsx"
 PROJECTS = FRONTEND / "components" / "projects"
 UNIT_360 = PROJECTS / "inventory" / "UnitDetailPanel.tsx"
+LAND_TAB = PROJECTS / "LandTab.tsx"
+PERMITS_TAB = PROJECTS / "PermitsTab.tsx"
+SETTINGS_SCREENS = FRONTEND / "components" / "settings"
 BACKEND_MODULES = ROOT / "app" / "modules"
 
 #: The screens PR-V2-00 upgraded as the proof of the system. The arithmetic
@@ -55,6 +58,10 @@ REPRESENTATIVE_SCREENS = (
     PROJECTS / "CollectionsTab.tsx",
     PROJECTS / "UnitEconomicsTab.tsx",
     PROJECTS / "cashflow" / "CashflowOverview.tsx",
+    # PR-V2-01 rebuilt these two on the same system, so they answer to the same
+    # guards. A parcel's purchase price and a permit's fee are redacted figures.
+    LAND_TAB,
+    PERMITS_TAB,
 )
 
 
@@ -669,3 +676,122 @@ class TestRecordsAndDialogsKeepTheirSemantics:
             assert forbidden not in package, f"frontend/package.json gained {forbidden}"
         icon = read(UI / "Icon.tsx")
         assert 'aria-hidden="true"' in icon
+
+
+# --------------------------------------------------------------------------- #
+# The Land and Permit workspace (PR-V2-01)
+# --------------------------------------------------------------------------- #
+
+
+class TestLandAndPermitsKeepTheirShape:
+    """The two decisions PR-V2-01 made, guarded where they can silently revert.
+
+    Land classification became text and permit type stayed a vocabulary. Both
+    are easy to undo by accident — a well-meaning "let's make ownership a
+    dropdown again", or a permit-type button wired to the generic Settings
+    write because it was the endpoint already to hand. Neither would fail a
+    build, and both would be discovered by an operator rather than by CI.
+    """
+
+    def test_land_classification_is_typed_rather_than_chosen(self) -> None:
+        """Given the Land form, then the three classifications are text inputs.
+
+        A ``<select>`` here is the old shape returning: it can only offer what
+        somebody configured in advance, which is what sent operators to the
+        notes field with the wording from the deed.
+        """
+        source = read(LAND_TAB)
+        for field in ("ownership_type", "title_status", "zoning"):
+            assert f'name: "{field}"' in source, f"the Land form dropped {field}"
+        for classification in ("ownership_type", "title_status", "zoning_class"):
+            assert f'category: "{classification}"' in source
+
+        # The inputs are `list=`-backed, and there is a datalist behind each.
+        assert "<datalist" in source
+        assert "list={`land-${classification.name}`}" in source
+
+    def test_the_land_form_cannot_refuse_a_classification_settings_lacks(self) -> None:
+        """Given Settings is unreachable, then the parcel still saves.
+
+        Suggestions are a convenience. The read is wrapped, its failure is
+        swallowed on purpose, and nothing gates the submit on it — a register
+        that will not record what the title office wrote because a reference
+        table is unavailable is worse than one with no suggestions at all.
+        """
+        source = read(LAND_TAB)
+        assert "settings.referenceValues()" in source
+        assert "suggestions" in source
+        for gate in ("disabled={suggestions", "suggestions.length === 0"):
+            assert gate not in source, f"the Land form gates on suggestions: {gate}"
+
+    def test_a_permit_type_is_added_through_the_project_not_through_settings(self) -> None:
+        """Given the permit workspace, then it uses the project-scoped route.
+
+        The narrow endpoint exists precisely so this button is not the generic
+        reference-value write with its permission relaxed. If the frontend
+        called ``settings.createReferenceValue`` the server would refuse the
+        Design / Engineering user anyway — and the fix somebody would reach for
+        is widening the Settings permission, which is the outcome this guards.
+        """
+        source = read(PERMITS_TAB)
+        assert "projects.createPermitType(" in source
+        assert "projects.permitTypes(" in source
+        assert "settings." not in source, "the permit workspace reaches into Settings"
+
+    def test_only_the_settings_screens_write_reference_data(self) -> None:
+        """Given any screen outside Settings, then it creates no reference value."""
+        for path in frontend_sources():
+            if path.is_relative_to(SETTINGS_SCREENS) or path.is_relative_to(FRONTEND / "lib"):
+                continue
+            assert "settings.createReferenceValue(" not in read(path), (
+                f"{path.name} writes reference data from outside Settings"
+            )
+
+    def test_the_permit_type_client_cannot_name_a_category_or_a_jurisdiction(self) -> None:
+        """Given the API client, then the request carries neither fact.
+
+        Both are the route's. The server refuses a body that names them, and
+        this keeps the browser from ever composing one — a client that sends a
+        field the server rejects is a 422 an operator has to interpret.
+        """
+        client = read(FRONTEND / "lib" / "api" / "index.ts")
+        signature = client.split("createPermitType:")[1].split("permits:")[0]
+        assert "code: string" in signature and "label: string" in signature
+        for forbidden in ("category", "country_pack_id"):
+            assert forbidden not in signature, f"the permit-type client sends {forbidden}"
+
+    def test_a_retired_permit_type_is_readable_but_not_offerable(self) -> None:
+        """Given a retired type, then it labels old permits and offers on none.
+
+        Two questions share one list. Dropping the retired rows answers *what
+        may I file today* by making *what is this 2019 permit called*
+        unanswerable; offering them answers the second by corrupting the first.
+        """
+        source = read(PERMITS_TAB)
+        assert "types.filter((type) => type.is_active)" in source
+        assert "type.is_active || type.code === permit.permit_type_code" in source
+
+    def test_both_records_open_in_the_canonical_drawer(self) -> None:
+        """Given a parcel or a permit, then it opens as a record file.
+
+        Not a bespoke panel that drifts from the system a release later.
+        """
+        for path in (LAND_TAB, PERMITS_TAB):
+            source = read(path)
+            assert "<Drawer" in source, f"{path.name} does not open a record file"
+            assert "Drawer," in source, f"{path.name} does not import the shared Drawer"
+
+    def test_neither_screen_asks_for_cost_it_may_not_read(self) -> None:
+        """Given a reader without the finance roles, then no cost is requested.
+
+        Redaction is the server's: it answers ``financials_visible`` and nulls
+        the figures. The browser's job is to not draw a column of dashes where
+        a price would be, and never to fetch a figure it intends to hide.
+        """
+        land = read(LAND_TAB)
+        assert "canSeeCost" in land
+        assert "financials_visible" in land
+        permits = read(PERMITS_TAB)
+        assert "permit.financials_visible" in permits
+        for path, source in ((LAND_TAB, land), (PERMITS_TAB, permits)):
+            assert "display: none" not in source, f"{path.name} hides a figure with CSS"

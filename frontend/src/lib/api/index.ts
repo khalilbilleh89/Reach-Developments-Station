@@ -70,6 +70,7 @@ import type {
   PlanVersionDetail,
   Permit,
   PermitRegister,
+  PermitType,
   PermitStatusEvent,
   Phase,
   PhaseAccess,
@@ -285,6 +286,27 @@ export const projects = {
       input,
     ),
 
+  /**
+   * The permit vocabulary for this project's jurisdiction.
+   *
+   * A project-scoped read rather than a generic reference-value query: the
+   * category and the country pack are the route's, so a screen cannot
+   * accidentally offer another jurisdiction's consents or another category's
+   * values.
+   */
+  permitTypes: (id: string) =>
+    get<PermitType[]>(`/projects/${id}/permit-types`),
+  /**
+   * Add a permit type without leaving the permit workspace.
+   *
+   * Three fields, and no way to name a category or a country pack: both come
+   * from the project. The server refuses a body that tries.
+   */
+  createPermitType: (
+    id: string,
+    input: { code: string; label: string; description?: string },
+  ) => post<PermitType>(`/projects/${id}/permit-types`, input),
+
   permits: (id: string, query: Record<string, string> = {}) => {
     const params = new URLSearchParams(query);
     const suffix = params.toString();
@@ -314,8 +336,13 @@ export const projects = {
       `/projects/${id}/permits/${permitId}/status-history`,
     ),
 
-  documents: (id: string) =>
-    get<DocumentReference[]>(`/projects/${id}/documents`),
+  documents: (id: string, query: Record<string, string> = {}) => {
+    const params = new URLSearchParams(query);
+    const suffix = params.toString();
+    return get<DocumentReference[]>(
+      `/projects/${id}/documents${suffix ? `?${suffix}` : ""}`,
+    );
+  },
   createDocument: (id: string, input: Record<string, unknown>) =>
     post<DocumentReference>(`/projects/${id}/documents`, input),
   updateDocument: (

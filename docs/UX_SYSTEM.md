@@ -529,6 +529,40 @@ Form
 - Validation is the server's. The message on refusal is the server's own
   words, in a `Notice` tied to the form that failed.
 
+### Suggested, chosen, or typed
+
+Three shapes, and picking the wrong one is the difference between a register
+that records the truth and one that argues with it.
+
+- **Chosen** — a `<select>` — where the value is filtered, counted or reported
+  on and a second spelling of it would corrupt the count. A permit's type is
+  chosen. Retired entries are not offered; they still render on the records
+  already filed under them.
+- **Suggested** — a text input backed by a native `<datalist>` — where the
+  value is *read*, and an outside authority decides its wording. A parcel's
+  ownership, title status and zoning are suggested: the interface offers the
+  usual phrasings and accepts what the deed actually says. The suggestion
+  never becomes a restriction, the form never gates on the suggestions
+  loading, and the record saves when the suggestion source cannot be reached.
+- **Typed** — a plain input — where there is nothing to suggest.
+
+A closed list applied to a suggested field is the most expensive mistake in
+this category: the operator picks the nearest wrong option and puts the truth
+in a notes field, and every downstream reader now has two answers.
+
+### Extending a vocabulary from where it is used
+
+When a field is *chosen* and the list is short of the entry somebody needs,
+the way to add one belongs beside the field, not in system-wide settings. The
+dialog opens over the form, the form beneath keeps everything already typed,
+the new entry is selected on success, and the person is back where they were.
+
+The endpoint behind it is narrow by construction: whatever decides *what kind
+of thing this is* and *whose jurisdiction it belongs to* comes from the route,
+never from the request, so an in-context shortcut can never widen into a
+general configuration write. A vocabulary with no entries at all says so and
+offers the same way out — never a dead empty dropdown.
+
 ---
 
 ## 13. Dialogs

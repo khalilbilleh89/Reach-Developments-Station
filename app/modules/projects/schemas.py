@@ -193,12 +193,15 @@ class _ParcelFacts(StrictRequest):
 
     title_deed_number: str | None = Field(default=None, max_length=120)
     cadastral_reference: str | None = Field(default=None, max_length=120)
-    ownership_type_code: str | None = Field(default=None, max_length=64)
+    #: Free text since PR-V2-01: the wording on the title and planning record,
+    #: not a code from a dictionary. Suggestions are offered by the interface;
+    #: nothing here refuses a value for being unfamiliar.
+    ownership_type: str | None = Field(default=None, max_length=500)
     ownership_share_fraction: OwnershipShare | None = None
     acquisition_date: date | None = None
     seller: str | None = Field(default=None, max_length=200)
-    title_status_code: str | None = Field(default=None, max_length=64)
-    zoning_class_code: str | None = Field(default=None, max_length=64)
+    title_status: str | None = Field(default=None, max_length=500)
+    zoning: str | None = Field(default=None, max_length=500)
     frontage: Measure | None = None
     road_access: str | None = Field(default=None, max_length=500)
     topography: str | None = Field(default=None, max_length=500)
@@ -324,6 +327,40 @@ class PlanningControlRead(PlanningControlWriteRequest):
 # --------------------------------------------------------------------------- #
 # Permits
 # --------------------------------------------------------------------------- #
+
+
+class PermitTypeRead(BaseModel):
+    """One permit type available to a project, as the workspace needs it.
+
+    Deliberately narrower than ``ReferenceValueRead``: this answers "what may I
+    file here, and what is it called", not "how is the system's reference data
+    configured". ``is_active`` is present because a selector must offer only
+    what may still be assigned while a historical permit must still render its
+    label.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    code: str
+    label: str
+    description: str | None
+    is_active: bool
+
+
+class PermitTypeCreateRequest(StrictRequest):
+    """The whole contract for adding a permit type from the permit workspace.
+
+    Three fields, and no way to say which category or which jurisdiction: the
+    route's project decides both. Strict, so a body naming ``category`` or
+    ``country_pack_id`` is refused rather than quietly ignored — the difference
+    matters when the field a caller is reaching for would turn this endpoint
+    into a general-purpose Settings write.
+    """
+
+    code: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
 
 
 class _PermitFacts(StrictRequest):

@@ -181,12 +181,18 @@ export interface LandParcel {
   area_unit: string;
   title_deed_number: string | null;
   cadastral_reference: string | null;
-  ownership_type_code: string | null;
+  /**
+   * How the parcel is held, where its title stands, and how it is zoned — the
+   * wording on the record rather than a configured code, since PR-V2-01. The
+   * interface suggests the usual phrasings from Settings; the server accepts
+   * whatever the title office and the planning authority actually wrote.
+   */
+  ownership_type: string | null;
   ownership_share_fraction: string | null;
   acquisition_date: string | null;
   seller: string | null;
-  title_status_code: string | null;
-  zoning_class_code: string | null;
+  title_status: string | null;
+  zoning: string | null;
   frontage: string | null;
   road_access: string | null;
   topography: string | null;
@@ -275,6 +281,21 @@ export interface Permit {
   fee_amount: string | null;
   financials_visible: boolean;
   base_currency_code: string | null;
+}
+
+/**
+ * A permit type this project may file under.
+ *
+ * The effective vocabulary for the project's jurisdiction, retired entries
+ * included: a permit granted under a type nobody issues any more still has to
+ * render its label, while a selector offers only what `is_active` allows.
+ */
+export interface PermitType {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  is_active: boolean;
 }
 
 export interface PermitRegister {

@@ -26,11 +26,8 @@ from app.modules.access.models import ROLE_SYSTEM_ADMIN, User
 from app.modules.audit.service import record_event
 from app.modules.projects.models import (
     CATEGORY_DOCUMENT_TYPE,
-    CATEGORY_OWNERSHIP_TYPE,
     CATEGORY_PERMIT_TYPE,
     CATEGORY_PROJECT_TYPE,
-    CATEGORY_TITLE_STATUS,
-    CATEGORY_ZONING_CLASS,
     PERMIT_STATUS_NOT_STARTED,
     PERMIT_STATUSES,
     PHASE_SCOPE_ALL,
@@ -43,8 +40,12 @@ from app.modules.projects.models import (
     Project,
     UserProjectAccess,
 )
-from app.modules.settings.models import CountryPack, Currency
-from app.modules.settings.service import require_active_reference_value
+from app.modules.settings.models import CountryPack, Currency, ReferenceValue
+from app.modules.settings.service import (
+    create_reference_value,
+    effective_reference_values,
+    require_active_reference_value,
+)
 
 ENTITY_PROJECT = "project"
 ENTITY_PROJECT_ACCESS = "project_access"
@@ -811,14 +812,14 @@ _PARCEL_FIELDS = (
     "cadastral_reference",
     "land_area",
     "area_unit",
-    "ownership_type_code",
+    "ownership_type",
     "ownership_share_fraction",
     "acquisition_date",
     "purchase_price",
     "acquisition_fees",
     "seller",
-    "title_status_code",
-    "zoning_class_code",
+    "title_status",
+    "zoning",
     "frontage",
     "road_access",
     "topography",
@@ -851,12 +852,16 @@ _PARCEL_CLEARABLE = frozenset(
 #: what establishes a monetary fact the currency can no longer be changed under.
 _PARCEL_MONEY_FIELDS = frozenset({"purchase_price", "acquisition_fees"})
 
-#: Reference-backed parcel codes and the category each is drawn from.
-_PARCEL_REFERENCE_FIELDS = {
-    "ownership_type_code": CATEGORY_OWNERSHIP_TYPE,
-    "title_status_code": CATEGORY_TITLE_STATUS,
-    "zoning_class_code": CATEGORY_ZONING_CLASS,
-}
+#: How this parcel is held, where its title stands, and how it is zoned.
+#:
+#: Free text since PR-V2-01. These were codes validated against the country
+#: pack, and the dictionary was the wrong shape for the fact: a title office
+#: writes "Mortgage release pending" and a planning authority writes
+#: "Residential 4-storey", and a register that can only record the wordings
+#: somebody configured in advance is a register the operator works around.
+#: Settings still carries the three categories, and the interface offers them
+#: as suggestions — but nothing here refuses a parcel for not matching one.
+_PARCEL_CLASSIFICATION_FIELDS = ("ownership_type", "title_status", "zoning")
 
 
 def list_parcels(session: Session, *, project_id: uuid.UUID) -> list[LandParcel]:
@@ -884,15 +889,22 @@ def get_parcel(session: Session, *, project_id: uuid.UUID, parcel_id: uuid.UUID)
     return parcel
 
 
-def _validate_parcel_codes(
-    session: Session, *, country_pack_id: uuid.UUID, values: dict[str, Any]
-) -> None:
-    for field, category in _PARCEL_REFERENCE_FIELDS.items():
-        code = values.get(field)
-        if code is not None:
-            require_active_reference_value(
-                session, category=category, code=code, country_pack_id=country_pack_id
-            )
+def _normalize_classifications(values: dict[str, Any]) -> dict[str, Any]:
+    """Trim the three classification facts, and read a blank one as unestablished.
+
+    Applied to these three only, because they are the ones that became free
+    text: a column that accepts anything a person types needs one answer to
+    "what does an empty box mean?", and the answer is the same as never having
+    filled it in. Storing ``""`` instead would read on screen as "not yet
+    established" while sorting, filtering and exporting as a recorded value.
+    The database refuses a blank in any case; this is what stops an ordinary
+    empty form field from becoming an integrity error.
+    """
+    for field in _PARCEL_CLASSIFICATION_FIELDS:
+        value = values.get(field)
+        if isinstance(value, str):
+            values[field] = value.strip() or None
+    return values
 
 
 def create_parcel(
@@ -906,14 +918,15 @@ def create_parcel(
     area_unit: str | None = None,
     **fields: object,
 ) -> LandParcel:
-    # The country pack decides which ownership, title and zoning codes are legal
-    # here, so read it under the project lock: a concurrent move to another
-    # jurisdiction must either land first — and be validated against — or wait
-    # behind this parcel and then be refused by the country-pack guard, which
-    # will now see a child record. There is no third outcome.
+    # The country pack still supplies this parcel's area unit, so read it under
+    # the project lock: a concurrent move to another jurisdiction must either
+    # land first — and be defaulted from — or wait behind this parcel and then
+    # be refused by the country-pack guard, which will now see a child record.
+    # There is no third outcome. PR-V2-01 removed the code validation this lock
+    # was first written for; it did not remove the jurisdiction from the parcel.
     project = lock_project(session, project.id)
 
-    _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=fields)
+    _normalize_classifications(fields)
     if area_unit is None:
         pack = session.get(CountryPack, project.country_pack_id)
         area_unit = pack.area_unit if pack is not None else "sqm"
@@ -973,7 +986,7 @@ def update_parcel(
     if not _PARCEL_MONEY_FIELDS.isdisjoint(updates):
         project = lock_project(session, project.id)
 
-    _validate_parcel_codes(session, country_pack_id=project.country_pack_id, values=dict(updates))
+    _normalize_classifications(updates)
     if "plot_number" in updates and updates["plot_number"] != parcel.plot_number:
         clash = session.scalars(
             select(LandParcel).where(
@@ -1103,6 +1116,79 @@ def write_planning_control(
     session.commit()
     session.refresh(control)
     return control
+
+
+# --------------------------------------------------------------------------- #
+# Permit types
+#
+# Permit type stays a controlled vocabulary while land classification became
+# free text, and the difference is not inconsistency. A parcel's zoning is read
+# by a person; a permit's type is filtered, counted and reported on. Left open,
+# one authority's building consent becomes "Building Permit", "building
+# permit", "Building Licence" and "BLDG" inside a month, and the register can
+# no longer answer how many building permits are outstanding.
+#
+# What PR-V2-01 removes is the detour, not the vocabulary: a project team had to
+# leave the permit they were creating, open system-wide Settings, understand
+# reference categories, add a row and come back. These two functions let the
+# permit workspace read and extend the vocabulary *for its own project*, with
+# the category and the jurisdiction supplied by the route rather than by the
+# caller. Creation is still the Settings service's: normalisation, uniqueness
+# and the audit event stay in one place.
+# --------------------------------------------------------------------------- #
+
+
+def list_permit_types(session: Session, *, project: Project) -> list[ReferenceValue]:
+    """The permit types usable on this project, retired ones included.
+
+    Retired types are returned so a permit granted years ago under a type
+    nobody issues any more still renders its label instead of a bare code. Each
+    row carries ``is_active``; offering only the active ones is the selector's
+    job, and rewriting an old permit to a current type is nobody's.
+    """
+    return effective_reference_values(
+        session,
+        category=CATEGORY_PERMIT_TYPE,
+        country_pack_id=project.country_pack_id,
+    )
+
+
+def create_permit_type(
+    session: Session,
+    *,
+    project: Project,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    code: str,
+    label: str,
+    description: str | None = None,
+) -> ReferenceValue:
+    """Add a permit type to this project's jurisdiction.
+
+    The two facts that decide what this row *is* — its category and the country
+    pack it belongs to — are taken from the route's project and never from the
+    request. That is the whole security argument for this endpoint existing: it
+    hands a project team the one addition they need without handing them the
+    generic Settings write, which would also create tax rules, document types
+    and global values.
+
+    A duplicate code is a conflict rather than a silently suffixed
+    ``BUILDING_2``: an identifier the operator did not choose is one they will
+    not recognise in a register later.
+    """
+    return create_reference_value(
+        session,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        country_pack_id=project.country_pack_id,
+        category=CATEGORY_PERMIT_TYPE,
+        code=code,
+        label=label,
+        description=description,
+        sort_order=0,
+        valid_from=None,
+        valid_to=None,
+    )
 
 
 # --------------------------------------------------------------------------- #

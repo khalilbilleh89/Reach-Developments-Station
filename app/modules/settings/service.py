@@ -616,6 +616,53 @@ def require_active_reference_value(
     return value
 
 
+def effective_reference_values(
+    session: Session,
+    *,
+    category: str,
+    country_pack_id: uuid.UUID | None,
+) -> list[ReferenceValue]:
+    """Every value of ``category`` that applies in one jurisdiction.
+
+    The list form of :func:`require_active_reference_value`, and it exists so
+    the precedence rule is written once: a country-scoped value shadows a global
+    one of the same code. A screen that assembled the two lists itself would
+    eventually offer both, and the operator would pick the one the validator
+    then refuses.
+
+    Inactive values are included, carrying their own ``is_active``. A record
+    created under a value that has since been retired still has to render its
+    label, and a selector still has to offer only what may be assigned today —
+    two different questions, and dropping the retired rows here would answer
+    the second by making the first impossible.
+    """
+    normalized = category.strip()
+    scoped = (
+        list(
+            session.scalars(
+                select(ReferenceValue).where(
+                    ReferenceValue.country_pack_id == country_pack_id,
+                    ReferenceValue.category == normalized,
+                )
+            )
+        )
+        if country_pack_id is not None
+        else []
+    )
+    shadowed = {value.code for value in scoped}
+    globals_ = [
+        value
+        for value in session.scalars(
+            select(ReferenceValue).where(
+                ReferenceValue.country_pack_id.is_(None),
+                ReferenceValue.category == normalized,
+            )
+        )
+        if value.code not in shadowed
+    ]
+    return sorted(scoped + globals_, key=lambda value: (value.sort_order, value.code))
+
+
 def create_reference_value(
     session: Session,
     *,

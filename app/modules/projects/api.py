@@ -43,6 +43,8 @@ from app.modules.projects.schemas import (
     PermitRegister,
     PermitStatusEventRead,
     PermitTransitionRequest,
+    PermitTypeCreateRequest,
+    PermitTypeRead,
     PermitUpdateRequest,
     PlanningControlRead,
     PlanningControlWriteRequest,
@@ -413,6 +415,57 @@ def write_planning_controls(
         values=payload.model_dump(),
     )
     return PlanningControlRead.model_validate(control)
+
+
+# --------------------------------------------------------------------------- #
+# Permit types
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/{project_id}/permit-types",
+    response_model=list[PermitTypeRead],
+    summary="Permit types available to this project",
+)
+def list_permit_types(
+    project: AccessibleProject, session: DbSession, _actor: ActiveActor
+) -> list[PermitTypeRead]:
+    return [
+        PermitTypeRead.model_validate(value)
+        for value in service.list_permit_types(session, project=project)
+    ]
+
+
+@router.post(
+    "/{project_id}/permit-types",
+    response_model=PermitTypeRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a permit type to this project's jurisdiction",
+)
+def create_permit_type(
+    payload: PermitTypeCreateRequest,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> PermitTypeRead:
+    """Extend the permit vocabulary without leaving the permit workspace.
+
+    Gated on the technical writer, which is the role already trusted with
+    permits and planning controls — not on the System Administrator that the
+    generic Settings write requires. A project team can add the consent their
+    authority asks for; they still cannot touch tax rules or global
+    configuration, because this route can only ever write one category into one
+    country pack.
+    """
+    require_technical_writer(actor)
+    value = service.create_permit_type(
+        session,
+        project=project,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        **payload.model_dump(),
+    )
+    return PermitTypeRead.model_validate(value)
 
 
 # --------------------------------------------------------------------------- #

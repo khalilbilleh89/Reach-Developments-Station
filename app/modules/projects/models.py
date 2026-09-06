@@ -82,8 +82,18 @@ PERMIT_STATUSES = (
 PERMIT_STATUS_NOT_STARTED = "not_started"
 PERMIT_STATUS_SUBMITTED = "submitted"
 
-#: Reference-value categories this module validates against Settings. Listed
-#: here so the module never invents a category string inline.
+#: Reference-value categories this module names against Settings. Listed here so
+#: the module never invents a category string inline.
+#:
+#: Two kinds live in this list since PR-V2-01, and the difference matters.
+#: ``project_type``, ``permit_type`` and ``document_type`` are *validated*: a
+#: record carrying one of them is refused unless the value is configured, because
+#: a register that cannot reliably tell a Building Permit from a Planning
+#: Approval cannot be filtered or reported on. ``ownership_type``,
+#: ``title_status`` and ``zoning_class`` are *suggested*: a parcel stores the
+#: wording on its own title and planning record as text, and these categories
+#: survive only so a screen can offer what the jurisdiction usually says.
+#: Nothing refuses a parcel for not matching them.
 CATEGORY_PROJECT_TYPE = "project_type"
 CATEGORY_OWNERSHIP_TYPE = "ownership_type"
 CATEGORY_TITLE_STATUS = "title_status"
@@ -239,15 +249,24 @@ class LandParcel(Base):
     #: Defaults from the country pack; overridable where the legal record
     #: genuinely uses the other supported unit. Nothing converts between them.
     area_unit: Mapped[str] = mapped_column(String(8), nullable=False)
-    ownership_type_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Free text since PR-V2-01. Ownership wording is a jurisdiction and deal
+    #: fact — "Freehold", "75% acquired, balance under negotiation" — and a
+    #: closed dictionary made the register refuse the truth on the deed.
+    ownership_type: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ownership_share_fraction: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
     acquisition_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     #: Denominated in the owning project's base currency.
     purchase_price: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     acquisition_fees: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     seller: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    title_status_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    zoning_class_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Free text, as ownership is. A title office says "Transfer pending" or
+    #: "Mortgage release pending" in its own words, and the register records
+    #: what it said.
+    title_status: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: The authority's classification *as issued* — "Residential B",
+    #: "Special development zone". Not the planning envelope: that is
+    #: :class:`PlanningControl`, and conflating the two loses both.
+    zoning: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Physical facts. Management records, not engineering analysis.
     frontage: Mapped[Decimal | None] = mapped_column(MEASURE, nullable=True)
@@ -294,6 +313,18 @@ class LandParcel(Base):
             "acquisition_fees IS NULL OR acquisition_fees >= 0", name="fees_non_negative"
         ),
         CheckConstraint("frontage IS NULL OR frontage >= 0", name="frontage_non_negative"),
+        # A classification is either recorded or not yet established. An empty
+        # string is neither, and it reads on screen as the second while
+        # sorting, filtering and exporting as the first.
+        CheckConstraint(
+            "ownership_type IS NULL OR length(btrim(ownership_type)) > 0",
+            name="ownership_type_not_blank",
+        ),
+        CheckConstraint(
+            "title_status IS NULL OR length(btrim(title_status)) > 0",
+            name="title_status_not_blank",
+        ),
+        CheckConstraint("zoning IS NULL OR length(btrim(zoning)) > 0", name="zoning_not_blank"),
     )
 
 

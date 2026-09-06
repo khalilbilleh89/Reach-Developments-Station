@@ -135,33 +135,171 @@ def test_negative_acquisition_money_is_rejected(
     assert response.status_code == 422
 
 
-def test_an_unconfigured_land_code_is_rejected(admin_client: TestClient, project_id: str) -> None:
-    """Given a title status nobody configured, then the parcel is refused.
+class TestClassificationIsTheWordingOnTheRecord:
+    """Ownership, title status and zoning are text, not a configured code.
 
-    Jurisdictional legal categories belong to country configuration, not to a
-    list hardcoded in Python.
+    They were reference codes validated against the project's country pack
+    until PR-V2-01, and the dictionary was the wrong shape for the fact: a
+    title office writes "Mortgage release pending" and a planning authority
+    issues "Residential 4-storey". A register that can only hold the wordings
+    somebody configured in advance is one the operator works around, and the
+    truth ends up in a notes field.
+
+    Permit type stayed a controlled vocabulary, and the difference is the
+    point: a permit's type is filtered and counted, a parcel's zoning is read.
     """
-    response = admin_client.post(
-        f"{PROJECTS}/{project_id}/parcels", json=parcel_payload(title_status_code="MADE_UP")
+
+    @pytest.mark.parametrize(
+        ("field", "wording"),
+        [
+            ("ownership_type", "75% acquired \u2014 balance under negotiation"),
+            ("title_status", "Mortgage release pending"),
+            ("zoning", "Residential / mixed use, 4 storeys"),
+        ],
     )
+    def test_a_wording_nobody_configured_is_recorded_as_given(
+        self, admin_client: TestClient, project_id: str, field: str, wording: str
+    ) -> None:
+        """Given wording matching no reference value, then it is stored verbatim."""
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload(**{field: wording})
+        )
 
-    assert response.status_code == 422
-    assert "title_status" in response.json()["detail"]
+        assert response.status_code == 201, response.text
+        assert response.json()[field] == wording
 
+    def test_the_reference_categories_are_not_consulted(
+        self, admin_client: TestClient, project_id: str, db: Session
+    ) -> None:
+        """Given every land reference value is retired, then a parcel still saves.
 
-def test_a_retired_land_code_stays_on_existing_parcels(
-    admin_client: TestClient, project_id: str, country_pack_id: str
-) -> None:
-    """Given the code is retired later, then history keeps it and reads fine."""
-    created = admin_client.post(f"{PROJECTS}/{project_id}/parcels", json=parcel_payload()).json()
-    values = admin_client.get(f"{SETTINGS}/reference-values?category=title_status").json()
-    retired = next(value for value in values if value["code"] == "REGISTERED")
-    admin_client.patch(f"{SETTINGS}/reference-values/{retired['id']}", json={"is_active": False})
+        The old model would have refused all three fields here. Settings keeps
+        the categories so a screen can go on suggesting the usual wordings, but
+        a suggestion that can refuse a parcel is not a suggestion.
+        """
+        for category in ("ownership_type", "title_status", "zoning_class"):
+            for value in admin_client.get(
+                f"{SETTINGS}/reference-values?category={category}"
+            ).json():
+                admin_client.patch(
+                    f"{SETTINGS}/reference-values/{value['id']}", json={"is_active": False}
+                )
 
-    read = admin_client.get(f"{PROJECTS}/{project_id}/parcels/{created['id']}")
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels",
+            json=parcel_payload(
+                ownership_type="Government allocation",
+                title_status="Under consolidation",
+                zoning="Special development zone",
+            ),
+        )
 
-    assert read.status_code == 200
-    assert read.json()["title_status_code"] == "REGISTERED"
+        assert response.status_code == 201, response.text
+        stored = db.scalars(select(LandParcel).where(LandParcel.id == response.json()["id"])).one()
+        assert stored.zoning == "Special development zone"
+
+    def test_surrounding_whitespace_is_not_part_of_the_classification(
+        self, admin_client: TestClient, project_id: str
+    ) -> None:
+        """Given padded wording, then it is stored trimmed.
+
+        Two parcels typed a day apart would otherwise be "Freehold" and
+        "Freehold ", which sort apart and filter apart while reading the same.
+        """
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels",
+            json=parcel_payload(ownership_type="  Long leasehold  "),
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["ownership_type"] == "Long leasehold"
+
+    def test_an_empty_box_means_not_yet_established(
+        self, admin_client: TestClient, project_id: str
+    ) -> None:
+        """Given a blank classification, then it is stored as absent.
+
+        A stored ``""`` reads on screen as "not recorded" while sorting,
+        filtering and exporting as a recorded value. One of those has to win,
+        and it is the one the operator meant.
+        """
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload(title_status="   ")
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["title_status"] is None
+
+    def test_a_classification_can_be_cleared_after_the_fact(
+        self, admin_client: TestClient, project_id: str
+    ) -> None:
+        """Given an explicit null, then the recorded wording goes away."""
+        created = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload()
+        ).json()
+
+        response = admin_client.patch(
+            f"{PROJECTS}/{project_id}/parcels/{created['id']}", json={"zoning": None}
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["zoning"] is None
+
+    def test_a_description_longer_than_the_column_is_refused(
+        self, admin_client: TestClient, project_id: str
+    ) -> None:
+        """Given 501 characters, then it is refused rather than truncated.
+
+        Flexible is not unbounded: a bounded column is what keeps this a
+        classification rather than a second notes field, and silently storing
+        the first 500 characters of a planning description is worse than
+        saying no.
+        """
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload(zoning="z" * 501)
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize(
+        "field", ["ownership_type_code", "title_status_code", "zoning_class_code"]
+    )
+    def test_the_retired_code_field_is_refused_rather_than_ignored(
+        self, admin_client: TestClient, project_id: str, field: str
+    ) -> None:
+        """Given the pre-V2 field name, then the request is refused.
+
+        There is one truth per classification and this is what keeps it that
+        way. Accepting the old name beside the new one — or ignoring it — is
+        how a caller ends up believing it set a value that was dropped.
+        """
+        response = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload(**{field: "FREEHOLD"})
+        )
+
+        assert response.status_code == 422
+
+    def test_the_audit_trail_carries_the_classification_that_changed(
+        self, admin_client: TestClient, project_id: str, db: Session
+    ) -> None:
+        """Given a re-zoning, then before and after both name it."""
+        created = admin_client.post(
+            f"{PROJECTS}/{project_id}/parcels", json=parcel_payload()
+        ).json()
+
+        admin_client.patch(
+            f"{PROJECTS}/{project_id}/parcels/{created['id']}",
+            json={"zoning": "Residential C, following the 2026 plan"},
+        )
+
+        event = db.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.action == "land_parcel.updated")
+            .order_by(AuditEvent.occurred_at.desc())
+        ).first()
+        assert event is not None
+        assert event.before_data["zoning"] == "Residential B"
+        assert event.after_data["zoning"] == "Residential C, following the 2026 plan"
 
 
 def test_the_area_unit_may_be_overridden_where_the_record_uses_the_other(
