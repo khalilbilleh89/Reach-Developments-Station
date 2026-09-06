@@ -39,6 +39,8 @@ import { statusLabel, statusTone } from "@/components/projects/inventory/statusL
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
+import { ReservationForm } from "@/components/projects/sales/ReservationForm";
+import { DealFile } from "@/components/projects/sales/DealFile";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import { UnitHistory } from "@/components/projects/inventory/unit/UnitHistory";
@@ -103,6 +105,8 @@ export function UnitDetailPanel({
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const [reserving, setReserving] = useState(false);
+  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null } | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [schedules, setSchedules] = useState<AreaSchedule[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
@@ -186,13 +190,15 @@ export function UnitDetailPanel({
         const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
         const live = contracts.find((entry) =>
           ["signature_pending", "active", "termination_pending"].includes(entry.status),
-        );
+        ) ?? contracts.find((entry) => entry.status === "draft");
         sale = live ? await sales.contract(projectId, live.id) : null;
         setCommitmentAnswer({
           status: "ready",
           data: {
             reservation:
-              reservations.find((entry) => ["active", "extended", "converted"].includes(entry.status)) ?? null,
+              reservations.find((entry) => entry.id === sale?.sale.reservation_id) ??
+              reservations.find((entry) => ["active", "extended"].includes(entry.status)) ??
+              reservations.find((entry) => ["draft", "deposit_pending"].includes(entry.status)) ?? null,
             sale,
           },
         });
@@ -201,7 +207,7 @@ export function UnitDetailPanel({
         setCollection({ status: "off" });
         return;
       }
-      if (seesCollections && sale) {
+      if (seesCollections && sale && sale.sale.status !== "draft") {
         setCollection({ status: "loading" });
         try {
           setCollection({ status: "ready", data: await collections.account(projectId, sale.sale.id) });
@@ -298,11 +304,15 @@ export function UnitDetailPanel({
     );
   }
 
+  if (deal) return <DealFile projectId={projectId} reservationId={deal.reservationId} saleId={deal.saleId}
+    roles={roles} unitReference={unit.unit_reference} onClose={() => { setDeal(null); void load(); }}
+    onChanged={async () => { await load(); await onChanged(); }} />;
+
   const editableValues = values.filter((value) => value.is_editable);
   const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;
   const price = unitPricing?.active_price ?? null;
   const priceCode = currencyCodeOf(price?.currency_id);
-  const hasSale = commitmentAnswer.status === "ready" && commitmentAnswer.data.sale !== null;
+  const hasSale = commitmentAnswer.status === "ready" && commitmentAnswer.data.sale !== null && commitmentAnswer.data.sale.sale.status !== "draft";
   const liveSale = commitmentAnswer.status === "ready" ? commitmentAnswer.data.sale?.sale : null;
 
   const sections = [
@@ -409,7 +419,9 @@ export function UnitDetailPanel({
         .join(" · ")}
       headline={headline}
       actions={
-        canWriteStructure ? (
+        <>
+        {seesSales ? <Button variant="primary" onClick={() => setSection("commercial")}>Buyer, reservation & sale</Button> : null}
+        {canWriteStructure ? (
           <Button
             onClick={() => {
               setSection("detail");
@@ -418,7 +430,8 @@ export function UnitDetailPanel({
           >
             Edit unit
           </Button>
-        ) : undefined
+        ) : null}
+        </>
       }
       meta={
         <>
@@ -569,7 +582,18 @@ export function UnitDetailPanel({
       ) : null}
 
       {activeSection === "commercial" ? (
-        <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} />
+        <>
+          {commitmentAnswer.status === "ready" ? (
+            commitmentAnswer.data.reservation || commitmentAnswer.data.sale ? (
+              <Button variant="primary" onClick={() => setDeal({ reservationId: commitmentAnswer.data.reservation?.id ?? null, saleId: commitmentAnswer.data.sale?.sale.id ?? null })}>Manage buyer, reservation & sale</Button>
+            ) : (roles.has("sales_operations") || roles.has("sales_advisor")) && unit.commercial_status === "available" ? (
+              reserving ? <ReservationForm key={unitId} projectId={projectId} unitId={unitId} currencyId={price?.currency_id ?? null}
+                onCancel={() => setReserving(false)} onCreated={(reservationId) => { setReserving(false); setDeal({ reservationId, saleId: null }); void load(); void onChanged(); }} />
+                : <Button variant="primary" onClick={() => setReserving(true)}>Add buyer & reserve</Button>
+            ) : null
+          ) : null}
+          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} /> : null}
+        </>
       ) : null}
 
       {activeSection === "collections" ? <UnitCollections answer={collection} /> : null}

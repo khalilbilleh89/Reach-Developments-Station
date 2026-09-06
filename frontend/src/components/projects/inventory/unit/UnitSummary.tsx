@@ -154,7 +154,7 @@ export function UnitSummary({
           <SectionHeader
             title="Commitment"
             actions={
-              commitment.status === "ready" && (commitment.data.reservation || commitment.data.sale) ? (
+              commitment.status === "ready" ? (
                 <Button small onClick={() => onOpenTab("commercial")}>
                   Sale and legal
                 </Button>

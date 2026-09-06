@@ -448,7 +448,7 @@ class TestOnlyEntitledReadersAsk:
         assert re.search(
             r"if \(!seesListPrice\) \{\s*setPricingAnswer\(\{ status: \"off\" \}\);\s*return;", unit
         )
-        assert "if (seesCollections && sale)" in unit
+        assert 'if (seesCollections && sale && sale.sale.status !== "draft")' in unit
 
     def test_the_unit_headline_price_exists_only_when_pricing_was_answered(self) -> None:
         """The large price in the record header is drawn from the pricing answer alone.

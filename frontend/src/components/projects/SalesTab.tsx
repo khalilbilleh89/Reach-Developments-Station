@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory, sales } from "@/lib/api";
-import type { Phase, SalesClient, SalesPolicy, SalesRegister } from "@/lib/api";
+import type { Phase, SalesPolicy, SalesRegister } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
@@ -14,15 +14,12 @@ import {
   DataToolbar,
   IdentityCell,
   EmptyState,
-  Field,
-  FieldRow,
   FormActions,
   Loading,
   Position,
   PositionFigure,
   PositionSupport,
   PositionSupportItem,
-  MoneyInput,
   Notice,
   PageHeader,
   StatusDot,
@@ -30,6 +27,7 @@ import {
   ToolbarFilter,
 } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { ReservationForm } from "@/components/projects/sales/ReservationForm";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { DealFile } from "@/components/projects/sales/DealFile";
 import {
@@ -110,13 +108,6 @@ export function SalesTab({
   // it starts here: the register is where somebody is looking when they decide
   // to take a unit off the market.
   const [reserving, setReserving] = useState<{ unitId: string; reference: string; currencyId: string | null } | null>(null);
-  const [buyers, setBuyers] = useState<SalesClient[]>([]);
-  const [reservation, setReservation] = useState({
-    client_id: "",
-    sales_channel_code: "",
-    sales_branch_code: "",
-    deposit_required_amount: "",
-  });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,13 +130,6 @@ export function SalesTab({
       setRegister(rows);
       setPhases(phaseList);
       setPolicy(policyRow);
-      // Allowed to fail quietly: a reader who may see the register is not
-      // always entitled to the buyer list, and that should not blank the page.
-      try {
-        setBuyers(await sales.clients(projectId, { is_active: "true" }));
-      } catch {
-        setBuyers([]);
-      }
       setError(null);
     } catch (caught) {
       setRegister(null);
@@ -311,76 +295,16 @@ export function SalesTab({
             description="Creating a reservation holds nothing. The unit stays on the market until the reservation is activated."
             actions={<Button variant="quiet" onClick={() => setReserving(null)}>Cancel</Button>}
           >
-            <form
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setBusy(true);
-                setError(null);
-                try {
-                  const created = await sales.createReservation(projectId, {
-                    unit_id: reserving.unitId,
-                    client_id: reservation.client_id,
-                    ...(reservation.sales_channel_code ? { sales_channel_code: reservation.sales_channel_code } : {}),
-                    ...(reservation.sales_branch_code ? { sales_branch_code: reservation.sales_branch_code } : {}),
-                    ...(reservation.deposit_required_amount
-                      ? { deposit_required_amount: reservation.deposit_required_amount }
-                      : {}),
-                  });
-                  setReserving(null);
-                  setNotice(`${created.reservation.reservation_number} prepared at the unit's live price.`);
-                  setDeal({ reservationId: created.reservation.id, saleId: null, unitReference: null });
-                  await load();
-                } catch (caught) {
-                  setError(caught instanceof ApiError ? caught.message : "Could not open the reservation.");
-                } finally {
-                  setBusy(false);
-                }
+            <ReservationForm
+              key={reserving.unitId}
+              projectId={projectId} unitId={reserving.unitId} currencyId={reserving.currencyId}
+              onCancel={() => setReserving(null)}
+              onCreated={(reservationId) => {
+                setDeal({ reservationId, saleId: null, unitReference: reserving.reference });
+                setReserving(null);
+                void load();
               }}
-            >
-              <FieldRow columns={4}>
-                <Field label="Buyer">
-                  <select
-                    className="input"
-                    required
-                    value={reservation.client_id}
-                    onChange={(event) => setReservation({ ...reservation, client_id: event.target.value })}
-                  >
-                    <option value="">Choose a buyer</option>
-                    {buyers.map((buyer) => (
-                      <option key={buyer.id} value={buyer.id}>
-                        {buyer.client_number} · {buyer.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Sales channel" optional>
-                  <input
-                    className="input"
-                    value={reservation.sales_channel_code}
-                    onChange={(event) => setReservation({ ...reservation, sales_channel_code: event.target.value })}
-                  />
-                </Field>
-                <Field label="Sales branch" optional>
-                  <input
-                    className="input"
-                    value={reservation.sales_branch_code}
-                    onChange={(event) => setReservation({ ...reservation, sales_branch_code: event.target.value })}
-                  />
-                </Field>
-                <Field label="Deposit required" optional hint="The gate amount. Evidence against it is not a receipt.">
-                  <MoneyInput
-                    code={currencyCodeOf(reserving.currencyId)}
-                    value={reservation.deposit_required_amount}
-                    onChange={(value) => setReservation({ ...reservation, deposit_required_amount: value })}
-                  />
-                </Field>
-              </FieldRow>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  Open reservation
-                </Button>
-              </FormActions>
-            </form>
+            />
           </Card>
         ) : null}
 

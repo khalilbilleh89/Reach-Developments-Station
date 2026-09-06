@@ -10,7 +10,7 @@ five grouped pull requests, each on its own short-lived branch.
 | Total planned MVP 2 PRs      |     8 |
 | Merged PRs                  |     3 |
 | Remaining PRs (including current) | 5 |
-| Current milestones          | PR-V2-03 + PR-V2-04 |
+| Current milestones          | PR-V2-03 + PR-V2-04 in review; PR-V2-05 + PR-V2-06 in development |
 
 ## Five remaining delivery batches
 
@@ -279,6 +279,9 @@ One production dependency: `openpyxl`. No database migration.
 
 ## PR-V2-05 — Buyer → Reserve → Sell
 
+Batch 2 implementation: [Buyer and legal workspace](V2_BUYER_LEGAL_WORKSPACE.md).
+Developed on batch 1 while #259 completes CI; merge order remains unchanged.
+
 - add buyer
 - reservation and reservation status
 - conversion to sale / SPA
@@ -337,6 +340,6 @@ One production dependency: `openpyxl`. No database migration.
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
 | Complete               | 3 / 12 original milestones; 3 merged PRs       |
-| Current                | Batch 1 — Unit Master & Commercial Unit 360    |
+| Current                | Batch 1 in review; batch 2 in development      |
 | Remaining              | 9 original milestones in 5 grouped PRs         |
 | Next after current     | Batch 2 — Buyer, Reservation, Sale, SPA & Registry |

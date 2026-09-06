@@ -147,6 +147,9 @@ class ClientCreateRequest(StrictRequest):
     """``client_number`` is absent: the server issues it under the project lock."""
 
     display_name: Name
+    sole_purchaser_name: (
+        Annotated[str, Field(min_length=1, max_length=200, pattern=r"\S")] | None
+    ) = None
     email: Annotated[str, Field(max_length=320)] | None = None
     phone: Annotated[str, Field(max_length=64)] | None = None
     address: Annotated[str, Field(max_length=500)] | None = None
