@@ -69,6 +69,7 @@ import { varianceNote, varianceTone } from "@/components/projects/construction/l
 import { AttentionPanel } from "./AttentionPanel";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectPlate } from "./ProjectPlate";
+import { ManagementReports } from "./ManagementReports";
 
 /**
  * The project's front page: a developer's command centre.
@@ -177,7 +178,7 @@ export function ProjectCommandCenter({
       tone: "warning",
       section: "permits",
     },
-    ...(prices.status === "ready" && prices.data.configuration
+    ...(prices.status === "ready"
       ? [
           {
             key: "repricing",
@@ -345,6 +346,7 @@ export function ProjectCommandCenter({
       />
 
       <div className="stack">
+        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
         {!operational ? (
           <Notice tone="info">
             This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -562,17 +564,16 @@ export function ProjectCommandCenter({
                           }
                         />
                         {data.configuration === null ? (
-                          <EmptyState
-                            compact
-                            icon="pricing"
-                            title="No active pricing configuration"
-                            hint="Until a configuration is approved and activated, no unit in this project can be priced."
-                            actions={
-                              <Button small onClick={() => onNavigate("pricing")}>
-                                Open pricing
-                              </Button>
-                            }
-                          />
+                          <>
+                            <MetricGroup compact>
+                              <Metric label="Priced" value={data.units_priced} size="sm" />
+                              <Metric label="Not priced" value={data.units_not_priced} size="sm" />
+                              <Metric label="Need repricing" value={data.units_repricing_required} size="sm"
+                                tone={data.units_repricing_required > 0 ? "danger" : "neutral"} />
+                            </MetricGroup>
+                            <p className="footnote">Selling prices can be entered inside each unit and submitted for separate approval.</p>
+                            <Button small onClick={() => onNavigate("inventory")}>Open units</Button>
+                          </>
                         ) : (
                           <MetricGroup compact>
                             <Metric

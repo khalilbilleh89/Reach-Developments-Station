@@ -203,6 +203,7 @@ function Management({
                           <button
                             type="button"
                             className="button-link"
+                            aria-label={`View transactions for ${metric.label}`}
                             onClick={() => onOpenSource(metric.drilldown_source_type as string)}
                           >
                             Transactions

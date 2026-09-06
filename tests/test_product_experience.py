@@ -967,3 +967,25 @@ class TestInventoryShowsTheObjectsItNames:
 
         assert "report?.structure.records" in source
         assert "report.create_count" in source
+
+
+class TestV2Management:
+    def test_direct_price_exceptions_do_not_require_a_policy(self) -> None:
+        source = read(COMMAND_CENTRE)
+        assert 'prices.status === "ready" && prices.data.configuration' not in source
+        assert "no unit in this project can be priced" not in source
+        assert "value={data.units_priced}" in source
+
+    def test_failed_sources_have_a_distinct_attention_empty_state(self) -> None:
+        source = read(DASHBOARD / "AttentionPanel.tsx")
+        assert "!flagged && problems.length > 0" in source
+        assert "Attention checks are incomplete" in source
+        assert "aria-label={`Open ${item.title}`}" in source
+
+    def test_reports_reuse_navigation_and_fetch_nothing(self) -> None:
+        source = read(DASHBOARD / "ManagementReports.tsx")
+        assert "visibleNavigation(PROJECT_NAVIGATION, roles)" in source
+        assert "allowed.has(report.section)" in source
+        assert "fetch(" not in source
+        assert "useAnswer(" not in source
+        assert "Historical reports state their own as-of dates" in source

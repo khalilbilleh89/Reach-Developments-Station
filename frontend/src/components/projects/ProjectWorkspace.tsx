@@ -261,7 +261,9 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
-          <ProjectStages projectId={projectId} roles={roles} />
+          <details><summary>Project construction stage configuration</summary>
+            <ProjectStages projectId={projectId} roles={roles} />
+          </details>
         </>
       );
     }
