@@ -769,6 +769,8 @@ def read_unit_pricing(
     active = service.active_price(session, unit_id=unit.id)
     history = service.list_price_versions(session, unit_id=unit.id, internal=internal)
     return UnitPricingRead(
+        direct_price_currency_id=project.base_currency_id,
+        **service.gross_price_presentation(session, unit=unit, active=active),
         unit_id=unit.id,
         unit_reference=unit.unit_reference,
         unit_type_code=unit.unit_type_code,

@@ -52,6 +52,7 @@ function overridden(component: PriceComponent): boolean {
  * a plain currency amount would misstate what it is. A factor is a multiplier.
  */
 function basisOf(component: PriceComponent): string {
+  if (component.component_type === "manual_override" && component.code === "SELLING_PRICE") return "Direct entry";
   const parts: string[] = [TYPE_LABELS[component.component_type] ?? component.component_type];
   if (component.quantity !== null) {
     parts.push(`${component.quantity}${component.unit_of_measure ? ` ${component.unit_of_measure}` : ""}`);

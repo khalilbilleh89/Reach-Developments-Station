@@ -17,6 +17,8 @@ import {
   TableScroll,
 } from "@/components/ui";
 
+import { PHYSICAL_COMPONENTS } from "@/components/projects/inventory/unit/PhysicalRecord";
+
 const ROLES = ["internal", "outdoor", "ancillary", "plot", "gross", "other"];
 
 /**
@@ -37,6 +39,7 @@ export function AreaTypesPanel({
   onChanged: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
+    physical_component: "",
     code: "",
     label: "",
     area_role: "outdoor",
@@ -51,8 +54,9 @@ export function AreaTypesPanel({
     setBusy(true);
     setError(null);
     try {
-      await inventory.createAreaType(projectId, form);
+      await inventory.createAreaType(projectId, { ...form, physical_component: form.physical_component || null });
       setForm({
+        physical_component: "",
         code: "",
         label: "",
         area_role: "outdoor",
@@ -93,6 +97,7 @@ export function AreaTypesPanel({
               <th scope="col">Code</th>
               <th scope="col">Label</th>
               <th scope="col">Role</th>
+              <th scope="col">Gross component</th>
               <th scope="col">Unit</th>
               <th scope="col" className="num">
                 Factor
@@ -118,6 +123,12 @@ export function AreaTypesPanel({
                     areaType.area_role
                   )}
                 </td>
+                <td><select className="input" aria-label={`Gross component for ${areaType.label}`}
+                  value={areaType.physical_component ?? ""}
+                  onChange={event => void toggle(areaType, { physical_component: event.target.value || null })}>
+                  <option value="">Not mapped</option>
+                  {PHYSICAL_COMPONENTS.filter(([key]) => areaType.area_role === "internal" ? key === "internal" : areaType.area_role === "outdoor" && key !== "internal").map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select></td>
                 <td>{areaType.unit_of_measure}</td>
                 <td className="num">{areaType.weight_factor}</td>
                 <td>
@@ -180,13 +191,19 @@ export function AreaTypesPanel({
               <select
                 className="input"
                 value={form.area_role}
-                onChange={(event) => setForm({ ...form, area_role: event.target.value })}
+                onChange={(event) => setForm({ ...form, area_role: event.target.value, physical_component: event.target.value === "internal" ? "internal" : "" })}
               >
                 {ROLES.map((role) => (
                   <option key={role} value={role}>
                     {role}
                   </option>
                 ))}
+              </select>
+            </Field>
+            <Field label="Gross component" hint="Explicitly map the six physical areas; parking and storage stay separate.">
+              <select className="input" value={form.physical_component} onChange={event => setForm({ ...form, physical_component: event.target.value, area_role: event.target.value === "internal" ? "internal" : event.target.value ? "outdoor" : form.area_role })}>
+                <option value="">Not a gross component</option>
+                {PHYSICAL_COMPONENTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
               </select>
             </Field>
             <Field label="Weight factor" hint="A fraction of one: 0.500000 is half.">

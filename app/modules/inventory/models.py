@@ -652,6 +652,7 @@ class AreaType(Base):
     )
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
+    physical_component: Mapped[str | None] = mapped_column(String(24), nullable=True)
     area_role: Mapped[str] = mapped_column(String(32), nullable=False)
     unit_of_measure: Mapped[str] = mapped_column(String(16), nullable=False, default="sqm")
     #: An explicit fraction of one: 0.500000 means half this area counts.
@@ -675,6 +676,24 @@ class AreaType(Base):
         CheckConstraint("length(code) > 0", name="code_not_blank"),
         CheckConstraint("code = upper(code)", name="code_upper"),
         CheckConstraint(in_list("area_role", AREA_ROLES), name="role_allowed"),
+        CheckConstraint(
+            "physical_component IN ('internal', 'balcony', 'roof_garden', "
+            "'front_garden', 'terrace', 'porches')",
+            name="component_allowed",
+        ),
+        CheckConstraint(
+            "physical_component IS NULL OR (physical_component = 'internal' "
+            "AND area_role = 'internal') OR (physical_component <> 'internal' "
+            "AND area_role = 'outdoor')",
+            name="component_role",
+        ),
+        Index(
+            "uq_area_types_physical_component",
+            "project_id",
+            "physical_component",
+            unique=True,
+            postgresql_where=text("physical_component IS NOT NULL AND is_active"),
+        ),
         CheckConstraint("weight_factor >= 0 AND weight_factor <= 1", name="factor_range"),
         # At most one active internal area per project. Two would make "the legal
         # area" ambiguous, which is the one thing this table must never be.
@@ -1067,3 +1086,57 @@ class UnitCustomFieldValue(Base):
     )
 
     __table_args__ = _value_table_args("unit_custom_field_values", "unit_id")
+
+
+class UnitFeature(Base):
+    """A physical unit annotation; retired records remain auditable."""
+
+    __tablename__ = "unit_features"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["unit_id", "project_id"], ["units.id", "units.project_id"], ondelete="RESTRICT"
+        ),
+        CheckConstraint("length(trim(label)) > 0", name="label_not_blank"),
+        Index("ix_unit_features_unit_id", "unit_id"),
+    )
+
+
+class UnitDocument(Base):
+    """A physical unit annotation; retired records remain auditable."""
+
+    __tablename__ = "unit_documents"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["unit_id", "project_id"], ["units.id", "units.project_id"], ondelete="RESTRICT"
+        ),
+        CheckConstraint("length(trim(title)) > 0", name="label_not_blank"),
+        Index("ix_unit_documents_unit_id", "unit_id"),
+    )

@@ -1348,11 +1348,11 @@ def create_reservation(
     active = pricing_service.active_price(session, unit_id=unit.id)
     if active is None:
         raise ConflictError("This unit has no active price to reserve against.")
-    configuration = pricing_service.get_configuration(
-        session, project_id=project.id, configuration_id=active.pricing_configuration_id
+    configuration = pricing_service.configuration_for_price(
+        session, project_id=project.id, version=active
     )
-    expiry_days = configuration.reservation_expiry_days
-    lock_days = configuration.price_lock_days
+    expiry_days = configuration.reservation_expiry_days if configuration else None
+    lock_days = configuration.price_lock_days if configuration else None
     if expires_on is None:
         if expiry_days is None:
             raise ValidationError(
@@ -2396,6 +2396,7 @@ def requote_reservation(
     reservation_id: uuid.UUID,
     actor: ActorContext,
     reason: str,
+    price_locked_until: date | None = None,
 ) -> Reservation:
     """Re-price a live reservation against the unit's current list price.
 
@@ -2452,14 +2453,15 @@ def requote_reservation(
         raise ConflictError("This unit has no active price to re-quote against.")
     _require_reconciled_shares(session, client=client)
 
-    configuration = pricing_service.get_configuration(
-        session, project_id=project.id, configuration_id=active.pricing_configuration_id
+    configuration = pricing_service.configuration_for_price(
+        session, project_id=project.id, version=active
     )
-    if configuration.price_lock_days is None:
-        raise ValidationError(
-            "This project's pricing configuration sets no price-lock period, so a "
-            "re-quote has no term to run for."
-        )
+    if price_locked_until is None:
+        if configuration is None or configuration.price_lock_days is None:
+            raise ValidationError("Give the re-quote an explicit price-lock date.")
+        price_locked_until = today + timedelta(days=configuration.price_lock_days)
+    if price_locked_until < today:
+        raise ValidationError("The new price lock cannot fall before today.")
 
     before = _snapshot(reservation, _RESERVATION_FIELDS)
     _freeze_quote(
@@ -2471,7 +2473,7 @@ def requote_reservation(
     )
     # The lock runs from today, not from the original reservation date: what the
     # buyer is being promised is this price, from now.
-    reservation.price_locked_until = today + timedelta(days=configuration.price_lock_days)
+    reservation.price_locked_until = price_locked_until
     draft = _draft_contract_on(session, reservation=reservation)
     if draft is not None:
         _refresh_draft_terms(session, reservation=reservation, sale=draft)

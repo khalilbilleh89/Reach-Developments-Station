@@ -16,7 +16,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, PlainSerializer, field_validator
 
 from app.modules.inventory.models import (
     AREA_ROLES,
@@ -53,6 +53,9 @@ LegalStatus = Literal[LEGAL_STATUSES]  # type: ignore[valid-type]
 CollectionStatus = Literal[COLLECTION_STATUSES]  # type: ignore[valid-type]
 DeliveryStatus = Literal[DELIVERY_STATUSES]  # type: ignore[valid-type]
 StatusDimension = Literal[STATUS_DIMENSIONS]  # type: ignore[valid-type]
+PhysicalComponent = Literal[
+    "internal", "balcony", "roof_garden", "front_garden", "terrace", "porches"
+]
 AreaRole = Literal[AREA_ROLES]  # type: ignore[valid-type]
 AreaScheduleStatus = Literal[AREA_SCHEDULE_STATUSES]  # type: ignore[valid-type]
 SubAssetType = Literal[SUB_ASSET_TYPES]  # type: ignore[valid-type]
@@ -267,6 +270,7 @@ class AreaLine(BaseModel):
     code: str
     label: str
     area_role: str
+    physical_component: PhysicalComponent | None = None
     unit_of_measure: str
     raw_area: DecimalStr
     weight_factor: DecimalStr
@@ -292,6 +296,8 @@ class UnitSummary(BaseModel):
     unit_type_code: str | None
     bedrooms: int | None
     #: The project's primary internal area from the current approved schedule.
+    gross_area: DecimalStr | None = None
+    gross_area_unit: str | None = None
     internal_area: DecimalStr | None = None
     weighted_saleable_area: DecimalStr | None = None
     #: The unit that figure is in. A weighted area without its unit is a
@@ -313,6 +319,8 @@ class UnitSummary(BaseModel):
 class UnitDetail(UnitSummary):
     """Everything about one unit that inventory owns. Not yet Unit 360."""
 
+    gross_area_reason: str | None = None
+    gross_missing_components: list[str] = Field(default_factory=list)
     bathrooms: int | None
     has_maid_room: bool
     is_duplex: bool
@@ -425,6 +433,7 @@ class AreaTypeCreateRequest(StrictRequest):
     code: Code
     label: Name
     area_role: AreaRole
+    physical_component: PhysicalComponent | None = None
     unit_of_measure: str = Field(default="sqm", max_length=16)
     #: An explicit fraction of one. A balcony at 0.500000 contributes half its
     #: measured area to the weighted saleable figure — and none of its raw area
@@ -437,6 +446,7 @@ class AreaTypeCreateRequest(StrictRequest):
 class AreaTypeUpdateRequest(StrictRequest):
     label: Name | None = None
     area_role: AreaRole | None = None
+    physical_component: PhysicalComponent | None = None
     unit_of_measure: str | None = Field(default=None, max_length=16)
     weight_factor: Factor | None = None
     required_for_release: bool | None = None
@@ -452,6 +462,7 @@ class AreaTypeRead(BaseModel):
     code: str
     label: str
     area_role: str
+    physical_component: PhysicalComponent | None = None
     unit_of_measure: str
     weight_factor: DecimalStr
     required_for_release: bool
@@ -745,3 +756,43 @@ class WorkbookReport(ImportReport):
 
     template_version: str | None = None
     structure: WorkbookStructure
+
+
+class UnitFeatureCreate(StrictRequest):
+    label: str = Field(min_length=1, max_length=200)
+
+    @field_validator("label")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a feature name.")
+        return value.strip()
+
+
+class UnitFeatureRead(BaseModel):
+    model_config = _READ
+    id: uuid.UUID
+    label: str
+    is_active: bool
+
+
+class UnitDocumentCreate(StrictRequest):
+    title: str = Field(min_length=1, max_length=200)
+    url: HttpUrl = Field(max_length=2000)
+    revision: str | None = Field(default=None, max_length=64)
+
+    @field_validator("title")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a document title.")
+        return value.strip()
+
+
+class UnitDocumentRead(BaseModel):
+    model_config = _READ
+    id: uuid.UUID
+    title: str
+    url: str
+    revision: str | None
+    is_active: bool

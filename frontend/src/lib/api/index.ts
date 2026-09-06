@@ -114,6 +114,7 @@ import type {
   TriggerRefreshResult,
   TaxRule,
   Unit,
+  UnitFeature, UnitDocument,
   UnitPricing,
   UnitRegister,
   UnitStatusEvent,
@@ -445,6 +446,12 @@ export const inventory = {
       `/projects/${projectId}/inventory/units/${unitId}/commercial-transitions`,
       input,
     ),
+  unitFeatures: (projectId: string, unitId: string) => get<UnitFeature[]>(`/projects/${projectId}/inventory/units/${unitId}/features`),
+  addUnitFeature: (projectId: string, unitId: string, body: { label: string }) => post<UnitFeature>(`/projects/${projectId}/inventory/units/${unitId}/features`, body),
+  retireUnitFeature: (projectId: string, unitId: string, id: string) => post<UnitFeature>(`/projects/${projectId}/inventory/units/${unitId}/features/${id}/retire`),
+  unitDocuments: (projectId: string, unitId: string) => get<UnitDocument[]>(`/projects/${projectId}/inventory/units/${unitId}/documents`),
+  addUnitDocument: (projectId: string, unitId: string, body: { title: string; url: string; revision: string | null }) => post<UnitDocument>(`/projects/${projectId}/inventory/units/${unitId}/documents`, body),
+  retireUnitDocument: (projectId: string, unitId: string, id: string) => post<UnitDocument>(`/projects/${projectId}/inventory/units/${unitId}/documents/${id}/retire`),
   unitHistory: (projectId: string, unitId: string) =>
     get<UnitStatusEvent[]>(
       `/projects/${projectId}/inventory/units/${unitId}/status-history`,
@@ -961,10 +968,11 @@ export const sales = {
     projectId: string,
     reservationId: string,
     reason: string,
+    priceLockedUntil?: string,
   ) =>
     post<ReservationDetail>(
       `/projects/${projectId}/sales/reservations/${reservationId}/requote`,
-      { reason },
+      { reason, ...(priceLockedUntil ? { price_locked_until: priceLockedUntil } : {}) },
     ),
   activateReservation: (projectId: string, reservationId: string) =>
     post<ReservationDetail>(

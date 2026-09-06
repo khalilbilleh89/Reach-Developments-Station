@@ -65,6 +65,7 @@ from app.modules.sales.schemas import (
     PartySummaryRead,
     PartyUpdateRequest,
     ReasonRequest,
+    RequoteRequest,
     ReservationActivateRequest,
     ReservationCloseRequest,
     ReservationCreateRequest,
@@ -504,7 +505,7 @@ def update_adjustment(
 )
 def requote_reservation(
     reservation_id: uuid.UUID,
-    payload: ReasonRequest,
+    payload: RequoteRequest,
     session: DbSession,
     actor: ActiveActor,
     project: SalesProject,
@@ -515,6 +516,7 @@ def requote_reservation(
         reservation_id=reservation_id,
         actor=actor,
         reason=payload.reason,
+        price_locked_until=payload.price_locked_until,
     )
     return _reservation_detail(session, reservation)
 

@@ -837,8 +837,8 @@ class UnitPriceVersion(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    pricing_configuration_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), nullable=False
+    pricing_configuration_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
     )
     #: The approved measurement this price was calculated from. Frozen: if the
     #: unit is re-measured and re-approved, this price is stale and says so.
@@ -936,6 +936,11 @@ class UnitPriceVersion(Base):
         CheckConstraint(in_list("status", PRICING_STATUSES), name="status_allowed"),
         CheckConstraint(in_list("market_flag", MARKET_FLAGS), name="flag_allowed"),
         CheckConstraint("version_number >= 1", name="version_positive"),
+        CheckConstraint(
+            "pricing_configuration_id IS NOT NULL OR "
+            "(basis_snapshot_json ->> 'entry_method') IS NOT DISTINCT FROM 'direct'",
+            name="direct_entry_basis",
+        ),
         CheckConstraint("reference_price_ex_tax >= 0", name="price_nonneg"),
         CheckConstraint("base_area_value >= 0", name="base_nonneg"),
         CheckConstraint("premium_cap_adjustment <= 0", name="cap_not_positive"),

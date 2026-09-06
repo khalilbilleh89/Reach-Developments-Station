@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0012_land_classification_text"
+HEAD_REVISION = "0014_direct_unit_price"
 
 #: The revision that shipped ``unit_economics_cost_pools`` wide enough to hold
 #: ``construction_forecast`` while its CHECK still listed two sources, and the

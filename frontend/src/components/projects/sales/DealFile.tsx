@@ -1,5 +1,6 @@
 "use client";
 
+import { RequoteForm } from "@/components/projects/sales/RequoteForm";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, sales } from "@/lib/api";
@@ -1003,24 +1004,10 @@ export function DealFile({
                 </Button>
               ) : null}
               {canPrepare && live && lockExpired ? (
-                <Button
-                  variant="primary"
-                  disabled={busy}
-                  onClick={() =>
-                    askThen(
-                      {
-                        title: "Re-quote this reservation",
-                        label: "Why is this reservation being re-quoted?",
-                        hint: "The quote is re-run at the unit's current price and any approval it had is withdrawn.",
-                        confirmLabel: "Re-quote",
-                      },
-                      (reason) => sales.requoteReservation(projectId, terms.id, reason),
-                      "Re-quoted at the unit's current price. Any approval it had is withdrawn.",
-                    )
-                  }
-                >
-                  Re-quote
-                </Button>
+                <RequoteForm busy={busy} onSubmit={(reason, lockDate) => run(
+                  () => sales.requoteReservation(projectId, terms.id, reason, lockDate),
+                  "Re-quoted at the unit's current price. Any approval it had is withdrawn.",
+                )} />
               ) : null}
               {canWriteSale && live && !lockExpired && sale === null ? (
                 <Button

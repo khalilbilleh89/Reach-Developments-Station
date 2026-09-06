@@ -118,6 +118,9 @@ _CONFLICTS = {
         "A sub-asset with that reference already exists in this project."
     ),
     "uq_area_types_project_id_code": "An area type with that code already exists in this project.",
+    "uq_area_types_physical_component": (
+        "This project already has an active type for that gross component."
+    ),
     "uq_area_types_one_internal": (
         "This project already has an active internal area type. A project has one "
         "primary internal area."
@@ -242,6 +245,7 @@ _AREA_TYPE_FIELDS = (
     "code",
     "label",
     "area_role",
+    "physical_component",
     "unit_of_measure",
     "weight_factor",
     "required_for_release",
@@ -1613,6 +1617,7 @@ def list_status_events(
 _AREA_TYPE_UPDATABLE = (
     "label",
     "area_role",
+    "physical_component",
     "unit_of_measure",
     "weight_factor",
     "required_for_release",
@@ -1745,6 +1750,13 @@ def create_area_type(
     weight_factor: Decimal,
     **fields: object,
 ) -> AreaType:
+    component = fields.get("physical_component")
+    if component is not None and area_role != (
+        "internal" if component == "internal" else "outdoor"
+    ):
+        raise ValidationError(
+            "Gross components require their corresponding internal or outdoor role."
+        )
     project = lock_project(session, project.id)
     _require_coherent_weighted_unit(
         session,
@@ -1759,6 +1771,8 @@ def create_area_type(
         code=normalize_code(code, label="An area type code"),
         label=label.strip(),
         area_role=area_role,
+        physical_component=fields.get("physical_component")
+        or ("internal" if area_role == "internal" else None),
         unit_of_measure=fields.get("unit_of_measure") or "sqm",
         weight_factor=weight_factor,
         required_for_release=bool(fields.get("required_for_release")),
@@ -1796,7 +1810,9 @@ def update_area_type(
     why it is audited. It never touches a raw measured area: those are what the
     drawing says, and a configuration change does not re-measure a building.
     """
-    updates = resolve_updates(changes, fields=_AREA_TYPE_UPDATABLE, clearable=frozenset())
+    updates = resolve_updates(
+        changes, fields=_AREA_TYPE_UPDATABLE, clearable=frozenset({"physical_component"})
+    )
     lock_project(session, project.id)
     _reload(session, area_type)
 
@@ -1813,6 +1829,13 @@ def update_area_type(
             "every stored figure a new meaning without anyone re-measuring."
         )
 
+    component = updates.get("physical_component", area_type.physical_component)
+    role = updates.get("area_role", area_type.area_role)
+    if component is not None and role != ("internal" if component == "internal" else "outdoor"):
+        raise ValidationError(
+            "Gross components require their corresponding internal or outdoor role."
+        )
+
     _require_coherent_weighted_unit(
         session,
         project_id=project.id,
@@ -1822,6 +1845,14 @@ def update_area_type(
         is_active=bool(updates.get("is_active", area_type.is_active)),
         in_use=in_use,
     )
+
+    if (
+        "physical_component" in updates
+        and updates["physical_component"] != area_type.physical_component
+        and area_type.physical_component is not None
+        and in_use
+    ):
+        raise ConflictError("A measured physical component cannot be reclassified.")
 
     before = _snapshot(area_type, _AREA_TYPE_FIELDS)
     for field, value in updates.items():
@@ -2122,6 +2153,7 @@ def area_lines(
             "code": area_type.code,
             "label": area_type.label,
             "area_role": area_type.area_role,
+            "physical_component": area_type.physical_component,
             "unit_of_measure": area_type.unit_of_measure,
             "raw_area": value.raw_area,
             "weight_factor": area_type.weight_factor,

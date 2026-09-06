@@ -178,6 +178,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `planning_controls` | As above. |
 | `permits` | Live permits are re-entered through the application, where the status machine applies. A migrated permit with no event history is a permit whose SLA clock never started. |
 | `document_references` | Pointers to files the migration does not move. |
+| `unit_features` | MVP 2 descriptive annotations, entered through the unit workspace; excluded from the legacy batch contract. |
+| `unit_documents` | MVP 2 document references, entered through the unit workspace; excluded from the legacy batch contract. |
 | `inventory_sub_assets` | Parking and storage. In scope only if the source ties them to sold units; unknown until the source is seen. |
 | `pricing_configurations` | Pricing is configured in Reach, then derived. Importing a configuration would imply the legacy prices came out of it. |
 | `pricing_area_rules` | As above. |

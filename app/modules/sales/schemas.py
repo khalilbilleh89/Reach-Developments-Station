@@ -94,6 +94,10 @@ class ReasonRequest(StrictRequest):
     reason: Reason
 
 
+class RequoteRequest(ReasonRequest):
+    price_locked_until: date | None = None
+
+
 class EvidenceRequest(StrictRequest):
     """An attestation that evidence exists, and the reference to find it by.
 

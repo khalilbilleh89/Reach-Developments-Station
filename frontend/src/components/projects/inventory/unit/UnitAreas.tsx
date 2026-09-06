@@ -138,7 +138,7 @@ export function UnitAreas({
               <li key={asset.id} className="chip">
                 <span className="mono">{asset.asset_reference}</span>
                 <span className="chip-label">
-                  {asset.asset_type} · {asset.transfer_mode}
+                  {asset.asset_type} · {asset.transfer_mode}{asset.area === null ? "" : ` · area ${asset.area}`}{asset.is_active ? "" : " · retired"}
                 </span>
               </li>
             ))}
