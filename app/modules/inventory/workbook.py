@@ -34,6 +34,7 @@ import io
 import re
 import uuid
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -43,6 +44,8 @@ from openpyxl.cell.cell import Cell
 from openpyxl.cell.read_only import ReadOnlyCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ValidationError
@@ -60,6 +63,11 @@ from app.modules.inventory.models import (
 from app.modules.inventory.permissions import (
     require_inventory_structure_writer,
     require_project_configurer,
+)
+from app.modules.inventory.schemas import (
+    BuildingCreateRequest,
+    FloorCreateRequest,
+    PhaseCreateRequest,
 )
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
@@ -159,6 +167,9 @@ _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_BYTES = import_service.MAX_BYTES
 MAX_UNCOMPRESSED = 64 * 1024 * 1024
 
+#: How much of one member is held at a time while it is being counted.
+_READ_CHUNK = 256 * 1024
+
 #: Rows per sheet. Units reuses the CSV importer's bound so one file cannot
 #: load more units through the workbook than through the CSV.
 MAX_UNIT_ROWS = import_service.MAX_ROWS
@@ -166,6 +177,20 @@ MAX_STRUCTURE_ROWS = 2000
 
 HEADER_ROW = 1
 FIRST_DATA_ROW = 2
+
+#: Request-model field name -> this sheet's column heading. The models are the
+#: authoritative home for lengths and minimums; these maps only translate where
+#: to point the operator.
+_PHASE_FIELD_COLUMNS = {"code": "phase_code", "name": "phase_name"}
+_BUILDING_FIELD_COLUMNS = {"code": "building_code", "name": "building_name"}
+_FLOOR_FIELD_COLUMNS = {"code": "floor_code", "label": "floor_label"}
+
+#: A stand-in parent for contract validation only. The request models require a
+#: parent identifier; at validate time the real parent may be a row further up
+#: this same workbook and have no identifier yet. Parent *resolution* is checked
+#: separately and precisely — this placeholder only lets the model judge the
+#: fields it owns.
+_UNRESOLVED_PARENT = uuid.UUID(int=0)
 
 IMPORT_MODES = import_service.IMPORT_MODES
 
@@ -230,10 +255,30 @@ def _text(value: object) -> str:
 
 
 def _archive_is_safe(body: bytes) -> None:
-    """Refuse the package before anything parses its contents.
+    """Refuse the package before anything inside it is decompressed.
 
-    Everything here is a property of the container, so it is answered from the
-    container — cheaply, and before an XML parser is pointed at operator input.
+    Order is the security property here, not the set of checks. An earlier
+    version called ``ZipFile.testzip()`` first and compared the uncompressed
+    size afterwards — and ``testzip`` decompresses every member to verify its
+    CRC, so the bomb was expanded in order to decide whether it was too big to
+    expand. The PR describing it claimed the opposite. It is now:
+
+    1. the compressed bound, on bytes already in hand;
+    2. the central directory, which is metadata and costs nothing;
+    3. the declared uncompressed total, refused before any member is opened;
+    4. macros and the shape of the package;
+    5. only then, reading members — and never unboundedly.
+
+    Step three is the gate that matters, and it is enough: ``ZipExtFile`` bounds
+    each read by the declared ``file_size`` and then raises on the CRC
+    mismatch, so an archive that understates itself truncates and fails rather
+    than over-delivering — verified against CPython 3.11 rather than assumed.
+    A bomb therefore has to declare its size to be readable at all, and the
+    central directory is where it is refused.
+
+    Step five replaces ``testzip`` rather than restoring it: the same CRC
+    verification, but counted against the same bound as it goes, so nothing
+    here can read more than the directory was judged on.
     """
     if not body:
         raise _refuse("That file is empty.")
@@ -242,31 +287,51 @@ def _archive_is_safe(body: bytes) -> None:
             f"That file is larger than the {MAX_BYTES // (1024 * 1024)} MB limit for an "
             "inventory workbook."
         )
-    if body[:2] == b"\xd0\xcf" or body[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+    if body[:2] == b"\xd0\xcf":
         raise _refuse(
             "That workbook is password-protected or in the older .xls format. Save it as "
             "an unprotected .xlsx and try again."
         )
     try:
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
-            names = set(archive.namelist())
-            if archive.testzip() is not None:
-                raise _refuse("That workbook is damaged and cannot be read.")
-            unpacked = sum(entry.file_size for entry in archive.infolist())
+            entries = archive.infolist()
+            declared = sum(entry.file_size for entry in entries)
+            if declared > MAX_UNCOMPRESSED:
+                raise _refuse(
+                    "That workbook expands to far more data than an inventory load needs."
+                )
+            names = {entry.filename for entry in entries}
+            if any(name.startswith("xl/vbaProject") for name in names):
+                raise _refuse(
+                    "That workbook contains macros. Save it as a plain .xlsx — an inventory "
+                    "import reads data and never runs code."
+                )
+            if "xl/workbook.xml" not in names:
+                raise _refuse("That file is not a readable .xlsx workbook.")
+            _read_within_bounds(archive, entries)
     except zipfile.BadZipFile as caught:
         raise _refuse(
             "That file is not a readable .xlsx workbook. Download the template and fill "
             "that in rather than converting another format."
         ) from caught
-    if unpacked > MAX_UNCOMPRESSED:
-        raise _refuse("That workbook expands to far more data than an inventory load needs.")
-    if any(name.startswith("xl/vbaProject") for name in names):
-        raise _refuse(
-            "That workbook contains macros. Save it as a plain .xlsx — an inventory "
-            "import reads data and never runs code."
-        )
-    if "xl/workbook.xml" not in names:
-        raise _refuse("That file is not a readable .xlsx workbook.")
+
+
+def _read_within_bounds(archive: zipfile.ZipFile, entries: list[zipfile.ZipInfo]) -> None:
+    """Read every member through the uncompressed bound, verifying it on the way.
+
+    The replacement for ``testzip``: same CRC verification, but the bytes are
+    counted as they arrive, so an archive whose central directory understates
+    what it holds is refused part-way through rather than after.
+    """
+    read = 0
+    for entry in entries:
+        with archive.open(entry) as member:
+            while chunk := member.read(_READ_CHUNK):
+                read += len(chunk)
+                if read > MAX_UNCOMPRESSED:
+                    raise _refuse(
+                        "That workbook expands to far more data than an inventory load needs."
+                    )
 
 
 def _load(body: bytes) -> Workbook:
@@ -568,6 +633,62 @@ def _required(
     return complete
 
 
+def _through_the_request_contract(
+    batch: import_service.Batch,
+    *,
+    row: int,
+    model: type[BaseModel],
+    payload: dict[str, Any],
+    columns: dict[str, str],
+) -> bool:
+    """Judge one row by the request model the manual form is judged by.
+
+    Lengths, minimums and the status vocabulary have an authoritative home in
+    ``inventory.schemas``. Restating them here as a second dictionary of limits
+    is how a workbook comes to accept a 300-character zone that the form
+    refuses — and worse, how ``validate`` comes to report clean on a workbook
+    ``apply`` will then reject.
+
+    ``columns`` maps the model's field names to this sheet's column names, so
+    the operator is sent to the cell rather than to a field they cannot see.
+    """
+    try:
+        model.model_validate(payload)
+    except PydanticValidationError as caught:
+        for error in caught.errors():
+            field = str(error["loc"][0]) if error["loc"] else None
+            batch.error(row, columns.get(field or "", field), error["msg"])
+        return False
+    return True
+
+
+def _domain_value(
+    batch: import_service.Batch, *, row: int, column: str, call: Callable[[], str]
+) -> str | None:
+    """One code as the service's own normaliser returns it, or None if refused.
+
+    The same function the apply path calls, so a value cannot pass validate and
+    fail apply on a rule this module could have asked about.
+    """
+    try:
+        return call()
+    except ValidationError as caught:
+        batch.error(row, column, caught.detail)
+        return None
+
+
+def _domain_allows(
+    batch: import_service.Batch, *, row: int, column: str, call: Callable[[], None]
+) -> bool:
+    """Whether one of the service's own checks passes, reported as a cell."""
+    try:
+        call()
+    except ValidationError as caught:
+        batch.error(row, column, caught.detail)
+        return False
+    return True
+
+
 def _duplicate(
     batch: import_service.Batch,
     *,
@@ -652,40 +773,43 @@ def _read_phases(
     for row, values in rows:
         if not _required(batch, row=row, values=values, columns=PHASE_COLUMNS):
             continue
-        code = values["phase_code"].upper()
+        code = _domain_value(
+            batch,
+            row=row,
+            column="phase_code",
+            call=lambda raw=values["phase_code"]: service.normalize_code(raw, label="A phase code"),
+        )
+        if code is None:
+            continue
         if _duplicate(
             batch, row=row, column="phase_code", key=(code,), seen=seen, what=f"Phase '{code}'"
         ):
-            continue
-        status = values["status"]
-        if status and status not in PHASE_STATUSES:
-            batch.error(
-                row,
-                "status",
-                f"'{status}' is not a phase status. Use one of: {', '.join(PHASE_STATUSES)}.",
-            )
             continue
         fields: dict[str, Any] = {"code": code, "name": values["phase_name"]}
         sequence = _int(batch, row=row, column="sequence", raw=values["sequence"])
         if sequence is not None:
             fields["sequence"] = sequence
-        if status:
-            fields["status"] = status
+        if values["status"]:
+            fields["status"] = values["status"]
         for column in ("planned_start", "planned_completion"):
             parsed = _iso_date(batch, row=row, column=column, raw=values[column])
             if parsed is not None:
                 fields[column] = parsed
-        start = fields.get("planned_start")
-        completion = fields.get("planned_completion")
-        if start is not None and completion is not None and completion < start:
-            batch.error(
-                row,
-                "planned_completion",
-                "A phase cannot be planned to finish before it starts.",
-            )
-            continue
         if values["notes"]:
             fields["notes"] = values["notes"]
+        if not _through_the_request_contract(
+            batch, row=row, model=PhaseCreateRequest, payload=fields, columns=_PHASE_FIELD_COLUMNS
+        ):
+            continue
+        if not _domain_allows(
+            batch,
+            row=row,
+            column="planned_completion",
+            call=lambda dates=fields: service.require_phase_dates_ordered(
+                dates.get("planned_start"), dates.get("planned_completion")
+            ),
+        ):
+            continue
         action = _action_for(
             batch,
             row=row,
@@ -715,8 +839,22 @@ def _read_buildings(
     for row, values in rows:
         if not _required(batch, row=row, values=values, columns=BUILDING_COLUMNS):
             continue
-        phase_code = values["phase_code"].upper()
-        code = values["building_code"].upper()
+        phase_code = _domain_value(
+            batch,
+            row=row,
+            column="phase_code",
+            call=lambda raw=values["phase_code"]: service.normalize_code(raw, label="A phase code"),
+        )
+        code = _domain_value(
+            batch,
+            row=row,
+            column="building_code",
+            call=lambda raw=values["building_code"]: service.normalize_code(
+                raw, label="A building code"
+            ),
+        )
+        if phase_code is None or code is None:
+            continue
         if _duplicate(
             batch,
             row=row,
@@ -726,13 +864,20 @@ def _read_buildings(
             what=f"Building '{code}' in phase '{phase_code}'",
         ):
             continue
-        if phase_code not in phases and phase_code not in declared_phases:
+        parent = phases.get(phase_code)
+        if parent is None and phase_code not in declared_phases:
             batch.error(
                 row,
                 "phase_code",
                 f"Phase '{phase_code}' does not exist in this project and is not declared "
                 f"on the {SHEET_PHASES} sheet of this workbook.",
             )
+            continue
+        # The same refusal `stage_create_building` makes, made early enough for
+        # the operator to see it beside the row rather than as a failed apply.
+        # A spreadsheet is not a way past a retired phase.
+        if parent is not None and not parent.is_active:
+            batch.error(row, "phase_code", f"Phase '{phase_code}' is not active.")
             continue
         fields: dict[str, Any] = {"code": code, "name": values["building_name"]}
         for column in ("zone", "block", "entrance_wing"):
@@ -741,6 +886,14 @@ def _read_buildings(
         sequence = _int(batch, row=row, column="sequence", raw=values["sequence"])
         if sequence is not None:
             fields["sequence"] = sequence
+        if not _through_the_request_contract(
+            batch,
+            row=row,
+            model=BuildingCreateRequest,
+            payload={**fields, "phase_id": _UNRESOLVED_PARENT},
+            columns=_BUILDING_FIELD_COLUMNS,
+        ):
+            continue
         action = _action_for(
             batch,
             row=row,
@@ -777,9 +930,30 @@ def _read_floors(
     for row, values in rows:
         if not _required(batch, row=row, values=values, columns=FLOOR_COLUMNS):
             continue
-        phase_code = values["phase_code"].upper()
-        building_code = values["building_code"].upper()
-        code = values["floor_code"].upper()
+        phase_code = _domain_value(
+            batch,
+            row=row,
+            column="phase_code",
+            call=lambda raw=values["phase_code"]: service.normalize_code(raw, label="A phase code"),
+        )
+        building_code = _domain_value(
+            batch,
+            row=row,
+            column="building_code",
+            call=lambda raw=values["building_code"]: service.normalize_code(
+                raw, label="A building code"
+            ),
+        )
+        code = _domain_value(
+            batch,
+            row=row,
+            column="floor_code",
+            call=lambda raw=values["floor_code"]: service.normalize_code(
+                raw, label="A floor code", pattern=service.FLOOR_CODE_PATTERN
+            ),
+        )
+        if phase_code is None or building_code is None or code is None:
+            continue
         key = (phase_code, building_code, code)
         if _duplicate(
             batch,
@@ -790,16 +964,17 @@ def _read_floors(
             what=f"Floor '{code}' in {phase_code}/{building_code}",
         ):
             continue
-        if (phase_code, building_code) not in buildings and (
-            phase_code,
-            building_code,
-        ) not in declared_buildings:
+        parent = buildings.get((phase_code, building_code))
+        if parent is None and (phase_code, building_code) not in declared_buildings:
             batch.error(
                 row,
                 "building_code",
                 f"Building '{building_code}' does not exist under phase '{phase_code}' and "
                 f"is not declared on the {SHEET_BUILDINGS} sheet of this workbook.",
             )
+            continue
+        if parent is not None and not parent.is_active:
+            batch.error(row, "building_code", f"Building '{building_code}' is not active.")
             continue
         fields: dict[str, Any] = {"code": code, "label": values["floor_label"]}
         level = _int(batch, row=row, column="level_number", raw=values["level_number"])
@@ -808,6 +983,14 @@ def _read_floors(
         sequence = _int(batch, row=row, column="sequence", raw=values["sequence"])
         if sequence is not None:
             fields["sequence"] = sequence
+        if not _through_the_request_contract(
+            batch,
+            row=row,
+            model=FloorCreateRequest,
+            payload={**fields, "building_id": _UNRESOLVED_PARENT},
+            columns=_FLOOR_FIELD_COLUMNS,
+        ):
+            continue
         action = _action_for(
             batch,
             row=row,
@@ -1042,64 +1225,46 @@ def apply(
 def _write_hierarchy(
     session: Session, *, project: Project, actor: ActorContext, structure: Structure
 ) -> None:
-    """Create or update the declared hierarchy, parents before children.
+    """Create or update the declared hierarchy through the domain's own rules.
 
-    Built as ORM records with their audit events rather than through
-    ``service.create_phase`` and friends, and that is not a shortcut: those
-    functions **commit**, because a route creating one phase is one
-    transaction. Called in a loop they would commit each phase as it was made,
-    and the workbook's promise — four sheets or none of them — would be gone
-    while still looking like it held. The CSV importer's ``_materialise_hierarchy``
-    reaches the same conclusion for the same reason.
+    Every call here is an ``inventory.service`` mutation primitive — the same
+    code the manual form runs. This module contributes the workbook: which rows
+    were asked for, in which order, and that they all land together. It
+    contributes no rule about what a phase, building or floor may be, and no
+    audit content of its own.
 
-    So the transaction boundary stays with the batch, and everything that is
-    genuinely a domain rule stays where it was: uniqueness is the database's
-    partial indexes, visibility was applied when the sheets were read, codes
-    were normalised there too, and the date ordering a phase requires is
-    checked as a cell error rather than raised here as an exception.
+    The primitives do not commit, which is the whole reason they exist. An
+    earlier version of this function built the ORM rows itself to get one
+    transaction, and in doing so quietly became a second implementation: it
+    accepted codes the API refused, skipped the active-parent checks, and wrote
+    an audit event carrying a code and a name where the real one carries the
+    whole before and after. The transaction boundary belongs to the batch; the
+    rules belong to the service; those are two different problems and they now
+    have two different answers.
     """
-    phases: dict[str, Phase] = {
+    phases = {
         phase.code: phase for phase in service.list_phases(session, project=project, actor=actor)
     }
     for record in structure.phases:
         code = record.codes[0]
         if record.action == "create":
-            phase = Phase(
-                project_id=project.id,
-                code=code,
-                name=record.fields["name"],
-                created_by_user_id=actor.user_id,
-                **{
-                    key: value
-                    for key, value in record.fields.items()
-                    if key in {"sequence", "status", "planned_start", "planned_completion", "notes"}
-                },
-            )
-            session.add(phase)
-            session.flush()
-            phases[code] = phase
-            _record(
+            phases[code] = service.stage_create_phase(
                 session,
-                actor,
-                "phase.created",
-                "phase",
-                phase.id,
-                {"code": code, "name": phase.name},
+                project=project,
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **record.fields,
             )
         else:
-            phase = record.existing
-            for key, value in record.fields.items():
-                if key != "code":
-                    setattr(phase, key, value)
-            session.flush()
-            phases[code] = phase
-            _record(
+            # A code is identity and is never an update. Everything else the
+            # sheet states is what the record should now say, and the primitive
+            # writes the real before/after snapshot for it.
+            phases[code] = service.stage_update_phase(
                 session,
-                actor,
-                "phase.updated",
-                "phase",
-                phase.id,
-                {"code": code, "name": phase.name},
+                phase=record.existing,
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **{key: value for key, value in record.fields.items() if key != "code"},
             )
 
     buildings: dict[tuple[str, str], Building] = {}
@@ -1108,103 +1273,41 @@ def _write_hierarchy(
             if phase.id == building.phase_id:
                 buildings[(code, building.code)] = building
     for record in structure.buildings:
-        phase_code, building_code = record.codes
+        phase_code, _building_code = record.codes
         if record.action == "create":
-            building = Building(
-                project_id=project.id,
-                phase_id=phases[phase_code].id,
-                code=building_code,
-                name=record.fields["name"],
-                created_by_user_id=actor.user_id,
-                **{
-                    key: value
-                    for key, value in record.fields.items()
-                    if key in {"zone", "block", "entrance_wing", "sequence"}
-                },
-            )
-            session.add(building)
-            session.flush()
-            buildings[record.codes] = building
-            _record(
+            buildings[record.codes] = service.stage_create_building(
                 session,
-                actor,
-                "building.created",
-                "building",
-                building.id,
-                {"code": building_code, "name": building.name},
+                project=project,
+                phase=phases[phase_code],
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **record.fields,
             )
         else:
-            building = record.existing
-            for key, value in record.fields.items():
-                if key != "code":
-                    setattr(building, key, value)
-            session.flush()
-            buildings[record.codes] = building
-            _record(
+            buildings[record.codes] = service.stage_update_building(
                 session,
-                actor,
-                "building.updated",
-                "building",
-                building.id,
-                {"code": building_code, "name": building.name},
+                building=record.existing,
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **{key: value for key, value in record.fields.items() if key != "code"},
             )
 
     for record in structure.floors:
-        phase_code, building_code, floor_code = record.codes
+        phase_code, building_code, _floor_code = record.codes
         if record.action == "create":
-            floor = Floor(
-                project_id=project.id,
-                building_id=buildings[(phase_code, building_code)].id,
-                code=floor_code,
-                label=record.fields["label"],
-                created_by_user_id=actor.user_id,
-                **{
-                    key: value
-                    for key, value in record.fields.items()
-                    if key in {"level_number", "sequence"}
-                },
-            )
-            session.add(floor)
-            session.flush()
-            _record(
+            service.stage_create_floor(
                 session,
-                actor,
-                "floor.created",
-                "floor",
-                floor.id,
-                {"code": floor_code, "label": floor.label},
+                project=project,
+                building=buildings[(phase_code, building_code)],
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **record.fields,
             )
         else:
-            floor = record.existing
-            for key, value in record.fields.items():
-                if key != "code":
-                    setattr(floor, key, value)
-            session.flush()
-            _record(
+            service.stage_update_floor(
                 session,
-                actor,
-                "floor.updated",
-                "floor",
-                floor.id,
-                {"code": floor_code, "label": floor.label},
+                floor=record.existing,
+                actor_user_id=actor.user_id,
+                correlation_id=actor.correlation_id,
+                **{key: value for key, value in record.fields.items() if key != "code"},
             )
-
-
-def _record(
-    session: Session,
-    actor: ActorContext,
-    action: str,
-    entity_type: str,
-    entity_id: uuid.UUID,
-    after: dict[str, Any],
-) -> None:
-    """One audit event per hierarchy record, marked as having arrived in a workbook."""
-    record_event(
-        session,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        correlation_id=actor.correlation_id,
-        actor_user_id=actor.user_id,
-        after={**after, "source": "import"},
-    )

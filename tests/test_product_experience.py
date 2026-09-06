@@ -811,6 +811,17 @@ class TestInventoryShowsTheObjectsItNames:
     STRUCTURE = PROJECTS / "inventory" / "StructureViews.tsx"
     IMPORT_PANEL = PROJECTS / "inventory" / "ImportPanel.tsx"
 
+    def _units_toolbar_actions(self) -> str:
+        """The unit register's toolbar alone.
+
+        Whole-file substring checks are how a guard comes to pass against an
+        unrelated line: this screen has three `canWriteStructure ?` branches,
+        and only one of them is the one under test.
+        """
+        source = read(self.INVENTORY)
+        start = source.index("count={register ?")
+        return source[start : source.index("onReset={", start)]
+
     def test_all_four_levels_are_first_class_views(self) -> None:
         source = read(self.INVENTORY)
 
@@ -866,6 +877,57 @@ class TestInventoryShowsTheObjectsItNames:
         # an operator loading a development is asked to choose.
         assert "Advanced CSV import" in source
         assert source.index("Download Excel template") < source.index("Advanced CSV import")
+
+    def test_retiring_the_generic_form_did_not_retire_manual_unit_creation(self) -> None:
+        """The regression the removal guard could not see.
+
+        `HierarchyForms` was four forms behind tabs, and one of them was the only
+        way to create a unit by hand. Asserting the file is gone says nothing
+        about what went with it — so this asserts the capability, which is what
+        an operator actually loses.
+
+        Import is the other way in, not the only one: adding one unit to a
+        finished floor should not require opening a spreadsheet.
+        """
+        action = self._units_toolbar_actions()
+
+        assert "Add unit" in action
+        assert "setAddingUnit(true)" in action
+        # Offered to somebody who may write structure, and to nobody else.
+        # Scoped to this toolbar: `canWriteStructure ? (` appears three times in
+        # the file, so asserting it anywhere passed with the guard deleted — the
+        # first version of this test did exactly that.
+        assert "canWriteStructure" in action
+        assert "inventory.createUnit(" in read(self.STRUCTURE)
+
+    def test_add_unit_preselects_the_floor_the_operator_drilled_into(self) -> None:
+        inventory = read(self.INVENTORY)
+        structure = read(self.STRUCTURE)
+
+        assert "defaultFloorId={filters.floor_id}" in inventory
+        assert "floorsForNewUnit" in inventory
+        assert "defaultFloorId" in structure
+
+    def test_the_unit_form_offers_only_floors_the_server_returned(self) -> None:
+        """No fetch-then-hide. A forbidden phase is absent, not filtered out."""
+        inventory = read(self.INVENTORY)
+
+        assert "floors.filter(" in inventory
+        assert "inventory.floors(" in inventory
+
+    def test_the_unit_form_stays_out_of_pr_v2_03(self) -> None:
+        """The physical unit record is the next PR's, and its shape is not settled."""
+        structure = read(self.STRUCTURE)
+        form = structure[structure.index("export function UnitForm(") :]
+
+        for later in ("internal_area", "balcony", "terrace", "roof_garden", "parking", "storage"):
+            assert later not in form, later
+
+    def test_the_unit_empty_state_does_not_call_csv_the_only_way_in(self) -> None:
+        inventory = read(self.INVENTORY)
+
+        assert "import them from a CSV" not in inventory
+        assert "Add a unit" in inventory
 
     def test_the_generic_add_structure_path_is_gone(self) -> None:
         """One operating path, never two.

@@ -32,6 +32,7 @@ import {
   BuildingsView,
   FloorsView,
   PhasesView,
+  UnitForm,
 } from "@/components/projects/inventory/StructureViews";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -101,6 +102,7 @@ export function InventoryTab({
   // which is the whole correction: they are no longer hidden inside a dialog
   // called "Add structure".
   const [view, setView] = useState<"phases" | "buildings" | "floors" | "units">("units");
+  const [addingUnit, setAddingUnit] = useState(false);
 
   // Typing in the search box fires a request per change, and responses can come
   // back out of order. Without this ticket the register can end up showing the
@@ -186,6 +188,19 @@ export function InventoryTab({
   ].filter((code): code is string => Boolean(code));
   const clearContext = () =>
     setFilters({ ...filters, phase_id: "", building_id: "", floor_id: "" });
+
+  //: Which floors "Add unit" may offer. Narrowed by the context the operator
+  //: already chose, and drawn only from what the server returned for them —
+  //: a forbidden phase is absent from `floors`, never fetched and hidden.
+  const floorsForNewUnit = floors.filter((floor) => {
+    if (filters.building_id) return floor.building_id === filters.building_id;
+    if (filters.phase_id) {
+      return buildings.some(
+        (building) => building.id === floor.building_id && building.phase_id === filters.phase_id,
+      );
+    }
+    return true;
+  });
 
   // Inventory is refused while the project is in setup, because that is the
   // window in which its country and currencies can still change under whatever
@@ -354,6 +369,13 @@ export function InventoryTab({
             label: "Search units",
           }}
           count={register ? { shown: register.units.length, total: register.total, noun: "unit" } : undefined}
+          actions={
+            canWriteStructure ? (
+              <Button variant="primary" onClick={() => setAddingUnit(true)}>
+                Add unit
+              </Button>
+            ) : undefined
+          }
           onReset={
             filtered
               ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", commercial_status: "", search: "" })
@@ -432,7 +454,7 @@ export function InventoryTab({
                 hint={
                   filtered
                     ? "Widen the filter to see the rest of the register."
-                    : "Add a phase, building and floor, then create units or import them from a CSV."
+                    : "Add a unit, or import the whole development from the Excel template."
                 }
               />
             </div>
@@ -536,6 +558,21 @@ export function InventoryTab({
         </>
         ) : null}
       </div>
+
+      {addingUnit ? (
+        <UnitForm
+          projectId={projectId}
+          floors={floorsForNewUnit}
+          defaultFloorId={filters.floor_id}
+          onCancel={() => setAddingUnit(false)}
+          onSaved={async () => {
+            setAddingUnit(false);
+            // The context the operator drilled through is kept: they are very
+            // likely adding a second unit to the same floor.
+            await refresh();
+          }}
+        />
+      ) : null}
 
       {selected ? (
         <UnitDetailPanel

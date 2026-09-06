@@ -1020,3 +1020,170 @@ function FloorForm({
     </FormDialog>
   );
 }
+
+// --------------------------------------------------------------------------- //
+// Units — the one form that is not a hierarchy record
+// --------------------------------------------------------------------------- //
+
+/** The asset classes the domain accepts. Mirrors `ASSET_CLASSES` server-side. */
+const ASSET_CLASSES = ["apartment", "villa", "townhouse", "commercial", "other"] as const;
+
+/**
+ * Create one unit, from the Units register.
+ *
+ * This form exists because retiring the generic "Add structure" dialog took
+ * manual unit creation with it — the dialog was four forms behind tabs, and
+ * removing the abstraction removed the only way to add a unit by hand. Import
+ * is the other way in, not the only one: an operator adding a single unit to a
+ * finished floor should not have to open a spreadsheet.
+ *
+ * Deliberately small. Everything a unit physically *is* — internal area,
+ * balcony, terrace, parking, storage, features — is PR-V2-03's, and putting it
+ * here now would fix its shape before that design exists.
+ */
+export function UnitForm({
+  projectId,
+  floors,
+  defaultFloorId,
+  onCancel,
+  onSaved,
+}: {
+  projectId: string;
+  floors: Floor[];
+  defaultFloorId: string;
+  onCancel: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [values, setValues] = useState({
+    // Preselected from the register's own context. Reaching Units through
+    // Phase → Building → Floor → View units and then being asked which floor
+    // is the screen forgetting what it just did.
+    floor_id: defaultFloorId || (floors.length === 1 ? floors[0].id : ""),
+    unit_number: "",
+    unit_reference: "",
+    asset_class: "apartment",
+    unit_type_code: "",
+    bedrooms: "",
+    bathrooms: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await inventory.createUnit(projectId, {
+        floor_id: values.floor_id,
+        unit_number: values.unit_number,
+        unit_reference: values.unit_reference,
+        asset_class: values.asset_class,
+        ...(values.unit_type_code ? { unit_type_code: values.unit_type_code } : {}),
+        ...(values.bedrooms ? { bedrooms: Number(values.bedrooms) } : {}),
+        ...(values.bathrooms ? { bathrooms: Number(values.bathrooms) } : {}),
+      });
+      await onSaved();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not create the unit.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <FormDialog
+      title="Add unit"
+      confirmLabel="Create unit"
+      busy={busy}
+      disabled={
+        values.floor_id === "" ||
+        values.unit_number.trim() === "" ||
+        values.unit_reference.trim() === ""
+      }
+      onCancel={onCancel}
+      onSubmit={() => void save()}
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {floors.length === 0 ? (
+        <Notice tone="warning">
+          A unit belongs to a floor, and this project has none yet. Add a floor first, or import
+          the structure from the Excel template.
+        </Notice>
+      ) : null}
+      <FieldRow columns={2}>
+        <Field label="Floor">
+          {/* Only the floors the server already returned for this project and
+              this operator. Nothing forbidden is fetched and then hidden. */}
+          <select
+            className="input"
+            value={values.floor_id}
+            onChange={(event) => setValues({ ...values, floor_id: event.target.value })}
+          >
+            <option value="">Choose a floor</option>
+            {floors.map((floor) => (
+              <option key={floor.id} value={floor.id}>
+                {floor.code} — {floor.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Asset class">
+          <select
+            className="input"
+            value={values.asset_class}
+            onChange={(event) => setValues({ ...values, asset_class: event.target.value })}
+          >
+            {ASSET_CLASSES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </FieldRow>
+      <FieldRow columns={2}>
+        <Field label="Unit number" hint="Unique on its floor.">
+          <input
+            className="input"
+            value={values.unit_number}
+            onChange={(event) => setValues({ ...values, unit_number: event.target.value })}
+          />
+        </Field>
+        <Field label="Unit reference" hint="What people call it. Can be corrected later.">
+          <input
+            className="input"
+            value={values.unit_reference}
+            onChange={(event) => setValues({ ...values, unit_reference: event.target.value })}
+          />
+        </Field>
+      </FieldRow>
+      <FieldRow columns={3}>
+        <Field label="Unit type" hint="A configured code." optional>
+          <input
+            className="input"
+            value={values.unit_type_code}
+            onChange={(event) => setValues({ ...values, unit_type_code: event.target.value })}
+          />
+        </Field>
+        <Field label="Bedrooms" optional>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            value={values.bedrooms}
+            onChange={(event) => setValues({ ...values, bedrooms: event.target.value })}
+          />
+        </Field>
+        <Field label="Bathrooms" optional>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            value={values.bathrooms}
+            onChange={(event) => setValues({ ...values, bathrooms: event.target.value })}
+          />
+        </Field>
+      </FieldRow>
+    </FormDialog>
+  );
+}

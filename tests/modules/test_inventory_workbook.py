@@ -578,20 +578,70 @@ class TestNothingInAWorkbookIsExecuted:
 
         assert response.status_code == 422, response.text
 
-    def test_the_uncompressed_bound_is_the_one_that_matters(self) -> None:
-        """A workbook is a ZIP, so the size on the wire is not the size in memory.
+    def test_an_oversized_archive_is_refused_before_anything_is_decompressed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The order is the security property, not the eventual refusal.
 
-        The compressed bound is the operator's number. This one is the defence:
-        a few hundred kilobytes that unpack to gigabytes is refused on the
-        archive listing, before a byte is decompressed.
+        An earlier version called ``ZipFile.testzip()`` first — which
+        decompresses every member to check its CRC — and compared the
+        uncompressed total afterwards. It expanded the bomb in order to decide
+        whether it was too big to expand, and the previous version of this test
+        could not tell: it asserted only that the refusal eventually happened.
+
+        So this one instruments the decompressing calls and fails if either is
+        reached. The bound is patched small so the archive stays small; the real
+        constant is checked separately below.
         """
-        assert workbook.MAX_UNCOMPRESSED > workbook.MAX_BYTES
         bomb = io.BytesIO()
         with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("xl/workbook.xml", b"\x00" * (workbook.MAX_UNCOMPRESSED + 1))
+            archive.writestr("xl/workbook.xml", b"\x00" * 4096)
+        body = bomb.getvalue()
 
-        with pytest.raises(workbook.WorkbookRefused):
-            workbook._archive_is_safe(bomb.getvalue())
+        # Patched only after the archive exists: writestr goes through
+        # ZipFile.open too, and patching first would have failed the test on
+        # its own fixture rather than on the code under test.
+        monkeypatch.setattr(workbook, "MAX_UNCOMPRESSED", 1024)
+
+        def never(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("the archive was decompressed before its size was judged")
+
+        monkeypatch.setattr(zipfile.ZipFile, "testzip", never)
+        monkeypatch.setattr(zipfile.ZipFile, "open", never)
+
+        with pytest.raises(workbook.WorkbookRefused, match="expands to far more"):
+            workbook._archive_is_safe(body)
+
+    def test_an_archive_that_understates_itself_cannot_over_deliver(self) -> None:
+        """The declared size is a claim, so what happens when it lies matters.
+
+        Checked against CPython rather than asserted from reasoning:
+        ``ZipExtFile`` bounds each read by the declared ``file_size`` and then
+        raises ``BadZipFile`` on the CRC mismatch. So an understating archive
+        truncates and fails — it cannot deliver more than the central directory
+        was judged on, which is what makes the directory check the real gate.
+
+        This test exists because the fix's first docstring claimed the
+        opposite, and a security note that is merely plausible is worth no more
+        than the one it replaced.
+        """
+        import copy
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("xl/workbook.xml", b"\x00" * 65536)
+
+        with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
+            honest = archive.infolist()[0]
+            lying = copy.copy(honest)
+            lying.file_size = 16
+            with pytest.raises(zipfile.BadZipFile), archive.open(lying) as member:
+                member.read()
+
+    def test_the_uncompressed_bound_is_larger_than_the_one_on_the_wire(self) -> None:
+        """A workbook is a ZIP, so the size on the wire is not the size in memory."""
+        assert workbook.MAX_UNCOMPRESSED > workbook.MAX_BYTES
+        assert workbook.MAX_UNCOMPRESSED == 64 * 1024 * 1024
 
 
 class TestTheTemplateVersionIsAContract:
@@ -906,3 +956,277 @@ class TestOneWorkbookIsOneTransaction:
         assert events[0].after_data["format"] == "workbook"
         assert events[0].after_data["template_version"] == workbook.TEMPLATE_VERSION
         assert events[0].correlation_id is not None
+
+
+# --------------------------------------------------------------------------- #
+# One domain, two ways in
+# --------------------------------------------------------------------------- #
+
+
+def _phases_url(project_id: str) -> str:
+    return f"{inventory_url(project_id)}/phases"
+
+
+class TestTheWorkbookIsJudgedByTheSameRulesAsTheForm:
+    """A spreadsheet is an input adapter, not a second rulebook.
+
+    Every test here pairs a value with the verdict the manual path gives it. The
+    failure this guards against is quiet: a workbook that ``validate`` calls
+    clean and ``apply`` then refuses, or worse, one that loads a record the form
+    would never have accepted. Both were live before the mutation primitives
+    existed, because the workbook wrote ORM rows directly and inherited none of
+    the service's checks.
+    """
+
+    def test_a_code_the_form_refuses_is_refused_in_the_workbook_too(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        bad = "PHASE 1!"
+
+        form = admin_client.post(_phases_url(operational_project), json={"code": bad, "name": "X"})
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(phases=({"phase_code": bad, "phase_name": "X"},)),
+        )
+
+        assert form.status_code >= 400, form.text
+        assert report["error_count"] >= 1, _messages(report)
+        assert any(issue["column"] == "phase_code" for issue in report["issues"]), _messages(report)
+
+    def test_an_invalid_building_code_is_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(phases=(PHASE,), buildings=({**BUILDING, "building_code": "B 1*"},)),
+        )
+
+        assert any(issue["column"] == "building_code" for issue in report["issues"]), _messages(
+            report
+        )
+
+    def test_an_invalid_floor_code_is_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(
+                phases=(PHASE,), buildings=(BUILDING,), floors=({**FLOOR, "floor_code": "0 1/"},)
+            ),
+        )
+
+        assert any(issue["column"] == "floor_code" for issue in report["issues"]), _messages(report)
+
+    def test_a_negative_sequence_is_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        """`ge=0` lives on the request model, and the workbook is judged by it."""
+        report = _validate(
+            admin_client, operational_project, _book(phases=({**PHASE, "sequence": -1},))
+        )
+
+        assert any(issue["column"] == "sequence" for issue in report["issues"]), _messages(report)
+
+    def test_an_overlong_phase_name_is_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client, operational_project, _book(phases=({**PHASE, "phase_name": "N" * 201},))
+        )
+
+        assert any(issue["column"] == "phase_name" for issue in report["issues"]), _messages(report)
+
+    def test_overlong_phase_notes_are_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client, operational_project, _book(phases=({**PHASE, "notes": "n" * 2001},))
+        )
+
+        assert any(issue["column"] == "notes" for issue in report["issues"]), _messages(report)
+
+    @pytest.mark.parametrize("column", ["building_name", "zone", "block", "entrance_wing"])
+    def test_an_overlong_building_field_is_refused(
+        self, admin_client: TestClient, operational_project: str, column: str
+    ) -> None:
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(phases=(PHASE,), buildings=({**BUILDING, column: "x" * 400},)),
+        )
+
+        assert report["error_count"] >= 1, f"{column}: {_messages(report)}"
+
+    def test_an_overlong_floor_label_is_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(
+                phases=(PHASE,),
+                buildings=(BUILDING,),
+                floors=({**FLOOR, "floor_label": "L" * 201},),
+            ),
+        )
+
+        assert any(issue["column"] == "floor_label" for issue in report["issues"]), _messages(
+            report
+        )
+
+    def test_phase_dates_out_of_order_are_refused(
+        self, admin_client: TestClient, operational_project: str
+    ) -> None:
+        report = _validate(
+            admin_client,
+            operational_project,
+            _book(
+                phases=(
+                    {**PHASE, "planned_start": "2026-06-01", "planned_completion": "2026-01-01"},
+                )
+            ),
+        )
+
+        assert any(issue["column"] == "planned_completion" for issue in report["issues"]), (
+            _messages(report)
+        )
+
+    def test_a_building_cannot_be_loaded_under_a_retired_phase(
+        self, admin_client: TestClient, operational_project: str, db: Session
+    ) -> None:
+        """A spreadsheet is not an administrative bypass.
+
+        `stage_create_building` refuses an inactive parent. Validate asks the
+        same question early, so the operator reads it beside the row instead of
+        meeting it as a failed apply.
+        """
+        _apply(admin_client, operational_project, _book(phases=(PHASE,)))
+        phase = db.scalars(select(Phase).where(Phase.code == "PHASE-1")).one()
+        retire = admin_client.patch(
+            f"{_phases_url(operational_project)}/{phase.id}", json={"is_active": False}
+        )
+        assert retire.status_code == 200, retire.text
+
+        report = _validate(admin_client, operational_project, _book(buildings=(BUILDING,)))
+
+        assert report["error_count"] >= 1, _messages(report)
+        assert any("not active" in issue["message"] for issue in report["issues"]), _messages(
+            report
+        )
+        assert db.scalars(select(Building.id)).all() == []
+
+    def test_a_floor_cannot_be_loaded_under_a_retired_building(
+        self, admin_client: TestClient, operational_project: str, db: Session
+    ) -> None:
+        _apply(admin_client, operational_project, _book(phases=(PHASE,), buildings=(BUILDING,)))
+        building = db.scalars(select(Building).where(Building.code == "B1")).one()
+        retire = admin_client.patch(
+            f"{inventory_url(operational_project)}/buildings/{building.id}",
+            json={"is_active": False},
+        )
+        assert retire.status_code == 200, retire.text
+
+        report = _validate(admin_client, operational_project, _book(floors=(FLOOR,)))
+
+        assert report["error_count"] >= 1, _messages(report)
+        assert any("not active" in issue["message"] for issue in report["issues"]), _messages(
+            report
+        )
+        assert db.scalars(select(Floor.id)).all() == []
+
+    def test_an_upsert_writes_the_same_audit_the_form_writes(
+        self, admin_client: TestClient, operational_project: str, db: Session
+    ) -> None:
+        """The audit has to say what changed, not merely that something did.
+
+        The workbook used to write its own abbreviated event carrying a code and
+        a name. "Phase status changed from planning to active" was unavailable
+        from it — which is the difference between an audit trail and a log line.
+        """
+        _apply(admin_client, operational_project, _book(phases=(PHASE,)))
+
+        _apply(
+            admin_client,
+            operational_project,
+            _book(phases=({**PHASE, "status": "active", "phase_name": "Phase One"},)),
+            mode="upsert",
+        )
+
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == "phase.updated")).one()
+        assert event.before_data["status"] == "planning"
+        assert event.after_data["status"] == "active"
+        assert event.before_data["name"] == "Phase 1"
+        assert event.after_data["name"] == "Phase One"
+        # The batch event complements the domain events; it does not replace them.
+        assert db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "inventory.import_applied")
+        ).all()
+        assert event.correlation_id is not None
+
+    def test_a_building_upsert_records_its_changed_fields(
+        self, admin_client: TestClient, operational_project: str, db: Session
+    ) -> None:
+        _apply(admin_client, operational_project, _book(phases=(PHASE,), buildings=(BUILDING,)))
+
+        _apply(
+            admin_client,
+            operational_project,
+            _book(buildings=({**BUILDING, "zone": "South", "block": "C", "sequence": 7},)),
+            mode="upsert",
+        )
+
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == "building.updated")).one()
+        assert event.before_data["zone"] is None
+        assert event.after_data["zone"] == "South"
+        assert event.after_data["block"] == "C"
+        assert event.after_data["sequence"] == 7
+
+    def test_a_floor_upsert_records_its_changed_fields(
+        self, admin_client: TestClient, operational_project: str, db: Session
+    ) -> None:
+        _apply(
+            admin_client,
+            operational_project,
+            _book(phases=(PHASE,), buildings=(BUILDING,), floors=(FLOOR,)),
+        )
+
+        _apply(
+            admin_client,
+            operational_project,
+            _book(floors=({**FLOOR, "floor_label": "Level one", "level_number": 4},)),
+            mode="upsert",
+        )
+
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == "floor.updated")).one()
+        assert event.before_data["label"] == "First floor"
+        assert event.after_data["label"] == "Level one"
+        assert event.after_data["level_number"] == 4
+
+    def test_the_workbook_module_owns_no_hierarchy_rules(self) -> None:
+        """Read from the source, because "we moved it" is a claim about code.
+
+        The point of the mutation primitives is that this module stopped being
+        a second implementation. If it starts building ORM rows or writing
+        hierarchy audit events again, it has started being one.
+        """
+        source = (
+            __import__("pathlib")
+            .Path("app/modules/inventory/workbook.py")
+            .read_text(encoding="utf-8")
+        )
+        writer = source[source.index("def _write_hierarchy(") :]
+
+        for forbidden in ("Phase(", "Building(", "Floor(", "record_event(", "session.add("):
+            assert forbidden not in writer, f"_write_hierarchy still does {forbidden}"
+        for required in (
+            "stage_create_phase",
+            "stage_update_phase",
+            "stage_create_building",
+            "stage_update_building",
+            "stage_create_floor",
+            "stage_update_floor",
+        ):
+            assert required in writer, required
