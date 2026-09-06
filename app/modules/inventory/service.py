@@ -99,7 +99,7 @@ from app.modules.settings.service import require_active_reference_value
 #: Codes are typed, read aloud and quoted, so they stay to characters that
 #: survive all three.
 _CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
-_FLOOR_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
+FLOOR_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
 #: A unit reference is a business label, normalised only enough to be comparable.
 _REFERENCE_PATTERN = re.compile(r"^[A-Za-z0-9 ._/-]{1,64}$")
 
@@ -263,8 +263,14 @@ _SCHEDULE_FIELDS = (
 )
 
 
-def _normalize_code(code: str, *, label: str, pattern: re.Pattern[str] = _CODE_PATTERN) -> str:
-    """Upper-case and validate a hierarchy code."""
+def normalize_code(code: str, *, label: str, pattern: re.Pattern[str] = _CODE_PATTERN) -> str:
+    """Upper-case and validate a hierarchy code.
+
+    Public because the workbook importer has to reach the same verdict at
+    *validate* time that this reaches at apply time. A second copy of the
+    pattern in the importer is how a code becomes acceptable in a spreadsheet
+    and refused through the form.
+    """
     normalized = code.strip().upper()
     if not pattern.match(normalized):
         raise ValidationError(f"{label} may contain only letters, digits, hyphen and underscore.")
@@ -325,7 +331,7 @@ def list_phases(
     return list(session.scalars(statement.order_by(Phase.sequence, Phase.code)))
 
 
-def create_phase(
+def stage_create_phase(
     session: Session,
     *,
     project: Project,
@@ -336,8 +342,8 @@ def create_phase(
     **fields: object,
 ) -> Phase:
     project = lock_project(session, project.id)
-    normalized = _normalize_code(code, label="A phase code")
-    _require_ordered(fields.get("planned_start"), fields.get("planned_completion"))
+    normalized = normalize_code(code, label="A phase code")
+    require_phase_dates_ordered(fields.get("planned_start"), fields.get("planned_completion"))
 
     phase = Phase(
         project_id=project.id,
@@ -361,12 +367,10 @@ def create_phase(
         actor_user_id=actor_user_id,
         after=_snapshot(phase, _PHASE_FIELDS),
     )
-    session.commit()
-    session.refresh(phase)
     return phase
 
 
-def update_phase(
+def stage_update_phase(
     session: Session,
     *,
     phase: Phase,
@@ -385,7 +389,7 @@ def update_phase(
 
     resulting_start = updates.get("planned_start", phase.planned_start)
     resulting_end = updates.get("planned_completion", phase.planned_completion)
-    _require_ordered(resulting_start, resulting_end)
+    require_phase_dates_ordered(resulting_start, resulting_end)
 
     if updates.get("is_active") is False and phase.is_active:
         _refuse_deactivation_with_children(session, phase=phase)
@@ -404,12 +408,11 @@ def update_phase(
         before=before,
         after=_snapshot(phase, _PHASE_FIELDS),
     )
-    session.commit()
-    session.refresh(phase)
     return phase
 
 
-def _require_ordered(start: date | None, end: date | None) -> None:
+def require_phase_dates_ordered(start: date | None, end: date | None) -> None:
+    """Public for the same reason as :func:`normalize_code`."""
     if start is not None and end is not None and end < start:
         raise ValidationError("Planned completion cannot be before planned start.")
 
@@ -454,7 +457,7 @@ def list_buildings(
     return list(session.scalars(statement.order_by(Building.sequence, Building.code)))
 
 
-def create_building(
+def stage_create_building(
     session: Session,
     *,
     project: Project,
@@ -474,7 +477,7 @@ def create_building(
     building = Building(
         project_id=project.id,
         phase_id=phase.id,
-        code=_normalize_code(code, label="A building code"),
+        code=normalize_code(code, label="A building code"),
         name=name.strip(),
         zone=fields.get("zone"),
         block=fields.get("block"),
@@ -493,12 +496,10 @@ def create_building(
         actor_user_id=actor_user_id,
         after=_snapshot(building, _BUILDING_FIELDS),
     )
-    session.commit()
-    session.refresh(building)
     return building
 
 
-def update_building(
+def stage_update_building(
     session: Session,
     *,
     building: Building,
@@ -532,8 +533,6 @@ def update_building(
         before=before,
         after=_snapshot(building, _BUILDING_FIELDS),
     )
-    session.commit()
-    session.refresh(building)
     return building
 
 
@@ -559,7 +558,7 @@ def list_floors(
     return list(session.scalars(statement.order_by(Floor.sequence, Floor.code)))
 
 
-def create_floor(
+def stage_create_floor(
     session: Session,
     *,
     project: Project,
@@ -577,7 +576,7 @@ def create_floor(
     floor = Floor(
         project_id=project.id,
         building_id=building.id,
-        code=_normalize_code(code, label="A floor code", pattern=_FLOOR_CODE_PATTERN),
+        code=normalize_code(code, label="A floor code", pattern=FLOOR_CODE_PATTERN),
         label=label.strip(),
         level_number=fields.get("level_number"),
         sequence=fields.get("sequence") or 0,
@@ -594,12 +593,10 @@ def create_floor(
         actor_user_id=actor_user_id,
         after=_snapshot(floor, _FLOOR_FIELDS),
     )
-    session.commit()
-    session.refresh(floor)
     return floor
 
 
-def update_floor(
+def stage_update_floor(
     session: Session,
     *,
     floor: Floor,
@@ -630,6 +627,170 @@ def update_floor(
         actor_user_id=actor_user_id,
         before=before,
         after=_snapshot(floor, _FLOOR_FIELDS),
+    )
+    return floor
+
+
+# --------------------------------------------------------------------------- #
+# Hierarchy mutation: the domain rules, and the transaction separately
+# --------------------------------------------------------------------------- #
+#
+# Each hierarchy mutation exists twice, and the split is load-bearing.
+#
+# ``stage_*`` validates, normalises, takes the project lock, reloads the row
+# behind that lock, applies the mutation, records the audit event and flushes.
+# It does **not** commit. Every rule about what a phase, building or floor may
+# be lives in exactly one of these.
+#
+# ``create_*`` and ``update_*`` are the public functions a route calls: the
+# primitive, then a commit and a refresh. One request creating one phase is one
+# transaction, which is what a route wants and what the API has always done.
+#
+# The workbook importer calls the primitives directly and commits once at the
+# end, because one workbook is one batch. Before this split it built the ORM
+# rows itself — the only way to get a single transaction — and that made it a
+# second implementation of these rules: it accepted codes the API refused,
+# skipped the active-parent checks, and wrote an audit event carrying a code and
+# a name where the real one carries the whole before and after. An import is an
+# input adapter. It is not a second set of rules with the same name.
+
+
+def create_phase(
+    session: Session,
+    *,
+    project: Project,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    code: str,
+    name: str,
+    **fields: object,
+) -> Phase:
+    """Create one phase as its own transaction."""
+    phase = stage_create_phase(
+        session,
+        project=project,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        code=code,
+        name=name,
+        **fields,
+    )
+    session.commit()
+    session.refresh(phase)
+    return phase
+
+
+def update_phase(
+    session: Session,
+    *,
+    phase: Phase,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    **changes: object,
+) -> Phase:
+    """Update one phase as its own transaction."""
+    phase = stage_update_phase(
+        session,
+        phase=phase,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        **changes,
+    )
+    session.commit()
+    session.refresh(phase)
+    return phase
+
+
+def create_building(
+    session: Session,
+    *,
+    project: Project,
+    phase: Phase,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    code: str,
+    name: str,
+    **fields: object,
+) -> Building:
+    """Create one building as its own transaction."""
+    building = stage_create_building(
+        session,
+        project=project,
+        phase=phase,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        code=code,
+        name=name,
+        **fields,
+    )
+    session.commit()
+    session.refresh(building)
+    return building
+
+
+def update_building(
+    session: Session,
+    *,
+    building: Building,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    **changes: object,
+) -> Building:
+    """Update one building as its own transaction."""
+    building = stage_update_building(
+        session,
+        building=building,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        **changes,
+    )
+    session.commit()
+    session.refresh(building)
+    return building
+
+
+def create_floor(
+    session: Session,
+    *,
+    project: Project,
+    building: Building,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    code: str,
+    label: str,
+    **fields: object,
+) -> Floor:
+    """Create one floor as its own transaction."""
+    floor = stage_create_floor(
+        session,
+        project=project,
+        building=building,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        code=code,
+        label=label,
+        **fields,
+    )
+    session.commit()
+    session.refresh(floor)
+    return floor
+
+
+def update_floor(
+    session: Session,
+    *,
+    floor: Floor,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    **changes: object,
+) -> Floor:
+    """Update one floor as its own transaction."""
+    floor = stage_update_floor(
+        session,
+        floor=floor,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        **changes,
     )
     session.commit()
     session.refresh(floor)
@@ -1595,7 +1756,7 @@ def create_area_type(
     )
     area_type = AreaType(
         project_id=project.id,
-        code=_normalize_code(code, label="An area type code"),
+        code=normalize_code(code, label="An area type code"),
         label=label.strip(),
         area_role=area_role,
         unit_of_measure=fields.get("unit_of_measure") or "sqm",
@@ -1790,7 +1951,7 @@ def create_area_schedule(
     schedule = UnitAreaSchedule(
         project_id=project.id,
         unit_id=unit.id,
-        revision_code=_normalize_code(revision_code, label="A revision code"),
+        revision_code=normalize_code(revision_code, label="A revision code"),
         status=AREA_SCHEDULE_DRAFT,
         measurement_standard=fields.get("measurement_standard"),
         plan_revision=fields.get("plan_revision"),

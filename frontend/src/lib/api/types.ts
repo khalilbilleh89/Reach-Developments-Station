@@ -540,6 +540,8 @@ export type CustomValue = {
 };
 
 export type ImportIssue = {
+  /** Which sheet of a workbook. Null for a CSV, which has only one. */
+  sheet: string | null;
   row: number;
   column: string | null;
   severity: "error" | "warning";
@@ -558,6 +560,23 @@ export type ImportReport = {
   warning_count: number;
   issues: ImportIssue[];
   issues_truncated: boolean;
+};
+
+export type WorkbookRecordCounts = { create: number; update: number };
+
+/**
+ * An import report for the four-sheet workbook.
+ *
+ * `structure` is why the review screen never counts rendered rows: the server
+ * decided which rows survive validation, and a second opinion computed in the
+ * browser is one more thing that can disagree with it.
+ */
+export type WorkbookReport = ImportReport & {
+  template_version: string | null;
+  structure: {
+    rows_read: Record<string, number>;
+    records: Record<string, WorkbookRecordCounts>;
+  };
 };
 
 /* -------------------------------------------------------------------------- *

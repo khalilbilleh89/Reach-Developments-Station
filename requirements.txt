@@ -11,6 +11,18 @@ alembic==1.19.1
 # (PR-MVP-01). Used directly — no Passlib, no auth framework.
 argon2-cffi==25.1.0
 fastapi==0.141.1
+# The operator's inventory template is a real .xlsx workbook, which the owner
+# required by name: a CSV that Excel can open is not a workbook, and a project
+# team asked to hand-build one from a column list will hand back a file that
+# does not import. Reading and writing the format means the OOXML package —
+# a ZIP of XML parts with shared strings, styles and relationships — and
+# hand-rolling that in application code to avoid one mature dependency would be
+# more code, less safe and permanently ours to maintain. Nothing in the
+# repository already reads or writes XLSX; verified against both requirements
+# files before adding this. Used for the workbook only: no pandas, no numpy, no
+# formula engine, and formulas in an uploaded workbook are refused rather than
+# evaluated (app/modules/inventory/workbook.py).
+openpyxl==3.1.5
 psycopg[binary]==3.3.4
 pydantic-settings==2.15.0
 sqlalchemy==2.0.52

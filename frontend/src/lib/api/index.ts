@@ -4,7 +4,7 @@
  * Every network call the application makes goes through one of these.
  */
 
-import { get, patch, post, postCsv, put, remove } from "./client";
+import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
   AdminUser,
   CashflowAccuracy,
@@ -126,6 +126,7 @@ import type {
   UnitCost,
   UnitEconomics as UnitEconomicsRow,
   UnitEconomicsDetail,
+  WorkbookReport,
 } from "./types";
 
 export { ApiError } from "./client";
@@ -377,6 +378,15 @@ export const inventory = {
     ),
   createBuilding: (projectId: string, input: Record<string, unknown>) =>
     post<Building>(`/projects/${projectId}/inventory/buildings`, input),
+  updateBuilding: (
+    projectId: string,
+    buildingId: string,
+    input: Record<string, unknown>,
+  ) =>
+    patch<Building>(
+      `/projects/${projectId}/inventory/buildings/${buildingId}`,
+      input,
+    ),
 
   floors: (
     projectId: string,
@@ -390,6 +400,11 @@ export const inventory = {
   },
   createFloor: (projectId: string, input: Record<string, unknown>) =>
     post<Floor>(`/projects/${projectId}/inventory/floors`, input),
+  updateFloor: (
+    projectId: string,
+    floorId: string,
+    input: Record<string, unknown>,
+  ) => patch<Floor>(`/projects/${projectId}/inventory/floors/${floorId}`, input),
 
   units: (projectId: string, query: Record<string, string> = {}) => {
     const params = new URLSearchParams(query);
@@ -566,6 +581,31 @@ export const inventory = {
     postCsv<ImportReport>(
       `/projects/${projectId}/inventory/import/apply?${new URLSearchParams(query)}`,
       csv,
+    ),
+
+  /** Download the exact workbook this project's import reads. */
+  workbookTemplate: (projectId: string) =>
+    download(
+      `/projects/${projectId}/inventory/import/template.xlsx`,
+      "inventory-template.xlsx",
+    ),
+  validateWorkbook: (
+    projectId: string,
+    bytes: ArrayBuffer,
+    query: Record<string, string>,
+  ) =>
+    postBinary<WorkbookReport>(
+      `/projects/${projectId}/inventory/import/workbook/validate?${new URLSearchParams(query)}`,
+      bytes,
+    ),
+  applyWorkbook: (
+    projectId: string,
+    bytes: ArrayBuffer,
+    query: Record<string, string>,
+  ) =>
+    postBinary<WorkbookReport>(
+      `/projects/${projectId}/inventory/import/workbook/apply?${new URLSearchParams(query)}`,
+      bytes,
     ),
 };
 

@@ -134,3 +134,52 @@ export function postCsv<T>(path: string, csv: string): Promise<T> {
     headers: { "Content-Type": "text/csv" },
   });
 }
+
+/**
+ * POST raw bytes as the request body.
+ *
+ * The workbook equivalent of `postCsv`, and raw for the same reason: the
+ * browser already holds the bytes, so multipart would be a parser on both
+ * sides carried for one screen.
+ */
+export function postBinary<T>(path: string, bytes: ArrayBuffer): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    body: bytes,
+    headers: { "Content-Type": "application/octet-stream" },
+  });
+}
+
+/**
+ * Fetch a file and hand it to the browser to save.
+ *
+ * Through `fetch` rather than a plain link because the session is an HttpOnly
+ * cookie on a same-origin API call, and because a link cannot report a 403 as
+ * anything other than a broken download. The server names the file; the
+ * fallback is only used when it does not.
+ */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`${API_ROOT}${path}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const named = /filename="?([^"';]+)"?/.exec(disposition);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = named ? named[1] : fallbackName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    // Revoked on the next tick: Safari has not necessarily started reading the
+    // blob by the time click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}

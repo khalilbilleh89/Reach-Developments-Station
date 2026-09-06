@@ -795,3 +795,177 @@ class TestLandAndPermitsKeepTheirShape:
         assert "permit.financials_visible" in permits
         for path, source in ((LAND_TAB, land), (PERMITS_TAB, permits)):
             assert "display: none" not in source, f"{path.name} hides a figure with CSS"
+
+
+class TestInventoryShowsTheObjectsItNames:
+    """Four object views, not one register wearing four labels.
+
+    The defect this replaces was invisible to every test the repository had:
+    the screen rendered, the filters worked, and choosing "Phase" produced the
+    unit register filtered by phase. Nothing was broken — the mental model was.
+    The guards here are about structure rather than appearance, so they survive
+    restyling and still fail if Inventory quietly collapses back to one table.
+    """
+
+    INVENTORY = PROJECTS / "InventoryTab.tsx"
+    STRUCTURE = PROJECTS / "inventory" / "StructureViews.tsx"
+    IMPORT_PANEL = PROJECTS / "inventory" / "ImportPanel.tsx"
+
+    def _units_toolbar_actions(self) -> str:
+        """The unit register's toolbar alone.
+
+        Whole-file substring checks are how a guard comes to pass against an
+        unrelated line: this screen has three `canWriteStructure ?` branches,
+        and only one of them is the one under test.
+        """
+        source = read(self.INVENTORY)
+        start = source.index("count={register ?")
+        return source[start : source.index("onReset={", start)]
+
+    def test_all_four_levels_are_first_class_views(self) -> None:
+        source = read(self.INVENTORY)
+
+        for key, label in (
+            ("phases", "Phases"),
+            ("buildings", "Buildings"),
+            ("floors", "Floors"),
+            ("units", "Units"),
+        ):
+            assert f'{{ key: "{key}", label: "{label}" }}' in source, key
+
+    def test_each_hierarchy_view_has_a_register_of_its_own_objects(self) -> None:
+        """A phase register labelled "Unit register" is the old defect returning."""
+        source = read(self.STRUCTURE)
+
+        for label in ("Phase register", "Building register", "Floor register"):
+            assert f'label="{label}"' in source, label
+        assert 'label="Unit register"' not in source
+
+    def test_the_hierarchy_views_do_not_render_the_unit_register(self) -> None:
+        source = read(self.STRUCTURE)
+
+        assert "UnitSummary" not in source
+        assert "commercial_status" not in source
+        assert "inventory.units(" not in source
+
+    def test_drill_down_carries_context_and_offers_a_way_out(self) -> None:
+        source = read(self.INVENTORY)
+
+        assert "onViewBuildings" in source
+        assert "onViewFloors" in source
+        assert "onViewUnits" in source
+        assert "Clear context" in source
+
+    def test_the_normal_import_action_downloads_a_real_workbook(self) -> None:
+        """Asserted on the call, not on the label.
+
+        A first attempt asserted the words "Load template" were absent and
+        matched the paragraph in this file's own docstring explaining why they
+        were removed — a guard reading its own documentation and reporting
+        success. What distinguishes the two designs is which endpoint the
+        button calls: one downloads a file, the other pasted CSV text into a
+        textarea.
+        """
+        source = read(self.IMPORT_PANEL)
+
+        assert "inventory.workbookTemplate(" in source
+        assert "Download Excel template" in source
+        # The CSV template endpoint returns JSON text for a textarea. It has no
+        # place in the normal path, whatever the button says.
+        assert "inventory.importTemplate(" not in source
+        # CSV survives behind one affordance rather than being the first thing
+        # an operator loading a development is asked to choose.
+        assert "Advanced CSV import" in source
+        assert source.index("Download Excel template") < source.index("Advanced CSV import")
+
+    def test_retiring_the_generic_form_did_not_retire_manual_unit_creation(self) -> None:
+        """The regression the removal guard could not see.
+
+        `HierarchyForms` was four forms behind tabs, and one of them was the only
+        way to create a unit by hand. Asserting the file is gone says nothing
+        about what went with it — so this asserts the capability, which is what
+        an operator actually loses.
+
+        Import is the other way in, not the only one: adding one unit to a
+        finished floor should not require opening a spreadsheet.
+        """
+        action = self._units_toolbar_actions()
+
+        assert "Add unit" in action
+        assert "setAddingUnit(true)" in action
+        # Offered to somebody who may write structure, and to nobody else.
+        # Scoped to this toolbar: `canWriteStructure ? (` appears three times in
+        # the file, so asserting it anywhere passed with the guard deleted — the
+        # first version of this test did exactly that.
+        assert "canWriteStructure" in action
+        assert "inventory.createUnit(" in read(self.STRUCTURE)
+
+    def test_add_unit_preselects_the_floor_the_operator_drilled_into(self) -> None:
+        inventory = read(self.INVENTORY)
+        structure = read(self.STRUCTURE)
+
+        assert "defaultFloorId={filters.floor_id}" in inventory
+        assert "floorsForNewUnit" in inventory
+        assert "defaultFloorId" in structure
+
+    def test_the_unit_form_offers_only_floors_the_server_returned(self) -> None:
+        """No fetch-then-hide. A forbidden phase is absent, not filtered out."""
+        inventory = read(self.INVENTORY)
+
+        assert "floors.filter(" in inventory
+        assert "inventory.floors(" in inventory
+
+    def test_the_unit_form_stays_out_of_pr_v2_03(self) -> None:
+        """The physical unit record is the next PR's, and its shape is not settled."""
+        structure = read(self.STRUCTURE)
+        form = structure[structure.index("export function UnitForm(") :]
+
+        for later in ("internal_area", "balcony", "terrace", "roof_garden", "parking", "storage"):
+            assert later not in form, later
+
+    def test_the_unit_empty_state_does_not_call_csv_the_only_way_in(self) -> None:
+        inventory = read(self.INVENTORY)
+
+        assert "import them from a CSV" not in inventory
+        assert "Add a unit" in inventory
+
+    def test_the_generic_add_structure_path_is_gone(self) -> None:
+        """One operating path, never two.
+
+        Contextual creation and a generic "Add structure" dialog doing the same
+        job is how two screens drift apart while both look right.
+
+        Asserted on the component and the state it was driven by rather than on
+        the words: the phrase still appears in a comment saying what was
+        removed, and a guard that the comment satisfies guards nothing.
+        """
+        assert not (PROJECTS / "inventory" / "HierarchyForms.tsx").exists()
+        for path in frontend_sources():
+            assert "HierarchyForms" not in read(path), path.name
+        source = read(self.INVENTORY)
+        assert '"hierarchy"' not in source
+
+    def test_creation_is_contextual_from_each_register(self) -> None:
+        """Each register offers the one record it is about, and no other."""
+        source = read(self.STRUCTURE)
+
+        for action in ("Add phase", "Add building", "Add floor"):
+            assert action in source, action
+        # The forms preselect the parent the register is already filtered to,
+        # so nobody restates context the screen already holds.
+        assert "defaultPhaseId" in source
+        assert "defaultBuildingId" in source
+
+    def test_the_import_report_is_read_by_sheet_row_and_column(self) -> None:
+        """A workbook has four sheets and four row 7s."""
+        source = read(self.IMPORT_PANEL)
+
+        assert 'scope="col">Sheet<' in source
+        assert "issue.sheet" in source
+
+    def test_the_review_counts_come_from_the_server(self) -> None:
+        """Counted rows and reported rows would be two answers to one question."""
+        source = read(self.IMPORT_PANEL)
+
+        assert "report?.structure.records" in source
+        assert "report.create_count" in source
