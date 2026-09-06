@@ -405,6 +405,7 @@ class PriceVersionCreateRequest(StrictRequest):
 
     valid_from: date | None = None
     change_reason: Reason | None = None
+    selling_price: Money | None = None
     internal_rate_override: Money | None = None
     override_reason: Reason | None = None
     paid_upgrades: list[PaidUpgradeRequest] = Field(default_factory=list, max_length=50)
@@ -490,7 +491,7 @@ class PriceVersionRead(BaseModel):
     project_id: uuid.UUID
     unit_id: uuid.UUID
     version_number: int
-    pricing_configuration_id: uuid.UUID
+    pricing_configuration_id: uuid.UUID | None
     unit_area_schedule_id: uuid.UUID
     status: str
     currency_id: uuid.UUID
@@ -535,6 +536,9 @@ class UnitPricingRead(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    direct_price_currency_id: uuid.UUID
+    price_per_gross_area: DecimalStr | None
+    gross_area_unit: str | None
     unit_id: uuid.UUID
     unit_reference: str
     unit_type_code: str | None

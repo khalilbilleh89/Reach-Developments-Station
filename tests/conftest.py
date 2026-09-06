@@ -122,6 +122,8 @@ _DATA_TABLES = (
     "client_parties",
     "clients",
     "sales_project_policies",
+    "unit_features",
+    "unit_documents",
     "unit_status_events",
     "unit_area_values",
     "unit_area_schedules",

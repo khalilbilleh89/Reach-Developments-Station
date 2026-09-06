@@ -1,6 +1,6 @@
 "use client";
 
-import type { CollectionSaleSummary, Unit, UnitEconomicsDetail, UnitPricing } from "@/lib/api";
+import type { CollectionSaleSummary, Unit, UnitPricing } from "@/lib/api";
 import type { Answer } from "@/lib/answer";
 import {
   Badge,
@@ -15,16 +15,10 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
-import { businessDate, money, percent } from "@/lib/format";
+import { businessDate, money } from "@/lib/format";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import { unitCollectionLabel, unitCollectionTone } from "@/components/projects/collections/labels";
-import {
-  PROFIT_EXPLANATIONS,
-  basisLabel,
-  profitTone,
-  profitabilityLabel,
-} from "@/components/projects/economics/labels";
 import {
   gateLabel,
   gateTone,
@@ -64,14 +58,12 @@ export function UnitSummary({
   unit,
   pricing,
   commitment,
-  economics,
   collection,
   onOpenTab,
 }: {
   unit: Unit;
   pricing: Answer<UnitPricing>;
   commitment: Answer<Commitment>;
-  economics: Answer<UnitEconomicsDetail>;
   collection: Answer<CollectionSaleSummary>;
   onOpenTab: (tab: string) => void;
 }) {
@@ -141,22 +133,6 @@ export function UnitSummary({
         </section>
       )}
 
-      {economics.status === "off" ? null : (
-        <section>
-          <SectionHeader
-            title="Economics"
-            actions={
-              economics.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("economics")}>
-                  Cost and margin
-                </Button>
-              ) : undefined
-            }
-          />
-          <EconomicsSnapshot answer={economics} />
-        </section>
-      )}
-
       {collection.status === "off" ? null : (
         <section>
           <SectionHeader
@@ -220,7 +196,7 @@ function PriceSnapshot({ answer }: { answer: Answer<UnitPricing> }) {
       {price ? (
         <MetricGroup>
           <Metric label="List price (ex tax)" value={money(price.reference_price_ex_tax, priceCode)} />
-          <Metric label="Per internal unit" value={money(price.price_per_internal_area, priceCode)} size="sm" />
+          <Metric label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_gross_area, priceCode)} note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"} size="sm" />
           <Metric
             label="Version"
             value={`v${price.version_number}`}
@@ -234,8 +210,8 @@ function PriceSnapshot({ answer }: { answer: Answer<UnitPricing> }) {
           title="Not priced"
           hint={
             unitPricing.has_active_configuration
-              ? "Generate a price from the project's Pricing section, then have it approved and activated."
-              : "This project has no active pricing configuration yet, so no unit can be priced."
+              ? "Enter a selling price in this unit’s Pricing tab, then have it approved and activated."
+              : "A pricing writer can enter a selling price directly in this unit’s Pricing tab."
           }
         />
       )}
@@ -321,51 +297,6 @@ function CommitmentSnapshot({ answer, commercialStatus }: { answer: Answer<Commi
         </>
       ) : null}
     </KeyValueGrid>
-  );
-}
-
-/** The four figures Finance opens a unit for, or the reason there are none. */
-function EconomicsSnapshot({ answer }: { answer: Answer<UnitEconomicsDetail> }) {
-  const currencyCodeOf = useCurrencyCode();
-  if (answer.status === "loading") return <Loading label="Loading the unit's economics" shape="metrics" />;
-  if (answer.status === "denied") return <p className="subtle">Not available to your role.</p>;
-  if (answer.status === "failed") {
-    return (
-      <Notice tone="error">
-        Economics could not be loaded. {answer.message} No cost or margin is known until it can be.
-      </Notice>
-    );
-  }
-  if (answer.status !== "ready") return null;
-
-  const row = answer.data.economics;
-  const costCode = currencyCodeOf(row.cost_currency_id);
-  const revenueCode = currencyCodeOf(row.revenue_currency_id);
-  if (row.profitability_status !== "ready") {
-    return (
-      <Notice tone="warning">
-        {profitabilityLabel(row.profitability_status)}. {PROFIT_EXPLANATIONS[row.profitability_status]}
-      </Notice>
-    );
-  }
-  return (
-    <MetricGroup compact>
-      <Metric label="Revenue" value={money(row.revenue, revenueCode)} note={`${basisLabel(row.basis)} basis`} size="sm" />
-      <Metric label="Total cost" value={money(row.total_cost, costCode)} size="sm" />
-      <Metric
-        label="Profit after finance"
-        value={money(row.profit_after_finance, costCode)}
-        tone={profitTone(row.profit_after_finance) === "danger" ? "danger" : "neutral"}
-        size="sm"
-      />
-      <Metric
-        label="Margin"
-        value={percent(row.margin_fraction)}
-        tone={row.below_margin_threshold ? "warning" : "neutral"}
-        note={row.below_margin_threshold ? `Below ${percent(row.threshold_fraction)} minimum` : undefined}
-        size="sm"
-      />
-    </MetricGroup>
   );
 }
 

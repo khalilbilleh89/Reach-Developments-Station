@@ -20,7 +20,7 @@ from sqlalchemy import select
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.inventory import custom_fields as fields_service
-from app.modules.inventory import import_service, service, workbook
+from app.modules.inventory import import_service, physical, service, workbook
 from app.modules.inventory.models import (
     SCOPE_PROJECT,
     SCOPE_UNIT_TYPE,
@@ -71,6 +71,10 @@ from app.modules.inventory.schemas import (
     SubAssetUpdateRequest,
     UnitCreateRequest,
     UnitDetail,
+    UnitDocumentCreate,
+    UnitDocumentRead,
+    UnitFeatureCreate,
+    UnitFeatureRead,
     UnitRegister,
     UnitStatusEventRead,
     UnitSummary,
@@ -340,6 +344,7 @@ def _unit_summary(
         **{name: getattr(unit, name) for name in UnitDetail.model_fields if hasattr(unit, name)},
         **labels.get(unit.id, {}),
         "internal_area": internal_area,
+        **physical.gross_measurement(lines),
         "weighted_saleable_area": service.weighted_saleable_area(lines),
         "weighted_saleable_area_unit": service.weighted_area_unit(session, project_id=project.id),
         "parking_count": counts.get(unit.id, {}).get("parking", 0),
@@ -1425,3 +1430,108 @@ async def _csv_body(request: Request) -> bytes:
             f"That file is larger than the {import_service.MAX_BYTES // (1024 * 1024)} MB limit."
         )
     return body
+
+
+@router.get(
+    "/{project_id}/inventory/units/{unit_id}/features", response_model=list[UnitFeatureRead]
+)
+def list_unit_features(
+    unit_id: uuid.UUID, session: DbSession, actor: ActiveActor, project: InventoryProject
+) -> list[UnitFeatureRead]:
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return [UnitFeatureRead.model_validate(row) for row in physical.features(session, unit)]
+
+
+@router.post(
+    "/{project_id}/inventory/units/{unit_id}/features",
+    response_model=UnitFeatureRead,
+    status_code=201,
+)
+def create_unit_feature(
+    unit_id: uuid.UUID,
+    payload: UnitFeatureCreate,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitFeatureRead:
+    require_inventory_structure_writer(actor)
+    require_operational_project(project)
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return UnitFeatureRead.model_validate(
+        physical.add_feature(session, unit=unit, actor=actor, label=payload.label)
+    )
+
+
+@router.post(
+    "/{project_id}/inventory/units/{unit_id}/features/{feature_id}/retire",
+    response_model=UnitFeatureRead,
+)
+def retire_unit_feature(
+    unit_id: uuid.UUID,
+    feature_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitFeatureRead:
+    require_inventory_structure_writer(actor)
+    require_operational_project(project)
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return UnitFeatureRead.model_validate(
+        physical.retire_feature(session, unit=unit, actor=actor, feature_id=feature_id)
+    )
+
+
+@router.get(
+    "/{project_id}/inventory/units/{unit_id}/documents", response_model=list[UnitDocumentRead]
+)
+def list_unit_documents(
+    unit_id: uuid.UUID, session: DbSession, actor: ActiveActor, project: InventoryProject
+) -> list[UnitDocumentRead]:
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return [UnitDocumentRead.model_validate(row) for row in physical.documents(session, unit)]
+
+
+@router.post(
+    "/{project_id}/inventory/units/{unit_id}/documents",
+    response_model=UnitDocumentRead,
+    status_code=201,
+)
+def create_unit_document(
+    unit_id: uuid.UUID,
+    payload: UnitDocumentCreate,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitDocumentRead:
+    require_inventory_structure_writer(actor)
+    require_operational_project(project)
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return UnitDocumentRead.model_validate(
+        physical.add_document(
+            session,
+            unit=unit,
+            actor=actor,
+            title=payload.title,
+            url=str(payload.url),
+            revision=payload.revision,
+        )
+    )
+
+
+@router.post(
+    "/{project_id}/inventory/units/{unit_id}/documents/{document_id}/retire",
+    response_model=UnitDocumentRead,
+)
+def retire_unit_document(
+    unit_id: uuid.UUID,
+    document_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitDocumentRead:
+    require_inventory_structure_writer(actor)
+    require_operational_project(project)
+    unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
+    return UnitDocumentRead.model_validate(
+        physical.retire_document(session, unit=unit, actor=actor, document_id=document_id)
+    )

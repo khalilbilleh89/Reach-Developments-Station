@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, collections, inventory, pricing, sales, unitEconomics } from "@/lib/api";
+import { ApiError, collections, inventory, pricing, sales } from "@/lib/api";
 import type {
   AreaSchedule,
   AreaType,
@@ -12,17 +12,15 @@ import type {
   SaleDetail,
   SubAsset,
   Unit,
-  UnitEconomicsDetail,
   UnitPricing,
   UnitStatusEvent,
 } from "@/lib/api";
 import { toAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
-import { isPositive, money, percent } from "@/lib/format";
+import { isPositive, money } from "@/lib/format";
 import {
   COLLECTION_READERS,
-  ECONOMICS_READERS,
   INTERNAL_PRICE_READERS,
   LIST_PRICE_READERS,
   PRICING_APPROVERS,
@@ -35,11 +33,11 @@ import type { DrawerFact, DrawerHeadline } from "@/components/ui";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import { profitabilityLabel } from "@/components/projects/economics/labels";
-import { UnitEconomicsSection } from "@/components/projects/economics/UnitEconomicsSection";
 import { UnitCollections } from "@/components/projects/collections/UnitCollections";
 import { unitCollectionLabel } from "@/components/projects/collections/labels";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
+import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
@@ -117,7 +115,6 @@ export function UnitDetailPanel({
   // and neither is ever drawn as a unit with no price or no commitment.
   const [pricingAnswer, setPricingAnswer] = useState<Answer<UnitPricing>>({ status: "off" });
   const [commitmentAnswer, setCommitmentAnswer] = useState<Answer<Commitment>>({ status: "off" });
-  const [economics, setEconomics] = useState<Answer<UnitEconomicsDetail>>({ status: "off" });
   const [collection, setCollection] = useState<Answer<CollectionSaleSummary>>({ status: "off" });
   const [section, setSection] = useState("summary");
   const [quoting, setQuoting] = useState(false);
@@ -129,7 +126,6 @@ export function UnitDetailPanel({
   const currencyCodeOf = useCurrencyCode();
 
   const seesSales = hasAnyRole(roles, SALES_READERS);
-  const seesEconomics = hasAnyRole(roles, ECONOMICS_READERS);
   const seesCollections = hasAnyRole(roles, COLLECTION_READERS);
   const seesInternalPrices = hasAnyRole(roles, INTERNAL_PRICE_READERS);
   const seesListPrice = hasAnyRole(roles, LIST_PRICE_READERS);
@@ -217,21 +213,8 @@ export function UnitDetailPanel({
       }
     };
 
-    const loadEconomics = async () => {
-      if (!seesEconomics) {
-        setEconomics({ status: "off" });
-        return;
-      }
-      setEconomics({ status: "loading" });
-      try {
-        setEconomics({ status: "ready", data: await unitEconomics.unit(projectId, unitId) });
-      } catch (caught) {
-        setEconomics(toAnswer(caught));
-      }
-    };
-
-    await Promise.all([loadPricing(), loadCommercial(), loadEconomics()]);
-  }, [projectId, unitId, seesSales, seesEconomics, seesCollections, seesListPrice]);
+    await Promise.all([loadPricing(), loadCommercial()]);
+  }, [projectId, unitId, seesSales, seesCollections, seesListPrice]);
 
   useEffect(() => {
     void (async () => {
@@ -320,14 +303,14 @@ export function UnitDetailPanel({
   const price = unitPricing?.active_price ?? null;
   const priceCode = currencyCodeOf(price?.currency_id);
   const hasSale = commitmentAnswer.status === "ready" && commitmentAnswer.data.sale !== null;
+  const liveSale = commitmentAnswer.status === "ready" ? commitmentAnswer.data.sale?.sale : null;
 
   const sections = [
     { key: "summary", label: "Overview" },
-    { key: "detail", label: "Areas & features" },
+    { key: "detail", label: "Physical record" },
     ...(seesListPrice ? [{ key: "pricing", label: "Pricing" }] : []),
     ...(seesSales ? [{ key: "commercial", label: "Sales & legal" }] : []),
     ...(seesCollections && hasSale ? [{ key: "collections", label: "Collections" }] : []),
-    ...(seesEconomics ? [{ key: "economics", label: "Economics" }] : []),
     { key: "release", label: "Release" },
     { key: "history", label: "History" },
   ];
@@ -356,7 +339,7 @@ export function UnitDetailPanel({
             : `Current list price · v${price.version_number} · ex tax`
           : unitPricing.has_active_configuration
             ? "No live price yet"
-            : "No pricing configuration",
+            : "No live selling price yet",
         tone: unitPricing.repricing_required ? "danger" : price ? undefined : "muted",
       }
     : pricingAnswer.status === "failed"
@@ -369,12 +352,12 @@ export function UnitDetailPanel({
       tone: unit.internal_area === null ? ("muted" as const) : undefined,
     },
     {
-      label: "Weighted saleable",
+      label: "Gross area",
       value:
-        unit.weighted_saleable_area === null
+        unit.gross_area === null
           ? "Not measured"
-          : `${unit.weighted_saleable_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
-      tone: unit.weighted_saleable_area === null ? ("muted" as const) : undefined,
+          : `${unit.gross_area} ${unit.gross_area_unit ?? ""}`.trim(),
+      tone: unit.gross_area === null ? ("muted" as const) : undefined,
     },
     ...(unit.parking_count > 0 || unit.storage_count > 0
       ? [
@@ -386,34 +369,13 @@ export function UnitDetailPanel({
             ]
               .filter(Boolean)
               .join(" · "),
-            note: "Excluded from area",
+            note: "Excluded from gross area",
           },
         ]
       : []),
-    ...(economics.status === "ready"
-      ? [
-          {
-            label: "Margin",
-            value:
-              economics.data.economics.profitability_status === "ready"
-                ? percent(economics.data.economics.margin_fraction)
-                : profitabilityLabel(economics.data.economics.profitability_status),
-            note:
-              economics.data.economics.profitability_status === "ready"
-                ? `${economics.data.economics.basis === "sold" ? "Sold" : "Forecast"} basis`
-                : undefined,
-            // The server's own flags, repeated: a loss, or a margin under the
-            // configured floor. Nothing here decides either.
-            tone:
-              economics.data.economics.profit_after_finance?.startsWith("-") ||
-              economics.data.economics.below_margin_threshold
-                ? ("danger" as const)
-                : undefined,
-          },
-        ]
-      : economics.status === "failed"
-        ? [unavailable("Margin")]
-        : []),
+    ...(liveSale && ["active", "termination_pending"].includes(liveSale.status)
+      ? [{ label: "Sold price", value: money(liveSale.net_contract_price_ex_tax, currencyCodeOf(liveSale.currency_id)), note: "Contract amount · ex tax" }]
+      : []),
     ...(collection.status === "ready"
       ? [
           {
@@ -488,7 +450,6 @@ export function UnitDetailPanel({
           unit={unit}
           pricing={pricingAnswer}
           commitment={commitmentAnswer}
-          economics={economics}
           collection={collection}
           onOpenTab={setSection}
         />
@@ -552,6 +513,9 @@ export function UnitDetailPanel({
               />
             </Card>
           ) : null}
+          <PhysicalRecord key={unitId} projectId={projectId} unit={unit} areaTypes={areaTypes}
+            schedules={schedules} assets={assets} canWrite={canWriteStructure}
+            onChanged={async () => { await load(); await onChanged(); }} />
           <UnitAreas
             unit={unit}
             schedules={schedules}
@@ -583,6 +547,7 @@ export function UnitDetailPanel({
 
       {activeSection === "pricing" ? (
         <>
+          {canPrice ? <SellingPriceForm projectId={projectId} unitId={unitId} currencyCode={currencyCodeOf(unitPricing?.direct_price_currency_id)} onChanged={async () => { await load(); await onChanged(); }} /> : null}
           <UnitPricingSection
             answer={pricingAnswer}
             canPrice={canPrice}
@@ -609,7 +574,6 @@ export function UnitDetailPanel({
 
       {activeSection === "collections" ? <UnitCollections answer={collection} /> : null}
 
-      {activeSection === "economics" ? <UnitEconomicsSection answer={economics} /> : null}
 
       {activeSection === "history" ? <UnitHistory history={history} /> : null}
 

@@ -378,6 +378,7 @@ export type AreaLine = {
   code: string;
   label: string;
   area_role: string;
+  physical_component: string | null;
   unit_of_measure: string;
   raw_area: string;
   weight_factor: string;
@@ -385,6 +386,8 @@ export type AreaLine = {
 };
 
 export type UnitSummary = {
+  gross_area: string | null;
+  gross_area_unit: string | null;
   id: string;
   project_id: string;
   unit_reference: string;
@@ -414,7 +417,12 @@ export type UnitSummary = {
   is_active: boolean;
 };
 
+export type UnitFeature = { id: string; label: string; is_active: boolean };
+export type UnitDocument = { id: string; title: string; url: string; revision: string | null; is_active: boolean };
+
 export type Unit = UnitSummary & {
+  gross_area_reason: string | null;
+  gross_missing_components: string[];
   bathrooms: number | null;
   has_maid_room: boolean;
   is_duplex: boolean;
@@ -481,6 +489,7 @@ export type AreaType = {
   code: string;
   label: string;
   area_role: string;
+  physical_component: string | null;
   unit_of_measure: string;
   weight_factor: string;
   required_for_release: boolean;
@@ -715,7 +724,7 @@ export interface PriceVersion {
   project_id: string;
   unit_id: string;
   version_number: number;
-  pricing_configuration_id: string;
+  pricing_configuration_id: string | null;
   unit_area_schedule_id: string;
   status: PricingStatus;
   currency_id: string;
@@ -745,6 +754,9 @@ export interface PriceVersionDetail extends PriceVersion {
 }
 
 export interface UnitPricing {
+  direct_price_currency_id: string;
+  price_per_gross_area: string | null;
+  gross_area_unit: string | null;
   unit_id: string;
   unit_reference: string;
   unit_type_code: string | null;

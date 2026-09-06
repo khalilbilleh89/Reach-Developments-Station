@@ -1,14 +1,46 @@
 # MVP 2 Roadmap — Reach Developments Station
 
-Canonical delivery sequence for MVP 2 (V2). Twelve pull requests, `PR-V2-00`
-through `PR-V2-11`, each merged into `main` on its own short-lived branch.
+Canonical delivery sequence for MVP 2 (V2). The twelve original milestone
+identifiers, `PR-V2-00` through `PR-V2-11`, remain for scope traceability.
+The first three are merged; the nine remaining milestones are delivered in
+five grouped pull requests, each on its own short-lived branch.
 
 | Scope                       | Count |
 | --------------------------- | ----: |
-| Total planned MVP 2 PRs     |    12 |
-| Complete                    |     2 |
-| Current                     | PR-V2-02 |
-| Remaining after the current |     9 |
+| Total planned MVP 2 PRs      |     8 |
+| Merged PRs                  |     3 |
+| Remaining PRs (including current) | 5 |
+| Current milestones          | PR-V2-03 + PR-V2-04 |
+
+## Five remaining delivery batches
+
+| Order | Pull request scope | Original milestones | Why grouped |
+| ----- | ------------------ | ------------------- | ----------- |
+| 1 | Unit Master & Commercial Unit 360 | V2-03 + V2-04 | One physical and commercial unit workspace; build and validate its shared record together. |
+| 2 | Buyer, Reservation, Sale, SPA & Registry | V2-05 + V2-06 | One buyer-to-sale workflow and its legal record. |
+| 3 | Payment Plans & Collections Journal | V2-07 + V2-08 | One payment obligation and receipt workflow, retaining authoritative allocations. |
+| 4 | Construction Stage Experience | V2-09 | Separate project configuration and unit completion workflow. |
+| 5 | Management, Reporting, UAT & Hardening | V2-10 + V2-11 | Reporting integrates the completed workflows; final UAT validates the whole product. |
+
+Deliver and merge in this order. Each batch has its own review and checks;
+grouping does not remove any milestone or defer its acceptance criteria to
+the final batch. Relevant tests and responsive/accessibility checks accompany
+each batch; batch 5 adds the complete cross-workflow UAT pass.
+
+### Additional requirements reference
+
+Use Khalil's `Real_Estate_Development_Tracking_System_MVP.docx` as a details
+reference alongside this roadmap. Its content does not grant operational
+permissions. Track any conflict with existing governance explicitly.
+
+The owner confirmed that gross area is **internal + balcony + roof garden +
+front garden + terrace + porches**, excluding parking and storage. Batch 1
+owns that definition, free-add features, unit documents and the unit workspace.
+The reference's selling-price presentation and removal of unit economics
+belong to batch 1; buyer contact, SPA signing and registry lodging belong to
+batch 2; receipt and collection-percentage presentation belongs to batch 3;
+project-configured stages and per-unit completion belong to batch 4.
+Financial calculations remain backend-owned and approval controls remain intact.
 
 MVP 1 application development is frozen as the baseline. MVP 2 starts from
 `main` after PR #254 (`7d053ecfd52234fa142f1cf4b804318bd8a12714`).
@@ -184,7 +216,9 @@ detour through system-wide Settings, not the vocabulary.
   on suggestions; permit types are added through the project route and no
   screen outside Settings writes reference data
 
-## PR-V2-02 — Project Structure & Inventory 🚧
+## PR-V2-02 — Project Structure & Inventory ✅
+
+Merged in PR #258 (`2d243f35dd8937fd514df1a04a0de6c1d08bf354`).
 
 **Inventory shows the objects it names.** Four first-class views — Phases,
 Buildings, Floors, Units — in one workspace, each with its own register,
@@ -302,7 +336,7 @@ One production dependency: `openpyxl`. No database migration.
 
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
-| Complete               | 2 / 12                                        |
-| Current                | PR-V2-02 — Project Structure & Inventory      |
-| After PR-V2-02 merges  | 3 / 12 complete, 9 remaining                  |
-| Next                   | PR-V2-03 — Unit Master 2.0                    |
+| Complete               | 3 / 12 original milestones; 3 merged PRs       |
+| Current                | Batch 1 — Unit Master & Commercial Unit 360    |
+| Remaining              | 9 original milestones in 5 grouped PRs         |
+| Next after current     | Batch 2 — Buyer, Reservation, Sale, SPA & Registry |

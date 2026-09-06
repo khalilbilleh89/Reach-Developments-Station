@@ -167,8 +167,8 @@ export function UnitPricingSection({
             title="Not priced"
             hint={
               unitPricing.has_active_configuration
-                ? "Generate a price from the project's Pricing section."
-                : "This project has no active pricing configuration yet."
+                ? "Enter a selling price above, then submit it for separate approval."
+                : "Selling prices can be entered directly without pricing configuration."
             }
           />
         ) : (
@@ -180,8 +180,9 @@ export function UnitPricingSection({
                 size="lg"
               />
               <Metric
-                label="Per internal unit"
-                value={money(active.price_per_internal_area, activeCode)}
+                label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`}
+                value={money(unitPricing.price_per_gross_area, activeCode)}
+                note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"}
                 size="sm"
               />
               <Metric

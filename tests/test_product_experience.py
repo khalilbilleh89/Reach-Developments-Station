@@ -441,12 +441,10 @@ class TestOnlyEntitledReadersAsk:
     def test_unit_360_asks_for_finance_only_on_behalf_of_finance_readers(self) -> None:
         """Legal and Collections open a unit file with no price, margin or cost requested."""
         unit = read(UNIT_360)
-        assert "const seesEconomics = hasAnyRole(roles, ECONOMICS_READERS);" in unit
+        assert "unitEconomics.unit(" not in unit
+        assert "UnitEconomicsSection" not in unit
         assert "const seesListPrice = hasAnyRole(roles, LIST_PRICE_READERS);" in unit
         assert "const seesCollections = hasAnyRole(roles, COLLECTION_READERS);" in unit
-        assert re.search(
-            r"if \(!seesEconomics\) \{\s*setEconomics\(\{ status: \"off\" \}\);\s*return;", unit
-        )
         assert re.search(
             r"if \(!seesListPrice\) \{\s*setPricingAnswer\(\{ status: \"off\" \}\);\s*return;", unit
         )

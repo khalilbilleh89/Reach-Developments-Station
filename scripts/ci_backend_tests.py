@@ -555,7 +555,9 @@ def select(changed: list[str], available: list[str]) -> Selection:
 def available_test_files(root: Path) -> list[str]:
     """Every test file in the checkout, as repository-relative paths."""
     return sorted(
-        str(path.relative_to(root)) for path in root.glob("tests/**/test_*.py") if path.is_file()
+        path.relative_to(root).as_posix()
+        for path in root.glob("tests/**/test_*.py")
+        if path.is_file()
     )
 
 

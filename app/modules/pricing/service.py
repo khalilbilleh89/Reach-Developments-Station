@@ -63,6 +63,7 @@ from app.modules.inventory.models import (
     UnitAreaValue,
     UnitCustomFieldValue,
 )
+from app.modules.inventory.physical import gross_measurement
 from app.modules.pricing import calculator
 from app.modules.pricing.calculator import (
     AreaInput,
@@ -2653,12 +2654,112 @@ def _build_version(
     return version
 
 
+def _build_direct_version(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    actor: ActorContext,
+    selling_price: Decimal,
+    valid_from: date | None,
+    change_reason: str | None,
+) -> UnitPriceVersion:
+    """A human-entered amount, using the same immutable approval lifecycle."""
+    reason = _require_reason(
+        change_reason, detail="A directly entered selling price needs a reason."
+    )
+    if selling_price <= ZERO:
+        raise ValidationError("The selling price must be greater than zero.")
+    schedule = inventory.approved_schedule(session, unit_id=unit.id)
+    if schedule is None or not unit.is_active:
+        raise ConflictError("An active unit with an approved area schedule is required.")
+    lines = inventory.area_lines(session, project_id=project.id, schedule=schedule)
+    internal = sum((line["raw_area"] for line in lines if line["area_role"] == "internal"), ZERO)
+    weighted = inventory.weighted_saleable_area(lines)
+    phase, _, _ = hierarchy_of(session, unit)
+    benchmark, observation, benchmark_price, deviation, flag = compare_to_market(
+        session,
+        project_id=project.id,
+        phase_id=phase.id,
+        unit_type_code=unit.unit_type_code,
+        currency_id=project.base_currency_id,
+        reference_price=selling_price,
+        internal_area=internal,
+        weighted_area=weighted,
+    )
+    highest = session.scalar(
+        select(func.max(UnitPriceVersion.version_number)).where(UnitPriceVersion.unit_id == unit.id)
+    )
+    effective = valid_from or inventory_fields.business_today()
+    version = UnitPriceVersion(
+        project_id=project.id,
+        unit_id=unit.id,
+        version_number=(highest or 0) + 1,
+        pricing_configuration_id=None,
+        unit_area_schedule_id=schedule.id,
+        status=STATUS_DRAFT,
+        currency_id=project.base_currency_id,
+        valid_from=effective,
+        base_area_value=ZERO,
+        scope_adjustment_total=ZERO,
+        premium_total=ZERO,
+        premium_cap_adjustment=ZERO,
+        escalation_total=ZERO,
+        paid_upgrade_total=ZERO,
+        reference_price_ex_tax=selling_price,
+        internal_area_snapshot=internal,
+        weighted_area_snapshot=weighted,
+        price_per_internal_area=_per_area(selling_price, internal),
+        price_per_weighted_area=_per_area(selling_price, weighted),
+        market_flag=flag,
+        market_benchmark_id=benchmark.id if benchmark else None,
+        market_benchmark_price_snapshot=benchmark_price,
+        market_deviation_fraction=deviation,
+        basis_snapshot_json={
+            "entry_method": "direct",
+            "market_benchmark": observation,
+            "pricing_basis": pricing_basis(session, project=project, unit=unit, schedule=schedule),
+            "descriptive": descriptive_snapshot(session, unit=unit),
+            "effective_from": effective.isoformat(),
+        },
+        change_reason=reason,
+        created_by_user_id=actor.user_id,
+    )
+    session.add(version)
+    _flush(session)
+    session.add(
+        UnitPriceComponent(
+            project_id=project.id,
+            unit_price_version_id=version.id,
+            sequence=1,
+            component_type="manual_override",
+            code="SELLING_PRICE",
+            label="Entered selling price",
+            calculated_amount=selling_price,
+            final_amount=selling_price,
+        )
+    )
+    _flush(session)
+    record_event(
+        session,
+        action="unit_price_version.created",
+        entity_type=ENTITY_PRICE_VERSION,
+        entity_id=version.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        after=_snapshot(version, _VERSION_FIELDS),
+    )
+    return version
+
+
 def generate_price_version(
     session: Session,
     *,
     project: Project,
     unit: Unit,
     actor: ActorContext,
+    selling_price: Decimal | None = None,
     internal_rate_override: Decimal | None = None,
     override_reason: str | None = None,
     paid_upgrades: tuple[UpgradeInput, ...] = (),
@@ -2674,6 +2775,27 @@ def generate_price_version(
     """
     project = lock_project(session, project.id)
     unit = inventory.lock_unit(session, project_id=project.id, unit_id=unit.id)
+    if selling_price is not None:
+        if internal_rate_override is not None or override_reason is not None or paid_upgrades:
+            raise ValidationError(
+                "Direct selling price cannot be combined with calculated-price inputs."
+            )
+        try:
+            version = _build_direct_version(
+                session,
+                project=project,
+                unit=unit,
+                actor=actor,
+                selling_price=selling_price,
+                valid_from=valid_from,
+                change_reason=change_reason,
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        session.refresh(version)
+        return version
     configuration = active_configuration(session, project_id=project.id)
     if configuration is None:
         raise ConflictError(
@@ -2863,19 +2985,26 @@ def _validate_submittable(session: Session, *, version: UnitPriceVersion) -> Non
     system already knew. The basis comparison is the load-bearing one: it is
     what stops an approval signing off geometry that has since been re-measured.
     """
-    configuration = get_configuration(
-        session,
-        project_id=version.project_id,
-        configuration_id=version.pricing_configuration_id,
-    )
-    if configuration.status != STATUS_ACTIVE:
-        raise ConflictError(
-            "This price was calculated under a pricing configuration that is no longer "
-            "active. Generate a new price version."
+    if version.pricing_configuration_id is None:
+        project = session.get(Project, version.project_id)
+        if project is None or version.currency_id != project.base_currency_id:
+            raise ConflictError("Direct prices must use the project base currency.")
+        if version.basis_snapshot_json.get("entry_method") != "direct":
+            raise ConflictError("This price has no recorded entry basis.")
+    else:
+        configuration = get_configuration(
+            session,
+            project_id=version.project_id,
+            configuration_id=version.pricing_configuration_id,
         )
-    if version.currency_id != configuration.pricing_currency_id:
-        raise ConflictError("This price is not in the project's pricing currency.")
-    _require_configuration_validity(configuration, effective_from=version.valid_from)
+        if configuration.status != STATUS_ACTIVE:
+            raise ConflictError(
+                "This price was calculated under a pricing configuration that is no longer "
+                "active. Generate a new price version."
+            )
+        if version.currency_id != configuration.pricing_currency_id:
+            raise ConflictError("This price is not in the project's pricing currency.")
+        _require_configuration_validity(configuration, effective_from=version.valid_from)
     components = list_components(session, version_id=version.id)
     if not components:
         raise ConflictError("This price has no components.")
@@ -3021,6 +3150,8 @@ def approve_price_version(
     if version.status != STATUS_SUBMITTED:
         raise ConflictError("Only a submitted price version can be approved.")
     require_different_checker(actor, maker_user_id=version.submitted_by_user_id)
+    if version.pricing_configuration_id is None:
+        require_different_checker(actor, maker_user_id=version.created_by_user_id)
     _validate_submittable(session, version=version)
 
     before = _snapshot(version, _VERSION_FIELDS)
@@ -3387,6 +3518,19 @@ def _approval_flags(
     return result
 
 
+def configuration_for_price(
+    session: Session, *, project_id: uuid.UUID, version: UnitPriceVersion
+) -> PricingConfiguration | None:
+    """Direct prices have no configuration; callers must ask for explicit terms."""
+    if version.project_id != project_id:
+        raise NotFoundError("Price version not found.")
+    if version.pricing_configuration_id is None:
+        return None
+    return get_configuration(
+        session, project_id=project_id, configuration_id=version.pricing_configuration_id
+    )
+
+
 def quote_preview(
     session: Session,
     *,
@@ -3424,11 +3568,7 @@ def quote_preview(
         _require_current_basis(session, version=active)
     except ConflictError as exc:
         raise ConflictError("This unit requires repricing before a quote can be prepared.") from exc
-    configuration = get_configuration(
-        session,
-        project_id=project.id,
-        configuration_id=active.pricing_configuration_id,
-    )
+    configuration = configuration_for_price(session, project_id=project.id, version=active)
 
     def amount(name: str) -> Decimal:
         value = inputs.get(name)
@@ -3439,7 +3579,9 @@ def quote_preview(
 
     plan_fraction = inputs.get("payment_plan_adjustment_fraction")
     if plan_fraction is None:
-        plan_fraction = configuration.default_payment_plan_adjustment_fraction
+        plan_fraction = (
+            configuration.default_payment_plan_adjustment_fraction if configuration else ZERO
+        )
     plan_fraction = Decimal(str(plan_fraction)) if plan_fraction is not None else ZERO
     plan_adjustment = money(reference * plan_fraction)
 
@@ -3509,13 +3651,40 @@ def quote_preview(
         "seller_cost_total": seller_costs,
         "effective_net_revenue_preview": effective_net_revenue,
         "tax_status": "configured" if tax_rules else "not_configured",
-        "tax_treatment_code": configuration.tax_treatment_code,
+        "tax_treatment_code": configuration.tax_treatment_code if configuration else "exclusive",
         "taxes": taxes,
         "tax_total": tax_total,
         "buyer_paid_fees": buyer_paid_fees,
         "total_buyer_payable_preview": total_payable,
-        "offer_valid_days": configuration.offer_valid_days,
-        "price_lock_days": configuration.price_lock_days,
-        "reservation_expiry_days": configuration.reservation_expiry_days,
+        "offer_valid_days": configuration.offer_valid_days if configuration else None,
+        "price_lock_days": configuration.price_lock_days if configuration else None,
+        "reservation_expiry_days": configuration.reservation_expiry_days if configuration else None,
         **approval,
+    }
+
+
+def gross_price_presentation(
+    session: Session, *, unit: Unit, active: UnitPriceVersion | None
+) -> dict[str, Any]:
+    """Current live price per confirmed gross area; never mix a stale price basis.
+
+    This is a display ratio, not a new pricing input. The approved price and
+    its frozen calculation remain unchanged.
+    """
+    schedule = inventory.approved_schedule(session, unit_id=unit.id)
+    measured = gross_measurement(
+        inventory.area_lines(session, project_id=unit.project_id, schedule=schedule)
+        if schedule is not None
+        else []
+    )
+    gross = measured["gross_area"]
+    return {
+        "price_per_gross_area": (
+            _per_area(active.reference_price_ex_tax, gross)
+            if active is not None
+            and not repricing_required(unit, active=active)
+            and gross is not None
+            else None
+        ),
+        "gross_area_unit": measured["gross_area_unit"],
     }
