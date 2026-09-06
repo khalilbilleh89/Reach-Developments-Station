@@ -693,10 +693,31 @@ class CustomValueRead(BaseModel):
 class ImportIssue(BaseModel):
     """One problem with one cell, named precisely enough to fix in the file."""
 
+    #: Which sheet of a workbook. Null for a CSV, which has only one.
+    sheet: str | None = None
     row: int
     column: str | None
     severity: Literal["error", "warning"]
     message: str
+
+
+class WorkbookRecordCounts(BaseModel):
+    """How many records of one object type the workbook creates and updates."""
+
+    create: int = 0
+    update: int = 0
+
+
+class WorkbookStructure(BaseModel):
+    """What the workbook said, counted by object rather than by row.
+
+    The register on screen reads these numbers rather than counting rendered
+    rows: the server is the one that decided which rows survive validation, and
+    a browser recount is a second opinion nobody asked for.
+    """
+
+    rows_read: dict[str, int]
+    records: dict[str, WorkbookRecordCounts]
 
 
 class ImportReport(BaseModel):
@@ -712,3 +733,15 @@ class ImportReport(BaseModel):
     issues: list[ImportIssue]
     #: True when ``issues`` was capped; ``error_count`` still counts them all.
     issues_truncated: bool = False
+
+
+class WorkbookReport(ImportReport):
+    """An import report for the four-sheet workbook.
+
+    Adds what a workbook has and a CSV does not: the template version it
+    declared, and counts per object type. ``total_rows`` here spans all four
+    sheets, so a row is only ever ``(sheet, row)``.
+    """
+
+    template_version: str | None = None
+    structure: WorkbookStructure

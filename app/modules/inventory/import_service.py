@@ -23,6 +23,7 @@ from __future__ import annotations
 import csv
 import io
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -216,10 +217,17 @@ _FALSE = {"false", "no", "n", "0"}
 
 @dataclass(slots=True)
 class Issue:
+    """One problem with one cell, named precisely enough to fix in the file.
+
+    ``sheet`` is None for a CSV, which has only one. A workbook has four, and
+    "row 24" without the sheet sends an operator to the wrong one.
+    """
+
     row: int
     column: str | None
     severity: str
     message: str
+    sheet: str | None = None
 
 
 @dataclass(slots=True)
@@ -281,11 +289,16 @@ class Batch:
     update_count: int = 0
     total_rows: int = 0
 
+    #: The sheet every issue raised through :meth:`error` and :meth:`warn`
+    #: belongs to. The workbook adapter sets it around each sheet it reads, so
+    #: the checks themselves never have to know which file shape called them.
+    sheet: str | None = None
+
     def error(self, row: int, column: str | None, message: str) -> None:
-        self.issues.append(Issue(row, column, "error", message))
+        self.issues.append(Issue(row, column, "error", message, self.sheet))
 
     def warn(self, row: int, column: str | None, message: str) -> None:
-        self.issues.append(Issue(row, column, "warning", message))
+        self.issues.append(Issue(row, column, "warning", message, self.sheet))
 
     @property
     def error_rows(self) -> set[int]:
@@ -383,18 +396,56 @@ def parse(
     mode: str,
     create_missing_hierarchy: bool,
 ) -> Batch:
-    """Read and check the whole file without writing anything.
+    """Read and check a whole CSV file without writing anything.
 
-    Every row is checked even after the first failure: an operator fixing a
-    247-row file one error per attempt would rather have the list.
+    Nothing but the header and the rows is CSV-specific, so that is all this
+    does. Everything a row is judged by lives in :func:`parse_rows`, which the
+    workbook adapter feeds too: hierarchy uniqueness, phase visibility,
+    reference validation, release governance and the rest are written once and
+    cannot come to differ between the two ways a file arrives.
     """
-    if mode not in IMPORT_MODES:
-        raise ValidationError("Import mode must be 'create' or 'upsert'.")
     reader = csv.DictReader(io.StringIO(_decode(body)))
     if reader.fieldnames is None:
         raise ValidationError("That file has no header row.")
+    return parse_rows(
+        session,
+        project=project,
+        actor=actor,
+        headers=list(reader.fieldnames),
+        rows=enumerate(reader, start=2),
+        mode=mode,
+        create_missing_hierarchy=create_missing_hierarchy,
+    )
 
-    batch = Batch()
+
+def parse_rows(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    headers: list[str],
+    rows: Iterable[tuple[int, dict[str, str]]],
+    mode: str,
+    create_missing_hierarchy: bool,
+    batch: Batch | None = None,
+) -> Batch:
+    """Check every unit row a caller supplies, whatever it was read from.
+
+    ``rows`` is ``(line number, column -> text)``. The line number is the one an
+    operator will look for, so a CSV passes its file line and the workbook
+    adapter passes the row of the Units sheet; neither is an index this function
+    invents, because "row 7" has to mean the row the operator can see.
+
+    Every row is checked even after the first failure: an operator fixing a
+    247-row file one error per attempt would rather have the list.
+
+    A caller may pass a ``batch`` already carrying issues — the workbook adapter
+    does, because a bad Phases sheet must not vanish behind a clean Units sheet.
+    """
+    if mode not in IMPORT_MODES:
+        raise ValidationError("Import mode must be 'create' or 'upsert'.")
+
+    batch = Batch() if batch is None else batch
     area_types = {
         area_type.code: area_type
         for area_type in service.list_area_types(
@@ -412,7 +463,7 @@ def parse(
         if can_view(definition, actor) and can_edit(definition, actor)
     }
     area_columns, custom_columns = _read_header(
-        batch, headers=reader.fieldnames, area_types=area_types, definitions=definitions
+        batch, headers=headers, area_types=area_types, definitions=definitions
     )
 
     allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
@@ -424,7 +475,7 @@ def parse(
     uniques_seen: dict[tuple[uuid.UUID, str], int] = {}
     declared: dict[tuple[str, ...], tuple[str, int]] = {}
 
-    for index, raw in enumerate(reader, start=2):
+    for index, raw in rows:
         if batch.total_rows >= MAX_ROWS:
             batch.error(index, None, f"This import accepts at most {MAX_ROWS} rows.")
             break
@@ -1297,6 +1348,7 @@ def report(batch: Batch, *, mode: str, applied: bool) -> dict[str, Any]:
         "warning_count": batch.warning_count,
         "issues": [
             {
+                "sheet": issue.sheet,
                 "row": issue.row,
                 "column": issue.column,
                 "severity": issue.severity,
@@ -1372,16 +1424,13 @@ def apply(
         return report(batch, mode=mode, applied=False)
 
     try:
-        floors = _materialise_hierarchy(session, project=project, actor=actor, batch=batch)
-        for row in batch.rows:
-            _apply_row(
-                session,
-                project=project,
-                actor=actor,
-                row=row,
-                floors=floors,
-                approve=approve_area_schedules,
-            )
+        apply_rows(
+            session,
+            project=project,
+            actor=actor,
+            batch=batch,
+            approve_area_schedules=approve_area_schedules,
+        )
         record_event(
             session,
             action="inventory.import_applied",
@@ -1403,6 +1452,33 @@ def apply(
         session.rollback()
         raise
     return report(batch, mode=mode, applied=True)
+
+
+def apply_rows(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    batch: Batch,
+    approve_area_schedules: bool = False,
+) -> None:
+    """Write every unit row of an already-clean batch.
+
+    The caller owns the transaction and the audit event: this is the half of
+    :func:`apply` the workbook adapter needs too, and reaching into a private
+    helper for it would be the moment the two paths could start to differ.
+    Nothing in here commits.
+    """
+    floors = _materialise_hierarchy(session, project=project, actor=actor, batch=batch)
+    for row in batch.rows:
+        _apply_row(
+            session,
+            project=project,
+            actor=actor,
+            row=row,
+            floors=floors,
+            approve=approve_area_schedules,
+        )
 
 
 def _materialise_hierarchy(

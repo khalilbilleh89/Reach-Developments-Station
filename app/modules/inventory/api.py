@@ -14,13 +14,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.inventory import custom_fields as fields_service
-from app.modules.inventory import import_service, service
+from app.modules.inventory import import_service, service, workbook
 from app.modules.inventory.models import (
     SCOPE_PROJECT,
     SCOPE_UNIT_TYPE,
@@ -75,6 +75,7 @@ from app.modules.inventory.schemas import (
     UnitStatusEventRead,
     UnitSummary,
     UnitUpdateRequest,
+    WorkbookReport,
 )
 from app.modules.projects.models import LandParcel, Project
 from app.modules.projects.permissions import AccessibleProject
@@ -1320,6 +1321,95 @@ async def apply_import(
             approve_area_schedules=approve_area_schedules,
         )
     )
+
+
+#: What a browser must send for a workbook, and what it gets back.
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.get(
+    "/{project_id}/inventory/import/template.xlsx",
+    summary="Download the exact Excel workbook this project's import reads",
+    response_class=Response,
+    responses={200: {"content": {XLSX_MEDIA_TYPE: {}}, "description": "The workbook."}},
+)
+def import_template_workbook(
+    session: DbSession, actor: ActiveActor, project: InventoryProject
+) -> Response:
+    """The file itself, not a description of it.
+
+    A binary response rather than JSON carrying text: the operator's next act is
+    to open this in Excel, and a template they have to assemble from a payload
+    is a template that arrives wrong.
+    """
+    return Response(
+        content=workbook.template(),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{project.code.lower()}-inventory-template.xlsx"'
+            )
+        },
+    )
+
+
+@router.post(
+    "/{project_id}/inventory/import/workbook/validate",
+    response_model=WorkbookReport,
+    summary="Check an inventory workbook without writing anything",
+)
+async def validate_workbook_import(
+    request: Request,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+    mode: Annotated[str, Query(max_length=16)] = "create",
+) -> WorkbookReport:
+    # The per-sheet permissions are demanded inside the parse, where the sheets
+    # that were actually filled in are known: a workbook with no Phases sheet
+    # rows is not a phase operation and must not need a phase operator.
+    require_operational_project(project)
+    body = await _workbook_body(request)
+    return WorkbookReport.model_validate(
+        workbook.validate(session, project=project, actor=actor, body=body, mode=mode)
+    )
+
+
+@router.post(
+    "/{project_id}/inventory/import/workbook/apply",
+    response_model=WorkbookReport,
+    summary="Apply an inventory workbook as one transaction",
+)
+async def apply_workbook_import(
+    request: Request,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+    mode: Annotated[str, Query(max_length=16)] = "create",
+) -> WorkbookReport:
+    require_operational_project(project)
+    body = await _workbook_body(request)
+    return WorkbookReport.model_validate(
+        workbook.apply(session, project=project, actor=actor, body=body, mode=mode)
+    )
+
+
+async def _workbook_body(request: Request) -> bytes:
+    """Read the raw workbook bytes.
+
+    Raw ``application/octet-stream`` rather than multipart, for the same reason
+    the CSV route reads raw text: the browser already holds the bytes and a
+    multipart parser would be a dependency carried for one screen.
+
+    The bound is checked again inside the parser against the same constant, so
+    a caller reaching the service directly cannot skip it.
+    """
+    body = await request.body()
+    if len(body) > workbook.MAX_BYTES:
+        raise ValidationError(
+            f"That file is larger than the {workbook.MAX_BYTES // (1024 * 1024)} MB limit."
+        )
+    return body
 
 
 async def _csv_body(request: Request) -> bytes:
