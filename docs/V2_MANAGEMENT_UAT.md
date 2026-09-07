@@ -1,5 +1,29 @@
 # MVP 2 batch 5 — Management, reporting and acceptance
 
+## Historical owner closure — 2026-09-07
+
+- **MVP 2 DELIVERY: COMPLETE**
+- **MVP 2 OWNER ACCEPTANCE: CLOSED — 2026-09-07**
+- **CLOSURE PR: #264**, merged as `650eef17bcffa203c6ed7a5a5b482e9cd0f27582`.
+- **RESIDUAL UAT: DOCUMENTED AND ACCEPTED BY OWNER**.
+
+The owner explicitly elected to merge #264 and close MVP 2. That governance
+choice is final; MVP 2 is not an active milestone to reopen before MVP 3.
+The existing matrix below remains the truthful historical record of what was
+and was not independently exercised before closure. Partial and Pending rows
+are accepted residual UAT debt, not passing evidence. They do not block MVP 3.
+Later regression/UAT may naturally cover them, but cannot retroactively change
+this record or imply those checks were executed before closure.
+
+MVP 1 real legacy-source migration / production go-live evidence remains a
+separate historical track. This decision does not mark that track complete.
+
+## Pre-closure record retained verbatim
+
+The following matrix, partial results and instructions describe the state
+recorded in #264 before owner closure. References below to Draft, pending gates
+or incomplete acceptance are historical, not current instructions to reopen V2.
+
 Implements V2-10 and V2-11 under [ENGINEERING_RULES.md](ENGINEERING_RULES.md).
 The requirements reference is the owner's MVP document, including its final
 amendments. This PR builds on batch 4 (#262); it is the fifth delivery PR,

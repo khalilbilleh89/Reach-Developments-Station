@@ -1,52 +1,12 @@
-# Reach Developments Station — MVP 1.0 continuous integration.
-#
-# Intentionally lightweight: lint, compile, migrate, test, build. Nothing here
-# deploys. Render remains solely responsible for deployment.
-#
-# CI runs at two speeds on a pull request, and GitHub's own draft state is the
-# switch. A commit that reaches main runs the full suite unconditionally.
-#
-#   Draft               Backend Fast  — structural checks, then the tests the
-#                                       change can plausibly break
-#   Ready for review    Backend       — structural checks, then every test
-#   Pushed to main      Backend       — the same full suite, after the fact
-#
-# A draft cannot be merged, so a draft does not need the whole suite; a pull
-# request marked ready is a merge candidate, so it gets all of it. Every push
-# after a pull request is marked ready re-runs the full job, which is what keeps
-# the green tick attached to the exact commit somebody would merge rather than
-# to an older one.
-#
-# The main trigger exists because that promise was never self-enforcing. It
-# describes what a person should wait for, and a person who does not wait breaks
-# nothing: PR #251 was marked ready and merged thirty-three seconds later, so
-# the full job's test step began after the merge had already landed and nothing
-# it went on to conclude could have stopped anything. It concluded success, two
-# and a half hours after the merge — which is the shape of the problem exactly:
-# the proof arrived, and it arrived long after the decision it was meant to
-# inform. Until now that left main in a state no run had ever reported on. Not
-# red, which would at least be a fact. Unmeasured.
-#
-# The two triggers ask different questions and neither answers the other's.
-# Pre-merge CI asks *may this merge?* and is only binding while somebody is
-# waiting for it. Post-merge CI asks *is main sound right now?* and becomes true
-# without anybody's patience. A release is cut from main, so main is the branch
-# whose health has to be a matter of record.
-#
-# Only one backend job ever runs for a given event. Fast is not a preview of
-# Full; it is the other half of the same decision.
-
+# Engineering governance: Smoke for temporary MVP 3 integration, Fast for main
+# drafts, and complete sharded Full for ready main candidates and every main push.
+# No deployment. Canonical temporary topology: docs/MVP3_ROADMAP.md.
 name: CI
 
 on:
   pull_request:
-    branches: [main]
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - converted_to_draft
+    branches: [main, integration/mvp3]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
 
@@ -54,36 +14,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  # A superseded pull request run is waste: nobody will read a verdict on a
-  # commit that has already been replaced. A superseded main run is evidence.
-  # Each merged commit is the only commit that will ever be tested as itself,
-  # and cancelling one leaves a gap in main's record that nothing later refills.
-  # So pull request runs still cancel each other, and main runs queue instead.
+  # Unique main groups also preserve queued main runs (Actions replaces older
+  # pending runs even when cancel-in-progress is false in a shared group).
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  backend_fast:
-    name: Backend Fast
+  backend_smoke:
+    name: Backend Smoke
     runs-on: ubuntu-latest
-    # Drafts only, and named against `github.event_name` rather than left to be
-    # inferred. On a push there is no pull request in the payload, and Actions
-    # coerces a missing value to a number before comparing — so `null == true`
-    # is false here by arithmetic rather than by intent. Both backend jobs name
-    # the event instead of selecting themselves on that coincidence.
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
-    # The same ceiling as the full job, and it has to be. "Fast" is a selection,
-    # not a promise about duration: an unrecognised change deliberately falls
-    # back to `pytest -q tests`, so this job's worst case *is* the whole suite.
-    # A tighter bound here would kill exactly the fallback runs that matter most.
-    timeout-minutes: 240
-
+    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration/mvp3'
+    timeout-minutes: 30
     services:
       postgres:
-        # A throwaway CI database. Never point this at Render PostgreSQL.
-        # Fast means fewer relevant tests, never a different database: row
-        # locks, partial unique indexes and NUMERIC are the behaviour under
-        # test, and SQLite has opinions about all three.
         image: postgres:16
         env:
           POSTGRES_USER: postgres
@@ -96,21 +39,17 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
     env:
       APP_ENV: test
       APP_DEBUG: "false"
+      TZ: UTC
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
-
     steps:
-      - name: Check out repository
+      - name: Check out reviewed tree
         uses: actions/checkout@v4
         with:
-          # Full history: the selection is made against the merge base, because
-          # a pull request is five commits as often as one and a run that only
-          # understood the last patch would miss what the first four changed.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -119,131 +58,219 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
-
+      - name: Refuse unknown or full-risk integration work
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/ci_backend_smoke.py --base "$PR_BASE_SHA" --out selected-smoke.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-
-      # Everything from here to the migration drift check is identical to the
-      # full job. These are cheap and catch a great deal, so they run on every
-      # push whatever the pull request's state. Only the pytest scope differs.
-
       - name: Verify dependency tree
         run: pip check
-
       - name: Lint
         run: ruff check .
-
       - name: Check formatting
         run: ruff format --check .
-
       - name: Compile
-        run: python -m compileall app
-
+        run: python -m compileall app scripts
       - name: Apply migrations
         run: alembic upgrade head
-
       - name: Check for model and schema drift
         run: alembic check
+      - name: Test smoke backbone and direct contracts
+        run: pytest -q $(tr '\n' ' ' < selected-smoke.txt) --durations=20
 
-      # The base commit comes from the event payload rather than a branch name,
-      # so the answer does not change if main moves while the job is queued.
-      - name: Choose the tests this change needs
+  backend_fast:
+    name: Backend Fast
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
+    timeout-minutes: 240
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out reviewed tree
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
         run: |
-          python scripts/ci_backend_tests.py \
-            --base "${{ github.event.pull_request.base.sha }}" \
-            --out selected-tests.txt
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Verify dependency tree
+        run: pip check
+      - name: Lint
+        run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Compile
+        run: python -m compileall app scripts
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Check for model and schema drift
+        run: alembic check
+      - name: Choose downstream tests
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/ci_backend_tests.py --base "$PR_BASE_SHA" --out selected-tests.txt
+      - name: Test targeted (Full fallback retained)
+        run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
 
-      - name: Test (targeted)
-        run: pytest -q $(tr '\n' ' ' < selected-tests.txt)
+  backend_static:
+    name: Backend Static / Structural
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out reviewed tree
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Verify dependency tree
+        run: pip check
+      - name: Lint
+        run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Compile
+        run: python -m compileall app scripts
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Check for model and schema drift
+        run: alembic check
+      - name: CI contract guards
+        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py
+      - name: Validate complete Full assignment
+        run: python scripts/ci_backend_shards.py --count 4
+
+  backend_full:
+    name: Backend Full ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
+    timeout-minutes: 120
+    needs: backend_static
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out reviewed tree
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Apply migrations to this shard's own database
+        run: alembic upgrade head
+      - name: Assign every file exactly once
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 4 --out selected-tests.txt
+      - name: Test every assigned file
+        run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
 
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-    # Four hours, from the only measurement this repository has. The full suite
-    # finished for the first time on 2026-09-05 — PR #251's run, test step
-    # 06:00:50Z to 08:30:54Z — in two hours thirty minutes, not the forty-five
-    # this workflow was documented at for the whole of PR-ENG-01's life. Nobody
-    # had seen the number before, because until that run no full job had ever
-    # been allowed to finish.
-    #
-    # One sample against a suite that varies with runner and cache warmth, so
-    # the bound is 1.6x it rather than a tight fit. That still halves the
-    # six-hour default and it still catches a hang, which is all a bound is for.
-    # If a run ever approaches four hours, read `--durations=20` before raising
-    # this: at that point the suite's cost is the finding.
-    timeout-minutes: 240
-
-    services:
-      postgres:
-        # A throwaway CI database. Never point this at Render PostgreSQL.
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reach_station_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      APP_ENV: test
-      APP_DEBUG: "false"
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
-
+    needs: [backend_static, backend_full]
+    if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
+    timeout-minutes: 5
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-
-      - name: Verify dependency tree
-        run: pip check
-
-      - name: Lint
-        run: ruff check .
-
-      - name: Check formatting
-        run: ruff format --check .
-
-      - name: Compile
-        run: python -m compileall app
-
-      - name: Apply migrations
-        run: alembic upgrade head
-
-      # A difference between the ORM metadata and the migration history is a
-      # defect, not background noise: PR-MVP-02 shipped with two of them and
-      # only noticed because an unrelated autogenerate run had something to say.
-      # This checks; it never generates.
-      - name: Check for model and schema drift
-        run: alembic check
-
-      # The whole suite, unfiltered. No selection, no --maxfail, no markers,
-      # no excluded concurrency tests. This is the result a merge is allowed to
-      # rely on, and it is only trustworthy if it is genuinely everything.
-      - name: Test
-        run: pytest -q --durations=20
+      - name: Require structure and every Full shard to succeed
+        env:
+          STRUCTURAL_RESULT: ${{ needs.backend_static.result }}
+          SHARDS_RESULT: ${{ needs.backend_full.result }}
+        run: python -c 'import os, sys; sys.exit(0 if os.environ["STRUCTURAL_RESULT"] == "success" and os.environ["SHARDS_RESULT"] == "success" else 1)'
 
   frontend:
     name: Frontend
@@ -258,6 +285,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

@@ -3,15 +3,15 @@
 Canonical delivery sequence for MVP 2 (V2). The twelve original milestone
 identifiers, `PR-V2-00` through `PR-V2-11`, remain for scope traceability.
 All eight delivery PRs are merged: V2-00, V2-01, V2-02 and grouped batches
-1–5 (#259–#263). Delivery is not product acceptance: the corrective
-PR-V2-CLOSE acceptance/hardening work remains subject to the closure gates.
+1–5 (#259–#263). The owner closed MVP 2 on 2026-09-07 through merged #264. Residual
+partial/pending UAT is documented and accepted, not rewritten as passing evidence.
 
 | Scope                       | Count |
 | --------------------------- | ----: |
 | Total planned MVP 2 PRs      |     8 |
 | Merged delivery PRs          | 8 / 8 |
 | Remaining delivery PRs       | 0 |
-| Product acceptance           | INCOMPLETE — closure evidence and independent acceptance outstanding |
+| Product acceptance           | CLOSED BY OWNER — 2026-09-07, #264; residual UAT accepted |
 
 ## Five grouped delivery batches (merged)
 
@@ -281,7 +281,7 @@ One production dependency: `openpyxl`. No database migration.
 ## PR-V2-05 — Buyer → Reserve → Sell
 
 Batch 2 implementation: [Buyer and legal workspace](V2_BUYER_LEGAL_WORKSPACE.md).
-Developed on batch 1 while #259 completes CI; merge order remains unchanged.
+Historically developed on batch 1; both batches are now merged.
 
 - add buyer
 - reservation and reservation status
@@ -325,7 +325,8 @@ Merged as #262. Configuration hardening and acceptance evidence are tracked in P
 ## PR-V2-10 — Management & Reporting Experience
 
 Batch 5: [Management and integrated acceptance](V2_MANAGEMENT_UAT.md).
-Merged as #263. The integrated acceptance matrix remains the closure authority.
+Merged as #263. The integrated matrix preserves historical evidence; the owner
+closed MVP 2 through #264 with the documented residual UAT accepted.
 
 - cleaner management command centre
 - commercial and project reporting
@@ -345,16 +346,18 @@ Merged as #263. The integrated acceptance matrix remains the closure authority.
 
 ## Master countdown
 
-| MVP 2 / V2             | State                                         |
-| ---------------------- | --------------------------------------------- |
-| Original milestone delivery | 12 / 12 represented in merged delivery PRs; final acceptance outstanding |
-| Delivery PRs           | 8 / 8 merged |
-| Current                | PR-V2-CLOSE — corrective acceptance and construction-stage hardening |
-| MVP 2 product acceptance | INCOMPLETE |
-| Next product work      | Must wait for explicit MVP 2 closure acceptance |
+| Track | State |
+| --- | --- |
+| Original milestone delivery | 12 / 12 represented in merged delivery PRs |
+| Delivery PRs | 8 / 8 merged |
+| MVP 2 owner acceptance | CLOSED — 2026-09-07, #264 |
+| Residual UAT | DOCUMENTED AND ACCEPTED BY OWNER; historical Partial/Pending rows preserved |
+| Current engineering work | PR-ENG-04 — MVP 3 Governance, Roadmap & Accelerated CI |
+| Next product work | MVP 3, 0 / 5; see [MVP3_ROADMAP.md](MVP3_ROADMAP.md) |
 
-PR-V2-CLOSE is not a thirteenth product milestone. Only after every row in
-[the integrated matrix](V2_MANAGEMENT_UAT.md), independent review and exact-head
-full CI passes may acceptance be recorded as COMPLETE and original milestones
-as 12 / 12 complete. MVP 1 real legacy-source migration and go-live evidence
-remain a separate track; this closure changes none of that track's evidence.
+#264 is merged at `650eef17bcffa203c6ed7a5a5b482e9cd0f27582`; it is not a
+thirteenth product milestone. Owner closure does not fabricate independent
+review or passing tests. The [historical integrated matrix](V2_MANAGEMENT_UAT.md)
+remains intact. Its residual debt does not block MVP 3; later evidence cannot
+retroactively rewrite it. MVP 1 real legacy-source migration and production
+go-live evidence remain a separate historical track, unchanged by this closure.
