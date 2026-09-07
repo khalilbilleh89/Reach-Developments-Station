@@ -64,6 +64,55 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import MONEY, RATE, Base, in_list
 
+
+class ConstructionStage(Base):
+    """A project's physical checklist, independent of financial milestones."""
+
+    __tablename__ = "construction_stages"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    planned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("project_id", "name"),
+        UniqueConstraint("project_id", "sequence"),
+        UniqueConstraint("id", "project_id"),
+        CheckConstraint("length(trim(name)) > 0", name="name_not_blank"),
+        CheckConstraint("sequence > 0", name="sequence_positive"),
+    )
+
+
+class UnitStageEvent(Base):
+    """Append-only completion/correction history. Latest sequence is current."""
+
+    __tablename__ = "unit_stage_events"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    stage_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(["unit_id", "project_id"], ["units.id", "units.project_id"]),
+        ForeignKeyConstraint(
+            ["stage_id", "project_id"], ["construction_stages.id", "construction_stages.project_id"]
+        ),
+        UniqueConstraint("unit_id", "stage_id", "sequence"),
+        CheckConstraint("sequence > 0", name="sequence_positive"),
+        CheckConstraint("length(trim(reason)) > 0", name="reason_not_blank"),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Cost codes
 # --------------------------------------------------------------------------- #

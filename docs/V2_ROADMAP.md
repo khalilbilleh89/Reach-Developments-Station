@@ -8,9 +8,9 @@ five grouped pull requests, each on its own short-lived branch.
 | Scope                       | Count |
 | --------------------------- | ----: |
 | Total planned MVP 2 PRs      |     8 |
-| Merged PRs                  |     3 |
-| Remaining PRs (including current) | 5 |
-| Current milestones          | Batches 1 (#259) and 2 (#260) open; batch 3 (V2-07 + V2-08) implemented for draft review |
+| Merged PRs                  |     6 |
+| Remaining PRs (including current) | 2 |
+| Current milestones          | Batch 4 — PR-V2-09 Construction Stage Experience |
 
 ## Five remaining delivery batches
 
@@ -313,6 +313,9 @@ Developed on batch 1 while #259 completes CI; merge order remains unchanged.
 
 ## PR-V2-09 — Construction Stage Experience
 
+Batch 4 implementation: [Construction stage workspace](V2_CONSTRUCTION_STAGES_WORKSPACE.md).
+Starts from merged batch 3 (#261). Batches 1–3 (#259–#261) are merged.
+
 - project-configured construction stages
 - unit-level stage completion and status
 - simple delivery visibility
@@ -340,7 +343,7 @@ Developed on batch 1 while #259 completes CI; merge order remains unchanged.
 
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
-| Complete               | 3 / 12 original milestones; 3 merged PRs       |
-| Current                | Batch 1 in review; batch 2 in development      |
-| Remaining              | 9 original milestones in 5 grouped PRs         |
-| Next after current     | Batch 2 — Buyer, Reservation, Sale, SPA & Registry |
+| Complete               | 9 / 12 original milestones; 6 merged PRs       |
+| Current                | Batch 4 — Construction Stage Experience        |
+| Remaining              | 3 original milestones in 2 grouped PRs         |
+| Next after current     | Batch 5 — Management, Reporting, UAT & Hardening |

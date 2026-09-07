@@ -52,6 +52,50 @@ from app.modules.projects.schemas import StrictRequest
 
 DecimalStr = Annotated[Decimal, PlainSerializer(str, return_type=str, when_used="json")]
 
+
+class StageCreate(StrictRequest):
+    name: str = Field(min_length=1, max_length=200)
+    planned_date: date | None = None
+
+
+class StageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    sequence: int
+    planned_date: date | None
+
+
+class StageCompletion(StrictRequest):
+    completed_date: date | None
+    reason: str = Field(min_length=1, max_length=1000)
+    expected_revision: int = Field(ge=0)
+
+
+class StageEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    completed_date: date | None
+    reason: str
+    actor_user_id: uuid.UUID
+    recorded_at: datetime
+    sequence: int
+
+
+class UnitStageOut(StageOut):
+    completed_date: date | None
+    revision: int
+    status: Literal["complete", "pending"]
+    history: list[StageEventOut]
+
+
+class UnitProgressOut(BaseModel):
+    unit_id: uuid.UUID
+    delivery_status: str
+    completed_count: int
+    stage_count: int
+    stages: list[UnitStageOut]
+
+
 #: ``max_digits`` mirrors the column rather than a preference: without it a value
 #: like ``1e400`` passes every other rule and then overflows NUMERIC(18,2) inside
 #: the transaction, reaching the caller as a 500 with nothing useful in it.
