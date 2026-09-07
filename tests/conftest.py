@@ -19,7 +19,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from psycopg import Connection
+from sqlalchemy import Engine, event, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -57,8 +58,31 @@ def _reset_configuration() -> None:
     dispose_engine()
 
 
+@pytest.fixture
+def connection_lifecycle() -> Iterator[None]:
+    """Attribute leaked connections to their owning test, not later garbage collection."""
+    opened: list[Connection] = []
+
+    def remember(connection: Connection, record: object) -> None:
+        opened.append(connection)
+
+    event.listen(Engine, "connect", remember)
+    try:
+        yield
+    finally:
+        event.remove(Engine, "connect", remember)
+        leaked = [connection for connection in opened if not connection.closed]
+        # Fail before losing the references; closing here only prevents a second,
+        # misleading destructor warning from surfacing in an unrelated test.
+        for connection in leaked:
+            connection.close()
+        assert not leaked, f"{len(leaked)} PostgreSQL connections left open after test cleanup"
+
+
 @pytest.fixture(autouse=True)
-def isolated_configuration(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def isolated_configuration(
+    monkeypatch: pytest.MonkeyPatch, connection_lifecycle: None
+) -> Iterator[None]:
     """Pin configuration and clear cached settings and engine around every test."""
     for name, value in PINNED_TEST_CONFIG.items():
         monkeypatch.setenv(name, value)
@@ -185,7 +209,8 @@ def db() -> Iterator[Session]:
     # this fixture tears down. A checked-out connection survives that disposal;
     # Session.close() then returns it to the old pool, not the replacement pool.
     # Retain ownership so the old pool is closed after its session returns.
-    pool = get_engine().pool
+    engine = get_engine()
+    pool = engine.pool
     session = get_session_factory()()
     try:
         yield session
@@ -194,3 +219,7 @@ def db() -> Iterator[Session]:
             session.close()
         finally:
             pool.dispose()
+            # The session still binds its original Engine after the global cache
+            # is cleared. Reusing it opens a replacement pool on that uncached
+            # engine, which the global configuration reset cannot reach.
+            engine.dispose()

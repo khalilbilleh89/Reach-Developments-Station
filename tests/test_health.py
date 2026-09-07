@@ -176,7 +176,8 @@ def test_readiness_probe_is_bounded_when_postgresql_never_answers(
     assert elapsed < 20, f"probe was not bounded; it took {elapsed:.1f}s"
 
 
-def test_database_fixture_closes_connection_after_application_shutdown() -> None:
+@pytest.mark.parametrize("reuse_session", (False, True))
+def test_database_fixture_closes_connection_after_application_shutdown(reuse_session: bool) -> None:
     """Shutdown may replace the pool while the arrangement session is checked out."""
     from sqlalchemy import text
 
@@ -190,9 +191,35 @@ def test_database_fixture_closes_connection_after_application_shutdown() -> None
     try:
         with TestClient(create_app()):
             pass
+        connections = [connection]
+        if reuse_session:
+            session.rollback()
+            session.execute(text("SELECT 1"))
+            connections.append(session.connection().connection.driver_connection)
         with pytest.raises(StopIteration):
             next(fixture)
-        assert connection.closed, "fixture returned a live connection to an orphaned pool"
+        assert all(c.closed for c in connections), "fixture left an orphaned pool open"
     finally:
         fixture.close()
         original_pool.dispose()
+        session.get_bind().dispose()
+
+
+def test_connection_lifecycle_guard_reports_leaks_in_the_owning_test() -> None:
+    """An idle connection in an abandoned pool must fail, without waiting for GC."""
+    from tests.conftest import connection_lifecycle
+
+    dispose_engine()
+    guard = connection_lifecycle.__wrapped__()
+    next(guard)
+    try:
+        engine = database.get_engine()
+        with engine.connect() as connection:
+            raw = connection.connection.driver_connection
+        assert not raw.closed
+        with pytest.raises(AssertionError, match="1 PostgreSQL connections left open"):
+            next(guard)
+        assert raw.closed
+    finally:
+        guard.close()
+        dispose_engine()
