@@ -38,6 +38,7 @@ AVAILABLE = [
     "tests/test_ci_selector.py",
     "tests/modules/test_construction_calculations.py",
     "tests/modules/test_cashflow_forecast.py",
+    "tests/modules/test_prelaunch.py",
     "tests/modules/test_audit.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
