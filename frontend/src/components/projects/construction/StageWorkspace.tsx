@@ -66,6 +66,8 @@ function StageConfiguration({ stage, rows, projectId, canConfigure, reload }: {
     try {
       await stages.update(projectId, stage, { sequence: position, expected_order: rows.map((row) => row.id) });
       await reload();
+      setBusy(false);
+      requestAnimationFrame(() => editControl.current?.querySelector("button")?.focus());
     } catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }
@@ -94,7 +96,8 @@ function StageConfiguration({ stage, rows, projectId, canConfigure, reload }: {
           <Field label="Stage name"><input ref={nameInput} className="input" required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} /></Field>
           <Field label="Planned completion date" optional><input className="input" type="date" value={planned} onChange={(event) => setPlanned(event.target.value)} /></Field>
         </FieldRow>
-        <p className="footnote">Leave the date empty to clear it. Completion history is retained.</p>
+        <Button type="button" disabled={busy} onClick={() => setPlanned("")}>Clear planned date</Button>
+        <p className="footnote">An empty date means not planned. Completion history is retained.</p>
         <FormActions><Button type="submit" disabled={busy}>Save stage</Button>
           <Button type="button" disabled={busy} onClick={close}>Cancel</Button></FormActions>
       </form> : null}
@@ -118,7 +121,7 @@ export function UnitStages({ projectId, unitId, roles }: { projectId: string; un
       <p>Delivery: {progress.delivery_status.replaceAll("_", " ")} · {progress.completed_count} of {progress.stage_count} stages complete</p>
       <p className="footnote">Physical stage completion records progress. Delivery readiness and payment milestone certification have their own approvals.</p>
       {progress.stage_count === 0 ? <p>No stages configured. A Project Manager can add them in the project overview.</p> : null}
-      <div className="stack">{progress.stages.map((stage) => <StageRecord key={`${stage.id}:${stage.revision}`} stage={stage} canWrite={canWrite}
+      <div className="stack">{progress.stages.map((stage) => <StageRecord key={`${unitId}:${stage.id}`} stage={stage} canWrite={canWrite}
         save={async (day, reason) => { await stages.complete(projectId, unitId, stage, day, reason); await load(); }} />)}</div>
     </> : null}
   </Card>;
@@ -127,19 +130,26 @@ export function UnitStages({ projectId, unitId, roles }: { projectId: string; un
 function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: boolean;
   save: (day: string | null, reason: string) => Promise<void> }) {
   const [day, setDay] = useState(stage.completed_date ?? todayISO());
+  const completionForm = useRef<HTMLDetailsElement>(null);
+  const completionSummary = useRef<HTMLElement>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(completed: string | null) {
     if (busy) return; setBusy(true);
-    try { await save(completed, reason); } catch (caught) { setError(message(caught)); }
+    try {
+      await save(completed, reason);
+      setDay(completed ?? todayISO()); setReason(""); setError(null);
+      if (completionForm.current) completionForm.current.open = false;
+      requestAnimationFrame(() => completionSummary.current?.focus());
+    } catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }
   return <section>
     <h3>{stage.sequence}. {stage.name} <Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status}</Badge></h3>
     <p>Planned: {stage.planned_date ? businessDate(stage.planned_date) : "Not set"} · Completed: {stage.completed_date ? businessDate(stage.completed_date) : "Not recorded"}</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    {canWrite ? <details><summary>{stage.completed_date ? "Correct completion" : "Record completion"}</summary>
+    {canWrite ? <details ref={completionForm}><summary ref={completionSummary}>{stage.completed_date ? "Correct completion" : "Record completion"}</summary>
       <form onSubmit={(event) => { event.preventDefault(); void submit(day); }}>
         <FieldRow columns={2}>
           <Field label="Actual completion date"><input className="input" type="date" required max={todayISO()} value={day} onChange={(event) => setDay(event.target.value)} /></Field>

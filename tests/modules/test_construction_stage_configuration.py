@@ -51,6 +51,27 @@ def test_downgrade_refuses_retained_checklist(
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0015_construction_stages"
 
 
+def test_reorder_rejects_changed_neighbors_even_when_target_position_is_unchanged(
+    manager_member_client: TestClient,
+    project_id: str,
+) -> None:
+    client = manager_member_client
+    root = construction_url(project_id)
+    rows = [client.post(f"{root}/stages", json={"name": name}).json() for name in ("A", "B", "C")]
+    order = [row["id"] for row in rows]
+    moved = client.patch(
+        f"{root}/stages/{rows[2]['id']}", json=snapshot(rows[2], sequence=2, expected_order=order)
+    )
+    assert moved.status_code == 200, moved.text
+    stale = client.patch(
+        f"{root}/stages/{rows[0]['id']}", json=snapshot(rows[0], sequence=2, expected_order=order)
+    )
+    assert stale.status_code == 409
+    duplicate = client.patch(f"{root}/stages/{rows[0]['id']}", json=snapshot(rows[0], name=" b "))
+    assert duplicate.status_code == 409
+    assert [row["name"] for row in client.get(f"{root}/stages").json()] == ["A", "C", "B"]
+
+
 def test_edit_move_clear_and_preserve_history(
     manager_member_client: TestClient,
     project_id: str,
