@@ -144,7 +144,7 @@ export function SalesTab({
   }, [load, projectStatus]);
 
   const header = (actions?: React.ReactNode) => (
-    <PageHeader title="Sales & Legal" subtitle={sectionDescription("sales")} compact actions={actions} />
+    <PageHeader title="Sales" subtitle={sectionDescription("sales")} compact actions={actions} />
   );
 
   // Sales is refused while the project is in setup, because that is the window

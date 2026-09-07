@@ -88,6 +88,7 @@ import type {
   PricingEscalationRule,
   PricingOverview,
   PricingPremiumRule,
+  PreLaunchRegister,
   ProjectAccess,
   ProjectDetail,
   ProjectSummary,
@@ -2245,6 +2246,24 @@ export const cashflow = {
     post<CashflowRelease>(`${cashflowRoot(projectId)}/releases/${releaseId}/reverse`, {
       reason,
     }),
+};
+
+/** Development language over the same Cashflow Development Movement rows. */
+export const prelaunch = {
+  register: (projectId: string) =>
+    get<PreLaunchRegister>(`/projects/${projectId}/pre-launch/expenses`),
+  record: (projectId: string, body: Record<string, unknown>) =>
+    post<CashflowDevelopmentMovement>(`/projects/${projectId}/pre-launch/expenses`, body),
+  confirm: (projectId: string, movementId: string) =>
+    post<CashflowDevelopmentMovement>(
+      `/projects/${projectId}/pre-launch/expenses/${movementId}/confirm`,
+      {},
+    ),
+  reverse: (projectId: string, movementId: string, reason: string) =>
+    post<CashflowDevelopmentMovement>(
+      `/projects/${projectId}/pre-launch/expenses/${movementId}/reverse`,
+      { reason },
+    ),
 };
 
 /** Where every cashflow route for one project hangs. */

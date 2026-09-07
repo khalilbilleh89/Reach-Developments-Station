@@ -122,6 +122,7 @@ DEVELOPMENT_CATEGORIES = (
     "design",
     "consultants",
     "permits",
+    "utilities",
     "insurance",
     "developer_overhead",
     "marketing",

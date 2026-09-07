@@ -15,9 +15,6 @@ import {
 } from "@/components/shell/navigation";
 import { AccountSection } from "@/components/settings/AccountSection";
 import { AuditSection } from "@/components/settings/AuditSection";
-import { CountryPacksSection } from "@/components/settings/CountryPacksSection";
-import { CurrenciesSection } from "@/components/settings/CurrenciesSection";
-import { ReferenceDataSection } from "@/components/settings/ReferenceDataSection";
 import { UsersSection } from "@/components/settings/UsersSection";
 import { PageHeader } from "@/components/ui";
 
@@ -48,9 +45,9 @@ function SettingsScreen() {
   }
 
   const groups = visibleNavigation(SETTINGS_NAVIGATION, roleSet(user.roles));
-  const wanted = isSettingsSection(requested) ? requested : "country";
+  const wanted = isSettingsSection(requested) ? requested : "account";
   const item = findNavItem(groups, wanted) ?? groups[0]?.items[0];
-  const section = item?.key ?? "country";
+  const section = item?.key ?? "account";
 
   return (
     <AppShell
@@ -61,9 +58,6 @@ function SettingsScreen() {
     >
       <PageHeader eyebrow="Settings" title={item?.label ?? "Settings"} subtitle={item?.description} />
       {section === "users" ? <UsersSection /> : null}
-      {section === "currencies" ? <CurrenciesSection /> : null}
-      {section === "country" ? <CountryPacksSection /> : null}
-      {section === "reference" ? <ReferenceDataSection /> : null}
       {section === "audit" ? <AuditSection /> : null}
       {section === "account" ? (
         <AccountSection onChanged={() => router.replace("/login/")} />

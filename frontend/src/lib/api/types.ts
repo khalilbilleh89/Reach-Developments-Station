@@ -213,6 +213,8 @@ export interface LandParcel {
   /** Null when the caller is not cleared to see development cost. */
   purchase_price: string | null;
   acquisition_fees: string | null;
+  total_acquisition_cost: string | null;
+  total_acquisition_cost_basis: "complete" | "incomplete_inputs" | "restricted";
   financials_visible: boolean;
   base_currency_code: string | null;
 }
@@ -2494,6 +2496,7 @@ export type DevelopmentCategory =
   | "design"
   | "consultants"
   | "permits"
+  | "utilities"
   | "insurance"
   | "developer_overhead"
   | "marketing"
@@ -2730,6 +2733,13 @@ export interface CashflowDevelopmentMovement {
   notes: string | null;
   /** Recording is a claim. This is what says the money actually moved. */
   counts_as_cash: boolean;
+}
+
+export interface PreLaunchRegister {
+  expenses: CashflowDevelopmentMovement[];
+  /** Unconfirmed entries only; never added to confirmed paid. */
+  recorded_amount: MoneyStr;
+  confirmed_paid_amount: MoneyStr;
 }
 
 export interface CashflowFinancingMovement {

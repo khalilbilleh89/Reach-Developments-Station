@@ -165,6 +165,9 @@ export const CASHFLOW_PREPARERS: Roles = new Set([
 /** Roles that may record a movement, a restriction or a release. Finance alone. */
 export const CASHFLOW_RECORDERS: Roles = new Set(["finance"]);
 
+/** Narrow Pre-Launch entry authority; never grants generic cash recording. */
+export const PRELAUNCH_RECORDERS: Roles = new Set(["finance", "project_manager"]);
+
 /**
  * Roles that may confirm somebody else's movement — the second pair of eyes.
  *

@@ -49,6 +49,34 @@ def test_a_parcel_records_the_legal_and_physical_facts(
     stored = db.scalars(select(LandParcel)).one()
     assert stored.purchase_price == Decimal("987654.32")
     assert isinstance(stored.purchase_price, Decimal)
+    assert body["total_acquisition_cost"] == "999999.99"
+    assert body["total_acquisition_cost_basis"] == "complete"
+
+
+def test_acquisition_total_is_incomplete_until_both_inputs_are_known(
+    admin_client: TestClient, project_id: str
+) -> None:
+    created = admin_client.post(
+        f"{PROJECTS}/{project_id}/parcels",
+        json=parcel_payload(purchase_price="1500000.00"),
+    )
+    assert created.json()["total_acquisition_cost"] is None
+    assert created.json()["total_acquisition_cost_basis"] == "incomplete_inputs"
+    updated = admin_client.patch(
+        f"{PROJECTS}/{project_id}/parcels/{created.json()['id']}",
+        json={"acquisition_fees": "75000.00"},
+    )
+    assert updated.json()["total_acquisition_cost"] == "1575000.00"
+
+
+def test_acquisition_total_is_not_an_editable_input(
+    admin_client: TestClient, project_id: str
+) -> None:
+    refused = admin_client.post(
+        f"{PROJECTS}/{project_id}/parcels",
+        json=parcel_payload(total_acquisition_cost="1.00"),
+    )
+    assert refused.status_code == 422
 
 
 def test_an_unknown_utility_state_stays_unknown(admin_client: TestClient, project_id: str) -> None:

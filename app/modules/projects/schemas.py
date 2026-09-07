@@ -238,6 +238,10 @@ class LandParcelRead(_ParcelFacts):
     #: exposed" — never a zero, which would read as a real figure of zero.
     purchase_price: DecimalStr | None = None
     acquisition_fees: DecimalStr | None = None
+    #: Derived from both inputs only. An unknown component makes the answer
+    #: incomplete rather than silently becoming zero.
+    total_acquisition_cost: DecimalStr | None = None
+    total_acquisition_cost_basis: str = "restricted"
     financials_visible: bool = False
     #: The currency the amounts above are in, so no client has to assume.
     base_currency_code: str | None = None
@@ -255,11 +259,19 @@ class LandParcelRead(_ParcelFacts):
         if include_financials:
             read.purchase_price = parcel.purchase_price
             read.acquisition_fees = parcel.acquisition_fees
+            if parcel.purchase_price is not None and parcel.acquisition_fees is not None:
+                read.total_acquisition_cost = parcel.purchase_price + parcel.acquisition_fees
+                read.total_acquisition_cost_basis = "complete"
+            else:
+                read.total_acquisition_cost = None
+                read.total_acquisition_cost_basis = "incomplete_inputs"
             read.financials_visible = True
             read.base_currency_code = base_currency_code
         else:
             read.purchase_price = None
             read.acquisition_fees = None
+            read.total_acquisition_cost = None
+            read.total_acquisition_cost_basis = "restricted"
             read.financials_visible = False
             read.base_currency_code = None
         return read

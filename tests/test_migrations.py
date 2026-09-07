@@ -28,7 +28,23 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0015_construction_stages"
+HEAD_REVISION = "0016_prelaunch_utilities"
+
+
+def test_prelaunch_utilities_widens_only_the_development_category_check(postgres: None) -> None:
+    config = _alembic_config()
+    command.downgrade(config, "0015_construction_stages")
+    command.upgrade(config, HEAD_REVISION)
+    with get_engine().connect() as connection:
+        definition = connection.execute(
+            text(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE conname = 'ck_cashflow_development_movements_category_ok'"
+            )
+        ).scalar_one()
+    assert "utilities" in definition
+    assert "construction" not in definition
+
 
 #: The revision that shipped ``unit_economics_cost_pools`` wide enough to hold
 #: ``construction_forecast`` while its CHECK still listed two sources, and the

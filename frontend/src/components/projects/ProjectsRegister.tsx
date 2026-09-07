@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CountryPack, Currency, ProjectSummary, ReferenceValue } from "@/lib/api";
-import { PROJECT_WRITERS, hasAnyRole } from "@/lib/roles";
+import { PROJECT_WRITERS, ROLE_SYSTEM_ADMIN, hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
 import {
   Badge,
@@ -15,6 +15,7 @@ import {
   EmptyState,
   Field,
   FieldRow,
+  FormDialog,
   FormActions,
   FormSection,
   Icon,
@@ -45,6 +46,7 @@ function emptyForm() {
     status: "setup",
     planned_start: "",
     planned_completion: "",
+    fiscal_year_start_month: "",
   };
 }
 
@@ -79,6 +81,11 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [addingCurrency, setAddingCurrency] = useState(false);
+  const [addingPack, setAddingPack] = useState(false);
+  const [currencyForm, setCurrencyForm] = useState({ code: "", name: "", symbol: "", minor_units: "2" });
+  const [packForm, setPackForm] = useState({ country_code: "", name: "", locale: "", timezone: "", default_currency_id: "", area_unit: "sqm", fiscal_year_start_month: "1" });
+  const canConfigure = roles.has(ROLE_SYSTEM_ADMIN);
 
   const load = useCallback(async () => {
     try {
@@ -146,6 +153,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
         "project_type_code",
         "planned_start",
         "planned_completion",
+        "fiscal_year_start_month",
       ] as const) {
         if (form[key]) payload[key] = form[key];
       }
@@ -159,6 +167,52 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
     } finally {
       setBusy(false);
     }
+  };
+
+  const createCurrency = async () => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const created = await settings.createCurrency({
+        code: currencyForm.code,
+        name: currencyForm.name,
+        symbol: currencyForm.symbol || null,
+        minor_units: Number(currencyForm.minor_units),
+      });
+      await loadConfiguration();
+      setForm((current) => ({ ...current, base_currency_id: created.id, reporting_currency_id: created.id }));
+      setPackForm((current) => ({ ...current, default_currency_id: created.id }));
+      setAddingCurrency(false);
+    } catch (caught) {
+      setFormError(caught instanceof ApiError ? caught.message : "Could not create the currency.");
+    } finally { setBusy(false); }
+  };
+
+  const createCountryPack = async () => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const created = await settings.createCountryPack({
+        country_code: packForm.country_code,
+        name: packForm.name,
+        locale: packForm.locale,
+        timezone: packForm.timezone,
+        default_currency_id: packForm.default_currency_id,
+        area_unit: packForm.area_unit,
+        fiscal_year_start_month: Number(packForm.fiscal_year_start_month),
+      });
+      await loadConfiguration();
+      setForm((current) => ({
+        ...current,
+        country_pack_id: created.id,
+        base_currency_id: current.base_currency_id || created.default_currency_id,
+        reporting_currency_id: current.reporting_currency_id || created.default_currency_id,
+        fiscal_year_start_month: current.fiscal_year_start_month || String(created.fiscal_year_start_month),
+      }));
+      setAddingPack(false);
+    } catch (caught) {
+      setFormError(caught instanceof ApiError ? caught.message : "Could not create the country configuration.");
+    } finally { setBusy(false); }
   };
 
   const configurationMissing = packs.length === 0 || activeCurrencies.length === 0;
@@ -324,15 +378,9 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
           subtitle="The code is issued once and never changes. Everything else can be edited later."
           onClose={() => setCreating(false)}
         >
-          {configurationMissing ? (
-            <EmptyState
-              icon="settings"
-              title="Configure the basis first"
-              hint="A project needs an active country pack and an active currency before it can be created. Both are set under Settings."
-            />
-          ) : (
             <form onSubmit={submit}>
               {formError ? <Notice tone="error">{formError}</Notice> : null}
+              {configurationMissing ? <Notice tone="warning">An active country configuration and currency are required. {canConfigure ? "Add them here without closing this project form." : "Ask a System Administrator to add them; your entered project details will remain here."}</Notice> : null}
               <FormSection title="Identity">
                 <FieldRow columns={2}>
                   <Field label="Project code" hint="Letters, digits, hyphen or underscore.">
@@ -374,19 +422,14 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                       onChange={(event) => setForm({ ...form, developer_entity: event.target.value })}
                     />
                   </Field>
-                  <Field label="Project type" optional>
-                    <select
+                  <Field label="Project type" optional hint="Choose a suggestion or enter the supported project type code.">
+                    <input
                       className="input"
+                      list="project-type-options"
                       value={form.project_type_code}
                       onChange={(event) => setForm({ ...form, project_type_code: event.target.value })}
-                    >
-                      <option value="">Not set</option>
-                      {types.map((value) => (
-                        <option key={value.id} value={value.code}>
-                          {value.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                    <datalist id="project-type-options">{types.map((value) => <option key={value.id} value={value.code}>{value.label}</option>)}</datalist>
                   </Field>
                 </FieldRow>
               </FormSection>
@@ -395,12 +438,24 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 title="Financial basis"
                 description="Every amount on this project is denominated in its base currency. There is no conversion anywhere."
               >
-                <Field label="Country pack">
+                <Field label="Country configuration">
                   <select
                     className="input"
                     required
                     value={form.country_pack_id}
-                    onChange={(event) => setForm({ ...form, country_pack_id: event.target.value })}
+                    onChange={(event) => {
+                      const pack = packs.find((item) => item.id === event.target.value);
+                      setForm({
+                        ...form,
+                        country_pack_id: event.target.value,
+                        base_currency_id: form.base_currency_id || pack?.default_currency_id || "",
+                        reporting_currency_id:
+                          form.reporting_currency_id || pack?.default_currency_id || "",
+                        fiscal_year_start_month:
+                          form.fiscal_year_start_month ||
+                          (pack ? String(pack.fiscal_year_start_month) : ""),
+                      });
+                    }}
                   >
                     <option value="">Choose…</option>
                     {packs.map((pack) => (
@@ -410,6 +465,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                     ))}
                   </select>
                 </Field>
+                {canConfigure ? <Button small onClick={() => setAddingPack(true)}>Add country configuration</Button> : null}
                 <FieldRow columns={2}>
                   <Field label="Base currency">
                     <select
@@ -441,6 +497,10 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                     </select>
                   </Field>
                 </FieldRow>
+                {canConfigure ? <Button small onClick={() => setAddingCurrency(true)}>Add currency</Button> : null}
+                <Field label="Fiscal year starts" optional hint="Month number, 1 to 12. Defaults from the country configuration.">
+                  <input className="input input-short" type="number" min={1} max={12} value={form.fiscal_year_start_month} onChange={(event) => setForm({ ...form, fiscal_year_start_month: event.target.value })} />
+                </Field>
               </FormSection>
 
               <FormSection title="Location and programme">
@@ -494,7 +554,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 </FieldRow>
               </FormSection>
               <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
+                <Button variant="primary" type="submit" disabled={busy || configurationMissing}>
                   {busy ? "Creating…" : "Create project"}
                 </Button>
                 <Button onClick={() => setCreating(false)} disabled={busy}>
@@ -502,9 +562,11 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 </Button>
               </FormActions>
             </form>
-          )}
         </Drawer>
       ) : null}
+
+      {addingCurrency ? <FormDialog title="Add currency" description="Creates the normalized currency and selects it in this project. No exchange rate is created." confirmLabel="Add currency" busy={busy} disabled={!currencyForm.code || !currencyForm.name} onCancel={() => setAddingCurrency(false)} onSubmit={() => void createCurrency()}><FieldRow><Field label="ISO code"><input className="input input-short" required maxLength={3} value={currencyForm.code} onChange={(event) => setCurrencyForm({ ...currencyForm, code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={currencyForm.name} onChange={(event) => setCurrencyForm({ ...currencyForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Symbol" optional><input className="input input-short" value={currencyForm.symbol} onChange={(event) => setCurrencyForm({ ...currencyForm, symbol: event.target.value })} /></Field><Field label="Minor units"><input className="input input-short" type="number" min={0} max={6} value={currencyForm.minor_units} onChange={(event) => setCurrencyForm({ ...currencyForm, minor_units: event.target.value })} /></Field></FieldRow></FormDialog> : null}
+      {addingPack ? <FormDialog title="Add country configuration" description="Creates the normalized CountryPack and selects it without clearing this project form." confirmLabel="Add configuration" busy={busy} disabled={!packForm.country_code || !packForm.name || !packForm.locale || !packForm.timezone || !packForm.default_currency_id} onCancel={() => setAddingPack(false)} onSubmit={() => void createCountryPack()}><FieldRow><Field label="Country code"><input className="input input-short" required maxLength={2} value={packForm.country_code} onChange={(event) => setPackForm({ ...packForm, country_code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Locale"><input className="input" required placeholder="en-JO" value={packForm.locale} onChange={(event) => setPackForm({ ...packForm, locale: event.target.value })} /></Field><Field label="Timezone"><input className="input" required placeholder="Asia/Amman" value={packForm.timezone} onChange={(event) => setPackForm({ ...packForm, timezone: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Default currency"><select className="input" required value={packForm.default_currency_id} onChange={(event) => setPackForm({ ...packForm, default_currency_id: event.target.value })}><option value="">Choose…</option>{activeCurrencies.map((currency) => <option key={currency.id} value={currency.id}>{currency.code}</option>)}</select></Field><Field label="Area unit"><select className="input" value={packForm.area_unit} onChange={(event) => setPackForm({ ...packForm, area_unit: event.target.value })}><option value="sqm">sqm</option><option value="sqft">sqft</option></select></Field></FieldRow><Field label="Fiscal year starts"><input className="input input-short" type="number" min={1} max={12} value={packForm.fiscal_year_start_month} onChange={(event) => setPackForm({ ...packForm, fiscal_year_start_month: event.target.value })} /></Field></FormDialog> : null}
     </>
   );
 }
