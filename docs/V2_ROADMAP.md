@@ -10,7 +10,7 @@ five grouped pull requests, each on its own short-lived branch.
 | Total planned MVP 2 PRs      |     8 |
 | Merged PRs                  |     6 |
 | Remaining PRs (including current) | 2 |
-| Current milestones          | Batch 4 — PR-V2-09 Construction Stage Experience |
+| Current milestones          | Batch 4 (#262) and batch 5 in draft development; acceptance outstanding |
 
 ## Five remaining delivery batches
 
@@ -323,6 +323,9 @@ Starts from merged batch 3 (#261). Batches 1–3 (#259–#261) are merged.
 
 ## PR-V2-10 — Management & Reporting Experience
 
+Batch 5: [Management and integrated acceptance](V2_MANAGEMENT_UAT.md).
+Developed on batch 4 (#262) while its CI runs; merge order remains batch 4 then 5.
+
 - cleaner management command centre
 - commercial and project reporting
 - exception visibility
@@ -344,6 +347,6 @@ Starts from merged batch 3 (#261). Batches 1–3 (#259–#261) are merged.
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
 | Complete               | 9 / 12 original milestones; 6 merged PRs       |
-| Current                | Batch 4 — Construction Stage Experience        |
+| Current                | Batches 4 and 5 in development/review; not accepted |
 | Remaining              | 3 original milestones in 2 grouped PRs         |
 | Next after current     | Batch 5 — Management, Reporting, UAT & Hardening |

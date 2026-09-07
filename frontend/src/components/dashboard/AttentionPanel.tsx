@@ -61,10 +61,12 @@ export function AttentionPanel({
       ))}
       {loading && !flagged ? (
         <Loading label="Checking the project…" lines={3} />
+      ) : !flagged && problems.length > 0 ? (
+        <p>Attention checks are incomplete. Review the unavailable sources before drawing a conclusion.</p>
       ) : !flagged ? (
         <p className="attention-clear">
           <Icon name="check" />
-          Nothing is flagged for attention.
+          Nothing is flagged in the sources available to you.
         </p>
       ) : (
         <ul className="attention-list">
@@ -85,7 +87,7 @@ export function AttentionPanel({
                 <p className="attention-title">{item.title}</p>
                 <p className="attention-hint">{item.hint}</p>
               </div>
-              <Button small variant="quiet" onClick={() => onNavigate(item.section)}>
+              <Button small variant="quiet" aria-label={`Open ${item.title}`} onClick={() => onNavigate(item.section)}>
                 Open
               </Button>
             </li>
