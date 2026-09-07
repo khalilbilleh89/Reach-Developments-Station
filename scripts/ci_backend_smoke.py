@@ -16,6 +16,13 @@ GUARDS = (
     "tests/test_ci_workflow.py",
     "tests/test_ci_smoke.py",
     "tests/test_ci_shards.py",
+    # Migration changes are admitted only through the exact MIGRATIONS entry
+    # below, which adds their named integrity node to the selected contract.
+    "tests/test_migrations.py",
+    # Pure source-reading contract for this deliberately cross-domain Gate 0A
+    # presentation slice. Its domain behaviour is covered by the registered
+    # project, settings, cashflow, and prelaunch representatives below.
+    "tests/test_gate0a_structure.py",
 )
 BACKBONE = (
     "tests/test_config.py::test_defaults_describe_the_service",
@@ -97,7 +104,16 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_cashflow_development_movements.py::TestRecordingIsNotPaying::test_a_recorded_movement_is_not_yet_cash",
         "tests/modules/test_cashflow_development_movements.py::TestRecordingIsNotPaying::test_confirmation_by_a_second_person_makes_it_cash",
         "tests/modules/test_cashflow_development_movements.py::TestRecordingIsNotPaying::test_the_recorder_may_not_confirm_their_own_movement",
+        "tests/modules/test_cashflow_concurrency.py::TestOneConfirmationPerMovement::test_two_confirmations_of_one_development_movement_leave_one_truth",
         "tests/modules/test_cashflow_security.py::TestAPartialViewIsRefusedNotFiltered::test_a_phase_scoped_reader_is_refused_every_project_total",
+    ),
+    "prelaunch": (
+        "tests/modules/test_prelaunch.py::test_contextual_setup_does_not_grant_configuration_admin",
+        "tests/modules/test_prelaunch.py::test_project_manager_records_the_same_unconfirmed_cashflow_row",
+        "tests/modules/test_prelaunch.py::test_maker_checker_confirmation_and_reversal_count_the_row_once",
+        "tests/modules/test_prelaunch.py::test_prelaunch_never_grants_broader_cash_authority",
+        "tests/modules/test_prelaunch.py::test_prelaunch_lifecycle_is_cross_domain_independent",
+        "tests/modules/test_prelaunch.py::test_sales_advisor_and_phase_scoped_reader_get_no_prelaunch_details",
     ),
     "audit": (
         "tests/modules/test_audit.py::test_configuration_changes_are_audited",
@@ -123,6 +139,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0015_construction_stages.py": (
         "construction",
         ("tests/test_migrations.py::test_construction_stages_upgrade_schema_and_clean_downgrade",),
+    ),
+    "0016_prelaunch_utilities.py": (
+        "cashflow",
+        (
+            "tests/test_migrations.py::test_prelaunch_utilities_widens_only_the_development_category_check",
+        ),
     ),
 }
 
@@ -166,7 +188,7 @@ def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]
             "app/modules/inventory/custom_fields.py",
         ) or path.startswith((*fast.FULL_RISK_PREFIXES, ".github/")):
             raise SmokeRefused(
-                f"{path}: system-wide blast radius; not eligible for MVP 3 Smoke. "
+                f"{path}: system-wide blast radius; not eligible for Gate 0A Smoke. "
                 "Avoid the shared change or obtain explicit full-gate exception/review."
             )
         if path.startswith(fast.MIGRATION_VERSIONS_PREFIX):

@@ -414,6 +414,16 @@ export function LandTab({
                   ? money(selected.acquisition_fees, selected.base_currency_code)
                   : "Not recorded",
               },
+              {
+                label: "Total acquisition cost",
+                value: selected.total_acquisition_cost
+                  ? money(selected.total_acquisition_cost, selected.base_currency_code)
+                  : "Incomplete",
+                note:
+                  selected.total_acquisition_cost_basis === "incomplete_inputs"
+                    ? "Purchase price and acquisition fees are both required"
+                    : "Backend-derived acquisition consideration",
+              },
             ]
           : []),
       ]
@@ -862,6 +872,14 @@ export function LandTab({
                           selected.acquisition_fees
                             ? money(selected.acquisition_fees, selected.base_currency_code)
                             : null
+                        }
+                      />
+                      <KeyValue
+                        label="Total acquisition cost"
+                        value={
+                          selected.total_acquisition_cost
+                            ? money(selected.total_acquisition_cost, selected.base_currency_code)
+                            : "Incomplete — record both inputs"
                         }
                       />
                     </>

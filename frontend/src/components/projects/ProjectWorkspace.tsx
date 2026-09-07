@@ -7,9 +7,6 @@ import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { CurrencyProvider } from "@/lib/currency";
 import {
-  INTERNAL_PRICE_READERS,
-  PRICING_APPROVERS,
-  PRICING_WRITERS,
   PROJECT_FINANCIAL_READERS,
   PROJECT_WRITERS,
   ROLE_SYSTEM_ADMIN,
@@ -39,7 +36,7 @@ import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
-import { PricingTab } from "@/components/projects/PricingTab";
+import { PreLaunchTab } from "@/components/projects/PreLaunchTab";
 import { SalesTab } from "@/components/projects/SalesTab";
 import { UnitEconomicsTab } from "@/components/projects/UnitEconomicsTab";
 import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
@@ -119,9 +116,6 @@ export function ProjectWorkspace({
   const isAdmin = roles.has(ROLE_SYSTEM_ADMIN);
   const canWriteProject = hasAnyRole(roles, PROJECT_WRITERS);
   const canWriteTechnical = hasAnyRole(roles, TECHNICAL_WRITERS);
-  const canPrice = hasAnyRole(roles, PRICING_WRITERS);
-  const canApprovePricing = hasAnyRole(roles, PRICING_APPROVERS);
-  const canSeeInternalPrices = hasAnyRole(roles, INTERNAL_PRICE_READERS);
 
   const groups = visibleNavigation(PROJECT_NAVIGATION, roles);
   const item = findNavItem(groups, section);
@@ -278,6 +272,14 @@ export function ProjectWorkspace({
           />
         ) : null}
         {section === "permits" ? <PermitsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "prelaunch" ? (
+          <PreLaunchTab
+            projectId={projectId}
+            currencyId={project.base_currency_id}
+            currencyCode={project.base_currency_code}
+            roles={roles}
+          />
+        ) : null}
         {section === "inventory" ? (
           <InventoryTab
             projectId={projectId}
@@ -285,17 +287,6 @@ export function ProjectWorkspace({
             roles={roles}
             canWriteStructure={canWriteTechnical}
             canConfigure={canWriteProject}
-          />
-        ) : null}
-        {section === "pricing" ? (
-          <PricingTab
-            projectId={projectId}
-            projectStatus={project.status}
-            reportingCurrencyId={project.reporting_currency_id}
-            canPrice={canPrice}
-            canApprove={canApprovePricing}
-            canSeeInternal={canSeeInternalPrices}
-            onOpenUnit={(unitId) => setOpenUnit(unitId)}
           />
         ) : null}
         {section === "sales" ? (

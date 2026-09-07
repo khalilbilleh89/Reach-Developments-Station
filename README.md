@@ -32,7 +32,8 @@ or rules engines, no microservices. The full forbidden list lives in
 | Completed                |      6 |
 | Remaining                |      6 |
 
-Current: **PR-MVP-05 — Sales & Legal**.
+Current: **PR-G0A-01 — Project Structure, Setup Simplification & Pre-Launch**
+(MVP 2 Gate 0A PR 1 of 3; Draft review, 0 / 3 merged).
 Next: **PR-MVP-06 — Payment Plans**.
 
 The system has authentication, the fixed role catalogue, country configuration,

@@ -97,7 +97,7 @@ const STATUS_LABELS: Record<string, string> = {
   comments_received: "Comments received",
   resubmission: "Resubmission",
   approved_with_conditions: "Approved with conditions",
-  issued: "Issued",
+  issued: "Obtained / Issued",
   expired: "Expired",
   renewed: "Renewed",
   rejected: "Rejected",

@@ -408,7 +408,7 @@ Tests protect business behaviour, not implementation trivia.
 
 PR-ENG-04 replaces serial Full execution with four independent jobs without
 changing which backend tests Full executes. Canonical temporary MVP 3 delivery
-and exception topology: [MVP3_ROADMAP.md](MVP3_ROADMAP.md). It is an explicitly
+and exception topology: [MVP2_GATE0A_ROADMAP.md](MVP2_GATE0A_ROADMAP.md). It is an explicitly
 reviewed temporary integration mechanism, not a permanent second production branch.
 
 | Event/base | Backend lane | Frontend |
@@ -536,7 +536,7 @@ delete PR branch
 - `main` is always deployable.
 - No direct development on `main`. Never rewrite or force-push `main`.
 - No long-lived `develop` branch. No environment branches. The reviewed temporary
-  integration exception is defined only in [MVP3_ROADMAP.md](MVP3_ROADMAP.md).
+  integration exception is defined only in [MVP2_GATE0A_ROADMAP.md](MVP2_GATE0A_ROADMAP.md).
 - Squash merge normal feature PRs. Delete merged branches.
 - Branch naming: `mvp/pr-NN-short-slug` for roadmap PRs, `eng/pr-NN-short-slug`
   for horizontal engineering work that adds no functional scope.

@@ -7,8 +7,8 @@ away from is a wait that stops being read. So a draft main pull request runs the
 tests its change can plausibly break, and a pull request marked ready for
 review runs all of them. Fast CI is not weaker CI; it answers a narrower
 question, and the broad one is still asked before a main candidate merges.
-The temporary MVP 3 integration Smoke policy is defined separately in
-ci_backend_smoke.py and docs/MVP3_ROADMAP.md.
+The temporary Gate 0A integration Smoke policy is defined separately in
+ci_backend_smoke.py and docs/MVP2_GATE0A_ROADMAP.md.
 
 Three ideas, and nothing more:
 
@@ -63,6 +63,7 @@ ALWAYS_RUN = (
     # token layer, no arithmetic in the browser, no request a role may not
     # make, and the overlays' semantics. Source reading only, so it is free.
     "tests/test_product_experience.py",
+    "tests/test_gate0a_structure.py",
     "tests/modules/test_auth.py",
     "tests/modules/test_authorization.py",
     "tests/modules/test_audit.py",
@@ -121,6 +122,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "unit_economics": ("unit_economics", "migration_unit_economics"),
     "construction": ("construction", "migration_construction"),
     "cashflow": ("cashflow", "migration_cashflow"),
+    "prelaunch": ("prelaunch",),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above

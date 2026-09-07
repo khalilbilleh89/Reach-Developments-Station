@@ -145,6 +145,7 @@ const DEVELOPMENT_LABELS: Record<string, string> = {
   design: "Design",
   consultants: "Consultants",
   permits: "Permits",
+  utilities: "Utilities",
   insurance: "Insurance",
   developer_overhead: "Developer overhead",
   marketing: "Marketing",
@@ -346,7 +347,7 @@ const SOURCE_MODULE_LABELS: Record<string, string> = {
   construction: "Construction",
   payment_plans: "Payment plans",
   unit_economics: "Unit economics",
-  sales: "Sales & Legal",
+  sales: "Sales",
 };
 
 export function sourceModuleLabel(module: string): string {

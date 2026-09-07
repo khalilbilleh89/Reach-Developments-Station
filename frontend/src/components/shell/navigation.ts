@@ -5,7 +5,6 @@ import {
   COLLECTION_READERS,
   CONSTRUCTION_READERS,
   ECONOMICS_READERS,
-  INTERNAL_PRICE_READERS,
   PLAN_READERS,
   ROLE_SYSTEM_ADMIN,
   SALES_READERS,
@@ -36,7 +35,10 @@ export type ProjectSection =
   | "overview"
   | "land"
   | "permits"
+  | "prelaunch"
   | "inventory"
+  // Retained as a technical route key for domain components and historical
+  // links; it is deliberately absent from ordinary PROJECT_NAVIGATION.
   | "pricing"
   | "sales"
   | "payments"
@@ -100,6 +102,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         visible: everyone,
       },
       {
+        key: "prelaunch",
+        label: "Pre-Launch",
+        icon: "money",
+        description: "Development expenses recorded before launch, with confirmed cash kept distinct.",
+        visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
+      },
+      {
         key: "inventory",
         label: "Inventory",
         icon: "inventory",
@@ -114,16 +123,8 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     label: "Commercial",
     items: [
       {
-        key: "pricing",
-        label: "Pricing",
-        icon: "pricing",
-        description:
-          "What this development is priced at, and what that price is made of.",
-        visible: (roles) => hasAnyRole(roles, INTERNAL_PRICE_READERS),
-      },
-      {
         key: "sales",
-        label: "Sales & Legal",
+        label: "Sales",
         icon: "sales",
         description:
           "Where every unit stands commercially, legally and on delivery.",
@@ -207,45 +208,9 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
   },
 ];
 
-export type SettingsSection =
-  | "users"
-  | "currencies"
-  | "country"
-  | "reference"
-  | "audit"
-  | "account";
+export type SettingsSection = "users" | "audit" | "account";
 
 export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
-  {
-    key: "configuration",
-    label: "Configuration",
-    items: [
-      {
-        key: "country",
-        label: "Country packs",
-        icon: "land",
-        description:
-          "The tax, currency and legal defaults a project inherits when it is created.",
-        visible: everyone,
-      },
-      {
-        key: "currencies",
-        label: "Currencies",
-        icon: "collections",
-        description:
-          "The currencies this business transacts in. No exchange rates are stored.",
-        visible: everyone,
-      },
-      {
-        key: "reference",
-        label: "Reference data",
-        icon: "documents",
-        description:
-          "The controlled vocabularies every project chooses its codes from.",
-        visible: everyone,
-      },
-    ],
-  },
   {
     key: "people",
     label: "People",
@@ -343,6 +308,6 @@ export function projectHref(
   return `/projects/?${params.toString()}`;
 }
 
-export function settingsHref(section: SettingsSection = "country"): string {
-  return section === "country" ? "/settings/" : `/settings/?section=${section}`;
+export function settingsHref(section: SettingsSection = "account"): string {
+  return section === "account" ? "/settings/" : `/settings/?section=${section}`;
 }

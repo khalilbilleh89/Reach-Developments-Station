@@ -11,7 +11,10 @@ partial/pending UAT is documented and accepted, not rewritten as passing evidenc
 | Total planned MVP 2 PRs      |     8 |
 | Merged delivery PRs          | 8 / 8 |
 | Remaining delivery PRs       | 0 |
-| Product acceptance           | CLOSED BY OWNER — 2026-09-07, #264; residual UAT accepted |
+| MVP 2 core Gate 0 delivery | COMPLETE |
+| Previous owner closure | RECORDED HISTORICAL DECISION — 2026-09-07, #264 |
+| Subsequent clarification | Gate 0A remains part of MVP 2 |
+| Current MVP 2 status | REOPENED FOR GATE 0A COMPLETION |
 
 ## Five grouped delivery batches (merged)
 
@@ -352,12 +355,12 @@ closed MVP 2 through #264 with the documented residual UAT accepted.
 | Delivery PRs | 8 / 8 merged |
 | MVP 2 owner acceptance | CLOSED — 2026-09-07, #264 |
 | Residual UAT | DOCUMENTED AND ACCEPTED BY OWNER; historical Partial/Pending rows preserved |
-| Current engineering work | PR-ENG-04 — MVP 3 Governance, Roadmap & Accelerated CI |
-| Next product work | MVP 3, 0 / 5; see [MVP3_ROADMAP.md](MVP3_ROADMAP.md) |
+| Current product work | MVP 2 Gate 0A, 0 / 3 merged; see [MVP2_GATE0A_ROADMAP.md](MVP2_GATE0A_ROADMAP.md) |
+| True MVP 3 | NOT STARTED |
 
 #264 is merged at `650eef17bcffa203c6ed7a5a5b482e9cd0f27582`; it is not a
 thirteenth product milestone. Owner closure does not fabricate independent
 review or passing tests. The [historical integrated matrix](V2_MANAGEMENT_UAT.md)
-remains intact. Its residual debt does not block MVP 3; later evidence cannot
+remains intact. Its residual debt is not passing evidence; later evidence cannot
 retroactively rewrite it. MVP 1 real legacy-source migration and production
 go-live evidence remain a separate historical track, unchanged by this closure.

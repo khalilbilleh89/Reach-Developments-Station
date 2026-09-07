@@ -83,6 +83,12 @@ CASHFLOW_PREPARER_ROLES = frozenset({"finance", "project_manager"})
 #: release. Finance alone: these are disbursements and bank instructions.
 CASHFLOW_RECORDER_ROLES = frozenset({"finance"})
 
+#: The Development-facing Pre-Launch facade is deliberately narrower than the
+#: generic cash recorder. A whole-project Project Manager may record only the
+#: facade's allow-listed development categories; confirmation remains Finance/
+#: CFO authority below.
+PRELAUNCH_RECORDER_ROLES = frozenset({"finance", "project_manager"})
+
 #: Who may confirm that cash actually moved. A second Finance user or the
 #: Approver / CFO — the identifier comparison below is what makes "a second
 #: Finance user" mean a genuinely different person.
@@ -127,6 +133,15 @@ def require_cashflow_preparer(actor: ActorContext) -> None:
 def require_cashflow_recorder(actor: ActorContext) -> None:
     """Gate recording cash this module owns, and escrow."""
     _require_any(actor, CASHFLOW_RECORDER_ROLES, "Only Finance may record this.")
+
+
+def require_prelaunch_recorder(actor: ActorContext) -> None:
+    """Gate the narrow Pre-Launch recording surface only."""
+    _require_any(
+        actor,
+        PRELAUNCH_RECORDER_ROLES,
+        "Only Finance or a Project Manager may record a Pre-Launch expense.",
+    )
 
 
 def require_cashflow_confirmer(actor: ActorContext) -> None:
