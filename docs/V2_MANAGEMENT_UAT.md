@@ -53,13 +53,14 @@ final integrated pass.
 
 ## Closure gates
 
-1. Finish batch 4's documented work, including stage configuration editing and
-   its database/security/concurrency verification. Bring the resulting changes
-   into this branch and repeat affected checks.
+1. Verify the closure PR's stage edit/reorder implementation and database,
+   security, concurrency and independence regressions.
 2. Record actual integrated test and browser outcomes above, fix findings and
    complete independent review.
-3. Obtain successful required CI for the final commits. Merge batch 4 before
-   batch 5; update this branch against main after the preceding squash merge.
+3. Obtain successful Full Backend + Frontend for both the final base main and
+   the exact reviewed closure head. All five grouped delivery PRs are merged.
+   Keep PR-V2-CLOSE Draft through implementation and independent review; only
+   the owner/reviewer may authorize marking Ready. Do not merge this Draft.
 4. Mark V2 complete only after those gates pass. Keep the legacy migration and
    production go-live evidence separate, as the roadmap requires.
 

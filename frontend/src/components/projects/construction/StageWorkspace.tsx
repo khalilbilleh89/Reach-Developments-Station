@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice } from "@/components/ui";
 import { stages } from "@/lib/api/stages";
 import type { Stage, UnitProgress, UnitStage } from "@/lib/api/stages";
@@ -25,7 +25,11 @@ export function ProjectStages({ projectId, roles }: { projectId: string; roles: 
     {error ? <Notice tone="error">{error}</Notice> : null}
     {!rows && !error ? <Loading label="Loading stages" /> : null}
     {rows?.length === 0 ? <p>No construction stages configured yet.</p> : null}
-    <ol>{rows?.map((stage) => <li key={stage.id}>{stage.name} — {stage.planned_date ? businessDate(stage.planned_date) : "Date not planned"}</li>)}</ol>
+    <Button type="button" disabled={busy} onClick={() => void load()}>Reload checklist</Button>
+    <ol>{rows?.map((stage) => <li key={stage.id}>
+      <StageConfiguration stage={stage} rows={rows} projectId={projectId}
+        canConfigure={hasAnyRole(roles, CONSTRUCTION_STAGE_CONFIGURERS)} reload={load} />
+    </li>)}</ol>
     {hasAnyRole(roles, CONSTRUCTION_STAGE_CONFIGURERS) ? <form onSubmit={async (event) => {
       event.preventDefault(); if (busy) return; setBusy(true);
       try { await stages.create(projectId, name, planned || null); setName(""); setPlanned(""); await load(); }
@@ -39,6 +43,63 @@ export function ProjectStages({ projectId, roles }: { projectId: string; roles: 
       <p className="footnote">Configuration requires access to the whole project.</p>
     </form> : null}
   </Card>;
+}
+
+function StageConfiguration({ stage, rows, projectId, canConfigure, reload }: {
+  stage: Stage; rows: Stage[]; projectId: string; canConfigure: boolean; reload: () => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<Stage | null>(null);
+  const [name, setName] = useState("");
+  const [planned, setPlanned] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const editControl = useRef<HTMLSpanElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing) nameInput.current?.focus(); }, [editing]);
+  function close() {
+    setEditing(null);
+    requestAnimationFrame(() => editControl.current?.querySelector("button")?.focus());
+  }
+  async function move(position: number) {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      await stages.update(projectId, stage, { sequence: position, expected_order: rows.map((row) => row.id) });
+      await reload();
+    } catch (caught) { setError(message(caught)); }
+    finally { setBusy(false); }
+  }
+  return <section>
+    <p>{stage.name} — {stage.planned_date ? businessDate(stage.planned_date) : "Date not planned"}</p>
+    {error ? <Notice tone="error">{error}</Notice> : null}
+    {canConfigure ? <>
+      <FormActions>
+        <span ref={editControl}><Button type="button" disabled={busy || !!editing} aria-label={`Edit ${stage.name}`} onClick={() => {
+          setEditing({ ...stage }); setName(stage.name); setPlanned(stage.planned_date ?? ""); setError(null);
+        }}>Edit</Button></span>
+        <Button type="button" disabled={busy || !!editing || stage.sequence === 1} aria-label={`Move ${stage.name} up`}
+          onClick={() => void move(stage.sequence - 1)}>Move up</Button>
+        <Button type="button" disabled={busy || !!editing || stage.sequence === rows.length} aria-label={`Move ${stage.name} down`}
+          onClick={() => void move(stage.sequence + 1)}>Move down</Button>
+      </FormActions>
+      {editing ? <form aria-label={`Edit ${editing.name}`} onSubmit={async (event) => {
+        event.preventDefault(); if (busy) return; setBusy(true); setError(null);
+        try {
+          await stages.update(projectId, editing, { name, planned_date: planned || null });
+          await reload(); setBusy(false); close();
+        } catch (caught) { setError(message(caught)); }
+        finally { setBusy(false); }
+      }}>
+        <FieldRow columns={2}>
+          <Field label="Stage name"><input ref={nameInput} className="input" required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} /></Field>
+          <Field label="Planned completion date" optional><input className="input" type="date" value={planned} onChange={(event) => setPlanned(event.target.value)} /></Field>
+        </FieldRow>
+        <p className="footnote">Leave the date empty to clear it. Completion history is retained.</p>
+        <FormActions><Button type="submit" disabled={busy}>Save stage</Button>
+          <Button type="button" disabled={busy} onClick={close}>Cancel</Button></FormActions>
+      </form> : null}
+    </> : null}
+  </section>;
 }
 
 export function UnitStages({ projectId, unitId, roles }: { projectId: string; unitId: string; roles: Roles }) {

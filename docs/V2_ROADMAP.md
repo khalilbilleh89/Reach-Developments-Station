@@ -2,17 +2,18 @@
 
 Canonical delivery sequence for MVP 2 (V2). The twelve original milestone
 identifiers, `PR-V2-00` through `PR-V2-11`, remain for scope traceability.
-The first three are merged; the nine remaining milestones are delivered in
-five grouped pull requests, each on its own short-lived branch.
+All eight delivery PRs are merged: V2-00, V2-01, V2-02 and grouped batches
+1–5 (#259–#263). Delivery is not product acceptance: the corrective
+PR-V2-CLOSE acceptance/hardening work remains subject to the closure gates.
 
 | Scope                       | Count |
 | --------------------------- | ----: |
 | Total planned MVP 2 PRs      |     8 |
-| Merged PRs                  |     6 |
-| Remaining PRs (including current) | 2 |
-| Current milestones          | Batch 4 (#262) and batch 5 in draft development; acceptance outstanding |
+| Merged delivery PRs          | 8 / 8 |
+| Remaining delivery PRs       | 0 |
+| Product acceptance           | INCOMPLETE — closure evidence and independent acceptance outstanding |
 
-## Five remaining delivery batches
+## Five grouped delivery batches (merged)
 
 | Order | Pull request scope | Original milestones | Why grouped |
 | ----- | ------------------ | ------------------- | ----------- |
@@ -314,7 +315,7 @@ Developed on batch 1 while #259 completes CI; merge order remains unchanged.
 ## PR-V2-09 — Construction Stage Experience
 
 Batch 4 implementation: [Construction stage workspace](V2_CONSTRUCTION_STAGES_WORKSPACE.md).
-Starts from merged batch 3 (#261). Batches 1–3 (#259–#261) are merged.
+Merged as #262. Configuration hardening and acceptance evidence are tracked in PR-V2-CLOSE.
 
 - project-configured construction stages
 - unit-level stage completion and status
@@ -324,7 +325,7 @@ Starts from merged batch 3 (#261). Batches 1–3 (#259–#261) are merged.
 ## PR-V2-10 — Management & Reporting Experience
 
 Batch 5: [Management and integrated acceptance](V2_MANAGEMENT_UAT.md).
-Developed on batch 4 (#262) while its CI runs; merge order remains batch 4 then 5.
+Merged as #263. The integrated acceptance matrix remains the closure authority.
 
 - cleaner management command centre
 - commercial and project reporting
@@ -346,7 +347,14 @@ Developed on batch 4 (#262) while its CI runs; merge order remains batch 4 then 
 
 | MVP 2 / V2             | State                                         |
 | ---------------------- | --------------------------------------------- |
-| Complete               | 9 / 12 original milestones; 6 merged PRs       |
-| Current                | Batches 4 and 5 in development/review; not accepted |
-| Remaining              | 3 original milestones in 2 grouped PRs         |
-| Next after current     | Batch 5 — Management, Reporting, UAT & Hardening |
+| Original milestone delivery | 12 / 12 represented in merged delivery PRs; final acceptance outstanding |
+| Delivery PRs           | 8 / 8 merged |
+| Current                | PR-V2-CLOSE — corrective acceptance and construction-stage hardening |
+| MVP 2 product acceptance | INCOMPLETE |
+| Next product work      | Must wait for explicit MVP 2 closure acceptance |
+
+PR-V2-CLOSE is not a thirteenth product milestone. Only after every row in
+[the integrated matrix](V2_MANAGEMENT_UAT.md), independent review and exact-head
+full CI passes may acceptance be recorded as COMPLETE and original milestones
+as 12 / 12 complete. MVP 1 real legacy-source migration and go-live evidence
+remain a separate track; this closure changes none of that track's evidence.
