@@ -21,8 +21,10 @@ _NEW = (
 
 
 def upgrade() -> None:
-    op.drop_constraint(_CONSTRAINT, "cashflow_development_movements", type_="check")
-    op.create_check_constraint(_CONSTRAINT, "cashflow_development_movements", _NEW)
+    # ``op.f`` marks the already-conventioned persisted name as final. Without
+    # it Alembic applies the ``ck_<table>_`` convention a second time.
+    op.drop_constraint(op.f(_CONSTRAINT), "cashflow_development_movements", type_="check")
+    op.create_check_constraint(op.f(_CONSTRAINT), "cashflow_development_movements", _NEW)
 
 
 def downgrade() -> None:
@@ -32,5 +34,5 @@ def downgrade() -> None:
         "WHERE category = 'utilities') THEN RAISE EXCEPTION "
         "'cannot downgrade while utilities movements exist'; END IF; END $$"
     )
-    op.drop_constraint(_CONSTRAINT, "cashflow_development_movements", type_="check")
-    op.create_check_constraint(_CONSTRAINT, "cashflow_development_movements", _OLD)
+    op.drop_constraint(op.f(_CONSTRAINT), "cashflow_development_movements", type_="check")
+    op.create_check_constraint(op.f(_CONSTRAINT), "cashflow_development_movements", _OLD)
