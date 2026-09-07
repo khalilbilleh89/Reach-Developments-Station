@@ -27,8 +27,10 @@ The document supplies no fixed stage catalogue: names must be project inputs.
 - Project members may read this nonfinancial checklist, including roles that
   cannot read construction costs. The unit endpoint additionally enforces phase
   visibility. Creation is Project Manager only; completion uses the existing
-  technical role set. Stage order is append order, and names/dates are fixed in
-  this first implementation; schedule editing is still to be implemented.
+  technical role set. New stages append; whole-project Project Managers may
+  edit names, set or clear planned dates, and move stages to positions 1..N.
+  Readers have no maintenance controls. Selected-phase PM writes are refused
+  by the backend even if a client sends the request directly.
 - A completed checklist is not a certificate, a payable instalment, or handover
   approval. Existing milestone certification and delivery transitions continue
   to own those decisions. No automatic delivery date is inferred from an
@@ -44,8 +46,33 @@ Verify stages cannot trigger buyer instalments or overwrite delivery status.
 Check migration upgrade, downgrade and model agreement, plus responsive and
 keyboard operation of project configuration and unit progress.
 
-Implementation and verification are in progress. No completion, passing test,
-deployment or production-data claim is made by this document.
+## Configuration update contract
+
+`PATCH /api/v1/projects/{project_id}/construction/stages/{stage_id}` accepts only
+`name`, `planned_date`, `sequence`, and concurrency preconditions. Omitted values
+remain unchanged; explicit null clears only the planned date. Null name/sequence,
+blank/duplicate names and positions outside the list are refused.
+
+Every request supplies `expected_name`, `expected_planned_date` and
+`expected_sequence`. Moves also supply `expected_order`, the displayed stage UUID
+list. Behind the project lock the service refreshes configuration and refuses
+stale snapshots with 409. This is value comparison, not an added versioning
+subsystem; an intervening change that returns to exactly the same state is
+equivalent for this contract.
+
+A move parks its stage at max(sequence)+1, shifts each intervening row into the
+vacant slot in deterministic order (flushing each step), then places the moved
+stage. All intermediate values are positive and unique; final positions are
+contiguous. One domain audit event carries actor, correlation ID, before/after
+name/date/sequence and ordered UUIDs. Internal shifts create no extra audit noise.
+No-op saves do not create an audit event. Stage UUIDs and unit completion events
+are unchanged. Creation audit also includes the assigned sequence.
+
+The inline editor focuses its name input and returns focus to Edit on save or
+cancel. Move controls are named for their stage. Reload is explicit after a stale
+save; the editor preserves the rejected input until cancelled, never silently
+retries against new state. See [V2_MANAGEMENT_UAT.md](V2_MANAGEMENT_UAT.md) for
+actual verification outcomes; implementation alone is not acceptance evidence.
 
 Migration `0015_construction_stages` adds two tables without backfilling existing
 units. An empty checklist is shown as unconfigured. Downgrade refuses once any

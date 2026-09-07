@@ -1,4 +1,4 @@
-import { get, post } from "./client";
+import { get, patch, post } from "./client";
 
 export interface Stage {
   id: string; name: string; sequence: number; planned_date: string | null;
@@ -15,6 +15,12 @@ export interface UnitProgress {
 const root = (projectId: string) => `/projects/${projectId}/construction`;
 export const stages = {
   list: (projectId: string) => get<Stage[]>(`${root(projectId)}/stages`),
+  update: (projectId: string, stage: Stage, changes: {
+    name?: string; planned_date?: string | null; sequence?: number; expected_order?: string[];
+  }) => patch<Stage>(`${root(projectId)}/stages/${stage.id}`, {
+    expected_name: stage.name, expected_planned_date: stage.planned_date,
+    expected_sequence: stage.sequence, ...changes,
+  }),
   create: (projectId: string, name: string, plannedDate: string | null) =>
     post<Stage>(`${root(projectId)}/stages`, { name, planned_date: plannedDate }),
   unit: (projectId: string, unitId: string) =>

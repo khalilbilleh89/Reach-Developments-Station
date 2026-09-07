@@ -72,6 +72,19 @@ def create_stage(
     return stage_service.create_stage(session, project, actor, payload.name, payload.planned_date)
 
 
+@router.patch("/stages/{stage_id}", response_model=schemas.StageOut)
+def update_stage(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    stage_id: uuid.UUID,
+    payload: schemas.StageUpdate,
+) -> object:
+    return stage_service.update_stage(
+        session, project, actor, stage_id, payload.model_dump(exclude_unset=True)
+    )
+
+
 @router.get("/units/{unit_id}/stages", response_model=schemas.UnitProgressOut)
 def read_unit_stages(
     project: InventoryProject, session: DbSession, actor: ActiveActor, unit_id: uuid.UUID

@@ -58,6 +58,16 @@ class StageCreate(StrictRequest):
     planned_date: date | None = None
 
 
+class StageUpdate(StrictRequest):
+    expected_name: str = Field(min_length=1, max_length=200)
+    expected_planned_date: date | None
+    expected_sequence: int = Field(ge=1)
+    expected_order: list[uuid.UUID] | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    planned_date: date | None = None
+    sequence: int | None = Field(default=None, ge=1)
+
+
 class StageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID

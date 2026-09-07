@@ -151,6 +151,19 @@ def test_the_history_round_trips_from_empty_to_head_and_back(postgres: None) -> 
     assert _current_revision() == HEAD_REVISION
 
 
+def test_construction_stages_upgrade_schema_and_clean_downgrade(postgres: None) -> None:
+    config = _alembic_config()
+    command.downgrade(config, "0014_direct_unit_price")
+    assert "construction_stages" not in _public_tables()
+    command.upgrade(config, "0015_construction_stages")
+    assert _current_revision() == "0015_construction_stages"
+    assert {"construction_stages", "unit_stage_events"} <= _public_tables()
+    command.check(config)
+    command.downgrade(config, "0014_direct_unit_price")
+    assert _current_revision() == "0014_direct_unit_price"
+    command.upgrade(config, "head")
+
+
 def test_baseline_creates_no_business_schema(empty_database: None) -> None:
     """Given an empty database, when the baseline is applied, then it adds no tables.
 

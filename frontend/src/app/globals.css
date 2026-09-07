@@ -4438,6 +4438,12 @@ input[type="file"].input {
     text-align: left;
   }
 
+  .drawer-head-actions {
+    order: 4;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
   .drawer-facts,
   .drawer-sections {
     padding-right: var(--space-4);

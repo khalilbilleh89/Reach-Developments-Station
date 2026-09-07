@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -280,7 +280,9 @@ def business_today() -> date:
     API, completeness and the CSV importer — rather than three call sites each
     reaching for ``date.today()`` and one of them eventually not.
     """
-    return date.today()
+    # Ledger lifecycle bounds are UTC midnight. A host-local day can lag those
+    # stamps and hide a receipt confirmed just after midnight UTC.
+    return datetime.now(UTC).date()
 
 
 def _within_validity(as_of: date) -> ColumnElement[bool]:
