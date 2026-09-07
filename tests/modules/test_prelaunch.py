@@ -5,13 +5,18 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from alembic import command
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.database import get_engine
 from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
 from app.modules.cashflow.models import CashflowDevelopmentMovement
+from tests.conftest import alembic_config
 from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, grant_access
 
@@ -187,3 +192,42 @@ def test_sales_advisor_and_phase_scoped_reader_get_no_prelaunch_details(
     )
     admin_client.put(f"{PROJECTS}/{project_id}/access/{scoped_reader.id}/phases/{phase_id}")
     assert client_for(scoped_reader.email).get(root(project_id)).status_code == 403
+
+
+def test_utilities_row_survives_refused_downgrade_to_0015(
+    finance_client: TestClient,
+    project_id: str,
+    currency_id: str,
+) -> None:
+    """0016 refuses a lossy downgrade and leaves both data and revision intact."""
+    created = finance_client.post(root(project_id), json=payload(currency_id))
+    assert created.status_code == 201, created.text
+    movement_id = created.json()["id"]
+
+    def retained_row() -> tuple[str, Decimal]:
+        with get_engine().connect() as connection:
+            row = connection.execute(
+                text(
+                    "SELECT category, amount FROM cashflow_development_movements "
+                    "WHERE id = CAST(:movement_id AS uuid)"
+                ),
+                {"movement_id": movement_id},
+            ).one()
+            return row.category, row.amount
+
+    assert retained_row() == ("utilities", Decimal("1250.25"))
+    try:
+        with pytest.raises(
+            SQLAlchemyError, match="cannot downgrade while utilities movements exist"
+        ):
+            command.downgrade(alembic_config(), "0015_construction_stages")
+
+        with get_engine().connect() as connection:
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == ("0016_prelaunch_utilities")
+        assert retained_row() == ("utilities", Decimal("1250.25"))
+    finally:
+        # The refusal is transactional, but restoring head explicitly keeps the
+        # test isolated even if a future dialect changes failure semantics.
+        command.upgrade(alembic_config(), "head")

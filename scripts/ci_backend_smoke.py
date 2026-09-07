@@ -114,6 +114,7 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_prelaunch.py::test_prelaunch_never_grants_broader_cash_authority",
         "tests/modules/test_prelaunch.py::test_prelaunch_lifecycle_is_cross_domain_independent",
         "tests/modules/test_prelaunch.py::test_sales_advisor_and_phase_scoped_reader_get_no_prelaunch_details",
+        "tests/modules/test_prelaunch.py::test_utilities_row_survives_refused_downgrade_to_0015",
     ),
     "audit": (
         "tests/modules/test_audit.py::test_configuration_changes_are_audited",
@@ -144,6 +145,7 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "cashflow",
         (
             "tests/test_migrations.py::test_prelaunch_utilities_widens_only_the_development_category_check",
+            "tests/modules/test_prelaunch.py::test_utilities_row_survives_refused_downgrade_to_0015",
         ),
     ),
 }
