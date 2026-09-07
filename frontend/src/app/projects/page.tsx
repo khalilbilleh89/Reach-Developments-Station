@@ -25,7 +25,9 @@ function ProjectsScreen() {
   const { state } = useSession();
   const openProjectId = params.get("project");
   const requested = params.get("section");
-  const section = isProjectSection(requested) ? requested : "overview";
+  // Historical standalone Pricing links now land in Inventory, where Unit 360
+  // owns the selling-price workflow. No pricing authority is weakened.
+  const section = requested === "pricing" ? "inventory" : isProjectSection(requested) ? requested : "overview";
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");

@@ -6,15 +6,17 @@ this file is a short entry point, not a second policy copy.
 
 ## Current product track
 
-MVP 2 was closed by owner decision through merged #264 on 2026-09-07. Preserve
-its Partial/Pending historical UAT rows as accepted residual debt; do not reopen
-MVP 2 as a prerequisite to MVP 3. Real legacy migration/go-live remains separate.
+MVP 2 core Gate 0 was completed and the owner closure through merged #264 on
+2026-09-07 remains recorded historical evidence. Subsequent stakeholder
+clarification reopened MVP 2 for Gate 0A completion. Preserve every Partial/
+Pending historical UAT row; this reclassification does not turn it into a pass.
+Real legacy migration/go-live remains separate. True MVP 3 has not started.
 
-MVP 3 authority: [product specification](docs/MVP3_PRODUCT_SPEC.md),
-[roadmap](docs/MVP3_ROADMAP.md), [acceptance matrix](docs/MVP3_ACCEPTANCE.md).
-The roadmap is the **single canonical temporary MVP 3 branch/PR workflow**.
-Read its branch topology, sequencing, exact five-product-PR count, integration
-exceptions and final main-promotion gate before starting any MVP 3 task. Do not
+MVP 2 Gate 0A authority: [product specification](docs/MVP2_GATE0A_PRODUCT_SPEC.md),
+[roadmap](docs/MVP2_GATE0A_ROADMAP.md), [acceptance matrix](docs/MVP2_GATE0A_ACCEPTANCE.md).
+The roadmap is the **single canonical temporary Gate 0A branch/PR workflow**.
+Read its branch topology, sequencing, exact three-product-PR count, integration
+exceptions and final main-promotion gate before starting any Gate 0A task. Do not
 copy or invent alternate rules here. PR-ENG-04 is engineering, not product.
 
 ## CI and review

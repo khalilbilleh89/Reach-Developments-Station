@@ -8,10 +8,12 @@
 - **RESIDUAL UAT: DOCUMENTED AND ACCEPTED BY OWNER**.
 
 The owner explicitly elected to merge #264 and close MVP 2. That governance
-choice is final; MVP 2 is not an active milestone to reopen before MVP 3.
+choice remains recorded historical evidence. Subsequent stakeholder clarification
+reopened MVP 2 only for Gate 0A completion; these results are not rewritten.
 The existing matrix below remains the truthful historical record of what was
 and was not independently exercised before closure. Partial and Pending rows
-are accepted residual UAT debt, not passing evidence. They do not block MVP 3.
+are accepted residual UAT debt, not passing evidence. Gate 0A adds new evidence
+without retroactively changing these rows.
 Later regression/UAT may naturally cover them, but cannot retroactively change
 this record or imply those checks were executed before closure.
 

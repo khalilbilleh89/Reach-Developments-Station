@@ -73,6 +73,8 @@ def test_a_restricted_role_never_receives_development_cost(
             assert figure not in response.text, f"{role} saw {figure}"
     assert parcels.json()[0]["purchase_price"] is None
     assert parcels.json()[0]["acquisition_fees"] is None
+    assert parcels.json()[0]["total_acquisition_cost"] is None
+    assert parcels.json()[0]["total_acquisition_cost_basis"] == "restricted"
     assert parcels.json()[0]["financials_visible"] is False
     assert permits.json()["permits"][0]["fee_amount"] is None
 

@@ -26,14 +26,18 @@ or rules engines, no microservices. The full forbidden list lives in
 
 ## Roadmap position
 
-| Scope                    | Status |
-| ------------------------ | -----: |
-| Total planned MVP PRs    |     12 |
-| Completed                |      6 |
-| Remaining                |      6 |
+- **MVP 1:** Foundation delivered; legacy-source migration and go-live remain a
+  separate historical track.
+- **MVP 2 Gate 0:** Complete.
+- **MVP 2 Gate 0A:** 0 / 3 merged while PR-G0A-01 is in Draft review.
+- **Current:** PR-G0A-01 — Project Structure, Setup Simplification & Pre-Launch.
+- **Next:** PR-G0A-02 — Consultant Engineer & Commission Distribution.
+- **Final:** PR-G0A-03 — Project Analysis Suite, Integrated Acceptance & Hardening.
+- **True MVP 3:** Not started.
 
-Current: **PR-MVP-05 — Sales & Legal**.
-Next: **PR-MVP-06 — Payment Plans**.
+The detailed current tracker is
+[docs/MVP2_GATE0A_ROADMAP.md](docs/MVP2_GATE0A_ROADMAP.md); the original plan is
+retained in [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) as historical context.
 
 The system has authentication, the fixed role catalogue, country configuration,
 an append-only audit trail, projects with land, planning controls, permits and

@@ -216,6 +216,14 @@ class DevelopmentMovementOut(Response):
     counts_as_cash: bool
 
 
+class PreLaunchRegisterOut(Response):
+    """Development-facing view of the same governed movement rows."""
+
+    expenses: list[DevelopmentMovementOut]
+    recorded_amount: Money
+    confirmed_paid_amount: Money
+
+
 class FinancingMovementCreate(StrictRequest):
     movement_type: FinancingType
     amount: PositiveMoney
