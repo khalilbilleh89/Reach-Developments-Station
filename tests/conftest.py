@@ -181,8 +181,16 @@ def clean_database(migrated_schema: None, isolated_configuration: None) -> None:
 @pytest.fixture
 def db() -> Iterator[Session]:
     """A database session for arranging test state directly."""
+    # A TestClient lifespan or migration can dispose the cached engine before
+    # this fixture tears down. A checked-out connection survives that disposal;
+    # Session.close() then returns it to the old pool, not the replacement pool.
+    # Retain ownership so the old pool is closed after its session returns.
+    pool = get_engine().pool
     session = get_session_factory()()
     try:
         yield session
     finally:
-        session.close()
+        try:
+            session.close()
+        finally:
+            pool.dispose()

@@ -174,3 +174,25 @@ def test_readiness_probe_is_bounded_when_postgresql_never_answers(
         listener.close()
 
     assert elapsed < 20, f"probe was not bounded; it took {elapsed:.1f}s"
+
+
+def test_database_fixture_closes_connection_after_application_shutdown() -> None:
+    """Shutdown may replace the pool while the arrangement session is checked out."""
+    from sqlalchemy import text
+
+    from tests.conftest import db as db_fixture
+
+    fixture = db_fixture.__wrapped__()
+    session = next(fixture)
+    original_pool = database.get_engine().pool
+    session.execute(text("SELECT 1"))
+    connection = session.connection().connection.driver_connection
+    try:
+        with TestClient(create_app()):
+            pass
+        with pytest.raises(StopIteration):
+            next(fixture)
+        assert connection.closed, "fixture returned a live connection to an orphaned pool"
+    finally:
+        fixture.close()
+        original_pool.dispose()
