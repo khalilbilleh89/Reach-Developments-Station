@@ -404,167 +404,116 @@ Tests protect business behaviour, not implementation trivia.
 
 ---
 
-## 10a. Two-speed CI
+## 10a. Smoke, Fast and sharded Full CI
 
-Continuous integration runs at two speeds on a pull request, and GitHub's own
-draft state is the switch. Nothing else selects it: no label, no slash command,
-no bot, no comment parser. A commit that reaches `main` runs the full suite
-regardless of how it got there.
+PR-ENG-04 replaces serial Full execution with four independent jobs without
+changing which backend tests Full executes. Canonical temporary MVP 3 delivery
+and exception topology: [MVP3_ROADMAP.md](MVP3_ROADMAP.md). It is an explicitly
+reviewed temporary integration mechanism, not a permanent second production branch.
 
-```text
-Draft               Backend Fast   structural checks, then the tests this
-                                   change can plausibly break
-Ready for review    Backend        structural checks, then every test
-Pushed to main      Backend        the same full suite, after the fact
-```
+| Event/base | Backend lane | Frontend |
+| --- | --- | --- |
+| PR to integration/mvp3, Draft or Ready | Backend Smoke | Always |
+| Draft PR to main | Backend Fast | Always |
+| Ready PR to main | Backend Static + all four Full shards → Backend | Always |
+| Push to main | Same complete sharded Full → Backend | Always |
 
-The reason is arithmetic, and the arithmetic is worse than PR-ENG-01 thought.
-It estimated the full suite at around forty-five minutes. The first full run
-ever allowed to finish — PR-MVP-10B's, on 2026-09-05 — took **two hours and
-thirty minutes**, and the estimate had gone unchecked because until then no full
-job had ever completed: they were skipped on drafts and cancelled or merged past
-on everything else. Running that on every push would turn a one-line correction
-into a half-day wait. A wait long enough to walk away from is a wait that stops
-being read, which is how a team ends up merging on a stale green tick.
+### Backend Smoke
 
-**Fast CI is not weaker CI.** It answers a narrower question — *did I break the
-area this change can reasonably affect?* — and the broad question is still
-asked, in full, before anything merges. What changed is *when* the exhaustive
-proof happens, never *whether*.
+Smoke answers whether an integration change is structurally sound and its
+directly affected domains still work. It is **not main merge evidence** and
+makes no full-regression claim. Target under 10–15 minutes, hard job timeout
+30 minutes; actual timing must be reported, never promised from estimates.
 
-### What each speed runs
+`scripts/ci_backend_smoke.py` owns a separate explicit backbone and direct-domain
+node-ID map. The backbone exercises configuration, real PostgreSQL readiness,
+API namespace/error behavior, authentication/authorization, audit, strict requests,
+migration history and representative CI selector/workflow/shard guards. The full
+guard files still run in Fast and Full; Smoke explicitly selects their routing,
+refusal, coverage and aggregation cases. It does not inherit
+the larger historical Fast backbone. Domain contracts name representative happy
+paths, access controls and critical financial/physical invariants. The map and
+its tests are the executable ownership authority; new domains register both
+Fast ownership and their own Smoke contract when introduced.
 
-Both keep every structural check, because they are cheap and catch a great
-deal: `pip check`, `ruff check .`, `ruff format --check .`,
-`python -m compileall app`, `alembic upgrade head`, `alembic check`. Both run
-against a real `postgres:16`. Fast means fewer relevant tests; it never means a
-different database, because row locks, partial unique indexes and `NUMERIC`
-are the behaviour under test.
+Classify before dependency installation and structural checks. Missing diff,
+unknown domain, empty/missing contract and unclassified migration fail immediately;
+none silently passes or invokes Full. Core, access, shared test fixtures,
+dependencies/runtime configuration, CI workflow, shared applicability-date
+helper and shared DB infrastructure
+refuse Smoke-only review. Avoid unnecessary shared changes or use the explicit
+full-gate exception/review path in the roadmap. No silent bypass flag.
 
-Only the pytest scope differs. `Backend Fast` runs what
-`scripts/ci_backend_tests.py` selects. `Backend` runs `pytest -q` — no
-selection, no `--maxfail`, no markers, no excluded concurrency tests.
+Normal domain migrations require explicit owner plus integrity-test registration.
+They still run against CI PostgreSQL 16, never Render. Smoke runs pip check,
+Ruff lint/format, compileall app/scripts, upgrade head, Alembic drift check,
+backbone, direct contracts and registered migration checks. No SQLite, mocked
+invariant substitute, disabled migration, deleted test or maxfail shortcut.
+Changing a large domain test file selects the domain representatives rather than
+silently importing the entire file into Smoke; all tests still belong to Full.
 
-### How the fast selection is made
+### Backend Fast
 
-The selector is explicit and lives in one small standard-library file. Three
-rules and nothing more:
+Keep `scripts/ci_backend_tests.py` for ordinary main drafts. Existing explicit
+ownership and transitive downstream selection remain. Unknown infrastructure or
+full-risk changes still select all tests and print why; the 240-minute ceiling
+supports that fallback. Fast means selected scope, not a duration guarantee.
+Changed test files run, and always-run safety/CI guards remain. The exact CI
+helper paths added by PR-ENG-04 select their guards instead of treating them as
+Render startup scripts; unrecognized operational scripts still require Full.
 
-- **A domain owns a family of test files.** The map was built by reading the
-  real names in `tests/`, not inferred.
-- **A change flows downstream, never up, and reachability is transitive.**
-  `DOWNSTREAM` holds direct edges only and the closure walks them, so a pricing
-  change reaches sales and, through sales, payment plans. A sales change does
-  not re-run pricing: sales' own tests already prove its use of pricing's
-  public contract. This asymmetry is where the time is saved.
-- **Anything unrecognised runs everything.** A new module, a shared fixture,
-  `app/core/`, the access layer, a migration no domain claims, an operational
-  script, an unclassified root file — all fall back to the full suite and print
-  the reason. Known-harmless is targeted; unknown is full. The selector fails
-  safe, never open.
+### Complete Full across independent shards
 
-A changed or newly added test file always runs, whatever else was selected. A
-small always-run backbone — configuration, health, migrations, static export,
-UX copy, authentication, authorization, audit, API shape and the selector's own
-tests — runs on every fast build, about a hundred and twenty tests in eighty
-seconds.
+A structural job runs dependencies, lint/format, compile, PostgreSQL migration/
+drift checks and CI guards, then validates complete shard assignment. Each of
+four matrix jobs has its own runner, PostgreSQL 16 service, Python process,
+dependencies and migrated database. No shared database/artifact tricks or xdist.
 
-Adding a domain is two lines: a `DOMAIN_TEST_PREFIXES` entry and, if anything
-consumes it, one `DOWNSTREAM` edge — not an edge from every ancestor, because
-the closure is transitive. Guard tests fail if any test file in the repository
-belongs to no domain, or if the dependency graph acquires a cycle of any
-length, so the map cannot rot quietly.
+`scripts/ci_backend_shards.py --shard N --count 4 --out selected-tests.txt`
+collects pytest's actual test counts, discovers all test files, greedily assigns
+largest count first to the currently lightest shard (stable path/index tie-breaks)
+and sorts each output. A file belongs to exactly one nonempty shard. Parametrized
+cases count separately in weights; counts are balancing estimates, not durations.
+Collection failure refuses the assignment. Every new test file is discovered;
+coverage guards prove no omission/duplication and remain valid for other counts.
 
-### The workflow this implies
+Every assigned file runs via pytest with durations, without marker exclusions,
+maxfail, skipped slow/security/concurrency/migration/cutover/history/financial
+families or changed-path selection. Structural CI guards may run additionally
+before the matrix; they still have exactly one assignment in the full partition.
+Matrix fail-fast is false so a failing shard does not cancel its peers.
 
-```text
-open the pull request as a draft
-  ↓
-Backend Fast + Frontend            minutes, not tens of minutes
-  ↓
-independent review, fixes, repeat
-  ↓
-mark ready for review
-  ↓
-Backend (full) + Frontend          on the exact merge candidate
-  ↓
-wait for it to conclude            the step everything else assumes
-  ↓
-merge
-  ↓
-Backend (full) + Frontend          again, on main, reporting not gating
-```
+The final check is named **Backend**, depends on structural and matrix results,
+and uses always() to evaluate failed/skipped dependencies. Only success of both
+can return success. Failure, cancellation, skipped shards or invalid assignment
+cannot yield a green Backend. Frontend remains a separate required check.
+Check out the event's exact head SHA, not a moving branch; the merge decision
+must also confirm base compatibility/current review. Started is not passed.
 
-- **A draft is an iteration state and is never a merge candidate.** It does not
-  run the full suite and must not be merged.
-- **Ready for review is a merge-candidate state.** The full suite is mandatory.
-- **Any commit pushed after a pull request is ready re-runs the full job.** The
-  green tick therefore belongs to the exact commit somebody would merge, never
-  to an older one. Never merge on a full run whose head SHA is not the PR's
-  current head.
-- **A run that has not concluded has not checked anything.** A merge landing
-  while the full job is still inside its test step is unchecked by it, whatever
-  the job goes on to say. Started is not green.
-- If substantial iteration resumes, convert back to draft to get the fast cycle
-  again.
+Smoke and structural jobs are bounded at 30 minutes, Full shards at 120, Fast
+at 240, the aggregator at 5 and Frontend at 15. Sharding aims materially below
+the old observed ~2.5 hours, with 30–60 minutes an initial engineering expectation,
+not a measured claim. Record the first approved Full run's shard durations,
+slowest shard, first-start to last-finish wall-clock, all verdicts, Backend and
+Frontend. Do not weaken coverage to reach a target; rebalance from actual evidence.
 
-### Why main is tested again after the merge
+### Review and main health
 
-Everything above describes what a person should wait for, and a person who does
-not wait breaks nothing that the workflow can see. PR #251 is the case: marked
-ready for review and merged thirty-three seconds later, so the full job's test
-step began *after* the merge had landed. Nothing was violated — the run was
-started, the reviewer merged a pull request whose checks had started — and the
-result was a commit on `main` that no run had ever reported on. Not red, which
-would at least be a fact. Unmeasured.
+Open Draft, run the applicable lane and Frontend, stop for independent review,
+fix findings, and mark Ready only after the candidate is accepted for full review.
+Main candidates require final exact-head Full Backend and Frontend before a human
+merges. The temporary integration exception is exclusively defined in the roadmap;
+Smoke never authorizes a main merge. Agents never merge.
 
-So a push to `main` runs the full suite too, and the two triggers answer
-different questions:
+Every push to main receives Full and Frontend using this same implementation.
+Superseded PR runs cancel; main runs have unique run-ID concurrency groups so
+neither running nor queued main evidence is displaced by a later merge. Pending
+main CI does not prevent starting authorized Draft work. A failing main run is
+the most urgent repository issue; fix it through normal review, not a direct push.
+Render remains on main. Nothing in this workflow deploys or points to production.
 
-- **Pre-merge CI asks *may this merge?*** It is a gate, and a gate binds only
-  while somebody is waiting at it.
-- **Post-merge CI asks *is main sound right now?*** It gates nothing — the
-  commit has already landed — and it becomes true without anybody's patience.
-
-A release is cut from `main`, so `main` is the branch whose health has to be a
-matter of record. Neither trigger replaces the other: post-merge CI cannot stop
-a bad merge, and pre-merge CI cannot tell you what `main` is today.
-
-**A red `main` is the most urgent thing in the repository.** Nothing else is
-worked on until it is green, and the fix is a normal pull request through the
-normal gates, never a push to `main`.
-
-### Every job is bounded
-
-GitHub's default job timeout is six hours, which is not a timeout so much as a
-weekend. An unbounded job that hangs reports nothing and costs everything,
-while a bounded one fails — which is at least an answer somebody can act on.
-Every job therefore declares `timeout-minutes`.
-
-The backend bound is **four hours**, set from the one measurement that exists:
-two hours thirty minutes, PR-MVP-10B's run on 2026-09-05, the first full job
-this repository ever let finish. One sample against a suite whose cost varies
-with runner and cache warmth, so the bound sits at about 1.6x it rather than
-hugging it. That still halves GitHub's default and still catches a hang, which
-is all a bound is for.
-
-Raising it again is not the response to a run that approaches it. Read
-`--durations=20` first: at four hours the suite's own cost is the finding.
-
-`Backend Fast` carries the same four-hour ceiling, and has to. *Fast* names a
-selection, not a duration: an unrecognised change deliberately falls back to
-`pytest -q tests`, so the fast job's worst case is the entire suite. A bound set
-from its usual targeted run — twenty-six minutes at the largest observed —
-would kill exactly the fallback runs the fallback exists for.
-
-`tests/test_ci_workflow.py` guards all of this: which event runs which backend
-job, that a commit reaching `main` is tested at all, that a `main` run is never
-cancelled by the next merge, that the fast job's bound is never set below the
-full job's, and that no job may run unbounded.
-
-Locally the same idea applies: run the affected domain's tests and the linters
-while implementing, and the full suite once before declaring the work final.
-The authoritative proof is the exact-head `Backend` run on GitHub.
+Workflow semantics are checked against GitHub's [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+and [concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 
 ---
 
@@ -586,13 +535,14 @@ delete PR branch
 
 - `main` is always deployable.
 - No direct development on `main`. Never rewrite or force-push `main`.
-- No long-lived `develop` branch. No environment branches.
+- No long-lived `develop` branch. No environment branches. The reviewed temporary
+  integration exception is defined only in [MVP3_ROADMAP.md](MVP3_ROADMAP.md).
 - Squash merge normal feature PRs. Delete merged branches.
 - Branch naming: `mvp/pr-NN-short-slug` for roadmap PRs, `eng/pr-NN-short-slug`
   for horizontal engineering work that adds no functional scope.
 - **Open the pull request as a draft.** Draft is the iteration state and runs
-  `Backend Fast`; marking it ready for review is what asks for the full
-  regression. See §10a.
+  the applicable lane in §10a; the temporary integration exception is defined
+  in the roadmap. A main candidate asks for Full by becoming Ready.
 
 ### Size discipline
 
@@ -609,12 +559,13 @@ delete PR branch
 A PR is done when all of the following hold:
 
 - [ ] Scope matches its roadmap entry; nothing extra was smuggled in.
-- [ ] The pull request is marked ready for review, and the `Backend` full
-      suite is green **on its current head SHA** — not on an earlier commit.
+- [ ] Independent review and the applicable §10a gate passed. Main candidates
+      are Ready with `Backend` Full green **on the current head SHA**; the
+      temporary integration exception follows the canonical roadmap.
 - [ ] `ruff check .` and `ruff format --check .` pass.
 - [ ] `python -m compileall app` passes.
 - [ ] `pip check` reports no broken requirements.
-- [ ] `pytest -q` passes against PostgreSQL.
+- [ ] Applicable PostgreSQL tests pass; main candidates require every Full shard.
 - [ ] Migrations apply forward and reverse cleanly.
 - [ ] `npm run lint` and `npm run build` pass.
 - [ ] CI is green.

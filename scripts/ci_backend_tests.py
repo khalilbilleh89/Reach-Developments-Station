@@ -2,11 +2,13 @@
 """Choose which backend tests a pull request actually needs.
 
 Every push used to run the whole suite. At fifteen hundred tests that turned a
-one-line correction into a forty-minute wait, and a wait long enough to walk
-away from is a wait that stops being read. So a draft pull request runs the
+one-line correction into a long wait, and a wait long enough to walk
+away from is a wait that stops being read. So a draft main pull request runs the
 tests its change can plausibly break, and a pull request marked ready for
 review runs all of them. Fast CI is not weaker CI; it answers a narrower
-question, and the broad one is still asked before anything merges.
+question, and the broad one is still asked before a main candidate merges.
+The temporary MVP 3 integration Smoke policy is defined separately in
+ci_backend_smoke.py and docs/MVP3_ROADMAP.md.
 
 Three ideas, and nothing more:
 
@@ -44,8 +46,8 @@ ROOT = Path(__file__).resolve().parent.parent
 #: Tests that run whatever changed: the application boots, its configuration is
 #: sound, its migrations are linear, its static export is served, who may call
 #: what is still enforced, every write is still audited, and the API's shape has
-#: not drifted. A hundred and twenty tests in about eighty seconds — deliberately
-#: a backbone and not a second suite.
+#: not drifted. This is Fast's historical backbone, not the deliberately smaller
+#: integration Smoke set. Measure actual runtime; shared DB fixtures have a cost.
 ALWAYS_RUN = (
     "tests/test_config.py",
     "tests/test_health.py",
@@ -75,6 +77,8 @@ ALWAYS_RUN = (
     # Pure text reading, and it guards the machinery every other entry in this
     # tuple depends on to be run in the first place.
     "tests/test_ci_workflow.py",
+    "tests/test_ci_smoke.py",
+    "tests/test_ci_shards.py",
     # The canonical intake contract's disposition of every table in the schema.
     # It belongs here rather than to the ``cutover`` domain because of what it
     # guards: a new table that nobody classified. The change that adds a table
@@ -466,7 +470,10 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is shared test support")
             continue
 
-        if path == SELECTOR_SCRIPT:
+        if path in (SELECTOR_SCRIPT, "scripts/ci_backend_smoke.py", "scripts/ci_backend_shards.py"):
+            direct.update(
+                p for p in ALWAYS_RUN if p.startswith("tests/test_ci_") and p in available_set
+            )
             if SELECTOR_TESTS in available_set:
                 direct.add(SELECTOR_TESTS)
             continue

@@ -1,38 +1,19 @@
-"""Guards on the shape of the CI workflow itself.
-
-The workflow decides what proof this repository has of its own soundness, and
-nothing else checks it. PR #251 is the case that made this file necessary: it
-was marked ready for review and merged thirty-three seconds later, so the full
-suite's test step began *after* the merge had landed. Everything about that was
-legal — the workflow ran what it was told to, the reviewer merged a pull request
-whose checks had started — and the result was a commit on ``main`` that no run
-had ever reported on.
-
-These are pure text and structure assertions. Nothing here starts a process,
-reads a database or calls GitHub, so the file costs nothing and belongs in the
-always-run set beside the selector's own tests.
-
-The evaluation semantics of an ``if:`` expression belong to GitHub, and nothing
-here pretends to reimplement them. What is asserted instead are the structural
-facts that make the intended behaviour possible: that the fast job cannot fire
-outside a pull request, that the full job can fire on a push to ``main``, that
-the two draft comparisons stay complementary, and that no job may run without a
-bound on how long it runs for.
-"""
+"""Exercise actual workflow conditions and the fail-closed Full aggregator."""
 
 from __future__ import annotations
 
+import ast
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-
-#: Every job the workflow defines. Named rather than discovered, so deleting a
-#: job is a failing test rather than a silently shorter loop.
-JOBS = ("backend_fast", "backend", "frontend")
+JOBS = ("backend_smoke", "backend_fast", "backend_static", "backend_full", "backend", "frontend")
 
 
 def source() -> str:
@@ -63,97 +44,153 @@ def setting(job: str, key: str) -> str | None:
     return found.group(1).strip() if found else None
 
 
-# --------------------------------------------------------------------------- #
-# What triggers a run
-# --------------------------------------------------------------------------- #
+def condition(job: str, event: str, base: str, draft: bool) -> bool:
+    expression = setting(job, "if")
+    if expression is None:
+        return True
+    values = {
+        "github.event_name": repr(event),
+        "github.event.pull_request.base.ref": repr(base),
+        "github.event.pull_request.draft": str(draft),
+        "always()": "True",
+        "true": "True",
+        "false": "False",
+    }
+    for key, value in values.items():
+        expression = expression.replace(key, value)
+    tree = ast.parse(expression.replace("&&", "and").replace("||", "or"), mode="eval")
+
+    def read(node: ast.AST) -> object:
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.BoolOp):
+            return (
+                all(read(v) for v in node.values)
+                if isinstance(node.op, ast.And)
+                else any(read(v) for v in node.values)
+            )
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
+            return read(node.left) == read(node.comparators[0])
+        raise AssertionError(f"Unhandled workflow expression: {ast.dump(node)}")
+
+    return bool(read(tree.body))
 
 
-def test_a_commit_reaching_main_is_tested() -> None:
-    """Without this trigger main's health is nobody's measurement.
+@pytest.mark.parametrize(
+    ("event", "base", "draft", "expected"),
+    [
+        ("pull_request", "integration/mvp3", True, {"backend_smoke", "frontend"}),
+        ("pull_request", "integration/mvp3", False, {"backend_smoke", "frontend"}),
+        ("pull_request", "main", True, {"backend_fast", "frontend"}),
+        ("pull_request", "main", False, {"backend_static", "backend_full", "backend", "frontend"}),
+        ("push", "", False, {"backend_static", "backend_full", "backend", "frontend"}),
+        ("pull_request", "unrelated", False, {"frontend"}),
+    ],
+)
+def test_lane_routing(event: str, base: str, draft: bool, expected: set[str]) -> None:
+    assert {job for job in JOBS if condition(job, event, base, draft)} == expected
 
-    Pre-merge CI answers "may this merge?" and binds only while somebody waits
-    for it. A release is cut from main, so main needs an answer that does not
-    depend on anybody's patience.
-    """
+
+def test_main_health_and_integration_triggers() -> None:
     assert re.search(r"^  push:\n    branches: \[main\]$", source(), re.MULTILINE)
-
-
-def test_the_pull_request_trigger_is_not_traded_away_for_it() -> None:
-    """Post-merge CI reports; it does not gate. Both triggers or neither."""
-    assert re.search(r"^  pull_request:\n    branches: \[main\]$", source(), re.MULTILINE)
-    for event in ("ready_for_review", "converted_to_draft", "synchronize"):
-        assert f"- {event}" in source(), event
-
-
-def test_a_main_run_is_never_cancelled_by_the_next_merge() -> None:
-    """A superseded pull request run is waste; a superseded main run is evidence.
-
-    Each merged commit is the only commit that will ever be tested as itself.
-    """
+    assert "branches: [main, integration/mvp3]" in source()
+    for event in (
+        "opened",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+        "converted_to_draft",
+    ):
+        assert event in source().split("permissions:")[0]
     assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in source()
-
-
-# --------------------------------------------------------------------------- #
-# Which backend job answers for which event
-# --------------------------------------------------------------------------- #
-
-
-def test_the_fast_job_cannot_fire_outside_a_pull_request() -> None:
-    """A push carries no pull request, so a draft check alone decides by accident.
-
-    Actions coerces a missing value to a number before comparing, which makes
-    ``null == true`` false and ``null == false`` *true*. The full job would
-    therefore have selected itself on a push either way — on arithmetic rather
-    than on intent. Both jobs name the event instead.
-    """
-    condition = setting("backend_fast", "if")
-    assert condition is not None
-    assert "github.event_name == 'pull_request'" in condition
-
-
-def test_the_full_job_answers_for_a_push_to_main() -> None:
-    condition = setting("backend", "if")
-    assert condition is not None
-    assert "github.event_name == 'push'" in condition
-
-
-def test_the_two_pull_request_conditions_stay_complementary() -> None:
-    """Exactly one backend job per pull request event — never none, never both."""
-    assert "github.event.pull_request.draft == true" in (setting("backend_fast", "if") or "")
-    assert "github.event.pull_request.draft == false" in (setting("backend", "if") or "")
-
-
-def test_the_full_job_runs_the_whole_suite_unfiltered() -> None:
-    """A full run that quietly excluded something would be worse than no run."""
-    assert re.search(r"^        run: pytest -q --durations=20$", block("backend"), re.MULTILINE)
-
-
-# --------------------------------------------------------------------------- #
-# How long a job may take before it is a failure
-# --------------------------------------------------------------------------- #
-
-
-def test_the_fast_job_is_bounded_for_its_worst_case_not_its_usual_one() -> None:
-    """Fast names a selection, not a promise about duration.
-
-    An unrecognised change — a new module, a shared fixture, ``app/core/`` —
-    deliberately falls back to ``pytest -q tests``, so the fast job's worst case
-    is the entire suite. A bound set from the usual targeted run would kill
-    exactly the fallback runs the fallback exists for.
-    """
-    fast = setting("backend_fast", "timeout-minutes")
-    full = setting("backend", "timeout-minutes")
-    assert fast is not None and full is not None
-    assert int(fast) >= int(full)
+    assert "github.event_name == 'pull_request' && github.ref || github.run_id" in source()
+    assert "pull_request_target:" not in source()
+    assert "contents: read" in source()
 
 
 @pytest.mark.parametrize("job", JOBS)
 def test_every_job_is_bounded(job: str) -> None:
-    """Actions defaults to six hours, which is not a timeout, it is a weekend.
+    assert 0 < int(setting(job, "timeout-minutes") or "0") <= 240
+    assert int(setting("backend_smoke", "timeout-minutes") or "0") == 30
+    assert int(setting("backend_fast", "timeout-minutes") or "0") >= int(
+        setting("backend_full", "timeout-minutes") or "0"
+    )
 
-    An unbounded job that hangs reports nothing and costs everything; a bounded
-    one fails, which is at least an answer somebody can act on.
-    """
-    limit = setting(job, "timeout-minutes")
-    assert limit is not None, f"{job} has no timeout-minutes"
-    assert 0 < int(limit) <= 240, f"{job} bound is {limit} minutes"
+
+@pytest.mark.parametrize("job", ("backend_smoke", "backend_fast", "backend_static"))
+def test_real_postgres_and_structural_checks(job: str) -> None:
+    content = block(job)
+    for command in (
+        "pip check",
+        "ruff check .",
+        "ruff format --check .",
+        "python -m compileall app scripts",
+        "alembic upgrade head",
+        "alembic check",
+    ):
+        assert f"run: {command}" in content
+    assert "image: postgres:16" in content
+    assert "TZ: UTC" in content
+    assert "--maxfail" not in content
+
+
+def test_smoke_refuses_before_dependency_installation() -> None:
+    content = block("backend_smoke")
+    assert content.index("ci_backend_smoke.py") < content.index("Install dependencies")
+    assert "pytest -q $(tr" in content
+    assert "selected-smoke.txt" in content
+    assert "ci_backend_tests.py" not in content
+
+
+def test_shards_are_independent_complete_and_not_fail_fast() -> None:
+    content = block("backend_full")
+    assert "needs: backend_static" in content
+    assert "fail-fast: false" in content
+    assert "shard: [1, 2, 3, 4]" in content
+    assert "image: postgres:16" in content
+    assert "alembic upgrade head" in content
+    assert (
+        "ci_backend_shards.py --shard ${{ matrix.shard }} --count 4 --out selected-tests.txt"
+        in content
+    )
+    assert "pytest -q $(tr '\\n' ' ' < selected-tests.txt) --durations=20" in content
+    assert "--maxfail" not in content
+    assert "--ignore" not in content
+    assert "continue-on-error" not in source()
+    assert "ci_backend_shards.py --count 4" in block("backend_static")
+    assert all(
+        path in block("backend_static")
+        for path in (
+            "test_ci_selector.py",
+            "test_ci_workflow.py",
+            "test_ci_smoke.py",
+            "test_ci_shards.py",
+        )
+    )
+
+
+@pytest.mark.parametrize("structural", ("success", "failure", "cancelled", "skipped"))
+@pytest.mark.parametrize("shards", ("success", "failure", "cancelled", "skipped"))
+def test_actual_aggregator_command_refuses_any_non_success(structural: str, shards: str) -> None:
+    content = block("backend")
+    assert setting("backend", "name") == "Backend"
+    assert "needs: [backend_static, backend_full]" in content
+    assert (setting("backend", "if") or "").startswith("always() &&")
+    assert "needs.backend_static.result" in content and "needs.backend_full.result" in content
+    command = re.search(r"run: python -c '(.+)'", content)
+    assert command
+    result = subprocess.run(
+        [sys.executable, "-c", command[1]],
+        env={**os.environ, "STRUCTURAL_RESULT": structural, "SHARDS_RESULT": shards},
+        check=False,
+    )
+    assert (result.returncode == 0) == (structural == shards == "success")
+
+
+def test_checks_use_reviewed_head_and_frontend_still_builds() -> None:
+    for job in JOBS:
+        if job != "backend":
+            assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in block(job)
+    assert "npm ci" in block("frontend")
+    assert "npm run lint" in block("frontend")
+    assert "npm run build" in block("frontend")

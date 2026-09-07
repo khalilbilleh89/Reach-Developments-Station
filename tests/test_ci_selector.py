@@ -85,6 +85,19 @@ AVAILABLE = [
 SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
 
 
+@pytest.mark.parametrize("script", ("ci_backend_smoke.py", "ci_backend_shards.py"))
+def test_reviewed_ci_helpers_run_guards_without_serial_full_fallback(script: str) -> None:
+    available = selector.available_test_files(ROOT)
+    result = select([f"scripts/{script}"], available)
+    assert not result.full
+    assert {
+        "tests/test_ci_selector.py",
+        "tests/test_ci_smoke.py",
+        "tests/test_ci_shards.py",
+        "tests/test_ci_workflow.py",
+    } <= set(result.paths)
+
+
 def test_every_domain_has_a_representative_in_the_available_fixture() -> None:
     """``AVAILABLE`` models the repository's test files, and it had drifted.
 
