@@ -63,7 +63,7 @@ The page title remains prominent on a compact register page; `compact` reduces s
 
 The graphite rail contains the architectural Reach mark, current-development identity, lifecycle groups, user context and settings. The project switcher is integrated into the rail. Active navigation has an accent marker and legible text, while the rest of the rail stays quiet.
 
-The context bar carries breadcrumbs, project status and base currency. The page header carries purpose, identity and actions. Avoid adding another competing navigation layer.
+The context bar carries breadcrumbs, project status and base currency. The page header carries purpose, identity and actions. Below 768px, actions occupy a separate row beneath the full-width identity so titles never compete with controls for a narrow column. Avoid adding another competing navigation layer.
 
 Keep the existing `auto`, `expanded` and `collapsed` rail preference and `reach.rail` persistence. Below 75rem the automatic rail collapses; below 64rem navigation opens as a modal drawer. The same catalogue supplies labels, route keys and visibility. `projectHref` and `settingsHref` remain the route builders. A project switch preserves the selected section where possible.
 

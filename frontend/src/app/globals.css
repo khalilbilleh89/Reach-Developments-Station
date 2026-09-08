@@ -4921,6 +4921,8 @@ input[type="file"].input {
   }
 
   .page-head-identity {
+    flex: none;
+    width: 100%;
     align-items: flex-start;
   }
 
@@ -5066,6 +5068,7 @@ input[type="file"].input {
   }
 
   .page-head {
+    flex-direction: column;
     align-items: flex-start;
   }
 
