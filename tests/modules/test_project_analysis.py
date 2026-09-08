@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -148,6 +149,49 @@ def test_role_matrix_phase_scope_and_cross_project(
     for section in expected:
         assert client.get(f"{root(project_id)}/{section}").status_code == 403
         assert client.get(f"{root(str(uuid.uuid4()))}/{section}").status_code == 404
+
+
+def test_section_authorization_precedes_context_lookup(
+    admin_client: TestClient,
+    manager_member_client: TestClient,
+    project_id: str,
+    phase_id: str,
+    building_id: str,
+    db: Session,
+) -> None:
+    other_phase = admin_client.post(
+        f"/api/v1/projects/{project_id}/inventory/phases",
+        json={"code": "PHASE-2", "name": "Phase 2", "sequence": 2},
+    )
+    assert other_phase.status_code == 201, other_phase.text
+    filters = (
+        {},
+        {"phase_id": phase_id},
+        {"phase_id": str(uuid.uuid4())},
+        {"building_id": building_id},
+        {"building_id": str(uuid.uuid4())},
+        {"phase_id": other_phase.json()["id"], "building_id": building_id},
+    )
+    for role, sections in (
+        ("sales_advisor", ("fundamental", "financial", "technical")),
+        ("design_engineering", ("financial",)),
+    ):
+        user = make_user(db, email=f"precedence-{role}@example.com", roles=(role,))
+        grant_access(admin_client, project_id, user)
+        client = client_for(user.email)
+        # Project access queries are allowed; Analysis preparation must never start.
+        with patch("app.modules.project_analysis.service.context") as prepare_context:
+            for section in sections:
+                for params in filters:
+                    response = client.get(f"{root(project_id)}/{section}", params=params)
+                    assert response.status_code == 403, (role, section, params, response.text)
+            prepare_context.assert_not_called()
+    for section in ("fundamental", "financial", "technical"):
+        for index in (2, 4, 5):
+            response = manager_member_client.get(
+                f"{root(project_id)}/{section}", params=filters[index]
+            )
+            assert response.status_code == 404, (section, filters[index], response.text)
 
 
 def test_date_and_scope_validation(manager_member_client: TestClient, project_id: str) -> None:
