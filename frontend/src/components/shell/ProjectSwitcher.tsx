@@ -73,6 +73,7 @@ export function ProjectSwitcher({
           {project ? glyph(project.code) : "…"}
         </span>
         <span className="switcher-text">
+          <span className="switcher-eyebrow">Current development</span>
           <span className="switcher-name">{project ? project.name : "Loading project…"}</span>
           <span className="switcher-meta">
             {project

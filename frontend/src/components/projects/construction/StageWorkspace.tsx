@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice, SubPanel } from "@/components/ui";
+import { Disclosure, Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice, SubPanel } from "@/components/ui";
 import { stages } from "@/lib/api/stages";
 import type { Stage, UnitProgress, UnitStage } from "@/lib/api/stages";
 import { businessDate, todayISO } from "@/lib/format";
@@ -148,7 +148,7 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
   return <SubPanel title={`${stage.sequence}. ${stage.name}`} actions={<Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status}</Badge>}>
     <p>Planned: {stage.planned_date ? businessDate(stage.planned_date) : "Not set"} · Completed: {stage.completed_date ? businessDate(stage.completed_date) : "Not recorded"}</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    {canWrite ? <details ref={completionForm}><summary ref={completionSummary}>{stage.completed_date ? "Correct completion" : "Record completion"}</summary>
+    {canWrite ? <Disclosure ref={completionForm} summaryRef={completionSummary} title={<>{stage.completed_date ? "Correct completion" : "Record completion"}</>}>
       <form onSubmit={(event) => { event.preventDefault(); void submit(day); }}>
         <FieldRow columns={2}>
           <Field label="Actual completion date"><input className="input" type="date" required max={todayISO()} value={day} onChange={(event) => setDay(event.target.value)} /></Field>
@@ -158,10 +158,10 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
           {stage.completed_date ? <Button type="button" disabled={busy || !reason.trim()} onClick={() => void submit(null)}>Reopen stage</Button> : null}
         </FormActions>
       </form>
-    </details> : null}
-    {stage.history.length ? <details><summary>Completion history</summary><ol>{stage.history.map((entry) => <li key={entry.sequence}>
+    </Disclosure> : null}
+    {stage.history.length ? <Disclosure title={<> Completion history </>}><ol>{stage.history.map((entry) => <li key={entry.sequence}>
       {entry.completed_date ? `Completed ${businessDate(entry.completed_date)}` : "Reopened"} — {entry.reason}
       <span className="footnote"> · Recorded {entry.recorded_at} · User {entry.actor_user_id}</span>
-    </li>)}</ol></details> : null}
+    </li>)}</ol></Disclosure> : null}
   </SubPanel>;
 }

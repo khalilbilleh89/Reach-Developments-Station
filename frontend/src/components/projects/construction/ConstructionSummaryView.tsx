@@ -2,6 +2,7 @@
 
 import {
   Card,
+  Disclosure,
   Metric,
   MetricGroup,
   Position,
@@ -61,7 +62,14 @@ export function ConstructionSummaryView({
               : `Excluding tax, against budget version ${summary.budget_version_number}.`
           }
         >
-        <Position compact>
+        <Position compact layout="split">
+          <PositionFigure
+            lead
+            label="Variance at completion"
+            value={money(cost.variance_at_completion, code)}
+            tone={varianceTone(cost.variance_at_completion)}
+            note={varianceNote(cost.variance_at_completion)}
+          />
           <PositionFigure
             label="Control budget"
             value={money(cost.control_budget, code)}
@@ -77,14 +85,8 @@ export function ConstructionSummaryView({
             value={money(cost.certified_to_date, code)}
             note="Work formally certified, as at today"
           />
-          <PositionFigure
-            lead
-            label="Variance at completion"
-            value={money(cost.variance_at_completion, code)}
-            tone={varianceTone(cost.variance_at_completion)}
-            note={varianceNote(cost.variance_at_completion)}
-          />
         </Position>
+        <Disclosure title="Budget, commitments & forecast basis">
         {summary.forecast_version_number === null ? null : (
           <p className="footnote">
             Certified to date is today&apos;s figure. The estimate at completion
@@ -137,9 +139,10 @@ export function ConstructionSummaryView({
             }
           />
         </PositionSupport>
+        </Disclosure>
       </Card>
 
-      <section className="stack stack-tight">
+      <section className="record-section stack stack-tight">
         <SectionHeader
           title="Payable"
           description="Including tax, on a cash basis. Never compared with the figures above."
@@ -166,12 +169,14 @@ export function ConstructionSummaryView({
             note="Cash confirmed as gone"
           />
         </Position>
+        <Disclosure title="Disputed payable treatment">
         <p className="footnote">
           A dispute blocks payment; it does not reduce the obligation.
           Outstanding therefore includes disputed invoices, because an amount
           that stopped being owed the moment somebody objected to it would make
           this a record of opinions.
         </p>
+        </Disclosure>
         <PositionSupport>
           <PositionSupportItem
             label="Retention held back"
@@ -192,7 +197,7 @@ export function ConstructionSummaryView({
         </PositionSupport>
       </section>
 
-      <section className="stack stack-tight">
+      <section className="record-section stack stack-tight">
         <SectionHeader
           title="What needs attention"
           description="Counts, not money. Each one is a thing somebody has to do."

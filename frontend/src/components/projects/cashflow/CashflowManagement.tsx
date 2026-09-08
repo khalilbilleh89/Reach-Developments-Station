@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import { Disclosure,
   Badge,
   Card,
   EmptyState,
@@ -109,8 +109,7 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
         </TableScroll>
       ) : null}
 
-      <details>
-        <summary>All {checks.length} checks</summary>
+      <Disclosure title={<> All {checks.length} checks </>}>
         <TableScroll label="Every reconciliation check" compact>
           <thead>
             <tr>
@@ -135,7 +134,7 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
             ))}
           </tbody>
         </TableScroll>
-      </details>
+      </Disclosure>
     </Card>
   );
 }

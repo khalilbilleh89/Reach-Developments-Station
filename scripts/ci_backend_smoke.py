@@ -37,6 +37,9 @@ GUARDS = (
     # project, settings, cashflow, and prelaunch representatives below.
     "tests/test_gate0a_structure.py",
 )
+# Reviewed presentation-only architecture contracts. A changed file runs in
+# full; this is exact ownership, not a wildcard exemption for shared tests.
+PRESENTATION_CONTRACTS = ("tests/test_product_experience.py",)
 BACKBONE = (
     "tests/test_config.py::test_defaults_describe_the_service",
     "tests/test_config.py::test_non_postgresql_backends_are_rejected",
@@ -55,6 +58,7 @@ BACKBONE = (
     "tests/test_ci_smoke.py::test_full_risk_refuses_instead_of_downgrading_or_running_full",
     "tests/test_ci_smoke.py::test_new_domain_refuses_until_registered",
     "tests/test_ci_smoke.py::test_reviewed_workflow_cli",
+    "tests/test_ci_smoke.py::test_presentation_contract_has_exact_ownership_and_runs_when_changed",
     "tests/test_ci_smoke.py::test_migrations_need_explicit_ownership_and_integrity_test",
     "tests/test_ci_shards.py::test_all_collected_files_exactly_once_for_any_count",
     "tests/test_ci_workflow.py::test_lane_routing",
@@ -274,6 +278,9 @@ def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]
         elif path.startswith(fast.CUTOVER_PACKAGE) or path.startswith(fast.CUTOVER_FIXTURES):
             domains.add("cutover")
         elif path.startswith("tests/"):
+            if path in PRESENTATION_CONTRACTS:
+                nodes.add(path)
+                continue
             if path in GUARDS:
                 continue
             owners = {

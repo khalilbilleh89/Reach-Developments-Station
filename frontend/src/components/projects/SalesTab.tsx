@@ -144,7 +144,7 @@ export function SalesTab({
   }, [load, projectStatus]);
 
   const header = (actions?: React.ReactNode) => (
-    <PageHeader title="Sales" subtitle={sectionDescription("sales")} compact actions={actions} />
+    <PageHeader icon="sales" title="Sales" subtitle={sectionDescription("sales")} compact actions={actions} />
   );
 
   // Sales is refused while the project is in setup, because that is the window
@@ -214,7 +214,7 @@ export function SalesTab({
             <Loading label="Loading sales…" shape="metrics" />
           ) : (
             <>
-              <Position>
+              <Position layout="split">
                 <PositionFigure
                   lead
                   label="Contracted value"
@@ -386,7 +386,7 @@ export function SalesTab({
                   <tr key={row.unit_id}>
                     <th scope="row">
                       <button className="button-link" type="button" onClick={() => onOpenUnit(row.unit_id)}>
-                        <IdentityCell name={row.unit_reference} meta={row.client_display_name ?? undefined} />
+                        <IdentityCell icon="inventory" name={row.unit_reference} meta={row.client_display_name ?? undefined} />
                       </button>
                     </th>
                     <td>

@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 
 /**
  * Labelled facts about one record, laid out in columns.
@@ -176,8 +178,10 @@ export function WaterfallRow({
  * As with every figure in this product, each value arrived from the API on
  * this request. Nothing here is totalled, averaged or projected.
  */
-export function Position({ children, compact }: { children: ReactNode; compact?: boolean }) {
-  return <div className={compact ? "position position-compact" : "position"}>{children}</div>;
+export function Position({ children, compact, layout = "inline" }: {
+  children: ReactNode; compact?: boolean; layout?: "inline" | "split";
+}) {
+  return <div className={["position", compact ? "position-compact" : "", layout === "split" ? "position-split" : ""].filter(Boolean).join(" ")}>{children}</div>;
 }
 
 export function PositionFigure({
@@ -329,9 +333,10 @@ export function DistributionBand({
  * the metadata recedes, so a column of two hundred rows scans as a column of
  * references rather than as a paragraph per line.
  */
-export function IdentityCell({ name, meta }: { name: ReactNode; meta?: ReactNode }) {
+export function IdentityCell({ name, meta, icon }: { name: ReactNode; meta?: ReactNode; icon?: IconName }) {
   return (
-    <span className="identity-cell">
+    <span className={icon ? "identity-cell identity-cell-asset" : "identity-cell"}>
+      {icon ? <span className="identity-cell-glyph"><Icon name={icon} /></span> : null}
       <span className="identity-cell-name">{name}</span>
       {meta ? <span className="identity-cell-meta">{meta}</span> : null}
     </span>

@@ -56,7 +56,7 @@ function SettingsScreen() {
       section={section}
       crumbs={[{ label: "Settings", href: settingsHref() }, { label: item?.label ?? "Settings" }]}
     >
-      <PageHeader eyebrow="Settings" title={item?.label ?? "Settings"} subtitle={item?.description} />
+      <PageHeader icon="settings" eyebrow="Settings" title={item?.label ?? "Settings"} subtitle={item?.description} />
       {section === "users" ? <UsersSection /> : null}
       {section === "audit" ? <AuditSection /> : null}
       {section === "account" ? (

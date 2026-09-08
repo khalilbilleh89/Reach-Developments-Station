@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 
 /**
  * The top of a page: where you are, what it is for, where it stands, and what
@@ -21,6 +23,7 @@ export function PageHeader({
   actions,
   meta,
   compact,
+  icon,
 }: {
   eyebrow?: string;
   title: string;
@@ -30,9 +33,12 @@ export function PageHeader({
   actions?: ReactNode;
   meta?: ReactNode;
   compact?: boolean;
+  icon?: IconName;
 }) {
   return (
     <header className={compact ? "page-head page-head-compact" : "page-head"}>
+      <div className="page-head-identity">
+      {icon ? <span className="page-glyph"><Icon name={icon} /></span> : null}
       <div className="page-head-main">
         {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
         {status ? (
@@ -45,6 +51,7 @@ export function PageHeader({
         )}
         {subtitle ? <p className="page-subtitle">{subtitle}</p> : null}
         {meta ? <div className="page-meta">{meta}</div> : null}
+      </div>
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>

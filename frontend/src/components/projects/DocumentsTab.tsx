@@ -155,6 +155,7 @@ export function DocumentsTab({
   return (
     <>
       <PageHeader
+        icon="documents"
         title="Documents"
         subtitle={sectionDescription("documents")}
         compact

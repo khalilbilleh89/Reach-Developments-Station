@@ -90,7 +90,7 @@ export function CashflowDrilldown({
 
   return (
     <Drawer
-      eyebrow="Cashflow"
+      eyebrow="Cashflow" icon="economics"
       title={
         filters.periodMonth
           ? `Transactions in ${businessDate(filters.periodMonth)}`

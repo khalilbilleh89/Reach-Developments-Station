@@ -12,6 +12,8 @@ import {
   Metric,
   MetricGroup,
   Notice,
+  Position,
+  PositionFigure,
   SectionHeader,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
@@ -70,8 +72,8 @@ export function UnitSummary({
   const blocked = unit.release_blockers.length > 0;
 
   return (
-    <>
-      <section>
+    <div className="record-overview">
+      <section className="record-section record-standing">
         <SectionHeader title="Standing" />
         <div className="standing">
           {DIMENSIONS.map((dimension) => {
@@ -86,7 +88,7 @@ export function UnitSummary({
         </div>
       </section>
 
-      <section>
+      <section className="record-section">
         <SectionHeader
           title="Release readiness"
           actions={
@@ -118,7 +120,7 @@ export function UnitSummary({
       </section>
 
       {pricing.status === "off" ? null : (
-        <section>
+        <section className="record-section">
           <SectionHeader
             title="Price"
             actions={
@@ -134,7 +136,7 @@ export function UnitSummary({
       )}
 
       {collection.status === "off" ? null : (
-        <section>
+        <section className="record-section">
           <SectionHeader
             title="Collections"
             actions={
@@ -150,7 +152,7 @@ export function UnitSummary({
       )}
 
       {commitment.status === "off" ? null : (
-        <section>
+        <section className="record-section">
           <SectionHeader
             title="Commitment"
             actions={
@@ -164,7 +166,7 @@ export function UnitSummary({
           <CommitmentSnapshot answer={commitment} commercialStatus={unit.commercial_status} />
         </section>
       )}
-    </>
+    </div>
   );
 }
 
@@ -194,16 +196,16 @@ function PriceSnapshot({ answer }: { answer: Answer<UnitPricing> }) {
         </Notice>
       ) : null}
       {price ? (
-        <MetricGroup>
-          <Metric label="List price (ex tax)" value={money(price.reference_price_ex_tax, priceCode)} />
-          <Metric label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_gross_area, priceCode)} note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"} size="sm" />
-          <Metric
+        <Position compact>
+          <PositionFigure lead label="List price (ex tax)" value={money(price.reference_price_ex_tax, priceCode)} />
+          <PositionFigure label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_gross_area, priceCode)} note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"} />
+          <PositionFigure
             label="Version"
             value={`v${price.version_number}`}
             note={`Live from ${businessDate(price.valid_from)}`}
-            size="sm"
+
           />
-        </MetricGroup>
+        </Position>
       ) : (
         <EmptyState
           compact

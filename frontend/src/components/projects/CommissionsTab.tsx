@@ -16,14 +16,14 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
   const load = useCallback(async () => { try { const [grants, sales] = await Promise.all([commissions.list(projectId), commissions.eligibleSales(projectId)]); setRows(grants); setEligible(sales); setSelected((old) => grants.find((x) => x.id === old?.id) ?? old); setLoaded(true); setError(null); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load commissions."); } }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]); const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); setDialog(null); setAllocation(null); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "That action could not be completed."); } finally { setBusy(false); } };
   return <div className="stack">
-    <PageHeader title="Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
+    <PageHeader icon="money" title="Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
     {error && !dialog && !selected ? <Notice tone="error">{error}</Notice> : null}
     <Card title="Commission register" description="Open a sale's commission to review its grant and beneficiary distribution." flush>
       {!loaded ? !error ? <Loading label="Loading commissions" shape="rows" /> : null : rows.length ? (
         <TableScroll label="Commission register" fixedFirst>
           <thead><tr><th scope="col">Unit / sale</th><th scope="col">Buyer</th><th scope="col" className="num">Sold price</th><th scope="col" className="num">Commission base</th><th scope="col" className="num">Granted</th><th scope="col" className="num">Commission total</th><th scope="col">Status</th></tr></thead>
           <tbody>{rows.map((x) => <tr key={x.id} aria-selected={selected?.id === x.id}>
-            <th scope="row"><Button variant="link" onClick={() => setSelected(x)} aria-label={`Open ${x.unit_reference} commission`}><IdentityCell name={x.unit_reference} meta={x.sale_reference} /></Button></th>
+            <th scope="row"><Button variant="link" onClick={() => setSelected(x)} aria-label={`Open ${x.unit_reference} commission`}><IdentityCell icon="inventory" name={x.unit_reference} meta={x.sale_reference} /></Button></th>
             <td>{x.buyer_display}</td>
             <td className="num">{money(x.sold_price_snapshot, currencyCodes[x.currency_id])}</td>
             <td className="num">{money(x.commissionable_base_amount, currencyCodes[x.currency_id])}</td>
@@ -37,6 +37,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
     </Card>
     {selected ? <Drawer
       eyebrow="Commission file"
+      icon="money"
       title={`${selected.unit_reference} commission`}
       subtitle={`${selected.sale_reference} · ${selected.buyer_display}`}
       meta={<Badge>{selected.status}</Badge>}

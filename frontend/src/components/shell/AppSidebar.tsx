@@ -65,7 +65,7 @@ export function SidebarContent({
     <>
       <div className="brand">
         <Link href="/projects/" className="brand-mark" aria-label="Reach — all projects">
-          R
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 27V5h10c7 0 11 3 11 9 0 4-2 7-6 9l7 4h-9l-9-7h6c4 0 6-2 6-6s-2-5-6-5h-5v18Z" fill="currentColor" /></svg>
         </Link>
         <span className="brand-text">
           <span className="brand-name">Reach</span>

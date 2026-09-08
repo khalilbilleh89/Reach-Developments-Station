@@ -26,6 +26,8 @@ import {
   Notice,
   PageHeader,
   PlaceCell,
+  Position,
+  PositionFigure,
   SectionHeader,
   StatusDot,
   TableScroll,
@@ -399,39 +401,13 @@ export function LandTab({
             : "Whole parcel",
         },
         { label: "Acquired", value: businessDate(selected.acquisition_date) ?? "Not recorded" },
-        ...(selected.financials_visible
-          ? [
-              {
-                label: "Purchase price",
-                value: selected.purchase_price
-                  ? money(selected.purchase_price, selected.base_currency_code)
-                  : "Not recorded",
-                note: "Acquisition consideration, not market value",
-              },
-              {
-                label: "Acquisition fees",
-                value: selected.acquisition_fees
-                  ? money(selected.acquisition_fees, selected.base_currency_code)
-                  : "Not recorded",
-              },
-              {
-                label: "Total acquisition cost",
-                value: selected.total_acquisition_cost
-                  ? money(selected.total_acquisition_cost, selected.base_currency_code)
-                  : "Incomplete",
-                note:
-                  selected.total_acquisition_cost_basis === "incomplete_inputs"
-                    ? "Purchase price and acquisition fees are both required"
-                    : "Backend-derived acquisition consideration",
-              },
-            ]
-          : []),
       ]
     : [];
 
   return (
     <>
       <PageHeader
+        icon="land"
         title="Land"
         subtitle={sectionDescription("land")}
         compact
@@ -515,6 +491,7 @@ export function LandTab({
                         onClick={() => void openParcel(parcel)}
                       >
                         <IdentityCell
+                            icon="land"
                           name={parcel.plot_number}
                           meta={
                             parcel.title_deed_number
@@ -753,7 +730,8 @@ export function LandTab({
 
       {selected ? (
         <Drawer
-          eyebrow="Parcel"
+          eyebrow="Land asset"
+          icon="land"
           title={selected.plot_number}
           subtitle={
             [selected.zoning, selected.title_status].filter(Boolean).join(" · ") ||
@@ -821,10 +799,10 @@ export function LandTab({
           ) : null}
 
           {section === "overview" ? (
-            <>
-              <section>
+            <div className="record-columns">
+              <section className="record-section">
                 <SectionHeader title="Tenure" />
-                <KeyValueGrid columns={3}>
+                <KeyValueGrid columns={2}>
                   <KeyValue label="Ownership" value={selected.ownership_type} />
                   <KeyValue
                     label="Ownership share"
@@ -840,7 +818,7 @@ export function LandTab({
                   <KeyValue label="Cadastral reference" mono value={selected.cadastral_reference} />
                 </KeyValueGrid>
               </section>
-              <section>
+              <section className="record-section">
                 <SectionHeader
                   title="Acquisition"
                   description={
@@ -849,7 +827,19 @@ export function LandTab({
                       : undefined
                   }
                 />
-                <KeyValueGrid columns={3}>
+                {selected.financials_visible ? (
+                  <Position compact>
+                    <PositionFigure
+                      lead
+                      label="Total acquisition cost"
+                      value={selected.total_acquisition_cost
+                        ? money(selected.total_acquisition_cost, selected.base_currency_code)
+                        : "Incomplete"}
+                      note={selected.total_acquisition_cost ? "Purchase price and acquisition fees" : "Record both inputs"}
+                    />
+                  </Position>
+                ) : null}
+                <KeyValueGrid columns={2}>
                   <KeyValue
                     label="Acquisition date"
                     mono
@@ -874,14 +864,6 @@ export function LandTab({
                             : null
                         }
                       />
-                      <KeyValue
-                        label="Total acquisition cost"
-                        value={
-                          selected.total_acquisition_cost
-                            ? money(selected.total_acquisition_cost, selected.base_currency_code)
-                            : "Incomplete — record both inputs"
-                        }
-                      />
                     </>
                   ) : null}
                 </KeyValueGrid>
@@ -892,7 +874,7 @@ export function LandTab({
                   </p>
                 )}
               </section>
-            </>
+            </div>
           ) : null}
 
           {section === "planning" ? (
