@@ -479,11 +479,13 @@ class TestOnlyEntitledReadersAsk:
             "overview",
             "land",
             "permits",
+            "prelaunch",
+            "consultant",
             "inventory",
-            "pricing",
             "sales",
             "payments",
             "collections",
+            "commissions",
             "construction",
             "economics",
             "cashflow",
@@ -494,10 +496,12 @@ class TestOnlyEntitledReadersAsk:
     def test_every_gated_navigation_item_names_its_reader_set(self) -> None:
         navigation = read(NAVIGATION)
         for key, role_set in (
-            ("pricing", "INTERNAL_PRICE_READERS"),
+            ("prelaunch", "CASHFLOW_READERS"),
+            ("consultant", "CONSULTANT_READERS"),
             ("sales", "SALES_READERS"),
             ("payments", "PLAN_READERS"),
             ("collections", "COLLECTION_READERS"),
+            ("commissions", "COMMISSION_READERS"),
             ("construction", "CONSTRUCTION_READERS"),
             ("economics", "ECONOMICS_READERS"),
             ("cashflow", "CASHFLOW_READERS"),

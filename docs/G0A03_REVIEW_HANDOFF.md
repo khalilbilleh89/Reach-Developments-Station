@@ -135,6 +135,10 @@ Fresh history round-trip and retained consultant/commission/utility downgrade
 refusal are separate gates. Do not destructively downgrade retained histories as a
 software rollback. The final PR body records focused test counts, Alembic checks,
 Backend Fast and Frontend CI results/runtimes against the exact candidate.
+Historical main CI failures in the retained Construction downgrade revision and
+legacy navigation assertions are corrected with focused coverage; refusal still
+preserves the checklist and starting revision, and every new gated navigation
+item must name its reader set.
 
 Production Dependencies Added: None. Development Dependencies Added: None.
 Frontend Dependencies Added: None. Dependencies Removed: None. Existing framework/native functionality is sufficient.

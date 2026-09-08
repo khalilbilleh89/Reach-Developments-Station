@@ -146,8 +146,15 @@ for the independently reviewed Ready candidate under the existing CI policy.
 There are no dependency, deployment, workflow, queue, cache or analysis-storage changes.
 
 
-Final integration also corrects two historical migration-test assumptions without
+Final integration also corrects historical migration-test assumptions without
 editing shipped migrations: the Utilities refusal test releases fixture read locks
 before DDL and asserts the starting revision is retained; the Construction 0015
 round-trip compares current metadata only after returning to head. Its intermediate
 revision/table assertions and clean downgrade remain intact.
+
+The retained Construction checklist refusal also asserts the starting revision
+is preserved transactionally, rather than hard-coding 0015. Navigation acceptance
+now requires Pre-Launch, Consultant Engineer and Commissions in their final
+departments and verifies their reader sets; Pricing remains absent from ordinary
+navigation. These three focused cases pass, correcting failures also observed
+on the prior main Full run 34151432488.
