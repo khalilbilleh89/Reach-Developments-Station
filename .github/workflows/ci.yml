@@ -5,7 +5,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, integration/mvp3]
+    branches: [main, integration/mvp3, integration/mvp3-management]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
@@ -23,7 +23,7 @@ jobs:
   backend_smoke:
     name: Backend Smoke
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'integration/mvp3'
+    if: github.event_name == 'pull_request' && (github.event.pull_request.base.ref == 'integration/mvp3' || github.event.pull_request.base.ref == 'integration/mvp3-management')
     timeout-minutes: 30
     services:
       postgres:
