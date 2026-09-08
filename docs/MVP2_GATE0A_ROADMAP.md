@@ -1,50 +1,41 @@
 # MVP 2 Gate 0A roadmap — three PRs
 
-Authority: [MVP2_GATE0A_PRODUCT_SPEC.md](MVP2_GATE0A_PRODUCT_SPEC.md). Acceptance:
-[MVP2_GATE0A_ACCEPTANCE.md](MVP2_GATE0A_ACCEPTANCE.md).
+Authority: [MVP2_GATE0A_PRODUCT_SPEC.md](MVP2_GATE0A_PRODUCT_SPEC.md).
+Evidence: [MVP2_GATE0A_ACCEPTANCE.md](MVP2_GATE0A_ACCEPTANCE.md).
 
-Before G0A-01 is integrated, Gate 0A is **0 / 3 complete**:
+- **G0A-01 — MERGED:** Project Structure, Setup Simplification & Pre-Launch (#266/#267).
+- **G0A-02 — MERGED:** Consultant Engineer & Commission Distribution (#268).
+- **G0A-03 — FINAL PROMOTION:** Project Analysis Suite, Integrated Gate 0A Acceptance & Main Promotion.
 
-- **G0A-01 — CURRENT:** Project Structure, Setup Simplification & Pre-Launch
-- **G0A-02 — NEXT:** Consultant Engineer & Commission Distribution
-- **G0A-03 — FINAL:** Project Analysis Suite, Integrated Acceptance & Hardening
+While G0A-03 is Draft, Gate 0A is **2 / 3 merged** and independent acceptance is
+pending. When the independently approved G0A-03 candidate is present on `main`,
+Gate 0A is **3 / 3 complete** and the MVP 2 stakeholder iteration is complete.
+This merge condition is the completion event; no fourth promotion PR is required.
 
-The original five product PRs were compressed because the current implementation
-agent can carry broader coherent scopes and accelerated Smoke/integration CI avoids
-repeatedly paying for the full backend suite. Compression does not reduce financial
-controls, security, database integrity, concurrency testing, exact-head independent
-review, or final integrated full-suite acceptance.
+MVP 1 foundation and MVP 2 Gate 0 are complete. **True MVP 3 — NOT STARTED**.
 
-## Product history
+## History and closure
 
-| Milestone | Status |
-| --- | --- |
-| MVP 1 | COMPLETE foundation |
-| MVP 2 core Gate 0 delivery | COMPLETE |
-| Previous owner closure | RECORDED HISTORICAL DECISION (#264) |
-| Subsequent stakeholder clarification | Gate 0A belongs to the same MVP 2 iteration and remains outstanding |
-| Current MVP 2 status | REOPENED FOR GATE 0A COMPLETION |
-| True MVP 3 | NOT STARTED |
+Owner closure #264 remains historical. Khalil subsequently clarified that Gate 0A
+belongs to the same MVP 2 operator iteration. MVP 2 was reopened for that work.
+Final G0A-03 promotion supersedes the old scope assumption without deleting or
+retroactively passing historical Partial/Pending UAT evidence.
 
-Historical Pending/Partial UAT evidence remains unchanged. This is a scope
-reclassification, not a retroactive pass.
+## Final branch and CI policy
 
-## Temporary integration workflow
+`integration/mvp3` is historical technical debt, not a product version. G0A-01/02
+used it for Smoke integration. G0A-03 starts at its latest head, merges latest
+main without dropping G0A-02, and targets **main as Draft**. Main must be an
+ancestor of the final candidate. Draft runs Backend Fast and Frontend.
 
-`integration/mvp3` is a temporary technical branch retained because PR #265 already
-configured accelerated CI around that name. It is historical technical debt and does
-not define the product version.
+Only after independent review explicitly authorizes Mark Ready may the configured
+Backend Static / Structural, four Full Backend shards, Backend aggregator and
+Frontend run. Smoke/Fast are not Full evidence. Do not edit the exact candidate
+after Full green; a changed head invalidates that gate. The implementation agent
+must not mark Ready or merge.
 
-Each Gate 0A implementation PR targets that branch as Draft and runs Backend Smoke +
-Frontend. It is not marked Ready or merged by its implementation agent. Exact-head
-independent review is required. A genuine full-risk exception must be declared rather
-than silently weakening Smoke. G0A-03 performs final integrated full-suite acceptance
-before promotion to `main`; after promotion, retire `integration/mvp3`.
-
-G0A-01 does not claim Gate 0A complete. Before merge the tracker remains:
-
-- G0A-01 — DRAFT / REVIEW
-- G0A-02 — NOT STARTED
-- G0A-03 — NOT STARTED
-- Gate 0A — 0 / 3 MERGED
-- True MVP 3 — NOT STARTED
+After human merge, verify main SHA and main CI, Render's main deploy, boot,
+0017_consultant_commissions, Overview analysis and core navigation. Retire/delete
+`integration/mvp3` only after successful main merge and post-merge verification;
+do not delete it during implementation. True MVP 3 requires a new planning session
+and does not inherit this branch or a new roadmap automatically.

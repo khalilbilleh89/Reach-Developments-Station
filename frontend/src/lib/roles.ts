@@ -168,6 +168,16 @@ export const CASHFLOW_RECORDERS: Roles = new Set(["finance"]);
 /** Narrow Pre-Launch entry authority; never grants generic cash recording. */
 export const PRELAUNCH_RECORDERS: Roles = new Set(["finance", "project_manager"]);
 
+export const CONSULTANT_READERS: Roles = new Set([
+  "project_manager", "design_engineering", "finance", "approver_cfo", "executive_viewer", "auditor",
+]);
+export const CONSULTANT_EDITORS: Roles = new Set(["project_manager", "design_engineering"]);
+export const COMMISSION_READERS: Roles = new Set([
+  "project_manager", "sales_operations", "finance", "approver_cfo", "executive_viewer", "auditor",
+]);
+export const COMMISSION_PREPARERS: Roles = new Set(["project_manager", "sales_operations", "finance"]);
+export const COMMISSION_RELEASERS: Roles = new Set(["finance", "approver_cfo"]);
+
 /**
  * Roles that may confirm somebody else's movement — the second pair of eyes.
  *
@@ -221,3 +231,10 @@ export function hasAnyRole(roles: Roles, allowed: Roles): boolean {
 export function roleSet(roles: { key: string }[]): Set<string> {
   return new Set(roles.map((role) => role.key));
 }
+
+/** Management analysis: the server also requires whole-project membership. */
+export const ANALYSIS_FINANCIAL_READERS: Roles = new Set([
+  "system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor",
+]);
+export const ANALYSIS_FUNDAMENTAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "sales_operations"]);
+export const ANALYSIS_TECHNICAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "design_engineering"]);

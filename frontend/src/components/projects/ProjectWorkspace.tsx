@@ -27,6 +27,8 @@ import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCente
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CashflowTab } from "@/components/projects/CashflowTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
+import { CommissionsTab } from "@/components/projects/CommissionsTab";
+import { ConsultantEngineerTab } from "@/components/projects/ConsultantEngineerTab";
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
@@ -280,6 +282,7 @@ export function ProjectWorkspace({
             roles={roles}
           />
         ) : null}
+        {section === "consultant" ? <ConsultantEngineerTab projectId={projectId} roles={roles} /> : null}
         {section === "inventory" ? (
           <InventoryTab
             projectId={projectId}
@@ -302,6 +305,7 @@ export function ProjectWorkspace({
           <PaymentPlansTab projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
         {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
+        {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}
         {section === "construction" ? <ConstructionTab projectId={projectId} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}

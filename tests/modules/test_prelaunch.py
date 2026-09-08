@@ -198,6 +198,7 @@ def test_utilities_row_survives_refused_downgrade_to_0015(
     finance_client: TestClient,
     project_id: str,
     currency_id: str,
+    db: Session,
 ) -> None:
     """0016 refuses a lossy downgrade and leaves both data and revision intact."""
     created = finance_client.post(root(project_id), json=payload(currency_id))
@@ -216,6 +217,12 @@ def test_utilities_row_survives_refused_downgrade_to_0015(
             return row.category, row.amount
 
     assert retained_row() == ("utilities", Decimal("1250.25"))
+    # Release fixture reads before DDL drops 0017's foreign keys to users.
+    db.rollback()
+    with get_engine().connect() as connection:
+        starting_revision = connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one()
     try:
         with pytest.raises(
             SQLAlchemyError, match="cannot downgrade while utilities movements exist"
@@ -223,9 +230,10 @@ def test_utilities_row_survives_refused_downgrade_to_0015(
             command.downgrade(alembic_config(), "0015_construction_stages")
 
         with get_engine().connect() as connection:
-            assert connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == ("0016_prelaunch_utilities")
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == starting_revision
+            )
         assert retained_row() == ("utilities", Decimal("1250.25"))
     finally:
         # The refusal is transactional, but restoring head explicitly keeps the

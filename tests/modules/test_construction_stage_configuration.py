@@ -44,11 +44,13 @@ def test_downgrade_refuses_retained_checklist(
         == 204
     )
     before = manager_member_client.get(path).json()
+    starting_revision = db.scalar(text("SELECT version_num FROM alembic_version"))
+    # Release fixture reads before later migrations drop foreign keys to users.
     db.rollback()
     with pytest.raises(RuntimeError, match="Construction stages exist"):
         command.downgrade(alembic_config(), "0014_direct_unit_price")
     assert manager_member_client.get(path).json() == before
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0015_construction_stages"
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == starting_revision
 
 
 def test_reorder_rejects_changed_neighbors_even_when_target_position_is_unchanged(

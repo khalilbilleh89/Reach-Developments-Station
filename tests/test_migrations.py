@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0016_prelaunch_utilities"
+HEAD_REVISION = "0017_consultant_commissions"
 
 
 def test_prelaunch_utilities_widens_only_the_development_category_check(postgres: None) -> None:
@@ -174,10 +174,11 @@ def test_construction_stages_upgrade_schema_and_clean_downgrade(postgres: None) 
     command.upgrade(config, "0015_construction_stages")
     assert _current_revision() == "0015_construction_stages"
     assert {"construction_stages", "unit_stage_events"} <= _public_tables()
-    command.check(config)
     command.downgrade(config, "0014_direct_unit_price")
     assert _current_revision() == "0014_direct_unit_price"
     command.upgrade(config, "head")
+    # Current metadata describes head, not the historical 0015 schema.
+    command.check(config)
 
 
 def test_baseline_creates_no_business_schema(empty_database: None) -> None:

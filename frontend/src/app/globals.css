@@ -4519,3 +4519,13 @@ input[type="file"].input {
     padding: var(--space-4);
   }
 }
+
+/* Compact derived analysis inside Overview; tables scroll within their region. */
+.analysis-headlines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 1rem; }
+.analysis-headlines p { margin: 0; display: grid; gap: .35rem; }
+.analysis-headlines strong { font-size: 1.4rem; overflow-wrap: anywhere; }
+.analysis-headlines span { color: var(--muted); }
+.analysis-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; padding-block: 1rem; }
+.analysis-filters label { display: grid; gap: .4rem; max-width: 100%; }
+.analysis-filters input { max-width: 100%; }
+.analysis-filters p { flex-basis: 100%; }

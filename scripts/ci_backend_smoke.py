@@ -116,6 +116,20 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_prelaunch.py::test_sales_advisor_and_phase_scoped_reader_get_no_prelaunch_details",
         "tests/modules/test_prelaunch.py::test_utilities_row_survives_refused_downgrade_to_0015",
     ),
+    "project_analysis": (
+        "tests/modules/test_project_analysis.py::test_empty_sources_and_reads_have_no_side_effects",
+    ),
+    "consultant_engineering": (
+        "tests/modules/test_consultant_engineering.py::test_create_activate_and_deliverable_lifecycle",
+        "tests/modules/test_consultant_engineering.py::test_second_activation_conflicts",
+        "tests/modules/test_consultant_engineering.py::test_commercial_reader_is_refused",
+    ),
+    "commissions": (
+        "tests/modules/test_commissions_review.py::test_financial_independence_and_immutable_history",
+        "tests/modules/test_commissions.py::test_150k_golden_decimal_calculation",
+        "tests/modules/test_commissions.py::test_reconciliation_and_maker_checker",
+        "tests/modules/test_commissions.py::test_partial_base_and_invalid_terms",
+    ),
     "audit": (
         "tests/modules/test_audit.py::test_configuration_changes_are_audited",
         "tests/modules/test_audit.py::test_passwords_and_tokens_never_reach_the_audit_trail",
@@ -146,6 +160,14 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/test_migrations.py::test_prelaunch_utilities_widens_only_the_development_category_check",
             "tests/modules/test_prelaunch.py::test_utilities_row_survives_refused_downgrade_to_0015",
+        ),
+    ),
+    "0017_consultant_commissions.py": (
+        "consultant_engineering",
+        (
+            "tests/test_migrations.py::test_the_history_round_trips_from_empty_to_head_and_back",
+            "tests/modules/test_consultant_engineering.py::test_create_activate_and_deliverable_lifecycle",
+            "tests/modules/test_commissions.py::test_150k_golden_decimal_calculation",
         ),
     ),
 }
@@ -183,6 +205,14 @@ def validate_contract(nodes: tuple[str, ...] | list[str], root: Path = ROOT) -> 
 def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]:
     domains: set[str] = set()
     nodes = set(BACKBONE)
+    # Model imports in Alembic's environment are the ordinary companion to a
+    # reviewed, registered domain migration. Alone, an env.py edit remains
+    # shared infrastructure and is refused below.
+    has_registered_migration = any(
+        raw.replace("\\", "/").startswith(fast.MIGRATION_VERSIONS_PREFIX)
+        and Path(raw.replace("\\", "/")).name in MIGRATIONS
+        for raw in changed
+    )
     for raw in changed:
         path = raw.replace("\\", "/")
         if path in (
@@ -203,6 +233,8 @@ def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]
             domain, tests = migration
             domains.add(domain)
             nodes.update(tests)
+        elif path == "app/db/migrations/env.py" and has_registered_migration:
+            continue
         elif path.startswith("app/db/"):
             raise SmokeRefused(
                 f"{path}: shared DB infrastructure requires explicit full-gate review"

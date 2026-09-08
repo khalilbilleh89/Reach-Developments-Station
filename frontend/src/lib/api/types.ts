@@ -2836,3 +2836,18 @@ export interface CashflowManagement {
   basis: CashflowBasis;
   groups: CashflowManagementGroup[];
 }
+
+export interface ConsultantEngagement {
+  id: string; project_id: string; consultant_name: string; agreement_reference: string;
+  agreement_date: string | null; planned_start_date: string | null; planned_completion_date: string | null;
+  status: string; scope_summary: string | null; notes: string | null; created_by_user_id: string;
+  created_at: string; updated_at: string;
+}
+export interface ConsultantDiscipline { id: string; engagement_id: string; name: string; lead_name: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
+export interface ConsultantStage { id: string; engagement_id: string; name: string; sequence: number; planned_date: string | null; forecast_date: string | null; actual_completion_date: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
+export interface ConsultantDeliverable { id: string; engagement_id: string; stage_id: string; discipline_id: string | null; name: string; category: string | null; revision_reference: string | null; document_reference: string | null; due_date: string | null; submitted_date: string | null; accepted_date: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
+export interface ConsultantWorkspace { active_engagement: ConsultantEngagement | null; engagements: ConsultantEngagement[]; disciplines: ConsultantDiscipline[]; stages: ConsultantStage[]; deliverables: ConsultantDeliverable[]; total_disciplines: number; completed_disciplines: number; current_design_stage: ConsultantStage | null; completed_stages: number; total_stages: number; outstanding_deliverables: number; accepted_deliverables: number; }
+
+export interface CommissionAllocation { id: string; beneficiary_name: string; rate_fraction: RateStr; calculated_amount: MoneyStr; sequence: number; notes: string | null; updated_at: string; }
+export interface CommissionGrant { id: string; project_id: string; sale_contract_id: string; sale_reference: string; sale_status: string; unit_id: string; unit_reference: string; buyer_display: string; currency_id: string; sold_price_snapshot: MoneyStr; commissionable_base_amount: MoneyStr; granted_rate_fraction: RateStr; commission_total: MoneyStr; status: string; notes: string | null; prepared_by_user_id: string; released_by_user_id: string | null; released_at: string | null; reversed_by_user_id: string | null; reversed_at: string | null; reversal_reason: string | null; created_at: string; updated_at: string; allocations: CommissionAllocation[]; allocation_rate_total: RateStr; allocation_amount_total: MoneyStr; is_reconciled: boolean; }
+export interface CommissionEligibleSale { id: string; sale_reference: string; unit_reference: string; buyer_display: string; sold_price: MoneyStr; currency_id: string; }
