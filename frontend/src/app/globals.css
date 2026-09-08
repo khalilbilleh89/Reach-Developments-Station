@@ -856,6 +856,10 @@ textarea {
   background-color: var(--surface);
 }
 
+.context-bar > nav {
+  min-width: 0;
+}
+
 .crumbs {
   display: flex;
   gap: var(--space-2);
@@ -1252,8 +1256,10 @@ section + section {
   margin-top: var(--space-6);
 }
 
-/* Sections inside a stack already carry the stack's gap. */
-.stack > section + section {
+/* Grid and stack layouts own the gap between their sections. */
+.stack > section + section,
+.split > section + section,
+.grid-12 > section + section {
   margin-top: 0;
 }
 
@@ -1422,6 +1428,7 @@ section + section {
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
+  overflow-y: hidden;
   margin-bottom: var(--space-5);
   border-bottom: 1px solid var(--line-soft);
   scrollbar-width: thin;
@@ -1890,10 +1897,6 @@ input[type="file"].input {
   max-width: 10rem;
 }
 
-.input-xs {
-  max-width: 6rem;
-}
-
 .input-medium {
   max-width: 16rem;
 }
@@ -2261,7 +2264,8 @@ input[type="file"].input {
   margin-bottom: calc(var(--space-5) * -1);
 }
 
-.card-body-flush .table-scroll {
+.card-body-flush .table-scroll,
+.card-body-flush .table-scroll:last-child {
   margin: 0;
 }
 
@@ -2320,7 +2324,8 @@ input[type="file"].input {
   transition: background-color var(--motion-fast) var(--ease);
 }
 
-.table tbody tr:hover {
+.table tbody tr:hover,
+.table tbody tr:focus-within {
   background-color: var(--surface-hover);
 }
 
@@ -2357,7 +2362,9 @@ input[type="file"].input {
 }
 
 .table-fixed-first tbody tr:hover th:first-child,
-.table-fixed-first tbody tr:hover td:first-child {
+.table-fixed-first tbody tr:hover td:first-child,
+.table-fixed-first tbody tr:focus-within th:first-child,
+.table-fixed-first tbody tr:focus-within td:first-child {
   background-color: var(--surface-hover);
 }
 
@@ -2442,16 +2449,20 @@ input[type="file"].input {
 
 /* The row whose record is open behind the drawer, so closing it lands the
  * reader back where they were. */
-.table tbody tr[aria-selected="true"] {
+.table tbody tr[aria-selected="true"],
+.table tbody tr[aria-current="true"] {
   background-color: var(--surface-selected);
 }
 
-.table tbody tr[aria-selected="true"] > :first-child {
+.table tbody tr[aria-selected="true"] > :first-child,
+.table tbody tr[aria-current="true"] > :first-child {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .table-fixed-first tbody tr[aria-selected="true"] th:first-child,
-.table-fixed-first tbody tr[aria-selected="true"] td:first-child {
+.table-fixed-first tbody tr[aria-selected="true"] td:first-child,
+.table-fixed-first tbody tr[aria-current="true"] th:first-child,
+.table-fixed-first tbody tr[aria-current="true"] td:first-child {
   background-color: var(--surface-selected);
   box-shadow:
     inset 2px 0 0 var(--accent),
@@ -3550,6 +3561,9 @@ input[type="file"].input {
 
 .dialog {
   width: 100%;
+  max-height: calc(100dvh - var(--space-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   max-width: 28rem;
   padding: var(--space-5);
   border: 1px solid var(--line-soft);
@@ -3637,6 +3651,7 @@ input[type="file"].input {
 
 .drawer-head-top {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-4);
   align-items: flex-start;
   padding: var(--space-5) var(--space-6) 0;
@@ -3670,6 +3685,7 @@ input[type="file"].input {
 }
 
 .drawer-subtitle {
+  overflow-wrap: anywhere;
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
   font-size: var(--text-base);
@@ -3688,7 +3704,8 @@ input[type="file"].input {
  * may read it: a role refused the figure never has it fetched. */
 .drawer-headline {
   flex: none;
-  min-width: max-content;
+  min-width: 0;
+  max-width: 100%;
   text-align: right;
 }
 
@@ -4399,6 +4416,11 @@ input[type="file"].input {
     margin-bottom: calc(var(--space-4) * -1);
   }
 
+  .card-body-flush .table-scroll,
+  .card-body-flush .table-scroll:last-child {
+    margin: 0;
+  }
+
   .table th:first-child,
   .table td:first-child {
     padding-left: var(--space-4);
@@ -4436,6 +4458,10 @@ input[type="file"].input {
     order: 3;
     flex-basis: 100%;
     text-align: left;
+  }
+
+  .drawer-headline-value {
+    font-size: var(--metric);
   }
 
   .drawer-head-actions {
@@ -4519,13 +4545,3 @@ input[type="file"].input {
     padding: var(--space-4);
   }
 }
-
-/* Compact derived analysis inside Overview; tables scroll within their region. */
-.analysis-headlines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 1rem; }
-.analysis-headlines p { margin: 0; display: grid; gap: .35rem; }
-.analysis-headlines strong { font-size: 1.4rem; overflow-wrap: anywhere; }
-.analysis-headlines span { color: var(--muted); }
-.analysis-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; padding-block: 1rem; }
-.analysis-filters label { display: grid; gap: .4rem; max-width: 100%; }
-.analysis-filters input { max-width: 100%; }
-.analysis-filters p { flex-basis: 100%; }

@@ -7,7 +7,7 @@ import type { ConsultantWorkspace, ConsultantEngagement, ConsultantDiscipline, C
 import { businessDate } from "@/lib/format";
 import { CONSULTANT_EDITORS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
-import { Badge, Button, ButtonRow, Card, EmptyState, Field, FieldRow, FormDialog, Loading, Notice, PageHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, EmptyState, Field, FieldRow, FormDialog, FormSection, IdentityCell, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, SubPanel, TableScroll } from "@/components/ui";
 
 type Kind = "engagement" | "discipline" | "stage" | "deliverable";
 type RecordRow = ConsultantEngagement | ConsultantDiscipline | ConsultantStage | ConsultantDeliverable;
@@ -76,33 +76,49 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   return <div className="stack">
     <PageHeader title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
-    {data ? <Card title="Design position across agreements"><p>Disciplines complete: {data.completed_disciplines} / {data.total_disciplines}. Design stages complete: {data.completed_stages} / {data.total_stages}. Outstanding deliverables: {data.outstanding_deliverables}. Accepted deliverables: {data.accepted_deliverables}.</p></Card> : null}
-    <Card title={current?.status === "draft" ? "Draft Agreement" : "Active Agreement"} actions={current ? <Button onClick={() => setSelectedId(current.id)}>View agreement</Button> : undefined}>
-      {!data ? <Loading label="Loading consultant agreement" /> : current ? <><p><strong>{current.consultant_name}</strong> · {current.agreement_reference} · <Badge>{current.status}</Badge></p><p>Agreement {businessDate(current.agreement_date)} · Planned completion {businessDate(current.planned_completion_date)}</p>
-        {canEdit && current.status === "draft" ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, current.id, "activate"))}>Activate Agreement</Button> : null}
-      </> : <EmptyState title="No active or draft agreement" hint="Create an agreement to appoint a main consultant." />}
-    </Card>
+    {data ? <Card tone="command" title="Design position across agreements">
+      <Position compact>
+        <PositionFigure lead label="Outstanding deliverables" value={data.outstanding_deliverables} />
+        <PositionFigure label="Accepted deliverables" value={data.accepted_deliverables} />
+        <PositionFigure label="Disciplines complete" value={data.completed_disciplines} note={`Of ${data.total_disciplines} disciplines`} />
+        <PositionFigure label="Design stages complete" value={data.completed_stages} note={`Of ${data.total_stages} stages`} />
+      </Position>
+    </Card> : !error ? <Loading label="Loading consultant agreement" shape="page" /> : null}
+    {data && !current ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
     {selected ? <>
-      <Card title={`${selected.consultant_name} — ${labels(selected.status)} agreement`}>
-        <p>{selected.agreement_reference} · {businessDate(selected.agreement_date)}</p>
-        <p>Programme: {businessDate(selected.planned_start_date)} – {businessDate(selected.planned_completion_date)}</p>
-        <p>{selected.scope_summary}</p><p>{selected.notes}</p>
+      <Card title={selected.consultant_name} description="Consultant agreement and design programme" actions={current && selected.id !== current.id ? <Button small onClick={() => setSelectedId(current.id)}>Return to current agreement</Button> : undefined}>
+        <InlineMeta>
+          <InlineMetaItem label="Agreement"><span className="mono">{selected.agreement_reference}</span></InlineMetaItem>
+          <InlineMetaItem label="Status"><Badge>{labels(selected.status)}</Badge></InlineMetaItem>
+        </InlineMeta>
+        <KeyValueGrid columns={3}>
+          <KeyValue label="Agreement date" value={businessDate(selected.agreement_date)} />
+          <KeyValue label="Planned start" value={businessDate(selected.planned_start_date)} />
+          <KeyValue label="Planned completion" value={businessDate(selected.planned_completion_date)} />
+        </KeyValueGrid>
+        {selected.scope_summary ? <p>{selected.scope_summary}</p> : null}
+        {selected.notes ? <p className="footnote">{selected.notes}</p> : null}
+        {!editable ? <p className="footnote">Read-only agreement. Its programme and delivery records are retained below.</p> : null}
         <ButtonRow>
           {canEdit && selected.status === "draft" ? <><Button disabled={busy} onClick={() => setEditor({ kind: "engagement", row: selected })}>Edit agreement</Button>{!data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
-          {canEdit && selected.status === "active" ? <><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "complete"))}>Complete agreement</Button><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "terminate"))}>Terminate agreement</Button></> : null}
+          {canEdit && selected.status === "active" ? <><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "complete"))}>Complete agreement</Button><Button variant="danger" disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "terminate"))}>Terminate agreement</Button></> : null}
         </ButtonRow>
+      <Register nested title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", labels(x.status), x.notes ?? "—", editable ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} />
+      <Register nested title="Design stages" action={editable ? <Button onClick={() => setEditor({ kind: "stage" })}>Add design stage</Button> : undefined} headers={["Stage", "Position", "Planned", "Forecast", "Actual", "Status", "Actions"]} rows={stages.map((x, i) => [x.name, x.sequence, businessDate(x.planned_date), businessDate(x.forecast_date), businessDate(x.actual_completion_date), labels(x.status), editable ? <ButtonRow key={x.id}><Button small disabled={busy} onClick={() => setEditor({ kind: "stage", row: x })}>Edit stage</Button><Button small aria-label={`Move ${x.name} up`} disabled={busy || i === 0} onClick={() => void move(x, -1)}>Move up</Button><Button small aria-label={`Move ${x.name} down`} disabled={busy || i === stages.length - 1} onClick={() => void move(x, 1)}>Move down</Button></ButtonRow> : "Read only"])} />
+      <Register nested title="Deliverables" action={editable && stages.length ? <Button onClick={() => setEditor({ kind: "deliverable" })}>Add deliverable</Button> : undefined} headers={["Deliverable", "Stage / discipline", "Due", "Submitted", "Accepted", "Status", "Revision / document", "Actions"]} rows={deliverables.map((x) => [x.name, `${stages.find((s) => s.id === x.stage_id)?.name ?? "—"} / ${disciplines.find((d) => d.id === x.discipline_id)?.name ?? "Cross-disciplinary"}`, businessDate(x.due_date), businessDate(x.submitted_date), businessDate(x.accepted_date), labels(x.status), `${x.revision_reference ?? "—"} / ${x.document_reference ?? "—"}`, editable && !["accepted", "superseded", "cancelled"].includes(x.status) ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "deliverable", row: x })}>Update deliverable</Button> : "Historical / read only"])} />
       </Card>
-      <Register title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", labels(x.status), x.notes ?? "—", editable ? <Button key={x.id} small onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} />
-      <Register title="Design stages" action={editable ? <Button onClick={() => setEditor({ kind: "stage" })}>Add design stage</Button> : undefined} headers={["Stage", "Position", "Planned", "Forecast", "Actual", "Status", "Actions"]} rows={stages.map((x, i) => [x.name, x.sequence, businessDate(x.planned_date), businessDate(x.forecast_date), businessDate(x.actual_completion_date), labels(x.status), editable ? <ButtonRow key={x.id}><Button small disabled={busy} onClick={() => setEditor({ kind: "stage", row: x })}>Edit stage</Button><Button small aria-label={`Move ${x.name} up`} disabled={busy || i === 0} onClick={() => void move(x, -1)}>Move up</Button><Button small aria-label={`Move ${x.name} down`} disabled={busy || i === stages.length - 1} onClick={() => void move(x, 1)}>Move down</Button></ButtonRow> : "Read only"])} />
-      <Register title="Deliverables" action={editable && stages.length ? <Button onClick={() => setEditor({ kind: "deliverable" })}>Add deliverable</Button> : undefined} headers={["Deliverable", "Stage / discipline", "Due", "Submitted", "Accepted", "Status", "Revision / document", "Actions"]} rows={deliverables.map((x) => [x.name, `${stages.find((s) => s.id === x.stage_id)?.name ?? "—"} / ${disciplines.find((d) => d.id === x.discipline_id)?.name ?? "Cross-disciplinary"}`, businessDate(x.due_date), businessDate(x.submitted_date), businessDate(x.accepted_date), labels(x.status), `${x.revision_reference ?? "—"} / ${x.document_reference ?? "—"}`, editable && !["accepted", "superseded", "cancelled"].includes(x.status) ? <Button key={x.id} small onClick={() => setEditor({ kind: "deliverable", row: x })}>Update deliverable</Button> : "Historical / read only"])} />
     </> : null}
-    <Register title="Agreement register and history" headers={["Consultant", "Agreement reference", "Status", "Agreement date", "Planned completion", "Details"]} rows={(data?.engagements ?? []).map((x) => [x.consultant_name, x.agreement_reference, labels(x.status), businessDate(x.agreement_date), businessDate(x.planned_completion_date), <Button key={x.id} small onClick={() => setSelectedId(x.id)}>View {x.status === "draft" ? "draft" : x.status === "active" ? "active agreement" : "history"}</Button>])} />
+    {data ? <Register title="Agreement register and history" headers={["Consultant", "Agreement reference", "Status", "Agreement date", "Planned completion", "Details"]} rows={(data?.engagements ?? []).map((x) => [<Button key={x.id} variant="link" onClick={() => setSelectedId(x.id)}><IdentityCell name={x.consultant_name} /></Button>, x.agreement_reference, labels(x.status), businessDate(x.agreement_date), businessDate(x.planned_completion_date), <Button key={x.id} small variant="quiet" onClick={() => setSelectedId(x.id)}>View {x.status === "draft" ? "draft" : x.status === "active" ? "active agreement" : "history"}</Button>])} /> : null}
     {editor ? <ConsultantDialog editor={editor} stages={stages} disciplines={disciplines} busy={busy} error={error} onCancel={() => { if (!busy) { setEditor(null); setError(null); } }} onSubmit={(body) => void save(body)} /> : null}
   </div>;
 }
 
-function Register({ title, action, headers, rows }: { title: string; action?: ReactNode; headers: string[]; rows: ReactNode[][] }) {
-  return <Card title={title} actions={action} flush>{rows.length ? <TableScroll label={title} compact><thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => j === 0 ? <th key={j} scope="row">{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></TableScroll> : <div className="card-body"><EmptyState title={`No ${title.toLowerCase()}`} /></div>}</Card>;
+function Register({ title, action, headers, rows, nested }: { title: string; action?: ReactNode; headers: string[]; rows: ReactNode[][]; nested?: boolean }) {
+  const content = rows.length ? <TableScroll label={title} fixedFirst compact>
+    <thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+    <tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => j === 0 ? <th key={j} scope="row">{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody>
+  </TableScroll> : <EmptyState compact title={`No ${title.toLowerCase()}`} hint="Records appear here as the consultant programme is maintained." />;
+  return nested ? <SubPanel title={title} actions={action}>{content}</SubPanel> : <Card title={title} actions={action}>{content}</Card>;
 }
 
 function ConsultantDialog({ editor, stages, disciplines, busy, error, onCancel, onSubmit }: { editor: Editor; stages: ConsultantStage[]; disciplines: ConsultantDiscipline[]; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
@@ -112,11 +128,18 @@ function ConsultantDialog({ editor, stages, disciplines, busy, error, onCancel, 
   const title = `${row ? "Edit" : "Add"} ${kind === "engagement" ? "consultant agreement" : kind === "stage" ? "design stage" : kind}`;
   return <FormDialog title={title} confirmLabel="Save" busy={busy} onCancel={onCancel} onSubmit={() => onSubmit(body)}>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    <FieldRow columns={2}>{fieldNames[kind].map((key) => {
+    {[
+      { title: "Identity and assignment", keys: ["consultant_name", "agreement_reference", "name", "lead_name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference"] },
+      { title: "Programme and status", keys: ["agreement_date", "planned_start_date", "planned_completion_date", "planned_date", "forecast_date", "actual_completion_date", "due_date", "submitted_date", "accepted_date", "status"] },
+      { title: "Scope and notes", keys: ["scope_summary", "notes"] },
+    ].map((group) => {
+      const keys = fieldNames[kind].filter((key) => group.keys.includes(key));
+      return keys.length ? <FormSection key={group.title} title={group.title}><FieldRow columns={group.title === "Scope and notes" ? 1 : 2}>{keys.map((key) => {
       const value = String(body[key] ?? "");
       const options = key === "status" ? statuses[kind].map((x) => ({ id: x, name: labels(x) })) : key === "stage_id" ? stages : key === "discipline_id" ? [{ id: "", name: "Cross-disciplinary" }, ...disciplines] : null;
-      return <Field key={key} label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{options ? <select className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
-    })}</FieldRow>
+      return <Field key={key} optional={!["name", "consultant_name", "agreement_reference", "stage_id", "status"].includes(key)} label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{options ? <select className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
+    })}</FieldRow></FormSection> : null;
+    })}
     {kind === "discipline" ? <p>Examples: Architecture, MEP, Structural, QS, Supervision. Other discipline names are welcome.</p> : null}
     {kind === "deliverable" ? <p>Submitted work requires a submitted date; accepted work also requires an accepted date. References identify documents held elsewhere.</p> : null}
   </FormDialog>;
