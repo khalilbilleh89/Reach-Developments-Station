@@ -496,6 +496,7 @@ export function ProjectCommandCenter({
         </div>
 
         {operational ? (
+          <Disclosure title="Department positions" context="Commercial · development · delivery · finance">
           <Card title="Departments" description="Each module's own position, and the way into it.">
             <div className="module-band">
               <ModuleSection
@@ -666,6 +667,7 @@ export function ProjectCommandCenter({
               ) : null}
             </div>
           </Card>
+          </Disclosure>
         ) : null}
 
         <ProjectAnalysis key={id} projectId={id} roles={roles} />

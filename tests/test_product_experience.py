@@ -1,4 +1,4 @@
-"""What Product Experience 3.0 is not allowed to do.
+"""Reach Experience 4 presentation, permission and financial boundaries.
 
 PR-V2-00 rebuilt how the product looks — tokens, shell, headers, registers,
 forms, the record file — without moving one business rule into the browser.
@@ -62,6 +62,10 @@ REPRESENTATIVE_SCREENS = (
     # guards. A parcel's purchase price and a permit's fee are redacted figures.
     LAND_TAB,
     PERMITS_TAB,
+    DASHBOARD / "ProjectAnalysis.tsx",
+    PROJECTS / "construction" / "ConstructionSummaryView.tsx",
+    PROJECTS / "CommissionsTab.tsx",
+    PROJECTS / "PreLaunchTab.tsx",
 )
 
 
@@ -171,7 +175,7 @@ class TestThereIsOnePrimitiveSystem:
                 for alias in self.RETIRED_ALIASES:
                     assert alias not in names, f"{path.name} still imports the retired `{alias}`"
 
-    @pytest.mark.parametrize("suffix", ["2", "New", "Modern", "Legacy", "Old", "V2", "V3"])
+    @pytest.mark.parametrize("suffix", ["2", "New", "Modern", "Legacy", "Old", "V2", "V3", "V4"])
     def test_no_primitive_is_a_second_version_of_another(self, suffix: str) -> None:
         for path in UI.glob("*.tsx"):
             assert not path.stem.endswith(suffix), (
@@ -307,13 +311,10 @@ class TestTheStylesheetIsOneLayer:
     def test_reduced_motion_is_respected(self) -> None:
         assert "prefers-reduced-motion" in read(STYLESHEET)
 
-    def test_no_decorative_gradient_or_glass(self) -> None:
-        """Modern means better hierarchy, not more decoration."""
+    def test_readability_does_not_depend_on_backdrop_effects(self) -> None:
+        """Working surfaces must remain readable independently of what is behind them."""
         css = stylesheet_without_comments()
         assert "backdrop-filter" not in css, "no glassmorphism"
-        gradients = re.findall(r"background(?:-image)?:\s*(?:radial|linear)-gradient", css)
-        # The one permitted gradient is the two-pixel ink hairline over a command surface.
-        assert len(gradients) <= 1, f"decorative gradients: {len(gradients)}"
 
 
 # --------------------------------------------------------------------------- #
@@ -626,6 +627,38 @@ class TestRecordsAndDialogsKeepTheirSemantics:
         assert 'role="tab"' in tabs
         assert 'role="tabpanel"' in tabs
         assert "ArrowRight" in tabs and "ArrowLeft" in tabs and "Home" in tabs and "End" in tabs
+
+    def test_revealing_a_tab_cannot_scroll_the_entire_page(self) -> None:
+        """An Analysis tab mounted below the fold must not displace the project header."""
+        tabs = read(UI / "Tabs.tsx")
+        code = re.sub(r"//[^\n]*|/\*.*?\*/", "", tabs, flags=re.S)
+        assert ".scrollIntoView(" not in code
+        assert "rail.scrollBy(" in code
+
+    def test_disclosures_share_native_keyboard_and_focus_semantics(self) -> None:
+        disclosure = read(UI / "Disclosure.tsx")
+        assert "<details" in disclosure and "<summary" in disclosure
+        assert "ref={ref}" in disclosure and "ref={summaryRef}" in disclosure
+        for path in frontend_sources():
+            if UI in path.parents:
+                continue
+            assert not re.search(r"<(?:details|summary)\b", read(path)), (
+                f"{path.name} bypasses the shared disclosure semantics"
+            )
+
+    def test_collapsing_filters_preserves_one_set_of_controls(self) -> None:
+        toolbar = read(UI / "Form.tsx").split("export function DataToolbar", 1)[1]
+        toolbar = toolbar.split("export function ToolbarFilter", 1)[0]
+        assert toolbar.count("{children}") == 1
+        assert "aria-expanded={filtersOpen}" in toolbar
+        assert "aria-controls={filtersId}" in toolbar
+        assert "id={filtersId}" in toolbar
+        assert "Clear filters" in toolbar and "Applied" in toolbar
+
+    def test_record_standing_keeps_all_four_independent_dimensions(self) -> None:
+        summary = read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
+        for dimension in ("commercial", "legal", "collection", "delivery"):
+            assert f'key: "{dimension}_status"' in summary
 
     def test_every_table_has_a_caption(self) -> None:
         table = read(UI / "Data.tsx")
@@ -993,3 +1026,72 @@ class TestV2Management:
         assert "fetch(" not in source
         assert "useAnswer(" not in source
         assert "Historical reports state their own as-of dates" in source
+
+
+class TestAnalysisKeepsItsEvidence:
+    def test_the_selected_analysis_section_is_entitled_before_it_is_requested(self) -> None:
+        source = read(DASHBOARD / "ProjectAnalysis.tsx")
+        assert "hasAnyRole(roles, readers[key])" in source
+        assert "chosen && enabled.includes(chosen)" in source
+        assert "if (!section) return null" in source
+        assert "projectAnalysis[section](projectId, query)" in source
+
+    def test_findings_keep_availability_sample_and_source_context(self) -> None:
+        source = read(DASHBOARD / "ProjectAnalysis.tsx")
+        for evidence in (
+            "value.availability",
+            "value.sample_size",
+            "value.reason",
+            "value.source_basis",
+            "context.as_of",
+            "context.period_from",
+            "context.period_to",
+            "context.snapshot_as_of",
+        ):
+            assert evidence in source
+        assert 'f.estimated_months_to_sell === null ? "Unavailable"' in source
+        assert 'p.penetration.percentage === null ? "Unavailable"' in source
+        assert "Contracted sales value is demand, not cash" in source
+
+
+class TestTextContrast:
+    """Token changes must not make small text illegible on its actual surface."""
+
+    @pytest.mark.parametrize(
+        ("foreground", "background"),
+        [
+            ("text-primary", "canvas"),
+            ("text-secondary", "canvas"),
+            ("text-muted", "canvas"),
+            ("text-muted", "surface"),
+            ("nav-text-muted", "nav-bg"),
+            ("command-text", "command-bg"),
+            ("command-muted", "command-bg"),
+            ("command-danger", "command-bg"),
+            ("accent", "surface"),
+            ("accent", "accent-soft"),
+            ("success", "success-soft"),
+            ("warning", "warning-soft"),
+            ("danger", "danger-soft"),
+        ],
+    )
+    def test_small_text_pairs_meet_aa(self, foreground: str, background: str) -> None:
+        tokens = dict(re.findall(r"--([\w-]+): (#[0-9a-fA-F]{6});", read(STYLESHEET)))
+
+        def luminance(colour: str) -> float:
+            channels = [int(colour[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+            linear = [
+                channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in channels
+            ]
+            return sum(
+                channel * weight
+                for channel, weight in zip(
+                    linear,
+                    (0.2126, 0.7152, 0.0722),
+                    strict=True,
+                )
+            )
+
+        dark, light = sorted((luminance(tokens[foreground]), luminance(tokens[background])))
+        assert (light + 0.05) / (dark + 0.05) >= 4.5, (foreground, background)

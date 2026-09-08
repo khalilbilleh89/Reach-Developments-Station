@@ -132,7 +132,7 @@ export function ContractFile({
 
   return (
     <Drawer
-      eyebrow="Contract"
+      eyebrow="Contract" icon="building"
       title={contract.contract_number}
       subtitle={contract.vendor_name}
       meta={

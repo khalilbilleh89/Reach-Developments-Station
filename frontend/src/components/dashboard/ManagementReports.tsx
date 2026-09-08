@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Card, TableScroll } from "@/components/ui";
+import { Disclosure, Badge, Button, Card, TableScroll } from "@/components/ui";
 import type { Answer } from "@/lib/answer";
 import type { Roles } from "@/lib/roles";
 import { PROJECT_NAVIGATION, visibleNavigation } from "@/components/shell/navigation";
@@ -22,8 +22,7 @@ export function ManagementReports({ roles, sources, onNavigate }: {
   onNavigate: (section: ProjectSection) => void;
 }) {
   const allowed = new Set(visibleNavigation(PROJECT_NAVIGATION, roles).flatMap((group) => group.items.map((item) => item.key)));
-  return <details>
-    <summary>Management reports & source coverage</summary>
+  return <Disclosure title={<> Management reports & source coverage </>}>
     <Card title="Management reports" description="Open the owning register to apply its filters and inspect the records behind each figure.">
       <TableScroll label="Available management reports" compact>
         <thead><tr><th scope="col">Report</th><th scope="col">Use it to</th><th scope="col">Action</th></tr></thead>
@@ -40,5 +39,5 @@ export function ManagementReports({ roles, sources, onNavigate }: {
         </Badge>
       </li>)}</ul>
     </Card>
-  </details>;
+  </Disclosure>;
 }

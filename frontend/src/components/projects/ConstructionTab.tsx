@@ -116,6 +116,7 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
   return (
     <div className="stack">
       <PageHeader
+        icon="building"
         title="Construction"
         subtitle={sectionDescription("construction")}
         meta={

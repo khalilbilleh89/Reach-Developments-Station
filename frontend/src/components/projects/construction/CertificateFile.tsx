@@ -97,7 +97,7 @@ export function CertificateFile({
 
   return (
     <Drawer
-      eyebrow="Certificate"
+      eyebrow="Certificate" icon="permits"
       title={certificate.certificate_number}
       subtitle={
         onOpenContract ? (

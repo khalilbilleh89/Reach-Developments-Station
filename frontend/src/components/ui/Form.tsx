@@ -73,7 +73,7 @@ export function FormSection({
         <h3 className="form-section-title">{title}</h3>
         {description ? <p className="form-section-description">{description}</p> : null}
       </div>
-      {children}
+      <div className="form-section-fields">{children}</div>
     </div>
   );
 }

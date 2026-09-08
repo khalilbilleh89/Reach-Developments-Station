@@ -178,8 +178,10 @@ export function WaterfallRow({
  * As with every figure in this product, each value arrived from the API on
  * this request. Nothing here is totalled, averaged or projected.
  */
-export function Position({ children, compact }: { children: ReactNode; compact?: boolean }) {
-  return <div className={compact ? "position position-compact" : "position"}>{children}</div>;
+export function Position({ children, compact, layout = "inline" }: {
+  children: ReactNode; compact?: boolean; layout?: "inline" | "split";
+}) {
+  return <div className={["position", compact ? "position-compact" : "", layout === "split" ? "position-split" : ""].filter(Boolean).join(" ")}>{children}</div>;
 }
 
 export function PositionFigure({

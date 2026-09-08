@@ -208,7 +208,7 @@ export function InventoryTab({
   if (projectStatus === "setup") {
     return (
       <>
-        <PageHeader title="Inventory" subtitle={sectionDescription("inventory")} compact />
+        <PageHeader icon="inventory" title="Inventory" subtitle={sectionDescription("inventory")} compact />
         <Card>
           <EmptyState
             title="Finalize project setup first"
@@ -222,6 +222,7 @@ export function InventoryTab({
   return (
     <>
       <PageHeader
+        icon="inventory"
         title="Inventory"
         subtitle={sectionDescription("inventory")}
         compact

@@ -74,7 +74,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     }
   });
   return <div className="stack">
-    <PageHeader title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
+    <PageHeader icon="building" title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
     {data ? <Card tone="command" title="Design position across agreements">
       <Position compact>

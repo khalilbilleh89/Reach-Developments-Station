@@ -407,6 +407,7 @@ export function LandTab({
   return (
     <>
       <PageHeader
+        icon="land"
         title="Land"
         subtitle={sectionDescription("land")}
         compact
@@ -490,6 +491,7 @@ export function LandTab({
                         onClick={() => void openParcel(parcel)}
                       >
                         <IdentityCell
+                            icon="land"
                           name={parcel.plot_number}
                           meta={
                             parcel.title_deed_number

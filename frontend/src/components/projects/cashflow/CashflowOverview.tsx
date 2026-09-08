@@ -3,6 +3,7 @@
 import {
   Badge,
   Card,
+  Disclosure,
   KeyValue,
   KeyValueGrid,
   Notice,
@@ -43,10 +44,11 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
   return (
     <div className="stack">
       <Card
+        tone="command"
         title="Cash position"
         description="What the project holds, and how much of it can be spent."
       >
-        <Position>
+        <Position layout="split">
           <PositionFigure
             lead
             label="Unrestricted cash"
@@ -81,12 +83,14 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
             value={basis.forecast_as_of_date ? businessDate(basis.forecast_as_of_date) : "—"}
           />
         </PositionSupport>
+        <Disclosure title="Spendable cash basis">
         <p className="footnote">
           Unrestricted cash is the figure to act on: it is what the project can
           pay a contractor with today. Restricted cash is buyer money held in
           escrow against the receipts it came from — it is on the balance sheet
           and cannot be spent.
         </p>
+        </Disclosure>
       </Card>
 
       {summary.has_active_forecast ? null : (

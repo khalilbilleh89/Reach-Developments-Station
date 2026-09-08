@@ -137,12 +137,12 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
 
   return (
     <>
-      <PageHeader title="Collections" subtitle={sectionDescription("collections")} compact />
+      <PageHeader icon="collections" title="Collections" subtitle={sectionDescription("collections")} compact />
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        <Card>
+        <Card tone={summary ? "command" : undefined} title="Receivables position" description="Outstanding obligations and customer cash, by currency.">
           {summary === null ? (
             <Loading label="Loading the position…" shape="metrics" />
           ) : (
@@ -275,7 +275,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                       <tr key={row.sale_id} aria-selected={open?.sale_id === row.sale_id}>
                         <th scope="row">
                           <button className="button-link" type="button" onClick={() => setOpen(row)}>
-                            <IdentityCell name={row.unit_number} meta={row.client_display_name} />
+                            <IdentityCell icon="inventory" name={row.unit_number} meta={row.client_display_name} />
                           </button>
                         </th>
                         <td className="mono">{row.spa_number ?? row.sale_number}</td>
