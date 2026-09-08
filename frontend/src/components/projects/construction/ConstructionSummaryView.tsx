@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Card,
   Metric,
   MetricGroup,
   Position,
@@ -52,16 +53,15 @@ export function ConstructionSummaryView({
 
   return (
     <div className="stack">
-      <section className="stack stack-tight">
-        <SectionHeader
+      <Card tone="command"
           title="Cost control"
           description={
             summary.budget_version_number === null
               ? "Excluding tax. No budget is in force, so there is nothing authorised to measure against."
               : `Excluding tax, against budget version ${summary.budget_version_number}.`
           }
-        />
-        <Position>
+        >
+        <Position compact>
           <PositionFigure
             label="Control budget"
             value={money(cost.control_budget, code)}
@@ -137,7 +137,7 @@ export function ConstructionSummaryView({
             }
           />
         </PositionSupport>
-      </section>
+      </Card>
 
       <section className="stack stack-tight">
         <SectionHeader

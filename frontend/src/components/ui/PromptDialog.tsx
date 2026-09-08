@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "./Button";
+import { Notice } from "./Feedback";
 import { useOverlay } from "./overlay";
 
 /**
@@ -28,6 +29,7 @@ export function PromptDialog({
   confirmLabel = "Record",
   required = true,
   busy,
+  error,
   onSubmit,
   onCancel,
 }: {
@@ -39,6 +41,7 @@ export function PromptDialog({
   confirmLabel?: string;
   required?: boolean;
   busy?: boolean;
+  error?: string | null;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -65,6 +68,7 @@ export function PromptDialog({
       >
         <h2 className="dialog-title">{title}</h2>
         {description ? <p className="dialog-description">{description}</p> : null}
+        {error ? <Notice tone="error">{error}</Notice> : null}
         <label className="field">
           <span className="field-label">{label}</span>
           <input

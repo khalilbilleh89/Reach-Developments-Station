@@ -125,7 +125,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
         </Card>
 
         <Card flush>
-          {rows === null ? (
+          {error && !rows?.length ? null : rows === null ? (
             <Loading label="Loading access…" shape="rows" rows={4} />
           ) : rows.length === 0 ? (
             <div className="card-body">
@@ -135,7 +135,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
               />
             </div>
           ) : (
-            <TableScroll label="Project membership">
+            <TableScroll fixedFirst label="Project membership">
               <thead>
                 <tr>
                   <th scope="col">Person</th>

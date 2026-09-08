@@ -165,6 +165,7 @@ export function UsersSection() {
       ) : null}
 
       <DataToolbar
+        framed
         search={{ value: search, onChange: setSearch, placeholder: "Name or email", label: "Search users" }}
         count={rows ? { shown: shown.length, total: rows.length, noun: "user" } : undefined}
         actions={
@@ -177,7 +178,7 @@ export function UsersSection() {
       />
 
       <Card flush>
-        {rows === null ? (
+        {error && !rows?.length ? null : rows === null ? (
           <Loading label="Loading users…" shape="rows" />
         ) : shown.length === 0 ? (
           <div className="card-body">
@@ -191,7 +192,7 @@ export function UsersSection() {
             />
           </div>
         ) : (
-          <TableScroll label="Users and their roles">
+          <TableScroll fixedFirst label="Users and their roles">
             <thead>
               <tr>
                 <th scope="col">Person</th>

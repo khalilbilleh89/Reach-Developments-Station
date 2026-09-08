@@ -271,7 +271,7 @@ export function DocumentsTab({
         ) : null}
 
         <Card flush>
-          {rows === null ? (
+          {error && !rows?.length ? null : rows === null ? (
             <Loading label="Loading references…" shape="rows" rows={4} />
           ) : rows.length === 0 ? (
             <div className="card-body">
@@ -281,7 +281,7 @@ export function DocumentsTab({
               />
             </div>
           ) : (
-            <TableScroll label="Document references">
+            <TableScroll fixedFirst label="Document references">
               <thead>
                 <tr>
                   <th scope="col">Document</th>

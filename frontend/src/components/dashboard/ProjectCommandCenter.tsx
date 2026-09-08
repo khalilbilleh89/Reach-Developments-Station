@@ -346,9 +346,7 @@ export function ProjectCommandCenter({
         actions={canEdit ? <Button onClick={onEdit}>Edit project</Button> : undefined}
       />
 
-      <ProjectAnalysis key={id} projectId={id} roles={roles} />
       <div className="stack">
-        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
         {!operational ? (
           <Notice tone="info">
             This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -498,6 +496,8 @@ export function ProjectCommandCenter({
           </div>
         </div>
 
+        <ProjectAnalysis key={id} projectId={id} roles={roles} />
+        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
         {operational ? (
           <Card title="Departments" description="Each module's own position, and the way into it.">
             <div className="module-band">
