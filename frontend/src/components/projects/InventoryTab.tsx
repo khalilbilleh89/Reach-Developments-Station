@@ -24,6 +24,7 @@ import {
   StatusDot,
   TableScroll,
   Tabs,
+  TabPanel,
   ToolbarFilter,
 } from "@/components/ui";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
@@ -280,6 +281,7 @@ export function InventoryTab({
           ]}
         />
 
+        <TabPanel group="inventory" tab={view}>
         {context.length > 0 ? (
           <Notice tone="info">
             Showing {noun[view]} in {context.join(" · ")}.{" "}
@@ -557,6 +559,7 @@ export function InventoryTab({
         </Card>
         </>
         ) : null}
+        </TabPanel>
       </div>
 
       {addingUnit ? (

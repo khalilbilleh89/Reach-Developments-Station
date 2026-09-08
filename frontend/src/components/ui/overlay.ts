@@ -30,6 +30,7 @@ const FOCUSABLE = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
+  "summary",
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
@@ -38,7 +39,7 @@ const openOverlays: HTMLElement[] = [];
 
 function focusables(container: HTMLElement): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (element) => element.offsetParent !== null,
+    (element) => element.offsetParent !== null && element.tabIndex >= 0,
   );
 }
 

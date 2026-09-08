@@ -1256,8 +1256,10 @@ section + section {
   margin-top: var(--space-6);
 }
 
-/* Sections inside a stack already carry the stack's gap. */
-.stack > section + section {
+/* Grid and stack layouts own the gap between their sections. */
+.stack > section + section,
+.split > section + section,
+.grid-12 > section + section {
   margin-top: 0;
 }
 
@@ -2360,7 +2362,9 @@ input[type="file"].input {
 }
 
 .table-fixed-first tbody tr:hover th:first-child,
-.table-fixed-first tbody tr:hover td:first-child {
+.table-fixed-first tbody tr:hover td:first-child,
+.table-fixed-first tbody tr:focus-within th:first-child,
+.table-fixed-first tbody tr:focus-within td:first-child {
   background-color: var(--surface-hover);
 }
 
@@ -2445,16 +2449,20 @@ input[type="file"].input {
 
 /* The row whose record is open behind the drawer, so closing it lands the
  * reader back where they were. */
-.table tbody tr[aria-selected="true"] {
+.table tbody tr[aria-selected="true"],
+.table tbody tr[aria-current="true"] {
   background-color: var(--surface-selected);
 }
 
-.table tbody tr[aria-selected="true"] > :first-child {
+.table tbody tr[aria-selected="true"] > :first-child,
+.table tbody tr[aria-current="true"] > :first-child {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .table-fixed-first tbody tr[aria-selected="true"] th:first-child,
-.table-fixed-first tbody tr[aria-selected="true"] td:first-child {
+.table-fixed-first tbody tr[aria-selected="true"] td:first-child,
+.table-fixed-first tbody tr[aria-current="true"] th:first-child,
+.table-fixed-first tbody tr[aria-current="true"] td:first-child {
   background-color: var(--surface-selected);
   box-shadow:
     inset 2px 0 0 var(--accent),

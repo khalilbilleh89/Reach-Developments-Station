@@ -131,7 +131,7 @@ function CurrencyBlock({
         <PositionSupportItem label="All cash confirmed to" value={businessDate(asOf)} />
       </PositionSupport>
 
-      <SectionHeader title="Outstanding by age" />
+      <SectionHeader title="Outstanding by age" level={2} />
       <Distribution>
         {AGING_BUCKETS.map((bucket) => (
           <DistributionBand

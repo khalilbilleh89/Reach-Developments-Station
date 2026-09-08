@@ -57,18 +57,21 @@ export function SectionHeader({
   description,
   actions,
   id,
+  level = 3,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
   id?: string;
+  level?: 2 | 3;
 }) {
+  const Heading = level === 2 ? "h2" : "h3";
   return (
     <>
       <div className="section-header">
-        <h3 className="section-heading" id={id}>
+        <Heading className="section-heading" id={id}>
           {title}
-        </h3>
+        </Heading>
         {actions ? <div className="card-actions">{actions}</div> : null}
       </div>
       {description ? <p className="section-description">{description}</p> : null}
