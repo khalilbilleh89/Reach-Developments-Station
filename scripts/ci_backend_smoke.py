@@ -67,6 +67,9 @@ BACKBONE = (
 # expensive domain files. A new module must register its contract here.
 DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
     "portfolio": (
+        "tests/modules/test_portfolio_risk_pagination.py::test_risk_pages_skip_summaries_and_scale_with_global_order",
+        "tests/modules/test_portfolio_risk_pagination.py::test_hidden_high_risks_do_not_change_counts_coverage_or_offsets",
+        "tests/modules/test_portfolio_risk_pagination.py::test_cashflow_mismatch_removes_both_candidates_and_keeps_coverage",
         "tests/modules/test_portfolio.py::test_empty_sources_are_unavailable_and_reads_do_not_write",
         "tests/modules/test_portfolio.py::test_safe_cashflow_owner_parity",
         "tests/modules/test_portfolio.py::test_roles_and_phase_scope_exclude_before_sources",

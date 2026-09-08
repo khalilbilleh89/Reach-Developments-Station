@@ -44,3 +44,56 @@ Frontend outcomes belong to the candidate PR's validation handoff. Full Backend
 must stay skipped for ordinary integration development. Smoke does not certify
 a main promotion. Independent review, Ready status and merge are separate gates;
 none is granted by this candidate evidence. M3-02 and M3-03 remain not started.
+
+## M3-01 risk pagination correction — 2026-09-08
+
+The Risks endpoint now uses a Portfolio-specific set-based projection over the
+authorized project relation. It shares the frozen predicates and owner financial
+calculators with summaries, but builds no `ProjectSummary`, full money/Design
+response graph, sellout forecast or Commission rollup. Narrow owner reads omit
+Land acquisition, Construction commitment/paid rollups, Sales contracted totals
+and Collections receipt/refund display totals. Cashflow's complete governing
+currency checks and owner bridge remain intact.
+
+Triggered candidates feed bounded `nsmallest(offset + limit)` selection using
+the existing severity/project-code/project-UUID/risk-ID order. Only page items
+become response `Risk` objects. All authorized risk facts still contribute to
+the exact global total and incomplete-coverage project count; neither count is
+derived from the page. Owner source reads remain proportional to authorized
+source data, and deep offsets increase the retained candidate prefix. This is
+not constant-time pagination or a persisted risk index.
+
+Populated PostgreSQL risk read, `limit=20, offset=0`, excluding fixture setup
+and HTTP authentication:
+
+| Authorized projects | Queries | Runtime | Full summaries | Response risks |
+| --- | --- | --- | --- | --- |
+| 1 | 40 | 67.91 ms | 0 | 3 |
+| 20 | 40 | 90.86 ms | 0 | 20 |
+| 50 | 40 | 120.80 ms | 0 | 20 |
+
+These are local synthetic measurements, not production capacity claims. Each
+of seven owner batches is called once per read. The unchanged full-summary
+path's separate 46/46-query evidence above should not be read as risk-page cost.
+
+The regression installs failing guards on summary constructors, unrelated KPI
+composition and Commission reads; `limit=1` constructs exactly one response
+risk. Three pages reproduce the complete 150-risk ordered golden across 50
+projects with unchanged totals and coverage. A hidden project with 30 high
+risks contributes nothing to scoped source reads, counts, coverage or offsets,
+including when it has phase-only access. An authorized currency mismatch
+removes both formerly triggered cash candidates and marks their evaluations
+unavailable. These three regressions are registered in Backend Smoke.
+
+Focused PostgreSQL validation: **17 passed in 248.79 seconds** across
+`test_portfolio.py`, `test_portfolio_risks.py`,
+`test_portfolio_risk_pagination.py`, `test_portfolio_scale.py` and
+`test_portfolio_governance.py`. The unchanged summary path again measured 46/46
+queries. CI selector, Smoke, shard and workflow guards: **187 passed in 37.53
+seconds** (source-only, `--noconftest`). Ruff check, format check (370 files),
+Python compilation and whitespace checks passed.
+An in-memory negative control restored the reviewed summary-then-slice read;
+the regression failed at its summary-construction guard, as intended (27.89 s).
+
+Frontend, UX-05, dependency manifests and migrations are unchanged by this
+correction. Fresh exact-head CI results are recorded in PR #273's handoff.

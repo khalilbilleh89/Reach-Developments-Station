@@ -24,7 +24,7 @@ class CollectionsPosition:
 
 
 def positions(
-    session: Session, project_ids: Select, as_of: date
+    session: Session, project_ids: Select, as_of: date, *, risk_only: bool = False
 ) -> dict[uuid.UUID, CollectionsPosition]:
     sales = list(
         session.scalars(select(SaleContract).where(SaleContract.project_id.in_(project_ids)))
@@ -42,7 +42,8 @@ def positions(
         unsafe = False
         for receipt in position.confirmed_receipts:
             code = receipt.currency_id
-            target.confirmed[code] = target.confirmed.get(code, Decimal(0)) + receipt.amount
+            if not risk_only:
+                target.confirmed[code] = target.confirmed.get(code, Decimal(0)) + receipt.amount
             target.unapplied[code] = (
                 target.unapplied.get(code, Decimal(0))
                 + receipt.amount
@@ -60,6 +61,8 @@ def positions(
         elif sale.activated_at is not None:
             target.missing_schedules += 1
             target.unavailable_overdue_currencies.add(sale.currency_id)
+    if risk_only:
+        return result
     for refund in session.scalars(
         select(CollectionRefund).where(
             CollectionRefund.project_id.in_(project_ids), service._refund_effective_on(as_of)

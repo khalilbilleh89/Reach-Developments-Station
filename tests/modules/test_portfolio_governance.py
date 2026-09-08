@@ -93,6 +93,7 @@ def test_prelaunch_commission_and_consultant_independence(
     after = finance_client.get(url).json()
     codes = {row["risk_code"] for row in after["risks"]}
     assert {"CONSULTANT_STAGE_OVERDUE", "CONSULTANT_DELIVERABLE_OVERDUE"} <= codes
+    assert finance_client.get("/api/v1/portfolio/risks?limit=100").json()["items"] == after["risks"]
     assert financial(before) == financial(after)
     expense_url = f"/api/v1/projects/{project_id}/pre-launch/expenses"
     created = finance_client.post(expense_url, json=expense_payload(currency_id))
@@ -105,6 +106,7 @@ def test_prelaunch_commission_and_consultant_independence(
         metric(before, "unrestricted_cash")["amount"]
     ) - Decimal("1250.25")
     assert "ACTUAL_CASH_DEFICIT" in {row["risk_code"] for row in after["risks"]}
+    assert finance_client.get("/api/v1/portfolio/risks?limit=100").json()["items"] == after["risks"]
 
 
 def test_governed_forecast_and_opening_anchor_exact_parity(
@@ -155,3 +157,4 @@ def test_governed_forecast_and_opening_anchor_exact_parity(
     assert actual.peak_deficit == expected_peak.peak_funding_deficit
     body = finance_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
     assert any(row["risk_code"] == "FORECAST_CASH_DEFICIT" for row in body["risks"])
+    assert finance_client.get("/api/v1/portfolio/risks?limit=100").json()["items"] == body["risks"]

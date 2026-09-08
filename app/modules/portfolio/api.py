@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from app.core.errors import NotFoundError
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.portfolio import calculations, permissions, schemas, service
+from app.modules.portfolio import permissions, risk_projection, schemas, service
 from app.modules.projects.models import Project
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -47,18 +47,7 @@ def risks(
 ) -> schemas.RiskPage:
     scope = permissions.authorized_projects(actor)
     today = datetime.now(UTC).date()
-    rows = service.summaries(session, scope, today)
-    items = sorted((risk for row in rows for risk in row.risks), key=calculations.risk_order)
-    return schemas.RiskPage(
-        as_of=today,
-        items=items[offset : offset + limit],
-        total=len(items),
-        offset=offset,
-        limit=limit,
-        unavailable_project_count=sum(
-            any(item.availability != "available" for item in row.risk_evaluations) for row in rows
-        ),
-    )
+    return risk_projection.page(session, scope, today, limit=limit, offset=offset)
 
 
 @router.get("/projects/{project_id}", response_model=schemas.ProjectSummary)

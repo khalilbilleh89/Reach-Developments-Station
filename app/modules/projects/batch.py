@@ -23,7 +23,7 @@ class DevelopmentPosition:
 
 
 def positions(
-    session: Session, project_ids: Select, as_of: date
+    session: Session, project_ids: Select, as_of: date, *, risk_only: bool = False
 ) -> dict[uuid.UUID, DevelopmentPosition]:
     result: dict[uuid.UUID, DevelopmentPosition] = {}
     for permit, overdue in session.execute(
@@ -36,6 +36,8 @@ def positions(
             target.blockers.append((permit.id, permit.permit_type_code))
         elif unresolved and overdue:
             target.overdue.append((permit.id, permit.permit_type_code))
+    if risk_only:
+        return result
     for parcel in session.scalars(
         select(LandParcel).where(
             LandParcel.project_id.in_(project_ids), LandParcel.is_active.is_(True)

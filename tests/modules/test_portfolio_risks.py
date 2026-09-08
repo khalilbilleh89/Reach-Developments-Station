@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.construction.models import ForecastLine
 from app.modules.inventory.models import Unit
-from app.modules.portfolio import service
+from app.modules.portfolio import risk_projection, service
 from app.modules.project_analysis.calculations import shift_month
 from app.modules.projects.models import Project
 from app.modules.sales.models import SaleContract
@@ -151,7 +151,10 @@ def test_commercial_stall_requires_complete_months_and_nonpositive_net(
 
     def codes() -> set[str]:
         db.commit()
-        return {risk.risk_code for risk in service.summaries(db, scope, today)[0].risks}
+        summary = service.summaries(db, scope, today)[0]
+        page = risk_projection.page(db, scope, today, limit=100, offset=0)
+        assert page.items == summary.risks
+        return {risk.risk_code for risk in summary.risks}
 
     project.created_at = datetime.combine(shift_month(today, -3), datetime.min.time(), UTC)
     sale.activated_at = datetime.combine(shift_month(today, -1), datetime.min.time(), UTC)

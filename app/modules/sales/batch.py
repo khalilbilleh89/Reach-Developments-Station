@@ -31,7 +31,9 @@ def standing(sale: SaleContract, cutoff: date) -> bool:
     return sale.cancelled_at is None or sale.cancelled_at.astimezone(UTC).date() > cutoff
 
 
-def positions(session: Session, project_ids: Select, as_of: date) -> dict[uuid.UUID, SalesPosition]:
+def positions(
+    session: Session, project_ids: Select, as_of: date, *, risk_only: bool = False
+) -> dict[uuid.UUID, SalesPosition]:
     result: dict[uuid.UUID, SalesPosition] = {}
     for pid, uid in session.execute(
         select(Reservation.project_id, Reservation.unit_id).where(
@@ -51,7 +53,7 @@ def positions(session: Session, project_ids: Select, as_of: date) -> dict[uuid.U
         position.activations.append(sale.activated_at.astimezone(UTC).date())
         if sale.cancelled_at is not None:
             position.cancellations.append(sale.cancelled_at.astimezone(UTC).date())
-        if standing(sale, as_of):
+        if not risk_only and standing(sale, as_of):
             position.contracted[sale.currency_id] = (
                 position.contracted.get(sale.currency_id, Decimal(0)) + sale.total_contract_price
             )

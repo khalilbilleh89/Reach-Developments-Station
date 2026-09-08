@@ -25,7 +25,9 @@ class ConstructionPosition:
     eac_reason: str = "No active Construction forecast."
 
 
-def positions(session: Session, project_ids: Select) -> dict[uuid.UUID, ConstructionPosition]:
+def positions(
+    session: Session, project_ids: Select, *, risk_only: bool = False
+) -> dict[uuid.UUID, ConstructionPosition]:
     result: dict[uuid.UUID, ConstructionPosition] = {}
     for version, approved, contingency in session.execute(
         select(
@@ -45,41 +47,44 @@ def positions(session: Session, project_ids: Select) -> dict[uuid.UUID, Construc
         target.control_budget = calculator.control_budget(
             approved_budget=approved or Decimal(0), contingency=contingency or Decimal(0)
         )
-    for pid, currency, original in session.execute(
-        select(
-            m.Contract.project_id,
-            m.Contract.currency_id,
-            func.sum(m.ContractLine.original_amount_ex_tax),
-        )
-        .join(m.ContractLine, m.ContractLine.contract_id == m.Contract.id)
-        .where(m.Contract.project_id.in_(project_ids), m.Contract.status.in_(m.CONTRACT_COMMITTING))
-        .group_by(m.Contract.project_id, m.Contract.currency_id)
-    ):
-        result.setdefault(pid, ConstructionPosition()).revised_commitment[currency] = (
-            calculator.revised_commitment(
-                original_amount=original, approved_variation_delta=Decimal(0)
+    if not risk_only:
+        for pid, currency, original in session.execute(
+            select(
+                m.Contract.project_id,
+                m.Contract.currency_id,
+                func.sum(m.ContractLine.original_amount_ex_tax),
             )
-        )
-    for pid, currency, delta in session.execute(
-        select(
-            m.Contract.project_id,
-            m.Contract.currency_id,
-            func.sum(m.VariationLine.value_delta_ex_tax),
-        )
-        .join(m.Variation, m.Variation.contract_id == m.Contract.id)
-        .join(m.VariationLine, m.VariationLine.variation_id == m.Variation.id)
-        .where(
-            m.Contract.project_id.in_(project_ids),
-            m.Contract.status.in_(m.CONTRACT_COMMITTING),
-            m.Variation.status == m.VARIATION_APPROVED,
-        )
-        .group_by(m.Contract.project_id, m.Contract.currency_id)
-    ):
-        target = result.setdefault(pid, ConstructionPosition())
-        target.revised_commitment[currency] = calculator.revised_commitment(
-            original_amount=target.revised_commitment.get(currency, Decimal(0)),
-            approved_variation_delta=delta,
-        )
+            .join(m.ContractLine, m.ContractLine.contract_id == m.Contract.id)
+            .where(
+                m.Contract.project_id.in_(project_ids), m.Contract.status.in_(m.CONTRACT_COMMITTING)
+            )
+            .group_by(m.Contract.project_id, m.Contract.currency_id)
+        ):
+            result.setdefault(pid, ConstructionPosition()).revised_commitment[currency] = (
+                calculator.revised_commitment(
+                    original_amount=original, approved_variation_delta=Decimal(0)
+                )
+            )
+        for pid, currency, delta in session.execute(
+            select(
+                m.Contract.project_id,
+                m.Contract.currency_id,
+                func.sum(m.VariationLine.value_delta_ex_tax),
+            )
+            .join(m.Variation, m.Variation.contract_id == m.Contract.id)
+            .join(m.VariationLine, m.VariationLine.variation_id == m.Variation.id)
+            .where(
+                m.Contract.project_id.in_(project_ids),
+                m.Contract.status.in_(m.CONTRACT_COMMITTING),
+                m.Variation.status == m.VARIATION_APPROVED,
+            )
+            .group_by(m.Contract.project_id, m.Contract.currency_id)
+        ):
+            target = result.setdefault(pid, ConstructionPosition())
+            target.revised_commitment[currency] = calculator.revised_commitment(
+                original_amount=target.revised_commitment.get(currency, Decimal(0)),
+                approved_variation_delta=delta,
+            )
     forecasts = list(
         session.scalars(
             select(m.ForecastVersion).where(
@@ -138,6 +143,8 @@ def positions(session: Session, project_ids: Select) -> dict[uuid.UUID, Construc
                 forecast_remaining=remaining.get(version.id, Decimal(0)),
             )
             target.eac_reason = ""
+    if risk_only:
+        return result
     for pid, currency, amount in session.execute(
         select(m.Payment.project_id, m.Payment.currency_id, func.sum(m.Payment.amount))
         .where(m.Payment.project_id.in_(project_ids), m.Payment.status == m.PAYMENT_CONFIRMED)

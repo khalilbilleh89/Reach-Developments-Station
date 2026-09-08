@@ -1,9 +1,16 @@
 """Read-only composition over authorized owner-domain batch contracts."""
 
+from __future__ import annotations
+
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, date
 from decimal import Decimal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.modules.portfolio.risk_projection import RiskFacts
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -58,6 +65,22 @@ def summaries(session: Session, project_ids: Select, as_of: date) -> list[out.Pr
         )
         for project in projects
     ]
+
+
+def commercial_observation(
+    project: Project, sale: sales.SalesPosition, as_of: date
+) -> tuple[list[int], int]:
+    """The existing three complete UTC months, shared by summaries and risks."""
+    net = []
+    observed = 0
+    for offset in (-3, -2, -1):
+        low, high = shift_month(as_of, offset), shift_month(as_of, offset + 1)
+        observed += int(project.created_at.astimezone(UTC).date() <= low)
+        net.append(
+            sum(low <= day < high for day in sale.activations)
+            - sum(low <= day < high for day in sale.cancellations)
+        )
+    return net, observed
 
 
 def _project_summary(
@@ -229,15 +252,7 @@ def _project_summary(
     eligible = len(inv.eligible_ids)
     committed = len(inv.eligible_ids & sale.committed_ids)
     remaining = eligible - committed
-    net = []
-    observed = 0
-    for offset in (-3, -2, -1):
-        low, high = shift_month(as_of, offset), shift_month(as_of, offset + 1)
-        observed += int(project.created_at.astimezone(UTC).date() <= low)
-        net.append(
-            sum(low <= day < high for day in sale.activations)
-            - sum(low <= day < high for day in sale.cancellations)
-        )
+    net, observed = commercial_observation(project, sale, as_of)
     run_rate = forecast(as_of, remaining if eligible else None, net, observed)
     design_out = out.Design(availability="unavailable", reason="No active Consultant engagement.")
     if programme:
@@ -299,9 +314,11 @@ def _project_summary(
 
 
 def _risks(
-    project: out.ProjectSummary,
+    project: out.ProjectSummary | RiskFacts,
     dev: development.DevelopmentPosition,
     programme: consultant.DesignPosition | None,
+    *,
+    risk_factory: Callable = out.Risk,
 ) -> None:
     """The frozen ten source-supported predicates; no scores or configurable engine."""
 
@@ -317,7 +334,7 @@ def _risks(
         currency: str | None = None,
     ) -> None:
         project.risks.append(
-            out.Risk(
+            risk_factory(
                 risk_id=f"{project.project_id}:{code}:{source}",
                 risk_code=code,
                 category=category,
