@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChangeEvent, FormEvent, InputHTMLAttributes, ReactNode } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "./Button";
 import { Icon } from "./Icon";
@@ -169,6 +170,8 @@ export function DataToolbar({
    */
   framed?: boolean;
 }) {
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersId = useId();
   const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
   return (
     <div className={framed ? "toolbar toolbar-framed" : "toolbar"} role="search">
@@ -185,7 +188,21 @@ export function DataToolbar({
           />
         </label>
       ) : null}
-      {children}
+      {children ? (
+        <>
+          <Button
+            className="toolbar-filter-toggle"
+            aria-expanded={filtersOpen}
+            aria-controls={filtersId}
+            onClick={() => setFiltersOpen((value) => !value)}
+          >
+            <Icon name="filter" /> Filters{onReset ? " · Applied" : ""}
+          </Button>
+          <div id={filtersId} className={filtersOpen ? "toolbar-filters toolbar-filters-open" : "toolbar-filters"}>
+            {children}
+          </div>
+        </>
+      ) : null}
       {count || onReset || actions ? (
         <div className="toolbar-meta">
           {count ? (

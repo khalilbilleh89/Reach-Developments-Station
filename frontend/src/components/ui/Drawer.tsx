@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 import { useOverlay } from "./overlay";
 import { TabPanel, Tabs } from "./Tabs";
 
@@ -49,6 +50,7 @@ export interface DrawerHeadline {
  */
 export function Drawer({
   eyebrow,
+  icon,
   title,
   subtitle,
   meta,
@@ -63,6 +65,7 @@ export function Drawer({
   children,
 }: {
   eyebrow?: string;
+  icon?: IconName;
   title: string;
   subtitle?: ReactNode;
   meta?: ReactNode;
@@ -114,6 +117,7 @@ export function Drawer({
             >
               <Icon name="arrow-left" />
             </button>
+            {icon ? <span className="record-glyph"><Icon name={icon} /></span> : null}
             <div className="drawer-identity">
               {eyebrow ? <p className="drawer-eyebrow">{eyebrow}</p> : null}
               <h2 className="drawer-title">{title}</h2>
@@ -146,7 +150,7 @@ export function Drawer({
           ) : null}
           {tabs && activeTab && onSelectTab ? (
             <div className="drawer-sections">
-              <Tabs label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
+              <Tabs variant="record" label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
             </div>
           ) : (
             <div className="drawer-head-pad" />

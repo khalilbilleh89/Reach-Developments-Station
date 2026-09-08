@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 
 /**
  * Labelled facts about one record, laid out in columns.
@@ -329,9 +331,10 @@ export function DistributionBand({
  * the metadata recedes, so a column of two hundred rows scans as a column of
  * references rather than as a paragraph per line.
  */
-export function IdentityCell({ name, meta }: { name: ReactNode; meta?: ReactNode }) {
+export function IdentityCell({ name, meta, icon }: { name: ReactNode; meta?: ReactNode; icon?: IconName }) {
   return (
-    <span className="identity-cell">
+    <span className={icon ? "identity-cell identity-cell-asset" : "identity-cell"}>
+      {icon ? <span className="identity-cell-glyph"><Icon name={icon} /></span> : null}
       <span className="identity-cell-name">{name}</span>
       {meta ? <span className="identity-cell-meta">{meta}</span> : null}
     </span>

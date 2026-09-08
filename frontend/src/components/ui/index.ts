@@ -68,3 +68,5 @@ export type { IconName } from "./Icon";
 export { TabPanel, Tabs } from "./Tabs";
 export { Steps, Timeline, TimelineItem } from "./Timeline";
 export type { TimelineState } from "./Timeline";
+
+export { Disclosure } from "./Disclosure";

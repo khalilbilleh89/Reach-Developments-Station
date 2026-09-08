@@ -45,6 +45,7 @@ import {
   BreakdownRow,
   Button,
   Card,
+  Disclosure,
   Distribution,
   DistributionBand,
   EmptyState,
@@ -359,7 +360,7 @@ export function ProjectCommandCenter({
             A grid row is as tall as its tallest card, so a project with eleven
             things needing attention would open a hand's depth of empty page
             under the position beside it. */}
-        <div className="split">
+        <div className="overview-position">
           <div className="stack">
             {operational && hasPosition ? (
               <Card
@@ -427,10 +428,7 @@ export function ProjectCommandCenter({
                         value={`${economic.comparable_unit_count} of ${economic.unit_count} units`}
                       />
                     </PositionSupport>
-                    <SectionHeader
-                      title="Cost composition"
-                      description="The pools the server allocated, and the total it reached."
-                    />
+                    <Disclosure title="Cost composition" context="Allocation evidence">
                     <Breakdown>
                       <BreakdownRow
                         label="Development"
@@ -445,6 +443,7 @@ export function ProjectCommandCenter({
                       <BreakdownRow label="Finance" amount={money(economic.finance_cost_total, economicCode)} />
                       <BreakdownRow total label="Total cost" amount={money(economic.total_cost_total, economicCode)} />
                     </Breakdown>
+                    </Disclosure>
                   </>
                 ) : unitTotals ? (
                   <>
@@ -496,8 +495,6 @@ export function ProjectCommandCenter({
           </div>
         </div>
 
-        <ProjectAnalysis key={id} projectId={id} roles={roles} />
-        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
         {operational ? (
           <Card title="Departments" description="Each module's own position, and the way into it.">
             <div className="module-band">
@@ -670,6 +667,9 @@ export function ProjectCommandCenter({
             </div>
           </Card>
         ) : null}
+
+        <ProjectAnalysis key={id} projectId={id} roles={roles} />
+        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
 
         {operational && seesCollections ? (
           <Card
