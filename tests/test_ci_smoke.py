@@ -71,6 +71,20 @@ def test_full_risk_refuses_instead_of_downgrading_or_running_full(path: str) -> 
         smoke.select([path])
 
 
+def test_migration_environment_is_allowed_only_with_a_registered_migration() -> None:
+    nodes, domains = smoke.select(
+        [
+            "app/db/migrations/env.py",
+            "app/db/migrations/versions/0017_consultant_commissions.py",
+        ]
+    )
+    assert "consultant_engineering" in domains
+    assert (
+        "tests/test_migrations.py::test_the_history_round_trips_from_empty_to_head_and_back"
+        in nodes
+    )
+
+
 def test_new_domain_refuses_until_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     path = "app/modules/commissions/service.py"
     with pytest.raises(smoke.SmokeRefused, match=r"commissions.*no Backend Smoke contract"):

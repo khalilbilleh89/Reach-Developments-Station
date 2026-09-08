@@ -201,6 +201,14 @@ def validate_contract(nodes: tuple[str, ...] | list[str], root: Path = ROOT) -> 
 def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]:
     domains: set[str] = set()
     nodes = set(BACKBONE)
+    # Model imports in Alembic's environment are the ordinary companion to a
+    # reviewed, registered domain migration. Alone, an env.py edit remains
+    # shared infrastructure and is refused below.
+    has_registered_migration = any(
+        raw.replace("\\", "/").startswith(fast.MIGRATION_VERSIONS_PREFIX)
+        and Path(raw.replace("\\", "/")).name in MIGRATIONS
+        for raw in changed
+    )
     for raw in changed:
         path = raw.replace("\\", "/")
         if path in (
@@ -221,6 +229,8 @@ def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]
             domain, tests = migration
             domains.add(domain)
             nodes.update(tests)
+        elif path == "app/db/migrations/env.py" and has_registered_migration:
+            continue
         elif path.startswith("app/db/"):
             raise SmokeRefused(
                 f"{path}: shared DB infrastructure requires explicit full-gate review"
