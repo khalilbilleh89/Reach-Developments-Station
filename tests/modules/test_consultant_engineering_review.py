@@ -274,3 +274,138 @@ def test_selected_phase_and_commercial_writer_refused(
     )
     admin_client.put(f"/api/v1/projects/{project_id}/access/{scoped.id}/phases/{phase_id}")
     assert client_for(scoped.email).get(root(project_id)).status_code == 403
+
+
+@pytest.mark.parametrize("transition", ["complete", "terminate"])
+def test_historical_engagement_child_mutations_refused(
+    manager_member_client: TestClient, project_id: str, db: Session, transition: str
+) -> None:
+    client = manager_member_client
+    agreement = engagement(client, project_id)
+    path = f"{root(project_id)}/engagements/{agreement['id']}"
+    discipline = client.post(f"{path}/disciplines", json={"name": "Civil"})
+    stage = client.post(f"{path}/stages", json={"name": "Concept"})
+    assert discipline.status_code == stage.status_code == 201
+    discipline, stage = discipline.json(), stage.json()
+    body = {"name": "Open drawings", "stage_id": stage["id"], "discipline_id": discipline["id"]}
+    deliverable = client.post(f"{path}/deliverables", json=body)
+    assert deliverable.status_code == 201
+    deliverable = deliverable.json()
+    assert deliverable["status"] == "not_started"
+    assert client.post(f"{path}/activate").status_code == 200
+    assert client.post(f"{path}/{transition}").status_code == 200
+    before = snapshot(db)
+    visible = client.get(root(project_id))
+    assert visible.status_code == 200
+    attempts = [
+        ("POST", f"{path}/disciplines", {"name": "New discipline"}),
+        ("PUT", f"{root(project_id)}/disciplines/{discipline['id']}", {"name": "Changed"}),
+        ("POST", f"{path}/stages", {"name": "New stage"}),
+        (
+            "PUT",
+            f"{root(project_id)}/stages/{stage['id']}",
+            {
+                "name": "Changed",
+                "sequence": 1,
+                "expected_order": [stage["id"]],
+                "expected_updated_at": stage["updated_at"],
+            },
+        ),
+        ("POST", f"{path}/deliverables", {**body, "name": "New deliverable"}),
+        (
+            "PUT",
+            f"{root(project_id)}/deliverables/{deliverable['id']}",
+            {
+                **body,
+                "name": "Changed",
+                "expected_updated_at": deliverable["updated_at"],
+            },
+        ),
+    ]
+    for method, url, payload in attempts:
+        response = client.request(method, url, json=payload)
+        assert response.status_code == 409, response.text
+        assert "read-only" in response.text
+        # Includes all child values/timestamps, row membership and audit events.
+        assert snapshot(db) == before, (transition, method, url)
+        assert client.get(root(project_id)).json() == visible.json()
+
+
+def test_draft_programme_update_validation(
+    manager_member_client: TestClient, project_id: str, db: Session
+) -> None:
+    client = manager_member_client
+    path = f"{root(project_id)}/engagements"
+    body = {
+        "consultant_name": "Programme",
+        "agreement_reference": "P-1",
+        "planned_start_date": "2026-12-10",
+        "planned_completion_date": "2026-12-20",
+    }
+    before_create = snapshot(db)
+    invalid = {**body, "planned_completion_date": "2026-12-01"}
+    response = client.post(path, json=invalid)
+    assert response.status_code == 422, response.text
+    assert snapshot(db) == before_create
+    created = client.post(path, json=body)
+    assert created.status_code == 201, created.text
+    row = created.json()
+    before = snapshot(db)
+    response = client.put(
+        f"{path}/{row['id']}",
+        json={
+            **invalid,
+            "expected_updated_at": row["updated_at"],
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "Planned completion cannot precede planned start" in response.text
+    assert snapshot(db) == before
+    assert client.get(root(project_id)).json()["engagements"] == [row]
+    response = client.put(
+        f"{path}/{row['id']}",
+        json={
+            **body,
+            "planned_completion_date": "2026-12-25",
+            "expected_updated_at": row["updated_at"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["planned_completion_date"] == "2026-12-25"
+    assert client.get(root(project_id)).json()["engagements"] == [response.json()]
+    events = db.scalars(
+        select(AuditEvent).where(AuditEvent.action == "consultant.engagement_updated")
+    ).all()
+    assert len(events) == 1
+    assert str(events[0].entity_id) == row["id"]
+    assert events[0].after_data["planned_completion_date"] == "2026-12-25"
+
+
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"planned_start_date": "2026-12-10"},
+        {"planned_completion_date": "2026-12-01"},
+        {},
+    ],
+)
+def test_open_ended_engagement_programme_remains_valid(
+    manager_member_client: TestClient, project_id: str, dates: dict
+) -> None:
+    client = manager_member_client
+    path = f"{root(project_id)}/engagements"
+    body = {"consultant_name": "Open", "agreement_reference": "O-1", **dates}
+    response = client.post(path, json=body)
+    assert response.status_code == 201, response.text
+    row = response.json()
+    response = client.put(
+        f"{path}/{row['id']}",
+        json={
+            **body,
+            "notes": "Valid update",
+            "expected_updated_at": row["updated_at"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    for key in ("planned_start_date", "planned_completion_date"):
+        assert response.json()[key] == dates.get(key)

@@ -49,6 +49,23 @@ def _get[T](session: Session, cls: type[T], project: Project, identifier: uuid.U
     return row
 
 
+def _require_mutable_engagement(
+    session: Session, project: Project, engagement_id: uuid.UUID
+) -> None:
+    engagement = _get(session, models.ConsultantEngagement, project, engagement_id)
+    if engagement.status not in {"draft", "active"}:
+        raise ConflictError("Historical consultant engagements are read-only.")
+
+
+def _validate_engagement_dates(payload: schemas.EngagementCreate) -> None:
+    if (
+        payload.planned_start_date
+        and payload.planned_completion_date
+        and payload.planned_completion_date < payload.planned_start_date
+    ):
+        raise ValidationError("Planned completion cannot precede planned start.")
+
+
 def workspace(session: Session, project: Project) -> schemas.WorkspaceOut:
     engagements = list(
         session.scalars(
@@ -112,12 +129,7 @@ def create_engagement(
     values = payload.model_dump()
     values["consultant_name"] = values["consultant_name"].strip()
     values["agreement_reference"] = values["agreement_reference"].strip()
-    if (
-        values["planned_start_date"]
-        and values["planned_completion_date"]
-        and values["planned_completion_date"] < values["planned_start_date"]
-    ):
-        raise ValidationError("Planned completion cannot precede planned start.")
+    _validate_engagement_dates(payload)
     row = models.ConsultantEngagement(
         project_id=project.id, created_by_user_id=actor.user_id, **values
     )
@@ -143,6 +155,7 @@ def update_engagement(
         raise ConflictError("Only a draft engagement may be edited.")
     if row.updated_at != payload.expected_updated_at:
         raise ConflictError("Engagement changed. Reload before saving.")
+    _validate_engagement_dates(payload)
     values = payload.model_dump(exclude={"expected_updated_at"})
     before = {key: getattr(row, key) for key in values}
     for key, value in values.items():
@@ -194,7 +207,7 @@ def create_discipline(
 ) -> models.ConsultantDiscipline:
     require_editor(actor)
     lock_project(session, project.id)
-    _get(session, models.ConsultantEngagement, project, engagement_id)
+    _require_mutable_engagement(session, project, engagement_id)
     name = payload.name.strip()
     row = models.ConsultantDiscipline(
         project_id=project.id,
@@ -225,6 +238,7 @@ def update_discipline(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantDiscipline, project, identifier)
+    _require_mutable_engagement(session, project, row.engagement_id)
     before = {key: getattr(row, key) for key in type(payload).model_fields}
     for key, value in payload.model_dump().items():
         setattr(row, key, value.strip() if isinstance(value, str) else value)
@@ -249,7 +263,7 @@ def create_stage(
 ) -> models.ConsultantDesignStage:
     require_editor(actor)
     lock_project(session, project.id)
-    _get(session, models.ConsultantEngagement, project, engagement_id)
+    _require_mutable_engagement(session, project, engagement_id)
     _validate_stage(payload.status, payload.actual_completion_date)
     sequence = (
         session.scalar(
@@ -294,6 +308,7 @@ def update_stage(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantDesignStage, project, identifier)
+    _require_mutable_engagement(session, project, row.engagement_id)
     _validate_stage(payload.status, payload.actual_completion_date)
     rows = list(
         session.scalars(
@@ -352,7 +367,7 @@ def create_deliverable(
 ) -> models.ConsultantDeliverable:
     require_editor(actor)
     lock_project(session, project.id)
-    _get(session, models.ConsultantEngagement, project, engagement_id)
+    _require_mutable_engagement(session, project, engagement_id)
     _validate_deliverable(session, project, engagement_id, payload)
     row = models.ConsultantDeliverable(
         project_id=project.id, engagement_id=engagement_id, **payload.model_dump()
@@ -391,6 +406,7 @@ def update_deliverable(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantDeliverable, project, identifier)
+    _require_mutable_engagement(session, project, row.engagement_id)
     if row.status in {"accepted", "superseded", "cancelled"}:
         raise ConflictError("Historical deliverables are immutable; supersede with a new record.")
     if row.updated_at != payload.expected_updated_at:
