@@ -34,12 +34,16 @@ def _audit(
         actor_user_id=actor.user_id,
         correlation_id=actor.correlation_id,
         before=before,
-        after=after,
+        after={**(after or {}), "project_id": entity.project_id},
     )
 
 
 def _get[T](session: Session, cls: type[T], project: Project, identifier: uuid.UUID) -> T:
-    row = session.scalar(select(cls).where(cls.id == identifier, cls.project_id == project.id))
+    row = session.scalar(
+        select(cls)
+        .where(cls.id == identifier, cls.project_id == project.id)
+        .execution_options(populate_existing=True)
+    )
     if row is None:
         raise NotFoundError("Consultant design record not found.")
     return row
@@ -221,7 +225,7 @@ def update_discipline(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantDiscipline, project, identifier)
-    before = {key: getattr(row, key) for key in payload.model_fields}
+    before = {key: getattr(row, key) for key in type(payload).model_fields}
     for key, value in payload.model_dump().items():
         setattr(row, key, value.strip() if isinstance(value, str) else value)
     row.normalized_name = row.name.casefold()

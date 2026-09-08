@@ -35,3 +35,25 @@ maker/checker release, immutable release and retained reversal, cross-project pr
 concurrency, downgrade safety, and unchanged Sale, Pricing, Unit Economics, Cashflow,
 Collections, Construction, Payment Plan, and physical-unit truth. These are acceptance areas,
 not a claim that final Gate 0A acceptance has passed; G0A-03 remains final.
+
+## G0A-02 independent review correction evidence
+
+The correction exposes Draft Agreement selection and activation, agreement edit and
+completion/termination, historical agreements, discipline edits, design-stage dates/status
+and Move Up/Down, and deliverable submission/acceptance metadata. The selected agreement
+owns the displayed child registers; historical agreements expose read-only controls.
+Commission drafts expose term edits and beneficiary edit/removal, with server reconciliation
+reloaded after mutation. Human percentages use the existing string conversion helpers.
+
+The PostgreSQL review contracts are in `test_consultant_engineering_review.py` and
+`test_commissions_review.py`. They compare full persisted rows across every unrelated
+table, exercise same-project cross-engagement refusal, independently competing transactions,
+retained-data downgrade refusal with unchanged revision/data, selected-phase refusal,
+and actor/entity/project audit evidence. Release locks and rechecks the authoritative
+sale; later cancellation leaves released history intact for explicit reversal.
+
+Browser validation of the production export uses controlled API responses to exercise
+the operator actions and stale-write request fields, Escape/focus return, and both screens
+at 1600, 1440, 1280, 1024, 768 and 390px without page overflow. This is browser workflow
+evidence; PostgreSQL state assertions are separate. Final CI counts and durations belong
+to the PR's exact correction head. Independent acceptance remains pending.

@@ -43,7 +43,7 @@ def _get(
         models.CommissionGrant.id == identifier, models.CommissionGrant.project_id == project.id
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     row = session.scalar(statement)
     if row is None:
         raise NotFoundError("Commission not found.")
@@ -230,7 +230,7 @@ def _audit(
         actor_user_id=actor.user_id,
         correlation_id=actor.correlation_id,
         before=before,
-        after=after,
+        after={**(after or {}), "project_id": row.project_id},
         reason=reason,
     )
 
@@ -433,6 +433,14 @@ def release(
     _draft(row)
     if row.prepared_by_user_id == actor.user_id:
         raise PermissionDeniedError("The person who prepared this commission may not release it.")
+    sale = session.scalar(
+        select(SaleContract)
+        .where(SaleContract.id == row.sale_contract_id, SaleContract.project_id == project.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if sale is None or sale.status != SALE_ACTIVE:
+        raise ConflictError("Only an active sale contract is eligible for commission release.")
     _recalculate(session, row)
     detail = out(session, row)
     if not detail.is_reconciled:

@@ -122,6 +122,7 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_consultant_engineering.py::test_commercial_reader_is_refused",
     ),
     "commissions": (
+        "tests/modules/test_commissions_review.py::test_financial_independence_and_immutable_history",
         "tests/modules/test_commissions.py::test_150k_golden_decimal_calculation",
         "tests/modules/test_commissions.py::test_reconciliation_and_maker_checker",
         "tests/modules/test_commissions.py::test_partial_base_and_invalid_terms",

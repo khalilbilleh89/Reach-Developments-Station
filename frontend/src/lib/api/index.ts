@@ -2268,6 +2268,9 @@ export const prelaunch = {
 
 const consultantRoot = (projectId: string) => `/projects/${projectId}/consultant-engineering`;
 export const consultantEngineering = {
+  updateEngagement: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${id}`, body),
+  updateDiscipline: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantDiscipline>(`${consultantRoot(projectId)}/disciplines/${id}`, body),
+  updateDeliverable: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantDeliverable>(`${consultantRoot(projectId)}/deliverables/${id}`, body),
   workspace: (projectId: string) => get<import("./types").ConsultantWorkspace>(consultantRoot(projectId)),
   createEngagement: (projectId: string, body: Record<string, unknown>) => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements`, body),
   transitionEngagement: (projectId: string, id: string, action: "activate" | "complete" | "terminate") => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${id}/${action}`, {}),
@@ -2279,6 +2282,9 @@ export const consultantEngineering = {
 
 const commissionsRoot = (projectId: string) => `/projects/${projectId}/commissions`;
 export const commissions = {
+  update: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").CommissionGrant>(`${commissionsRoot(projectId)}/${id}`, body),
+  updateAllocation: (projectId: string, id: string, allocationId: string, body: Record<string, unknown>) => put<import("./types").CommissionGrant>(`${commissionsRoot(projectId)}/${id}/allocations/${allocationId}`, body),
+  removeAllocation: (projectId: string, id: string, allocationId: string) => remove(`${commissionsRoot(projectId)}/${id}/allocations/${allocationId}`),
   list: (projectId: string) => get<import("./types").CommissionGrant[]>(commissionsRoot(projectId)),
   eligibleSales: (projectId: string) => get<import("./types").CommissionEligibleSale[]>(`${commissionsRoot(projectId)}/eligible-sales`),
   create: (projectId: string, body: Record<string, unknown>) => post<import("./types").CommissionGrant>(commissionsRoot(projectId), body),
