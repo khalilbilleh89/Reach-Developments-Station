@@ -5,12 +5,25 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
+import subprocess
 import sys
 from pathlib import Path
 
 import ci_backend_tests as fast
 
 ROOT = Path(__file__).resolve().parents[1]
+REVIEWED_WORKFLOW = ".github/workflows/ci.yml"
+# The complete reviewed delta, including indentation; no other workflow edit qualifies.
+REVIEWED_WORKFLOW_LINES = (
+    "-    branches: [main, integration/mvp3]",
+    "+    branches: [main, integration/mvp3, integration/mvp3-management]",
+    "-    if: github.event_name == 'pull_request' && "
+    "github.event.pull_request.base.ref == 'integration/mvp3'",
+    "+    if: github.event_name == 'pull_request' && "
+    "(github.event.pull_request.base.ref == 'integration/mvp3' || "
+    "github.event.pull_request.base.ref == 'integration/mvp3-management')",
+)
 GUARDS = (
     "tests/test_ci_selector.py",
     "tests/test_ci_workflow.py",
@@ -41,6 +54,7 @@ BACKBONE = (
     "tests/test_ci_smoke.py::test_every_registered_contract_resolves_to_real_tests",
     "tests/test_ci_smoke.py::test_full_risk_refuses_instead_of_downgrading_or_running_full",
     "tests/test_ci_smoke.py::test_new_domain_refuses_until_registered",
+    "tests/test_ci_smoke.py::test_reviewed_workflow_cli",
     "tests/test_ci_smoke.py::test_migrations_need_explicit_ownership_and_integrity_test",
     "tests/test_ci_shards.py::test_all_collected_files_exactly_once_for_any_count",
     "tests/test_ci_workflow.py::test_lane_routing",
@@ -291,14 +305,68 @@ def select(changed: list[str], root: Path = ROOT) -> tuple[list[str], list[str]]
     return selected, sorted(domains)
 
 
+def reviewed_workflow_diff(base: str) -> str:
+    """Read committed base-to-HEAD changes, never the working tree or final shape."""
+    try:
+        return subprocess.run(
+            [
+                "git",
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                "--no-color",
+                "--unified=0",
+                base,
+                "HEAD",
+                "--",
+                REVIEWED_WORKFLOW,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        raise fast.CannotDiff(f"could not inspect reviewed workflow against {base}") from error
+
+
+def is_reviewed_workflow_delta(diff: str) -> bool:
+    """Exactly two one-line substitutions in an ordinary file; metadata also fails closed."""
+    lines = diff.splitlines()
+    if len(lines) < 4 or lines[0] != f"diff --git a/{REVIEWED_WORKFLOW} b/{REVIEWED_WORKFLOW}":
+        return False
+    if not re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 100644", lines[1]):
+        return False
+    if lines[2:4] != [f"--- a/{REVIEWED_WORKFLOW}", f"+++ b/{REVIEWED_WORKFLOW}"]:
+        return False
+    hunks = [line for line in lines[4:] if line.startswith("@@")]
+    if len(hunks) != 2 or any(not re.fullmatch(r"@@ -\d+ \+\d+ @@.*", h) for h in hunks):
+        return False
+    return tuple(line for line in lines[4:] if not line.startswith("@@")) == REVIEWED_WORKFLOW_LINES
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="origin/integration/mvp3")
+    parser.add_argument("--base")
     parser.add_argument("--changed", nargs="*")
     parser.add_argument("--out")
     args = parser.parse_args(argv)
     try:
-        changed = args.changed if args.changed is not None else fast.changed_files(args.base)
+        changed = (
+            args.changed
+            if args.changed is not None
+            else fast.changed_files(args.base or "origin/integration/mvp3")
+        )
+        # Only an explicit, real PR diff may remove this one path from full-risk review.
+        # --changed cannot supply or forge the companion-test evidence.
+        if (
+            args.changed is None
+            and args.base is not None
+            and REVIEWED_WORKFLOW in changed
+            and "tests/test_ci_workflow.py" in changed
+            and is_reviewed_workflow_delta(reviewed_workflow_diff(args.base))
+        ):
+            changed = [path for path in changed if path != REVIEWED_WORKFLOW]
         paths, domains = select(changed)
     except (SmokeRefused, fast.CannotDiff, OSError, SyntaxError) as error:
         print(f"Backend Smoke refused: {error}", file=sys.stderr)

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Badge,
+  Button,
   Card,
   DataToolbar,
   EmptyState,
@@ -12,6 +13,7 @@ import {
   Notice,
   PageHeader,
   Tabs,
+  TabPanel,
   TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
@@ -53,6 +55,11 @@ import {
   variationLabel,
   variationTone,
 } from "@/components/projects/construction/labels";
+
+/** Denomination belongs to the contract, never an assumed project currency. */
+function contractCurrency(contracts: ConstructionContract[], contractId: string | undefined): string {
+  return contracts.find((contract) => contract.id === contractId)?.currency_code ?? "Currency unavailable";
+}
 
 const SECTIONS = [
   { key: "overview", label: "Overview" },
@@ -147,6 +154,7 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
         group="construction"
       />
 
+      <TabPanel group="construction" tab={section}>
       {section === "overview" ? (
         summary ? (
           <ConstructionSummaryView summary={summary} />
@@ -172,6 +180,7 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
       {section === "forecast" ? (
         <ForecastSection projectId={projectId} />
       ) : null}
+      </TabPanel>
     </div>
   );
 }
@@ -235,6 +244,7 @@ function BudgetSection({ projectId }: { projectId: string }) {
 
   return (
     <Card
+      flush
       title={`Budget version ${detail.version_number}`}
       description={`Effective ${businessDate(detail.effective_date)}. ${detail.change_reason}`}
       actions={
@@ -390,6 +400,7 @@ function ContractsSection({ projectId }: { projectId: string }) {
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
+            className="input"
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
@@ -414,6 +425,7 @@ function ContractsSection({ projectId }: { projectId: string }) {
           }
         />
       ) : (
+        <Card flush>
         <TableScroll label="Contracts" fixedFirst>
           <thead>
             <tr>
@@ -440,13 +452,16 @@ function ContractsSection({ projectId }: { projectId: string }) {
                 key={row.id}
                 onClick={() => setOpen(row.id)}
                 className="row-clickable"
+                aria-selected={open === row.id}
               >
-                <td>
+                <th scope="row">
+                  <Button variant="link" onClick={() => setOpen(row.id)} aria-label={`Open contract ${row.contract_number}`}>
                   <IdentityCell
                     name={row.contract_number}
                     meta={row.contract_type}
                   />
-                </td>
+                  </Button>
+                </th>
                 <td>{row.vendor_name}</td>
                 <td className="num">
                   {money(row.original_contract_value_ex_tax, row.currency_code)}
@@ -469,6 +484,7 @@ function ContractsSection({ projectId }: { projectId: string }) {
             ))}
           </tbody>
         </TableScroll>
+        </Card>
       )}
 
       {open ? (
@@ -496,12 +512,17 @@ function ContractsSection({ projectId }: { projectId: string }) {
  */
 function VariationsSection({ projectId }: { projectId: string }) {
   const [rows, setRows] = useState<Variation[] | null>(null);
+  const [contracts, setContracts] = useState<ConstructionContract[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setRows(await construction.variations(projectId));
+      const [variations, contracts] = await Promise.all([
+        construction.variations(projectId), construction.contracts(projectId),
+      ]);
+      setRows(variations);
+      setContracts(contracts);
       setError(null);
     } catch (caught) {
       setError(
@@ -535,6 +556,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
+            className="input"
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
@@ -558,6 +580,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
           }
         />
       ) : (
+        <Card flush>
         <TableScroll label="Variations" fixedFirst>
           <thead>
             <tr>
@@ -579,13 +602,13 @@ function VariationsSection({ projectId }: { projectId: string }) {
                 <td>{row.contract_number}</td>
                 <td>{row.description}</td>
                 <td>{businessDate(row.requested_date)}</td>
-                <td className="num">{money(row.total_value_ex_tax)}</td>
+                <td className="num">{money(row.total_value_ex_tax, contractCurrency(contracts, row.contract_id))}</td>
                 <td>
                   {row.requires_escalation ? (
                     <Badge tone="warning">
                       Needs the Approver
                       {row.review_amount
-                        ? ` (over ${money(row.review_amount)})`
+                        ? ` (over ${money(row.review_amount, contractCurrency(contracts, row.contract_id))})`
                         : ""}
                     </Badge>
                   ) : (
@@ -601,6 +624,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
             ))}
           </tbody>
         </TableScroll>
+        </Card>
       )}
     </div>
   );
@@ -612,6 +636,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
 
 function CertificatesSection({ projectId }: { projectId: string }) {
   const [rows, setRows] = useState<Certificate[] | null>(null);
+  const [contracts, setContracts] = useState<ConstructionContract[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState<string | null>(null);
@@ -619,7 +644,11 @@ function CertificatesSection({ projectId }: { projectId: string }) {
 
   const load = useCallback(async () => {
     try {
-      setRows(await construction.certificates(projectId));
+      const [certificates, contracts] = await Promise.all([
+        construction.certificates(projectId), construction.contracts(projectId),
+      ]);
+      setRows(certificates);
+      setContracts(contracts);
       setError(null);
     } catch (caught) {
       setError(
@@ -653,6 +682,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
+            className="input"
             value={status}
             onChange={(event) => setStatus(event.target.value)}
           >
@@ -676,6 +706,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
           }
         />
       ) : (
+        <Card flush>
         <TableScroll label="Certificates" fixedFirst>
           <thead>
             <tr>
@@ -700,18 +731,19 @@ function CertificatesSection({ projectId }: { projectId: string }) {
                 key={row.id}
                 onClick={() => setOpen(row.id)}
                 className="row-clickable"
+                aria-selected={open === row.id}
               >
-                <td>{row.certificate_number}</td>
+                <th scope="row"><Button variant="link" onClick={() => setOpen(row.id)} aria-label={`Open certificate ${row.certificate_number}`}>{row.certificate_number}</Button></th>
                 <td>{row.contract_number}</td>
                 <td>
                   {businessDate(row.period_start)} to{" "}
                   {businessDate(row.period_end)}
                 </td>
                 <td className="num">
-                  {money(row.current_work_value_ex_tax)}
+                  {money(row.current_work_value_ex_tax, contractCurrency(contracts, row.contract_id))}
                 </td>
-                <td className="num">{money(row.retention_held_amount)}</td>
-                <td className="num">{money(row.net_due)}</td>
+                <td className="num">{money(row.retention_held_amount, contractCurrency(contracts, row.contract_id))}</td>
+                <td className="num">{money(row.net_due, contractCurrency(contracts, row.contract_id))}</td>
                 <td>
                   <Badge tone={certificateTone(row.status)}>
                     {certificateLabel(row.status)}
@@ -721,12 +753,14 @@ function CertificatesSection({ projectId }: { projectId: string }) {
             ))}
           </tbody>
         </TableScroll>
+        </Card>
       )}
 
       {open ? (
         <CertificateFile
           projectId={projectId}
           certificateId={open}
+          currency={contractCurrency(contracts, rows.find((row) => row.id === open)?.contract_id)}
           onClose={() => setOpen(null)}
           onOpenContract={(contractId) => {
             setOpen(null);
@@ -759,16 +793,19 @@ function CertificatesSection({ projectId }: { projectId: string }) {
 function CashSection({ projectId }: { projectId: string }) {
   const [invoices, setInvoices] = useState<ConstructionInvoice[] | null>(null);
   const [payments, setPayments] = useState<ConstructionPayment[] | null>(null);
+  const [contracts, setContracts] = useState<ConstructionContract[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [claims, cash] = await Promise.all([
+      const [claims, cash, contracts] = await Promise.all([
         construction.invoices(projectId),
         construction.payments(projectId),
+        construction.contracts(projectId),
       ]);
       setInvoices(claims);
       setPayments(cash);
+      setContracts(contracts);
       setError(null);
     } catch (caught) {
       setError(
@@ -821,8 +858,8 @@ function CashSection({ projectId }: { projectId: string }) {
                   <td>{row.contract_number}</td>
                   <td>{row.invoice_type}</td>
                   <td>{businessDate(row.invoice_date)}</td>
-                  <td className="num">{money(row.net_payable)}</td>
-                  <td className="num">{money(row.outstanding)}</td>
+                  <td className="num">{money(row.net_payable, contractCurrency(contracts, row.contract_id))}</td>
+                  <td className="num">{money(row.outstanding, contractCurrency(contracts, row.contract_id))}</td>
                   <td>
                     <Badge tone={invoiceTone(row.status)}>
                       {invoiceLabel(row.status)}
@@ -931,6 +968,7 @@ function MilestonesSection({ projectId }: { projectId: string }) {
   }
 
   return (
+    <Card flush>
     <TableScroll label="Milestones" fixedFirst>
       <thead>
         <tr>
@@ -975,6 +1013,7 @@ function MilestonesSection({ projectId }: { projectId: string }) {
         ))}
       </tbody>
     </TableScroll>
+    </Card>
   );
 }
 
@@ -1035,6 +1074,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
 
   return (
     <Card
+      flush
       title={`Forecast version ${detail.version_number}`}
       description={`As at ${businessDate(detail.as_of_date)}, against budget version ${
         detail.budget_version_number ?? "—"

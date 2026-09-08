@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import { Field, Notice, PageHeader, Tabs } from "@/components/ui";
+import { Field, Notice, PageHeader, Tabs, TabPanel } from "@/components/ui";
 import { sectionDescription } from "@/components/shell/navigation";
 import { CashflowDrilldown } from "@/components/projects/cashflow/CashflowDrilldown";
 import type { DrilldownQuery } from "@/components/projects/cashflow/CashflowDrilldown";
@@ -232,6 +232,7 @@ export function CashflowTab({
         group="cashflow"
       />
 
+      <TabPanel group="cashflow" tab={section}>
       {section === "overview" ? (
         summary.status === "loading" ? (
           <Loading label="Loading the cash position" shape="metrics" />
@@ -343,6 +344,8 @@ export function CashflowTab({
           onOpenSource={(sourceType) => setDrilldown({ sourceType })}
         />
       ) : null}
+
+      </TabPanel>
 
       {drilldown ? (
         <CashflowDrilldown

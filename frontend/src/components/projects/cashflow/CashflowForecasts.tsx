@@ -143,7 +143,7 @@ export function CashflowForecasts({
               hint="A forecast pins the construction forecast it schedules and freezes the buyer schedule it was built on. Until one is in force, only cash that has moved is reported."
             />
           ) : (
-            <TableScroll label="Cashflow forecast versions" compact>
+            <TableScroll label="Cashflow forecast versions" fixedFirst compact>
               <thead>
                 <tr>
                   <th scope="col">Version</th>
@@ -325,7 +325,7 @@ function ForecastDetail({
             </Button>
           ) : null}
           {canPrepare && isDraft ? (
-            <Button small onClick={onSubmit} disabled={busy}>
+            <Button small variant="primary" onClick={onSubmit} disabled={busy}>
               Submit
             </Button>
           ) : null}
@@ -336,7 +336,7 @@ function ForecastDetail({
           ) : null}
           {canApprove && version.status === "submitted" ? (
             <>
-              <Button small onClick={onAskApprove} disabled={busy}>
+              <Button small variant="primary" onClick={onAskApprove} disabled={busy}>
                 Approve
               </Button>
               <Button small variant="danger" onClick={onAskReject} disabled={busy}>
@@ -345,7 +345,7 @@ function ForecastDetail({
             </>
           ) : null}
           {canActivate && isApproved ? (
-            <Button small onClick={onActivate} disabled={busy}>
+            <Button small variant="primary" onClick={onActivate} disabled={busy}>
               Put in force
             </Button>
           ) : null}

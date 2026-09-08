@@ -45,11 +45,13 @@ import { certificateLabel, certificateTone } from "./labels";
 export function CertificateFile({
   projectId,
   certificateId,
+  currency,
   onClose,
   onOpenContract,
 }: {
   projectId: string;
   certificateId: string;
+  currency: string;
   onClose: () => void;
   onOpenContract?: (contractId: string) => void;
 }) {
@@ -128,12 +130,12 @@ export function CertificateFile({
       facts={[
         {
           label: "Work this period",
-          value: money(certificate.current_work_value_ex_tax),
+          value: money(certificate.current_work_value_ex_tax, currency),
         },
-        { label: "Net due", value: money(certificate.net_due) },
+        { label: "Net due", value: money(certificate.net_due, currency) },
         {
           label: "Still to invoice",
-          value: money(certificate.uninvoiced_net_due),
+          value: money(certificate.uninvoiced_net_due, currency),
         },
       ]}
       onClose={onClose}
@@ -148,35 +150,35 @@ export function CertificateFile({
             <WaterfallRow
               label="Work certified this period"
               note="Excluding tax"
-              amount={money(certificate.current_work_value_ex_tax)}
+              amount={money(certificate.current_work_value_ex_tax, currency)}
             />
             <WaterfallRow
               label="Retention withheld"
               note="Held back on this period's work"
-              amount={`(${money(certificate.retention_held_amount)})`}
+              amount={`(${money(certificate.retention_held_amount, currency)})`}
             />
             <WaterfallRow
               label="Retention released"
               note="Withheld on an earlier certificate"
-              amount={money(certificate.retention_release_amount)}
+              amount={money(certificate.retention_release_amount, currency)}
             />
             <WaterfallRow
               label="Advance recovered"
               note="Against advance cash already paid"
-              amount={`(${money(certificate.advance_recovery_amount)})`}
+              amount={`(${money(certificate.advance_recovery_amount, currency)})`}
             />
             <WaterfallRow
               label="Other deductions"
-              amount={`(${money(certificate.other_deductions_amount)})`}
+              amount={`(${money(certificate.other_deductions_amount, currency)})`}
             />
             <WaterfallRow
               label="Tax"
-              amount={money(certificate.tax_amount)}
+              amount={money(certificate.tax_amount, currency)}
               kind="subtotal"
             />
             <WaterfallRow
               label="Net due"
-              amount={money(certificate.net_due)}
+              amount={money(certificate.net_due, currency)}
               kind="total"
             />
           </Waterfall>
@@ -221,16 +223,16 @@ export function CertificateFile({
                   <tr key={line.cost_code_id}>
                     <td>{line.cost_code}</td>
                     <td className="num">
-                      {money(line.previously_certified)}
+                      {money(line.previously_certified, currency)}
                     </td>
                     <td className="num">
-                      {money(line.current_work_value_ex_tax)}
+                      {money(line.current_work_value_ex_tax, currency)}
                     </td>
                     <td className="num">
-                      {money(line.cumulative_certified)}
+                      {money(line.cumulative_certified, currency)}
                     </td>
                     <td className="num">
-                      {money(line.revised_commitment)}
+                      {money(line.revised_commitment, currency)}
                     </td>
                   </tr>
                 ))}

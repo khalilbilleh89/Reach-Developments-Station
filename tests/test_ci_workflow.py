@@ -81,6 +81,8 @@ def condition(job: str, event: str, base: str, draft: bool) -> bool:
     [
         ("pull_request", "integration/mvp3", True, {"backend_smoke", "frontend"}),
         ("pull_request", "integration/mvp3", False, {"backend_smoke", "frontend"}),
+        ("pull_request", "integration/mvp3-management", True, {"backend_smoke", "frontend"}),
+        ("pull_request", "integration/mvp3-management", False, {"backend_smoke", "frontend"}),
         ("pull_request", "main", True, {"backend_fast", "frontend"}),
         ("pull_request", "main", False, {"backend_static", "backend_full", "backend", "frontend"}),
         ("push", "", False, {"backend_static", "backend_full", "backend", "frontend"}),
@@ -93,7 +95,7 @@ def test_lane_routing(event: str, base: str, draft: bool, expected: set[str]) ->
 
 def test_main_health_and_integration_triggers() -> None:
     assert re.search(r"^  push:\n    branches: \[main\]$", source(), re.MULTILINE)
-    assert "branches: [main, integration/mvp3]" in source()
+    assert "branches: [main, integration/mvp3, integration/mvp3-management]" in source()
     for event in (
         "opened",
         "synchronize",

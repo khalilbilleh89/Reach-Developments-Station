@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice } from "@/components/ui";
+import { Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice, SubPanel } from "@/components/ui";
 import { stages } from "@/lib/api/stages";
 import type { Stage, UnitProgress, UnitStage } from "@/lib/api/stages";
 import { businessDate, todayISO } from "@/lib/format";
@@ -145,8 +145,7 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
     } catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }
-  return <section>
-    <h3>{stage.sequence}. {stage.name} <Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status}</Badge></h3>
+  return <SubPanel title={`${stage.sequence}. ${stage.name}`} actions={<Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status}</Badge>}>
     <p>Planned: {stage.planned_date ? businessDate(stage.planned_date) : "Not set"} · Completed: {stage.completed_date ? businessDate(stage.completed_date) : "Not recorded"}</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {canWrite ? <details ref={completionForm}><summary ref={completionSummary}>{stage.completed_date ? "Correct completion" : "Record completion"}</summary>
@@ -164,5 +163,5 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
       {entry.completed_date ? `Completed ${businessDate(entry.completed_date)}` : "Reopened"} — {entry.reason}
       <span className="footnote"> · Recorded {entry.recorded_at} · User {entry.actor_user_id}</span>
     </li>)}</ol></details> : null}
-  </section>;
+  </SubPanel>;
 }

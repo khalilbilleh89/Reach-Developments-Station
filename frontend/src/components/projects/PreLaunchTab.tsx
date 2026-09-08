@@ -18,8 +18,9 @@ import {
   FieldRow,
   FormDialog,
   Loading,
-  Metric,
-  MetricGroup,
+  Position,
+  PositionFigure,
+  FormSection,
   MoneyInput,
   Notice,
   PageHeader,
@@ -99,22 +100,19 @@ export function PreLaunchTab({
         subtitle={sectionDescription("prelaunch")}
         actions={canRecord ? <Button variant="primary" onClick={() => setAdding(true)}>Add expense</Button> : undefined}
       />
-      <Notice tone="info">
-        Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment.
-      </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {register ? (
-        <MetricGroup compact>
-          <Metric label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
-          <Metric label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
-        </MetricGroup>
+        <Card tone="command" title="Expense position"><Position compact>
+          <PositionFigure label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
+          <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
+        </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment.</p></Card>
       ) : null}
       <Card flush>
-        {register === null ? <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
+        {register === null ? error ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : (
-          <TableScroll label="Pre-Launch expense register" compact>
-            <thead><tr><th>Description</th><th>Category</th><th>Counterparty / authority</th><th>Date</th><th className="num">Amount</th><th>Status</th><th>Reference</th><th /></tr></thead>
+          <TableScroll label="Pre-Launch expense register" fixedFirst>
+            <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{register.expenses.map((row) => (
               <tr key={row.id}>
                 <th scope="row" className="cell-prose">{row.notes ?? row.movement_reference}</th>
@@ -148,9 +146,10 @@ function ExpenseDialog({ currencyId, currencyCode, busy, onCancel, onSubmit }: {
   const [reference, setReference] = useState("");
   const [evidence, setEvidence] = useState("");
   return <FormDialog title="Add Pre-Launch expense" description="This records an entry. It is not cash until another authorised user confirms it." confirmLabel="Record expense" busy={busy} disabled={!description || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, currency_id: currencyId, counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
-    <Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
+    <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
-    <FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>
+    </FormSection><FormSection title="Payment and evidence"><FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>
     <FieldRow><Field label="Reference" optional><input className="input" value={reference} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Evidence / proof" optional><input className="input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field></FieldRow>
+    </FormSection>
   </FormDialog>;
 }

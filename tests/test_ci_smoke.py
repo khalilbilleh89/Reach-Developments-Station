@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -131,3 +132,97 @@ def test_cli_failure_is_nonzero_and_does_not_write_a_selection(tmp_path: Path) -
     output = tmp_path / "selected.txt"
     assert smoke.main(["--changed", "app/core/database.py", "--out", str(output)]) == 1
     assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "exact",
+        "extra-timeout",
+        "extra-permission",
+        "wildcard",
+        "missing-test",
+        "other-github",
+        "file-mode",
+        "no-explicit-base",
+        "changed-override",
+        "invalid-base",
+        "only-one-substitution",
+    ],
+)
+def test_reviewed_workflow_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+) -> None:
+    """Exercise real git deltas and the CLI boundary, including untrusted path overrides."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init")
+    git("config", "user.name", "Smoke regression")
+    git("config", "user.email", "smoke@example.invalid")
+    git("config", "core.autocrlf", "false")
+    git("config", "core.filemode", "false")
+    workflow = tmp_path / ".github/workflows/ci.yml"
+    workflow.parent.mkdir(parents=True)
+    old_trigger = "    branches: [main, integration/mvp3]"
+    new_trigger = "    branches: [main, integration/mvp3, integration/mvp3-management]"
+    old_condition = (
+        "    if: github.event_name == 'pull_request' && "
+        "github.event.pull_request.base.ref == 'integration/mvp3'"
+    )
+    new_condition = (
+        "    if: github.event_name == 'pull_request' && "
+        "(github.event.pull_request.base.ref == 'integration/mvp3' || "
+        "github.event.pull_request.base.ref == 'integration/mvp3-management')"
+    )
+    reviewed = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert reviewed.count(new_trigger) == reviewed.count(new_condition) == 1
+    original = reviewed.replace(new_trigger, old_trigger).replace(new_condition, old_condition)
+    workflow.write_text(original, encoding="utf-8")
+    companion = tmp_path / "tests/test_ci_workflow.py"
+    companion.parent.mkdir()
+    companion.write_text("# Original lane contracts\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "Base")
+    base = git("rev-parse", "HEAD")
+    git("update-ref", "refs/remotes/origin/integration/mvp3", base)
+
+    candidate = reviewed
+    if scenario == "extra-timeout":
+        candidate = candidate.replace("timeout-minutes: 30", "timeout-minutes: 31")
+    elif scenario == "extra-permission":
+        candidate = candidate.replace("contents: read", "contents: write")
+    elif scenario == "wildcard":
+        candidate = candidate.replace("integration/mvp3-management", "integration/*")
+    elif scenario == "only-one-substitution":
+        candidate = candidate.replace(new_condition, old_condition)
+    workflow.write_text(candidate, encoding="utf-8")
+    if scenario != "missing-test":
+        companion.write_text("# Extended exact lane contracts\n", encoding="utf-8")
+    if scenario == "other-github":
+        (workflow.parent / "other.yml").write_text("name: unreviewed\n", encoding="utf-8")
+    git("add", ".")
+    if scenario == "file-mode":
+        git("update-index", "--chmod=+x", ".github/workflows/ci.yml")
+    git("commit", "-m", "Candidate")
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "selected.txt"
+    args = ["--out", str(output)]
+    if scenario != "no-explicit-base":
+        args += ["--base", "missing-ref" if scenario == "invalid-base" else base]
+    if scenario == "changed-override":
+        args += ["--changed", ".github/workflows/ci.yml", "tests/test_ci_workflow.py"]
+    assert smoke.main(args) == (0 if scenario == "exact" else 1)
+    if scenario == "exact":
+        assert output.read_text(encoding="utf-8").splitlines() == sorted(smoke.BACKBONE)
+    else:
+        assert not output.exists()

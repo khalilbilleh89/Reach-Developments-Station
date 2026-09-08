@@ -70,12 +70,13 @@ export function AuditSection() {
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <DataToolbar
+        framed
         search={{ value: search, onChange: setSearch, placeholder: "Action, object, person or reason", label: "Search audit history" }}
         count={events ? { shown: shown.length, total: events.length, noun: "event" } : undefined}
       />
 
       <Card flush>
-        {events === null ? (
+        {error && !events?.length ? null : events === null ? (
           <Loading label="Loading audit history…" shape="rows" />
         ) : shown.length === 0 ? (
           <div className="card-body">
@@ -85,7 +86,7 @@ export function AuditSection() {
             />
           </div>
         ) : (
-          <TableScroll label="Audit history">
+          <TableScroll fixedFirst label="Audit history">
             <thead>
               <tr>
                 <th scope="col">When</th>
