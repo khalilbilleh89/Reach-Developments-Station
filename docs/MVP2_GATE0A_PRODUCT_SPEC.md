@@ -44,3 +44,19 @@ arithmetic. Product Experience 3.0 remains the design system and no dependency i
 G0A-02 owns Consultant Engineer and Commission Distribution. G0A-03 owns Fundamental,
 Financial and Technical Analysis plus integrated acceptance and hardening. They are not
 implemented or advertised by G0A-01.
+
+## G0A-02 contracts
+
+Consultant Engineer is independent project-level design-management truth. It records
+historical main-consultant engagements (with one structurally enforced active agreement),
+free-entry normalized disciplines, safely ordered design stages, and referenced
+deliverables whose submitted and accepted states remain distinct. It requires whole-project
+access and creates no construction, cashflow, sale, pricing, or Unit Economics record.
+
+Commission Distribution starts only from an active authoritative SaleContract. It snapshots
+the contract price, currency and unit, accepts a manually chosen positive base no greater
+than that price, and calculates all money on the server with Decimal half-up currency
+rounding. Beneficiary rates apply directly to the commissionable base and must sum exactly
+to the granted rate and amount before a different Finance/CFO actor can release. Released
+rows are immutable; reversal retains history. This ledger never posts cash and never changes
+Pricing, SaleContract terms, Payment Plans, Collections, Construction, or Unit Economics.

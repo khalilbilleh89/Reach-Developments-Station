@@ -8,7 +8,7 @@ has not been seen. When the source arrives, a second document maps it onto this
 one. The two are deliberately separate — a mapping written before the contract
 tends to become the contract.
 
-The disposition table below covers **every one of the 91 tables** in the schema.
+The disposition table below covers **every one of the 101 tables** in the schema.
 `tests/modules/test_cutover_intake_contract.py` fails if it does not: a new
 table that nobody has classified is a table somebody may quietly start
 importing.
@@ -182,6 +182,12 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `construction_stages` | MVP 2 project checklist configured through the project workspace; excluded from the legacy batch contract. |
 | `unit_stage_events` | MVP 2 physical completion history entered through the unit workspace; excluded from the legacy batch contract. |
 | `unit_documents` | MVP 2 document references, entered through the unit workspace; excluded from the legacy batch contract. |
+| `consultant_engagements` | Gate 0A governed design-management history, entered through the application. |
+| `consultant_disciplines` | As above. |
+| `consultant_design_stages` | As above. |
+| `consultant_deliverables` | As above. |
+| `commission_grants` | Gate 0A governed distribution history sourced from a Reach sale; never fabricated by intake. |
+| `commission_allocations` | As above. |
 | `inventory_sub_assets` | Parking and storage. In scope only if the source ties them to sold units; unknown until the source is seen. |
 | `pricing_configurations` | Pricing is configured in Reach, then derived. Importing a configuration would imply the legacy prices came out of it. |
 | `pricing_area_rules` | As above. |
