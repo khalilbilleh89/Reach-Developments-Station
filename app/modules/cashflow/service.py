@@ -2366,6 +2366,15 @@ def forecast_remainders(
     matched, unattributed = _post_cutoff_actuals(
         session, project=project, version=version, as_of=as_of
     )
+    return remaining_forecast_amounts(lines, matched, unattributed)
+
+
+def remaining_forecast_amounts(
+    lines: Sequence[CashflowForecastLine],
+    matched: dict[tuple[date, str, object, object], Decimal],
+    unattributed: dict[date, Decimal],
+) -> dict[uuid.UUID, Decimal]:
+    """Consume matched actuals once, using the same owner calculation for batch reads."""
     remaining = {line.id: money(line.amount) for line in lines}
 
     # A phase-scoped line consumes before an unscoped one of the same category,
@@ -2443,11 +2452,130 @@ def collect_source_rows(
     place that adds them up. Deciding it here as well is how the two answers
     started to differ.
     """
+    receipts = list(
+        collections_service.cashflow_receipt_rows(session, project_id=project.id, as_of=as_of)
+    )
+    refunds = list(
+        collections_service.cashflow_refund_rows(session, project_id=project.id, as_of=as_of)
+    )
+    payments = list(
+        construction_service.cashflow_payment_rows(session, project_id=project.id, as_of=as_of)
+    )
+    development = list(
+        session.scalars(
+            select(CashflowDevelopmentMovement).where(
+                *_standing_rows(
+                    session, model=CashflowDevelopmentMovement, project_id=project.id, as_of=as_of
+                )
+            )
+        )
+    )
+    financing = list(
+        session.scalars(
+            select(CashflowFinancingMovement).where(
+                *_standing_rows(
+                    session, model=CashflowFinancingMovement, project_id=project.id, as_of=as_of
+                )
+            )
+        )
+    )
+    restrictions = list(
+        session.execute(
+            select(
+                CashflowReceiptRestriction,
+                CollectionReceipt.receipt_date,
+                CollectionReceipt.receipt_number,
+            )
+            .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
+            .where(
+                *_standing_rows(
+                    session, model=CashflowReceiptRestriction, project_id=project.id, as_of=as_of
+                ),
+                *standing_conditions(
+                    status=CollectionReceipt.status,
+                    confirmed_at=CollectionReceipt.confirmed_at,
+                    reversed_at=CollectionReceipt.reversed_at,
+                    as_of=as_of,
+                ),
+            )
+        ).all()
+    )
+    releases = list(
+        session.scalars(
+            select(CashflowRestrictionRelease)
+            .join(
+                CashflowReceiptRestriction,
+                CashflowReceiptRestriction.id == CashflowRestrictionRelease.restriction_id,
+            )
+            .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
+            .where(
+                *_standing_rows(
+                    session, model=CashflowRestrictionRelease, project_id=project.id, as_of=as_of
+                ),
+                *standing_conditions(
+                    status=CashflowReceiptRestriction.status,
+                    confirmed_at=CashflowReceiptRestriction.confirmed_at,
+                    reversed_at=CashflowReceiptRestriction.reversed_at,
+                    as_of=as_of,
+                ),
+                *standing_conditions(
+                    status=CollectionReceipt.status,
+                    confirmed_at=CollectionReceipt.confirmed_at,
+                    reversed_at=CollectionReceipt.reversed_at,
+                    as_of=as_of,
+                ),
+            )
+        )
+    )
+    lines = list(forecast_lines(session, version_id=version.id)) if version is not None else []
+    snapshot = snapshot_rows(session, version_id=version.id) if version is not None else []
+    unapplied = (
+        collections_service.cashflow_unapplied_cash(session, project_id=project.id, as_of=as_of)
+        if version is not None
+        else {}
+    )
+    remainders = (
+        forecast_remainders(session, project=project, version=version, as_of=as_of)
+        if version is not None
+        else {}
+    )
+    return assemble_source_rows(
+        version=version,
+        as_of=as_of,
+        receipts=receipts,
+        refunds=refunds,
+        payments=payments,
+        development=development,
+        financing=financing,
+        restrictions=restrictions,
+        releases=releases,
+        snapshot=snapshot,
+        lines=lines,
+        unapplied=unapplied,
+        remainders=remainders,
+    )
+
+
+def assemble_source_rows(
+    *,
+    version: CashflowForecastVersion | None,
+    as_of: date,
+    receipts: Sequence[collections_service.CashflowCashRow],
+    refunds: Sequence[collections_service.CashflowCashRow],
+    payments: Sequence[construction_service.CashflowPaymentRow],
+    development: Sequence[CashflowDevelopmentMovement],
+    financing: Sequence[CashflowFinancingMovement],
+    restrictions: Sequence[tuple[CashflowReceiptRestriction, date, str]],
+    releases: Sequence[CashflowRestrictionRelease],
+    snapshot: Sequence[CashflowCustomerScheduleSnapshot],
+    lines: Sequence[CashflowForecastLine],
+    unapplied: dict[uuid.UUID, Decimal],
+    remainders: dict[uuid.UUID, Decimal],
+) -> list[SourceRow]:
+    """Compose typed source preloads without database access."""
     rows: list[SourceRow] = []
 
-    for receipt in collections_service.cashflow_receipt_rows(
-        session, project_id=project.id, as_of=as_of
-    ):
+    for receipt in receipts:
         rows.append(
             SourceRow(
                 source_type=SOURCE_RECEIPT,
@@ -2462,9 +2590,7 @@ def collect_source_rows(
                 display_reference=receipt.reference,
             )
         )
-    for refund in collections_service.cashflow_refund_rows(
-        session, project_id=project.id, as_of=as_of
-    ):
+    for refund in refunds:
         rows.append(
             SourceRow(
                 source_type=SOURCE_REFUND,
@@ -2479,9 +2605,7 @@ def collect_source_rows(
                 display_reference=refund.reference,
             )
         )
-    for payment in construction_service.cashflow_payment_rows(
-        session, project_id=project.id, as_of=as_of
-    ):
+    for payment in payments:
         rows.append(
             SourceRow(
                 source_type=SOURCE_CONSTRUCTION_PAYMENT,
@@ -2496,13 +2620,7 @@ def collect_source_rows(
                 display_reference=f"{payment.reference} · {payment.vendor_name}",
             )
         )
-    for movement in session.scalars(
-        select(CashflowDevelopmentMovement).where(
-            *_standing_rows(
-                session, model=CashflowDevelopmentMovement, project_id=project.id, as_of=as_of
-            )
-        )
-    ):
+    for movement in development:
         rows.append(
             SourceRow(
                 source_type=SOURCE_DEVELOPMENT_MOVEMENT,
@@ -2517,13 +2635,7 @@ def collect_source_rows(
                 display_reference=movement.movement_reference,
             )
         )
-    for movement in session.scalars(
-        select(CashflowFinancingMovement).where(
-            *_standing_rows(
-                session, model=CashflowFinancingMovement, project_id=project.id, as_of=as_of
-            )
-        )
-    ):
+    for movement in financing:
         rows.append(
             SourceRow(
                 source_type=SOURCE_FINANCING_MOVEMENT,
@@ -2549,25 +2661,7 @@ def collect_source_rows(
     # still claims a share of what is left. At a historical cutoff both are asked
     # of that cutoff, so an August report keeps an escrow over an August receipt
     # that a September reversal later withdrew.
-    for restriction, receipt_date, receipt_number in session.execute(
-        select(
-            CashflowReceiptRestriction,
-            CollectionReceipt.receipt_date,
-            CollectionReceipt.receipt_number,
-        )
-        .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
-        .where(
-            *_standing_rows(
-                session, model=CashflowReceiptRestriction, project_id=project.id, as_of=as_of
-            ),
-            *standing_conditions(
-                status=CollectionReceipt.status,
-                confirmed_at=CollectionReceipt.confirmed_at,
-                reversed_at=CollectionReceipt.reversed_at,
-                as_of=as_of,
-            ),
-        )
-    ).all():
+    for restriction, receipt_date, receipt_number in restrictions:
         rows.append(
             SourceRow(
                 source_type=SOURCE_RESTRICTION,
@@ -2589,31 +2683,7 @@ def collect_source_rows(
     # A release frees a restriction, so it is standing only while that
     # restriction — and the receipt behind it — is. Freeing an escrow that no
     # longer exists would raise unrestricted cash against nothing.
-    for release in session.scalars(
-        select(CashflowRestrictionRelease)
-        .join(
-            CashflowReceiptRestriction,
-            CashflowReceiptRestriction.id == CashflowRestrictionRelease.restriction_id,
-        )
-        .join(CollectionReceipt, CollectionReceipt.id == CashflowReceiptRestriction.receipt_id)
-        .where(
-            *_standing_rows(
-                session, model=CashflowRestrictionRelease, project_id=project.id, as_of=as_of
-            ),
-            *standing_conditions(
-                status=CashflowReceiptRestriction.status,
-                confirmed_at=CashflowReceiptRestriction.confirmed_at,
-                reversed_at=CashflowReceiptRestriction.reversed_at,
-                as_of=as_of,
-            ),
-            *standing_conditions(
-                status=CollectionReceipt.status,
-                confirmed_at=CollectionReceipt.confirmed_at,
-                reversed_at=CollectionReceipt.reversed_at,
-                as_of=as_of,
-            ),
-        )
-    ):
+    for release in releases:
         rows.append(
             SourceRow(
                 source_type=SOURCE_RELEASE,
@@ -2632,10 +2702,6 @@ def collect_source_rows(
     if version is None:
         return rows
 
-    snapshot = snapshot_rows(session, version_id=version.id)
-    unapplied = collections_service.cashflow_unapplied_cash(
-        session, project_id=project.id, as_of=as_of
-    )
     adjusted = offset_unapplied_cash(snapshot, unapplied)
     for row in snapshot:
         month = month_of(row.chosen_forecast_date)
@@ -2677,8 +2743,8 @@ def collect_source_rows(
     # itself is untouched — a forecast that quietly shrank would not be the one
     # anybody approved — so the forecast file still reports the original amount
     # and only the projection reads the remainder.
-    remainders = forecast_remainders(session, project=project, version=version, as_of=as_of)
-    for line in forecast_lines(session, version_id=version.id):
+
+    for line in lines:
         remaining = remainders.get(line.id, money(line.amount))
         if remaining <= ZERO:
             continue
@@ -2820,6 +2886,20 @@ def monthly_positions(
     see ``opening_anchor_month``.
     """
     rows = collect_source_rows(session, project=project, version=version, as_of=as_of)
+    return positions_from_rows(
+        rows, version=version, as_of=as_of, start_month=start_month, end_month=end_month
+    )
+
+
+def positions_from_rows(
+    rows: Sequence[SourceRow],
+    *,
+    version: CashflowForecastVersion | None,
+    as_of: date,
+    start_month: date | None = None,
+    end_month: date | None = None,
+) -> list[MonthlyPosition]:
+    """The owner cash bridge calculation over an already collected source set."""
     anchor = opening_anchor_month(version)
 
     if start_month is None:

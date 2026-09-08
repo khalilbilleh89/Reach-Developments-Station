@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -3148,8 +3148,29 @@ def collection_register(
     if not visible:
         return []
 
-    sale_ids = [sale.id for sale, _, _ in visible]
+    positions = load_ledgers(session, [sale for sale, _, _ in visible], as_of)
+    return [
+        RegisterRow(
+            sale_id=sale.id,
+            sale_number=sale.sale_number,
+            spa_number=sale.spa_number,
+            unit_id=unit.id,
+            unit_number=unit.unit_number,
+            client_display_name=client.display_name,
+            currency_id=sale.currency_id,
+            summary=summarise(
+                session, position=positions[sale.id][0], as_of=as_of, extras=positions[sale.id][1]
+            ),
+        )
+        for sale, unit, client in visible
+    ]
 
+
+def load_ledgers(
+    session: Session, sales: list[SaleContract], as_of: date
+) -> dict[uuid.UUID, tuple[SaleLedger, SaleExtras]]:
+    """Bounded owner preloads for an already authorized sale population."""
+    sale_ids = [sale.id for sale in sales]
     plans = list(
         session.scalars(select(PaymentPlan).where(PaymentPlan.sale_contract_id.in_(sale_ids)))
     )
@@ -3283,8 +3304,8 @@ def collection_register(
         )
     )
 
-    register: list[RegisterRow] = []
-    for sale, unit, client in visible:
+    positions: dict[uuid.UUID, tuple[SaleLedger, SaleExtras]] = {}
+    for sale in sales:
         plan = plan_by_sale.get(sale.id)
         version = version_by_plan.get(plan.id) if plan else None
         schedule = rows_by_version.get(version.id, []) if version else []
@@ -3319,19 +3340,8 @@ def collection_register(
             # protect.
             collection_clearance_status=None,
         )
-        register.append(
-            RegisterRow(
-                sale_id=sale.id,
-                sale_number=sale.sale_number,
-                spa_number=sale.spa_number,
-                unit_id=unit.id,
-                unit_number=unit.unit_number,
-                client_display_name=client.display_name,
-                currency_id=sale.currency_id,
-                summary=summarise(session, position=position, as_of=as_of, extras=extras),
-            )
-        )
-    return register
+        positions[sale.id] = (position, extras)
+    return positions
 
 
 @dataclass(frozen=True, slots=True)
@@ -3495,6 +3505,8 @@ class CashflowCashRow:
     this contract a second collections API that drifts from the first.
     """
 
+    project_id: uuid.UUID
+    currency_id: uuid.UUID
     id: uuid.UUID
     reference: str
     sale_contract_id: uuid.UUID
@@ -3506,7 +3518,8 @@ class CashflowCashRow:
 def _cashflow_cash_rows(
     session: Session,
     *,
-    project_id: uuid.UUID,
+    project_id: uuid.UUID | None = None,
+    project_ids: Select | None = None,
     model: type[CollectionReceipt] | type[CollectionRefund],
     reference_column: InstrumentedAttribute[str],
     date_column: InstrumentedAttribute[date],
@@ -3521,10 +3534,16 @@ def _cashflow_cash_rows(
             SaleContract.unit_id,
             model.amount,
             date_column,
+            model.project_id,
+            model.currency_id,
         )
         .join(SaleContract, SaleContract.id == model.sale_contract_id)
         .where(
-            model.project_id == project_id,
+            (
+                model.project_id.in_(project_ids)
+                if project_ids is not None
+                else model.project_id == project_id
+            ),
             *standing_conditions(
                 status=model.status,
                 confirmed_at=model.confirmed_at,
@@ -3537,6 +3556,8 @@ def _cashflow_cash_rows(
     return [
         CashflowCashRow(
             id=row[0],
+            project_id=row[6],
+            currency_id=row[7],
             reference=row[1],
             sale_contract_id=row[2],
             unit_id=row[3],
@@ -3548,7 +3569,11 @@ def _cashflow_cash_rows(
 
 
 def cashflow_receipt_rows(
-    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+    session: Session,
+    *,
+    project_id: uuid.UUID | None = None,
+    project_ids: Select | None = None,
+    as_of: date | None = None,
 ) -> list[CashflowCashRow]:
     """Confirmed buyer cash that was standing, now or at a historical cutoff.
 
@@ -3560,6 +3585,7 @@ def cashflow_receipt_rows(
     return _cashflow_cash_rows(
         session,
         project_id=project_id,
+        project_ids=project_ids,
         model=CollectionReceipt,
         reference_column=CollectionReceipt.receipt_number,
         date_column=CollectionReceipt.receipt_date,
@@ -3568,7 +3594,11 @@ def cashflow_receipt_rows(
 
 
 def cashflow_refund_rows(
-    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+    session: Session,
+    *,
+    project_id: uuid.UUID | None = None,
+    project_ids: Select | None = None,
+    as_of: date | None = None,
 ) -> list[CashflowCashRow]:
     """Confirmed money returned to buyers, standing now or at a cutoff.
 
@@ -3579,6 +3609,7 @@ def cashflow_refund_rows(
     return _cashflow_cash_rows(
         session,
         project_id=project_id,
+        project_ids=project_ids,
         model=CollectionRefund,
         reference_column=CollectionRefund.refund_number,
         date_column=CollectionRefund.refund_date,

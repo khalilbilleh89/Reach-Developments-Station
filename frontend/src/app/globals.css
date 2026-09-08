@@ -2400,11 +2400,13 @@ input[type="file"].input {
    the register's own `white-space: nowrap`; a bare `.cell-prose` loses that
    cascade and the text runs across its neighbours instead of wrapping. */
 .table td.cell-prose,
+.table th.cell-prose,
 .table td.cell-prose .cell-secondary {
   white-space: normal;
 }
 
-.table td.cell-prose {
+.table td.cell-prose,
+.table th.cell-prose {
   min-width: 14rem;
   max-width: 28rem;
 }
@@ -2412,7 +2414,8 @@ input[type="file"].input {
 /* A prose column a register carries several of: an operator-typed
    classification, not a paragraph. Bounded tighter so three of them side by
    side still leave the figures on screen. */
-.table td.cell-prose-tight {
+.table td.cell-prose-tight,
+.table th.cell-prose-tight {
   min-width: 9rem;
   max-width: 15rem;
 }

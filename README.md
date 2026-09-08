@@ -29,15 +29,23 @@ or rules engines, no microservices. The full forbidden list lives in
 - **MVP 1:** Foundation delivered; legacy-source migration and go-live remain a
   separate historical track.
 - **MVP 2 Gate 0:** Complete.
-- **MVP 2 Gate 0A:** G0A-01 and G0A-02 merged; G0A-03 is the final main promotion candidate.
-- **Completion condition:** Once the independently approved G0A-03 candidate is on `main`,
-  Gate 0A and the MVP 2 operator iteration are complete (3 / 3). While it remains Draft,
-  acceptance is pending and only the first two PRs are merged.
-- **True MVP 3:** Not started.
+- **MVP 2:** Complete; its historical UAT qualifications remain in the original tracker.
+- **UX-04:** Merged into management integration (#270) and promoted to main (#271).
+- **True MVP 3:** M3-01 Portfolio Command Center is the current implementation candidate.
+  M3-02 and M3-03 are not started. **0 / 3 production milestones complete.**
 
-The detailed current tracker is
+The current tracker is [docs/MVP3_ROADMAP.md](docs/MVP3_ROADMAP.md), with
+[Portfolio definitions](docs/MVP3_PRODUCT_SPEC.md) and
+[acceptance evidence](docs/MVP3_ACCEPTANCE.md). The historical tracker remains
 [docs/MVP2_GATE0A_ROADMAP.md](docs/MVP2_GATE0A_ROADMAP.md); the original plan is
 retained in [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) as historical context.
+
+Portfolio is a read-only management view at `/portfolio/`. It combines only
+authorized whole projects through owner-domain batch reads, separates money by
+original currency and states unavailable coverage. Cashflow refuses incompatible
+source denominations instead of relabelling or converting them. The four GET
+routes are `/api/v1/portfolio/overview`, `/projects`, `/risks` and
+`/projects/{project_id}` beneath the Portfolio prefix.
 
 The system has authentication, the fixed role catalogue, country configuration,
 an append-only audit trail, projects with land, planning controls, permits and

@@ -15,6 +15,7 @@ import {
 } from "./navigation";
 import type { NavGroup } from "./navigation";
 import type { ShellArea } from "./AppShell";
+import { hasAnyRole, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
 
 interface SidebarProps {
   user: CurrentUser;
@@ -83,6 +84,13 @@ export function SidebarContent({
       </div>
 
       <div className="sidebar-scroll">
+        {hasAnyRole(roleSet(user.roles), PORTFOLIO_READERS) ? (
+          <nav className="nav-group" aria-label="Portfolio management">
+            <ul className="nav-list"><li><Link href="/portfolio/" className="nav-item" data-label="Portfolio" aria-current={area === "portfolio" ? "page" : undefined} onClick={onClose}>
+              <Icon name="overview" className="nav-icon" /><span className="nav-label">Portfolio</span>
+            </Link></li></ul>
+          </nav>
+        ) : null}
         {insideProject && projectId ? (
           <ProjectSwitcher project={project ?? null} projectId={projectId} section={section} onNavigate={onClose} />
         ) : null}

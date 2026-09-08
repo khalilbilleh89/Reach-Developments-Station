@@ -66,6 +66,16 @@ BACKBONE = (
 # Node IDs intentionally name a few existing, real PostgreSQL cases, not whole
 # expensive domain files. A new module must register its contract here.
 DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
+    "portfolio": (
+        "tests/modules/test_portfolio.py::test_empty_sources_are_unavailable_and_reads_do_not_write",
+        "tests/modules/test_portfolio.py::test_safe_cashflow_owner_parity",
+        "tests/modules/test_portfolio.py::test_roles_and_phase_scope_exclude_before_sources",
+        "tests/modules/test_portfolio.py::test_foreign_and_mixed_cash_refuse_without_losing_collections",
+        "tests/modules/test_portfolio.py::test_unauthorized_large_sources_and_phase_project_do_not_contribute",
+        "tests/modules/test_portfolio.py::test_populated_owner_parity_and_allocation_dedup",
+        "tests/modules/test_portfolio_governance.py::test_governed_forecast_and_opening_anchor_exact_parity",
+        "tests/modules/test_portfolio_risks.py::test_receipts_refund_and_unconfirmed_golden",
+    ),
     "settings": (
         "tests/modules/test_settings.py::test_a_currency_code_is_normalised_to_upper_case",
         "tests/modules/test_settings.py::test_a_country_pack_requires_an_active_currency",

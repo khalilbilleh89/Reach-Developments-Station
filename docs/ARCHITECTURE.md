@@ -67,6 +67,27 @@ Each layer reads downward, never upward. Reporting never becomes a place where
 new business truth is invented; it renders what the transaction and calculation
 layers already hold.
 
+### True MVP3 Portfolio management
+
+`app/modules/portfolio` is a read-only consumer of existing project truth. Its
+permissions module creates the authorized Project ID SQL relation before owner
+reads execute. Non-admin readers need active whole-project membership; selected
+phase memberships contribute no identity, counts, currency, amounts or risks.
+
+Narrow `batch.py` contracts in Inventory, Sales, Collections, Cashflow,
+Construction, Projects (Land/Permits), Consultant Engineering and Commissions
+accept that relation. They share owner arithmetic and lifecycle semantics and
+load multiple projects in fixed queries. Portfolio composes the responses and
+reduces currency buckets, weighted sales penetration and ten explicit risk
+predicates. It has no persistence, transaction routes, warehouse or background
+aggregation. Neither dependencies nor schema are extended for M3-01.
+
+Cashflow owns the denomination compatibility check. A foreign or mixed source
+invalidates the entire cash position and dependent risk evaluation; original
+Collections currency remains visible. Commission release is non-cash information.
+Missing governed sources remain unavailable, never zero or a health assessment.
+See [MVP3_PRODUCT_SPEC.md](MVP3_PRODUCT_SPEC.md) for exact bases and coverage.
+
 ---
 
 ## 5. Runtime architecture
