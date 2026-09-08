@@ -51,7 +51,7 @@ def reaches(start: str, target: str) -> bool:
 
 def chosen(*paths: str) -> selector.Selection:
     return selector.select(
-        list(paths), sorted(str(p.relative_to(ROOT)) for p in ROOT.glob("tests/**/test_*.py"))
+        list(paths), sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob("tests/**/test_*.py"))
     )
 
 
@@ -242,5 +242,5 @@ def test_schema_domains_still_claim_their_own_revisions() -> None:
 
 
 def test_only_operational_domains_are_excluded_from_schema_inference() -> None:
-    assert frozenset({CUTOVER}) == selector.NON_SCHEMA_DOMAINS
+    assert frozenset({CUTOVER, "project_analysis"}) == selector.NON_SCHEMA_DOMAINS
     assert CUTOVER in selector.DOMAIN_TEST_PREFIXES

@@ -2790,3 +2790,17 @@ def ensure_manager_sees_every_phase(
     ).first()
     if membership is not None and membership.phase_scope != PHASE_SCOPE_ALL:
         membership.phase_scope = PHASE_SCOPE_ALL
+
+
+def analysis_eligible(unit: Unit) -> bool:
+    """Released/committed/returned primary inventory; excludes held, unreleased,
+    withdrawn and inactive records. Returned units still require repricing before
+    they become available again. This population is not a new status dimension.
+    """
+    return unit.is_active and unit.commercial_status in {
+        "available",
+        "reserved",
+        "contract_pending",
+        "contracted",
+        "returned",
+    }

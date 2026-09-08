@@ -29,10 +29,10 @@ or rules engines, no microservices. The full forbidden list lives in
 - **MVP 1:** Foundation delivered; legacy-source migration and go-live remain a
   separate historical track.
 - **MVP 2 Gate 0:** Complete.
-- **MVP 2 Gate 0A:** 1 / 3 merged while PR-G0A-02 is in Draft review.
-- **Merged:** PR-G0A-01 — Project Structure, Setup Simplification & Pre-Launch.
-- **Current:** PR-G0A-02 — Consultant Engineer & Commission Distribution.
-- **Final:** PR-G0A-03 — Project Analysis Suite, Integrated Acceptance & Hardening.
+- **MVP 2 Gate 0A:** G0A-01 and G0A-02 merged; G0A-03 is the final main promotion candidate.
+- **Completion condition:** Once the independently approved G0A-03 candidate is on `main`,
+  Gate 0A and the MVP 2 operator iteration are complete (3 / 3). While it remains Draft,
+  acceptance is pending and only the first two PRs are merged.
 - **True MVP 3:** Not started.
 
 The detailed current tracker is

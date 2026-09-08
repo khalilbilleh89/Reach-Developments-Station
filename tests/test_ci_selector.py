@@ -40,6 +40,7 @@ AVAILABLE = [
     "tests/modules/test_prelaunch.py",
     "tests/modules/test_consultant_engineering.py",
     "tests/modules/test_commissions.py",
+    "tests/modules/test_project_analysis.py",
     "tests/modules/test_cashflow_forecast.py",
     "tests/modules/test_prelaunch.py",
     "tests/modules/test_audit.py",
@@ -161,6 +162,7 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "unit_economics",
     ]
     assert "tests/modules/test_payment_plans.py" in result.paths
@@ -189,6 +191,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -209,6 +212,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
         "cutover",
         "payment_plans",
         "pricing",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -230,6 +234,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
         "inventory",
         "payment_plans",
         "pricing",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -253,6 +258,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "inventory",
         "payment_plans",
         "pricing",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -290,7 +296,7 @@ def test_unit_economics_is_not_reached_from_collections() -> None:
     """
     result = chosen("app/modules/collections/service.py")
 
-    assert result.domains == ["cashflow", "collections", "cutover"]
+    assert result.domains == ["cashflow", "collections", "cutover", "project_analysis"]
     assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
 
 
@@ -627,6 +633,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cutover",
         "payment_plans",
         "pricing",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -637,6 +644,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -646,6 +654,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "unit_economics",
     ]
     # Construction reaches unit economics and cashflow, and cashflow reaches
@@ -655,15 +664,21 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cashflow",
         "construction",
         "cutover",
+        "project_analysis",
         "unit_economics",
     ]
     # And still downstream only: no leaf drags sales back in.
-    assert selector.closure({"collections"}) == ["cashflow", "collections", "cutover"]
+    assert selector.closure({"collections"}) == [
+        "cashflow",
+        "collections",
+        "cutover",
+        "project_analysis",
+    ]
     assert selector.closure({"unit_economics"}) == ["unit_economics"]
     # Cashflow is no longer a leaf: it feeds the cutover, and the cutover feeds
     # nothing. Unit economics still terminates, which is what keeps the two
     # sinks distinguishable.
-    assert selector.closure({"cashflow"}) == ["cashflow", "cutover"]
+    assert selector.closure({"cashflow"}) == ["cashflow", "cutover", "project_analysis"]
     assert selector.closure({"cutover"}) == ["cutover"]
     assert selector.find_cycle() is None
 
@@ -679,7 +694,7 @@ def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
     result = chosen("app/modules/collections/service.py")
 
     assert result.full is False
-    assert result.domains == ["cashflow", "collections", "cutover"]
+    assert result.domains == ["cashflow", "collections", "cutover", "project_analysis"]
     assert "tests/modules/test_collection_receipts.py" in result.paths
     assert "tests/modules/test_collection_allocations.py" in result.paths
     assert "tests/modules/test_collection_restructures.py" in result.paths
@@ -699,6 +714,7 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "unit_economics",
     ]
     assert "tests/modules/test_collection_restructures.py" in result.paths
@@ -716,6 +732,7 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
         "construction",
         "cutover",
         "payment_plans",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -733,6 +750,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
         "cutover",
         "payment_plans",
         "pricing",
+        "project_analysis",
         "sales",
         "unit_economics",
     ]
@@ -813,3 +831,19 @@ def test_closure_is_stable_when_applied_twice() -> None:
     once = selector.closure({"pricing"})
     twice = selector.closure(set(once))
     assert once == twice
+
+
+def test_analysis_is_a_read_only_downstream_of_its_sources() -> None:
+    for source in (
+        "projects",
+        "settings",
+        "inventory",
+        "sales",
+        "collections",
+        "construction",
+        "cashflow",
+        "consultant_engineering",
+    ):
+        assert "project_analysis" in selector.closure({source}), source
+    assert selector.closure({"project_analysis"}) == ["project_analysis"]
+    assert "project_analysis" in selector.NON_SCHEMA_DOMAINS

@@ -231,3 +231,10 @@ export function hasAnyRole(roles: Roles, allowed: Roles): boolean {
 export function roleSet(roles: { key: string }[]): Set<string> {
   return new Set(roles.map((role) => role.key));
 }
+
+/** Management analysis: the server also requires whole-project membership. */
+export const ANALYSIS_FINANCIAL_READERS: Roles = new Set([
+  "system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor",
+]);
+export const ANALYSIS_FUNDAMENTAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "sales_operations"]);
+export const ANALYSIS_TECHNICAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "design_engineering"]);

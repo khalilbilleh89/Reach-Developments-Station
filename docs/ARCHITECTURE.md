@@ -1191,3 +1191,22 @@ sourcing · CQRS · Kubernetes.
 
 The previous application became substantially overengineered. The rebuild does
 not repeat that.
+
+
+## 10. Gate 0A Project Analysis read composition
+
+`app/modules/project_analysis` is a read-only composition layer: `api.py` validates
+scope and routes; `permissions.py` enforces whole-project and per-section access;
+`service.py` reads authoritative sources in bulk; `calculations.py` contains small
+Decimal formulas; `schemas.py` describes context, availability and results. It has
+no models, migrations, persistence, audit writes, background tasks or dependency
+infrastructure. Source domains never import Analysis.
+
+Read joins stay project-scoped. Cash uses the existing public Cashflow collector's
+standing-as-of contract; Inventory gross area and attachment rules and Consultant
+workspace truth use their public contracts. Bounded periods default to 12 calendar
+months and reject ranges beyond 732 days. Unit/area/assignment reads use set-based
+queries; grouping is linear in the project source rows. This is not a cached
+warehouse or an unbounded cross-project report. Whole-project actual cash is not
+allocated to phases that lack authoritative allocations. Financial and technical
+facts remain separate from commercial commitments and consultant design progress.

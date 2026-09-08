@@ -14,27 +14,38 @@ def test_gate0a_is_the_canonical_three_pr_mvp2_plan() -> None:
     } <= names
     assert not {"MVP3_PRODUCT_SPEC.md", "MVP3_ROADMAP.md", "MVP3_ACCEPTANCE.md"} & names
     roadmap = (ROOT / "docs" / "MVP2_GATE0A_ROADMAP.md").read_text(encoding="utf-8")
-    assert "0 / 3 complete" in roadmap
-    assert "G0A-01 — CURRENT" in roadmap
-    assert "G0A-02 — NEXT" in roadmap
+    assert "2 / 3 merged" in roadmap
+    assert "3 / 3 complete" in roadmap
+    assert "main as Draft" in roadmap
+    assert "G0A-01 — MERGED" in roadmap
+    assert "G0A-02 — MERGED" in roadmap
     assert "G0A-03 — FINAL" in roadmap
     assert "True MVP 3 — NOT STARTED" in roadmap
     assert "historical technical debt" in roadmap and "integration/mvp3" in roadmap
 
 
-def test_g0a01_navigation_contains_only_implemented_destinations() -> None:
+def test_final_gate0a_navigation_contains_implemented_destinations() -> None:
     navigation = (ROOT / "frontend/src/components/shell/navigation.ts").read_text(encoding="utf-8")
     development = navigation.split('key: "development"', 1)[1].split('key: "commercial"', 1)[0]
     commercial = navigation.split('key: "commercial"', 1)[1].split('key: "delivery"', 1)[0]
-    for label in ('label: "Land"', 'label: "Permits"', 'label: "Pre-Launch"', 'label: "Inventory"'):
+    for label in (
+        'label: "Land"',
+        'label: "Permits"',
+        'label: "Pre-Launch"',
+        'label: "Inventory"',
+        'label: "Consultant Engineer"',
+    ):
         assert label in development
-    for label in ('label: "Sales"', 'label: "Payment Plans"', 'label: "Collections"'):
+    for label in (
+        'label: "Sales"',
+        'label: "Payment Plans"',
+        'label: "Collections"',
+        'label: "Commissions"',
+    ):
         assert label in commercial
     for absent in (
         'label: "Pricing"',
         'label: "Sales & Legal"',
-        'label: "Consultant Engineer"',
-        'label: "Commissions"',
     ):
         assert absent not in development + commercial
 

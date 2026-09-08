@@ -116,6 +116,9 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_prelaunch.py::test_sales_advisor_and_phase_scoped_reader_get_no_prelaunch_details",
         "tests/modules/test_prelaunch.py::test_utilities_row_survives_refused_downgrade_to_0015",
     ),
+    "project_analysis": (
+        "tests/modules/test_project_analysis.py::test_empty_sources_and_reads_have_no_side_effects",
+    ),
     "consultant_engineering": (
         "tests/modules/test_consultant_engineering.py::test_create_activate_and_deliverable_lifecycle",
         "tests/modules/test_consultant_engineering.py::test_second_activation_conflicts",

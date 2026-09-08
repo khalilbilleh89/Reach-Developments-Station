@@ -68,6 +68,7 @@ import {
 import { varianceNote, varianceTone } from "@/components/projects/construction/labels";
 import { AttentionPanel } from "./AttentionPanel";
 import type { AttentionItem } from "./AttentionPanel";
+import { ProjectAnalysis } from "./ProjectAnalysis";
 import { ProjectPlate } from "./ProjectPlate";
 import { ManagementReports } from "./ManagementReports";
 
@@ -345,6 +346,7 @@ export function ProjectCommandCenter({
         actions={canEdit ? <Button onClick={onEdit}>Edit project</Button> : undefined}
       />
 
+      <ProjectAnalysis key={id} projectId={id} roles={roles} />
       <div className="stack">
         {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
         {!operational ? (
