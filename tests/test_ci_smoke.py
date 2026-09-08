@@ -87,6 +87,7 @@ def test_migration_environment_is_allowed_only_with_a_registered_migration() -> 
 
 def test_new_domain_refuses_until_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     path = "app/modules/commissions/service.py"
+    monkeypatch.delitem(smoke.DOMAIN_SMOKE, "commissions")
     with pytest.raises(smoke.SmokeRefused, match=r"commissions.*no Backend Smoke contract"):
         smoke.select([path])
     representative = ("tests/test_config.py::test_defaults_describe_the_service",)
