@@ -379,6 +379,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
   return (
     <>
       <PageHeader
+        icon="permits"
         title="Permits"
         subtitle={sectionDescription("permits")}
         compact
@@ -891,6 +892,7 @@ function PermitFile({
   return (
     <Drawer
       narrow
+      icon="permits"
       eyebrow={typeLabel(permit.permit_type_code)}
       title={permit.permit_code}
       subtitle={permit.authority}

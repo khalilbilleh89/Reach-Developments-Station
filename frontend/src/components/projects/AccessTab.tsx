@@ -93,7 +93,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <PageHeader title="Access" subtitle={sectionDescription("access")} compact />
+      <PageHeader icon="access" title="Access" subtitle={sectionDescription("access")} compact />
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}

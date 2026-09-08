@@ -18,9 +18,8 @@ import {
   Notice,
   PageHeader,
   PlaceCell,
-  StatStrip,
-  StatStripItem,
-  StatStripNote,
+  Position,
+  PositionFigure,
   StatusDot,
   TableScroll,
   Tabs,
@@ -209,7 +208,7 @@ export function InventoryTab({
   if (projectStatus === "setup") {
     return (
       <>
-        <PageHeader title="Inventory" subtitle={sectionDescription("inventory")} compact />
+        <PageHeader icon="inventory" title="Inventory" subtitle={sectionDescription("inventory")} compact />
         <Card>
           <EmptyState
             title="Finalize project setup first"
@@ -223,6 +222,7 @@ export function InventoryTab({
   return (
     <>
       <PageHeader
+        icon="inventory"
         title="Inventory"
         subtitle={sectionDescription("inventory")}
         compact
@@ -345,19 +345,16 @@ export function InventoryTab({
         ) : null}
 
         {view === "units" && register ? (
-          <StatStrip>
-            <StatStripItem label="Units" value={register.total} />
-            <StatStripItem label="Available" value={register.available_count} />
-            <StatStripItem
-              label="Held"
-              value={register.held_count}
-              tone={register.held_count > 0 ? "warning" : "neutral"}
-            />
-            <StatStripItem label="Unreleased" value={register.unreleased_count} />
-            {areaTypes.length === 0 ? (
-              <StatStripNote>No area types configured — no unit can be measured or released.</StatStripNote>
-            ) : null}
-          </StatStrip>
+          <section className="asset-position" aria-label="Inventory position">
+            <div className="asset-position-identity"><Icon name="inventory" /><span>Property inventory<span className="cell-secondary">Physical assets · commercial readiness</span></span></div>
+            <Position compact>
+              <PositionFigure lead label="Units" value={register.total} />
+              <PositionFigure label="Available" value={register.available_count} />
+              <PositionFigure label="Held" value={register.held_count} tone={register.held_count > 0 ? "warning" : "neutral"} />
+              <PositionFigure label="Unreleased" value={register.unreleased_count} />
+            </Position>
+            {areaTypes.length === 0 ? <p className="footnote">No area types configured — no unit can be measured or released.</p> : null}
+          </section>
         ) : null}
 
         {view === "units" ? (
@@ -486,6 +483,7 @@ export function InventoryTab({
                       <th scope="row">
                         <button className="button-link" type="button" onClick={() => setSelected(unit)}>
                           <IdentityCell
+                            icon="inventory"
                             name={unit.unit_reference}
                             meta={
                               [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]

@@ -22,7 +22,7 @@ import {
   visibleNavigation,
 } from "@/components/shell/navigation";
 import type { ProjectSection } from "@/components/shell/navigation";
-import { Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
+import { Disclosure, Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
 import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCenter";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CashflowTab } from "@/components/projects/CashflowTab";
@@ -257,9 +257,9 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
-          <details><summary>Project construction stage configuration</summary>
+          <Disclosure title={<> Project construction stage configuration </>}>
             <ProjectStages projectId={projectId} roles={roles} />
-          </details>
+          </Disclosure>
         </>
       );
     }

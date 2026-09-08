@@ -191,7 +191,7 @@ export function CashflowTab({
   if (!canRead) {
     return (
       <div className="stack">
-        <PageHeader title="Cashflow" subtitle={sectionDescription("cashflow")} />
+        <PageHeader icon="economics" title="Cashflow" subtitle={sectionDescription("cashflow")} />
         <Notice tone="info">
           The project&rsquo;s cash position is not available to your role.
         </Notice>
@@ -207,6 +207,7 @@ export function CashflowTab({
   return (
     <div className="stack">
       <PageHeader
+        icon="economics"
         title="Cashflow"
         subtitle={sectionDescription("cashflow")}
         actions={

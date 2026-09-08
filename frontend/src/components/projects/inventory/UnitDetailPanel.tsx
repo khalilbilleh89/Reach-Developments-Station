@@ -409,7 +409,8 @@ export function UnitDetailPanel({
 
   return (
     <Drawer
-      eyebrow="Unit"
+      eyebrow="Unit 360"
+      icon="inventory"
       title={unit.unit_reference}
       subtitle={[
         [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bedroom`].filter(Boolean).join(" · ") ||

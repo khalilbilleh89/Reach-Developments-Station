@@ -96,6 +96,7 @@ export function PreLaunchTab({
   return (
     <div className="stack">
       <PageHeader
+        icon="money"
         title="Pre-Launch"
         subtitle={sectionDescription("prelaunch")}
         actions={canRecord ? <Button variant="primary" onClick={() => setAdding(true)}>Add expense</Button> : undefined}

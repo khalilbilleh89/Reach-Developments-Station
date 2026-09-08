@@ -195,7 +195,7 @@ export function CollectionAccount({
 
   return (
     <Drawer
-      eyebrow="Collections account"
+      eyebrow="Collections account" icon="collections"
       title={clientName}
       subtitle={`Unit ${unitNumber} · ${saleNumber}`}
       meta={

@@ -26,12 +26,14 @@ export function Tabs({
   active,
   onSelect,
   group,
+  variant = "workspace",
 }: {
   label: string;
   tabs: { key: string; label: string }[];
   active: string;
   onSelect: (key: string) => void;
   group?: string;
+  variant?: "workspace" | "record" | "analysis";
 }) {
   const stem = group ?? slug(label);
   const row = useRef<HTMLDivElement>(null);
@@ -39,8 +41,15 @@ export function Tabs({
   // On a narrow screen the row scrolls, and the selected section can end up off
   // the edge — which reads as nothing being selected at all. Bring it back.
   useEffect(() => {
-    const selected = row.current?.querySelector('[aria-selected="true"]');
-    selected?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const rail = row.current;
+    const selected = rail?.querySelector('[aria-selected="true"]');
+    if (!rail || !selected) return;
+    const bounds = rail.getBoundingClientRect();
+    const item = selected.getBoundingClientRect();
+    // Reveal only within this rail. scrollIntoView also scrolls the page when
+    // an analysis group mounts below the fold, displacing the project header.
+    if (item.left < bounds.left) rail.scrollBy({ left: item.left - bounds.left });
+    else if (item.right > bounds.right) rail.scrollBy({ left: item.right - bounds.right });
   }, [active]);
 
   // Arrow keys move BOTH selection and browser focus. Selection alone is not
@@ -58,7 +67,7 @@ export function Tabs({
   };
 
   return (
-    <div className="tabs" role="tablist" aria-label={label} ref={row}>
+    <div className={`tabs tabs-${variant}`} role="tablist" aria-label={label} ref={row}>
       {tabs.map((tab, index) => (
         <button
           key={tab.key}

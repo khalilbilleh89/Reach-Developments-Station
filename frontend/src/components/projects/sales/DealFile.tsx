@@ -14,7 +14,7 @@ import type {
   SaleDetail,
   SalesClient,
 } from "@/lib/api";
-import {
+import { Disclosure,
   Badge,
   Button,
   ButtonRow,
@@ -613,7 +613,8 @@ export function DealFile({
 
   if (error && reservation === null && sale === null) {
     return (
-      <Drawer eyebrow="Deal file" title={unitReference ?? "Deal"} onClose={onClose}>
+      <Drawer eyebrow="Deal file"
+      icon="sales" title={unitReference ?? "Deal"} onClose={onClose}>
         <Notice tone="error">{error}</Notice>
       </Drawer>
     );
@@ -621,7 +622,7 @@ export function DealFile({
 
   if (reservation === null && sale === null) {
     return (
-      <Drawer eyebrow="Deal file" title={unitReference ?? "Loading the deal…"} onClose={onClose}>
+      <Drawer eyebrow="Deal file" icon="sales" title={unitReference ?? "Loading the deal…"} onClose={onClose}>
         <Loading label="Loading the deal…" shape="record" />
       </Drawer>
     );
@@ -683,7 +684,7 @@ export function DealFile({
 
   return (
     <Drawer
-      eyebrow="Deal file"
+      eyebrow="Deal file" icon="sales"
       title={
         sale
           ? `${sale.sale.sale_number}${sale.sale.spa_number ? ` · ${sale.sale.spa_number}` : ""}`
@@ -798,8 +799,7 @@ export function DealFile({
             ) : null}
           </section>
 
-          <details>
-            <summary>Discounts, packages & other commercial inputs</summary>
+          <Disclosure title={<> Discounts, packages & other commercial inputs </>}>
             <SectionHeader title="Commercial inputs" />
             {reservation && reservation.adjustments.length > 0 ? (
               <TableScroll label="Commercial inputs" compact>
@@ -902,7 +902,7 @@ export function DealFile({
                 </form>
               </SubPanel>
             ) : null}
-          </details>
+          </Disclosure>
 
           <section>
             <SectionHeader title="What happens next" />

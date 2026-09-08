@@ -182,7 +182,7 @@ export function UnitEconomicsTab({ projectId, roles }: { projectId: string; role
     }
   };
 
-  const header = <PageHeader title="Unit Economics" subtitle={sectionDescription("economics")} compact />;
+  const header = <PageHeader icon="economics" title="Unit Economics" subtitle={sectionDescription("economics")} compact />;
 
   if (denied) {
     return (

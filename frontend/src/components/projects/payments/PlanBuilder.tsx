@@ -339,7 +339,7 @@ export function PlanBuilder({
 
   if (error && detail === null) {
     return (
-      <Drawer eyebrow="Payment plan" title="Payment plan" onClose={onClose}>
+      <Drawer eyebrow="Payment plan" icon="payments" title="Payment plan" onClose={onClose}>
         <Notice tone="error">{error}</Notice>
       </Drawer>
     );
@@ -347,7 +347,7 @@ export function PlanBuilder({
   if (detail === null) {
     return (
       <Drawer
-        eyebrow="Payment plan"
+        eyebrow="Payment plan" icon="payments"
         title="Loading the payment plan…"
         onClose={onClose}
       >
@@ -432,7 +432,7 @@ export function PlanBuilder({
 
   return (
     <Drawer
-      eyebrow="Payment plan"
+      eyebrow="Payment plan" icon="payments"
       title={detail.plan.plan_number}
       subtitle={`${detail.unit_reference} · ${detail.sale_number} · ${detail.client_display_name}`}
       meta={

@@ -221,6 +221,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
   return (
     <>
       <PageHeader
+        icon="projects"
         title="Projects"
         subtitle="The developments you can open. Choose one to work inside it."
         actions={

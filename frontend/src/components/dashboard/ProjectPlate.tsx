@@ -36,7 +36,7 @@ export function ProjectPlate({ project, actions }: { project: ProjectDetail; act
   return (
     <header className="plate">
       <div className="plate-main">
-        <p className="plate-eyebrow">Project</p>
+        <p className="plate-eyebrow"><Icon name="inventory" /> Development overview</p>
         <h1 className="plate-title">{project.name}</h1>
         <p className="plate-org">{project.developer_entity}</p>
         {place || mapHref ? (

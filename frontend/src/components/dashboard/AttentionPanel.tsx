@@ -51,7 +51,7 @@ export function AttentionPanel({
   return (
     <Card
       title="Needs attention"
-      description={flagged ? "In lifecycle order." : undefined}
+      description={flagged ? "Exceptions requiring a decision" : "Project exception queue"}
       tone={flagged ? "attention" : undefined}
     >
       {problems.map((problem) => (
@@ -88,7 +88,7 @@ export function AttentionPanel({
                 <p className="attention-hint">{item.hint}</p>
               </div>
               <Button small variant="quiet" aria-label={`Open ${item.title}`} onClick={() => onNavigate(item.section)}>
-                Open
+                <Icon name="chevron" />
               </Button>
             </li>
           ))}

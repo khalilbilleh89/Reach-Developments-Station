@@ -95,7 +95,7 @@ export function PaymentPlansTab({
   }, [load, projectStatus]);
 
   const header = (actions?: React.ReactNode) => (
-    <PageHeader title="Payment Plans" subtitle={sectionDescription("payments")} compact actions={actions} />
+    <PageHeader icon="payments" title="Payment Plans" subtitle={sectionDescription("payments")} compact actions={actions} />
   );
 
   if (projectStatus === "setup") {
@@ -369,6 +369,7 @@ export function PaymentPlansTab({
                     <th scope="row">
                       <button className="button-link" type="button" onClick={() => setOpenPlan(row.plan_id)}>
                         <IdentityCell
+                              icon="inventory"
                           name={row.plan_number}
                           meta={<span className="mono">{row.unit_reference}</span>}
                         />
