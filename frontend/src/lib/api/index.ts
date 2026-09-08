@@ -2266,6 +2266,27 @@ export const prelaunch = {
     ),
 };
 
+const consultantRoot = (projectId: string) => `/projects/${projectId}/consultant-engineering`;
+export const consultantEngineering = {
+  workspace: (projectId: string) => get<import("./types").ConsultantWorkspace>(consultantRoot(projectId)),
+  createEngagement: (projectId: string, body: Record<string, unknown>) => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements`, body),
+  transitionEngagement: (projectId: string, id: string, action: "activate" | "complete" | "terminate") => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${id}/${action}`, {}),
+  createDiscipline: (projectId: string, engagementId: string, body: Record<string, unknown>) => post<import("./types").ConsultantDiscipline>(`${consultantRoot(projectId)}/engagements/${engagementId}/disciplines`, body),
+  createStage: (projectId: string, engagementId: string, body: Record<string, unknown>) => post<import("./types").ConsultantStage>(`${consultantRoot(projectId)}/engagements/${engagementId}/stages`, body),
+  updateStage: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantStage>(`${consultantRoot(projectId)}/stages/${id}`, body),
+  createDeliverable: (projectId: string, engagementId: string, body: Record<string, unknown>) => post<import("./types").ConsultantDeliverable>(`${consultantRoot(projectId)}/engagements/${engagementId}/deliverables`, body),
+};
+
+const commissionsRoot = (projectId: string) => `/projects/${projectId}/commissions`;
+export const commissions = {
+  list: (projectId: string) => get<import("./types").CommissionGrant[]>(commissionsRoot(projectId)),
+  eligibleSales: (projectId: string) => get<import("./types").CommissionEligibleSale[]>(`${commissionsRoot(projectId)}/eligible-sales`),
+  create: (projectId: string, body: Record<string, unknown>) => post<import("./types").CommissionGrant>(commissionsRoot(projectId), body),
+  addAllocation: (projectId: string, id: string, body: Record<string, unknown>) => post<import("./types").CommissionGrant>(`${commissionsRoot(projectId)}/${id}/allocations`, body),
+  release: (projectId: string, id: string) => post<import("./types").CommissionGrant>(`${commissionsRoot(projectId)}/${id}/release`, {}),
+  reverse: (projectId: string, id: string, reason: string) => post<import("./types").CommissionGrant>(`${commissionsRoot(projectId)}/${id}/reverse`, { reason }),
+};
+
 /** Where every cashflow route for one project hangs. */
 function cashflowRoot(projectId: string): string {
   return `/projects/${projectId}/cashflow`;

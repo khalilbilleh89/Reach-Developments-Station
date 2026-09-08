@@ -3,10 +3,10 @@
 Authority: [MVP2_GATE0A_PRODUCT_SPEC.md](MVP2_GATE0A_PRODUCT_SPEC.md). Acceptance:
 [MVP2_GATE0A_ACCEPTANCE.md](MVP2_GATE0A_ACCEPTANCE.md).
 
-Before G0A-01 is integrated, Gate 0A is **0 / 3 complete**:
+With G0A-01 integrated, Gate 0A is **1 / 3 merged**:
 
-- **G0A-01 — CURRENT:** Project Structure, Setup Simplification & Pre-Launch
-- **G0A-02 — NEXT:** Consultant Engineer & Commission Distribution
+- **G0A-01 — MERGED:** Project Structure, Setup Simplification & Pre-Launch
+- **G0A-02 — CURRENT / DRAFT REVIEW:** Consultant Engineer & Commission Distribution
 - **G0A-03 — FINAL:** Project Analysis Suite, Integrated Acceptance & Hardening
 
 The original five product PRs were compressed because the current implementation
@@ -41,10 +41,10 @@ independent review is required. A genuine full-risk exception must be declared r
 than silently weakening Smoke. G0A-03 performs final integrated full-suite acceptance
 before promotion to `main`; after promotion, retire `integration/mvp3`.
 
-G0A-01 does not claim Gate 0A complete. Before merge the tracker remains:
+G0A-02 does not claim Gate 0A complete. During Draft review the tracker is:
 
-- G0A-01 — DRAFT / REVIEW
-- G0A-02 — NOT STARTED
+- G0A-01 — MERGED
+- G0A-02 — CURRENT / DRAFT REVIEW
 - G0A-03 — NOT STARTED
-- Gate 0A — 0 / 3 MERGED
+- Gate 0A — 1 / 3 MERGED
 - True MVP 3 — NOT STARTED

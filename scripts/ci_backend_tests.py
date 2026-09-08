@@ -123,6 +123,8 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "construction": ("construction", "migration_construction"),
     "cashflow": ("cashflow", "migration_cashflow"),
     "prelaunch": ("prelaunch",),
+    "consultant_engineering": ("consultant_engineering",),
+    "commissions": ("commissions",),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above
@@ -163,6 +165,8 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # is not why its tests run.
     "payment_plans": ("collections", "construction"),
     "collections": ("cashflow",),
+    "commissions": (),
+    "consultant_engineering": (),
     # Unit economics may source a construction forecast's hard-cost estimate at
     # completion through a named reader, so a construction change reaches it.
     # Cashflow reads construction's confirmed payments and its forecast position

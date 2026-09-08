@@ -38,7 +38,9 @@ from app.modules.access.dependencies import SESSION_COOKIE_NAME
 from app.modules.audit.api import router as audit_router
 from app.modules.cashflow.api import router as cashflow_router
 from app.modules.collections.api import router as collections_router
+from app.modules.commissions.api import router as commissions_router
 from app.modules.construction.api import router as construction_router
+from app.modules.consultant_engineering.api import router as consultant_router
 from app.modules.inventory.api import router as inventory_router
 from app.modules.payment_plans.api import router as payment_plans_router
 from app.modules.prelaunch.api import router as prelaunch_router
@@ -235,7 +237,9 @@ def create_app() -> FastAPI:
         sales_router,
         payment_plans_router,
         collections_router,
+        commissions_router,
         construction_router,
+        consultant_router,
         cashflow_router,
         prelaunch_router,
         unit_economics_router,

@@ -4,6 +4,8 @@ import {
   CASHFLOW_READERS,
   COLLECTION_READERS,
   CONSTRUCTION_READERS,
+  CONSULTANT_READERS,
+  COMMISSION_READERS,
   ECONOMICS_READERS,
   PLAN_READERS,
   ROLE_SYSTEM_ADMIN,
@@ -36,6 +38,7 @@ export type ProjectSection =
   | "land"
   | "permits"
   | "prelaunch"
+  | "consultant"
   | "inventory"
   // Retained as a technical route key for domain components and historical
   // links; it is deliberately absent from ordinary PROJECT_NAVIGATION.
@@ -43,6 +46,7 @@ export type ProjectSection =
   | "sales"
   | "payments"
   | "collections"
+  | "commissions"
   | "construction"
   | "economics"
   | "cashflow"
@@ -109,6 +113,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
       },
       {
+        key: "consultant",
+        label: "Consultant Engineer",
+        icon: "documents",
+        description: "The main consultant agreement, disciplines, design stages and deliverables.",
+        visible: (roles) => hasAnyRole(roles, CONSULTANT_READERS),
+      },
+      {
         key: "inventory",
         label: "Inventory",
         icon: "inventory",
@@ -145,6 +156,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description:
           "What the buyers have actually paid, what is still owed, and how old it is.",
         visible: (roles) => hasAnyRole(roles, COLLECTION_READERS),
+      },
+      {
+        key: "commissions",
+        label: "Commissions",
+        icon: "money",
+        description: "Per-sale commission grants and their beneficiary distribution.",
+        visible: (roles) => hasAnyRole(roles, COMMISSION_READERS),
       },
     ],
   },

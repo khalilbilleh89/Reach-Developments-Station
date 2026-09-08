@@ -28,7 +28,9 @@ from app.modules.access import models as access_models  # noqa: E402,F401
 from app.modules.audit import models as audit_models  # noqa: E402,F401
 from app.modules.cashflow import models as cashflow_models  # noqa: E402,F401
 from app.modules.collections import models as collections_models  # noqa: E402,F401
+from app.modules.commissions import models as commission_models  # noqa: E402,F401
 from app.modules.construction import models as construction_models  # noqa: E402,F401
+from app.modules.consultant_engineering import models as consultant_models  # noqa: E402,F401
 from app.modules.inventory import models as inventory_models  # noqa: E402,F401
 from app.modules.payment_plans import models as payment_plan_models  # noqa: E402,F401
 from app.modules.pricing import models as pricing_models  # noqa: E402,F401
