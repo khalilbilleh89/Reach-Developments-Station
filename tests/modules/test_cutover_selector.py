@@ -242,5 +242,5 @@ def test_schema_domains_still_claim_their_own_revisions() -> None:
 
 
 def test_only_operational_domains_are_excluded_from_schema_inference() -> None:
-    assert frozenset({CUTOVER, "project_analysis"}) == selector.NON_SCHEMA_DOMAINS
+    assert frozenset({CUTOVER, "project_analysis", "portfolio"}) == selector.NON_SCHEMA_DOMAINS
     assert CUTOVER in selector.DOMAIN_TEST_PREFIXES
