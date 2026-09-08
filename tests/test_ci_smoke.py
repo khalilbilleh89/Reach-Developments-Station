@@ -122,6 +122,17 @@ def test_unclassifiable_test_support_cannot_silently_pass() -> None:
         smoke.select(["tests/shared/helper.py"])
 
 
+def test_presentation_contract_has_exact_ownership_and_runs_when_changed() -> None:
+    path = "tests/test_product_experience.py"
+    nodes, domains = smoke.select([path, "frontend/src/components/ui/Card.tsx"])
+    assert not domains
+    assert set(nodes) == set(smoke.BACKBONE) | {path}
+    with pytest.raises(smoke.SmokeRefused, match="Unclassified/shared test"):
+        smoke.select(["tests/test_product_experience_unreviewed.py"])
+    with pytest.raises(smoke.SmokeRefused, match=r"full-gate|blast radius"):
+        smoke.select([path, "tests/conftest.py"])
+
+
 def test_a_large_domain_regression_file_does_not_turn_smoke_into_fast() -> None:
     nodes, domains = smoke.select(["tests/modules/test_collection_receipts.py"])
     assert domains == ["collections"]
