@@ -135,7 +135,7 @@ export function UsersSection() {
           >
             <FormSection
               title="Roles"
-              description="Approver / CFO may approve and activate prices, but may never approve a price they submitted themselves."
+              description="Ordinary Approver / CFO users need a different submitter. Master Administrator is the explicit owner override and may approve its own work."
             >
               <fieldset className="fieldset">
                 <legend className="visually-hidden">Roles for {editing.display_name}</legend>
