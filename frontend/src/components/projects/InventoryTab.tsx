@@ -1,9 +1,11 @@
 "use client";
 
+import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
-import type { AreaType, Building, Floor, Phase, UnitRegister, UnitSummary } from "@/lib/api";
+import type { AreaType, Building, Floor, Phase, UnitRegister } from "@/lib/api";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
@@ -34,7 +36,7 @@ import {
   PhasesView,
   UnitForm,
 } from "@/components/projects/inventory/StructureViews";
-import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
+import { RecordLink } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 const PAGE = "200";
@@ -72,7 +74,6 @@ const PAGE = "200";
 export function InventoryTab({
   projectId,
   projectStatus,
-  roles,
   canWriteStructure,
   canConfigure,
 }: {
@@ -83,25 +84,27 @@ export function InventoryTab({
   canConfigure: boolean;
 }) {
   const [register, setRegister] = useState<UnitRegister | null>(null);
+  useRegisterRestore(register !== null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useRegisterFields({
     phase_id: "",
     building_id: "",
     floor_id: "",
     commercial_status: "",
     search: "",
   });
-  const [selected, setSelected] = useState<UnitSummary | null>(null);
   const [open, setOpen] = useState<"none" | "areas" | "import">("none");
   const [error, setError] = useState<string | null>(null);
   // The unit is the record this business runs on, so it stays the view an
   // operator lands on. The other three are beside it and equally first-class,
   // which is the whole correction: they are no longer hidden inside a dialog
   // called "Add structure".
-  const [view, setView] = useState<"phases" | "buildings" | "floors" | "units">("units");
+  const [viewFields, setViewFields] = useRegisterFields({ view: "units" });
+  const view = (["phases", "buildings", "floors", "units"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units";
+  const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);
 
   // Typing in the search box fires a request per change, and responses can come
@@ -486,9 +489,9 @@ export function InventoryTab({
                 </thead>
                 <tbody>
                   {register.units.map((unit) => (
-                    <tr key={unit.id} aria-selected={selected?.id === unit.id}>
+                    <tr key={unit.id}>
                       <th scope="row">
-                        <button className="button-link" type="button" onClick={() => setSelected(unit)}>
+                        <RecordLink projectId={projectId} kind="unit" id={unit.id}>
                           <IdentityCell
                             icon="inventory"
                             name={unit.unit_reference}
@@ -498,7 +501,7 @@ export function InventoryTab({
                                 .join(" · ") || unit.asset_class
                             }
                           />
-                        </button>
+                        </RecordLink>
                       </th>
                       <td>
                         <PlaceCell
@@ -582,17 +585,6 @@ export function InventoryTab({
         />
       ) : null}
 
-      {selected ? (
-        <UnitDetailPanel
-          projectId={projectId}
-          roles={roles}
-          unitId={selected.id}
-          canWriteStructure={canWriteStructure}
-          canConfigure={canConfigure}
-          onClose={() => setSelected(null)}
-          onChanged={refresh}
-        />
-      ) : null}
     </>
   );
 }

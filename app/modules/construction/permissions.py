@@ -198,6 +198,8 @@ def require_different_approver(
     actor: ActorContext, *, submitted_by_user_id: uuid.UUID | None
 ) -> None:
     """Refuse an approval by the person who submitted the thing being approved."""
+    if actor.is_master_admin:
+        return
     if submitted_by_user_id is not None and submitted_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 
@@ -212,6 +214,8 @@ def require_different_invoice_approver(
     Named separately from the payment check because the wording matters in the
     refusal a person actually reads.
     """
+    if actor.is_master_admin:
+        return
     if recorded_by_user_id == actor.user_id:
         raise PermissionDeniedError("The person who recorded this invoice may not approve it.")
 
@@ -223,6 +227,8 @@ def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uui
     single Finance user who can both prepare and release a disbursement is the
     control failure every construction fraud case has in common.
     """
+    if actor.is_master_admin:
+        return
     if recorded_by_user_id == actor.user_id:
         raise PermissionDeniedError(_RECORDER)
 

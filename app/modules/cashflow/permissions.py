@@ -178,12 +178,16 @@ def require_cashflow_activator(actor: ActorContext) -> None:
 
 def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uuid.UUID) -> None:
     """Refuse a confirmation by the person who recorded the movement."""
+    if actor.is_master_admin:
+        return
     if recorded_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 
 
 def require_different_approver(actor: ActorContext, *, submitted_by_user_id: uuid.UUID) -> None:
     """Refuse an approval by the person who submitted the forecast."""
+    if actor.is_master_admin:
+        return
     if submitted_by_user_id == actor.user_id:
         raise PermissionDeniedError(_SUBMITTER)
 

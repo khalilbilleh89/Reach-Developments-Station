@@ -155,7 +155,7 @@ export function PhasesView({
       </Card>
 
       {selected ? (
-        <Drawer
+        <Drawer inspector
           eyebrow={selected.code}
           title={selected.name}
           onClose={() => setSelected(null)}
@@ -477,7 +477,7 @@ export function BuildingsView({
       </Card>
 
       {selected ? (
-        <Drawer
+        <Drawer inspector
           eyebrow={selected.code}
           title={selected.name}
           subtitle={phaseOf(selected)?.name ?? undefined}
@@ -836,7 +836,7 @@ export function FloorsView({
       </Card>
 
       {selected ? (
-        <Drawer
+        <Drawer inspector
           eyebrow={selected.code}
           title={selected.label}
           subtitle={(() => {

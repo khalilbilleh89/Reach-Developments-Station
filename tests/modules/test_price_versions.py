@@ -137,6 +137,31 @@ def test_the_submitter_cannot_approve_their_own_price(
     assert "may not approve it" in response.json()["detail"]
 
 
+def test_master_administrator_can_approve_and_activate_own_price(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    active_configuration: str,
+    db: Session,
+) -> None:
+    """The explicit owner override bypasses role and maker/checker approval gates."""
+    from tests.factories import client_for, make_user
+
+    master = make_user(db, email="master-price@example.com", roles=("master_admin",))
+    client = client_for(master.email)
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    version = _draft(client, project_id, unit_id)
+    base = _version_url(project_id, version["id"])
+
+    assert client.post(f"{base}/submit", json={}).status_code == 200
+    approved = client.post(f"{base}/approve", json={"reason": "Owner approval"})
+    activated = client.post(f"{base}/activate")
+
+    assert approved.status_code == 200, approved.text
+    assert activated.status_code == 200, activated.text
+
+
 def test_versions_are_numbered_in_sequence_per_unit(
     admin_client: TestClient,
     finance_client: TestClient,

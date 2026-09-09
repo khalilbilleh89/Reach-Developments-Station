@@ -39,9 +39,9 @@ from app.modules.projects.permissions import require_project_access
 #: up before Finance exists.
 PRICING_WRITER_ROLES = frozenset({"system_admin", "project_manager", "finance"})
 
-#: Who may sanction and release a price. Exactly one role, and deliberately not
-#: the administrator: the ability to configure a system is not the authority to
-#: approve what it charges.
+#: The ordinary role that may sanction and release a price. System Administrator
+#: remains excluded; Master Administrator receives every authority through the
+#: explicit request-level owner override in access dependencies.
 PRICING_APPROVER_ROLES = frozenset({"approver_cfo"})
 
 #: Who may see prices that are not yet live — drafts, submissions, approvals
@@ -120,6 +120,8 @@ def require_different_checker(actor: ActorContext, *, maker_user_id: uuid.UUID |
     who put a price forward is the one asserting it is right, and they are the
     signature the approval is meant to be independent of.
     """
+    if actor.is_master_admin:
+        return
     if maker_user_id is not None and maker_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER_DETAIL)
 

@@ -37,7 +37,7 @@ ROLES = FRONTEND / "lib" / "roles.ts"
 DASHBOARD = FRONTEND / "components" / "dashboard"
 COMMAND_CENTRE = DASHBOARD / "ProjectCommandCenter.tsx"
 PROJECTS = FRONTEND / "components" / "projects"
-UNIT_360 = PROJECTS / "inventory" / "UnitDetailPanel.tsx"
+UNIT_360 = PROJECTS / "inventory" / "UnitWorkspace.tsx"
 LAND_TAB = PROJECTS / "LandTab.tsx"
 PERMITS_TAB = PROJECTS / "PermitsTab.tsx"
 SETTINGS_SCREENS = FRONTEND / "components" / "settings"
@@ -517,7 +517,7 @@ class TestOnlyEntitledReadersAsk:
             'const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;'
             in unit
         )
-        headline = unit.split("const headline: DrawerHeadline | undefined = ")[1].split(";")[0]
+        headline = unit.split("const headline: WorkspaceHeadline | undefined = ")[1].split(";")[0]
         assert headline.startswith("soldContract")
         assert "soldContract.net_contract_price_ex_tax" in headline
         assert 'const liveSale = commitmentAnswer.status === "ready"' in unit
@@ -1160,3 +1160,51 @@ class TestTextContrast:
 
         dark, light = sorted((luminance(tokens[foreground]), luminance(tokens[background])))
         assert (light + 0.05) / (dark + 0.05) >= 4.5, (foreground, background)
+
+
+class TestRecordWorkspaceArchitecture:
+    """Persistent records keep a shareable address and existing business gates."""
+
+    def test_records_share_the_static_project_route(self) -> None:
+        routes = read(SHELL / "recordRoutes.ts")
+        assert "new URLSearchParams({ project: projectId" in routes
+        assert "return `/projects/?${params}`" in routes
+        assert "Object.hasOwn(recordModules, value)" in routes
+        assert 'params.get("project") === projectId' in routes
+        assert '!params.has("record")' in routes
+        for old in (
+            "inventory/UnitDetailPanel.tsx",
+            "sales/DealFile.tsx",
+            "payments/PlanBuilder.tsx",
+        ):
+            assert not (PROJECTS / old).exists()
+        for current in (
+            "inventory/UnitWorkspace.tsx",
+            "sales/SaleWorkspace.tsx",
+            "payments/PaymentPlanWorkspace.tsx",
+        ):
+            source = read(PROJECTS / current)
+            assert "<RecordWorkspace" in source
+            assert "<Drawer" not in source
+
+    def test_navigation_keeps_links_and_tab_addresses(self) -> None:
+        workspace = read(UI / "RecordWorkspace.tsx")
+        assert "<Link data-record-link" in workspace
+        assert 'next.set("tab", tab)' in workspace
+        assert "useOverlay" not in workspace
+        assert "onKeyDown" not in workspace
+        assert "tabIndex={-1}" in workspace
+        register = read(SHELL / "registerState.ts")
+        assert "window.history.replaceState" in register
+        assert "link?.focus({ preventScroll: true })" in register
+
+    def test_plan_creation_keeps_contract_and_maker_gates(self) -> None:
+        summary = read(PROJECTS / "payments/PlanSummary.tsx")
+        assert 'roles?.has("collections")' in summary
+        assert '["signature_pending", "active"].includes(saleStatus ?? "")' in summary
+        assert "sale_contract_id: saleId" in summary
+        assert "const shown = detail.active ?? detail.current" in summary
+        plan = read(PROJECTS / "payments/PaymentPlanWorkspace.tsx")
+        assert 'section === "overview" ? active ?? current' in plan
+        assert 'version.status === "submitted"' in plan
+        assert "!shownDetail.reconciliation.is_reconciled" in plan

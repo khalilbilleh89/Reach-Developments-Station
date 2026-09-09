@@ -20,7 +20,23 @@ export type Roles = ReadonlySet<string>;
 export const CONSTRUCTION_STAGE_CONFIGURERS: Roles = new Set(["project_manager"]);
 export const CONSTRUCTION_STAGE_WRITERS: Roles = new Set(["project_manager", "design_engineering", "finance"]);
 
+export const ROLE_MASTER_ADMIN = "master_admin";
 export const ROLE_SYSTEM_ADMIN = "system_admin";
+
+const SYSTEM_ROLE_KEYS = [
+  ROLE_MASTER_ADMIN,
+  ROLE_SYSTEM_ADMIN,
+  "project_manager",
+  "design_engineering",
+  "sales_operations",
+  "sales_advisor",
+  "legal",
+  "collections",
+  "finance",
+  "approver_cfo",
+  "executive_viewer",
+  "auditor",
+];
 
 /** Roles that may change project identity and the land record. */
 export const PROJECT_WRITERS: Roles = new Set([
@@ -206,6 +222,7 @@ export const AUDIT_READERS: Roles = new Set(["system_admin", "auditor"]);
  * "not found".
  */
 export function restrictedToOwnClients(roles: Roles): boolean {
+  if (roles.has(ROLE_MASTER_ADMIN)) return false;
   const wider = [
     "system_admin",
     "project_manager",
@@ -223,13 +240,15 @@ export function restrictedToOwnClients(roles: Roles): boolean {
 
 /** Whether the person holds at least one of the roles named. */
 export function hasAnyRole(roles: Roles, allowed: Roles): boolean {
+  if (roles.has(ROLE_MASTER_ADMIN)) return true;
   for (const role of roles) if (allowed.has(role)) return true;
   return false;
 }
 
 /** The person's roles as a set, from the session's list of role objects. */
 export function roleSet(roles: { key: string }[]): Set<string> {
-  return new Set(roles.map((role) => role.key));
+  const assigned = new Set(roles.map((role) => role.key));
+  return assigned.has(ROLE_MASTER_ADMIN) ? new Set(SYSTEM_ROLE_KEYS) : assigned;
 }
 
 /** Management analysis: the server also requires whole-project membership. */

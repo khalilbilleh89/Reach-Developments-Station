@@ -63,6 +63,7 @@ export function Drawer({
   onSelectTab,
   onClose,
   narrow,
+  inspector,
   children,
 }: {
   eyebrow?: string;
@@ -81,6 +82,7 @@ export function Drawer({
   onSelectTab?: (key: string) => void;
   onClose: () => void;
   narrow?: boolean;
+  inspector?: boolean;
   children: ReactNode;
 }) {
   const panel = useOverlay<HTMLDivElement>(onClose, "container");
@@ -103,7 +105,7 @@ export function Drawer({
       }}
     >
       <div
-        className={narrow ? "drawer drawer-narrow" : "drawer"}
+        className={inspector ? "drawer drawer-narrow drawer-inspector" : narrow ? "drawer drawer-narrow" : "drawer"}
         role="dialog"
         aria-modal="true"
         aria-label={title}

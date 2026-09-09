@@ -105,8 +105,10 @@ TypeScript.
 
 **Authentication** is server-side opaque sessions in an HttpOnly,
 `SameSite=Strict` cookie — no JWT, no auth framework, no token in
-`localStorage`. Authorization is explicit checks against eleven fixed roles;
-there is no permission table and no policy language.
+`localStorage`. Authorization is explicit checks against twelve fixed roles;
+there is no permission table and no policy language. Master Administrator is the
+explicit audited owner override: it receives every authority and may complete
+both sides of a maker/checker workflow without another user.
 
 ## Repository structure
 

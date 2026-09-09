@@ -1,5 +1,7 @@
 "use client";
 
+import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, paymentPlans, sales } from "@/lib/api";
@@ -23,11 +25,17 @@ import {
   PositionSupportItem,
   Notice,
   PageHeader,
+  SectionHeader,
   StatusDot,
   TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
-import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
+import { RecordLink } from "@/components/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { recordHref } from "@/components/shell/recordRoutes";
+import { projectHref } from "@/components/shell/navigation";
+import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { versionLabel, versionTone } from "@/components/projects/payments/labels";
 
 /**
@@ -51,6 +59,7 @@ export function PaymentPlansTab({
   roles: Set<string>;
 }) {
   const [register, setRegister] = useState<PlanRegister | null>(null);
+  useRegisterRestore(register !== null);
   const [schedulable, setSchedulable] = useState<SaleContract[]>([]);
   const [opening, setOpening] = useState(false);
   const [form, setForm] = useState({
@@ -60,9 +69,11 @@ export function PaymentPlansTab({
     effective_date: todayISO(),
     source_version_id: "",
   });
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const [filters, setFilters] = useRegisterFields({ search: "", status: "" });
+  const { search, status } = filters;
+  const setSearch = (search: string) => setFilters({ search });
+  const setStatus = (status: string) => setFilters({ status });
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -81,12 +92,13 @@ export function PaymentPlansTab({
     // Allowed to fail quietly: a reader who may see the register is not always
     // entitled to the contract list, and that should not blank the page.
     try {
+      if (!hasAnyRole(roles, SALES_READERS)) return;
       const contracts = await sales.contracts(projectId, {});
       setSchedulable(contracts.filter((sale) => ["signature_pending", "active"].includes(sale.status)));
     } catch {
       setSchedulable([]);
     }
-  }, [projectId]);
+  }, [projectId, roles]);
 
   useEffect(() => {
     void (async () => {
@@ -168,7 +180,8 @@ export function PaymentPlansTab({
             money received: what a buyer has actually paid is Collections' to
             say, and "next scheduled" is the next date still to come rather
             than any statement about arrears. */}
-        <Card
+        {register && rows.length === 0 ? <section className="workspace-empty"><SectionHeader title="No payment plans yet" description="Payment schedules are created from eligible Sale Contracts. Open a contract to prepare its SPA payment schedule." /><Link className="button button-primary" href={projectHref(projectId, "sales")}>Open Sales</Link></section> : <>
+        <div className="register-position"><Card
           tone={register ? "command" : undefined}
           title="Scheduled position"
           description={register ? "What is agreed and when it falls due, across this project." : undefined}
@@ -199,7 +212,10 @@ export function PaymentPlansTab({
               </PositionSupport>
             </>
           )}
-        </Card>
+        </Card></div>
+
+        </>}
+        {register && canPrepare && unscheduled.length ? <section className="stack"><SectionHeader title="Contracts needing a payment schedule" description="Eligible contracts returned to your role, without a plan in the authorized register." /><TableScroll label="Contracts needing schedules" stickyHeader><thead><tr><th scope="col">Sale / SPA</th><th scope="col">Status</th><th scope="col">Contract value</th><th scope="col">Action</th></tr></thead><tbody>{unscheduled.map(sale => <tr key={sale.id}><th scope="row"><RecordLink projectId={projectId} kind="sale" id={sale.id}>{sale.spa_number ?? sale.sale_number}</RecordLink></th><td>{sale.status.replaceAll("_", " ")}</td><td>{money(sale.total_contract_price, currencyCodeOf(sale.currency_id))}</td><td><RecordLink projectId={projectId} kind="sale" id={sale.id} tab="plan">Prepare SPA schedule</RecordLink></td></tr>)}</tbody></TableScroll></section> : null}
 
         {opening && canPrepare ? (
           <Card
@@ -224,7 +240,7 @@ export function PaymentPlansTab({
                   });
                   setOpening(false);
                   setNotice(`${created.plan.plan_number} opened. Build its schedule next.`);
-                  setOpenPlan(created.plan.id);
+                  router.push(recordHref(projectId, "payment-plan", created.plan.id));
                   await load();
                 } catch (caught) {
                   setError(caught instanceof ApiError ? caught.message : "Could not open the payment plan.");
@@ -343,7 +359,7 @@ export function PaymentPlansTab({
               />
             </div>
           ) : (
-            <TableScroll label="Payment plan register" fixedFirst>
+            <TableScroll label="Payment plan register" fixedFirst stickyHeader>
               <thead>
                 <tr>
                   <th scope="col">Plan</th>
@@ -367,13 +383,13 @@ export function PaymentPlansTab({
                 {shown.map((row) => (
                   <tr key={row.plan_id}>
                     <th scope="row">
-                      <button className="button-link" type="button" onClick={() => setOpenPlan(row.plan_id)}>
+                      <RecordLink projectId={projectId} kind="payment-plan" id={row.plan_id}>
                         <IdentityCell
                               icon="inventory"
                           name={row.plan_number}
                           meta={<span className="mono">{row.unit_reference}</span>}
                         />
-                      </button>
+                      </RecordLink>
                     </th>
                     <td className="cell-prose">{row.client_display_name}</td>
                     <td className="mono">{row.spa_number ?? row.sale_number}</td>
@@ -419,15 +435,6 @@ export function PaymentPlansTab({
         </Card>
       </div>
 
-      {openPlan ? (
-        <PlanBuilder
-          projectId={projectId}
-          planId={openPlan}
-          roles={roles}
-          onClose={() => setOpenPlan(null)}
-          onChanged={load}
-        />
-      ) : null}
     </>
   );
 }

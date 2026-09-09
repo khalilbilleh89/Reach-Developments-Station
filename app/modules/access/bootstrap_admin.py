@@ -24,7 +24,7 @@ from sqlalchemy import inspect, select
 from app.core.database import get_session_factory
 from app.core.errors import ServiceError
 from app.modules.access import service
-from app.modules.access.models import ROLE_SYSTEM_ADMIN, Role, User, UserRole
+from app.modules.access.models import ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN, Role, User, UserRole
 from app.modules.access.security import MIN_PASSWORD_LENGTH
 from app.modules.audit.models import AUDIT_SOURCE_BOOTSTRAP
 
@@ -57,7 +57,10 @@ def _check_no_existing_admin(session) -> None:  # noqa: ANN001 - Session, kept i
         select(User.id)
         .join(UserRole, UserRole.user_id == User.id)
         .join(Role, Role.id == UserRole.role_id)
-        .where(Role.key == ROLE_SYSTEM_ADMIN, User.is_active.is_(True))
+        .where(
+            Role.key.in_((ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN)),
+            User.is_active.is_(True),
+        )
     ).first()
     if existing is not None:
         raise BootstrapError(

@@ -38,8 +38,9 @@ const VERSION_TONES: Record<string, "muted" | "warning" | "info" | "success" | "
  * What this unit is offered at, and what that figure is made of.
  *
  * The buttons a caller is offered mirror the server's rule rather than replacing
- * it: the API refuses a submitter approving their own price, and an
- * administrator approving anything, whichever button was on screen.
+ * it: the API refuses ordinary submitters approving their own price and keeps
+ * System Administrators out of financial approval. Master Administrator is the
+ * explicit, audited owner override.
  *
  * `canSeeInternal` mirrors the server's own narrowing: for a role that may see
  * only the live list price the history it returned holds nothing that is not
@@ -145,8 +146,8 @@ export function UnitPricingSection({
             ) : null}
           </ButtonRow>
           <p className="footnote">
-            Nothing is live until it is approved and activated. Approval and preparation are
-            deliberately different people.
+            Nothing is live until it is approved and activated. Ordinary approvals require
+            different people; Master Administrator is the audited owner override.
           </p>
         </section>
       ) : null}

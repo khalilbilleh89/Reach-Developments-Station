@@ -630,7 +630,8 @@ Browser
 
 The raw token exists only in the browser cookie. Passwords are hashed with
 Argon2id. There is no permission table and no policy language: authorization is
-explicit role checks against the eleven fixed system roles.
+explicit role checks against the twelve fixed system roles. Master Administrator
+is the explicit audited owner override and receives every fixed authority.
 
 ### Project access
 
@@ -717,8 +718,9 @@ spreadsheet cell this system exists to replace.
 administrator prepares; only an Approver / CFO approves and activates; and the
 submitter may never approve their own work. A System Administrator deliberately
 does not inherit financial approval: the ability to configure a system is not
-the authority to sanction what it charges, and a role that silently contained
-every other role would make the separation decorative.
+the authority to sanction what it charges. Master Administrator is the named
+exception: it receives every authority and may approve and activate its own work
+without a second user, while retaining the same actor and timestamp audit evidence.
 
 **Activation is the only writer of `pricing_approved`.** The gate PR-MVP-03
 created with no writer now has exactly one, and no button, PATCH or override
@@ -966,7 +968,8 @@ moment somebody objected to it would make the ledger a record of opinions.
 certificate, invoice and payment each have two people, and the second is
 compared by user id rather than by role: a user holding both Finance and
 Approver / CFO is still one pair of eyes. The System Administrator reads
-everything and signs nothing.
+everything and signs nothing. Master Administrator is the explicit exception and
+may sign both sides under its own audited identity.
 
 **A partial view of a project total is refused, not filtered.** A phase-scoped
 reader who opened a budget would be shown "the project's budget" with the hidden
