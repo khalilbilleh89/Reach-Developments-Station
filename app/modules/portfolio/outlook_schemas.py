@@ -56,7 +56,8 @@ class Item(BaseModel):
 
 class CurrencyBucket(BaseModel):
     currency: str
-    scheduled_outstanding_due: Decimal = Decimal(0)
+    scheduled_outstanding_due: Decimal | None = None
+    availability: Literal["available", "partial", "unavailable"] = "available"
     contributing_project_count: int = 0
     unavailable_project_count: int = 0
 

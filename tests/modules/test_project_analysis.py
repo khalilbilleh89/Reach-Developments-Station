@@ -375,9 +375,7 @@ def test_deployed_main_upgrade_retains_source_data(
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
-    assert (
-        db.scalar(text("SELECT version_num FROM alembic_version")) == "0017_consultant_commissions"
-    )
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0018_management_actions"
     assert (
         snapshot(
             db,

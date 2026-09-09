@@ -51,6 +51,7 @@ class HorizonPosition:
     first_deficit_month: date | None
     peak_deficit: Decimal | None
     reason: str | None
+    availability: str = "available"
 
 
 def horizon_position(position: CashPosition, as_of: date, horizon_end: date) -> HorizonPosition:
@@ -60,7 +61,7 @@ def horizon_position(position: CashPosition, as_of: date, horizon_end: date) -> 
     is a monthly forecast outlook, not the separate daily funding-window report.
     """
     if position.forecast_reason:
-        return HorizonPosition(None, None, None, None, position.forecast_reason)
+        return HorizonPosition(None, None, None, None, position.forecast_reason, "unavailable")
     months = [
         (month, value)
         for month, value in position.projected_months
@@ -68,12 +69,20 @@ def horizon_position(position: CashPosition, as_of: date, horizon_end: date) -> 
     ]
     if not months:
         return HorizonPosition(
-            None, None, None, None, "No governed forecast months in this horizon."
+            None, None, None, None, "No governed forecast months in this horizon.", "unavailable"
         )
     month, amount = min(months, key=lambda item: (item[1], item[0]))
     first = next((month for month, value in months if value < 0), None)
     peak = calculator.peak_deficit(months).peak_funding_deficit
-    return HorizonPosition(amount, month, first, peak, None)
+    partial = position.forecast_end_month < owner.month_of(horizon_end)
+    return HorizonPosition(
+        amount,
+        month,
+        first,
+        peak,
+        "Governed forecast ends before the selected horizon." if partial else None,
+        "partial" if partial else "available",
+    )
 
 
 def _group(rows: Sequence, key: str = "project_id") -> dict[uuid.UUID, list]:

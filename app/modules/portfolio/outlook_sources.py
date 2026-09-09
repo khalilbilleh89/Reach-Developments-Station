@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Iterator
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import Row, Select, select
 from sqlalchemy.orm import Session
@@ -122,7 +123,7 @@ def observations(
             first_deficit_month=horizon.first_deficit_month,
             peak_deficit=horizon.peak_deficit,
             forecast_end_month=position.forecast_end_month,
-            availability="unavailable" if horizon.reason else "available",
+            availability=horizon.availability,
             reason=horizon.reason,
         )
         cost = costs.get(pid, service.construction.ConstructionPosition())
@@ -161,7 +162,9 @@ def observations(
                 continue
             code = currencies[currency_id]
             bucket = denomination_buckets.setdefault(code, CurrencyBucket(currency=code))
-            bucket.scheduled_outstanding_due += amount
+            bucket.scheduled_outstanding_due = (
+                bucket.scheduled_outstanding_due or Decimal("0")
+            ) + amount
             contributors.setdefault(code, set()).add(pid)
             yield item(
                 "scheduled_collection_due",
@@ -229,4 +232,8 @@ def observations(
                 )
     for code, bucket in denomination_buckets.items():
         bucket.contributing_project_count = len(contributors.get(code, set()))
+        if bucket.unavailable_project_count:
+            bucket.availability = (
+                "unavailable" if bucket.scheduled_outstanding_due is None else "partial"
+            )
     buckets.extend(denomination_buckets[code] for code in sorted(denomination_buckets))

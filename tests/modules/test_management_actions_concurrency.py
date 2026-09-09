@@ -30,6 +30,14 @@ def test_competing_updates_and_source_tables_unchanged(
         )
         assert reply.status_code == 201, reply.text
         url = f"/api/v1/portfolio/actions/{reply.json()['id']}"
+        # Resolve each app's lazy route schemas sequentially. The race below is
+        # between real database mutations, not Pydantic's process-global warning
+        # filters during first-request schema construction.
+        for client in (first, second):
+            assert (
+                client.patch(url, json={"expected_version": 999, "title": "Stale"}).status_code
+                == 409
+            )
         barrier = Barrier(2)
 
         def write(client: TestClient, title: str) -> int:
