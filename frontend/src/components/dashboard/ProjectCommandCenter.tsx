@@ -344,6 +344,7 @@ export function ProjectCommandCenter({
     <>
       <ProjectPlate
         project={project}
+        unitCount={unitTotals?.total}
         actions={canEdit ? <Button onClick={onEdit}>Edit project</Button> : undefined}
       />
 
@@ -361,6 +362,9 @@ export function ProjectCommandCenter({
             things needing attention would open a hand's depth of empty page
             under the position beside it. */}
         <div className="overview-position">
+          <div className="stack">
+            <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
+          </div>
           <div className="stack">
             {operational && hasPosition ? (
               <Card
@@ -490,9 +494,7 @@ export function ProjectCommandCenter({
             {operational && !hasPosition && loading ? <Loading label="Loading the position…" shape="metrics" /> : null}
           </div>
 
-          <div className="stack">
-            <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
-          </div>
+
         </div>
 
         {operational ? (

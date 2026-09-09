@@ -90,18 +90,21 @@ export function TableScroll({
   label,
   fixedFirst,
   compact,
+  stickyHeader,
   children,
 }: {
   label: string;
   fixedFirst?: boolean;
   compact?: boolean;
+  /** Bounded register scrolling keeps column labels visible on long lists. */
+  stickyHeader?: boolean;
   children: ReactNode;
 }) {
   const classes = ["table", fixedFirst ? "table-fixed-first" : "", compact ? "table-compact" : ""]
     .filter(Boolean)
     .join(" ");
   return (
-    <div className="table-scroll" tabIndex={0} role="group" aria-label={label}>
+    <div className={stickyHeader ? "table-scroll table-scroll-register" : "table-scroll"} tabIndex={0} role="group" aria-label={label}>
       <table className={classes}>
         <caption className="visually-hidden">{label}</caption>
         {children}
@@ -365,15 +368,19 @@ export function Meter({
   percent,
   label,
   note,
+  neutral,
 }: {
-  percent: number;
+  percent: number | string;
   /** Read out instead of the bar; defaults to the percentage itself. */
   label?: string;
   note?: ReactNode;
+  /** A reported ratio is not a risk judgement. Readiness keeps its existing tones. */
+  neutral?: boolean;
 }) {
-  const width = Math.max(0, Math.min(100, percent));
+  // Conversion is presentation geometry for a server percentage, never money.
+  const width = Math.max(0, Math.min(100, Number(percent)));
   const fillClass =
-    width >= 100 ? "meter-fill meter-fill-complete" : width < 50 ? "meter-fill meter-fill-low" : "meter-fill";
+    neutral ? "meter-fill" : width >= 100 ? "meter-fill meter-fill-complete" : width < 50 ? "meter-fill meter-fill-low" : "meter-fill";
   return (
     <span className="meter-block">
       <span className="meter">

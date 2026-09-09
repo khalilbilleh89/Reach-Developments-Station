@@ -20,7 +20,7 @@ function PortfolioScreen() {
   if (state.user.must_change_password) return <PasswordGate onChanged={() => router.replace("/login/")} />;
   const allowed = hasAnyRole(roleSet(state.user.roles), PORTFOLIO_READERS);
   return <AppShell area="portfolio" user={state.user} crumbs={[{ label: "Portfolio", href: "/portfolio/" }, { label: id ? "Project management summary" : section }]}>
-    <PageHeader eyebrow="Owner / developer" title={id ? "Portfolio project" : "Portfolio"} subtitle="Current project truth, explicit risks and traceable source coverage." />
+    <PageHeader icon="projects" eyebrow="Across developments" title={id ? "Portfolio project" : "Portfolio"} subtitle="Capital position, development performance and management attention." />
     {!allowed ? <Notice tone="info">Portfolio is not available to your role.</Notice> : id ? <PortfolioProject key={id} id={id} /> : <>
       <Tabs label="Portfolio sections" tabs={[{ key: "overview", label: "Overview" }, { key: "projects", label: "Projects" }, { key: "risks", label: "Risks" }]} active={section} onSelect={(key) => router.push(`/portfolio/?section=${key}`)} />
       <TabPanel group="portfolio-sections" tab={section}>{section === "projects" ? <PortfolioProjects /> : section === "risks" ? <PortfolioRisks /> : <PortfolioOverview />}</TabPanel>

@@ -5,6 +5,7 @@ import type { Answer } from "@/lib/answer";
 import {
   Badge,
   Button,
+  Disclosure,
   EmptyState,
   KeyValue,
   KeyValueGrid,
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
-import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import { unitCollectionLabel, unitCollectionTone } from "@/components/projects/collections/labels";
 import {
@@ -32,13 +32,6 @@ import {
 
 /** The commercial states in which a reservation or contract owns the unit. */
 const COMMITTED = new Set(["reserved", "contract_pending", "contracted"]);
-
-const DIMENSIONS: { key: keyof Unit; label: string }[] = [
-  { key: "commercial_status", label: "Commercial" },
-  { key: "legal_status", label: "Legal" },
-  { key: "collection_status", label: "Collection" },
-  { key: "delivery_status", label: "Delivery" },
-];
 
 /**
  * The first screen of Unit 360: where this unit stands, in one view.
@@ -74,29 +67,66 @@ export function UnitSummary({
   return (
     <div className="record-overview">
       <section className="record-section record-standing">
-        <SectionHeader title="Standing" />
-        <div className="standing">
-          {DIMENSIONS.map((dimension) => {
-            const value = String(unit[dimension.key]);
-            return (
-              <div className="standing-cell" key={dimension.key}>
-                <p className="standing-label">{dimension.label}</p>
-                <Badge tone={statusTone(value)}>{statusLabel(value)}</Badge>
-              </div>
-            );
-          })}
-        </div>
+        <SectionHeader title="Property profile" actions={<Button small onClick={() => onOpenTab("detail")}>Physical record</Button>} />
+        <KeyValueGrid columns={3}>
+          <KeyValue label="Property" value={[unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bedrooms`, unit.bathrooms === null ? null : `${unit.bathrooms} bathrooms`].filter(Boolean).join(" · ") || unit.asset_class} />
+          <KeyValue label="Location" value={[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" → ") || "Not recorded"} />
+          {unit.view_class_code || unit.orientation_code ? <KeyValue label="View / orientation" value={[unit.view_class_code, unit.orientation_code].filter(Boolean).join(" · ")} /> : null}
+          <KeyValue label="Parking / storage" value={`${unit.parking_count} parking · ${unit.storage_count} storage`} />
+          <KeyValue label="Area revision" value={unit.area_revision_code ?? "Not recorded"} />
+          <KeyValue label="Delivery" value={<Button small variant="quiet" onClick={() => onOpenTab("construction")}>Inspect construction stages</Button>} />
+        </KeyValueGrid>
+        <p className="footnote">Parking and storage remain separate attached assets, excluded from gross area.</p>
       </section>
+      {collection.status === "off" ? null : (
+        <section className="record-section unit-account">
+          <SectionHeader
+            title="Collections"
+            actions={
+              collection.status === "ready" ? (
+                <Button small onClick={() => onOpenTab("collections")}>
+                  Account position
+                </Button>
+              ) : undefined
+            }
+          />
+          <CollectionSnapshot answer={collection} />
+        </section>
+      )}
 
-      <section className="record-section">
-        <SectionHeader
-          title="Release readiness"
-          actions={
-            <Button small onClick={() => onOpenTab("release")}>
-              Release controls
-            </Button>
-          }
-        />
+      {pricing.status === "off" ? null : (
+        <section className="record-section">
+          <SectionHeader
+            title="Price"
+            actions={
+              pricing.status === "ready" ? (
+                <Button small onClick={() => onOpenTab("pricing")}>
+                  Price breakdown
+                </Button>
+              ) : undefined
+            }
+          />
+          <PriceSnapshot answer={pricing} />
+        </section>
+      )}
+
+      {commitment.status === "off" ? null : (
+        <section className="record-section">
+          <SectionHeader
+            title="Commitment"
+            actions={
+              commitment.status === "ready" ? (
+                <Button small onClick={() => onOpenTab("commercial")}>
+                  Sale and legal
+                </Button>
+              ) : undefined
+            }
+          />
+          <CommitmentSnapshot answer={commitment} commercialStatus={unit.commercial_status} />
+        </section>
+      )}
+      <Disclosure title="Release readiness" context="Configuration · approvals · release controls">
+        <Button small onClick={() => onOpenTab("release")}>Release controls</Button>
         <MetricGroup compact>
           <Metric
             label="Data completeness"
@@ -117,55 +147,8 @@ export function UnitSummary({
         {unit.missing_requirements.length > 0 ? (
           <p className="footnote">Outstanding: {unit.missing_requirements.join(", ")}.</p>
         ) : null}
-      </section>
+      </Disclosure>
 
-      {pricing.status === "off" ? null : (
-        <section className="record-section">
-          <SectionHeader
-            title="Price"
-            actions={
-              pricing.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("pricing")}>
-                  Price breakdown
-                </Button>
-              ) : undefined
-            }
-          />
-          <PriceSnapshot answer={pricing} />
-        </section>
-      )}
-
-      {collection.status === "off" ? null : (
-        <section className="record-section">
-          <SectionHeader
-            title="Collections"
-            actions={
-              collection.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("collections")}>
-                  Account position
-                </Button>
-              ) : undefined
-            }
-          />
-          <CollectionSnapshot answer={collection} />
-        </section>
-      )}
-
-      {commitment.status === "off" ? null : (
-        <section className="record-section">
-          <SectionHeader
-            title="Commitment"
-            actions={
-              commitment.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("commercial")}>
-                  Sale and legal
-                </Button>
-              ) : undefined
-            }
-          />
-          <CommitmentSnapshot answer={commitment} commercialStatus={unit.commercial_status} />
-        </section>
-      )}
     </div>
   );
 }
@@ -292,7 +275,7 @@ function CommitmentSnapshot({ answer, commercialStatus }: { answer: Answer<Commi
           />
           <KeyValue label="SPA number" mono value={commitment.sale.sale.spa_number} />
           <KeyValue
-            label="Contract price"
+            label="Contract total · incl tax"
             mono
             value={money(commitment.sale.sale.total_contract_price, currencyCodeOf(commitment.sale.sale.currency_id))}
           />

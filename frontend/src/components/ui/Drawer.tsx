@@ -54,6 +54,7 @@ export function Drawer({
   title,
   subtitle,
   meta,
+  status,
   headline,
   facts,
   actions,
@@ -69,6 +70,8 @@ export function Drawer({
   title: string;
   subtitle?: ReactNode;
   meta?: ReactNode;
+  /** Independent record states, between identity and supporting facts. */
+  status?: ReactNode;
   headline?: DrawerHeadline;
   facts?: DrawerFact[];
   /** Contextual actions beside Close: the one or two things this record invites. */
@@ -137,6 +140,7 @@ export function Drawer({
               </Button>
             </div>
           </div>
+          {status ? <div className="drawer-state">{status}</div> : null}
           {shownFacts.length > 0 ? (
             <dl className="drawer-facts">
               {shownFacts.map((fact) => (

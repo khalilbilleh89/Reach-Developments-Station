@@ -22,7 +22,7 @@ import { projectStatusLabel, projectStatusTone } from "@/components/projects/pro
  * programme, a currency. No figure appears here. Figures are labelled, and
  * they belong in the position beneath.
  */
-export function ProjectPlate({ project, actions }: { project: ProjectDetail; actions?: ReactNode }) {
+export function ProjectPlate({ project, actions, unitCount }: { project: ProjectDetail; actions?: ReactNode; unitCount?: number }) {
   // The readable place, and separately the destination — the two are only
   // sometimes the same field.
   const mapHref = isUrl(project.location) ? project.location : null;
@@ -58,6 +58,7 @@ export function ProjectPlate({ project, actions }: { project: ProjectDetail; act
               <InlineMetaItem label="Type">{project.project_type_code}</InlineMetaItem>
             ) : null}
             {programme ? <InlineMetaItem label="Programme">{programme}</InlineMetaItem> : null}
+            {unitCount !== undefined ? <InlineMetaItem label="Inventory">{unitCount} units</InlineMetaItem> : null}
             <InlineMetaItem label="Base">{project.base_currency_code ?? "—"}</InlineMetaItem>
             {project.reporting_currency_code && project.reporting_currency_code !== project.base_currency_code ? (
               <InlineMetaItem label="Reporting">{project.reporting_currency_code}</InlineMetaItem>

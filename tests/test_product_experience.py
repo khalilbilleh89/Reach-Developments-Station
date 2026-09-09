@@ -66,6 +66,7 @@ REPRESENTATIVE_SCREENS = (
     PROJECTS / "construction" / "ConstructionSummaryView.tsx",
     PROJECTS / "CommissionsTab.tsx",
     PROJECTS / "PreLaunchTab.tsx",
+    FRONTEND / "components" / "portfolio" / "Portfolio.tsx",
 )
 
 
@@ -81,6 +82,60 @@ def frontend_sources() -> list[Path]:
         for path in FRONTEND.glob(pattern)
         if "node_modules" not in path.parts
     )
+
+
+class TestExperience41Evidence:
+    """Keep shared exceptions and count geometry from creating new business truth."""
+
+    def test_attention_has_one_presentation_and_keeps_source_evidence(self) -> None:
+        component = read(UI / "Attention.tsx")
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "AttentionList" in read(DASHBOARD / "AttentionPanel.tsx")
+        assert "AttentionList detailed" in portfolio
+        for field in ("risk.reason", "risk.basis", "risk.observation_date", "risk.drilldown"):
+            assert field in portfolio
+        assert "risk.severity" in portfolio
+        for forbidden in ("fetch(", "useAnswer", "onSubmit", "owner_id", "due_date"):
+            assert forbidden not in component
+
+    def test_count_visuals_accept_counts_not_decimal_money(self) -> None:
+        charts = read(UI / "CountVisuals.tsx")
+        analysis = read(DASHBOARD / "ProjectAnalysis.tsx")
+        assert "count: number" in charts
+        assert "count: row.net_absorption" in analysis
+        assert "Object.entries(p.commercial)" in analysis
+        for forbidden in ("Number(", "parseFloat", "currency", "amount", ".reduce(", "fetch("):
+            assert forbidden not in charts
+        assert "flexGrow: row.count" in charts
+        assert "{row.count}</text>" in charts
+        assert "Math.abs(row.count) / extent" in charts
+
+    def test_visuals_keep_availability_and_text_equivalents(self) -> None:
+        charts = read(UI / "CountVisuals.tsx")
+        analysis = read(DASHBOARD / "ProjectAnalysis.tsx")
+        assert '<dl className="count-legend">' in charts
+        assert '<dl className="visually-hidden">' in charts
+        assert "{row.count} units" in charts
+        assert "Below zero means net cancellations" in analysis
+        assert 'data.sales_basis.availability === "unavailable"' in analysis
+        assert "<Basis value={data.sales_basis}" in analysis
+        assert '<TableScroll fixedFirst label="Monthly selling demand">' in analysis
+
+    def test_capital_bands_select_exact_currency_records(self) -> None:
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "entry.currency === currency && entry.metric_code === code" in portfolio
+        assert "money(row.amount, row.currency)" in portfolio
+        assert 'row.amount === null ? "Unavailable"' in portfolio
+        assert "row.availability" in portfolio and "row.reason" in portfolio
+        assert "partial sums exclude unavailable project amounts" in portfolio
+        assert "Missing coverage is not a health assessment" in portfolio
+
+    def test_penetration_geometry_uses_the_reported_percentage(self) -> None:
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "<Meter neutral percent={data.sales_penetration.percentage}" in portfolio
+        assert "data.sales_penetration.percentage === null" in portfolio
+        assert "Number(percent)" in read(UI / "Data.tsx")
+        assert 'neutral ? "meter-fill"' in read(UI / "Data.tsx")
 
 
 def stylesheet_without_comments() -> str:
@@ -451,12 +506,11 @@ class TestOnlyEntitledReadersAsk:
         )
         assert 'if (seesCollections && sale && sale.sale.status !== "draft")' in unit
 
-    def test_the_unit_headline_price_exists_only_when_pricing_was_answered(self) -> None:
-        """The large price in the record header is drawn from the pricing answer alone.
+    def test_the_unit_headline_follows_authorized_contract_or_pricing_answers(self) -> None:
+        """A sold asset leads with its readable contract; asking price remains gated.
 
-        `unitPricing` is null unless the pricing request was made and answered,
-        and the request is made only for LIST_PRICE_READERS — so a role refused
-        the list price has no headline, not a hidden one.
+        A committed unit with no readable contract must not fall back to a list
+        price and imply that it is the sold amount. Neither source gains a fetch.
         """
         unit = read(UNIT_360)
         assert (
@@ -464,7 +518,14 @@ class TestOnlyEntitledReadersAsk:
             in unit
         )
         headline = unit.split("const headline: DrawerHeadline | undefined = ")[1].split(";")[0]
-        assert headline.startswith("unitPricing")
+        assert headline.startswith("soldContract")
+        assert "soldContract.net_contract_price_ex_tax" in headline
+        assert 'const liveSale = commitmentAnswer.status === "ready"' in unit
+        assert '["active", "termination_pending"].includes(liveSale.status)' in unit
+        assert 'const committedUnit = ["contract_pending", "contracted"]' in unit
+        committed_branch = headline.split(": committedUnit")[1].split(": unitPricing")[0]
+        assert 'commitmentAnswer.status === "failed"' in committed_branch
+        assert ": undefined" in committed_branch
         assert "reference_price_ex_tax" in headline
 
     def test_navigation_groups_are_the_developers_departments_in_order(self) -> None:
@@ -656,9 +717,13 @@ class TestRecordsAndDialogsKeepTheirSemantics:
         assert "Clear filters" in toolbar and "Applied" in toolbar
 
     def test_record_standing_keeps_all_four_independent_dimensions(self) -> None:
-        summary = read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
+        standing = read(PROJECTS / "inventory" / "unit" / "UnitStanding.tsx")
         for dimension in ("commercial", "legal", "collection", "delivery"):
-            assert f'key: "{dimension}_status"' in summary
+            assert f'["{dimension}_status",' in standing
+        assert "statusLabel(unit[key])" in standing
+        assert "statusTone(unit[key])" in standing
+        assert "status={<UnitStanding unit={unit} />}" in read(UNIT_360)
+        assert "UnitStanding" not in read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
 
     def test_every_table_has_a_caption(self) -> None:
         table = read(UI / "Data.tsx")
