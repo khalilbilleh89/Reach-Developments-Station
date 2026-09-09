@@ -53,7 +53,6 @@ def test_system_administrator_can_manage_users(admin: User) -> None:
     assert created.json()["role_keys"] == ["finance"]
 
 
-@pytest.mark.parametrize("actor", ["auditor", "advisor"])
 def test_master_administrator_can_edit_own_permissions_and_manage_settings(db: Session) -> None:
     """A Master Administrator may grant itself roles and use administrator routes."""
     master = make_user(db, email="master@example.com", roles=("master_admin",))
@@ -76,6 +75,7 @@ def test_master_administrator_can_edit_own_permissions_and_manage_settings(db: S
     assert configured.status_code == 201, configured.text
 
 
+@pytest.mark.parametrize("actor", ["auditor", "advisor"])
 def test_non_administrators_cannot_manage_users(request: pytest.FixtureRequest, actor: str) -> None:
     """Given any non-administrator, then user administration is refused."""
     user: User = request.getfixturevalue(actor)
