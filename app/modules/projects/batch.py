@@ -2,7 +2,7 @@
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import Select, select
@@ -20,6 +20,8 @@ class DevelopmentPosition:
     land_count: int = 0
     land_total: Decimal = Decimal(0)
     land_incomplete: bool = False
+    deadlines: list[tuple[uuid.UUID, str, date, str, bool]] = field(default_factory=list)
+    undated_permits: int = 0
 
 
 def positions(
@@ -32,6 +34,19 @@ def positions(
         target = result.setdefault(permit.project_id, DevelopmentPosition())
         target.permit_count += 1
         unresolved = permit.status not in _SATISFYING_STATUSES | {"withdrawn"}
+        if unresolved:
+            if permit.statutory_sla_days is None:
+                target.undated_permits += 1
+            else:
+                target.deadlines.append(
+                    (
+                        permit.id,
+                        permit.permit_code,
+                        permit.status_effective_date + timedelta(days=permit.statutory_sla_days),
+                        permit.status,
+                        permit.is_blocking,
+                    )
+                )
         if unresolved and permit.is_blocking:
             target.blockers.append((permit.id, permit.permit_type_code))
         elif unresolved and overdue:
