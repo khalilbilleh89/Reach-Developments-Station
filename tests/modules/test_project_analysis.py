@@ -356,43 +356,19 @@ def test_deployed_main_upgrade_retains_source_data(
     from tests.conftest import alembic_config
 
     del manager_member_client, project_id, unit_id, confirmed_receipt
-    before = snapshot(
-        db,
-        (
-            "alembic_version",
-            "consultant_engagements",
-            "consultant_disciplines",
-            "consultant_design_stages",
-            "consultant_deliverables",
-            "commission_grants",
-            "commission_allocations",
-        ),
-    )
+    excluded = ("alembic_version", "management_actions", "management_action_history")
+    before = snapshot(db, excluded)
     db.rollback()
     config = alembic_config()
-    command.downgrade(config, "0016_prelaunch_utilities")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0016_prelaunch_utilities"
+    # Current deployed main includes the Master Administrator seed migration.
+    # Older history round-trips are covered by tests/test_migrations.py.
+    command.downgrade(config, "0018_master_admin")
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0018_master_admin"
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
-    assert (
-        db.scalar(text("SELECT version_num FROM alembic_version")) == "0017_consultant_commissions"
-    )
-    assert (
-        snapshot(
-            db,
-            (
-                "alembic_version",
-                "consultant_engagements",
-                "consultant_disciplines",
-                "consultant_design_stages",
-                "consultant_deliverables",
-                "commission_grants",
-                "commission_allocations",
-            ),
-        )
-        == before
-    )
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
+    assert snapshot(db, excluded) == before
 
 
 def test_financial_confirmation_reversal_and_business_date(

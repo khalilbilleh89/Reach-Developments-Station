@@ -21,6 +21,10 @@ class CollectionsPosition:
     overdue: dict[uuid.UUID, Decimal] = field(default_factory=dict)
     unavailable_overdue_currencies: set[uuid.UUID] = field(default_factory=set)
     missing_schedules: int = 0
+    scheduled: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID, str, date, uuid.UUID, Decimal]] = field(
+        default_factory=list
+    )
+    undated_installments: int = 0
 
 
 def positions(
@@ -55,6 +59,24 @@ def positions(
             target.unavailable_overdue_currencies.add(sale.currency_id)
         elif position.version is not None or position.sale_cancelled:
             summary = service.summarise(session, position=position, as_of=as_of, extras=extras)
+            if not risk_only and position.version is not None and not position.sale_cancelled:
+                for row in summary.rows:
+                    if row.outstanding <= 0:
+                        continue
+                    if row.due_date is None:
+                        target.undated_installments += 1
+                    else:
+                        target.scheduled.append(
+                            (
+                                row.installment_id,
+                                sale.id,
+                                position.version.id,
+                                row.label,
+                                row.due_date,
+                                sale.currency_id,
+                                row.outstanding,
+                            )
+                        )
             target.overdue[sale.currency_id] = (
                 target.overdue.get(sale.currency_id, Decimal(0)) + summary.overdue_total
             )

@@ -84,7 +84,7 @@ administrator, and are refused if a bundle tries to supply them.
 `preflight` proves these are present and refuses the batch when they are not.
 That is target-side preflight, and it is why preflight has a target half at all.
 
-## Disposition of all 91 tables
+## Disposition of all application tables
 
 ### Platform — administered before any batch; never in a bundle
 
@@ -188,6 +188,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `consultant_deliverables` | As above. |
 | `commission_grants` | Gate 0A governed distribution history sourced from a Reach sale; never fabricated by intake. |
 | `commission_allocations` | As above. |
+| `management_actions` | M3-02 commitments are created through the application with current project access, assignee eligibility and source validation; excluded from legacy intake. |
+| `management_action_history` | Immutable events from commands executed in Reach; never fabricated or imported from legacy history. |
 | `inventory_sub_assets` | Parking and storage. In scope only if the source ties them to sold units; unknown until the source is seen. |
 | `pricing_configurations` | Pricing is configured in Reach, then derived. Importing a configuration would imply the legacy prices came out of it. |
 | `pricing_area_rules` | As above. |

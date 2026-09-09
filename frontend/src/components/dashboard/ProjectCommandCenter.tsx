@@ -68,6 +68,7 @@ import {
 } from "@/components/projects/collections/labels";
 import { varianceNote, varianceTone } from "@/components/projects/construction/labels";
 import { AttentionPanel } from "./AttentionPanel";
+import { ManagementSummary } from "@/components/portfolio/Actions";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectAnalysis } from "./ProjectAnalysis";
 import { ProjectPlate } from "./ProjectPlate";
@@ -364,6 +365,7 @@ export function ProjectCommandCenter({
         <div className="overview-position">
           <div className="stack">
             <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
+            <ManagementSummary key={refreshKey} project={id} />
           </div>
           <div className="stack">
             {operational && hasPosition ? (

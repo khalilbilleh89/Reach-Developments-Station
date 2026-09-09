@@ -28,6 +28,10 @@ class DesignPosition:
     undated_open_items: int = 0
     overdue_stages: list[tuple[uuid.UUID, str, date]] = field(default_factory=list)
     overdue_deliverables: list[tuple[uuid.UUID, str, date]] = field(default_factory=list)
+    open_stages: list[tuple[uuid.UUID, str, date, str, date | None, date | None, date | None]] = (
+        field(default_factory=list)
+    )
+    open_deliverables: list[tuple[uuid.UUID, str, date, str]] = field(default_factory=list)
 
 
 def positions(
@@ -60,6 +64,18 @@ def positions(
             target.actual_date = stage.actual_completion_date
             target.stage_status = stage.status
         due = stage.forecast_date or stage.planned_date
+        if due is not None and stage.actual_completion_date is None:
+            target.open_stages.append(
+                (
+                    stage.id,
+                    stage.name,
+                    due,
+                    stage.status,
+                    stage.planned_date,
+                    stage.forecast_date,
+                    stage.actual_completion_date,
+                )
+            )
         if due is None:
             target.undated_open_items += 1
         elif due < as_of and stage.actual_completion_date is None:
@@ -73,6 +89,8 @@ def positions(
             continue
         if item.due_date is None:
             target.undated_open_items += 1
-        elif item.due_date < as_of:
-            target.overdue_deliverables.append((item.id, item.name, item.due_date))
+        else:
+            target.open_deliverables.append((item.id, item.name, item.due_date, item.status))
+            if item.due_date < as_of:
+                target.overdue_deliverables.append((item.id, item.name, item.due_date))
     return result
