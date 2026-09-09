@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.correlation import get_correlation_id
 from app.core.database import get_session
-from app.modules.access.models import ROLE_SYSTEM_ADMIN, User
+from app.modules.access.models import ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN, SYSTEM_ROLES, User
 from app.modules.access.service import resolve_session
 
 #: Name of the opaque session cookie. The value is the raw session token, which
@@ -45,11 +45,15 @@ class ActorContext:
     must_change_password: bool
 
     @property
+    def is_master_admin(self) -> bool:
+        return ROLE_MASTER_ADMIN in self.role_keys
+
+    @property
     def is_system_admin(self) -> bool:
-        return ROLE_SYSTEM_ADMIN in self.role_keys
+        return self.is_master_admin or ROLE_SYSTEM_ADMIN in self.role_keys
 
     def has_any_role(self, *keys: str) -> bool:
-        return bool(self.role_keys.intersection(keys))
+        return self.is_master_admin or bool(self.role_keys.intersection(keys))
 
 
 def db_session() -> Iterator[Session]:
@@ -74,13 +78,21 @@ def current_user(request: Request, session: DbSession) -> User:
 AuthenticatedUser = Annotated[User, Depends(current_user)]
 
 
+def _effective_role_keys(user: User) -> frozenset[str]:
+    """Expand Master Administrator into every fixed authority for this request."""
+    assigned = user.role_keys
+    if ROLE_MASTER_ADMIN not in assigned:
+        return assigned
+    return frozenset(key for key, _label in SYSTEM_ROLES)
+
+
 def current_actor(request: Request, user: AuthenticatedUser) -> ActorContext:
     """The authenticated caller's actor context."""
     return ActorContext(
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
-        role_keys=user.role_keys,
+        role_keys=_effective_role_keys(user),
         correlation_id=get_correlation_id(request),
         must_change_password=user.must_change_password,
     )
