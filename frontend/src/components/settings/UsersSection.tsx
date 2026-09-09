@@ -153,7 +153,7 @@ export function UsersSection() {
                 </div>
               </fieldset>
             </FormSection>
-            <FormSection title="Auditibly record why">
+            <FormSection title="Record the reason">
               <Field label="Reason" hint="Optional. Included in the user-change audit event.">
                 <textarea
                   className="input"
