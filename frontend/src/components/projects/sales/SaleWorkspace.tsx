@@ -18,7 +18,9 @@ import { Disclosure,
   Badge,
   Button,
   ButtonRow,
-  Drawer,
+  RecordWorkspace,
+  RecordLink,
+  useRecordTab,
   EmptyState,
   Field,
   FieldRow,
@@ -43,11 +45,14 @@ import { Disclosure,
   Waterfall,
   WaterfallRow,
 } from "@/components/ui";
-import type { DrawerFact } from "@/components/ui";
+import type { WorkspaceFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
 import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
-import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
+import { useRouter } from "next/navigation";
+import { recordHref } from "@/components/shell/recordRoutes";
+import { SaleOverview } from "./SaleOverview";
+import { inventory } from "@/lib/api";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { DealCollections } from "@/components/projects/collections/DealCollections";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -461,14 +466,12 @@ function HandoverView({
   );
 }
 
-export function DealFile({
+export function SaleWorkspace({
   projectId,
   reservationId,
   saleId,
   roles,
   unitReference,
-  initialSection,
-  onClose,
   onChanged,
 }: {
   projectId: string;
@@ -477,17 +480,16 @@ export function DealFile({
   roles: Set<string>;
   /** The unit the register row named, so the header can say it before the deal loads. */
   unitReference?: string | null;
-  initialSection?: string;
-  onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
-  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const router = useRouter();
+  const [unitLabel, setUnitLabel] = useState(unitReference ?? "");
   const [reservation, setReservation] = useState<ReservationDetail | null>(null);
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [client, setClient] = useState<SalesClient | null>(null);
   const [parties, setParties] = useState<PartyRow[]>([]);
   const [shares, setShares] = useState<string | null>(null);
-  const [section, setSection] = useState<string | null>(initialSection ?? null);
+  const [section, setSection] = useRecordTab();
   const [ask, setAsk] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -542,7 +544,7 @@ export function DealFile({
         const onUnit = await sales.contracts(projectId, {
           unit_id: loadedReservation.reservation.unit_id,
         });
-        const live = onUnit.find((entry) => entry.status !== "cancelled");
+        const live = onUnit.find((entry) => entry.reservation_id === loadedReservation.reservation.id && entry.status !== "cancelled");
         if (live) loadedSale = await sales.contract(projectId, live.id);
       }
       const clientId = loadedSale?.sale.client_id ?? loadedReservation?.reservation.client_id ?? null;
@@ -550,9 +552,11 @@ export function DealFile({
       setReservation(loadedReservation);
       if (clientId) {
         setClient(await sales.client(projectId, clientId));
-        setParties(await sales.parties(projectId, clientId));
-        const reconciliation = await sales.shareReconciliation(projectId, clientId);
-        setShares(reconciliation.total_share_fraction);
+
+      }
+      const unitId = loadedSale?.sale.unit_id ?? loadedReservation?.reservation.unit_id;
+      if (unitId) {
+        try { setUnitLabel((await inventory.unit(projectId, unitId)).unit_reference); } catch { setUnitLabel(""); }
       }
       setError(null);
     } catch (caught) {
@@ -560,7 +564,7 @@ export function DealFile({
       // assigned, exactly as for one that never existed. Said plainly here.
       setError(
         caught instanceof ApiError && caught.status === 404
-          ? "This deal is not visible to you. A Sales Advisor sees only the buyers assigned to them."
+          ? "Record not found."
           : caught instanceof ApiError
             ? caught.message
             : "Could not load the deal.",
@@ -573,6 +577,18 @@ export function DealFile({
       await load();
     })();
   }, [load]);
+
+  useEffect(() => {
+    if (section !== "buyers" || !client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [partyRows, reconciliation] = await Promise.all([sales.parties(projectId, client.id), sales.shareReconciliation(projectId, client.id)]);
+        if (!cancelled) { setParties(partyRows); setShares(reconciliation.total_share_fraction); }
+      } catch (caught) { if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Could not read buyer parties."); }
+    })();
+    return () => { cancelled = true; };
+  }, [section, client, projectId]);
 
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -608,23 +624,20 @@ export function DealFile({
     });
   };
 
-  if (openPlan) return <PlanBuilder projectId={projectId} planId={openPlan} roles={roles}
-    onClose={() => setOpenPlan(null)} onChanged={async () => { await load(); await onChanged(); }} />;
-
   if (error && reservation === null && sale === null) {
     return (
-      <Drawer eyebrow="Deal file"
-      icon="sales" title={unitReference ?? "Deal"} onClose={onClose}>
+      <RecordWorkspace projectId={projectId} kind={saleId ? "sale" : "reservation"} eyebrow="Sale workspace"
+      icon="sales" title={unitReference ?? "Deal"}>
         <Notice tone="error">{error}</Notice>
-      </Drawer>
+      </RecordWorkspace>
     );
   }
 
   if (reservation === null && sale === null) {
     return (
-      <Drawer eyebrow="Deal file" icon="sales" title={unitReference ?? "Loading the deal…"} onClose={onClose}>
+      <RecordWorkspace projectId={projectId} kind={saleId ? "sale" : "reservation"} eyebrow="Sale workspace" icon="sales" title={unitReference ?? "Loading the deal…"}>
         <Loading label="Loading the deal…" shape="record" />
-      </Drawer>
+      </RecordWorkspace>
     );
   }
 
@@ -643,20 +656,21 @@ export function DealFile({
   const saleCode = currencyCodeOf(sale?.sale.currency_id);
 
   const sections = [
-    ...(terms ? [{ key: "commercial", label: "Commercial" }] : []),
+    { key: "overview", label: "Overview" },
+    ...(terms ? [{ key: "commercial", label: "Reservation" }] : []),
     { key: "buyers", label: "Buyers" },
-    ...(sale ? [{ key: "contract", label: "Sale / SPA" }] : []),
-    ...(sale ? [{ key: "legal", label: "SPA & registry" }] : []),
+    ...(sale ? [{ key: "contract", label: "Contract" }] : []),
+    ...(sale ? [{ key: "legal", label: "Legal" }] : []),
     ...(sale ? [{ key: "plan", label: "Payment plan" }] : []),
     ...(sale && seesCollections ? [{ key: "collections", label: "Collections" }] : []),
     ...(sale?.cancellation ? [{ key: "closure", label: "Cancellation" }] : []),
     ...(sale?.handover ? [{ key: "handover", label: "Handover" }] : []),
   ];
-  const fallback = sale ? "contract" : "commercial";
+  const fallback = "overview";
   const activeSection =
     section !== null && sections.some((entry) => entry.key === section) ? section : fallback;
 
-  const facts: DrawerFact[] = sale
+  const facts: WorkspaceFact[] = sale
     ? [
         { label: "Contract price", value: money(sale.sale.total_contract_price, saleCode), note: "Buyer payable" },
         { label: "Net of tax", value: money(sale.sale.net_contract_price_ex_tax, saleCode) },
@@ -683,16 +697,16 @@ export function DealFile({
       : [];
 
   return (
-    <Drawer
-      eyebrow="Deal file" icon="sales"
+    <RecordWorkspace projectId={projectId} kind={saleId ? "sale" : "reservation"}
+      eyebrow="Sale workspace" icon="sales"
       title={
         sale
           ? `${sale.sale.sale_number}${sale.sale.spa_number ? ` · ${sale.sale.spa_number}` : ""}`
           : (terms?.reservation_number ?? "Deal")
       }
-      subtitle={[unitReference ? `Unit ${unitReference}` : null, client?.display_name ?? null]
-        .filter(Boolean)
-        .join(" · ")}
+      subtitle={<>{unitLabel || "Property transaction"}{client?.display_name ? ` · ${client.display_name}` : ""}</>}
+      actions={<RecordLink projectId={projectId} kind="unit" id={(sale?.sale.unit_id ?? terms?.unit_id)!}>Open Unit {unitLabel}</RecordLink>}
+      headline={sale ? { value: money(sale.sale.total_contract_price, saleCode), label: "Contract value · buyer payable" } : terms ? { value: money(terms.total_buyer_payable, quoteCode), label: "Reservation · buyer payable" } : undefined}
       meta={
         <>
           {terms ? <Badge tone={reservationTone(terms.status)}>{reservationLabel(terms.status)}</Badge> : null}
@@ -708,16 +722,19 @@ export function DealFile({
           {reservation?.closure_required ? <Badge tone="danger">Expired — closure required</Badge> : null}
         </>
       }
-      facts={facts}
+      facts={facts.slice(2)}
       tabs={sections}
       activeTab={activeSection}
       onSelectTab={setSection}
-      onClose={onClose}
+     
     >
       <Steps label="Where the deal has got to" steps={lifecycle(terms, sale)} />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} /> : null}
+      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref(projectId, "payment-plan", id))} /></section> : null}
 
       {activeSection === "commercial" && terms ? (
         <>
@@ -1026,7 +1043,10 @@ export function DealFile({
                   disabled={busy}
                   onClick={() =>
                     void run(
-                      () => sales.createContract(projectId, { reservation_id: terms.id }),
+                      async () => {
+                        const created = await sales.createContract(projectId, { reservation_id: terms.id });
+                        router.push(recordHref(projectId, "sale", created.sale.id, "contract"));
+                      },
                       "Contract drafted at the reservation's frozen price.",
                     )
                   }
@@ -1475,16 +1495,6 @@ export function DealFile({
         </>
       ) : null}
 
-      {activeSection === "plan" && sale ? (
-        <section>
-          <SectionHeader
-            title="Payment plan"
-            description="What the buyer agreed to pay, and when. Not what has been collected."
-          />
-          <PlanSummary projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={setOpenPlan} />
-        </section>
-      ) : null}
-
       {activeSection === "collections" && sale && seesCollections ? (
         <section>
           <SectionHeader
@@ -1650,6 +1660,6 @@ export function DealFile({
           onCancel={() => setAsk(null)}
         />
       ) : null}
-    </Drawer>
+    </RecordWorkspace>
   );
 }

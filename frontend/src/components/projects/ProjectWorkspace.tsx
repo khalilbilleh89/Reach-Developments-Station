@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
@@ -41,7 +41,10 @@ import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PreLaunchTab } from "@/components/projects/PreLaunchTab";
 import { SalesTab } from "@/components/projects/SalesTab";
 import { UnitEconomicsTab } from "@/components/projects/UnitEconomicsTab";
-import { UnitDetailPanel } from "@/components/projects/inventory/UnitDetailPanel";
+import { UnitWorkspace } from "@/components/projects/inventory/UnitWorkspace";
+import { PaymentPlanWorkspace } from "@/components/projects/payments/PaymentPlanWorkspace";
+import { SaleWorkspace } from "@/components/projects/sales/SaleWorkspace";
+import { readRecord } from "@/components/shell/recordRoutes";
 import { PROJECT_STATUSES, projectStatusLabel, projectStatusTone } from "./projectStatus";
 
 /** Editable project identity. `code` is absent: it is immutable once issued. */
@@ -96,6 +99,7 @@ export function ProjectWorkspace({
   user: CurrentUser;
 }) {
   const router = useRouter();
+  const record = readRecord(useSearchParams());
   const [project, setProject] = useState<ProjectDetail | null>(null);
   // Which currency each currency_id names, for every money figure below this
   // point. Seeded from the currency register (readable by any signed-in user)
@@ -105,7 +109,6 @@ export function ProjectWorkspace({
   // Opening a unit from the price or sales register reuses the same Unit 360
   // the Inventory section opens. One record file, reached from wherever the
   // person was.
-  const [openUnit, setOpenUnit] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,7 @@ export function ProjectWorkspace({
   // this guards the reloads within one project against arriving out of order.
   const generation = useRef(0);
 
-  const roles = roleSet(user.roles);
+  const roles = useMemo(() => roleSet(user.roles), [user.roles]);
   const isAdmin = roles.has(ROLE_SYSTEM_ADMIN);
   const canWriteProject = hasAnyRole(roles, PROJECT_WRITERS);
   const canWriteTechnical = hasAnyRole(roles, TECHNICAL_WRITERS);
@@ -217,6 +220,13 @@ export function ProjectWorkspace({
         </>
       );
     }
+    if (record) {
+      if (record.invalid) return <><PageHeader title="Record not found" /><Notice tone="error">This record address is invalid.</Notice><a href={projectHref(projectId, section)}>Return to register</a></>;
+      if (project.status === "setup") return <><PageHeader title="Finalize project setup first" /><Notice tone="info">Complete project setup before opening records.</Notice></>;
+      if (record.kind === "payment-plan") return <PaymentPlanWorkspace key={record.id} projectId={projectId} roles={roles} planId={record.id} onChanged={changed} />;
+      if (record.kind === "sale" || record.kind === "reservation") return <SaleWorkspace key={`${record.kind}:${record.id}`} projectId={projectId} roles={roles} saleId={record.kind === "sale" ? record.id : null} reservationId={record.kind === "reservation" ? record.id : null} onChanged={changed} />;
+      if (record.kind === "unit") return <UnitWorkspace key={record.id} projectId={projectId} roles={roles} unitId={record.id} canWriteStructure={canWriteTechnical} canConfigure={canWriteProject} onChanged={changed} />;
+    }
     if (section === "overview") {
       return (
         <>
@@ -298,7 +308,6 @@ export function ProjectWorkspace({
             projectStatus={project.status}
             roles={roles}
             userId={user.id}
-            onOpenUnit={(unitId) => setOpenUnit(unitId)}
           />
         ) : null}
         {section === "payments" ? (
@@ -327,17 +336,6 @@ export function ProjectWorkspace({
         utilities={utilities}
       >
         {body()}
-        {openUnit ? (
-          <UnitDetailPanel
-            projectId={projectId}
-            roles={roles}
-            unitId={openUnit}
-            canWriteStructure={canWriteTechnical}
-            canConfigure={canWriteProject}
-            onClose={() => setOpenUnit(null)}
-            onChanged={changed}
-          />
-        ) : null}
       </AppShell>
     </CurrencyProvider>
   );

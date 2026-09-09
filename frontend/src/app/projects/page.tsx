@@ -6,6 +6,7 @@ import { Suspense, useEffect } from "react";
 import { useSession } from "@/lib/api/session";
 import { AppShell, PasswordGate, SessionScreen } from "@/components/shell/AppShell";
 import { isProjectSection, projectHref } from "@/components/shell/navigation";
+import { readRecord, recordModules } from "@/components/shell/recordRoutes";
 import { roleSet } from "@/lib/roles";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 import { ProjectsRegister } from "@/components/projects/ProjectsRegister";
@@ -27,7 +28,8 @@ function ProjectsScreen() {
   const requested = params.get("section");
   // Historical standalone Pricing links now land in Inventory, where Unit 360
   // owns the selling-price workflow. No pricing authority is weakened.
-  const section = requested === "pricing" ? "inventory" : isProjectSection(requested) ? requested : "overview";
+  const record = readRecord(params);
+  const section = record && !record.invalid ? recordModules[record.kind] : requested === "pricing" ? "inventory" : isProjectSection(requested) ? requested : "overview";
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");

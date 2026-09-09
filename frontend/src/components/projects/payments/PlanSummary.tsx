@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, paymentPlans } from "@/lib/api";
 import type { PaymentPlanDetail } from "@/lib/api";
-import { Badge, Button, EmptyState, Notice, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading } from "@/components/ui";
+import { RecordLink, Badge, Button, EmptyState, Notice, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { ReconciliationBadge } from "@/components/projects/payments/ReconciliationStrip";
@@ -76,7 +76,7 @@ export function PlanSummary({
     return (
       <>
         {problem ? <Notice tone="error">{problem}</Notice> : null}
-        <EmptyState title="No SPA payment schedule yet" hint="Collections prepares the instalments agreed in the SPA, then submits the schedule for separate approval." />
+        <EmptyState compact title="No SPA payment schedule yet" hint="Collections prepares the instalments agreed in the SPA, then submits the schedule for separate approval." />
         {onOpenPlan && roles?.has("collections") && ["signature_pending", "active"].includes(saleStatus ?? "") ? (
           <Button variant="primary" disabled={creating} onClick={async () => {
             setCreating(true);
@@ -109,7 +109,7 @@ export function PlanSummary({
 
   return (
     <>
-      {onOpenPlan ? <Button onClick={() => onOpenPlan(detail.plan.id)}>Open SPA payment schedule</Button> : null}
+      {onOpenPlan ? <RecordLink projectId={projectId} kind="payment-plan" id={detail.plan.id} className="button">Open SPA payment schedule</RecordLink> : null}
       <InlineMeta>
         <InlineMetaItem label="Plan">
           <span className="mono">{detail.plan.plan_number}</span>

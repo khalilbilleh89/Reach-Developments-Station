@@ -439,7 +439,7 @@ export function ScheduleTable({
   const code = currencyCodeOf(currencyId);
 
   return (
-    <TableScroll label="Instalment schedule" fixedFirst compact>
+    <TableScroll label="Instalment schedule" fixedFirst stickyHeader compact>
       <thead>
         <tr>
           <th scope="col" className="num">

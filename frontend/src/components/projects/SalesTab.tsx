@@ -1,5 +1,7 @@
 "use client";
 
+import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory, sales } from "@/lib/api";
@@ -29,7 +31,9 @@ import {
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
-import { DealFile } from "@/components/projects/sales/DealFile";
+import { RecordLink } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { recordHref } from "@/components/shell/recordRoutes";
 import {
   handoverLabel,
   handoverTone,
@@ -87,23 +91,24 @@ export function SalesTab({
   projectStatus,
   roles,
   userId,
-  onOpenUnit,
 }: {
   projectId: string;
   projectStatus: string;
   roles: Set<string>;
   /** Who is reading, so an advisor is offered only the deals the server would open. */
   userId: string;
-  onOpenUnit: (unitId: string) => void;
 }) {
   const ownOnly = restrictedToOwnClients(roles);
   const [register, setRegister] = useState<SalesRegister | null>(null);
+  useRegisterRestore(register !== null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
-  const [filters, setFilters] = useState({ phase_id: "", commercial_status: "" });
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useRegisterFields({ phase_id: "", commercial_status: "" });
+  const [searchFields, setSearchFields] = useRegisterFields({ search: "" });
+  const search = searchFields.search;
+  const setSearch = (search: string) => setSearchFields({ search });
   const [open, setOpen] = useState<"none" | "clients" | "policy">("none");
-  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null; unitReference: string | null } | null>(null);
+  const router = useRouter();
   // Reserving is the one thing that starts at a unit rather than at a deal, so
   // it starts here: the register is where somebody is looking when they decide
   // to take a unit off the market.
@@ -205,7 +210,7 @@ export function SalesTab({
 
         {/* The book, as a desk reads it: what has been agreed, what is being
             agreed, and what is still on the shelf. */}
-        <Card
+        <div className="register-position"><Card
           tone={totals ? "command" : undefined}
           title="Commercial pipeline"
           description={totals ? "Counted over every unit you may see, not the page below." : undefined}
@@ -214,7 +219,7 @@ export function SalesTab({
             <Loading label="Loading sales…" shape="metrics" />
           ) : (
             <>
-              <Position layout="split">
+              <Position compact>
                 <PositionFigure
                   lead
                   label="Contracted value"
@@ -241,7 +246,7 @@ export function SalesTab({
               </PositionSupport>
             </>
           )}
-        </Card>
+        </Card></div>
 
         {open === "clients" ? (
           <ClientsPanel projectId={projectId} canWrite={canWriteClients} onChanged={load} onClose={() => setOpen("none")} />
@@ -300,7 +305,7 @@ export function SalesTab({
               projectId={projectId} unitId={reserving.unitId} currencyId={reserving.currencyId}
               onCancel={() => setReserving(null)}
               onCreated={(reservationId) => {
-                setDeal({ reservationId, saleId: null, unitReference: reserving.reference });
+                router.push(recordHref(projectId, "reservation", reservationId));
                 setReserving(null);
                 void load();
               }}
@@ -386,9 +391,9 @@ export function SalesTab({
                 {rows.map((row) => (
                   <tr key={row.unit_id}>
                     <th scope="row">
-                      <button className="button-link" type="button" onClick={() => onOpenUnit(row.unit_id)}>
+                      <RecordLink projectId={projectId} kind="unit" id={row.unit_id}>
                         <IdentityCell icon="inventory" name={row.unit_reference} meta={row.client_display_name ?? undefined} />
-                      </button>
+                      </RecordLink>
                     </th>
                     <td>
                       <Badge tone={statusTone(row.commercial_status)}>{statusLabel(row.commercial_status)}</Badge>
@@ -444,13 +449,7 @@ export function SalesTab({
                         ownOnly && row.advisor_user_id !== userId ? (
                           <span className="subtle">Another advisor&rsquo;s buyer</span>
                         ) : (
-                          <Button
-                            small
-                            variant="quiet"
-                            onClick={() => setDeal({ reservationId: row.reservation_id, saleId: row.sale_id, unitReference: row.unit_reference })}
-                          >
-                            Deal file
-                          </Button>
+                          <RecordLink projectId={projectId} kind={row.sale_id ? "sale" : "reservation"} id={(row.sale_id ?? row.reservation_id)!}>Open Sale</RecordLink>
                         )
                       ) : canWriteClients && row.commercial_status === "available" ? (
                         <Button
@@ -473,17 +472,6 @@ export function SalesTab({
         </Card>
       </div>
 
-      {deal ? (
-        <DealFile
-          projectId={projectId}
-          reservationId={deal.reservationId}
-          saleId={deal.saleId}
-          roles={roles}
-          unitReference={deal.unitReference}
-          onClose={() => setDeal(null)}
-          onChanged={load}
-        />
-      ) : null}
     </>
   );
 }
