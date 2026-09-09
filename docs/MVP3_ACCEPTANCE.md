@@ -102,12 +102,13 @@ correction. Fresh exact-head CI results are recorded in PR #273's handoff.
 ## M3-02 Draft implementation evidence — 2026-09-09
 
 PR #275 branches from main `73036d8af8d98dfdc6be81034eae4ddbaeb233db`.
-It remains Draft for independent review; M3-02 is not merged or deployed.
+It was opened Draft and marked Ready externally. Main `96db2f9` is now included;
+M3-02 is not merged or deployed. Full CI and Frontend are the current gates.
 
 - Actions have separate persistence and immutable append-only history. PostgreSQL
   tests cover lifecycle, reasons, reassignment, conflicting expected versions,
   source preservation, source resolution independence, whole-project access and
-  phase-only exclusion. Migration 0018 round-trips and has no schema drift.
+  phase-only exclusion. Migration 0019 (after main's 0018 Master Administrator) round-trips and has no schema drift.
 - Outlook goldens cover the existing three-complete-month commercial calculator,
   indeterminate absorption, original-currency scheduled dues distinct from cash,
   governed Cashflow lowpoints, mixed-currency refusal, stale source versions,
@@ -120,7 +121,7 @@ It remains Draft for independent review; M3-02 is not merged or deployed.
   Responsive browser matrix covers 1600/1440/1280/1024/768/390 widths, populated
   Portfolio sections, Action records and Project Overview. Desktop and phone
   management loops and Executive Viewer/Auditor read-only browser checks pass.
-- Final exact-head Draft Backend Fast and Frontend results, complete local logs,
+- Final exact-head applicable Backend and Frontend results, complete local logs,
   screenshots, commit/file inventory and contract details belong to the PR #275
   handoff. Earlier-head CI is not acceptance evidence for a later head.
 

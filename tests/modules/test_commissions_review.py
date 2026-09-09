@@ -202,7 +202,7 @@ def test_retained_commission_refuses_downgrade(
             command.downgrade(alembic_config(), "0016_prelaunch_utilities")
         assert snapshot(db) == before
         assert (
-            db.scalar(text("SELECT version_num FROM alembic_version")) == "0018_management_actions"
+            db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
         )
     finally:
         db.rollback()

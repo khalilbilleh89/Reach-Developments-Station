@@ -1,7 +1,7 @@
 """management_actions
 
-Revision ID: 0018_management_actions
-Revises: 0017_consultant_commissions
+Revision ID: 0019_management_actions
+Revises: 0018_master_admin
 Create Date: 2026-09-09 04:08:25.683723+00:00
 
 """
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0018_management_actions"
-down_revision: str | Sequence[str] | None = "0017_consultant_commissions"
+revision: str = "0019_management_actions"
+down_revision: str | Sequence[str] | None = "0018_master_admin"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

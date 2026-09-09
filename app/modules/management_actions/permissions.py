@@ -41,9 +41,9 @@ def eligible_users(project_id: uuid.UUID) -> Select:
     roles = select(UserRole.user_id).join(Role, Role.id == UserRole.role_id)
     return select(User.id, User.display_name).where(
         User.is_active.is_(True),
-        User.id.in_(roles.where(Role.key.in_(READERS))),
+        User.id.in_(roles.where(Role.key.in_(READERS | {"master_admin"}))),
         or_(
-            User.id.in_(roles.where(Role.key == "system_admin")),
+            User.id.in_(roles.where(Role.key.in_(("system_admin", "master_admin")))),
             User.id.in_(
                 select(UserProjectAccess.user_id).where(
                     UserProjectAccess.project_id == project_id,

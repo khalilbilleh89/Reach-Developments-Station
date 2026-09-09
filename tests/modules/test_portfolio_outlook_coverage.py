@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from tests.factories import make_user
+from tests.factories import client_for, make_user
 from tests.modules.conftest import create_cashflow_forecast, govern_cashflow_forecast, grant_access
 from tests.modules.test_portfolio_outlook import rows
 
@@ -82,3 +82,37 @@ def test_inactive_and_phase_only_assignees_are_rejected(
     )
     assert choices.status_code == 200
     assert str(user.id) not in {row["user_id"] for row in choices.json()}
+
+
+def test_master_administrator_can_own_and_manage_without_project_grant(
+    admin_client: TestClient,
+    project_id: str,
+    db: Session,
+) -> None:
+    master = make_user(db, email="master-action@example.com", roles=("master_admin",))
+    with client_for(master.email) as client:
+        choices = client.get(
+            "/api/v1/portfolio/actions/assignees", params={"project_id": project_id}
+        )
+        assert choices.status_code == 200
+        assert str(master.id) in {row["user_id"] for row in choices.json()}
+        created = client.post(
+            "/api/v1/portfolio/actions",
+            json={
+                "project_id": project_id,
+                "title": "Master management commitment",
+                "owner_user_id": str(master.id),
+                "due_date": str(datetime.now(UTC).date()),
+            },
+        )
+        assert created.status_code == 201, created.text
+        aid = created.json()["id"]
+        finished = client.post(
+            f"/api/v1/portfolio/actions/{aid}/transitions",
+            json={
+                "expected_version": 1,
+                "status": "completed",
+            },
+        )
+        assert finished.status_code == 200, finished.text
+        assert client.get(f"/api/v1/portfolio/actions/{aid}/history").json()["total"] == 2

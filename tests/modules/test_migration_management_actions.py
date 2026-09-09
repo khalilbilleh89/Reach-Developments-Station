@@ -57,7 +57,7 @@ def test_action_migration_roundtrip_constraints_and_history(
         == before
     )
     db.rollback()
-    command.downgrade(alembic_config(), "0017_consultant_commissions")
+    command.downgrade(alembic_config(), "0018_master_admin")
     assert "management_actions" not in inspect(get_engine()).get_table_names()
     assert snapshot(db, ("alembic_version",)) == before
     db.rollback()

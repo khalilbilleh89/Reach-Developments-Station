@@ -1,7 +1,7 @@
 # True MVP3 product specification
 
 M3-01 is merged to main (`5363388`); M3-02 is in progress from Experience 4.1
-main (`73036d8`); M3-03 is not started. The M3-01 specification below remains
+main (original `73036d8`, now including `96db2f9`); M3-03 is not started. The M3-01 specification below remains
 the frozen current-position and ten-risk contract.
 
 ## M3-02: forward outlook and management commitments
