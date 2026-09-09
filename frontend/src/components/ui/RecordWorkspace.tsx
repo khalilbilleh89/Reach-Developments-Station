@@ -26,7 +26,7 @@ export function RecordLink({ projectId, kind, id, tab, children, className = "bu
   const href = recordHref(projectId, kind, id, tab) + (source ? `&return=${encodeURIComponent(source)}` : "");
   return <Link data-record-link className={className} href={href} onClick={() => {
     if (!params.has("record") && source) {
-      try { sessionStorage.setItem(`reach-register:${source}`, JSON.stringify({ href, y: window.scrollY })); } catch { /* Storage may be disabled; URL context still works. */ }
+      try { sessionStorage.setItem(`reach-register:${source}`, JSON.stringify({ href, y: window.scrollY, tables: Array.from(document.querySelectorAll<HTMLElement>(".table-scroll")).map(table => ({ label: table.getAttribute("aria-label"), x: table.scrollLeft, y: table.scrollTop })) })); } catch { /* Storage may be disabled; URL context still works. */ }
     }
   }}>{children}</Link>;
 }

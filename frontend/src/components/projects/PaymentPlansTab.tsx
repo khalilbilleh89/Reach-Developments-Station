@@ -317,6 +317,7 @@ export function PaymentPlansTab({
           </Card>
         ) : null}
 
+        {register === null || rows.length > 0 ? <>
         <DataToolbar
           framed
           search={{ value: search, onChange: setSearch, placeholder: "Plan, unit, buyer or contract", label: "Search payment plans" }}
@@ -433,6 +434,7 @@ export function PaymentPlansTab({
             </TableScroll>
           )}
         </Card>
+        </> : null}
       </div>
 
     </>

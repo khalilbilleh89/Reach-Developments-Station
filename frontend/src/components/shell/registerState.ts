@@ -23,12 +23,16 @@ export function useRegisterRestore(ready: boolean) {
   const address = `/projects/?${params}`;
   useEffect(() => {
     if (!ready) return;
-    let saved: { href: string; y: number } | null = null;
+    let saved: { href: string; y: number; tables?: { label: string | null; x: number; y: number }[] } | null = null;
     try { saved = JSON.parse(sessionStorage.getItem(`reach-register:${address}`) ?? "null"); } catch { return; }
     if (!saved) return;
     const frame = requestAnimationFrame(() => {
       const link = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-record-link]")).find(item => item.getAttribute("href") === saved!.href);
       link?.focus({ preventScroll: true });
+      for (const table of document.querySelectorAll<HTMLElement>(".table-scroll")) {
+        const position = saved!.tables?.find(item => item.label === table.getAttribute("aria-label"));
+        if (position) table.scrollTo({ left: position.x, top: position.y, behavior: "instant" });
+      }
       window.scrollTo({ top: saved!.y, behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
