@@ -10,7 +10,7 @@ export type ManagementAction = ActionSource & {
   created_at: string; updated_at: string; completed_at: string | null; cancelled_at: string | null; version: number;
 };
 export type ActionPage = { as_of: string; due_soon_days: number; items: ManagementAction[]; total: number; offset: number; limit: number };
-export type HistoryPage = { items: { id: string; version: number; actor: Identity; occurred_at: string; event_type: string; reason: string | null; changes: Record<string, { old: string | null; new: string | null }> }[]; total: number; offset: number; limit: number };
+export type HistoryPage = { items: { id: string; version: number; actor: Identity; occurred_at: string; event_type: string; reason: string | null; changes: Record<string, { old: string | null; new: string | null; old_display_name?: string | null; new_display_name?: string | null }> }[]; total: number; offset: number; limit: number };
 export type ActionSummary = { open_count: number; overdue_count: number; next_due_date: string | null; source_linked_open_count: number };
 export type OutlookItem = {
   source_key: string; item_type: string; project_id: string; project_code: string; project_name: string; title: string;
@@ -23,7 +23,7 @@ export type OutlookItem = {
 };
 export type Outlook = {
   as_of: string; horizon_days: number; horizon_end: string; date_basis: string; cashflow_basis: string; authorized_project_count: number;
-  summary_counts: Record<string, number>; currency_buckets: { currency: string; scheduled_outstanding_due: string; contributing_project_count: number; unavailable_project_count: number }[];
+  summary_counts: Record<string, number>; currency_buckets: { currency: string; scheduled_outstanding_due: string | null; availability: string; contributing_project_count: number; unavailable_project_count: number }[];
   coverage: { source: string; unavailable_project_count: number; undated_item_count: number; reason: string }[];
   items: OutlookItem[]; total: number; offset: number; limit: number;
 };
@@ -37,8 +37,8 @@ export const management = {
   detail: (id: string) => get<ManagementAction>(`/portfolio/actions/${encodeURIComponent(id)}`),
   history: (id: string, offset: number) => get<HistoryPage>(`/portfolio/actions/${encodeURIComponent(id)}/history?limit=20&offset=${offset}`),
   source: (id: string) => get<{ state: string; title: string; drilldown: string | null }>(`/portfolio/actions/${encodeURIComponent(id)}/source`),
-  assignees: (project: string) => get<Identity[]>(`/portfolio/actions/assignees?project_id=${encodeURIComponent(project)}`),
-  owners: (project?: string) => get<Identity[]>(`/portfolio/actions/owners?${query({ project_id: project })}`),
+  assignees: (project: string, offset = 0) => get<Identity[]>(`/portfolio/actions/assignees?${query({ project_id: project, offset })}`),
+  owners: (project?: string, offset = 0) => get<Identity[]>(`/portfolio/actions/owners?${query({ project_id: project, offset })}`),
   projects: (offset: number) => get<{ items: { id: string; code: string; name: string }[]; total: number }>(`/portfolio/actions/projects?limit=100&offset=${offset}`),
   summary: (project?: string) => get<ActionSummary>(`/portfolio/actions/summary?${query({ project_id: project })}`),
   create: (payload: ActionSource & { project_id: string; title: string; description: string | null; owner_user_id: string; due_date: string }) => post<ManagementAction>("/portfolio/actions", payload),

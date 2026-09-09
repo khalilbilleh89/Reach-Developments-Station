@@ -178,6 +178,23 @@ The source guards in `tests/test_product_experience.py` enforce architecture, pe
 
 ## 11. Implementation and review
 
+**M3-02 management surfaces:** Portfolio adds Outlook, Exceptions and Actions.
+Outlook starts with the server-selected horizon and cash/funding source, then
+offers contractual dues, commercial run-rate, EAC, permit/design dates and
+management commitments in that order. Use a dense source register and one
+focused source drawer; do not repeat executive cards for every project.
+Forecast, scheduled contractual due and actual cash remain distinct labels.
+Incomplete and undated coverage stays visible below the register.
+
+Actions use server filters, including My Actions, and a versioned record drawer
+with Action, Source and chronological History sections. Source risk severity
+and action lateness are separate sections in Exceptions. Project Overview has
+compact open/overdue/next-due counts and a filtered register link. Management
+writers may create a project action there. Read-only roles show no mutation
+controls and never request assignment candidates. Current owner names and
+attributed event times are readable; business dates never undergo timezone
+conversion. Source resolution and action completion remain independent.
+
 The frontend remains a Next.js static export served by FastAPI from `frontend/out`. Keep the current dependencies and route architecture. Add no UI framework, chart package, font request or state-management layer for presentation work.
 
 Run lint, TypeScript, the production build, Product Experience guards and the relevant frontend contract checks. Review the console, responsive results and interaction evidence. When integration advances during a horizontal redesign, synchronize carefully and visually integrate new screens without changing their business implementation. Describe material limitations and remaining visual debt in the handoff.

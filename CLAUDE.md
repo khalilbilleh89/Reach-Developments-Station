@@ -10,7 +10,9 @@ MVP 2 core Gate 0 was completed and the owner closure through merged #264 on
 2026-09-07 remains recorded historical evidence. Subsequent stakeholder
 clarification reopened MVP 2 for Gate 0A completion. Preserve every Partial/
 Pending historical UAT row; this reclassification does not turn it into a pass.
-Real legacy migration/go-live remains separate. True MVP 3 has not started.
+Real legacy migration/go-live remains separate. True MVP3 M3-01 merged in PR #273;
+M3-02 is in progress as a draft from main `73036d8` (Experience 4.1 / UX-06).
+M3-03 has not started. See the MVP3 document family for current management scope.
 
 MVP 2 Gate 0A authority: [product specification](docs/MVP2_GATE0A_PRODUCT_SPEC.md),
 [roadmap](docs/MVP2_GATE0A_ROADMAP.md), [acceptance matrix](docs/MVP2_GATE0A_ACCEPTANCE.md).

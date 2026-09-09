@@ -71,6 +71,11 @@ export function businessDate(value: string | null | undefined): string {
   return `${day.startsWith("0") ? day.slice(1) : day} ${name} ${year}`;
 }
 
+/** An attributed event timestamp, explicitly UTC; never used for business dates. */
+export function eventTime(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value)) + " UTC";
+}
+
 /**
  * Present a stored fraction as a percentage: `percent("0.055000")` is
  * `"5.5%"`. The decimal point is moved two places by string manipulation —

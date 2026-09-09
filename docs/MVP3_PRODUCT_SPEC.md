@@ -115,8 +115,8 @@ code/id and stable risk id. There is no composite score or generic rules engine.
 Resolved/issued permits and historical Consultant engagements do not become
 current blockers. No invented criticality for Consultant deliverables.
 
-## Deferred
+## Remaining programme scope
 
-M3-02 owns new forward management outlook and actions, owners, due dates and
-workflow. M3-03 owns governed historical snapshots, board reporting and final
+M3-02 implements the forward outlook and action workflow described above.
+M3-03 still owns governed historical snapshots, board reporting and final
 acceptance/promotion. No AI, FX engine, notifications or extra roadmap PR.
