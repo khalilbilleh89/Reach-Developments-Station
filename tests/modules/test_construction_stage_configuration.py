@@ -9,7 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.modules.access.models import SYSTEM_ROLES, User
+from app.modules.access.models import ROLE_MASTER_ADMIN, SYSTEM_ROLES, User
 from app.modules.audit.models import AuditEvent
 from tests.conftest import alembic_config
 from tests.factories import client_for, make_user
@@ -150,7 +150,9 @@ def test_strict_update(manager_member_client: TestClient, project_id: str, chang
     assert client.get(f"{root}/stages").json() == [stage]
 
 
-@pytest.mark.parametrize("role", [key for key, _ in SYSTEM_ROLES if key != "project_manager"])
+@pytest.mark.parametrize(
+    "role", [key for key, _ in SYSTEM_ROLES if key not in {"project_manager", ROLE_MASTER_ADMIN}]
+)
 def test_other_roles_read_but_cannot_configure(
     db: Session,
     admin_client: TestClient,
@@ -174,6 +176,24 @@ def test_other_roles_read_but_cannot_configure(
             ).status_code
             == 403
         )
+
+
+def test_master_administrator_can_configure_without_project_membership(
+    db: Session,
+    project_id: str,
+) -> None:
+    master = make_user(db, email="master-stage@example.com", roles=(ROLE_MASTER_ADMIN,))
+    root = construction_url(project_id)
+    with client_for(master.email) as client:
+        created = client.post(f"{root}/stages", json={"name": "Master checklist"})
+        assert created.status_code == 201, created.text
+        stage = created.json()
+        updated = client.patch(
+            f"{root}/stages/{stage['id']}",
+            json=snapshot(stage, name="Reviewed checklist"),
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["name"] == "Reviewed checklist"
 
 
 def test_selected_pm_and_cross_project_boundaries(

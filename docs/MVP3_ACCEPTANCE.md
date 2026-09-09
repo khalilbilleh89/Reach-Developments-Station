@@ -1,9 +1,10 @@
 # True MVP3 acceptance
 
-M3-01 is an implementation candidate, not independently accepted. MVP3: 0 / 3.
+M3-01 merged in PR #273 (`5363388`); UX-06 merged in PR #274 (`73036d8`).
+M3-02 is in progress from that main baseline; M3-03 is not started. MVP3: 1 / 3 merged.
 Historical MVP2 Partial/Pending UAT evidence is unchanged.
 
-Required evidence: PostgreSQL owner parity; original currencies; incompatible and
+Historical M3-01 required evidence: PostgreSQL owner parity; original currencies; incompatible and
 mixed Cashflow refusal; weighted 10/100 penetration; converted commitment dedup;
 confirmed receipt/allocation/refund reconciliation; Pre-Launch counted once;
 Commission and Consultant independence; all-role, unauthorized-project and
@@ -12,7 +13,7 @@ and EXPLAIN; paginated API responses; explicit missing-source coverage; determin
 risks and order; responsive 1600/1440/1280/1024/768/390 views and accessibility;
 focused local checks plus exact-head GitHub Backend Smoke and Frontend.
 
-## M3-01 candidate evidence — 2026-09-08
+## Historical M3-01 candidate evidence — 2026-09-08
 
 - PostgreSQL Portfolio suite: **14 passed** in 442.64 seconds on the local Windows
   test host. Covers the role matrix, phase-only and large unauthorized sources,
@@ -97,3 +98,36 @@ the regression failed at its summary-construction guard, as intended (27.89 s).
 
 Frontend, UX-05, dependency manifests and migrations are unchanged by this
 correction. Fresh exact-head CI results are recorded in PR #273's handoff.
+
+## M3-02 Draft implementation evidence — 2026-09-09
+
+PR #275 branches from main `73036d8af8d98dfdc6be81034eae4ddbaeb233db`.
+It was opened Draft and marked Ready externally. Main `96db2f9` is now included;
+M3-02 is not merged or deployed. Full CI and Frontend are the current gates.
+
+- Actions have separate persistence and immutable append-only history. PostgreSQL
+  tests cover lifecycle, reasons, reassignment, conflicting expected versions,
+  source preservation, source resolution independence, whole-project access and
+  phase-only exclusion. Migration 0019 (after main's 0018 Master Administrator) round-trips and has no schema drift.
+- Outlook goldens cover the existing three-complete-month commercial calculator,
+  indeterminate absorption, original-currency scheduled dues distinct from cash,
+  governed Cashflow lowpoints, mixed-currency refusal, stale source versions,
+  permit SLA deadlines and active Consultant planned/forecast dates.
+- Populated Outlook projection uses 43 queries at 1, 20 and 50 projects; measured
+  0.122 / 0.310 / 0.613 seconds. The 50-project fixture includes 10,000 actions.
+  Action filtered count plus page uses two queries, including owner, overdue and
+  project filters. Actual PostgreSQL EXPLAIN ANALYZE plans are captured locally.
+- Structural/Product Experience and CI-selection checks: 242 passed (17.81 s).
+  Responsive browser matrix covers 1600/1440/1280/1024/768/390 widths, populated
+  Portfolio sections, Action records and Project Overview. Desktop and phone
+  management loops and Executive Viewer/Auditor read-only browser checks pass.
+- Final exact-head applicable Backend and Frontend results, complete local logs,
+  screenshots, commit/file inventory and contract details belong to the PR #275
+  handoff. Earlier-head CI is not acceptance evidence for a later head.
+
+Coverage limits are visible: monthly Cashflow uses whole intersecting calendar
+months without daily proration; a forecast ending inside the requested horizon
+is partial. Missing dates and sources remain unavailable/undated. Currency buckets
+never convert or combine currencies. Completing an Action cannot resolve a risk;
+a source resolving cannot close an Action. No source-owner table is written by
+management actions or Outlook. There are no new dependencies or CI workflow edits.

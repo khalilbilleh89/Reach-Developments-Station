@@ -7,14 +7,47 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 from sqlalchemy import func, select
 
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationError
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.portfolio import permissions, risk_projection, schemas, service
+from app.modules.portfolio import (
+    outlook,
+    outlook_schemas,
+    permissions,
+    risk_projection,
+    schemas,
+    service,
+)
 from app.modules.projects.models import Project
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 Limit = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0)]
+
+
+@router.get("/outlook", response_model=outlook_schemas.Outlook)
+def forward_outlook(
+    session: DbSession,
+    actor: ActiveActor,
+    horizon_days: int = 90,
+    project_id: uuid.UUID | None = None,
+    item_type: outlook_schemas.Kind | None = None,
+    limit: Limit = 20,
+    offset: Offset = 0,
+) -> outlook_schemas.Outlook:
+    scope = permissions.authorized_projects(actor)
+    if horizon_days not in {30, 60, 90}:
+        raise ValidationError("Outlook horizon must be 30, 60 or 90 days.")
+    if project_id:
+        scope = scope.where(Project.id == project_id)
+    return outlook.page(
+        session,
+        scope,
+        datetime.now(UTC).date(),
+        horizon_days=horizon_days,
+        limit=limit,
+        offset=offset,
+        item_type=item_type,
+    )
 
 
 @router.get("/overview", response_model=schemas.Overview)

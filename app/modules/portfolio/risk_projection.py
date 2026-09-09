@@ -85,7 +85,14 @@ class RiskFacts:
 
 
 def page(
-    session: Session, project_ids: Select, as_of: date, *, limit: int, offset: int
+    session: Session,
+    project_ids: Select,
+    as_of: date,
+    *,
+    limit: int,
+    offset: int,
+    source_key: str | None = None,
+    evaluations: list[out.Evaluation] | None = None,
 ) -> out.RiskPage:
     projects = list(
         session.execute(
@@ -200,11 +207,15 @@ def page(
     def candidates() -> Iterator[Candidate]:
         for project in projects:
             facts = facts_for(project)
+            if evaluations is not None:
+                evaluations.extend(facts.risk_evaluations)
             result.total += len(facts.risks)
             result.unavailable_project_count += int(
                 any(item.availability != "available" for item in facts.risk_evaluations)
             )
-            yield from facts.risks
+            yield from (
+                risk for risk in facts.risks if source_key is None or risk.risk_id == source_key
+            )
 
     prefix = nsmallest(offset + limit, candidates(), key=calculations.risk_order)
     result.items = [out.Risk(**candidate.fields) for candidate in prefix[offset:]]

@@ -4825,7 +4825,7 @@ a:not([class]):hover { color: var(--accent-hover); }
 .workspace-value-secondary strong { font-size: 1.15rem; }
 .workspace-actions, .workspace-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .workspace-meta { flex-basis: 100%; }
-.workspace-status .unit-standing { margin: 0; padding: .8rem 0; }
+.workspace-status { min-width: 0; }
 .workspace-facts { display: flex; flex-wrap: wrap; gap: 1rem 2rem; border-bottom: 1px solid var(--line-default); margin: 0; padding: .8rem 0 1rem; }
 .workspace-facts dt { color: var(--text-muted); font-size: .75rem; }
 .workspace-facts dd { margin: .25rem 0 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -4837,7 +4837,6 @@ a:not([class]):hover { color: var(--accent-hover); }
 .workspace-content .record-section { border-radius: 0; background: transparent; box-shadow: none; padding: 0 0 1.5rem; border-bottom: 1px solid var(--line-default); }
 .workspace-content .record-standing { grid-column: auto; }
 .workspace-content .unit-account { grid-column: auto; }
-.workspace-content .record-standing .key-value-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .workspace-content .card { box-shadow: none; }
 .workspace-content > [role=tabpanel] > .card { background: transparent; border-radius: 0; }
 .sale-overview { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 2rem; }

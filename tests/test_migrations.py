@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0017_consultant_commissions"
+HEAD_REVISION = "0019_management_actions"
 
 
 def test_prelaunch_utilities_widens_only_the_development_category_check(postgres: None) -> None:

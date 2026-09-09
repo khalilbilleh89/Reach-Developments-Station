@@ -11,7 +11,7 @@ from alembic import command
 from sqlalchemy import UniqueConstraint, inspect, text
 
 from app.core.database import get_engine
-from app.modules.access.models import SYSTEM_ROLES
+from app.modules.access.models import ROLE_MASTER_ADMIN, SYSTEM_ROLES
 from app.modules.settings.models import CountryApprovalThreshold
 from tests.conftest import alembic_config
 
@@ -105,9 +105,14 @@ def test_the_role_catalogue_is_seeded_exactly(at_baseline: None) -> None:
     try:
         with get_engine().connect() as connection:
             rows = connection.execute(text("SELECT key, label FROM roles")).all()
-        assert sorted((key, label) for key, label in rows) == sorted(SYSTEM_ROLES)
+        # Master Administrator is introduced by 0018, not this historical revision.
+        historical_roles = [item for item in SYSTEM_ROLES if item[0] != ROLE_MASTER_ADMIN]
+        assert sorted((key, label) for key, label in rows) == sorted(historical_roles)
     finally:
         _restore_head()
+    with get_engine().connect() as connection:
+        current_roles = connection.execute(text("SELECT key, label FROM roles")).all()
+    assert sorted((key, label) for key, label in current_roles) == sorted(SYSTEM_ROLES)
 
 
 def test_no_user_is_seeded(at_baseline: None) -> None:

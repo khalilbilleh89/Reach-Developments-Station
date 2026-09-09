@@ -39,6 +39,50 @@ class CashPosition:
     peak_deficit: Decimal | None = None
     forecast_id: uuid.UUID | None = None
     forecast_reason: str | None = None
+    forecast_as_of: date | None = None
+    forecast_end_month: date | None = None
+    projected_months: list[tuple[date, Decimal]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class HorizonPosition:
+    lowest_unrestricted_cash: Decimal | None
+    lowpoint_month: date | None
+    first_deficit_month: date | None
+    peak_deficit: Decimal | None
+    reason: str | None
+    availability: str = "available"
+
+
+def horizon_position(position: CashPosition, as_of: date, horizon_end: date) -> HorizonPosition:
+    """Monthly bridge observations in intersecting calendar months, never prorated.
+
+    A partial last month includes that month's governed closing position. This
+    is a monthly forecast outlook, not the separate daily funding-window report.
+    """
+    if position.forecast_reason:
+        return HorizonPosition(None, None, None, None, position.forecast_reason, "unavailable")
+    months = [
+        (month, value)
+        for month, value in position.projected_months
+        if owner.month_of(as_of) <= month <= owner.month_of(horizon_end)
+    ]
+    if not months:
+        return HorizonPosition(
+            None, None, None, None, "No governed forecast months in this horizon.", "unavailable"
+        )
+    month, amount = min(months, key=lambda item: (item[1], item[0]))
+    first = next((month for month, value in months if value < 0), None)
+    peak = calculator.peak_deficit(months).peak_funding_deficit
+    partial = position.forecast_end_month < owner.month_of(horizon_end)
+    return HorizonPosition(
+        amount,
+        month,
+        first,
+        peak,
+        "Governed forecast ends before the selected horizon." if partial else None,
+        "partial" if partial else "available",
+    )
 
 
 def _group(rows: Sequence, key: str = "project_id") -> dict[uuid.UUID, list]:
@@ -204,6 +248,9 @@ def positions(session: Session, project_ids: Select, as_of: date) -> dict[uuid.U
         pid = project.id
         version = versions.get(pid)
         target = CashPosition(project.base_currency_id, forecast_id=version.id if version else None)
+        if version:
+            target.forecast_as_of = version.as_of_date
+            target.forecast_end_month = version.forecast_end_month
         result[pid] = target
         target.observed_currencies = {
             row.currency_id
@@ -307,6 +354,9 @@ def positions(session: Session, project_ids: Select, as_of: date) -> dict[uuid.U
             target.forecast_reason = "Active Cashflow forecast horizon has ended."
         else:
             bridge = owner.positions_from_rows(sources, version=version, as_of=as_of)
+            target.projected_months = [
+                (row.period_month, row.closing_unrestricted_cash) for row in bridge
+            ]
             target.peak_deficit = calculator.peak_deficit(
                 [(row.period_month, row.closing_unrestricted_cash) for row in bridge]
             ).peak_funding_deficit

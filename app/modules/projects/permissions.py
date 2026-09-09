@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, PermissionDeniedError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession
-from app.modules.projects.models import Project, UserProjectAccess
+from app.modules.projects.models import PHASE_SCOPE_ALL, Project, UserProjectAccess
 
 #: Roles that may change project records they have access to.
 PROJECT_WRITER_ROLES = frozenset({"system_admin", "project_manager"})
@@ -51,6 +51,22 @@ FINANCIAL_ROLES = frozenset(
 _NOT_FOUND_DETAIL = "Project not found."
 
 _FORBIDDEN_DETAIL = "You do not have permission to perform this action."
+
+
+def whole_project_ids(actor: ActorContext) -> Select[tuple[uuid.UUID]]:
+    """Whole-project relation shared by management readers before source reads."""
+    statement = select(Project.id)
+    if actor.is_system_admin:
+        return statement
+    return statement.where(
+        Project.id.in_(
+            select(UserProjectAccess.project_id).where(
+                UserProjectAccess.user_id == actor.user_id,
+                UserProjectAccess.is_active.is_(True),
+                UserProjectAccess.phase_scope == PHASE_SCOPE_ALL,
+            )
+        )
+    )
 
 
 def has_project_access(session: Session, *, project_id: uuid.UUID, actor: ActorContext) -> bool:
