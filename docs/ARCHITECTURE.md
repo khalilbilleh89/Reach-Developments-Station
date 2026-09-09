@@ -88,6 +88,15 @@ Collections currency remains visible. Commission release is non-cash information
 Missing governed sources remain unavailable, never zero or a health assessment.
 See [MVP3_PRODUCT_SPEC.md](MVP3_PRODUCT_SPEC.md) for exact bases and coverage.
 
+M3-02 adds `management_actions`, owning actions and immutable attributed history.
+Project whole-project scope is a shared public security relation. Portfolio
+`action_api.py` composes source validation with action commands; action services
+do not import Portfolio. Outlook consumes owner batches and the action due-read
+contract. This keeps the dependency direction Actions → Portfolio composition.
+Action mutations change no source tables. One migration adds action/history
+tables, integrity indexes and a history update/delete rejection trigger;
+Outlook and Exceptions gain no persistence.
+
 ---
 
 ## 5. Runtime architecture

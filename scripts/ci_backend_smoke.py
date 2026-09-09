@@ -70,6 +70,12 @@ BACKBONE = (
 # Node IDs intentionally name a few existing, real PostgreSQL cases, not whole
 # expensive domain files. A new module must register its contract here.
 DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
+    "management_actions": (
+        "tests/modules/test_portfolio_actions_api.py::test_versioned_lifecycle_and_immutable_history",
+        "tests/modules/test_portfolio_actions_api.py::test_action_scope_owner_and_read_only_roles",
+        "tests/modules/test_portfolio_actions_api.py::test_risk_action_does_not_resolve_permit",
+        "tests/modules/test_portfolio_actions_api.py::test_outlook_horizons_and_action_due_independence",
+    ),
     "portfolio": (
         "tests/modules/test_portfolio_risk_pagination.py::test_risk_pages_skip_summaries_and_scale_with_global_order",
         "tests/modules/test_portfolio_risk_pagination.py::test_hidden_high_risks_do_not_change_counts_coverage_or_offsets",
@@ -174,6 +180,10 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "0018_management_actions.py": (
+        "management_actions",
+        ("tests/modules/test_migration_management_actions.py",),
+    ),
     "0013_unit_master.py": (
         "inventory",
         ("tests/modules/test_migration_inventory_unit_master.py",),

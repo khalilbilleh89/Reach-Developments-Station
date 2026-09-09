@@ -42,6 +42,7 @@ AVAILABLE = [
     "tests/modules/test_commissions.py",
     "tests/modules/test_project_analysis.py",
     "tests/modules/test_portfolio.py",
+    "tests/modules/test_management_actions_concurrency.py",
     "tests/modules/test_cashflow_forecast.py",
     "tests/modules/test_prelaunch.py",
     "tests/modules/test_audit.py",

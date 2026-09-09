@@ -1,5 +1,40 @@
 # True MVP3 product specification
 
+M3-01 is merged to main (`5363388`); M3-02 is in progress from Experience 4.1
+main (`73036d8`); M3-03 is not started. The M3-01 specification below remains
+the frozen current-position and ten-risk contract.
+
+## M3-02: forward outlook and management commitments
+
+Outlook is a read-only whole-project composition of owner batch contracts.
+It accepts 30/60/90 days (default 90), UTC business dates, inclusive today
+through horizon end. Open overdue actions are also included. Cashflow reports
+governed monthly closing observations for intersecting months, with full
+boundary months and no daily proration. Foreign denominations or stale sources
+remain unavailable. Collections reports outstanding governing contractual
+installments after confirmed allocations, in original currencies; undated
+contingent obligations remain coverage gaps, never predicted cash.
+
+Commercial uses the unchanged Project Analysis run-rate calculator. Construction
+uses comparable governed EAC and budget excluding tax. Permits use unresolved
+statutory SLA deadlines. Consultant dates belong only to the active engagement.
+Item identity uses source identifiers/version/date, never labels or row numbers.
+
+Management Actions owns only actions and append-only attributed history.
+Project Manager and System Administrator write, following project management
+permissions; Portfolio readers read authorized actions. Assignees need active
+eligible whole-project access. Actions never change source state or move money.
+The finite workflow is open → in_progress/completed/cancelled;
+in_progress → open/completed/cancelled; completed/cancelled → open.
+Cancel/reopen, due-date changes and reassignment after work starts require
+reasons. Mutations compare expected_version under project/action locks; stale
+updates return 409. No DELETE API exists. PostgreSQL also rejects history
+updates/deletes. One migration adds only action/history persistence.
+
+Experience 4.1 Portfolio adds Outlook, Exceptions and Actions. Exceptions keeps
+frozen source risk severity separate from action lateness. Project Overview
+links to its filtered register. Read-only roles never fetch assignee candidates.
+
 ## M3-01: current Portfolio management
 
 A read-only owner/developer composition above existing domains. Portfolio owns no

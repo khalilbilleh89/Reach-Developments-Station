@@ -127,6 +127,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "commissions": ("commissions",),
     "project_analysis": ("project_analysis",),
     "portfolio": ("portfolio",),
+    "management_actions": ("management_actions", "migration_management_actions"),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above
@@ -157,7 +158,7 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # ``inventory`` for the obvious reason; ``cutover`` because a batch takes
     # the project row lock through ``lock_project`` and resolves the project a
     # manifest names, so this module's contract is one the cutover depends on.
-    "projects": ("inventory", "cutover"),
+    "projects": ("inventory", "cutover", "management_actions"),
     "inventory": ("pricing",),
     "pricing": ("sales",),
     "sales": ("payment_plans", "unit_economics"),
@@ -171,6 +172,8 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "consultant_engineering": ("project_analysis",),
     "project_analysis": ("portfolio",),
     "portfolio": (),
+    # Portfolio API composition validates sources and exposes action commands.
+    "management_actions": ("portfolio",),
     # Unit economics may source a construction forecast's hard-cost estimate at
     # completion through a named reader, so a construction change reaches it.
     # Cashflow reads construction's confirmed payments and its forecast position

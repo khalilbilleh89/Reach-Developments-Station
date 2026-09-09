@@ -1,6 +1,7 @@
 # True MVP3 acceptance
 
-M3-01 is an implementation candidate, not independently accepted. MVP3: 0 / 3.
+M3-01 merged in PR #273 (`5363388`); UX-06 merged in PR #274 (`73036d8`).
+M3-02 is in progress from that main baseline; M3-03 is not started. MVP3: 1 / 3 merged.
 Historical MVP2 Partial/Pending UAT evidence is unchanged.
 
 Required evidence: PostgreSQL owner parity; original currencies; incompatible and
@@ -12,7 +13,7 @@ and EXPLAIN; paginated API responses; explicit missing-source coverage; determin
 risks and order; responsive 1600/1440/1280/1024/768/390 views and accessibility;
 focused local checks plus exact-head GitHub Backend Smoke and Frontend.
 
-## M3-01 candidate evidence — 2026-09-08
+## Historical M3-01 candidate evidence — 2026-09-08
 
 - PostgreSQL Portfolio suite: **14 passed** in 442.64 seconds on the local Windows
   test host. Covers the role matrix, phase-only and large unauthorized sources,
