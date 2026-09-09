@@ -137,7 +137,6 @@ def test_the_submitter_cannot_approve_their_own_price(
     assert "may not approve it" in response.json()["detail"]
 
 
-
 def test_master_administrator_can_approve_and_activate_own_price(
     admin_client: TestClient,
     project_id: str,
