@@ -13,7 +13,9 @@ import {
   Badge,
   Button,
   ButtonRow,
-  Drawer,
+  RecordWorkspace,
+  RecordLink,
+  useRecordTab,
   EmptyState,
   Field,
   FieldRow,
@@ -29,7 +31,9 @@ import {
   SubPanel,
   TableScroll,
 } from "@/components/ui";
-import type { DrawerFact } from "@/components/ui";
+import type { WorkspaceFact } from "@/components/ui";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CONSTRUCTION_READERS, hasAnyRole } from "@/lib/roles";
 import { useCurrencyCode } from "@/lib/currency";
 import {
   businessDate,
@@ -98,24 +102,24 @@ type Ask = {
  * and a second implementation here would eventually disagree with it in front
  * of an operator who cannot see why.
  */
-export function PlanBuilder({
+export function PaymentPlanWorkspace({
   projectId,
   planId,
   roles,
-  onClose,
   onChanged,
 }: {
   projectId: string;
   planId: string;
   roles: Set<string>;
-  onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
   const [detail, setDetail] = useState<PaymentPlanDetail | null>(null);
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [allocationMode, setAllocationMode] = useState("percentage");
   const [chargeMode, setChargeMode] = useState("pro_rata");
-  const [section, setSection] = useState("schedule");
+  const [requestedSection, setSection] = useRecordTab();
+  const section = ["overview", "schedule", "reconciliation", "terms", "history"].includes(requestedSection) ? requestedSection : "overview";
+  const router = useRouter(), params = useSearchParams();
   const [series, setSeries] = useState({
     frequency: "recurring_monthly",
     first_due_date: "",
@@ -134,7 +138,13 @@ export function PlanBuilder({
   // Which version the drawer is showing. Null means the one being prepared;
   // any other id selects a version to read. Selecting one changes nothing on
   // the server — it is a choice of which immutable record to look at.
-  const [showing, setShowing] = useState<string | null>(null);
+  const showing = params.get("version");
+  const setShowing = (id: string | null) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set("version", id); else next.delete("version");
+    next.set("tab", "schedule");
+    router.push(`/projects/?${next}`, { scroll: false });
+  };
   const [historical, setHistorical] = useState<PlanVersionDetail | null>(null);
   // The construction milestones an instalment may wait on, or null where this
   // caller cannot read them. A failure here is not an error the preparer needs
@@ -177,6 +187,7 @@ export function PlanBuilder({
   }, [load]);
 
   useEffect(() => {
+    if (section !== "schedule" || !canPrepare || !hasAnyRole(roles, CONSTRUCTION_READERS)) return;
     void (async () => {
       try {
         setMilestones(await construction.milestoneTriggerOptions(projectId));
@@ -184,7 +195,7 @@ export function PlanBuilder({
         setMilestones(null);
       }
     })();
-  }, [projectId]);
+  }, [projectId, section, canPrepare, roles]);
 
   // A version that is neither in preparation nor governing is read on demand.
   // The plan response already carries those two in full, so the only request
@@ -339,20 +350,20 @@ export function PlanBuilder({
 
   if (error && detail === null) {
     return (
-      <Drawer eyebrow="Payment plan" icon="payments" title="Payment plan" onClose={onClose}>
+      <RecordWorkspace projectId={projectId} kind="payment-plan" eyebrow="Payment plan" icon="payments" title="Payment plan">
         <Notice tone="error">{error}</Notice>
-      </Drawer>
+      </RecordWorkspace>
     );
   }
   if (detail === null) {
     return (
-      <Drawer
+      <RecordWorkspace projectId={projectId} kind="payment-plan"
         eyebrow="Payment plan" icon="payments"
         title="Loading the payment plan…"
-        onClose={onClose}
+       
       >
         <Loading label="Loading the payment plan…" shape="record" />
-      </Drawer>
+      </RecordWorkspace>
     );
   }
 
@@ -368,7 +379,7 @@ export function PlanBuilder({
   // so no stale schedule can be shown while the next one is on its way — which
   // is also why the effect above never has to clear it.
   const shownDetail =
-    showing === null || showing === current?.version.id
+    section === "overview" ? active ?? current : showing === null || showing === current?.version.id
       ? current
       : showing === active?.version.id
         ? active
@@ -387,9 +398,11 @@ export function PlanBuilder({
   const isDraft = isCurrent && version?.status === "draft";
   const code = currencyCodeOf(detail.currency_id);
   const sections = [
-    { key: "schedule", label: "Schedule" },
+    { key: "overview", label: "Overview" },
+    { key: "schedule", label: "Installments & triggers" },
+    { key: "reconciliation", label: "Reconciliation" },
     { key: "terms", label: "Terms" },
-    { key: "history", label: "History" },
+    { key: "history", label: "Versions & history" },
   ];
 
   /**
@@ -409,7 +422,7 @@ export function PlanBuilder({
 
   // The figures every reader opens a plan for. All four are the version's own
   // frozen basis and the server's reconciliation of the schedule against it.
-  const facts: DrawerFact[] = [
+  const facts: WorkspaceFact[] = [
     {
       label: "Contract principal",
       value: money(version?.contract_value_covered ?? null, code),
@@ -431,10 +444,12 @@ export function PlanBuilder({
   ];
 
   return (
-    <Drawer
+    <RecordWorkspace projectId={projectId} kind="payment-plan"
       eyebrow="Payment plan" icon="payments"
       title={detail.plan.plan_number}
       subtitle={`${detail.unit_reference} · ${detail.sale_number} · ${detail.client_display_name}`}
+      actions={<><RecordLink projectId={projectId} kind="sale" id={detail.sale_id}>Open Sale</RecordLink><RecordLink projectId={projectId} kind="unit" id={detail.unit_id}>Open Unit</RecordLink></>}
+      headline={version ? { value: money(version.contract_value_covered, code), label: section === "overview" && active ? "Governing contract principal" : "Selected version · contract principal" } : undefined}
       meta={
         <>
           {version ? (
@@ -452,14 +467,21 @@ export function PlanBuilder({
           ) : null}
         </>
       }
-      facts={facts}
+      facts={facts.slice(1)}
       tabs={sections}
       activeTab={section}
       onSelectTab={setSection}
-      onClose={onClose}
+     
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      {section === "overview" ? <section className="stack">
+        <SectionHeader title={active ? "Governing schedule" : "Schedule in preparation"} actions={<Button onClick={() => setSection("schedule")}>{canPrepare && current?.version.status === "draft" ? "Build schedule" : "Inspect installments"}</Button>} />
+        {revisionOpen ? <Notice tone="info">v{current?.version.version_number} is being prepared. v{active?.version.version_number} continues to govern this Sale.</Notice> : null}
+        {shownDetail ? <><KeyValueGrid columns={3}><KeyValue label="Plan name" value={detail.plan.name} /><KeyValue label="Next scheduled date" value={shownDetail.next_scheduled_date ? businessDate(shownDetail.next_scheduled_date) : "No future scheduled date"} /><KeyValue label="Next forecast date" value={shownDetail.next_forecast_date ? businessDate(shownDetail.next_forecast_date) : "No future forecast date"} /></KeyValueGrid><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /><ScheduleTable installments={shownDetail.installments} currencyId={detail.currency_id} /></> : <EmptyState compact title="No version" hint="Inspect the schedule to prepare the first version." />}
+      </section> : null}
+      {section === "reconciliation" && shownDetail ? <section className="stack"><SectionHeader title="Reconciliation" description={`v${version?.version_number} · ${isActive ? "Governing schedule" : "Selected version"}`} /><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /></section> : null}
 
       {section === "schedule" && shownDetail && version ? (
         <>
@@ -1044,7 +1066,6 @@ export function PlanBuilder({
                       variant="quiet"
                       onClick={() => {
                         setShowing(entry.id);
-                        setSection("schedule");
                       }}
                     >
                       View
@@ -1198,7 +1219,7 @@ export function PlanBuilder({
           onCancel={() => setAsk(null)}
         />
       ) : null}
-    </Drawer>
+    </RecordWorkspace>
   );
 }
 

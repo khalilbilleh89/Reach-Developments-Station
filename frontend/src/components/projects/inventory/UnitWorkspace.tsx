@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { UnitStages } from "@/components/projects/construction/StageWorkspace";
 
 import { ApiError, collections, inventory, pricing, sales } from "@/lib/api";
@@ -10,7 +10,6 @@ import type {
   CollectionSaleSummary,
   CustomValue,
   SaleContract,
-  SaleDetail,
   SubAsset,
   Unit,
   UnitPricing,
@@ -29,8 +28,8 @@ import {
   SALES_READERS,
   hasAnyRole,
 } from "@/lib/roles";
-import { Button, Card, Drawer, Loading, Notice } from "@/components/ui";
-import type { DrawerFact, DrawerHeadline } from "@/components/ui";
+import { Button, Card, RecordWorkspace, RecordLink, Loading, Notice, useRecordTab } from "@/components/ui";
+import type { WorkspaceFact, WorkspaceHeadline } from "@/components/ui";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
@@ -39,9 +38,10 @@ import { UnitStanding } from "./unit/UnitStanding";
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
-import { PlanBuilder } from "@/components/projects/payments/PlanBuilder";
+import { useRouter } from "next/navigation";
+import { recordHref } from "@/components/shell/recordRoutes";
+import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
-import { DealFile } from "@/components/projects/sales/DealFile";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import { UnitHistory } from "@/components/projects/inventory/unit/UnitHistory";
@@ -89,13 +89,12 @@ const UNIT_FIELDS: EditField[] = [
  * server would accept, and the server refuses regardless of which button was
  * on screen.
  */
-export function UnitDetailPanel({
+export function UnitWorkspace({
   projectId,
   roles,
   unitId,
   canWriteStructure,
   canConfigure,
-  onClose,
   onChanged,
 }: {
   projectId: string;
@@ -103,12 +102,14 @@ export function UnitDetailPanel({
   unitId: string;
   canWriteStructure: boolean;
   canConfigure: boolean;
-  onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
-  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const router = useRouter();
+  const [supportBusy, setSupportBusy] = useState(false);
+  const [detailRevision, setDetailRevision] = useState(-1);
+  const [supportRevision, setSupportRevision] = useState(0);
+  const supportLoaded = useRef<Record<string, number>>({});
   const [reserving, setReserving] = useState(false);
-  const [deal, setDeal] = useState<{ reservationId: string | null; saleId: string | null; initialSection?: string } | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [schedules, setSchedules] = useState<AreaSchedule[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
@@ -122,7 +123,7 @@ export function UnitDetailPanel({
   const [pricingAnswer, setPricingAnswer] = useState<Answer<UnitPricing>>({ status: "off" });
   const [commitmentAnswer, setCommitmentAnswer] = useState<Answer<Commitment>>({ status: "off" });
   const [collection, setCollection] = useState<Answer<CollectionSaleSummary>>({ status: "off" });
-  const [section, setSection] = useState("summary");
+  const [section, setSection] = useRecordTab();
   const [quoting, setQuoting] = useState(false);
   const [pricingBusy, setPricingBusy] = useState(false);
   const [editing, setEditing] = useState<"none" | "unit" | "fields">("none");
@@ -140,20 +141,9 @@ export function UnitDetailPanel({
 
   const load = useCallback(async () => {
     try {
-      const [detail, scheduleList, typeList, assetList, valueList, events] = await Promise.all([
-        inventory.unit(projectId, unitId),
-        inventory.areaSchedules(projectId, unitId),
-        inventory.areaTypes(projectId),
-        inventory.subAssets(projectId, { unit_id: unitId }),
-        inventory.unitValues(projectId, unitId),
-        inventory.unitHistory(projectId, unitId),
-      ]);
+      const detail = await inventory.unit(projectId, unitId);
       setUnit(detail);
-      setSchedules(scheduleList);
-      setAreaTypes(typeList);
-      setAssets(assetList);
-      setValues(valueList);
-      setHistory(events);
+      setSupportRevision(value => value + 1);
       setError(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not load the unit.");
@@ -186,14 +176,14 @@ export function UnitDetailPanel({
         return;
       }
       setCommitmentAnswer({ status: "loading" });
-      let sale: SaleDetail | null = null;
+      let sale: { sale: SaleContract } | null = null;
       try {
         const reservations = await sales.reservations(projectId, { unit_id: unitId });
         const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
         const live = contracts.find((entry) =>
           ["signature_pending", "active", "termination_pending"].includes(entry.status),
         ) ?? contracts.find((entry) => entry.status === "draft");
-        sale = live ? await sales.contract(projectId, live.id) : null;
+        sale = live ? { sale: live } : null;
         setCommitmentAnswer({
           status: "ready",
           data: {
@@ -229,6 +219,30 @@ export function UnitDetailPanel({
       await load();
     })();
   }, [load]);
+
+  // Identity and commercial summaries load once; physical detail and history follow intent.
+  useEffect(() => {
+    if (!unit || !["detail", "history"].includes(section) || supportLoaded.current[section] === supportRevision) return;
+    let cancelled = false;
+    void (async () => {
+      setSupportBusy(true);
+      try {
+        if (section === "history") {
+          const events = await inventory.unitHistory(projectId, unitId);
+          if (!cancelled) setHistory(events);
+        } else {
+          const [scheduleList, typeList, assetList, valueList] = await Promise.all([
+            inventory.areaSchedules(projectId, unitId), inventory.areaTypes(projectId),
+            inventory.subAssets(projectId, { unit_id: unitId }), inventory.unitValues(projectId, unitId),
+          ]);
+          if (!cancelled) { setSchedules(scheduleList); setAreaTypes(typeList); setAssets(assetList); setValues(valueList); setDetailRevision(supportRevision); }
+        }
+        if (!cancelled) supportLoaded.current[section] = supportRevision;
+      } catch (caught) { if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Could not load this section."); }
+      finally { if (!cancelled) setSupportBusy(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [section, projectId, unitId, supportRevision, unit]);
 
   const transition = async (move: { to_status: string; effective_date: string; reason: string }) => {
     setBusy(true);
@@ -292,26 +306,19 @@ export function UnitDetailPanel({
 
   if (error && unit === null) {
     return (
-      <Drawer title="Unit" onClose={onClose}>
+      <RecordWorkspace projectId={projectId} kind="unit" title="Unit">
         <Notice tone="error">{error}</Notice>
-      </Drawer>
+      </RecordWorkspace>
     );
   }
 
   if (unit === null) {
     return (
-      <Drawer eyebrow="Unit" title="Loading…" onClose={onClose}>
+      <RecordWorkspace projectId={projectId} kind="unit" eyebrow="Unit" title="Loading…">
         <Loading label="Loading unit…" shape="record" />
-      </Drawer>
+      </RecordWorkspace>
     );
   }
-
-  if (openPlan) return <PlanBuilder projectId={projectId} planId={openPlan} roles={roles}
-    onClose={() => { setOpenPlan(null); void load(); }} onChanged={async () => { await load(); await onChanged(); }} />;
-
-  if (deal) return <DealFile projectId={projectId} reservationId={deal.reservationId} saleId={deal.saleId}
-    roles={roles} unitReference={unit.unit_reference} initialSection={deal.initialSection} onClose={() => { setDeal(null); void load(); }}
-    onChanged={async () => { await load(); await onChanged(); }} />;
 
   const editableValues = values.filter((value) => value.is_editable);
   const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;
@@ -321,16 +328,16 @@ export function UnitDetailPanel({
   const liveSale = commitmentAnswer.status === "ready" ? commitmentAnswer.data.sale?.sale : null;
 
   const sections = [
-    { key: "summary", label: "Overview" },
-    { key: "detail", label: "Physical record" },
+    { key: "overview", label: "Overview" },
+    { key: "detail", label: "Property" },
     ...(seesListPrice ? [{ key: "pricing", label: "Pricing" }] : []),
-    ...(seesSales ? [{ key: "commercial", label: "Sales & legal" }] : []),
-    ...(seesCollections && hasSale ? [{ key: "collections", label: "Collections" }] : []),
-    { key: "construction", label: "Construction / delivery" },
+    ...(seesSales ? [{ key: "commercial", label: "Sale" }] : []),
+    ...(seesCollections && hasSale ? [{ key: "collections", label: "Payment & collections" }] : []),
+    { key: "construction", label: "Delivery" },
     { key: "release", label: "Release" },
     { key: "history", label: "History" },
   ];
-  const activeSection = sections.some((entry) => entry.key === section) ? section : "summary";
+  const activeSection = sections.some((entry) => entry.key === section) ? section : "overview";
 
   // Each fact follows its module's answer: shown when the module answered,
   // shown as unavailable when the request failed, and absent while loading,
@@ -342,7 +349,7 @@ export function UnitDetailPanel({
   // said as a failure, never drawn as "not priced".
   const soldContract = liveSale && ["active", "termination_pending"].includes(liveSale.status) ? liveSale : null;
   const committedUnit = ["contract_pending", "contracted"].includes(unit.commercial_status);
-  const headline: DrawerHeadline | undefined = soldContract
+  const headline: WorkspaceHeadline | undefined = soldContract
     ? { value: money(soldContract.net_contract_price_ex_tax, currencyCodeOf(soldContract.currency_id)), label: `${soldContract.sale_number} · Active contract · ex tax` }
     : committedUnit
       ? commitmentAnswer.status === "failed"
@@ -363,7 +370,7 @@ export function UnitDetailPanel({
     : pricingAnswer.status === "failed"
       ? { value: "Unavailable", label: "List price could not be loaded", tone: "muted" }
       : undefined;
-  const facts: DrawerFact[] = [
+  const facts: WorkspaceFact[] = [
     {
       label: "Internal area",
       value: unit.internal_area === null ? "Not measured" : `${unit.internal_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
@@ -380,7 +387,7 @@ export function UnitDetailPanel({
   ];
 
   return (
-    <Drawer
+    <RecordWorkspace projectId={projectId} kind="unit"
       eyebrow="Unit 360"
       icon="inventory"
       title={unit.unit_reference}
@@ -400,7 +407,7 @@ export function UnitDetailPanel({
       headline={headline}
       actions={
         <>
-        {seesSales ? <Button variant="primary" onClick={() => setSection("commercial")}>Sales file</Button> : null}
+        {liveSale ? <RecordLink projectId={projectId} kind="sale" id={liveSale.id} className="button button-primary">Open Sale</RecordLink> : commitmentAnswer.status === "ready" && commitmentAnswer.data.reservation ? <RecordLink projectId={projectId} kind="reservation" id={commitmentAnswer.data.reservation.id} className="button button-primary">Open reservation</RecordLink> : seesSales ? <Button onClick={() => setSection("commercial")}>Sale options</Button> : null}
         {canWriteStructure ? (
           <Button
             onClick={() => {
@@ -418,19 +425,19 @@ export function UnitDetailPanel({
       tabs={sections}
       activeTab={activeSection}
       onSelectTab={setSection}
-      onClose={onClose}
+     
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      {areaTypes.length === 0 ? (
+      {activeSection === "detail" && !supportBusy && detailRevision === supportRevision && areaTypes.length === 0 ? (
         <Notice tone="info">
           This project has no area types configured yet, so no unit can be measured or released.
         </Notice>
       ) : null}
 
       {activeSection === "construction" ? <UnitStages projectId={projectId} unitId={unitId} roles={roles} /> : null}
-      {activeSection === "summary" ? (
+      {activeSection === "overview" ? (
         <UnitSummary
           unit={unit}
           pricing={pricingAnswer}
@@ -440,7 +447,8 @@ export function UnitDetailPanel({
         />
       ) : null}
 
-      {activeSection === "detail" ? (
+      {activeSection === "detail" && supportBusy ? <Loading label="Loading property" /> : null}
+      {activeSection === "detail" && !supportBusy ? (
         <>
           {editing === "unit" ? (
             <Card title="Edit unit">
@@ -557,29 +565,29 @@ export function UnitDetailPanel({
         <>
           {commitmentAnswer.status === "ready" ? (
             commitmentAnswer.data.reservation || commitmentAnswer.data.sale ? (
-              <Button variant="primary" onClick={() => setDeal({ reservationId: commitmentAnswer.data.reservation?.id ?? null, saleId: commitmentAnswer.data.sale?.sale.id ?? null })}>Manage buyer, reservation & sale</Button>
+              <RecordLink projectId={projectId} kind={liveSale ? "sale" : "reservation"} id={liveSale?.id ?? commitmentAnswer.data.reservation!.id} className="button button-primary">Open Sale Workspace</RecordLink>
             ) : (roles.has("sales_operations") || roles.has("sales_advisor")) && unit.commercial_status === "available" ? (
               reserving ? <ReservationForm key={unitId} projectId={projectId} unitId={unitId} currencyId={price?.currency_id ?? null}
-                onCancel={() => setReserving(false)} onCreated={(reservationId) => { setReserving(false); setDeal({ reservationId, saleId: null }); void load(); void onChanged(); }} />
+                onCancel={() => setReserving(false)} onCreated={(reservationId) => { setReserving(false); router.push(recordHref(projectId, "reservation", reservationId)); }} />
                 : <Button variant="primary" onClick={() => setReserving(true)}>Add buyer & reserve</Button>
             ) : null
           ) : null}
-          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} onOpenPlan={setOpenPlan} /> : null}
+          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} /> : null}
         </>
       ) : null}
 
-      {activeSection === "collections" ? <UnitCollections answer={collection} onOpenCollections={liveSale ? () => setDeal({ saleId: liveSale.id, reservationId: liveSale.reservation_id, initialSection: "collections" }) : undefined} /> : null}
+      {activeSection === "collections" && liveSale ? <div className="stack"><RecordLink projectId={projectId} kind="sale" id={liveSale.id} tab="collections">Open Sale collections</RecordLink><PlanSummary projectId={projectId} saleId={liveSale.id} roles={roles} saleStatus={liveSale.status} onOpenPlan={(id) => router.push(recordHref(projectId, "payment-plan", id))} /><UnitCollections answer={collection} /></div> : null}
 
 
-      {activeSection === "history" ? <UnitHistory history={history} /> : null}
+      {activeSection === "history" ? supportBusy ? <Loading label="Loading history" /> : <UnitHistory history={history} /> : null}
 
-      {activeSection === "summary" ? (
+      {activeSection === "overview" ? (
         <p className="footnote">
           <Button small variant="quiet" onClick={() => setSection("history")}>
             Status history
           </Button>
         </p>
       ) : null}
-    </Drawer>
+    </RecordWorkspace>
   );
 }

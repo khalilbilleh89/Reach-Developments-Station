@@ -212,7 +212,7 @@ function PriceSnapshot({ answer }: { answer: Answer<UnitPricing> }) {
  * belongs to another advisor's buyer and is withheld from this reader. A
  * failed read is neither, and is said as a failure.
  */
-function CommitmentSnapshot({ answer, commercialStatus }: { answer: Answer<Commitment>; commercialStatus: string }) {
+export function CommitmentSnapshot({ answer, commercialStatus }: { answer: Answer<Commitment>; commercialStatus: string }) {
   const currencyCodeOf = useCurrencyCode();
   if (answer.status === "loading") return <Loading label="Loading the commercial record" shape="rows" rows={2} />;
   if (answer.status === "denied") return <p className="subtle">Not available to your role.</p>;
@@ -286,7 +286,7 @@ function CommitmentSnapshot({ answer, commercialStatus }: { answer: Answer<Commi
 }
 
 /** The cash position behind the collection status, from the account's own summary. */
-function CollectionSnapshot({ answer }: { answer: Answer<CollectionSaleSummary> }) {
+export function CollectionSnapshot({ answer }: { answer: Answer<CollectionSaleSummary> }) {
   const currencyCodeOf = useCurrencyCode();
   if (answer.status === "loading") return <Loading label="Loading the collections position" shape="metrics" />;
   if (answer.status === "denied") return <p className="subtle">Not available to your role.</p>;

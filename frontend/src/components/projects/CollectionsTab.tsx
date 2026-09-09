@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Badge,
+  RecordLink,
   Card,
   DataToolbar,
   IdentityCell,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type { AgingRow, CollectionProjectSummary, CollectionRegisterRow } from "@/lib/api";
+import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
@@ -279,7 +281,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                             <IdentityCell icon="inventory" name={row.unit_number} meta={row.client_display_name} />
                           </button>
                         </th>
-                        <td className="mono">{row.spa_number ?? row.sale_number}</td>
+                        <td className="mono">{hasAnyRole(roles, SALES_READERS) ? <RecordLink projectId={projectId} kind="sale" id={row.sale_id} tab="collections">{row.spa_number ?? row.sale_number}</RecordLink> : row.spa_number ?? row.sale_number}</td>
                         <td className="num">{money(row.summary.scheduled_total, code)}</td>
                         <td className="num">{money(row.summary.allocated_total, code)}</td>
                         <td className="num">
