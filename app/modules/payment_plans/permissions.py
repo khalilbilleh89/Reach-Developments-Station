@@ -123,6 +123,8 @@ def require_different_checker(actor: ActorContext, *, maker_user_id: uuid.UUID |
     submitter is the one asserting the schedule is right, and theirs is the
     signature the approval exists to be independent of.
     """
+    if actor.is_master_admin:
+        return
     if maker_user_id is not None and maker_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 
