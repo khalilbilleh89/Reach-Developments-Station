@@ -123,6 +123,8 @@ def require_economics_approver(actor: ActorContext) -> None:
 
 def require_different_approver(actor: ActorContext, *, submitted_by_user_id: uuid.UUID) -> None:
     """Refuse an approval by the person who submitted the version."""
+    if actor.is_master_admin:
+        return
     if submitted_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 

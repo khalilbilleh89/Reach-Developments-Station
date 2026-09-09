@@ -431,7 +431,7 @@ def release(
     lock_project(session, project.id)
     row = _get(session, project, identifier, lock=True)
     _draft(row)
-    if row.prepared_by_user_id == actor.user_id:
+    if not actor.is_master_admin and row.prepared_by_user_id == actor.user_id:
         raise PermissionDeniedError("The person who prepared this commission may not release it.")
     sale = session.scalar(
         select(SaleContract)

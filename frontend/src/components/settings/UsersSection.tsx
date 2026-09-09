@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 
 const EMPTY_DRAFT = { email: "", display_name: "", initial_password: "", role_keys: [] as string[] };
+const EMPTY_PERMISSION_DRAFT = { role_keys: [] as string[], reason: "" };
 
 /** User administration: who exists, what they may do, and access resets. */
 export function UsersSection() {
@@ -31,6 +32,8 @@ export function UsersSection() {
   const [notice, setNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [permissionDraft, setPermissionDraft] = useState(EMPTY_PERMISSION_DRAFT);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -75,6 +78,28 @@ export function UsersSection() {
     }));
   }
 
+  function openPermissionEditor(user: AdminUser) {
+    setAdding(false);
+    setEditing(user);
+    setPermissionDraft({ role_keys: [...user.role_keys], reason: "" });
+    setError(null);
+    setNotice(null);
+  }
+
+  function closePermissionEditor() {
+    setEditing(null);
+    setPermissionDraft(EMPTY_PERMISSION_DRAFT);
+  }
+
+  function togglePermissionRole(key: string) {
+    setPermissionDraft((previous) => ({
+      ...previous,
+      role_keys: previous.role_keys.includes(key)
+        ? previous.role_keys.filter((existing) => existing !== key)
+        : [...previous.role_keys, key],
+    }));
+  }
+
   // Show the human label, not the internal key.
   const roleLabel = (key: string) => roles.find((role) => role.key === key)?.label ?? key;
 
@@ -90,6 +115,68 @@ export function UsersSection() {
     <div className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      {editing ? (
+        <Card
+          title={`Edit permissions — ${editing.display_name}`}
+          description={`${editing.email}. Roles apply across every project this person can access.`}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(async () => {
+                await usersApi.update(editing.id, {
+                  role_keys: permissionDraft.role_keys,
+                  reason: permissionDraft.reason.trim() || undefined,
+                });
+                closePermissionEditor();
+              }, "User permissions updated.");
+            }}
+          >
+            <FormSection
+              title="Roles"
+              description="Ordinary Approver / CFO users need a different submitter. Master Administrator is the explicit owner override and may approve its own work."
+            >
+              <fieldset className="fieldset">
+                <legend className="visually-hidden">Roles for {editing.display_name}</legend>
+                <div className="checkbox-grid">
+                  {roles.map((role) => (
+                    <label className="checkbox" key={role.key}>
+                      <input
+                        type="checkbox"
+                        checked={permissionDraft.role_keys.includes(role.key)}
+                        onChange={() => togglePermissionRole(role.key)}
+                      />
+                      <span>{role.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </FormSection>
+            <FormSection title="Record the reason">
+              <Field label="Reason" hint="Optional. Included in the user-change audit event.">
+                <textarea
+                  className="input"
+                  rows={3}
+                  maxLength={500}
+                  value={permissionDraft.reason}
+                  onChange={(event) =>
+                    setPermissionDraft({ ...permissionDraft, reason: event.target.value })
+                  }
+                />
+              </Field>
+            </FormSection>
+            <FormActions>
+              <Button variant="primary" type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save permissions"}
+              </Button>
+              <Button onClick={closePermissionEditor} disabled={busy}>
+                Cancel
+              </Button>
+            </FormActions>
+          </form>
+        </Card>
+      ) : null}
 
       {adding ? (
         <Card title="Add a user" description="They sign in with a temporary password and must replace it before doing anything else.">
@@ -170,7 +257,13 @@ export function UsersSection() {
         count={rows ? { shown: shown.length, total: rows.length, noun: "user" } : undefined}
         actions={
           adding ? undefined : (
-            <Button variant="primary" onClick={() => setAdding(true)}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                closePermissionEditor();
+                setAdding(true);
+              }}
+            >
               Add user
             </Button>
           )
@@ -226,19 +319,29 @@ export function UsersSection() {
                   </td>
                   <td className="figure">{row.last_login_at ? row.last_login_at.slice(0, 10) : "Never"}</td>
                   <td>
-                    <Button
-                      small
-                      variant="quiet"
-                      disabled={busy}
-                      onClick={() =>
-                        void act(
-                          () => usersApi.update(row.id, { is_active: !row.is_active }),
-                          row.is_active ? "User deactivated." : "User reactivated.",
-                        )
-                      }
-                    >
-                      {row.is_active ? "Deactivate" : "Reactivate"}
-                    </Button>
+                    <div className="row-actions">
+                      <Button
+                        small
+                        variant="quiet"
+                        disabled={busy}
+                        onClick={() => openPermissionEditor(row)}
+                      >
+                        Edit permissions
+                      </Button>
+                      <Button
+                        small
+                        variant="quiet"
+                        disabled={busy}
+                        onClick={() =>
+                          void act(
+                            () => usersApi.update(row.id, { is_active: !row.is_active }),
+                            row.is_active ? "User deactivated." : "User reactivated.",
+                          )
+                        }
+                      >
+                        {row.is_active ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

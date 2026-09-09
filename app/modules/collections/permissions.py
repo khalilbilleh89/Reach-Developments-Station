@@ -123,6 +123,8 @@ def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uui
     is that a second pair of eyes saw the bank, and their own eyes are the ones
     already counted.
     """
+    if actor.is_master_admin:
+        return
     if recorded_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 
@@ -131,6 +133,8 @@ def require_different_waiver_approver(
     actor: ActorContext, *, submitted_by_user_id: uuid.UUID
 ) -> None:
     """Refuse an approval by the person who asked for the concession."""
+    if actor.is_master_admin:
+        return
     if submitted_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER_WAIVER)
 
