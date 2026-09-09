@@ -32,6 +32,7 @@ from app.modules.commissions import models as commission_models  # noqa: E402,F4
 from app.modules.construction import models as construction_models  # noqa: E402,F401
 from app.modules.consultant_engineering import models as consultant_models  # noqa: E402,F401
 from app.modules.inventory import models as inventory_models  # noqa: E402,F401
+from app.modules.management_actions import models as management_actions_models  # noqa: E402,F401
 from app.modules.payment_plans import models as payment_plan_models  # noqa: E402,F401
 from app.modules.pricing import models as pricing_models  # noqa: E402,F401
 from app.modules.projects import models as projects_models  # noqa: E402,F401
