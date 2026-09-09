@@ -22,6 +22,7 @@ from app.db.base import Base
 #: builder and no permission table. Authorization is explicit role checks in
 #: code until real domain actions exist to authorize.
 SYSTEM_ROLES: tuple[tuple[str, str], ...] = (
+    ("master_admin", "Master Administrator"),
     ("system_admin", "System Administrator"),
     ("project_manager", "Project Manager"),
     ("design_engineering", "Design / Engineering"),
@@ -35,6 +36,7 @@ SYSTEM_ROLES: tuple[tuple[str, str], ...] = (
     ("auditor", "Auditor"),
 )
 
+ROLE_MASTER_ADMIN = "master_admin"
 ROLE_SYSTEM_ADMIN = "system_admin"
 ROLE_AUDITOR = "auditor"
 
