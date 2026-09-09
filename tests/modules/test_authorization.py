@@ -54,6 +54,28 @@ def test_system_administrator_can_manage_users(admin: User) -> None:
 
 
 @pytest.mark.parametrize("actor", ["auditor", "advisor"])
+def test_master_administrator_can_edit_own_permissions_and_manage_settings(db: Session) -> None:
+    """A Master Administrator may grant itself roles and use administrator routes."""
+    master = make_user(db, email="master@example.com", roles=("master_admin",))
+    client = client_for(master.email)
+
+    updated = client.patch(
+        f"/api/v1/admin/users/{master.id}",
+        json={
+            "role_keys": ["master_admin", "approver_cfo"],
+            "reason": "Owner authority",
+        },
+    )
+    configured = client.post(
+        "/api/v1/settings/currencies",
+        json={"code": "JOD", "name": "Jordanian Dinar"},
+    )
+
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["role_keys"] == ["approver_cfo", "master_admin"]
+    assert configured.status_code == 201, configured.text
+
+
 def test_non_administrators_cannot_manage_users(request: pytest.FixtureRequest, actor: str) -> None:
     """Given any non-administrator, then user administration is refused."""
     user: User = request.getfixturevalue(actor)
@@ -140,7 +162,7 @@ def test_the_role_catalogue_is_read_only(admin: User, db: Session) -> None:
     ):
         assert response.status_code == 404
         assert response.json() == {"detail": "Not Found."}
-    assert len(db.scalars(select(Role)).all()) == 11
+    assert len(db.scalars(select(Role)).all()) == 12
 
 
 def test_the_last_system_administrator_cannot_be_deactivated(admin: User) -> None:
