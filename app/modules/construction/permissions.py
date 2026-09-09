@@ -198,6 +198,8 @@ def require_different_approver(
     actor: ActorContext, *, submitted_by_user_id: uuid.UUID | None
 ) -> None:
     """Refuse an approval by the person who submitted the thing being approved."""
+    if actor.is_master_admin:
+        return
     if submitted_by_user_id is not None and submitted_by_user_id == actor.user_id:
         raise PermissionDeniedError(_MAKER)
 
