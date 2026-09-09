@@ -152,6 +152,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
 
         <DataToolbar
           framed
+          activeSummary={[status ? unitCollectionLabel(status) : null, bucket ? bucketLabel(bucket) : null, only === "overdue" ? "Overdue only" : only === "unapplied" ? "With unapplied cash" : only === "disputed" ? "With an open dispute" : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
           search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search accounts" }}
           count={
             rows && view === "accounts"
@@ -241,7 +242,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                 />
               </div>
             ) : (
-              <TableScroll label="Receivables" fixedFirst>
+              <TableScroll label="Receivables" fixedFirst stickyHeader>
                 <thead>
                   <tr>
                     <th scope="col">Account</th>

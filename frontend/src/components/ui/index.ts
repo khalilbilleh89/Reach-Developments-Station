@@ -72,3 +72,4 @@ export type { TimelineState } from "./Timeline";
 export { Disclosure } from "./Disclosure";
 export { AttentionList } from "./Attention";
 export type { AttentionEntry } from "./Attention";
+export { CountComposition, CountSeries } from "./CountVisuals";

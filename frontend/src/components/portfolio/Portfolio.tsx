@@ -43,7 +43,7 @@ export function RiskRegister({ rows }: { rows: Risk[] }) {
     tone: risk.severity === "high" ? "danger" : "warning",
     category: risk.category.replaceAll("_", " "),
     context: <Link href={`/portfolio/?project=${risk.project_id}`}>{risk.project_code} · {risk.project_name}</Link>,
-    evidence: <><span className="figure">{risk.currency ? money(risk.source_value, risk.currency) : risk.source_value}</span><span>Observed {businessDate(risk.observation_date)}</span></>,
+    evidence: <><span className={risk.currency ? "figure" : undefined}>{risk.currency ? money(risk.source_value, risk.currency) : risk.source_value}</span><span>Observed {businessDate(risk.observation_date)}</span></>,
     source: <Disclosure title="Source basis"><p>{risk.basis}</p></Disclosure>,
     action: <Link className="button button-small" href={risk.drilldown}>Open source</Link>,
   }))} />;

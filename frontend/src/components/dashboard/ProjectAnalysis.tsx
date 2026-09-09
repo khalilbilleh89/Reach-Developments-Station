@@ -7,7 +7,8 @@ import type { Availability, Context, Demand, Fundamental, Financial, Technical, 
 import { ANALYSIS_FINANCIAL_READERS, ANALYSIS_FUNDAMENTAL_READERS, ANALYSIS_TECHNICAL_READERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
-import { Disclosure, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
+import { CountComposition, CountSeries, Disclosure, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 const labels = { fundamental: "Fundamental", financial: "Financial", technical: "Technical" };
 const readers = { fundamental: ANALYSIS_FUNDAMENTAL_READERS, financial: ANALYSIS_FINANCIAL_READERS, technical: ANALYSIS_TECHNICAL_READERS };
@@ -63,6 +64,7 @@ function FundamentalView({ data }: { data: Fundamental }) {
       <PositionFigure label="Available units" value={p.available_units} />
       <PositionFigure label="Active sold units" value={p.active_sold_units} />
     </Position> : <Notice tone="info">{p.reason}</Notice>}
+    {p.availability === "available" ? <CountComposition label="Commercial inventory" note={`Current snapshot · ${businessDate(data.context.snapshot_as_of)} · ${p.total_units} total unit records`} rows={Object.entries(p.commercial).map(([status, count]) => ({ label: statusLabel(status), count, tone: statusTone(status) }))} /> : null}
     <Basis value={p} /></section>
     <aside className="analysis-outlook">
       <SectionHeader title="Run-rate sellout estimate" />
@@ -71,7 +73,11 @@ function FundamentalView({ data }: { data: Fundamental }) {
       <Disclosure title="Observed absorption"><p>Net absorption: {f.monthly_net_absorption.join(", ")}</p></Disclosure>
       <Basis value={f} />
     </aside></div>
-    <Disclosure title={<> Monthly selling demand </>}><Basis value={data.sales_basis} /><TableScroll fixedFirst label="Monthly selling demand"><thead><tr><th scope="col">Month</th><th scope="col" className="num">Activations</th><th scope="col" className="num">Cancellations</th><th scope="col" className="num">Net absorption</th><th scope="col" className="num">New contracted value</th></tr></thead><tbody>{data.monthly_sales.map((row) => <tr key={row.month}><th scope="row">{businessDate(row.month)}</th><td className="num">{row.activations}</td><td className="num">{row.cancellations}</td><td className="num">{row.net_absorption}</td><td className="num">{amounts(row.contracted_value)}</td></tr>)}</tbody></TableScroll></Disclosure>
+    <section className="analysis-primary">
+      {data.sales_basis.availability === "unavailable" ? <Notice tone="info">Monthly sales activity is unavailable. {data.sales_basis.reason}</Notice> : data.monthly_sales.length ? <CountSeries label="Monthly net sales activity" note={`${businessDate(data.context.period_from)} — ${businessDate(data.context.period_to)} · Units · ${data.sales_basis.availability} · Below zero means net cancellations`} rows={data.monthly_sales.map((row) => ({ label: businessDate(row.month).replace(/^1 /, ""), count: row.net_absorption }))} /> : <Notice tone="info">No monthly sales observations returned for this period.</Notice>}
+      <Basis value={data.sales_basis} />
+      <Disclosure title={<> Monthly selling demand </>}><TableScroll fixedFirst label="Monthly selling demand"><thead><tr><th scope="col">Month</th><th scope="col" className="num">Activations</th><th scope="col" className="num">Cancellations</th><th scope="col" className="num">Net absorption</th><th scope="col" className="num">New contracted value</th></tr></thead><tbody>{data.monthly_sales.map((row) => <tr key={row.month}><th scope="row">{businessDate(row.month)}</th><td className="num">{row.activations}</td><td className="num">{row.cancellations}</td><td className="num">{row.net_absorption}</td><td className="num">{amounts(row.contracted_value)}</td></tr>)}</tbody></TableScroll></Disclosure>
+    </section>
     <Disclosure title={<> Independent unit status dimensions · {p.total_units} total records </>}><Counts label="Commercial" values={p.commercial} /><Counts label="Legal" values={p.legal} /><Counts label="Delivery" values={p.delivery} /><p>These are current record dimensions, not a single combined status.</p></Disclosure>
     <RankingTable title="Sales branches" rows={data.branches} /><RankingTable title="Salespeople" rows={data.salespeople} /><Basis value={data.ranking_basis} />
     <DemandTable title="Property type demand" rows={data.property_types} /><DemandTable title="View demand" rows={data.views} /><Basis value={data.view_basis} />

@@ -66,6 +66,7 @@ REPRESENTATIVE_SCREENS = (
     PROJECTS / "construction" / "ConstructionSummaryView.tsx",
     PROJECTS / "CommissionsTab.tsx",
     PROJECTS / "PreLaunchTab.tsx",
+    FRONTEND / "components" / "portfolio" / "Portfolio.tsx",
 )
 
 
@@ -81,6 +82,60 @@ def frontend_sources() -> list[Path]:
         for path in FRONTEND.glob(pattern)
         if "node_modules" not in path.parts
     )
+
+
+class TestExperience41Evidence:
+    """Keep shared exceptions and count geometry from creating new business truth."""
+
+    def test_attention_has_one_presentation_and_keeps_source_evidence(self) -> None:
+        component = read(UI / "Attention.tsx")
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "AttentionList" in read(DASHBOARD / "AttentionPanel.tsx")
+        assert "AttentionList detailed" in portfolio
+        for field in ("risk.reason", "risk.basis", "risk.observation_date", "risk.drilldown"):
+            assert field in portfolio
+        assert "risk.severity" in portfolio
+        for forbidden in ("fetch(", "useAnswer", "onSubmit", "owner_id", "due_date"):
+            assert forbidden not in component
+
+    def test_count_visuals_accept_counts_not_decimal_money(self) -> None:
+        charts = read(UI / "CountVisuals.tsx")
+        analysis = read(DASHBOARD / "ProjectAnalysis.tsx")
+        assert "count: number" in charts
+        assert "count: row.net_absorption" in analysis
+        assert "Object.entries(p.commercial)" in analysis
+        for forbidden in ("Number(", "parseFloat", "currency", "amount", ".reduce(", "fetch("):
+            assert forbidden not in charts
+        assert "flexGrow: row.count" in charts
+        assert "{row.count}</text>" in charts
+        assert "Math.abs(row.count) / extent" in charts
+
+    def test_visuals_keep_availability_and_text_equivalents(self) -> None:
+        charts = read(UI / "CountVisuals.tsx")
+        analysis = read(DASHBOARD / "ProjectAnalysis.tsx")
+        assert '<dl className="count-legend">' in charts
+        assert '<dl className="visually-hidden">' in charts
+        assert "{row.count} units" in charts
+        assert "Below zero means net cancellations" in analysis
+        assert 'data.sales_basis.availability === "unavailable"' in analysis
+        assert "<Basis value={data.sales_basis}" in analysis
+        assert '<TableScroll fixedFirst label="Monthly selling demand">' in analysis
+
+    def test_capital_bands_select_exact_currency_records(self) -> None:
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "entry.currency === currency && entry.metric_code === code" in portfolio
+        assert "money(row.amount, row.currency)" in portfolio
+        assert 'row.amount === null ? "Unavailable"' in portfolio
+        assert "row.availability" in portfolio and "row.reason" in portfolio
+        assert "partial sums exclude unavailable project amounts" in portfolio
+        assert "Missing coverage is not a health assessment" in portfolio
+
+    def test_penetration_geometry_uses_the_reported_percentage(self) -> None:
+        portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
+        assert "<Meter neutral percent={data.sales_penetration.percentage}" in portfolio
+        assert "data.sales_penetration.percentage === null" in portfolio
+        assert "Number(percent)" in read(UI / "Data.tsx")
+        assert 'neutral ? "meter-fill"' in read(UI / "Data.tsx")
 
 
 def stylesheet_without_comments() -> str:
@@ -667,7 +722,7 @@ class TestRecordsAndDialogsKeepTheirSemantics:
             assert f'["{dimension}_status",' in standing
         assert "statusLabel(unit[key])" in standing
         assert "statusTone(unit[key])" in standing
-        assert 'status={<UnitStanding unit={unit} />}' in read(UNIT_360)
+        assert "status={<UnitStanding unit={unit} />}" in read(UNIT_360)
         assert "UnitStanding" not in read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
 
     def test_every_table_has_a_caption(self) -> None:

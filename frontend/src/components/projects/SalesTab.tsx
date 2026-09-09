@@ -310,6 +310,7 @@ export function SalesTab({
 
         <DataToolbar
           framed
+          activeSummary={[phases.find((phase) => phase.id === filters.phase_id)?.name, filters.commercial_status ? statusLabel(filters.commercial_status) : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
           search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search the sales register" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
@@ -362,7 +363,7 @@ export function SalesTab({
               />
             </div>
           ) : (
-            <TableScroll label="Sales register" fixedFirst>
+            <TableScroll label="Sales register" fixedFirst stickyHeader>
               <thead>
                 <tr>
                   <th scope="col">Unit</th>

@@ -514,7 +514,7 @@ export function InventoryTab({
                         />
                       </td>
                       <td className="num">
-                        {unit.internal_area ?? "—"} internal
+                        {unit.internal_area === null ? "Not measured" : `${unit.internal_area} ${unit.weighted_saleable_area_unit ?? ""} internal`}
                         {unit.gross_area !== null ? (
                           <span className="cell-secondary">
                             {unit.gross_area} {unit.gross_area_unit ?? ""} gross
