@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access import security
 from app.modules.access.models import (
+    ROLE_MASTER_ADMIN,
     ROLE_SYSTEM_ADMIN,
     Role,
     User,
@@ -29,7 +30,7 @@ ENTITY_USER = "user"
 
 #: Conflict message used whenever the last administrator would be lost. Stated
 #: once so the API and the tests cannot drift apart.
-LAST_ADMIN_DETAIL = "This change would leave the system with no active System Administrator."
+LAST_ADMIN_DETAIL = "This change would leave the system with no active administrator."
 
 
 def _now() -> datetime:
@@ -80,7 +81,10 @@ def _active_system_admin_ids(session: Session, *, lock: bool) -> set[uuid.UUID]:
         select(User.id)
         .join(UserRole, UserRole.user_id == User.id)
         .join(Role, Role.id == UserRole.role_id)
-        .where(Role.key == ROLE_SYSTEM_ADMIN, User.is_active.is_(True))
+        .where(
+            Role.key.in_((ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN)),
+            User.is_active.is_(True),
+        )
     )
     if lock:
         statement = statement.with_for_update(of=User)
@@ -218,7 +222,11 @@ def update_user(
 
     will_be_active = user.is_active if is_active is None else is_active
     keeps_admin = (
-        ROLE_SYSTEM_ADMIN in (set(role_keys) if role_keys is not None else user.role_keys)
+        bool(
+            {ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN}.intersection(
+                set(role_keys) if role_keys is not None else user.role_keys
+            )
+        )
         and will_be_active
     )
     if (is_active is not None and not is_active) or role_keys is not None:
