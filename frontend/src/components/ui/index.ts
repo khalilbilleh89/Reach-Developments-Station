@@ -70,3 +70,5 @@ export { Steps, Timeline, TimelineItem } from "./Timeline";
 export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
+export { AttentionList } from "./Attention";
+export type { AttentionEntry } from "./Attention";

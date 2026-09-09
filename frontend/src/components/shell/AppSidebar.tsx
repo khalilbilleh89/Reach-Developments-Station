@@ -85,7 +85,7 @@ export function SidebarContent({
 
       <div className="sidebar-scroll">
         {hasAnyRole(roleSet(user.roles), PORTFOLIO_READERS) ? (
-          <nav className="nav-group" aria-label="Portfolio management">
+          <nav className="nav-group nav-portfolio" aria-label="Portfolio management">
             <ul className="nav-list"><li><Link href="/portfolio/" className="nav-item" data-label="Portfolio" aria-current={area === "portfolio" ? "page" : undefined} onClick={onClose}>
               <Icon name="overview" className="nav-icon" /><span className="nav-label">Portfolio</span>
             </Link></li></ul>
@@ -96,7 +96,7 @@ export function SidebarContent({
         ) : null}
 
         {!insideProject ? (
-          <nav className="nav-group" aria-label="Portfolio">
+          <nav className="nav-group" aria-label="Development directory">
             <ul className="nav-list">
               <li>
                 <Link

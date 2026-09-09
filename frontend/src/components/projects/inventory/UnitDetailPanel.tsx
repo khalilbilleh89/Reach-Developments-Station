@@ -19,7 +19,7 @@ import type {
 import { toAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
-import { isPositive, money } from "@/lib/format";
+import { money } from "@/lib/format";
 import {
   COLLECTION_READERS,
   INTERNAL_PRICE_READERS,
@@ -29,14 +29,13 @@ import {
   SALES_READERS,
   hasAnyRole,
 } from "@/lib/roles";
-import { Badge, Button, Card, Drawer, Loading, Notice, StatusDot } from "@/components/ui";
+import { Button, Card, Drawer, Loading, Notice } from "@/components/ui";
 import type { DrawerFact, DrawerHeadline } from "@/components/ui";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { UnitCollections } from "@/components/projects/collections/UnitCollections";
-import { unitCollectionLabel } from "@/components/projects/collections/labels";
-import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { UnitStanding } from "./unit/UnitStanding";
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
@@ -324,10 +323,10 @@ export function UnitDetailPanel({
   const sections = [
     { key: "summary", label: "Overview" },
     { key: "detail", label: "Physical record" },
-    { key: "construction", label: "Construction" },
     ...(seesListPrice ? [{ key: "pricing", label: "Pricing" }] : []),
     ...(seesSales ? [{ key: "commercial", label: "Sales & legal" }] : []),
     ...(seesCollections && hasSale ? [{ key: "collections", label: "Collections" }] : []),
+    { key: "construction", label: "Construction / delivery" },
     { key: "release", label: "Release" },
     { key: "history", label: "History" },
   ];
@@ -337,17 +336,19 @@ export function UnitDetailPanel({
   // shown as unavailable when the request failed, and absent while loading,
   // when refused, or when never asked. A failure is never drawn as "not
   // priced", "no margin" or a cleared balance.
-  const unavailable = (label: string): DrawerFact => ({
-    label,
-    value: "Unavailable",
-    note: "Could not be loaded",
-    tone: "muted",
-  });
   // The one value the file is about, set beside the identity. The list price
   // is requested only for a role the server answers, so for Legal and
   // Collections there is no headline and nothing to hide; a failed request is
   // said as a failure, never drawn as "not priced".
-  const headline: DrawerHeadline | undefined = unitPricing
+  const soldContract = liveSale && ["active", "termination_pending"].includes(liveSale.status) ? liveSale : null;
+  const committedUnit = ["contract_pending", "contracted"].includes(unit.commercial_status);
+  const headline: DrawerHeadline | undefined = soldContract
+    ? { value: money(soldContract.net_contract_price_ex_tax, currencyCodeOf(soldContract.currency_id)), label: `${soldContract.sale_number} · Active contract · ex tax` }
+    : committedUnit
+      ? commitmentAnswer.status === "failed"
+        ? { value: "Unavailable", label: "Contract could not be loaded", tone: "muted" }
+        : undefined
+      : unitPricing
     ? {
         value: price ? money(price.reference_price_ex_tax, priceCode) : "Not priced",
         label: price
@@ -376,35 +377,6 @@ export function UnitDetailPanel({
           : `${unit.gross_area} ${unit.gross_area_unit ?? ""}`.trim(),
       tone: unit.gross_area === null ? ("muted" as const) : undefined,
     },
-    ...(unit.parking_count > 0 || unit.storage_count > 0
-      ? [
-          {
-            label: "Attached",
-            value: [
-              unit.parking_count > 0 ? `${unit.parking_count} parking` : null,
-              unit.storage_count > 0 ? `${unit.storage_count} storage` : null,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-            note: "Excluded from gross area",
-          },
-        ]
-      : []),
-    ...(liveSale && ["active", "termination_pending"].includes(liveSale.status)
-      ? [{ label: "Sold price", value: money(liveSale.net_contract_price_ex_tax, currencyCodeOf(liveSale.currency_id)), note: "Contract amount · ex tax" }]
-      : []),
-    ...(collection.status === "ready"
-      ? [
-          {
-            label: "Outstanding",
-            value: money(collection.data.outstanding_total, currencyCodeOf(collection.data.currency_id)),
-            note: unitCollectionLabel(collection.data.derived_collection_status),
-            tone: isPositive(collection.data.overdue_total) ? ("danger" as const) : undefined,
-          },
-        ]
-      : collection.status === "failed"
-        ? [unavailable("Outstanding")]
-        : []),
   ];
 
   return (
@@ -428,7 +400,7 @@ export function UnitDetailPanel({
       headline={headline}
       actions={
         <>
-        {seesSales ? <Button variant="primary" onClick={() => setSection("commercial")}>Buyer, reservation & sale</Button> : null}
+        {seesSales ? <Button variant="primary" onClick={() => setSection("commercial")}>Sales file</Button> : null}
         {canWriteStructure ? (
           <Button
             onClick={() => {
@@ -441,16 +413,7 @@ export function UnitDetailPanel({
         ) : null}
         </>
       }
-      meta={
-        <>
-          <Badge tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</Badge>
-          {unit.release_eligible ? (
-            <StatusDot tone="success">Releasable</StatusDot>
-          ) : (
-            <StatusDot tone="muted">Not releasable</StatusDot>
-          )}
-        </>
-      }
+      status={<UnitStanding unit={unit} />}
       facts={facts}
       tabs={sections}
       activeTab={activeSection}

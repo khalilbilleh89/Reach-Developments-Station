@@ -151,6 +151,7 @@ export function DataToolbar({
   onReset,
   actions,
   framed,
+  activeSummary,
 }: {
   search?: {
     value: string;
@@ -169,6 +170,8 @@ export function DataToolbar({
    * independently bordered boxes make it read as five unrelated questions.
    */
   framed?: boolean;
+  /** Human labels for the current selection, also visible while filters collapse. */
+  activeSummary?: string;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
@@ -203,6 +206,7 @@ export function DataToolbar({
           </div>
         </>
       ) : null}
+      {activeSummary ? <p className="toolbar-summary">{activeSummary}</p> : null}
       {count || onReset || actions ? (
         <div className="toolbar-meta">
           {count ? (

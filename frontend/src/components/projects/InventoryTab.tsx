@@ -361,6 +361,13 @@ export function InventoryTab({
         <>
         <DataToolbar
           framed
+          activeSummary={[
+            phases.find((phase) => phase.id === filters.phase_id)?.name,
+            buildings.find((building) => building.id === filters.building_id)?.name,
+            floors.find((floor) => floor.id === filters.floor_id)?.label,
+            filters.commercial_status ? statusLabel(filters.commercial_status) : null,
+            filters.search ? `“${filters.search}”` : null,
+          ].filter(Boolean).join(" · ")}
           search={{
             value: filters.search,
             onChange: (value) => setFilters({ ...filters, search: value }),
@@ -459,7 +466,7 @@ export function InventoryTab({
             </div>
           ) : (
             <>
-              <TableScroll label="Unit register" fixedFirst>
+              <TableScroll label="Unit register" fixedFirst stickyHeader>
                 <thead>
                   <tr>
                     <th scope="col">Unit</th>

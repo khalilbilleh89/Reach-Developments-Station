@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProjectSection } from "@/components/shell/navigation";
-import { Button, Card, Icon, Loading, Notice } from "@/components/ui";
+import { AttentionList, Button, Card, Icon, Loading, Notice } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
 /**
@@ -69,30 +69,11 @@ export function AttentionPanel({
           Nothing is flagged in the sources available to you.
         </p>
       ) : (
-        <ul className="attention-list">
-          {shown.map((item) => (
-            <li key={item.key} className="attention-item">
-              <span
-                className={
-                  item.tone === "danger"
-                    ? "attention-count attention-count-danger"
-                    : item.tone === "warning"
-                      ? "attention-count attention-count-warning"
-                      : "attention-count"
-                }
-              >
-                {item.count}
-              </span>
-              <div className="attention-text">
-                <p className="attention-title">{item.title}</p>
-                <p className="attention-hint">{item.hint}</p>
-              </div>
-              <Button small variant="quiet" aria-label={`Open ${item.title}`} onClick={() => onNavigate(item.section)}>
-                <Icon name="chevron" />
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <AttentionList items={shown.map((item) => ({
+          key: item.key, count: item.count, title: item.title,
+          reason: item.hint, tone: item.tone, category: item.section.replaceAll("_", " "),
+          action: <Button small variant="quiet" aria-label={`Open ${item.title}`} onClick={() => onNavigate(item.section)}><Icon name="chevron" /></Button>,
+        }))} />
       )}
     </Card>
   );

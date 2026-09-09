@@ -451,12 +451,11 @@ class TestOnlyEntitledReadersAsk:
         )
         assert 'if (seesCollections && sale && sale.sale.status !== "draft")' in unit
 
-    def test_the_unit_headline_price_exists_only_when_pricing_was_answered(self) -> None:
-        """The large price in the record header is drawn from the pricing answer alone.
+    def test_the_unit_headline_follows_authorized_contract_or_pricing_answers(self) -> None:
+        """A sold asset leads with its readable contract; asking price remains gated.
 
-        `unitPricing` is null unless the pricing request was made and answered,
-        and the request is made only for LIST_PRICE_READERS — so a role refused
-        the list price has no headline, not a hidden one.
+        A committed unit with no readable contract must not fall back to a list
+        price and imply that it is the sold amount. Neither source gains a fetch.
         """
         unit = read(UNIT_360)
         assert (
@@ -464,7 +463,14 @@ class TestOnlyEntitledReadersAsk:
             in unit
         )
         headline = unit.split("const headline: DrawerHeadline | undefined = ")[1].split(";")[0]
-        assert headline.startswith("unitPricing")
+        assert headline.startswith("soldContract")
+        assert "soldContract.net_contract_price_ex_tax" in headline
+        assert 'const liveSale = commitmentAnswer.status === "ready"' in unit
+        assert '["active", "termination_pending"].includes(liveSale.status)' in unit
+        assert 'const committedUnit = ["contract_pending", "contracted"]' in unit
+        committed_branch = headline.split(": committedUnit")[1].split(": unitPricing")[0]
+        assert 'commitmentAnswer.status === "failed"' in committed_branch
+        assert ": undefined" in committed_branch
         assert "reference_price_ex_tax" in headline
 
     def test_navigation_groups_are_the_developers_departments_in_order(self) -> None:
@@ -656,9 +662,13 @@ class TestRecordsAndDialogsKeepTheirSemantics:
         assert "Clear filters" in toolbar and "Applied" in toolbar
 
     def test_record_standing_keeps_all_four_independent_dimensions(self) -> None:
-        summary = read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
+        standing = read(PROJECTS / "inventory" / "unit" / "UnitStanding.tsx")
         for dimension in ("commercial", "legal", "collection", "delivery"):
-            assert f'key: "{dimension}_status"' in summary
+            assert f'["{dimension}_status",' in standing
+        assert "statusLabel(unit[key])" in standing
+        assert "statusTone(unit[key])" in standing
+        assert 'status={<UnitStanding unit={unit} />}' in read(UNIT_360)
+        assert "UnitStanding" not in read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
 
     def test_every_table_has_a_caption(self) -> None:
         table = read(UI / "Data.tsx")
