@@ -12,7 +12,10 @@ def test_gate0a_is_the_canonical_three_pr_mvp2_plan() -> None:
         "MVP2_GATE0A_ROADMAP.md",
         "MVP2_GATE0A_ACCEPTANCE.md",
     } <= names
-    assert not {"MVP3_PRODUCT_SPEC.md", "MVP3_ROADMAP.md", "MVP3_ACCEPTANCE.md"} & names
+    # True MVP3 now has its own documents; Gate 0A remains the historical MVP2 plan.
+    assert {"MVP3_PRODUCT_SPEC.md", "MVP3_ROADMAP.md", "MVP3_ACCEPTANCE.md"} <= names
+    mvp3 = (ROOT / "docs" / "MVP3_PRODUCT_SPEC.md").read_text(encoding="utf-8")
+    assert mvp3.startswith("# True MVP3 product specification")
     roadmap = (ROOT / "docs" / "MVP2_GATE0A_ROADMAP.md").read_text(encoding="utf-8")
     assert "2 / 3 merged" in roadmap
     assert "3 / 3 complete" in roadmap
