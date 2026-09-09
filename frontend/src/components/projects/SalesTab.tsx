@@ -401,7 +401,7 @@ export function SalesTab({
                     <td>
                       {row.reservation_number ? (
                         <>
-                          <span className="mono">{row.reservation_number}</span>
+                          <span className="mono">{row.reservation_id && (!ownOnly || row.advisor_user_id === userId) ? <RecordLink projectId={projectId} kind="reservation" id={row.reservation_id}>{row.reservation_number}</RecordLink> : row.reservation_number}</span>
                           <span className="cell-secondary">
                             {row.closure_required ? (
                               <Badge tone="danger">Closure required</Badge>
@@ -420,7 +420,7 @@ export function SalesTab({
                     <td>
                       {row.sale_number ? (
                         <>
-                          <span className="mono">{row.spa_number ?? row.sale_number}</span>
+                          <span className="mono">{row.sale_id && (!ownOnly || row.advisor_user_id === userId) ? <RecordLink projectId={projectId} kind="sale" id={row.sale_id}>{row.spa_number ?? row.sale_number}</RecordLink> : row.spa_number ?? row.sale_number}</span>
                           <span className="cell-secondary">
                             <StatusDot tone={saleTone(row.sale_status)}>{saleLabel(row.sale_status)}</StatusDot>
                           </span>
