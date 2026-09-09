@@ -146,8 +146,8 @@ export function UnitPricingSection({
             ) : null}
           </ButtonRow>
           <p className="footnote">
-            Nothing is live until it is approved and activated. Approval and preparation are
-            deliberately different people.
+            Nothing is live until it is approved and activated. Ordinary approvals require
+            different people; Master Administrator is the audited owner override.
           </p>
         </section>
       ) : null}
