@@ -1,8 +1,10 @@
-# Reach Experience 4 — UX System
+# Reach Experience 4.1 — UX System
 
 Reach is a real-estate development operating system. Its interface must help a developer understand capital, assets, commitments and delivery before inspecting individual records. Experience 4 uses architectural graphite, a warm mineral canvas, strong financial typography and clearly separated working surfaces.
 
 This document replaces the visual rules of Product Experience 3.0. Business truth, permissions and accessibility remain constraints on every composition. The design system is implemented in `frontend/src/app/globals.css` and the canonical exports in `frontend/src/components/ui/index.ts`.
+
+Experience 4.1 refines three scales within that system: Portfolio exposes development attention and denomination-specific capital, Project identifies the development and its current position, and Unit 360 presents a physical asset with independently owned commercial, legal, collection and delivery states. Registers connect those scales without losing the source context.
 
 ## 1. Composition and hierarchy
 
@@ -63,6 +65,8 @@ The page title remains prominent on a compact register page; `compact` reduces s
 
 The graphite rail contains the architectural Reach mark, current-development identity, lifecycle groups, user context and settings. The project switcher is integrated into the rail. Active navigation has an accent marker and legible text, while the rest of the rail stays quiet.
 
+Portfolio is a distinct destination above the current-development switcher. Its visibility and requests remain subject to the existing Portfolio roles; it is not another project department. Long context-bar breadcrumbs truncate within their own bounds.
+
 The context bar carries breadcrumbs, project status and base currency. The page header carries purpose, identity and actions. Below 768px, actions occupy a separate row beneath the full-width identity so titles never compete with controls for a narrow column. Avoid adding another competing navigation layer.
 
 Keep the existing `auto`, `expanded` and `collapsed` rail preference and `reach.rail` persistence. Below 75rem the automatic rail collapses; below 64rem navigation opens as a modal drawer. The same catalogue supplies labels, route keys and visibility. `projectHref` and `settingsHref` remain the route builders. A project switch preserves the selected section where possible.
@@ -82,6 +86,8 @@ Import from `@/components/ui`. Extend the canonical component where it already o
 | `PositionSupport` | The supporting facts and basis of the position |
 | `Metric`, `MetricGroup`, `StatStrip` | Smaller measurements and count bands |
 | `Breakdown`, `Waterfall`, `Distribution`, `Meter` | Reported components or progress, with explicit labels |
+| `CountComposition`, `CountSeries` | Server count composition and signed count observations, with exact text equivalents |
+| `AttentionList` | Reported severity or count, reason, context, optional source evidence, and an action to the owning workflow |
 | `DataToolbar`, `ToolbarFilter` | Search, filters, result count, reset and register actions |
 | `TableScroll`, `IdentityCell`, `PlaceCell` | Accessible registers, asset identity and physical context |
 | `Drawer` | A record opened over its source register, including identity, facts, actions and section tabs |
@@ -102,6 +108,8 @@ The identity column represents an asset or account, not a database key. Use a mo
 
 Use a quiet tinted header strip, row separators, a restrained hover state and a visible selected record. Keep the first column pinned when appropriate. A wide register scrolls inside `TableScroll`; the page does not scroll sideways. Every table has a caption and scoped headings.
 
+Use `stickyHeader` for long operational registers: the bounded scroll region retains column headings while reading rows. `fixedFirst` retains identity on desktop and releases it at phone width so it does not cover the other columns. `DataToolbar.activeSummary` names applied search and selected context even while the filters are collapsed; the applied indicator and reset remain available.
+
 Search and filters are individual, clearly labelled controls on the canvas. Below 60rem filters collapse behind a button with `aria-expanded` and `aria-controls`. Applied filters remain apparent through the applied indicator, result count and reset action. Render each filter once; collapsing must not clear its value or create duplicate controls. Show the primary register action beside the count.
 
 Inventory keeps Phases, Buildings, Floors and Units as first-class views. Each shows its own objects, and drill-down preserves context. Keep contextual manual creation and the existing workbook import/review process.
@@ -112,7 +120,7 @@ Desktop drawers float with a small inset, rounded corners and a warm body beneat
 
 Land separates tenure and acquisition. Its area is the recorded physical measure; acquisition is explicitly a cost basis, not a valuation. Planning, utilities and documents remain separate sections. Unknown values remain unknown. Land classifications remain free text with optional suggestions; Settings vocabularies must not reject valid typed classifications.
 
-Unit 360 keeps four independent status dimensions: commercial, legal, collection and delivery. Its overview groups release readiness, price, collections and commitment. Areas and attachments keep their existing definitions. The list price, contracted price and outstanding balance retain their individual labels and access rules. A failed read is not an unpriced or uncommitted unit.
+Unit 360 keeps four independent status dimensions in its header through `UnitStanding`: commercial, legal, collection and delivery. The headline uses the returned active contract net price (ex tax) when readable. A committed unit with a withheld contract must not substitute asking price; a failed contract read explicitly reports unavailable. Uncontracted units may show the authorized asking price. Internal and gross areas retain their units. The overview leads with the physical profile and location, then collections, price and commitment; release readiness is supporting disclosed evidence. Physical record, pricing, sales/legal, collections, construction/delivery, release and history remain separate tabs. Property characteristics come only from recorded fields; parking and storage remain separate assets, excluded from gross area.
 
 Workspace tabs use a contained rail, record tabs use a section underline, and Analysis tabs use a compact segmented treatment. All share roving focus, arrow keys, Home/End, stable ids and labelled panels. Revealing a selected tab scrolls only its own horizontal rail; mounting a tab group must never move the page.
 
@@ -123,6 +131,8 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 ## 8. Executive and operational workspaces
 
 **Project Overview:** development identity, economic position and exception queue lead. Department detail is available through a labelled disclosure. Analysis follows with its own context and evidence; collections and management reports retain their owning-source data. Unavailable attention sources must be reported before claiming nothing is flagged.
+
+**Portfolio:** development counts and the server's sales penetration establish the executive position. Prioritized risks use the same `AttentionList` as Project, retaining the server's severity, category, reason, project identity, source value/currency, observation date and source basis. Open-source actions lead to the existing owner; attention rows do not dismiss, score or resolve risks. Capital bands select original `money` records by currency and metric code without summing them. Contracted value, confirmed receipts, unrestricted cash and construction EAC are labelled separately; the complete monetary register, contributing/missing coverage and risk-evaluation coverage remain available. Prose source values wrap; decimal amounts retain their exact digits.
 
 **Project Analysis:** observation period and snapshot context precede reported findings. Inventory absorption and the run-rate estimate occupy distinct surfaces. Display partial/unavailable coverage and sample size explicitly. Detailed source explanations and secondary tables are disclosed on demand. Financial analysis leads with one selected month's reported cash movement, showing every returned currency separately; the full monthly register and refund/financing detail remain disclosed evidence. Selecting an existing month must never aggregate, convert or calculate amounts. Contracted demand remains distinct from actual cash. Technical product mix and recorded feature coverage occupy distinct surfaces, retaining their populations, denominators and availability. Never fabricate a management score, trend or comparison.
 
@@ -143,6 +153,10 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 - Use the string-based rate formatters and business-date formatting. A date-only value is a calendar date, not a timezone conversion.
 - No browser sums, ratios, margins, forecasts, economics, derived progress or invented financial series. Existing count-only behavior stays separate from money.
 - `Meter` displays a percentage already reported by the server. Never invent a completion percentage for visual effect.
+- Portfolio uses the neutral `Meter` with `sales_penetration.percentage`; numerator, denominator and availability remain visible. Neutral styling does not imply a risk threshold.
+- `CountComposition` consumes `analysis/fundamental.position.commercial` and labels the full `position.total_units` population and `context.snapshot_as_of`. CSS distributes the returned non-negative counts; no displayed ratio or total is calculated. Legal and delivery counts remain separate dimensions.
+- `CountSeries` consumes `analysis/fundamental.monthly_sales[].net_absorption` and `month`, with `context.period_from`, `period_to` and `sales_basis` coverage. SVG arithmetic determines coordinates of integer counts only. Preserve negative observations, zero, exact printed counts, period labels and accessible units. Keep the source monthly table and suppress the plot for unavailable or absent observations.
+- Financial series, a cashflow curve or collections composition require an owning API's comparable source series and safe normalized geometry/basis before new plots can be introduced. Current money remains in exact labelled figures and source tables. Do not normalize financial decimal strings in the browser, combine financial with physical construction progress, or invent a collection ratio.
 - Preserve API payloads, backend formulas, schema, authentication, role checks and approval workflows.
 - Distinguish loading, absent, denied, failed, partial and zero. Keep a failure visible; never replace it with a comforting zero or a false empty state.
 
