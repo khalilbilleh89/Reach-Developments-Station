@@ -21,6 +21,7 @@ from app.modules.inventory.service import analysis_eligible, sub_asset_counts
 from app.modules.project_analysis import schemas as out
 from app.modules.project_analysis.calculations import forecast, ratio, rounded, shift_month
 from app.modules.projects.models import Permit, Project
+from app.modules.sales.batch import standing
 from app.modules.sales.models import (
     RESERVATION_COMMITTED,
     SALE_COMMITTED,
@@ -118,10 +119,6 @@ def sales(session: Session, ctx: out.Context, unit_ids: list[uuid.UUID]) -> list
             )
         )
     )
-
-
-def standing(sale: SaleContract, cutoff: date) -> bool:
-    return sale.cancelled_at is None or sale.cancelled_at.astimezone(UTC).date() > cutoff
 
 
 def money_buckets(rows: list[SaleContract], currencies: dict[uuid.UUID, str]) -> list[out.Money]:

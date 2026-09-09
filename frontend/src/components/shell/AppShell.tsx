@@ -19,7 +19,7 @@ import {
 } from "./navigation";
 import type { NavGroup } from "./navigation";
 
-export type ShellArea = "projects" | "settings";
+export type ShellArea = "projects" | "settings" | "portfolio";
 
 /** How the desktop rail is drawn: the viewport decides, or the person did. */
 export type RailState = "auto" | "expanded" | "collapsed";

@@ -1,0 +1,99 @@
+# True MVP3 acceptance
+
+M3-01 is an implementation candidate, not independently accepted. MVP3: 0 / 3.
+Historical MVP2 Partial/Pending UAT evidence is unchanged.
+
+Required evidence: PostgreSQL owner parity; original currencies; incompatible and
+mixed Cashflow refusal; weighted 10/100 penetration; converted commitment dedup;
+confirmed receipt/allocation/refund reconciliation; Pre-Launch counted once;
+Commission and Consultant independence; all-role, unauthorized-project and
+phase-only isolation; no writes or migrations; bounded 1/20-project query growth
+and EXPLAIN; paginated API responses; explicit missing-source coverage; deterministic
+risks and order; responsive 1600/1440/1280/1024/768/390 views and accessibility;
+focused local checks plus exact-head GitHub Backend Smoke and Frontend.
+
+## M3-01 candidate evidence — 2026-09-08
+
+- PostgreSQL Portfolio suite: **14 passed** in 442.64 seconds on the local Windows
+  test host. Covers the role matrix, phase-only and large unauthorized sources,
+  original/mixed currencies, receipt allocation deduplication, 30,000 confirmed /
+  10,000 unconfirmed / 5,000 refund, safe actual and governed forecast parity,
+  Construction parity, weighted 10/100 penetration, read-only snapshots, partial
+  EAC coverage, permit resolution, deterministic risk pages, commercial stall,
+  Pre-Launch counted once and Commission/Consultant cash independence.
+- Populated batch queries: **46 for one project; 46 for twenty**. Actual scoped
+  PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` examples: Units hash join 0.177 ms;
+  Collections receipts sort 0.123 ms; Construction budget aggregate 0.580 ms;
+  forecast-line aggregate 0.361 ms; Development Movement hash join 0.090 ms.
+  These are small synthetic fixtures, not production capacity measurements.
+  No index or migration was justified.
+- Production frontend: lint, TypeScript and build passed. Chromium exercised
+  Overview, Projects, Risks and project summary at 1600, 1440, 1280, 1024, 768
+  and 390 px: **24 combinations without page-level horizontal overflow**.
+  Wide registers scroll internally; long row headings wrap and do not cover
+  the remaining columns. Checked one h1, table captions/scoped headers, keyboard
+  tabs and visible 2 px focus, pagination, source navigation, explicit currency
+  and coverage, empty/loading/error states, and denied role with no Portfolio
+  request. No browser page errors; one compact Portfolio read per view.
+- Ruff check/format and Python compilation passed. Alembic current and heads are
+  `0017_consultant_commissions`; `alembic check` detects no new upgrade operations.
+  No dependency manifests or migration files changed; installed pins are compatible.
+
+Additional focused owner regressions and exact-head GitHub Backend Smoke /
+Frontend outcomes belong to the candidate PR's validation handoff. Full Backend
+must stay skipped for ordinary integration development. Smoke does not certify
+a main promotion. Independent review, Ready status and merge are separate gates;
+none is granted by this candidate evidence. M3-02 and M3-03 remain not started.
+
+## M3-01 risk pagination correction — 2026-09-08
+
+The Risks endpoint now uses a Portfolio-specific set-based projection over the
+authorized project relation. It shares the frozen predicates and owner financial
+calculators with summaries, but builds no `ProjectSummary`, full money/Design
+response graph, sellout forecast or Commission rollup. Narrow owner reads omit
+Land acquisition, Construction commitment/paid rollups, Sales contracted totals
+and Collections receipt/refund display totals. Cashflow's complete governing
+currency checks and owner bridge remain intact.
+
+Triggered candidates feed bounded `nsmallest(offset + limit)` selection using
+the existing severity/project-code/project-UUID/risk-ID order. Only page items
+become response `Risk` objects. All authorized risk facts still contribute to
+the exact global total and incomplete-coverage project count; neither count is
+derived from the page. Owner source reads remain proportional to authorized
+source data, and deep offsets increase the retained candidate prefix. This is
+not constant-time pagination or a persisted risk index.
+
+Populated PostgreSQL risk read, `limit=20, offset=0`, excluding fixture setup
+and HTTP authentication:
+
+| Authorized projects | Queries | Runtime | Full summaries | Response risks |
+| --- | --- | --- | --- | --- |
+| 1 | 40 | 67.91 ms | 0 | 3 |
+| 20 | 40 | 90.86 ms | 0 | 20 |
+| 50 | 40 | 120.80 ms | 0 | 20 |
+
+These are local synthetic measurements, not production capacity claims. Each
+of seven owner batches is called once per read. The unchanged full-summary
+path's separate 46/46-query evidence above should not be read as risk-page cost.
+
+The regression installs failing guards on summary constructors, unrelated KPI
+composition and Commission reads; `limit=1` constructs exactly one response
+risk. Three pages reproduce the complete 150-risk ordered golden across 50
+projects with unchanged totals and coverage. A hidden project with 30 high
+risks contributes nothing to scoped source reads, counts, coverage or offsets,
+including when it has phase-only access. An authorized currency mismatch
+removes both formerly triggered cash candidates and marks their evaluations
+unavailable. These three regressions are registered in Backend Smoke.
+
+Focused PostgreSQL validation: **17 passed in 248.79 seconds** across
+`test_portfolio.py`, `test_portfolio_risks.py`,
+`test_portfolio_risk_pagination.py`, `test_portfolio_scale.py` and
+`test_portfolio_governance.py`. The unchanged summary path again measured 46/46
+queries. CI selector, Smoke, shard and workflow guards: **187 passed in 37.53
+seconds** (source-only, `--noconftest`). Ruff check, format check (370 files),
+Python compilation and whitespace checks passed.
+An in-memory negative control restored the reviewed summary-then-slice read;
+the regression failed at its summary-construction guard, as intended (27.89 s).
+
+Frontend, UX-05, dependency manifests and migrations are unchanged by this
+correction. Fresh exact-head CI results are recorded in PR #273's handoff.

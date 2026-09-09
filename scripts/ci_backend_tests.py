@@ -126,6 +126,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "consultant_engineering": ("consultant_engineering",),
     "commissions": ("commissions",),
     "project_analysis": ("project_analysis",),
+    "portfolio": ("portfolio",),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above
@@ -166,9 +167,10 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # is not why its tests run.
     "payment_plans": ("collections", "construction"),
     "collections": ("cashflow",),
-    "commissions": (),
+    "commissions": ("portfolio",),
     "consultant_engineering": ("project_analysis",),
-    "project_analysis": (),
+    "project_analysis": ("portfolio",),
+    "portfolio": (),
     # Unit economics may source a construction forecast's hard-cost estimate at
     # completion through a named reader, so a construction change reaches it.
     # Cashflow reads construction's confirmed payments and its forecast position
@@ -271,7 +273,7 @@ CUTOVER_DOCS = "docs/go_live/"
 #: A domain here is never the answer to "whose schema is this?"; an unrecognised
 #: revision falls back to everything, which is the conservative behaviour that
 #: was always intended.
-NON_SCHEMA_DOMAINS = frozenset({CUTOVER_DOMAIN, "project_analysis"})
+NON_SCHEMA_DOMAINS = frozenset({CUTOVER_DOMAIN, "project_analysis", "portfolio"})
 SELECTOR_TESTS = "tests/test_ci_selector.py"
 
 

@@ -45,7 +45,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
@@ -4745,6 +4745,8 @@ class CashflowPaymentRow:
     about an amount that has exactly one correct value.
     """
 
+    project_id: uuid.UUID
+    currency_id: uuid.UUID
     id: uuid.UUID
     reference: str
     contract_id: uuid.UUID
@@ -4780,7 +4782,11 @@ class CashflowForecastPosition:
 
 
 def payment_cost_code_split(
-    session: Session, *, project_id: uuid.UUID, payment_ids: Sequence[uuid.UUID]
+    session: Session,
+    *,
+    payment_ids: Sequence[uuid.UUID],
+    project_id: uuid.UUID | None = None,
+    project_ids: Select | None = None,
 ) -> dict[uuid.UUID, dict[uuid.UUID, Decimal]]:
     """Which cost codes each payment settled work on, and for how much.
 
@@ -4814,7 +4820,11 @@ def payment_cost_code_split(
         .join(Certificate, Certificate.id == Invoice.certificate_id)
         .join(CertificateLine, CertificateLine.certificate_id == Certificate.id)
         .where(
-            PaymentAllocation.project_id == project_id,
+            (
+                PaymentAllocation.project_id.in_(project_ids)
+                if project_ids is not None
+                else PaymentAllocation.project_id == project_id
+            ),
             PaymentAllocation.payment_id.in_(payment_ids),
         )
         .order_by(PaymentAllocation.id, CertificateLine.cost_code_id)
@@ -4849,7 +4859,11 @@ def payment_cost_code_split(
 
 
 def cashflow_payment_rows(
-    session: Session, *, project_id: uuid.UUID, as_of: date | None = None
+    session: Session,
+    *,
+    project_id: uuid.UUID | None = None,
+    as_of: date | None = None,
+    project_ids: Select | None = None,
 ) -> list[CashflowPaymentRow]:
     """Confirmed construction cash that was standing, now or at a cutoff.
 
@@ -4866,10 +4880,16 @@ def cashflow_payment_rows(
             Contract.vendor_name,
             Payment.amount,
             Payment.payment_date,
+            Payment.project_id,
+            Payment.currency_id,
         )
         .join(Contract, Contract.id == Payment.contract_id)
         .where(
-            Payment.project_id == project_id,
+            (
+                Payment.project_id.in_(project_ids)
+                if project_ids is not None
+                else Payment.project_id == project_id
+            ),
             *standing_conditions(
                 status=Payment.status,
                 confirmed_at=Payment.confirmed_at,
@@ -4880,7 +4900,10 @@ def cashflow_payment_rows(
         .order_by(Payment.payment_date, Payment.payment_reference)
     ).all()
     split = payment_cost_code_split(
-        session, project_id=project_id, payment_ids=[row[0] for row in rows]
+        session,
+        project_id=project_id,
+        project_ids=project_ids,
+        payment_ids=[row[0] for row in rows],
     )
     payments: list[CashflowPaymentRow] = []
     for row in rows:
@@ -4889,6 +4912,8 @@ def cashflow_payment_rows(
         payments.append(
             CashflowPaymentRow(
                 id=row[0],
+                project_id=row[6],
+                currency_id=row[7],
                 reference=row[1],
                 contract_id=row[2],
                 vendor_name=row[3],

@@ -238,3 +238,8 @@ export const ANALYSIS_FINANCIAL_READERS: Roles = new Set([
 ]);
 export const ANALYSIS_FUNDAMENTAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "sales_operations"]);
 export const ANALYSIS_TECHNICAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_READERS, "design_engineering"]);
+
+/** Portfolio requires whole-project membership in addition to these roles. */
+export const PORTFOLIO_READERS: Roles = new Set([
+  "system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor",
+]);
