@@ -39,9 +39,9 @@ from app.modules.projects.permissions import require_project_access
 #: up before Finance exists.
 PRICING_WRITER_ROLES = frozenset({"system_admin", "project_manager", "finance"})
 
-#: Who may sanction and release a price. Exactly one role, and deliberately not
-#: the administrator: the ability to configure a system is not the authority to
-#: approve what it charges.
+#: The ordinary role that may sanction and release a price. System Administrator
+#: remains excluded; Master Administrator receives every authority through the
+#: explicit request-level owner override in access dependencies.
 PRICING_APPROVER_ROLES = frozenset({"approver_cfo"})
 
 #: Who may see prices that are not yet live — drafts, submissions, approvals
