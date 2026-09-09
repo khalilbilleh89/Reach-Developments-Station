@@ -1161,19 +1161,28 @@ class TestTextContrast:
         dark, light = sorted((luminance(tokens[foreground]), luminance(tokens[background])))
         assert (light + 0.05) / (dark + 0.05) >= 4.5, (foreground, background)
 
+
 class TestRecordWorkspaceArchitecture:
     """Persistent records keep a shareable address and existing business gates."""
 
     def test_records_share_the_static_project_route(self) -> None:
         routes = read(SHELL / "recordRoutes.ts")
-        assert 'new URLSearchParams({ project: projectId' in routes
-        assert 'return `/projects/?${params}`' in routes
-        assert 'Object.hasOwn(recordModules, value)' in routes
+        assert "new URLSearchParams({ project: projectId" in routes
+        assert "return `/projects/?${params}`" in routes
+        assert "Object.hasOwn(recordModules, value)" in routes
         assert 'params.get("project") === projectId' in routes
         assert '!params.has("record")' in routes
-        for old in ("inventory/UnitDetailPanel.tsx", "sales/DealFile.tsx", "payments/PlanBuilder.tsx"):
+        for old in (
+            "inventory/UnitDetailPanel.tsx",
+            "sales/DealFile.tsx",
+            "payments/PlanBuilder.tsx",
+        ):
             assert not (PROJECTS / old).exists()
-        for current in ("inventory/UnitWorkspace.tsx", "sales/SaleWorkspace.tsx", "payments/PaymentPlanWorkspace.tsx"):
+        for current in (
+            "inventory/UnitWorkspace.tsx",
+            "sales/SaleWorkspace.tsx",
+            "payments/PaymentPlanWorkspace.tsx",
+        ):
             source = read(PROJECTS / current)
             assert "<RecordWorkspace" in source
             assert "<Drawer" not in source
@@ -1184,7 +1193,7 @@ class TestRecordWorkspaceArchitecture:
         assert 'next.set("tab", tab)' in workspace
         assert "useOverlay" not in workspace
         assert "onKeyDown" not in workspace
-        assert 'tabIndex={-1}' in workspace
+        assert "tabIndex={-1}" in workspace
         register = read(SHELL / "registerState.ts")
         assert "window.history.replaceState" in register
         assert "link?.focus({ preventScroll: true })" in register
@@ -1198,4 +1207,4 @@ class TestRecordWorkspaceArchitecture:
         plan = read(PROJECTS / "payments/PaymentPlanWorkspace.tsx")
         assert 'section === "overview" ? active ?? current' in plan
         assert 'version.status === "submitted"' in plan
-        assert '!shownDetail.reconciliation.is_reconciled' in plan
+        assert "!shownDetail.reconciliation.is_reconciled" in plan
