@@ -4735,12 +4735,21 @@ def sales_register(
     }
     clients = {
         client.id: client
-        for client in session.scalars(select(Client).where(Client.project_id == project.id))
+        for client in session.execute(
+            select(Client.id, Client.display_name).where(
+                Client.id.in_(
+                    {row.client_id for row in reservations.values()}
+                    | {row.client_id for row in sales.values()}
+                )
+            )
+        )
     }
     handovers = {
         handover.sale_contract_id: handover
         for handover in session.scalars(
-            select(HandoverRecord).where(HandoverRecord.project_id == project.id)
+            select(HandoverRecord).where(
+                HandoverRecord.sale_contract_id.in_([sale.id for sale in sales.values()])
+            )
         )
     }
     today = inventory_fields.business_today()

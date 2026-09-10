@@ -192,7 +192,8 @@ remain pending. No historical Partial/Pending UAT row is promoted by this work.
   Account identity remains mounted through register refreshes, preserving the
   existing account editor lifecycle.
 - Reporting retains register project/scope/page through capture, record views,
-  comparisons and the return link. Register links retain scroll/focus when
+  comparisons and the return link. Browser checks confirmed focus returned to
+  the originating Sales and Reporting links. Register links retain scroll/focus when
   browser storage is available. Equivalent query parameter orderings share the
   same restoration key; navigation itself does not require storage.
 
@@ -231,5 +232,6 @@ history rows and one management snapshot were created; no production data used.
 
 Screenshots: [UX09 evidence](evidence/ux09-search-history/).
 Native Node behavior tests: 19 passed. Initial PostgreSQL search/history/Audit
-suite: 14 passed. Broader regression and exact candidate CI results are recorded
-in the PR. Full operator/browser/accessibility acceptance remains PR-UX-10.
+suite: 14 passed. Sales security and Product Experience regression: 124 passed.
+Final Sales query/representative-reservation rerun: 4 passed. Exact candidate CI
+results are recorded in the PR. Full operator/browser/accessibility acceptance remains PR-UX-10.
