@@ -24,6 +24,37 @@ class DevelopmentPosition:
     undated_permits: int = 0
 
 
+@dataclass(frozen=True)
+class PermitFact:
+    project_id: uuid.UUID
+    source_id: uuid.UUID
+    label: str
+    status: str
+    blocking: bool
+    due_date: date | None
+
+
+def reporting_permits(session: Session, scope: Select) -> list[PermitFact]:
+    """Freeze status even after issue; no inference from absence in an Outlook."""
+    return [
+        PermitFact(
+            p.project_id,
+            p.id,
+            p.permit_code,
+            p.status,
+            p.is_blocking,
+            p.status_effective_date + timedelta(days=p.statutory_sla_days)
+            if p.statutory_sla_days is not None
+            else None,
+        )
+        for p in session.scalars(
+            select(Permit)
+            .where(Permit.project_id.in_(scope))
+            .order_by(Permit.project_id, Permit.id)
+        )
+    ]
+
+
 def positions(
     session: Session, project_ids: Select, as_of: date, *, risk_only: bool = False
 ) -> dict[uuid.UUID, DevelopmentPosition]:

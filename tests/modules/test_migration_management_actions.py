@@ -22,7 +22,16 @@ def test_action_migration_roundtrip_constraints_and_history(
 ) -> None:
     owner = make_user(db, email="migration-action-owner@example.com", roles=("project_manager",))
     grant_access(admin_client, project_id, owner)
-    before = snapshot(db, ("management_actions", "management_action_history", "alembic_version"))
+    before = snapshot(
+        db,
+        (
+            "management_actions",
+            "management_action_history",
+            "alembic_version",
+            "management_report_snapshots",
+            "management_report_snapshot_projects",
+        ),
+    )
     reply = admin_client.post(
         "/api/v1/portfolio/actions",
         json={
@@ -53,13 +62,32 @@ def test_action_migration_roundtrip_constraints_and_history(
         with pytest.raises(SQLAlchemyError, match="append-only"), db.begin_nested():
             db.execute(text(statement))
     assert (
-        snapshot(db, ("management_actions", "management_action_history", "alembic_version"))
+        snapshot(
+            db,
+            (
+                "management_actions",
+                "management_action_history",
+                "alembic_version",
+                "management_report_snapshots",
+                "management_report_snapshot_projects",
+            ),
+        )
         == before
     )
     db.rollback()
     command.downgrade(alembic_config(), "0018_master_admin")
     assert "management_actions" not in inspect(get_engine()).get_table_names()
-    assert snapshot(db, ("alembic_version",)) == before
+    assert (
+        snapshot(
+            db,
+            (
+                "alembic_version",
+                "management_report_snapshots",
+                "management_report_snapshot_projects",
+            ),
+        )
+        == before
+    )
     db.rollback()
     command.upgrade(alembic_config(), "head")
     command.check(alembic_config())
@@ -67,6 +95,15 @@ def test_action_migration_roundtrip_constraints_and_history(
         inspect(get_engine()).get_table_names()
     )
     assert (
-        snapshot(db, ("management_actions", "management_action_history", "alembic_version"))
+        snapshot(
+            db,
+            (
+                "management_actions",
+                "management_action_history",
+                "alembic_version",
+                "management_report_snapshots",
+                "management_report_snapshot_projects",
+            ),
+        )
         == before
     )

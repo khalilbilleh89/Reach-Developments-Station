@@ -95,3 +95,24 @@ class HistoryPage(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class ReportingFrontier(BaseModel):
+    """Small immutable visibility boundary; contains no terminal action detail."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    version: int
+
+
+class ReportingAction(ReportingFrontier):
+    """Captured management identity/state, including a history visibility watermark."""
+
+    title: str
+    owner: Identity
+    due_date: date
+    status: Status
+    source_type: Source
+    source_code: str | None
+    created_at: datetime
+    updated_at: datetime

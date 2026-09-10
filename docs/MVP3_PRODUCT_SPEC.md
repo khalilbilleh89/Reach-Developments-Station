@@ -1,8 +1,34 @@
 # True MVP3 product specification
 
-M3-01 is merged to main (`5363388`); M3-02 is in progress from Experience 4.1
-main (original `73036d8`, now including `96db2f9`); M3-03 is not started. The M3-01 specification below remains
+M3-01 is merged to main (`5363388`); M3-02 merged in PR #275 (`fceb047`).
+M3-03 is a candidate in Draft PR #279 based on main `2e697c8`; MVP3 remains
+2 / 3 merged. The M3-01 specification below remains
 the frozen current-position and ten-risk contract.
+
+## M3-03: prospective historical reporting candidate
+
+Capture current authorized whole-project truth in one PostgreSQL repeatable-read
+transaction. Retain immutable identity, scope, original-currency amounts, explicit
+coverage, source versions, development facts and canonical 30/60/90-day outlooks.
+Technical source failure aborts capture; business unavailability retains its reason.
+Historical access requires every retained project; revocation denies the complete
+document rather than transforming it into a partial report.
+
+Retain full Action details only for open/in-progress positions and frozen status
+counts for all actions. Retain only `(action ID, project ID, version)` for the
+history visibility frontier. Terminal titles, owners and dates are not duplicated.
+The per-action frontier is necessary because a single maximum history ID or time
+does not prove transaction visibility: an earlier allocated ID can commit later.
+Comparison reads append-only history with `prior.captured_at < occurred_at <=
+current.captured_at` and the captured version limit, restricted to common projects.
+It never reads mutable live actions to reconstruct a historical report. Repeated
+completions are events, and completion is independent of risk resolution.
+
+The frontier still grows linearly with the number of actions, but terminal detail
+does not. This is a deliberate compact visibility index, not a second Action
+warehouse. Board Packs reproduce captured positions through browser print; no PDF
+dependency is added. Financial deltas require compatible source coverage, basis
+and currency. Composition changes are disclosed separately from operating movement.
 
 ## M3-02: forward outlook and management commitments
 

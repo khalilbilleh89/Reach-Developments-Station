@@ -128,6 +128,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "project_analysis": ("project_analysis",),
     "portfolio": ("portfolio",),
     "management_actions": ("management_actions", "migration_management_actions"),
+    "management_reporting": ("management_reporting",),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above
@@ -171,7 +172,8 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "commissions": ("portfolio",),
     "consultant_engineering": ("project_analysis",),
     "project_analysis": ("portfolio",),
-    "portfolio": (),
+    "portfolio": ("management_reporting",),
+    "management_reporting": (),
     # Portfolio API composition validates sources and exposes action commands.
     "management_actions": ("portfolio",),
     # Unit economics may source a construction forecast's hard-cost estimate at
