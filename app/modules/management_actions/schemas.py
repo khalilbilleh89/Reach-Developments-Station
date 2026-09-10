@@ -95,3 +95,19 @@ class HistoryPage(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class ReportingAction(BaseModel):
+    """Captured management identity/state, including a history visibility watermark."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    title: str
+    owner: Identity
+    due_date: date
+    status: Status
+    source_type: Source
+    source_code: str | None
+    created_at: datetime
+    updated_at: datetime
+    version: int

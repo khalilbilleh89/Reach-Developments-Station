@@ -5285,3 +5285,36 @@ a:not([class]):hover { color: var(--accent-hover); }
     padding: var(--space-4);
   }
 }
+
+/* Historical management reports reuse the workspace's typography and tables. */
+.reporting-record { min-width: 0; }
+.reporting-header { padding-block: 1.5rem; border-bottom: 1px solid var(--line-default); }
+.reporting-header h1 { margin: .5rem 0 1rem; overflow-wrap: anywhere; }
+.reporting-controls { margin-block: 1rem; }
+.reporting-document { display: grid; gap: 2rem; }
+.reporting-section { min-width: 0; padding-top: 1rem; border-top: 1px solid var(--line-default); }
+.reporting-executive { background: var(--surface-secondary); padding: 1.5rem; border-radius: var(--radius-card); }
+.reporting-document td, .reporting-document th { vertical-align: top; }
+.reporting-footer { overflow-wrap: anywhere; padding-block: 2rem; }
+@media print {
+  body:has(.reporting-board) { background: var(--surface); }
+  body:has(.reporting-board) .app { display: block; }
+  body:has(.reporting-board) .app-main { margin: 0; }
+  body:has(.reporting-board) .app-content { padding: 0; max-width: none; }
+  body:has(.reporting-board) aside,
+  body:has(.reporting-board) .context-bar,
+  body:has(.reporting-board) [role="tablist"],
+  .reporting-board .reporting-controls,
+  .reporting-board button { display: none !important; }
+  .reporting-board { font-size: 9pt; color: var(--text-primary); }
+  .reporting-board .table-scroll { overflow: visible; max-height: none; }
+  .reporting-board table { min-width: 0; width: 100%; table-layout: fixed; font-size: 8pt; }
+  .reporting-board th, .reporting-board td { white-space: normal; overflow-wrap: anywhere; padding: .3rem; }
+  .reporting-board thead { display: table-header-group; }
+  .reporting-board tr { break-inside: avoid; }
+  .reporting-board h2, .reporting-board summary { break-after: avoid; }
+  .reporting-board .disclosure-content { display: block !important; }
+  .reporting-board .disclosure { border-radius: 0; }
+  .reporting-board .reporting-executive { background: transparent; padding: .5rem 0; }
+  .reporting-board .reporting-footer { font-size: 7pt; }
+}

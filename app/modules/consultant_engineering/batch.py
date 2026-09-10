@@ -34,6 +34,67 @@ class DesignPosition:
     open_deliverables: list[tuple[uuid.UUID, str, date, str]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class DesignFact:
+    project_id: uuid.UUID
+    source_id: uuid.UUID
+    kind: str
+    label: str
+    status: str
+    due_date: date | None
+    planned_date: date | None
+    forecast_date: date | None
+    actual_date: date | None
+
+
+def reporting_design(session: Session, scope: Select) -> list[DesignFact]:
+    """Management dates and statuses for the active engagement only."""
+    active = select(ConsultantEngagement.id).where(
+        ConsultantEngagement.project_id.in_(scope), ConsultantEngagement.status == "active"
+    )
+    facts = [
+        DesignFact(
+            s.project_id,
+            s.id,
+            "consultant_stage",
+            s.name,
+            s.status,
+            s.forecast_date or s.planned_date,
+            s.planned_date,
+            s.forecast_date,
+            s.actual_completion_date,
+        )
+        for s in session.scalars(
+            select(ConsultantDesignStage)
+            .where(ConsultantDesignStage.engagement_id.in_(active))
+            .order_by(
+                ConsultantDesignStage.project_id,
+                ConsultantDesignStage.sequence,
+                ConsultantDesignStage.id,
+            )
+        )
+    ]
+    facts.extend(
+        DesignFact(
+            d.project_id,
+            d.id,
+            "consultant_deliverable",
+            d.name,
+            d.status,
+            d.due_date,
+            None,
+            None,
+            None,
+        )
+        for d in session.scalars(
+            select(ConsultantDeliverable)
+            .where(ConsultantDeliverable.engagement_id.in_(active))
+            .order_by(ConsultantDeliverable.project_id, ConsultantDeliverable.id)
+        )
+    )
+    return facts
+
+
 def positions(
     session: Session, project_ids: Select, as_of: date
 ) -> dict[uuid.UUID, DesignPosition]:

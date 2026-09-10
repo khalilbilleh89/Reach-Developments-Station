@@ -43,6 +43,7 @@ AVAILABLE = [
     "tests/modules/test_project_analysis.py",
     "tests/modules/test_portfolio.py",
     "tests/modules/test_management_actions_concurrency.py",
+    "tests/modules/test_management_reporting.py",
     "tests/modules/test_cashflow_forecast.py",
     "tests/modules/test_prelaunch.py",
     "tests/modules/test_audit.py",
@@ -163,6 +164,7 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -193,6 +195,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -214,6 +217,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "pricing",
@@ -237,6 +241,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
         "construction",
         "cutover",
         "inventory",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "pricing",
@@ -262,6 +267,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "construction",
         "cutover",
         "inventory",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "pricing",
@@ -303,7 +309,14 @@ def test_unit_economics_is_not_reached_from_collections() -> None:
     """
     result = chosen("app/modules/collections/service.py")
 
-    assert result.domains == ["cashflow", "collections", "cutover", "portfolio", "project_analysis"]
+    assert result.domains == [
+        "cashflow",
+        "collections",
+        "cutover",
+        "management_reporting",
+        "portfolio",
+        "project_analysis",
+    ]
     assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
 
 
@@ -638,6 +651,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "pricing",
@@ -651,6 +665,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -662,6 +677,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -674,6 +690,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cashflow",
         "construction",
         "cutover",
+        "management_reporting",
         "portfolio",
         "project_analysis",
         "unit_economics",
@@ -683,6 +700,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cashflow",
         "collections",
         "cutover",
+        "management_reporting",
         "portfolio",
         "project_analysis",
     ]
@@ -693,6 +711,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
     assert selector.closure({"cashflow"}) == [
         "cashflow",
         "cutover",
+        "management_reporting",
         "portfolio",
         "project_analysis",
     ]
@@ -711,7 +730,14 @@ def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
     result = chosen("app/modules/collections/service.py")
 
     assert result.full is False
-    assert result.domains == ["cashflow", "collections", "cutover", "portfolio", "project_analysis"]
+    assert result.domains == [
+        "cashflow",
+        "collections",
+        "cutover",
+        "management_reporting",
+        "portfolio",
+        "project_analysis",
+    ]
     assert "tests/modules/test_collection_receipts.py" in result.paths
     assert "tests/modules/test_collection_allocations.py" in result.paths
     assert "tests/modules/test_collection_restructures.py" in result.paths
@@ -730,6 +756,7 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -749,6 +776,7 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "project_analysis",
@@ -767,6 +795,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
         "collections",
         "construction",
         "cutover",
+        "management_reporting",
         "payment_plans",
         "portfolio",
         "pricing",
@@ -865,11 +894,15 @@ def test_analysis_is_a_read_only_downstream_of_its_sources() -> None:
         "consultant_engineering",
     ):
         assert "project_analysis" in selector.closure({source}), source
-    assert selector.closure({"project_analysis"}) == ["portfolio", "project_analysis"]
+    assert selector.closure({"project_analysis"}) == [
+        "management_reporting",
+        "portfolio",
+        "project_analysis",
+    ]
     assert "project_analysis" in selector.NON_SCHEMA_DOMAINS
 
 
-def test_portfolio_is_a_read_only_leaf_of_every_consumed_domain() -> None:
+def test_portfolio_feeds_reporting_from_every_consumed_domain() -> None:
     for source in (
         "projects",
         "inventory",
@@ -882,5 +915,7 @@ def test_portfolio_is_a_read_only_leaf_of_every_consumed_domain() -> None:
         "project_analysis",
     ):
         assert "portfolio" in selector.closure({source}), source
-    assert selector.closure({"portfolio"}) == ["portfolio"]
+        assert "management_reporting" in selector.closure({source}), source
+    assert selector.closure({"portfolio"}) == ["management_reporting", "portfolio"]
+    assert selector.closure({"management_reporting"}) == ["management_reporting"]
     assert "portfolio" in selector.NON_SCHEMA_DOMAINS

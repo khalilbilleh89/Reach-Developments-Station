@@ -356,18 +356,22 @@ def test_deployed_main_upgrade_retains_source_data(
     from tests.conftest import alembic_config
 
     del manager_member_client, project_id, unit_id, confirmed_receipt
-    excluded = ("alembic_version", "management_actions", "management_action_history")
+    excluded = (
+        "alembic_version",
+        "management_report_snapshots",
+        "management_report_snapshot_projects",
+    )
     before = snapshot(db, excluded)
     db.rollback()
     config = alembic_config()
-    # Current deployed main includes the Master Administrator seed migration.
+    # Current deployed main includes M3-02; reporting adds no source-domain tables.
     # Older history round-trips are covered by tests/test_migrations.py.
-    command.downgrade(config, "0018_master_admin")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0018_master_admin"
+    command.downgrade(config, "0019_management_actions")
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0020_management_reporting"
     assert snapshot(db, excluded) == before
 
 
