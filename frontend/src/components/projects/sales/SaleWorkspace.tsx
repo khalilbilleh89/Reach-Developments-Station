@@ -50,7 +50,7 @@ import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
 import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
-import { recordHref } from "@/components/shell/recordRoutes";
+import { useRecordHref } from "@/components/ui";
 import { SaleOverview } from "./SaleOverview";
 import { inventory } from "@/lib/api";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
@@ -483,6 +483,7 @@ export function SaleWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const router = useRouter();
+  const recordHref = useRecordHref(projectId);
   const [unitLabel, setUnitLabel] = useState(unitReference ?? "");
   const [reservation, setReservation] = useState<ReservationDetail | null>(null);
   const [sale, setSale] = useState<SaleDetail | null>(null);
@@ -698,7 +699,7 @@ export function SaleWorkspace({
 
   return (
     <RecordWorkspace projectId={projectId} kind={saleId ? "sale" : "reservation"}
-      eyebrow="Sale workspace" icon="sales"
+      eyebrow={saleId ? "Sale workspace" : "Reservation workspace"} icon="sales"
       title={
         sale
           ? `${sale.sale.sale_number}${sale.sale.spa_number ? ` · ${sale.sale.spa_number}` : ""}`
@@ -734,7 +735,7 @@ export function SaleWorkspace({
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} /> : null}
-      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref(projectId, "payment-plan", id))} /></section> : null}
+      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
 
       {activeSection === "commercial" && terms ? (
         <>
@@ -1045,7 +1046,7 @@ export function SaleWorkspace({
                     void run(
                       async () => {
                         const created = await sales.createContract(projectId, { reservation_id: terms.id });
-                        router.push(recordHref(projectId, "sale", created.sale.id, "contract"));
+                        router.push(recordHref("sale", created.sale.id, "contract"));
                       },
                       "Contract drafted at the reservation's frozen price.",
                     )

@@ -67,7 +67,9 @@ The graphite rail contains the architectural Reach mark, current-development ide
 
 Portfolio is a distinct destination above the current-development switcher. Its visibility and requests remain subject to the existing Portfolio roles; it is not another project department. Long context-bar breadcrumbs truncate within their own bounds.
 
-The context bar carries breadcrumbs, project status and base currency. The page header carries purpose, identity and actions. Below 768px, actions occupy a separate row beneath the full-width identity so titles never compete with controls for a narrow column. Avoid adding another competing navigation layer.
+The context bar carries breadcrumbs, project status and base currency. On phones, preserve the project breadcrumb instead of the Projects directory breadcrumb; long project names wrap. Record tabs scroll with the page below 768px so they cannot stick behind a taller project bar. The page header carries purpose, identity and actions. Below 768px, actions occupy a separate row beneath the full-width identity so titles never compete with controls for a narrow column. Avoid adding another competing navigation layer.
+
+Sales gives the current sale or reservation the primary first-column link, with the buyer alongside it. View unit is secondary; available units without a current transaction expose Reserve in the same visible column. Record navigation retains both the same-project register origin and the immediate parent, including its tab. Back follows the parent, and an origin link returns directly to the register. Use the shared contextual URL builder for post-create redirects as well as links. See the [September follow-up roadmap](UX_ROADMAP_2026_09_10.md) for the bounded trail and acceptance evidence.
 
 Keep the existing `auto`, `expanded` and `collapsed` rail preference and `reach.rail` persistence. Below 75rem the automatic rail collapses; below 64rem navigation opens as a modal drawer. The same catalogue supplies labels, route keys and visibility. `projectHref` and `settingsHref` remain the route builders. A project switch preserves the selected section where possible.
 

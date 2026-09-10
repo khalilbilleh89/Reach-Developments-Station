@@ -35,7 +35,7 @@ import { ReservationForm } from "@/components/projects/sales/ReservationForm";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { RecordLink } from "@/components/ui";
 import { useRouter } from "next/navigation";
-import { recordHref } from "@/components/shell/recordRoutes";
+import { useRecordHref } from "@/components/ui";
 import {
   handoverLabel,
   handoverTone,
@@ -117,6 +117,7 @@ export function SalesTab({
   const setSearch = (search: string) => setSearchFields({ search });
   const [open, setOpen] = useState<"none" | "clients" | "policy">("none");
   const router = useRouter();
+  const recordHref = useRecordHref(projectId);
   // Reserving is the one thing that starts at a unit rather than at a deal, so
   // it starts here: the register is where somebody is looking when they decide
   // to take a unit off the market.
@@ -320,7 +321,7 @@ export function SalesTab({
               projectId={projectId} unitId={reserving.unitId} currencyId={reserving.currencyId}
               onCancel={() => setReserving(null)}
               onCreated={(reservationId) => {
-                router.push(recordHref(projectId, "reservation", reservationId));
+                router.push(recordHref("reservation", reservationId));
                 setReserving(null);
                 void load();
               }}
@@ -386,7 +387,7 @@ export function SalesTab({
             <TableScroll label="Sales register" fixedFirst stickyHeader>
               <thead>
                 <tr>
-                  <th scope="col">Unit</th>
+                  <th scope="col">Sale / reservation</th>
                   <th scope="col">Commercial</th>
                   <th scope="col">Reservation</th>
                   <th scope="col">Contract</th>
@@ -397,18 +398,29 @@ export function SalesTab({
                   <th scope="col">Next legal step</th>
                   <th scope="col">Handover</th>
                   <th scope="col">Delivery</th>
-                  <th scope="col">
-                    <span className="visually-hidden">Open</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.unit_id}>
-                    <th scope="row">
-                      <RecordLink projectId={projectId} kind="unit" id={row.unit_id}>
-                        <IdentityCell icon="inventory" name={row.unit_reference} meta={row.client_display_name ?? undefined} />
-                      </RecordLink>
+                    <th scope="row" className="sales-primary-cell">
+                      {row.sale_id || row.reservation_id ? (
+                        ownOnly && row.advisor_user_id !== userId ? (
+                          <><IdentityCell icon="sales" name={row.spa_number ?? row.sale_number ?? row.reservation_number ?? "Transaction"} meta={row.client_display_name ?? undefined} /><span className="cell-secondary">Another advisor&rsquo;s buyer</span></>
+                        ) : (
+                          <RecordLink projectId={projectId} kind={row.sale_id ? "sale" : "reservation"} id={(row.sale_id ?? row.reservation_id)!}>
+                            <IdentityCell icon="sales" name={`${row.sale_id ? "Open Sale" : "Open Reservation"} ${row.spa_number ?? row.sale_number ?? row.reservation_number ?? ""}`} meta={row.client_display_name ?? undefined} />
+                          </RecordLink>
+                        )
+                      ) : (
+                        <>
+                          <IdentityCell icon="sales" name={row.unit_reference} meta="No current sale or reservation" />
+                          {canWriteClients && row.commercial_status === "available" ? (
+                            <Button small onClick={() => setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id })}>Reserve {row.unit_reference}</Button>
+                          ) : null}
+                        </>
+                      )}
+                      <span className="cell-secondary"><RecordLink projectId={projectId} kind="unit" id={row.unit_id}>View unit {row.unit_reference}</RecordLink></span>
                     </th>
                     <td>
                       <Badge tone={statusTone(row.commercial_status)}>{statusLabel(row.commercial_status)}</Badge>
@@ -458,26 +470,6 @@ export function SalesTab({
                     </td>
                     <td>
                       <StatusDot tone={statusTone(row.delivery_status)}>{statusLabel(row.delivery_status)}</StatusDot>
-                    </td>
-                    <td>
-                      {row.reservation_id || row.sale_id ? (
-                        ownOnly && row.advisor_user_id !== userId ? (
-                          <span className="subtle">Another advisor&rsquo;s buyer</span>
-                        ) : (
-                          <RecordLink projectId={projectId} kind={row.sale_id ? "sale" : "reservation"} id={(row.sale_id ?? row.reservation_id)!}>Open Sale</RecordLink>
-                        )
-                      ) : canWriteClients && row.commercial_status === "available" ? (
-                        <Button
-                          small
-                          onClick={() =>
-                            setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id })
-                          }
-                        >
-                          Reserve
-                        </Button>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
                     </td>
                   </tr>
                 ))}

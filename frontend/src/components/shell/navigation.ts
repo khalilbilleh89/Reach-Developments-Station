@@ -138,7 +138,7 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         label: "Sales",
         icon: "sales",
         description:
-          "Where every unit stands commercially, legally and on delivery.",
+          "Manage sales and reservations, with each unit’s commercial, legal and delivery status in view.",
         visible: (roles) => hasAnyRole(roles, SALES_READERS),
       },
       {

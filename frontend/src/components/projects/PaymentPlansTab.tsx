@@ -33,7 +33,7 @@ import {
 import { RecordLink } from "@/components/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { recordHref } from "@/components/shell/recordRoutes";
+import { useRecordHref } from "@/components/ui";
 import { projectHref } from "@/components/shell/navigation";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { versionLabel, versionTone } from "@/components/projects/payments/labels";
@@ -74,6 +74,7 @@ export function PaymentPlansTab({
   const setSearch = (search: string) => setFilters({ search });
   const setStatus = (status: string) => setFilters({ status });
   const router = useRouter();
+  const recordHref = useRecordHref(projectId);
   const [error, setError] = useState<string | null>(null);
   const [contractsError, setContractsError] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -244,7 +245,7 @@ export function PaymentPlansTab({
                   });
                   setOpening(false);
                   setNotice(`${created.plan.plan_number} opened. Build its schedule next.`);
-                  router.push(recordHref(projectId, "payment-plan", created.plan.id));
+                  router.push(recordHref("payment-plan", created.plan.id));
                   await load();
                 } catch (caught) {
                   setError(caught instanceof ApiError ? caught.message : "Could not open the payment plan.");

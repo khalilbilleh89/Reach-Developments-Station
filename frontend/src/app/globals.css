@@ -2773,6 +2773,10 @@ input[type="file"].input {
   white-space: normal;
 }
 
+.table .sales-primary-cell { min-width: 13rem; max-width: 17rem; white-space: normal; overflow-wrap: anywhere; }
+.sales-primary-cell > .button { margin-top: var(--space-2); }
+.sales-primary-cell .button-link { white-space: normal; text-align: left; }
+
 /* Where a unit sits in the development: the container first, the path under. */
 .place-cell {
   display: flex;
@@ -4859,7 +4863,8 @@ a:not([class]):hover { color: var(--accent-hover); }
   .workspace-actions { margin-left: auto; }
   .workspace-facts { gap: .75rem 1.5rem; }
   .workspace-content { padding-top: 1rem; }
-  .workspace-tabs { top: 4rem; }
+  /* The mobile project name can wrap; tabs must not stick underneath that taller bar. */
+  .workspace-tabs { position: static; }
   .sale-overview { grid-template-columns: minmax(0,1fr); gap: 1.5rem; }
 }
 .table-scroll-register { max-height: min(66vh, 44rem); overflow-y: auto; scrollbar-gutter: stable; }
@@ -5240,9 +5245,15 @@ a:not([class]):hover { color: var(--accent-hover); }
     max-width: 12rem;
   }
 
-  .crumbs li:not(:last-child):not(:first-child) {
+  .crumbs:not(.crumbs-project) li:not(:last-child):not(:first-child),
+  .crumbs-project li:first-child:not(.crumb-project) {
     display: none;
   }
+
+  .crumbs-project { flex-wrap: wrap; gap: 0 var(--space-2); padding-block: var(--space-2); }
+  .crumbs-project .crumb-project { flex-basis: 100%; }
+  .crumbs-project .crumb-project .crumb { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+  .crumbs-project .crumb-project .crumb-sep { display: none; }
 
   .page-head {
     flex-direction: column;

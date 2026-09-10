@@ -39,7 +39,7 @@ import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPr
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
 import { useRouter } from "next/navigation";
-import { recordHref } from "@/components/shell/recordRoutes";
+import { useRecordHref } from "@/components/ui";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
@@ -103,6 +103,7 @@ export function UnitWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const router = useRouter();
+  const recordHref = useRecordHref(projectId);
   const [supportBusy, setSupportBusy] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -604,10 +605,10 @@ export function UnitWorkspace({
         <>
           {commitmentAnswer.status === "ready" ? (
             commitmentAnswer.data.reservation || commitmentAnswer.data.sale ? (
-              <RecordLink projectId={projectId} kind={liveSale ? "sale" : "reservation"} id={liveSale?.id ?? commitmentAnswer.data.reservation!.id} className="button button-primary">Open Sale Workspace</RecordLink>
+              <RecordLink projectId={projectId} kind={liveSale ? "sale" : "reservation"} id={liveSale?.id ?? commitmentAnswer.data.reservation!.id} className="button button-primary">{liveSale ? "Open Sale" : "Open Reservation"}</RecordLink>
             ) : (roles.has("sales_operations") || roles.has("sales_advisor")) && unit.commercial_status === "available" ? (
               reserving ? <ReservationForm key={unitId} projectId={projectId} unitId={unitId} currencyId={price?.currency_id ?? null}
-                onCancel={() => setReserving(false)} onCreated={(reservationId) => { setReserving(false); router.push(recordHref(projectId, "reservation", reservationId)); }} />
+                onCancel={() => setReserving(false)} onCreated={(reservationId) => { setReserving(false); router.push(recordHref("reservation", reservationId)); }} />
                 : <Button variant="primary" onClick={() => setReserving(true)}>Add buyer & reserve</Button>
             ) : null
           ) : null}
@@ -615,7 +616,7 @@ export function UnitWorkspace({
         </>
       ) : null}
 
-      {activeSection === "collections" && liveSale ? <div className="stack"><RecordLink projectId={projectId} kind="sale" id={liveSale.id} tab="collections">Open Sale collections</RecordLink><PlanSummary projectId={projectId} saleId={liveSale.id} roles={roles} saleStatus={liveSale.status} onOpenPlan={(id) => router.push(recordHref(projectId, "payment-plan", id))} /><UnitCollections answer={collection} /></div> : null}
+      {activeSection === "collections" && liveSale ? <div className="stack"><RecordLink projectId={projectId} kind="sale" id={liveSale.id} tab="collections">Open Sale collections</RecordLink><PlanSummary projectId={projectId} saleId={liveSale.id} roles={roles} saleStatus={liveSale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /><UnitCollections answer={collection} /></div> : null}
 
 
       {activeSection === "history" ? supportBusy ? <Loading label="Loading history" /> : <UnitHistory history={history} /> : null}
