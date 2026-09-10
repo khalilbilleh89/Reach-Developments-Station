@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -15,6 +18,48 @@ from app.modules.audit.service import REDACTED
 from tests.factories import DEFAULT_PASSWORD, client_for, make_user
 
 AUDIT_URL = "/api/v1/audit-events"
+
+
+def test_search_and_filters_cover_all_audit_pages(
+    client: TestClient, admin: User, db: Session
+) -> None:
+    for index in range(125):
+        db.add(
+            AuditEvent(
+                action="test.recorded",
+                entity_type="test",
+                actor_user_id=admin.id,
+                reason=f"Marker-{index:03}",
+                correlation_id=uuid.uuid4(),
+                occurred_at=datetime(2025, 3, 1, tzinfo=UTC),
+            )
+        )
+    db.commit()
+    query = {"action": "test.recorded", "limit": 100}
+    first = client.get(AUDIT_URL, params=query).json()
+    second = client.get(AUDIT_URL, params={**query, "offset": 100}).json()
+    assert first["total"] == second["total"] == 125
+    assert len(first["items"]) == 100 and len(second["items"]) == 25
+    target = second["items"][0]
+    found = client.get(AUDIT_URL, params={"search": target["reason"]}).json()
+    assert found["total"] == 1 and found["items"][0]["id"] == target["id"]
+    by_actor = client.get(
+        AUDIT_URL,
+        params={
+            **query,
+            "search": admin.display_name,
+            "actor_user_id": str(admin.id),
+            "occurred_to": "2025-03-01T23:59:59Z",
+        },
+    ).json()
+    assert by_actor["total"] == 125
+    assert (
+        client.get(AUDIT_URL, params={**query, "occurred_from": "2025-03-02T00:00:00Z"}).json()[
+            "total"
+        ]
+        == 0
+    )
+    assert client.get(AUDIT_URL, params={"search": "%"}).json()["total"] == 0
 
 
 @pytest.fixture

@@ -47,7 +47,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, exists, func, select
+from sqlalchemy import Select, exists, func, literal, or_, select, union_all
 from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -4611,6 +4611,7 @@ def sales_register(
     phase_id: uuid.UUID | None = None,
     building_id: uuid.UUID | None = None,
     commercial_status: str | None = None,
+    search: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
@@ -4635,7 +4636,73 @@ def sales_register(
     if building_id is not None or phase_id is not None:
         units = units.where(Unit.floor_id.in_(_floor_ids(phase_id, building_id)))
 
-    every = list(session.scalars(units.order_by(Unit.unit_reference)))
+    visible_clients = permissions.visible_clients(
+        select(Client).where(Client.project_id == project.id), actor=actor
+    ).with_only_columns(Client.id)
+    current_reservations = select(Reservation).where(
+        Reservation.project_id == project.id,
+        Reservation.status.in_(RESERVATION_COMMITTED | RESERVATION_PREPARING),
+        Reservation.client_id.in_(visible_clients),
+    )
+    current_sales = select(SaleContract).where(
+        SaleContract.project_id == project.id,
+        SaleContract.status.in_(SALE_COMMITTED),
+        SaleContract.client_id.in_(visible_clients),
+    )
+    if search and search.strip():
+        # Pick the same representative as the displayed row before searching.
+        selected_reservation = (
+            current_reservations.with_only_columns(Reservation.id)
+            .where(Reservation.unit_id == Unit.id)
+            .order_by(
+                Reservation.status.in_(RESERVATION_COMMITTED).desc(),
+                Reservation.created_at.desc(),
+                Reservation.id.desc(),
+            )
+            .limit(1)
+            .correlate(Unit)
+            .scalar_subquery()
+        )
+        selected_sale = (
+            current_sales.with_only_columns(SaleContract.id)
+            .where(SaleContract.unit_id == Unit.id)
+            .order_by(SaleContract.created_at.desc(), SaleContract.id.desc())
+            .limit(1)
+            .correlate(Unit)
+            .scalar_subquery()
+        )
+        needle = search.strip()
+        units = units.where(
+            or_(
+                Unit.unit_reference.icontains(needle, autoescape=True),
+                Unit.unit_number.icontains(needle, autoescape=True),
+                exists(
+                    select(Reservation.id)
+                    .join(Client, Client.id == Reservation.client_id)
+                    .where(
+                        Reservation.id == selected_reservation,
+                        or_(
+                            Reservation.reservation_number.icontains(needle, autoescape=True),
+                            Client.display_name.icontains(needle, autoescape=True),
+                        ),
+                    )
+                ),
+                exists(
+                    select(SaleContract.id)
+                    .join(Client, Client.id == SaleContract.client_id)
+                    .where(
+                        SaleContract.id == selected_sale,
+                        or_(
+                            SaleContract.sale_number.icontains(needle, autoescape=True),
+                            SaleContract.spa_number.icontains(needle, autoescape=True),
+                            Client.display_name.icontains(needle, autoescape=True),
+                        ),
+                    )
+                ),
+            )
+        )
+
+    every = list(session.scalars(units.order_by(Unit.unit_reference, Unit.id)))
     total = len(every)
     page = every[offset : offset + limit]
     unit_ids = [unit.id for unit in every]
@@ -4646,16 +4713,13 @@ def sales_register(
     # find it — and the register is where they are looking.
     reservations: dict[uuid.UUID, Reservation] = {}
     for reservation in session.scalars(
-        select(Reservation)
-        .where(
-            Reservation.unit_id.in_(unit_ids),
-            Reservation.status.in_(RESERVATION_COMMITTED | RESERVATION_PREPARING),
+        current_reservations.where(Reservation.unit_id.in_(unit_ids)).order_by(
+            Reservation.status.in_(RESERVATION_COMMITTED).desc(),
+            Reservation.created_at.desc(),
+            Reservation.id.desc(),
         )
-        .order_by(Reservation.created_at)
     ):
-        held = reservations.get(reservation.unit_id)
-        if held is None or reservation.status in RESERVATION_COMMITTED:
-            reservations[reservation.unit_id] = reservation
+        reservations.setdefault(reservation.unit_id, reservation)
     committed_units = {
         unit_id
         for unit_id, reservation in reservations.items()
@@ -4664,8 +4728,8 @@ def sales_register(
     sales = {
         sale.unit_id: sale
         for sale in session.scalars(
-            select(SaleContract).where(
-                SaleContract.unit_id.in_(unit_ids), SaleContract.status.in_(SALE_COMMITTED)
+            current_sales.where(SaleContract.unit_id.in_(unit_ids)).order_by(
+                SaleContract.created_at, SaleContract.id
             )
         )
     }
@@ -4760,6 +4824,91 @@ def sales_register(
         "mixed_currency": mixed,
     }
     return rows, totals, total
+
+
+def transaction_history(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    kind: str | None = None,
+    status: str | None = None,
+    search: str | None = None,
+    phase_id: uuid.UUID | None = None,
+    created_from: date | None = None,
+    created_to: date | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """All transaction states, including inactive units, scoped before pagination.
+
+    Reservations and contracts remain distinct records even after conversion.
+    This history has no financial aggregate: cancelled and superseded terms
+    must never be added to the current pipeline position.
+    """
+    permissions.require_sales_reader(actor)
+    allowed = permissions.visible_unit_ids(session, project_id=project.id, actor=actor)
+    branches = []
+    for model, record_kind, reference in (
+        (Reservation, "reservation", Reservation.reservation_number),
+        (SaleContract, "sale", SaleContract.sale_number),
+    ):
+        if kind and kind != record_kind:
+            continue
+        spa = SaleContract.spa_number if record_kind == "sale" else literal(None)
+        statement = (
+            select(
+                model.id.label("id"),
+                literal(record_kind).label("kind"),
+                reference.label("reference"),
+                model.status.label("status"),
+                model.created_at.label("created_at"),
+                Unit.id.label("unit_id"),
+                Unit.unit_reference.label("unit_reference"),
+                Client.display_name.label("client_display_name"),
+                spa.label("spa_number"),
+            )
+            .join(Unit, Unit.id == model.unit_id)
+            .join(Client, Client.id == model.client_id)
+            .where(
+                model.project_id == project.id,
+                Unit.project_id == project.id,
+                Client.project_id == project.id,
+            )
+        )
+        if allowed is not None:
+            statement = statement.where(model.unit_id.in_(allowed))
+        if permissions.restricts_clients_to_own(actor):
+            statement = statement.where(Client.owner_advisor_user_id == actor.user_id)
+        if phase_id is not None:
+            statement = statement.where(Unit.floor_id.in_(_floor_ids(phase_id, None)))
+        if status:
+            statement = statement.where(model.status == status)
+        if created_from:
+            statement = statement.where(
+                model.created_at >= datetime.combine(created_from, time.min, UTC)
+            )
+        if created_to:
+            statement = statement.where(
+                model.created_at <= datetime.combine(created_to, time.max, UTC)
+            )
+        if search and search.strip():
+            fields = [reference, Unit.unit_reference, Unit.unit_number, Client.display_name]
+            if record_kind == "sale":
+                fields.append(SaleContract.spa_number)
+            statement = statement.where(
+                or_(*(field.icontains(search.strip(), autoescape=True) for field in fields))
+            )
+        branches.append(statement)
+    history = union_all(*branches).subquery()
+    total = session.scalar(select(func.count()).select_from(history)) or 0
+    rows = session.execute(
+        select(history)
+        .order_by(history.c.created_at.desc(), history.c.id.desc(), history.c.kind)
+        .limit(limit)
+        .offset(offset)
+    ).mappings()
+    return [dict(row) for row in rows], total
 
 
 def _floor_ids(

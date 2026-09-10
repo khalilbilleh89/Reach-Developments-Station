@@ -16,7 +16,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
@@ -129,6 +129,7 @@ def list_events(
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
     action: str | None = None,
+    search: str | None = None,
     occurred_from: datetime | None = None,
     occurred_to: datetime | None = None,
 ) -> tuple[list[tuple[AuditEvent, str | None]], int]:
@@ -137,6 +138,18 @@ def list_events(
     Read-only by construction: this module exposes no update or delete path.
     """
     filters = []
+    if search and search.strip():
+        needle = search.strip()
+        filters.append(
+            or_(
+                AuditEvent.action.icontains(needle, autoescape=True),
+                AuditEvent.entity_type.icontains(needle, autoescape=True),
+                AuditEvent.reason.icontains(needle, autoescape=True),
+                AuditEvent.actor_user_id.in_(
+                    select(User.id).where(User.display_name.icontains(needle, autoescape=True))
+                ),
+            )
+        )
     if actor_user_id is not None:
         filters.append(AuditEvent.actor_user_id == actor_user_id)
     if entity_type is not None:

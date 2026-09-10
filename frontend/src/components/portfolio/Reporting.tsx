@@ -10,13 +10,11 @@ import type { Snapshot, SnapshotHeader } from "@/lib/api/reporting";
 import { management } from "@/lib/api/management";
 import { businessDate, eventTime } from "@/lib/format";
 import { ReadState } from "./ReadState";
+import { ProjectChoice } from "./ActionRecord";
+import { pageOffset, rememberRegisterLink, useRegisterRestore } from "@/components/shell/registerState";
 import { HistoricalPosition, ComparisonReport, BoardReport } from "./ReportingDocument";
 
-export function reportingHref(id: string, view = "position", prior = "") {
-  const params = new URLSearchParams({ section: "reporting", snapshot: id, view });
-  if (prior) params.set("prior", prior);
-  return `/portfolio/?${params}`;
-}
+import { reportingHref } from "./reportingRoutes";
 
 export function Reporting({ canWrite }: { canWrite: boolean }) {
   const params = useSearchParams();
@@ -25,7 +23,7 @@ export function Reporting({ canWrite }: { canWrite: boolean }) {
 }
 
 function Capture({ initialProject, onClose }: { initialProject: string; onClose: () => void }) {
-  const router = useRouter();
+  const router = useRouter(), params = useSearchParams();
   const [scope, setScope] = useState<"portfolio" | "project">(initialProject ? "project" : "portfolio");
   const [project, setProject] = useState(initialProject), [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -34,7 +32,7 @@ function Capture({ initialProject, onClose }: { initialProject: string; onClose:
   return <FormDialog title="Capture management snapshot" description="Uses current authoritative system state. A snapshot cannot be backdated, edited or deleted." confirmLabel="Capture snapshot" busy={busy} disabled={scope === "project" && !project} onCancel={onClose} onSubmit={async () => {
     if (busy) return;
     setBusy(true); setError("");
-    try { const result = await reporting.capture({ scope, ...(scope === "project" ? { project_id: project } : {}), ...(label.trim() ? { label: label.trim() } : {}) }); router.push(reportingHref(result.id)); }
+    try { const result = await reporting.capture({ scope, ...(scope === "project" ? { project_id: project } : {}), ...(label.trim() ? { label: label.trim() } : {}) }); router.push(reportingHref(result.id, "position", "", params)); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Snapshot capture failed."); setBusy(false); }
   }}>
     <Field label="Scope"><select className="input" value={scope} onChange={e => setScope(e.target.value as "portfolio" | "project")}><option value="portfolio">My authorized whole-project portfolio</option><option value="project">One project</option></select></Field>
@@ -46,17 +44,19 @@ function Capture({ initialProject, onClose }: { initialProject: string; onClose:
 
 function SnapshotRegister({ canWrite }: { canWrite: boolean }) {
   const params = useSearchParams(), router = useRouter();
-  const offset = Math.max(0, Number(params.get("offset")) || 0), scope = params.get("scope") ?? "", project = params.get("project") ?? "";
+  const offset = pageOffset(params.get("offset") ?? ""), scope = params.get("scope") ?? "", project = params.get("project") ?? "";
   const [creating, setCreating] = useState(false);
   const answer = useAnswer(true, () => reporting.list({ scope, project_id: project, limit: 20, offset }), [scope, project, offset]);
+  useRegisterRestore(answer.status === "ready");
   function change(values: Record<string, string>) { const next = new URLSearchParams(params); for (const [k,v] of Object.entries(values)) { if (v) next.set(k,v); else next.delete(k); } router.push(`/portfolio/?${next}`); }
   return <div className="stack">
     <PageHeader icon="projects" eyebrow="Historical management" title="Reporting" subtitle="Capture what the system says now. Compare governed snapshots as history grows." />
-    <DataToolbar count={answer.status === "ready" ? { shown: answer.data.items.length, total: answer.data.total, noun: "snapshot" } : undefined} actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>Capture management snapshot</Button> : undefined}>
-      <ToolbarFilter label="Scope"><select className="input" value={scope} onChange={e => change({scope:e.target.value, offset:""})}><option value="">All accessible snapshots</option><option value="portfolio">Portfolio</option><option value="project">Project</option></select></ToolbarFilter>
+    <DataToolbar onReset={scope || project || offset ? () => change({ scope: "", project: "", offset: "" }) : undefined} activeSummary={project ? "Selected development" : "All authorized developments"} count={answer.status === "ready" ? { shown: answer.data.items.length, total: answer.data.total, noun: "snapshot" } : undefined} actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>Capture management snapshot</Button> : undefined}>
+      <ToolbarFilter label="Scope"><select className="input" value={scope} onChange={e => change({scope:e.target.value, project: e.target.value === "portfolio" ? "" : project, offset:""})}><option value="">All accessible snapshots</option><option value="portfolio">Portfolio</option><option value="project">Project</option></select></ToolbarFilter>
+      <ProjectChoice value={project} onChange={project => change({ project, scope: project ? "project" : "", offset: "" })} />
     </DataToolbar>
     {answer.status !== "ready" ? <ReadState answer={answer} label="Reading snapshots…" /> : !answer.data.total ? <EmptyState title="No governed snapshots yet" hint="The first capture starts management history. Earlier periods are not reconstructed from today's data." /> : <>
-      <TableScroll label="Management snapshot register" stickyHeader><thead><tr>{["Captured / label", "Scope", "Created by", "Coverage", "Integrity", "Open"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{answer.data.items.map(s => <tr key={s.id}><th scope="row" className="cell-prose"><Link href={reportingHref(s.id)}>{s.label ?? "Management snapshot"}</Link><p className="muted">{eventTime(s.captured_at)}</p></th><td>{s.scope_type} · {s.project_count} projects</td><td>{s.creator_display_name}</td><td>{s.incomplete_project_count} with incomplete coverage</td><td className="mono">{s.content_hash.slice(0,12)}</td><td><Link href={reportingHref(s.id,"comparison")}>Compare</Link></td></tr>)}</tbody></TableScroll>
+      <TableScroll label="Management snapshot register" stickyHeader><thead><tr>{["Captured / label", "Scope", "Created by", "Coverage", "Integrity", "Open"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{answer.data.items.map(s => <tr key={s.id}><th scope="row" className="cell-prose"><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "position", "", params))} href={reportingHref(s.id, "position", "", params)}>{s.label ?? "Management snapshot"}</Link><p className="muted">{eventTime(s.captured_at)}</p></th><td>{s.scope_type} · {s.project_count} projects</td><td>{s.creator_display_name}</td><td>{s.incomplete_project_count} with incomplete coverage</td><td className="mono">{s.content_hash.slice(0,12)}</td><td><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "comparison", "", params))} href={reportingHref(s.id,"comparison", "", params)}>Compare</Link></td></tr>)}</tbody></TableScroll>
       <ButtonRow><Button disabled={!offset} onClick={() => change({offset:String(Math.max(0,offset-20))})}>Previous snapshots</Button><Button disabled={offset+20>=answer.data.total} onClick={() => change({offset:String(offset+20)})}>Next snapshots</Button></ButtonRow>
     </>}
     {creating && canWrite ? <Capture initialProject={project} onClose={() => setCreating(false)} /> : null}
@@ -101,10 +101,10 @@ function HistoricalRecord({ snapshot }: { snapshot: Snapshot }) {
     };
   }, [view]);
   return <article className={`reporting-record ${view === "board" ? "reporting-board" : ""}`}>
-    <div className="reporting-controls"><Link href="/portfolio/?section=reporting">← Reporting register</Link></div>
+    <div className="reporting-controls"><Link href={reportingHref("", "position", "", params)}>← Reporting register</Link></div>
     <header className="reporting-header"><p className="eyebrow">Reach Developments Station · Immutable snapshot</p><h1 ref={heading} tabIndex={-1}>{view === "board" ? "Board Pack" : snapshot.label ?? "Management snapshot"}</h1>{view === "board" ? <p>{snapshot.label ?? "Management review"}</p> : null}<SnapshotIdentity snapshot={snapshot} /><p className="footnote">Historical system position at capture. Current source records may have changed.</p></header>
-    <div className="reporting-controls stack"><nav className="tabs" aria-label="Historical report views">{[{key:"position",label:"Snapshot"},{key:"comparison",label:"Comparison"},{key:"board",label:"Board Pack"}].map(v => <Link key={v.key} className={`tab ${view === v.key ? "tab-active" : ""}`} aria-current={view === v.key ? "page" : undefined} href={reportingHref(snapshot.id,v.key,prior)}>{v.label}</Link>)}</nav>
-      <Field label="Prior snapshot"><select className="input" value={prior} onChange={e => router.push(reportingHref(snapshot.id,view,e.target.value))}><option value="">No comparison selected</option>{prior && candidates.status === "ready" && !candidates.data.items.some(s => s.id===prior) ? <option value={prior}>Selected prior snapshot</option> : null}{candidates.status === "ready" ? candidates.data.items.filter(s=>s.id!==snapshot.id && s.captured_at<snapshot.captured_at).map(s=><option key={s.id} value={s.id}>{eventTime(s.captured_at)} · {s.label ?? "Management snapshot"}</option>) : null}</select></Field>
+    <div className="reporting-controls stack"><nav className="tabs" aria-label="Historical report views">{[{key:"position",label:"Snapshot"},{key:"comparison",label:"Comparison"},{key:"board",label:"Board Pack"}].map(v => <Link key={v.key} className={`tab ${view === v.key ? "tab-active" : ""}`} aria-current={view === v.key ? "page" : undefined} href={reportingHref(snapshot.id,v.key,prior, params)}>{v.label}</Link>)}</nav>
+      <Field label="Prior snapshot"><select className="input" value={prior} onChange={e => router.push(reportingHref(snapshot.id,view,e.target.value, params))}><option value="">No comparison selected</option>{prior && candidates.status === "ready" && !candidates.data.items.some(s => s.id===prior) ? <option value={prior}>Selected prior snapshot</option> : null}{candidates.status === "ready" ? candidates.data.items.filter(s=>s.id!==snapshot.id && s.captured_at<snapshot.captured_at).map(s=><option key={s.id} value={s.id}>{eventTime(s.captured_at)} · {s.label ?? "Management snapshot"}</option>) : null}</select></Field>
       {candidates.status === "ready" ? <><ButtonRow><Button small disabled={!offset} onClick={()=>setOffset(offset-20)}>Previous choices</Button><Button small disabled={offset+20>=candidates.data.total} onClick={()=>setOffset(offset+20)}>More choices</Button></ButtonRow>{candidates.data.total===1 ? <Notice tone="info">No earlier governed snapshot exists. Future captures enable comparison.</Notice> : null}</> : <ReadState answer={candidates} label="Reading compatible snapshot choices…" />}
       {view==="board" ? <Button onClick={()=>window.print()}>Print / Save as PDF</Button> : null}
     </div>

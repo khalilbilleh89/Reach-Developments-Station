@@ -37,6 +37,7 @@ def list_audit_events(
     entity_type: Annotated[str | None, Query(max_length=64)] = None,
     entity_id: Annotated[uuid.UUID | None, Query()] = None,
     action: Annotated[str | None, Query(max_length=64)] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
     occurred_from: Annotated[datetime | None, Query()] = None,
     occurred_to: Annotated[datetime | None, Query()] = None,
 ) -> AuditEventPage:
@@ -48,6 +49,7 @@ def list_audit_events(
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
+        search=search,
         occurred_from=occurred_from,
         occurred_to=occurred_to,
     )

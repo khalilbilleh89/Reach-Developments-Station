@@ -155,3 +155,81 @@ including reordered responses, retry, filter round trips and role-off/403 states
 Independent review, exact-head Full CI and owner UAT are separate gates. Historical
 Partial/Pending rows remain unchanged; cross-workflow accessibility acceptance
 stays in PR-UX-10.
+
+## PR-UX-09 candidate — Search, History & Durable Workspace State
+
+This slice follows merged PR-UX-08 (#282). PR-UX-10 remains separate. It follows
+[Engineering Rules](ENGINEERING_RULES.md); independent review and owner acceptance
+remain pending. No historical Partial/Pending UAT row is promoted by this work.
+
+### Implemented behavior
+
+- Current Sales search runs on the server across the authorized project result
+  set, before pagination and totals. It matches unit reference/number, the current
+  buyer, reservation, sale and SPA. A literal `%` is not a wildcard. The displayed
+  reservation is deterministically the holding reservation, otherwise the newest
+  preparing reservation. Older attempts remain in History.
+- Transaction History lists reservations and contracts separately, including
+  converted, expired and cancelled records and transactions on inactive units.
+  Type, status, phase, created-date (UTC) and reference/buyer search filter the
+  SQL query before its count and pagination. Stable ordering uses creation time,
+  identifier and transaction type. History does not calculate pipeline totals.
+- Advisor buyer ownership and phase restrictions apply in SQL before matching
+  or counting transactions. Another advisor's buyer/deal is neither searchable
+  nor exposed in current Sales rows. Authorized unit inventory remains visible.
+- Audit retains the server total and pages through the full authorized history.
+  Search covers action code, object type, actor name and reason. Exact action,
+  object, actor (by selecting a displayed actor) and UTC date filters are composed
+  on the server. Read failures have Retry; events show readable action text,
+  original action codes and UTC timestamps.
+- Actions filters, page and open action use the URL. Clear filters removes a
+  linked source as well as the other removable filters. The Exceptions section's
+  overdue-only context remains explicit and permanent.
+- Outlook keeps project, horizon, source, page and inspected observation in the
+  URL. Clear filters selects all sources and projects and resets the horizon/page.
+- Collections keeps view, as-at date, search, status, aging bucket, special filter
+  and selected account in the URL. Clearing filters restores today's date.
+  Account identity remains mounted through register refreshes, preserving the
+  existing account editor lifecycle.
+- Reporting retains register project/scope/page through capture, record views,
+  comparisons and the return link. Register links retain scroll/focus when
+  browser storage is available. Equivalent query parameter orderings share the
+  same restoration key; navigation itself does not require storage.
+
+### Contract and dependency impact
+
+Additive `GET /projects/{project_id}/sales/history` (API v1 prefix applies), with
+`kind`, `status`, `search`, `phase_id`, `created_from`, `created_to`, `limit` and
+`offset`. Its response is `{items, total}`; default page size 50, maximum 200.
+`search` is added to existing Sales register and Audit reads, limited to 200
+characters. Existing register response shapes remain unchanged. Advisor-only
+current transaction exposure is tightened to the existing buyer reader boundary.
+
+No database migration, financial formula, FX, rounding, lifecycle transition,
+production dependency, development dependency, or CI workflow change. Existing
+Sales/Audit test ownership automatically includes the added coverage.
+
+### Engineering acceptance
+
+Production static export served by FastAPI, with synthetic PostgreSQL fixtures.
+Browser acceptance used `reach_ux09_uat`; pytest used `reach_ux09_test`. The browser
+copy needed the already-existing management-reporting migration before Reporting
+could load. That migration was applied only to this isolated copy. Fixture-only
+history rows and one management snapshot were created; no production data used.
+
+| Journey | Observed result |
+| --- | --- |
+| Complete Sales search | From the first 200 of 206 units, searching UX278-029 returned the previously unlisted final unit. Unit → Back retained the search. |
+| Historical pagination | All 108 fixture transactions were reachable, including 101–108. An expired-state filter paged through all 105 expired reservations. |
+| Cancelled sale | Exact SPA search found the cancelled sale; opening it showed Cancelled and Back returned to its filtered History. |
+| Actions | Clear filters removed the linked source and project. A fresh load of the copied URL restored the open action and selected status. |
+| Audit | Full total 432, page three 101–150, and server search returned older reservation events from September 8. |
+| Outlook | A fresh load retained the 30-day horizon, All observations source and inspected observation. |
+| Collections | A fresh load retained the September 9 as-at date, Rana search and selected account. |
+| Reporting | A project-filtered synthetic capture retained its register context through Board Pack and the return link. |
+| Responsive | At 375px, History had no document horizontal overflow (360px content width with scrollbar), usable date labels and filters; changing status reset offset 100 to the first page. |
+
+Screenshots: [UX09 evidence](evidence/ux09-search-history/).
+Native Node behavior tests: 19 passed. Initial PostgreSQL search/history/Audit
+suite: 14 passed. Broader regression and exact candidate CI results are recorded
+in the PR. Full operator/browser/accessibility acceptance remains PR-UX-10.

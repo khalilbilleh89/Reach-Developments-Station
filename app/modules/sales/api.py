@@ -23,7 +23,8 @@ read models differ by which columns exist on them, not by which are blanked.
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, status
 
@@ -81,6 +82,8 @@ from app.modules.sales.schemas import (
     SalePartyDetailRead,
     SalePartyRead,
     SaleRead,
+    SalesHistoryRead,
+    SalesHistoryRow,
     SalesPolicyRead,
     SalesPolicyWriteRequest,
     SalesRegisterRead,
@@ -1264,6 +1267,7 @@ def read_register(
     phase_id: Annotated[uuid.UUID | None, Query()] = None,
     building_id: Annotated[uuid.UUID | None, Query()] = None,
     commercial_status: Annotated[str | None, Query(max_length=32)] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
     limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> SalesRegisterRead:
@@ -1274,6 +1278,7 @@ def read_register(
         phase_id=phase_id,
         building_id=building_id,
         commercial_status=commercial_status,
+        search=search,
         limit=limit,
         offset=offset,
     )
@@ -1282,3 +1287,37 @@ def read_register(
         totals=SalesRegisterTotals(**totals),
         total=total,
     )
+
+
+@router.get(
+    "/{project_id}/sales/history",
+    response_model=SalesHistoryRead,
+    summary="Search all authorized reservations and sale contracts",
+)
+def read_history(
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+    kind: Annotated[Literal["reservation", "sale"] | None, Query()] = None,
+    status: Annotated[str | None, Query(max_length=40)] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    phase_id: Annotated[uuid.UUID | None, Query()] = None,
+    created_from: Annotated[date | None, Query()] = None,
+    created_to: Annotated[date | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> SalesHistoryRead:
+    rows, total = service.transaction_history(
+        session,
+        project=project,
+        actor=actor,
+        kind=kind,
+        status=status,
+        search=search,
+        phase_id=phase_id,
+        created_from=created_from,
+        created_to=created_to,
+        limit=limit,
+        offset=offset,
+    )
+    return SalesHistoryRead(items=[SalesHistoryRow(**row) for row in rows], total=total)

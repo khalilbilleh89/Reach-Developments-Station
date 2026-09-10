@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { pageOffset, useRegisterFields } from "@/components/shell/registerState";
 import { useState } from "react";
 import { Badge, Button, ButtonRow, Card, DataToolbar, EmptyState, IdentityCell, Position, PositionFigure, TableScroll, ToolbarFilter } from "@/components/ui";
 import { ReadState } from "./ReadState";
@@ -37,16 +38,20 @@ export function ManagementSummary({ project }: { project: string }) {
   </Card>;
 }
 
-export function Actions({ canWrite, initialProject = "", initialAction = null, sourceKey = "", overdueOnly = false }: { canWrite: boolean; initialProject?: string; initialAction?: string | null; sourceKey?: string; overdueOnly?: boolean }) {
-  const [project, setProject] = useState(initialProject);
-  const [owner, setOwner] = useState("");
+export function Actions({ canWrite, overdueOnly = false }: { canWrite: boolean; overdueOnly?: boolean }) {
+  const [fields, change] = useRegisterFields({ project: "", owner: "", status: "", due: "", origin: "", offset: "", action: "", source_key: "" });
+  const { project, owner, status, origin, source_key: sourceKey } = fields;
+  const due = overdueOnly ? "overdue" : fields.due;
+  const offset = pageOffset(fields.offset), action = fields.action;
+  const setProject = (project: string) => change({ project });
+  const setOwner = (owner: string) => change({ owner });
+  const setStatus = (status: string) => change({ status });
+  const setDue = (due: string) => change({ due });
+  const setOrigin = (origin: string) => change({ origin });
+  const setOffset = (offset: number) => change({ offset: String(offset) });
+  const setAction = (action: string | null) => change({ action: action ?? "" });
   const [ownerOffset, setOwnerOffset] = useState(0);
-  const [status, setStatus] = useState("");
-  const [due, setDue] = useState(overdueOnly ? "overdue" : "");
-  const [origin, setOrigin] = useState("");
-  const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
-  const [action, setAction] = useState(initialAction);
   const [creating, setCreating] = useState(false);
   const ownerOptions = useAnswer(true, () => management.owners(project, ownerOffset), [project, revision, ownerOffset]);
   const answer = useAnswer(true, () => management.list({ project_id: project, owner: owner === "me" ? "me" : undefined, owner_user_id: owner !== "me" ? owner : undefined, status, due_state: due, source_type: origin, source_key: sourceKey, offset, limit: 20 }), [project, owner, status, due, origin, sourceKey, offset, revision]);
@@ -55,7 +60,7 @@ export function Actions({ canWrite, initialProject = "", initialAction = null, s
   return <div className="stack">
     <DataToolbar activeSummary={[project ? "Selected development" : "All authorized developments", owner === "me" ? "My actions" : owner ? "Selected owner" : "All owners", status, due, origin, sourceKey ? "Linked source" : ""].filter(Boolean).join(" · ")}
       count={answer.status === "ready" ? { shown: answer.data.items.length, total: answer.data.total, noun: "action" } : undefined}
-      onReset={() => { setProject(""); setOwner(""); setStatus(""); setDue(overdueOnly ? "overdue" : ""); setOrigin(""); setOffset(0); }}
+      onReset={project || owner || status || fields.due || origin || sourceKey || offset ? () => { change({ project: "", owner: "", status: "", due: "", origin: "", offset: "", source_key: "", action: "" }); setOwnerOffset(0); } : undefined}
       actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>Create action</Button> : undefined}>
       <ProjectChoice value={project} onChange={(value) => { filter(setProject, value); setOwner(""); setOwnerOffset(0); }} />
       <ToolbarFilter label="Owner"><select className="input" value={owner} onChange={(event) => filter(setOwner, event.target.value)}><option value="">All owners</option><option value="me">My actions</option>{owner && owner !== "me" && ownerOptions.status === "ready" && !ownerOptions.data.some((user) => user.user_id === owner) ? <option value={owner}>Selected owner</option> : null}{ownerOptions.status === "ready" ? ownerOptions.data.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name}</option>) : null}</select></ToolbarFilter>

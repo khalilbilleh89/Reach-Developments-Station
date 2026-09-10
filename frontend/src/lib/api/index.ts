@@ -108,6 +108,7 @@ import type {
   LegalTimeline,
   SalesPolicy,
   SalesRegister,
+  SalesHistoryRow,
   InstallmentTriggerEvent,
   SeriesPreview,
   ShareReconciliation,
@@ -236,7 +237,7 @@ export const settings = {
 };
 
 export const audit = {
-  list: (limit = 100) => get<Page<AuditEvent>>(`/audit-events?limit=${limit}`),
+  list: (query: Record<string, string> = {}) => get<Page<AuditEvent>>(`/audit-events?${new URLSearchParams(query)}`),
 };
 
 /**
@@ -835,6 +836,8 @@ export const pricing = {
  * sends inputs and displays what comes back.
  */
 export const sales = {
+  history: (projectId: string, query: Record<string, string>) =>
+    get<{ items: SalesHistoryRow[]; total: number }>(`/projects/${projectId}/sales/history?${new URLSearchParams(query)}`),
   policy: (projectId: string) =>
     get<SalesPolicy>(`/projects/${projectId}/sales/policy`),
   writePolicy: (projectId: string, body: Record<string, unknown>) =>

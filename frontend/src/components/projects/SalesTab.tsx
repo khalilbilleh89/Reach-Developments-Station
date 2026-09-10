@@ -1,5 +1,7 @@
 "use client";
 
+import { SalesHistory } from "./sales/SalesHistory";
+
 import { RegisterPagination } from "@/components/ui";
 
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
@@ -101,6 +103,8 @@ export function SalesTab({
   /** Who is reading, so an advisor is offered only the deals the server would open. */
   userId: string;
 }) {
+  const [workspace, setWorkspace] = useRegisterFields({ sales_view: "" });
+  const history = workspace.sales_view === "history";
   const ownOnly = restrictedToOwnClients(roles);
   const [pageFields, setPageFields] = useRegisterFields({offset: ""});
   const parsedOffset = Number(pageFields.offset);
@@ -115,7 +119,7 @@ export function SalesTab({
   const setFilters = (changes: Partial<typeof filters>) => { updateFilters(changes); setPageFields({offset: ""}); };
   const [searchFields, setSearchFields] = useRegisterFields({ search: "" });
   const search = searchFields.search;
-  const setSearch = (search: string) => setSearchFields({ search });
+  const setSearch = (search: string) => { setSearchFields({ search }); setPageFields({offset: ""}); };
   const [open, setOpen] = useState<"none" | "clients" | "policy">("none");
   const router = useRouter();
   const recordHref = useRecordHref(projectId);
@@ -141,7 +145,7 @@ export function SalesTab({
     setRegister(null);
     setError(null);
     try {
-      const query: Record<string, string> = { limit: "200", offset: String(offset) };
+      const query: Record<string, string> = { limit: "200", offset: String(offset), search };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -163,16 +167,16 @@ export function SalesTab({
       setRegister(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load sales.");
     }
-  }, [projectId, filters, offset]);
+  }, [projectId, filters, offset, search]);
 
   useEffect(() => {
     void (async () => {
-      if (projectStatus !== "setup") await load();
+      if (projectStatus !== "setup" && !history) await load();
     })();
-  }, [load, projectStatus]);
+  }, [load, projectStatus, history]);
 
   const header = (actions?: React.ReactNode) => (
-    <PageHeader icon="sales" title="Sales" subtitle={sectionDescription("sales")} compact actions={actions} />
+    <PageHeader icon="sales" title="Sales" subtitle={sectionDescription("sales")} compact actions={<><Button data-leaves-editor onClick={() => setWorkspace({ sales_view: history ? "" : "history" })}>{history ? "Current sales" : "Transaction history"}</Button>{actions}</>} />
   );
 
   // Sales is refused while the project is in setup, because that is the window
@@ -192,6 +196,8 @@ export function SalesTab({
     );
   }
 
+  if (history) return <>{header()}<SalesHistory projectId={projectId} /></>;
+
   if (error && register === null) {
     return (
       <>
@@ -202,14 +208,7 @@ export function SalesTab({
   }
 
   const totals = register?.totals ?? null;
-  const needle = search.trim().toLowerCase();
-  const rows = (register?.rows ?? []).filter(
-    (row) =>
-      !needle ||
-      `${row.unit_reference} ${row.client_display_name ?? ""} ${row.sale_number ?? ""} ${row.spa_number ?? ""} ${row.reservation_number ?? ""}`
-        .toLowerCase()
-        .includes(needle),
-  );
+  const rows = register?.rows ?? [];
   const filtered = search !== "" || filters.phase_id !== "" || filters.commercial_status !== "";
 
   return (
@@ -236,7 +235,7 @@ export function SalesTab({
         <div className="register-position"><Card
           tone={totals ? "command" : undefined}
           title="Commercial pipeline"
-          description={totals ? "Counted over every unit you may see, not the page below." : undefined}
+          description={totals ? "Current units matching the search and filters, across all pages." : undefined}
         >
           {totals === null ? (
             <Loading label="Loading sales…" shape="metrics" />
@@ -338,10 +337,11 @@ export function SalesTab({
           </Card>
         ) : null}
 
+        <p className="hint">Current position totals cover every authorized unit matching the search and filters, across all pages. Historical transactions are listed separately.</p>
         <DataToolbar
           framed
           activeSummary={[phases.find((phase) => phase.id === filters.phase_id)?.name, filters.commercial_status ? statusLabel(filters.commercial_status) : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
-          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search this page" }}
+          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search all current sales" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
             filtered
