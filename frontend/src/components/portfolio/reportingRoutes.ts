@@ -5,4 +5,3 @@ export function reportingHref(id: string, view = "position", prior = "", context
   if (!id) { params.delete("snapshot"); params.delete("view"); params.delete("prior"); }
   return `/portfolio/?${params}`;
 }
-
