@@ -200,3 +200,23 @@ conversion. Source resolution and action completion remain independent.
 The frontend remains a Next.js static export served by FastAPI from `frontend/out`. Keep the current dependencies and route architecture. Add no UI framework, chart package, font request or state-management layer for presentation work.
 
 Run lint, TypeScript, the production build, Product Experience guards and the relevant frontend contract checks. Review the console, responsive results and interaction evidence. When integration advances during a horizontal redesign, synchronize carefully and visually integrate new screens without changing their business implementation. Describe material limitations and remaining visual debt in the handoff.
+
+## Form safety and request outcomes
+
+Use `DraftBoundary` for state-owned inline editors, comparing against the saved
+record and resetting only after persistence or confirmed discard. Shared form
+and reason dialogs guard their own inputs; Drawer asks contained drafts before
+closing. Mark inline close/version-change controls with `data-leaves-editor`.
+Use `requestFormLeave` for non-link project selection that replaces an editor.
+Keep inputs in memory; never persist customer or transaction drafts in storage.
+
+Reason dialogs remain mounted after failed mutations. Close on successful
+persistence before refreshing the record, so refresh failure cannot invite a
+second mutation. Distinguish a conflict from a failed read and offer explicit
+refresh without clearing the reason. Prevent navigation/editing while saving.
+
+Readers must distinguish loading, failed, denied and empty. `useAnswer` pairs
+results with request identity and exposes Retry. Never label amounts from the
+previous date/filter as current data. Retain structured `ApiError.fieldErrors`
+where an editor can identify the affected fields or instalment rows; use the
+shared validation summary and named controls for focus/error association.

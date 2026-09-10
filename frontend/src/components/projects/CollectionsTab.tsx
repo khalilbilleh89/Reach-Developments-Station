@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Badge,
@@ -9,15 +9,15 @@ import {
   DataToolbar,
   IdentityCell,
   EmptyState,
-  Loading,
-  Notice,
   PageHeader,
   StatusDot,
   TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
-import { ApiError, collections } from "@/lib/api";
-import type { AgingRow, CollectionProjectSummary, CollectionRegisterRow } from "@/lib/api";
+import { collections } from "@/lib/api";
+import type { CollectionRegisterRow } from "@/lib/api";
+import { useAnswer } from "@/lib/answer";
+import { ReadState } from "@/components/portfolio/ReadState";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
@@ -62,10 +62,6 @@ const VIEWS = [
 export function CollectionsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
   const [view, setView] = useState("accounts");
   const [asOf, setAsOf] = useState(todayISO());
-  const [summary, setSummary] = useState<CollectionProjectSummary | null>(null);
-  const [rows, setRows] = useState<CollectionRegisterRow[] | null>(null);
-  const [aging, setAging] = useState<AgingRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [bucket, setBucket] = useState("");
@@ -73,45 +69,13 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
   const [open, setOpen] = useState<CollectionRegisterRow | null>(null);
   const currencyCodeOf = useCurrencyCode();
 
-  const load = useCallback(async () => {
-    try {
-      const [totals, register] = await Promise.all([
-        collections.summary(projectId, asOf),
-        collections.receivables(projectId, asOf),
-      ]);
-      setSummary(totals);
-      setRows(register);
-      setError(null);
-    } catch (caught) {
-      setSummary(null);
-      setRows(null);
-      setError(caught instanceof ApiError ? caught.message : "Could not load the collections position.");
-    }
-  }, [projectId, asOf]);
-
-  useEffect(() => {
-    void (async () => {
-      await load();
-    })();
-  }, [load]);
-
-  const loadAging = useCallback(async () => {
-    try {
-      setAging(await collections.aging(projectId, { asOf, overdueOnly: only === "overdue" }));
-      setError(null);
-    } catch (caught) {
-      // An empty aging list and a failed request look identical on screen, and
-      // "Nothing aged" is the more reassuring of the two. Say which it was.
-      setAging(null);
-      setError(caught instanceof ApiError ? caught.message : "Could not load the aging report.");
-    }
-  }, [projectId, asOf, only]);
-
-  useEffect(() => {
-    void (async () => {
-      if (view === "aging") await loadAging();
-    })();
-  }, [view, loadAging]);
+  const position = useAnswer(true, () => Promise.all([
+    collections.summary(projectId, asOf), collections.receivables(projectId, asOf),
+  ]), [projectId, asOf]);
+  const agingAnswer = useAnswer(view === "aging", () => collections.aging(projectId, { asOf, overdueOnly: only === "overdue" }), [projectId, asOf, only === "overdue"]);
+  const summary = position.status === "ready" ? position.data[0] : null;
+  const rows = position.status === "ready" ? position.data[1] : null;
+  const aging = agingAnswer.status === "ready" ? agingAnswer.data : null;
 
   const visible = useMemo(() => {
     if (rows === null) return [];
@@ -142,11 +106,10 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
       <PageHeader icon="collections" title="Collections" subtitle={sectionDescription("collections")} compact />
 
       <div className="stack">
-        {error ? <Notice tone="error">{error}</Notice> : null}
 
         <Card tone={summary ? "command" : undefined} title="Receivables position" description="Outstanding obligations and customer cash, by currency.">
           {summary === null ? (
-            <Loading label="Loading the position…" shape="metrics" />
+            <ReadState answer={position} label="Loading the position…" />
           ) : (
             <CollectionsSummary summary={summary} currencyCodeOf={currencyCodeOf} />
           )}
@@ -229,15 +192,15 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
         </DataToolbar>
 
         <Card flush>
-          {rows === null ? (
-            <Loading label="Loading the receivables…" shape="rows" />
+          {view === "accounts" && rows === null ? (
+            <ReadState answer={position} label="Loading the receivables…" />
           ) : view === "accounts" ? (
             visible.length === 0 ? (
               <div className="card-body">
                 <EmptyState
-                  title={rows.length === 0 ? "Nothing to collect yet" : "No account matches"}
+                  title={rows?.length === 0 ? "Nothing to collect yet" : "No account matches"}
                   hint={
-                    rows.length === 0
+                    rows?.length === 0
                       ? "No sale in this project has a payment schedule to collect against."
                       : "Widen the filters to see the rest."
                   }
@@ -318,7 +281,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
               </TableScroll>
             )
           ) : aging === null ? (
-            error ? null : <Loading label="Loading the aging…" shape="rows" />
+            <ReadState answer={agingAnswer} label="Loading the aging…" />
           ) : aging.length === 0 ? (
             <div className="card-body">
               <EmptyState title="Nothing aged" hint={`No overdue receivables as at ${businessDate(asOf)}.`} />
@@ -394,8 +357,8 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
           asOf={asOf}
           onClose={() => setOpen(null)}
           onChanged={() => {
-            void load();
-            if (view === "aging") void loadAging();
+            position.retry();
+            if (view === "aging") agingAnswer.retry();
           }}
         />
       ) : null}

@@ -636,7 +636,12 @@ class TestRecordsAndDialogsKeepTheirSemantics:
         assert 'role="dialog"' in drawer
         assert 'aria-modal="true"' in drawer
         assert "aria-label={title}" in drawer
-        assert 'useOverlay<HTMLDivElement>(onClose, "container")' in drawer
+        assert (
+            'useOverlay<HTMLDivElement>(element => requestFormLeave(element, onClose), "container")'
+            in drawer
+        )
+        assert "requestFormLeave(panel.current, onClose)" in drawer
+        assert "onClick={close}" in drawer
         assert 'document.body.style.overflow = "hidden"' in drawer
 
     def test_the_drawer_header_carries_identity_headline_actions_facts_and_sections(self) -> None:

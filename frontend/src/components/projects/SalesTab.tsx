@@ -12,6 +12,7 @@ import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
+  DraftBoundary,
   Badge,
   Button,
   Card,
@@ -123,6 +124,8 @@ export function SalesTab({
   // to take a unit off the market.
   const [reserving, setReserving] = useState<{ unitId: string; reference: string; currencyId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [auxError, setAuxError] = useState<string | null>(null);
+  const [savedPolicy, setSavedPolicy] = useState<SalesPolicy | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -130,6 +133,8 @@ export function SalesTab({
   const canWriteClients = roles.has("sales_operations") || roles.has("sales_advisor");
   const canSetPolicy = roles.has("system_admin") || roles.has("project_manager");
 
+  const policyDirty = useRef(false);
+  useEffect(() => { policyDirty.current = JSON.stringify(policy) !== JSON.stringify(savedPolicy); }, [policy, savedPolicy]);
   const pageRequest = useRef(0);
   const load = useCallback(async () => {
     const ticket = ++pageRequest.current;
@@ -140,16 +145,18 @@ export function SalesTab({
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
-      const [rows, phaseList, policyRow] = await Promise.all([
+      const [registerResult, phaseResult, policyResult] = await Promise.allSettled([
         sales.register(projectId, query),
         inventory.phases(projectId),
         sales.policy(projectId),
       ]);
       if (ticket !== pageRequest.current) return;
-      setRegister(rows);
-      setPageTotal(rows.total);
-      setPhases(phaseList);
-      setPolicy(policyRow);
+      if (registerResult.status === "rejected") throw registerResult.reason;
+      setRegister(registerResult.value);
+      setPageTotal(registerResult.value.total);
+      if (phaseResult.status === "fulfilled") setPhases(phaseResult.value);
+      if (policyResult.status === "fulfilled") { if (!policyDirty.current) setPolicy(policyResult.value); setSavedPolicy(policyResult.value); }
+      setAuxError(phaseResult.status === "rejected" || policyResult.status === "rejected" ? "Some sales filters or gates could not load." : null);
       setError(null);
     } catch (caught) {
       if (ticket !== pageRequest.current) return;
@@ -189,7 +196,7 @@ export function SalesTab({
     return (
       <>
         {header()}
-        <Notice tone="error">{error}</Notice>
+        <Notice tone="error">{error}<Button onClick={() => void load()}>Retry</Button></Notice>
       </>
     );
   }
@@ -209,11 +216,11 @@ export function SalesTab({
     <>
       {header(
         <>
-          <Button onClick={() => setOpen(open === "clients" ? "none" : "clients")} aria-expanded={open === "clients"}>
+          <Button data-leaves-editor={open !== "none" || undefined} onClick={() => setOpen(open === "clients" ? "none" : "clients")} aria-expanded={open === "clients"}>
             Buyers
           </Button>
           {canSetPolicy ? (
-            <Button onClick={() => setOpen(open === "policy" ? "none" : "policy")} aria-expanded={open === "policy"}>
+            <Button data-leaves-editor={open !== "none" || undefined} onClick={() => setOpen(open === "policy" ? "none" : "policy")} aria-expanded={open === "policy"}>
               Sales gates
             </Button>
           ) : null}
@@ -221,7 +228,7 @@ export function SalesTab({
       )}
 
       <div className="stack">
-        {error ? <Notice tone="error">{error}</Notice> : null}
+        {error ? <Notice tone="error">{error}<Button onClick={() => void load()}>Retry</Button></Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {/* The book, as a desk reads it: what has been agreed, what is being
@@ -268,18 +275,20 @@ export function SalesTab({
           <ClientsPanel projectId={projectId} canWrite={canWriteClients} onChanged={load} onClose={() => setOpen("none")} />
         ) : null}
 
+        {auxError ? <Notice tone="error">{auxError}<Button onClick={() => void load()}>Retry sales filters and gates</Button></Notice> : null}
         {open === "policy" && policy ? (
-          <Card
+          <DraftBoundary dirty={JSON.stringify(policy) !== JSON.stringify(savedPolicy)} busy={busy} onDiscard={() => setPolicy(savedPolicy)}><Card
             title="Sales gates"
             description="Six named choices this project makes about what a sale must clear. Not a rules engine, and never becoming one."
-            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+            actions={<Button variant="quiet" data-leaves-editor onClick={() => setOpen("none")}>Close</Button>}
           >
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
                 setBusy(true);
                 try {
-                  setPolicy(await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>));
+                  const saved = await sales.writePolicy(projectId, policy as unknown as Record<string, unknown>);
+                  setPolicy(saved); setSavedPolicy(saved);
                   setNotice("Gates saved.");
                   setError(null);
                 } catch (caught) {
@@ -307,14 +316,14 @@ export function SalesTab({
                 </Button>
               </FormActions>
             </form>
-          </Card>
+          </Card></DraftBoundary>
         ) : null}
 
         {reserving ? (
           <Card
             title={`Reserve ${reserving.reference}`}
             description="Creating a reservation holds nothing. The unit stays on the market until the reservation is activated."
-            actions={<Button variant="quiet" onClick={() => setReserving(null)}>Cancel</Button>}
+            actions={<Button variant="quiet" data-leaves-editor onClick={() => setReserving(null)}>Cancel</Button>}
           >
             <ReservationForm
               key={reserving.unitId}

@@ -167,7 +167,7 @@ export function ScheduleEditor({
                 <input
                   className="input input-label"
                   aria-label={`Label for instalment ${row.sequence}`}
-                  value={row.label}
+                  name={`installments.${row.sequence - 1}.label`} value={row.label}
                   onChange={(event) =>
                     onChange(row.key, "label", event.target.value)
                   }
@@ -178,7 +178,7 @@ export function ScheduleEditor({
                 <select
                   className="input"
                   aria-label={`Trigger for instalment ${row.sequence}`}
-                  value={row.trigger_type}
+                  name={`installments.${row.sequence - 1}.trigger_type`} value={row.trigger_type}
                   onChange={(event) =>
                     onChange(row.key, "trigger_type", event.target.value)
                   }
@@ -203,7 +203,7 @@ export function ScheduleEditor({
                   <RateInput
                     aria-label={`Share for instalment ${row.sequence}`}
                     placeholder="25"
-                    value={row.principal_fraction}
+                    name={`installments.${row.sequence - 1}.principal_fraction`} value={row.principal_fraction}
                     onChange={(value) =>
                       onChange(row.key, "principal_fraction", value)
                     }
@@ -213,7 +213,7 @@ export function ScheduleEditor({
                     code={code}
                     aria-label={`Principal for instalment ${row.sequence}`}
                     placeholder="0.00"
-                    value={row.principal_amount}
+                    name={`installments.${row.sequence - 1}.principal_amount`} value={row.principal_amount}
                     onChange={(value) =>
                       onChange(row.key, "principal_amount", value)
                     }
@@ -226,7 +226,7 @@ export function ScheduleEditor({
                     <MoneyInput
                       code={code}
                       aria-label={`Tax for instalment ${row.sequence}`}
-                      value={row.tax_amount}
+                      name={`installments.${row.sequence - 1}.tax_amount`} value={row.tax_amount}
                       onChange={(value) =>
                         onChange(row.key, "tax_amount", value)
                       }
@@ -236,7 +236,7 @@ export function ScheduleEditor({
                     <MoneyInput
                       code={code}
                       aria-label={`Buyer fee for instalment ${row.sequence}`}
-                      value={row.fee_amount}
+                      name={`installments.${row.sequence - 1}.fee_amount`} value={row.fee_amount}
                       onChange={(value) =>
                         onChange(row.key, "fee_amount", value)
                       }
@@ -250,7 +250,7 @@ export function ScheduleEditor({
                   className="input input-short"
                   inputMode="numeric"
                   aria-label={`Grace days for instalment ${row.sequence}`}
-                  value={row.grace_days}
+                  name={`installments.${row.sequence - 1}.grace_days`} value={row.grace_days}
                   onChange={(event) =>
                     onChange(row.key, "grace_days", event.target.value)
                   }
@@ -302,7 +302,7 @@ function TriggerDetail({
         inputMode="numeric"
         aria-label={`Days after the SPA for instalment ${row.sequence}`}
         placeholder="30"
-        value={row.offset_days}
+        name={`installments.${row.sequence - 1}.offset_days`} value={row.offset_days}
         onChange={(event) =>
           onChange(row.key, "offset_days", event.target.value)
         }
@@ -315,7 +315,7 @@ function TriggerDetail({
         className="input input-date"
         type="date"
         aria-label={`Due date for instalment ${row.sequence}`}
-        value={row.contractual_due_date}
+        name={`installments.${row.sequence - 1}.contractual_due_date`} value={row.contractual_due_date}
         onChange={(event) =>
           onChange(row.key, "contractual_due_date", event.target.value)
         }
@@ -336,7 +336,7 @@ function TriggerDetail({
           className="input input-label"
           aria-label={`Trigger reference for instalment ${row.sequence}`}
           placeholder={isMilestone ? "Milestone code" : "What must happen"}
-          value={row.trigger_reference}
+          name={`installments.${row.sequence - 1}.trigger_reference`} value={row.trigger_reference}
           onChange={(event) =>
             onChange(row.key, "trigger_reference", event.target.value)
           }
@@ -346,7 +346,7 @@ function TriggerDetail({
         className="input input-date"
         type="date"
         aria-label={`Forecast date for instalment ${row.sequence}`}
-        value={row.forecast_due_date}
+        name={`installments.${row.sequence - 1}.forecast_due_date`} value={row.forecast_due_date}
         onChange={(event) =>
           onChange(row.key, "forecast_due_date", event.target.value)
         }
@@ -400,7 +400,7 @@ function MilestoneSelector({
     <select
       className="input"
       aria-label={`Construction milestone for instalment ${row.sequence}`}
-      value={row.trigger_reference}
+      name={`installments.${row.sequence - 1}.trigger_reference`} value={row.trigger_reference}
       onChange={(event) =>
         onChange(row.key, "trigger_reference", event.target.value)
       }

@@ -148,7 +148,7 @@ export function AppShell({
 }
 
 /** What a page shows while the session is still being established, or is gone. */
-export function SessionScreen({ status }: { status: "loading" | "anonymous" }) {
+export function SessionScreen({ status, onRetry }: { status: "loading" | "anonymous" | "failed"; onRetry?: () => void }) {
   return (
     <div className="shell">
       {status === "loading" ? (
@@ -157,7 +157,7 @@ export function SessionScreen({ status }: { status: "loading" | "anonymous" }) {
         </div>
       ) : (
         <div className="panel panel-narrow">
-          <Notice tone="info">Your session has ended. Please sign in again.</Notice>
+          {status === "failed" ? <Notice tone="error">Could not establish your session. <button className="button" onClick={onRetry}>Retry</button></Notice> : <Notice tone="info">Your session has ended. Please sign in again.</Notice>}
         </div>
       )}
     </div>

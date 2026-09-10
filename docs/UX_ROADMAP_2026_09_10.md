@@ -96,3 +96,62 @@ Global search and complete transaction history remain PR-UX-09. Forms and stale
 request handling remain PR-UX-08. This targeted Chromium acceptance is not the
 full role/browser/accessibility matrix scheduled for PR-UX-10. No API, schema,
 authorization, financial formula, currency or rounding behavior changed.
+
+## PR-UX-08 candidate — Form Safety & Trustworthy UI State
+
+This slice follows merged PR #281. It does not add Sales search/history, change
+financial calculations, change authorization, or expand API/schema contracts.
+
+- Explicit draft boundaries cover Reservation, Buyer, SPA details, payment
+  schedule, receipt entry, Sales gates and management-action editors. Shared
+  form and reason dialogs protect Cancel, Escape and backdrop exits. Drawer
+  close, tabs, project links and browser unload/traversal use the same guard.
+  Pristine forms leave directly; drafts remain in memory, never browser storage.
+  Controls are disabled while saving, and failed requests retain entered values.
+- Sale and Payment Plan reasons close after persistence succeeds. Conflicts
+  offer a current-record refresh that keeps the typed reason. Receipt reversal
+  follows the same persistence-before-close rule.
+- Collections position/register and aging have separate request lifecycles.
+  Project/date/filter changes immediately hide prior results. Effect cleanup
+  rejects late success and failure; retries and filter round trips start fresh.
+- Failed session lookup offers Retry; only 401 takes the user to sign-in.
+  Shared management readers expose Retry. Sales auxiliary failures no longer
+  discard a successful register response. Initial record failures can retry.
+- A contracted/released unit cannot present an enabled Deactivate action.
+  A payment schedule with unsaved edits cannot be submitted for approval.
+  Existing server eligibility and role rules remain authoritative.
+- ApiError retains structured validation paths. Buyer, Reservation, management
+  Action and schedule editors retain errors, identify fields/rows and focus the
+  first matching invalid control with accessible error association.
+
+Engineering browser evidence uses a production static export and synthetic
+`reach_ux08_uat`, cloned from the previous isolated UX fixture. Test-only fault
+injection lives outside the repository and is not shipped. The PostgreSQL pytest
+suite uses a separate throwaway database. The local database service stopped
+partway through the first verification attempt; it was restarted and checks
+were rerun. No production data or business records were used.
+
+Observed engineering acceptance:
+
+| Journey | Result |
+| --- | --- |
+| Pristine expense Cancel | Closed without a discard prompt. |
+| Edited expense Escape / Cancel | Stay retained text; Discard closed the editor. |
+| Reservation waiver returns 409 | Reason stayed visible with the error and Refresh current record. |
+| Refresh then retry waiver | Reason remained unchanged; successful persistence closed the dialog. |
+| Buyer create returns structured 422 | Friendly Buyer name error, input retained, first-invalid focus and aria-invalid. |
+| Buyer draft → Collections / another project | Discard confirmation; Stay preserved draft; confirmed project switch completed. |
+| Collections 500 | Explicit failure and Retry; recovered to actual account totals. |
+| Slow 2027 request followed by 2026 request | Old amounts hidden while pending; late 2027 result did not overwrite 2026/193-day account data. |
+| Receipt draft → Drawer Close / Position tab | Stay retained bank reference; confirmed Cancel discarded it. |
+| Mobile receipt discard at 390px | Stay and Discard remained visible and operable; no document horizontal overflow. |
+| Draft schedule → another tab | Confirmation protected changes; Discard restored the saved row label. |
+| Schedule write returns structured 422 | Row-specific label error, input retained and aria-invalid focus; Submit disabled while dirty. |
+| Session lookup 503 | Retry screen, no sign-in redirect; Retry restored the existing session. |
+
+Screenshots: [UX08 evidence](evidence/ux08-form-safety/).
+Native Node tests exercise the actual API error decoder and request-reader hook,
+including reordered responses, retry, filter round trips and role-off/403 states.
+Independent review, exact-head Full CI and owner UAT are separate gates. Historical
+Partial/Pending rows remain unchanged; cross-workflow accessibility acceptance
+stays in PR-UX-10.

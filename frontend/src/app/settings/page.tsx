@@ -29,14 +29,14 @@ import { PageHeader } from "@/components/ui";
 function SettingsScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const { state } = useSession();
+  const { state, refresh } = useSession();
   const requested = params.get("section");
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");
   }, [state, router]);
 
-  if (state.status !== "authenticated") return <SessionScreen status={state.status} />;
+  if (state.status !== "authenticated") return <SessionScreen status={state.status} onRetry={() => void refresh()} />;
 
   const { user } = state;
 

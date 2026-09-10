@@ -77,4 +77,6 @@ export { RecordWorkspace, RecordLink, useRecordTab, useRecordHref } from "./Reco
 export type { WorkspaceFact, WorkspaceHeadline } from "./RecordWorkspace";
 
 export { RegisterPagination } from "./RegisterPagination";
-export { UnsavedChangesGuard } from "./UnsavedChangesGuard";
+export { UnsavedChangesGuard, DraftBoundary } from "./UnsavedChangesGuard";
+
+export { ValidationSummary } from "./ValidationSummary";

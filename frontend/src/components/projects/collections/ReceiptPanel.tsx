@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  DraftBoundary,
   Badge,
   Button,
   ButtonRow,
@@ -108,11 +109,13 @@ export function ReceiptPanel({
     onChanged();
   };
 
-  const act = async (run: () => Promise<unknown>, done: string) => {
+  const act = async (run: () => Promise<unknown>, done: string, onPersisted?: () => void) => {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     try {
       await run();
+      onPersisted?.();
       setNotice(done);
       await refresh();
       return true;
@@ -139,7 +142,7 @@ export function ReceiptPanel({
     summary.installments.find((row) => row.installment_id === installmentId);
 
   return (
-    <div className="stack">
+    <DraftBoundary dirty={recording && Boolean(form.amount || form.bank_reference || form.notes || form.receipt_date !== todayISO())} busy={busy} onDiscard={() => { setRecording(false); setForm({ amount: "", receipt_date: todayISO(), bank_reference: "", notes: "" }); }}><div className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -147,7 +150,7 @@ export function ReceiptPanel({
         <SubPanel
           title="Receipt journal"
           actions={
-            <Button onClick={() => setRecording((open) => !open)}>
+            <Button data-leaves-editor={recording || undefined} onClick={() => setRecording(!recording)}>
               {recording ? "Cancel" : "Record a receipt"}
             </Button>
           }
@@ -480,6 +483,7 @@ export function ReceiptPanel({
 
       {reversing ? (
         <PromptDialog
+          error={error}
           title={reversing.kind === "receipt" ? "Reverse this receipt" : "Reverse this allocation"}
           hint={
             reversing.kind === "receipt"
@@ -492,13 +496,13 @@ export function ReceiptPanel({
           onCancel={() => setReversing(null)}
           onSubmit={(reason) => {
             const target = reversing;
-            setReversing(null);
             void act(
               () =>
                 target.kind === "receipt"
                   ? collections.reverseReceipt(projectId, target.id, reason)
                   : collections.reverseAllocation(projectId, target.id, reason),
               "Reversed.",
+              () => setReversing(null),
             );
           }}
         />
@@ -506,21 +510,22 @@ export function ReceiptPanel({
 
       {restricting ? (
         <RestrictCashDialog
+          error={error}
           receipt={restricting}
           currencyCode={currencyCode}
           busy={busy}
           onCancel={() => setRestricting(null)}
           onSubmit={(body) => {
             const target = restricting;
-            setRestricting(null);
             void act(
               () => cashflow.recordRestriction(projectId, target.id, body),
               `Escrow recorded against ${target.receipt_number}. It holds cash back once Finance confirms it.`,
+              () => setRestricting(null),
             );
           }}
         />
       ) : null}
-    </div>
+    </div></DraftBoundary>
   );
 }
 
@@ -541,12 +546,14 @@ function RestrictCashDialog({
   receipt,
   currencyCode,
   busy,
+  error,
   onCancel,
   onSubmit,
 }: {
   receipt: Receipt;
   currencyCode: string | null;
   busy: boolean;
+  error: string | null;
   onCancel: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
@@ -572,6 +579,7 @@ function RestrictCashDialog({
         })
       }
     >
+      {error ? <Notice tone="error">{error}</Notice> : null}
       <FieldRow>
         <Field
           label="Amount held"

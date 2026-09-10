@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { SaleContract } from "@/lib/api";
-import { Button, Field, FieldRow, FormActions, SubPanel } from "@/components/ui";
+import { DraftBoundary, Button, Field, FieldRow, FormActions, SubPanel } from "@/components/ui";
 import { todayISO } from "@/lib/format";
 
 export function SpaDetailsForm({ sale, busy, onSave }: {
@@ -9,7 +9,8 @@ export function SpaDetailsForm({ sale, busy, onSave }: {
 }) {
   const [number, setNumber] = useState(sale.spa_number ?? "");
   const [date, setDate] = useState(sale.contract_date ?? todayISO());
-  return <SubPanel title="SPA details"><form onSubmit={(event) => {
+  const dirty = number !== (sale.spa_number ?? "") || date !== (sale.contract_date ?? todayISO());
+  return <DraftBoundary dirty={dirty} busy={busy}><SubPanel title="SPA details"><form onSubmit={(event) => {
     event.preventDefault(); if (!busy) void onSave({ spa_number: number.trim() || null, contract_date: date });
   }}>
     <FieldRow columns={2}>
@@ -18,5 +19,5 @@ export function SpaDetailsForm({ sale, busy, onSave }: {
     </FieldRow>
     <p className="footnote">Save these details before submitting for signature. Legal records the buyer and seller signing dates separately.</p>
     <FormActions><Button type="submit" disabled={busy}>Save SPA details</Button></FormActions>
-  </form></SubPanel>;
+  </form></SubPanel></DraftBoundary>;
 }

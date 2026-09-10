@@ -23,7 +23,7 @@ import { ProjectsRegister } from "@/components/projects/ProjectsRegister";
 function ProjectsScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const { state } = useSession();
+  const { state, refresh } = useSession();
   const openProjectId = params.get("project");
   const requested = params.get("section");
   // Historical standalone Pricing links now land in Inventory, where Unit 360
@@ -35,7 +35,7 @@ function ProjectsScreen() {
     if (state.status === "anonymous") router.replace("/login/");
   }, [state, router]);
 
-  if (state.status !== "authenticated") return <SessionScreen status={state.status} />;
+  if (state.status !== "authenticated") return <SessionScreen status={state.status} onRetry={() => void refresh()} />;
 
   const { user } = state;
 

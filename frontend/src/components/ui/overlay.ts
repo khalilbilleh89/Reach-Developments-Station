@@ -52,7 +52,7 @@ function focusables(container: HTMLElement): HTMLElement[] {
  * control (a confirm dialog, whose first button is the safe one).
  */
 export function useOverlay<T extends HTMLElement>(
-  onClose: () => void,
+  onClose: (element: T) => void,
   initialFocus?: "container" | string,
 ): RefObject<T | null> {
   const container = useRef<T>(null);
@@ -83,7 +83,7 @@ export function useOverlay<T extends HTMLElement>(
       if (event.key === "Escape") {
         if (event.defaultPrevented) return;
         event.preventDefault();
-        close.current();
+        close.current(element);
         return;
       }
       if (event.key !== "Tab") return;

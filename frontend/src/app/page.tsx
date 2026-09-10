@@ -11,12 +11,12 @@ import { SessionScreen } from "@/components/shell/AppShell";
  */
 export default function HomePage() {
   const router = useRouter();
-  const { state } = useSession();
+  const { state, refresh } = useSession();
 
   useEffect(() => {
     if (state.status === "authenticated") router.replace("/projects/");
     if (state.status === "anonymous") router.replace("/login/");
   }, [state, router]);
 
-  return <SessionScreen status="loading" />;
+  return <SessionScreen status={state.status === "authenticated" ? "loading" : state.status} onRetry={() => void refresh()} />;
 }
