@@ -143,6 +143,13 @@ created both portfolio and project snapshots. Deep links, selected comparator,
 reload and back/forward navigation passed; no JavaScript page errors occurred.
 This is targeted keyboard/semantic QA, not a screen-reader certification.
 
+An explicit heading-order assertion found the shared header component's default
+H3 skipped H2 in full-page reports. Top-level reporting sections now request H2;
+comparison subsections remain H3. The final browser matrix checks heading order
+and nonempty table headers. Separate keyboard checks select and clear the prior
+snapshot, activate Board Pack navigation, and invoke the Print button's browser
+print action. These checks pass on the corrected production build.
+
 A4 and Letter each produced 14 populated pages, inspected as rendered images.
 Tables wrap inside the page, repeat column headers and show 30/60/90-day Outlook
 content. No blank pages or clipping were found; currency, capture identity,
