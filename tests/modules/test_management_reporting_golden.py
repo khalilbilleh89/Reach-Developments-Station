@@ -116,7 +116,16 @@ def test_full_project_before_after_meeting_story(
     first_board = admin_client.get(f"{ROOT}/snapshots/{a['id']}/board-pack").json()
     # New unit, measured/priced/released, reservation, signatures, active sale,
     # reconciled plan and independent CFO approval through existing fixture routes.
-    request.getfixturevalue("other_phase_plan")
+    second = request.getfixturevalue("other_phase_plan")
+    forecast_date = collections_client.patch(
+        f"/api/v1/projects/{project_id}/payment-plans/{second['plan_id']}"
+        f"/installments/{second['manual_installment_id']}/forecast",
+        json={
+            "forecast_due_date": str(today + timedelta(days=15)),
+            "reason": "Lender drawdown expected within the governed cashflow horizon",
+        },
+    )
+    assert forecast_date.status_code == 200, forecast_date.text
     receipt = record_receipt(collections_client, project_id, collecting_sale, "20000", str(today))
     assert receipt.status_code == 201, receipt.text
     assert confirm_receipt(finance_client, project_id, receipt.json()["id"]).status_code == 200
@@ -182,16 +191,25 @@ def test_full_project_before_after_meeting_story(
     assert risks["FORECAST_CASH_DEFICIT"] == "continuing"
     assert risks["CONSTRUCTION_COST_EXCEEDANCE"] == "new"
     assert risks["UNRESOLVED_BLOCKING_PERMIT"] == "resolved"
-    assert (
-        next(x for x in b["payload"]["actions"] if x["id"] == funding["id"])["status"]
-        == "completed"
-    )
+    assert all(x["id"] != funding["id"] for x in b["payload"]["actions"])
+    assert b["payload"]["action_counts"]["completed"] == 1
+    assert next(x for x in b["payload"]["action_frontier"] if x["id"] == funding["id"])
     assert (
         next(x for x in b["payload"]["actions"] if x["id"] == permit_action["id"])["status"]
         == "open"
     )
     assert any(f["fact"].endswith("/ status") and f["current"] == "issued" for f in c["facts"])
     assert any(f["prior"] == fid and f["current"] == next_cash for f in c["facts"])
+    # A second live mutation after both retained captures must change neither
+    # the earlier Board Pack nor the already computed historical interval.
+    later_receipt = record_receipt(
+        collections_client, project_id, collecting_sale, "1000", str(today)
+    )
+    assert later_receipt.status_code == 201, later_receipt.text
+    assert (
+        confirm_receipt(finance_client, project_id, later_receipt.json()["id"]).status_code == 200
+    )
+    transition(funding, "open")
     assert admin_client.get(f"{ROOT}/snapshots/{a['id']}/board-pack").json() == first_board
     assert (
         admin_client.get(

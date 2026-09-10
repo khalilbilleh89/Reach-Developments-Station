@@ -38,6 +38,21 @@ def test_capture_roundtrip_board_and_no_backdating(
     assert result["project_count"] == 1
     assert len(result["payload"]["outlooks"]) == 3
     assert result["payload"]["projects"][0]["project_id"] == project_id
+    # Missing governed sources are business unavailability, not a capture error.
+    captured_project = result["payload"]["projects"][0]
+    cash_coverage = next(
+        row
+        for row in captured_project["risk_evaluations"]
+        if row["risk_code"] == "FORECAST_CASH_DEFICIT"
+    )
+    source_project = admin_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
+    source_coverage = next(
+        row
+        for row in source_project["risk_evaluations"]
+        if row["risk_code"] == "FORECAST_CASH_DEFICIT"
+    )
+    assert cash_coverage["availability"] == "unavailable"
+    assert cash_coverage["reason"] and cash_coverage["reason"] == source_coverage["reason"]
     assert all(
         m["amount"] is None or isinstance(m["amount"], str)
         for m in result["payload"]["overview"]["money"]

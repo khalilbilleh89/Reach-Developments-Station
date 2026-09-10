@@ -48,6 +48,34 @@ def test_phase_hidden_and_later_partial_reader_never_receive_document(
         assert client.get(f"{ROOT}/snapshots").json()["total"] == 1
 
 
+def test_revocation_of_one_retained_project_denies_entire_history(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    other = copy_project(db, uuid.UUID(project_id), "REVOKED-LATER")
+    viewer = make_user(db, email="revoked-history@example.com", roles=("executive_viewer",))
+    for pid in (project_id, str(other)):
+        grant_access(admin_client, pid, viewer)
+    a, b = capture(admin_client), capture(admin_client)
+    assert a["project_count"] == b["project_count"] == 2
+    with client_for(viewer.email) as client:
+        assert client.get(f"{ROOT}/snapshots/{a['id']}").status_code == 200
+        response = admin_client.patch(
+            f"/api/v1/projects/{other}/access/{viewer.id}", json={"is_active": False}
+        )
+        assert response.status_code == 200, response.text
+        for report in (a, b):
+            for suffix in ("", "/board-pack"):
+                assert client.get(f"{ROOT}/snapshots/{report['id']}{suffix}").status_code == 404
+        assert client.get(f"{ROOT}/snapshots").json()["total"] == 0
+        assert (
+            client.get(
+                f"{ROOT}/comparisons?from_snapshot_id={a['id']}&to_snapshot_id={b['id']}"
+            ).status_code
+            == 404
+        )
+    assert admin_client.get(f"{ROOT}/snapshots/{a['id']}").json() == a
+
+
 @pytest.mark.parametrize(
     "role,can_write",
     [

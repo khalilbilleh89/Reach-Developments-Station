@@ -4,10 +4,17 @@ MVP1 and MVP2 are complete. Historical migration/go-live and UAT evidence remain
 unchanged. UX-04 is the merged horizontal prerequisite, not a fourth MVP3 PR.
 
 1. **M3-01 — Portfolio Command Center & Deterministic Risk Monitoring:** merged in PR #273 (`5363388`).
-2. **M3-02 — Forward Outlook, Exceptions & Management Actions:** in review, PR #275.
-3. **M3-03 — Historical Intelligence, Board Reporting & Final MVP3 Acceptance:** not started.
+2. **M3-02 — Forward Outlook, Exceptions & Management Actions:** merged in PR #275 (`fceb047`).
+3. **M3-03 — Historical Intelligence, Board Reporting & Final MVP3 Acceptance:** candidate / in review, Draft PR #279.
 
-Merged milestones: **1 / 3**. This does not claim deployment or alter historical UAT.
+Merged milestones: **2 / 3**. This does not claim deployment or alter historical UAT.
+
+M3-03 branches from main `2e697c8` on `mvp3/m3-03-historical-board-reporting`.
+Keep #279 Draft until the completed candidate receives independent review.
+Acceptance, exact-head Full CI, human merge, post-merge main verification,
+migration deployment and production smoke remain separate gates.
+
+## Historical M3-02 candidate routing (superseded)
 
 M3-02 branches directly from main at `73036d8af8d98dfdc6be81034eae4ddbaeb233db`,
 including Experience 4.1 / UX-06 (PR #274), and now includes main `96db2f9`

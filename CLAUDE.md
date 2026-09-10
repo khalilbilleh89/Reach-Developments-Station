@@ -11,8 +11,8 @@ MVP 2 core Gate 0 was completed and the owner closure through merged #264 on
 clarification reopened MVP 2 for Gate 0A completion. Preserve every Partial/
 Pending historical UAT row; this reclassification does not turn it into a pass.
 Real legacy migration/go-live remains separate. True MVP3 M3-01 merged in PR #273;
-M3-02 is in review in PR #275, now integrated with main `96db2f9` (UX-07 and Master Administrator).
-M3-03 has not started. See the MVP3 document family for current management scope.
+M3-02 merged in PR #275 (`fceb047`). Main is `2e697c8` after PR #278.
+M3-03 is the Draft candidate in PR #279. Two of three MVP3 slices are merged; independent review and the exact-head Full gate remain pending. See the MVP3 document family for current management scope.
 
 MVP 2 Gate 0A authority: [product specification](docs/MVP2_GATE0A_PRODUCT_SPEC.md),
 [roadmap](docs/MVP2_GATE0A_ROADMAP.md), [acceptance matrix](docs/MVP2_GATE0A_ACCEPTANCE.md).

@@ -1,7 +1,8 @@
 # True MVP3 acceptance
 
 M3-01 merged in PR #273 (`5363388`); UX-06 merged in PR #274 (`73036d8`).
-M3-02 is in progress from that main baseline; M3-03 is not started. MVP3: 1 / 3 merged.
+M3-02 merged in PR #275 (`fceb047`); M3-03 is a candidate in Draft PR #279.
+MVP3: **2 / 3 merged**. M3-03 final acceptance remains pending.
 Historical MVP2 Partial/Pending UAT evidence is unchanged.
 
 Historical M3-01 required evidence: PostgreSQL owner parity; original currencies; incompatible and
@@ -99,7 +100,7 @@ the regression failed at its summary-construction guard, as intended (27.89 s).
 Frontend, UX-05, dependency manifests and migrations are unchanged by this
 correction. Fresh exact-head CI results are recorded in PR #273's handoff.
 
-## M3-02 Draft implementation evidence — 2026-09-09
+## M3-02 Draft implementation evidence — 2026-09-09 (historical)
 
 PR #275 branches from main `73036d8af8d98dfdc6be81034eae4ddbaeb233db`.
 It was opened Draft and marked Ready externally. Main `96db2f9` is now included;
@@ -131,3 +132,13 @@ is partial. Missing dates and sources remain unavailable/undated. Currency bucke
 never convert or combine currencies. Completing an Action cannot resolve a risk;
 a source resolving cannot close an Action. No source-owner table is written by
 management actions or Outlook. There are no new dependencies or CI workflow edits.
+
+## M3-03 Draft candidate evidence — 2026-09-10
+
+The completed checks, test-isolation correction, retention rationale, acceptance
+goldens, scale measurements and browser/print limitations are recorded in
+[M3-03 evidence](MVP3_M3_03_EVIDENCE.md). This is prospective retained history;
+earlier reports are never reconstructed from today's source rows. M3-01 and
+M3-02 are merged (2/3); M3-03 remains Draft #279 pending independent review and
+the subsequent mandatory exact-head Full gate. This does not rewrite earlier
+historical acceptance or declare MVP3 complete.

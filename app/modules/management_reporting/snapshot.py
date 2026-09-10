@@ -10,6 +10,7 @@ from app.core.database import get_engine
 from app.core.errors import NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.management_actions import reporting as actions
+from app.modules.management_actions.schemas import ReportingFrontier
 from app.modules.management_reporting import canonical, permissions, schemas
 from app.modules.management_reporting.models import Snapshot, SnapshotProject
 from app.modules.portfolio import outlook, service
@@ -82,7 +83,11 @@ def compose(session: Session, actor: ActorContext, command: schemas.Create) -> s
             overview=overview,
             projects=projects,
             outlooks=forwards,
-            actions=position,
+            actions=[a for a in position if a.status in ("open", "in_progress")],
+            action_frontier=[
+                ReportingFrontier(id=a.id, project_id=a.project_id, version=a.version)
+                for a in position
+            ],
             action_counts=counts,
             development=[
                 schemas.DevelopmentFact.model_validate(fact)

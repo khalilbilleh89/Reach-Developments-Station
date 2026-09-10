@@ -46,9 +46,11 @@ def test_snapshot_db_immutability_scope_integrity_retained_downgrade(
         )
         db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     db.rollback()
+    retained_rows = source_rows(db)
     with pytest.raises(SQLAlchemyError, match="Retained management snapshots"):
         command.downgrade(alembic_config(), "0019_management_actions")
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0020_management_reporting"
+    assert source_rows(db) == retained_rows
     assert admin_client.get(f"{ROOT}/snapshots/{report['id']}").json() == report
     # Test cleanup uses the suite's administrative TRUNCATE, not a product API.
     db.execute(text("TRUNCATE management_report_snapshot_projects, management_report_snapshots"))

@@ -336,7 +336,12 @@ def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) 
         )
     captured = [a for a in current.payload.actions if a.project_id in common]
     execution = out.Execution(
-        **actions.execution(session, captured, prior.captured_at, current.captured_at),
+        **actions.execution(
+            session,
+            [a for a in current.payload.action_frontier if a.project_id in common],
+            prior.captured_at,
+            current.captured_at,
+        ),
         prior_overdue=sum(
             a.project_id in common
             and a.status in ("open", "in_progress")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.modules.access.models import User
 from app.modules.management_actions.models import ManagementAction as Action
 from app.modules.management_actions.models import ManagementActionHistory as History
-from app.modules.management_actions.schemas import Identity, ReportingAction
+from app.modules.management_actions.schemas import Identity, ReportingAction, ReportingFrontier
 
 
 def position(session: Session, scope: Select, as_of: date) -> list[ReportingAction]:
@@ -42,7 +42,7 @@ def position(session: Session, scope: Select, as_of: date) -> list[ReportingActi
 
 
 def execution(
-    session: Session, captured: list[ReportingAction], low: datetime, high: datetime
+    session: Session, captured: list[ReportingFrontier], low: datetime, high: datetime
 ) -> dict[str, int]:
     """Upper version watermarks exclude transactions committed after capture.
 

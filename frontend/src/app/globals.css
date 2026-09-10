@@ -5307,6 +5307,7 @@ a:not([class]):hover { color: var(--accent-hover); }
   .reporting-board .reporting-controls,
   .reporting-board button { display: none !important; }
   .reporting-board { font-size: 9pt; color: var(--text-primary); }
+  .reporting-board :focus { outline: none !important; }
   .reporting-board .table-scroll { overflow: visible; max-height: none; }
   .reporting-board table { min-width: 0; width: 100%; table-layout: fixed; font-size: 8pt; }
   .reporting-board th, .reporting-board td { white-space: normal; overflow-wrap: anywhere; padding: .3rem; }

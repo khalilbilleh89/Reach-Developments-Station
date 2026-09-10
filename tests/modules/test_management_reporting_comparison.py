@@ -155,6 +155,43 @@ def test_forecast_currency_and_version_changes_keep_actual_denominations(
     assert all(m.delta == Decimal("-200000") for m in rows)
 
 
+def test_cash_coverage_deterioration_and_decimal_construction_basis(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    a, b = pair(admin_client, project_id)
+    ap, bp = a.payload.projects[0], b.payload.projects[0]
+    ap.money = [
+        metric("unrestricted_cash", "JOD", Decimal("300000.123")),
+        metric("construction_eac", "JOD", Decimal("12000000.001")),
+        metric("construction_budget", "JOD", Decimal("10000000.001")),
+    ]
+    bp.money = [
+        metric("unrestricted_cash", "JOD", None, "unavailable"),
+        metric("construction_eac", "JOD", Decimal("12000000.003")),
+        metric("construction_budget", "JOD", Decimal("10000000.002")),
+    ]
+    bp.money[0].reason = "Cashflow source currency mismatch."
+    refresh(a)
+    refresh(b)
+    result = compare(db, a, b)
+    rows = {m.metric: m for m in result.movements if m.project_id == ap.project_id}
+    cash = rows["unrestricted_cash"]
+    assert cash.prior == Decimal("300000.123") and cash.current is None and cash.delta is None
+    assert cash.prior_availability == "available" and cash.current_availability == "unavailable"
+    assert not cash.comparable
+    assert rows["construction_eac"].delta == Decimal("0.002")
+    assert rows["construction_budget"].delta == Decimal("0.001")
+    bp.money[1].source_basis = "Different estimate basis"
+    assert (
+        next(
+            m
+            for m in compare(db, a, b).movements
+            if m.project_id == ap.project_id and m.metric == "construction_eac"
+        ).delta
+        is None
+    )
+
+
 def test_risks_use_stable_identity_and_missing_coverage_is_not_resolution(
     admin_client: TestClient, project_id: str, db: Session
 ) -> None:
@@ -210,6 +247,7 @@ def test_history_exact_interval_and_visibility_watermark(
     ).json()
     a, b = pair(admin_client, project_id)
     b.payload.actions[0].version = 5
+    b.payload.action_frontier[0].version = 5
     for version, when, state in (
         (2, a.captured_at, "completed"),
         (3, a.captured_at + timedelta(seconds=1), "in_progress"),
@@ -244,3 +282,66 @@ def test_history_exact_interval_and_visibility_watermark(
     )
     db.commit()
     assert compare(db, a, b) == c
+
+
+def test_terminal_retention_reopen_and_consecutive_intervals(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    from tests.modules.test_management_reporting import ROOT
+
+    owner = db.scalar(select(User).where(User.email == "admin@example.com"))
+    a = capture(admin_client, project_id)
+    response = admin_client.post(
+        "/api/v1/portfolio/actions",
+        json={
+            "project_id": project_id,
+            "title": "Terminal details must not accumulate in snapshots",
+            "owner_user_id": str(owner.id),
+            "due_date": "2026-01-01",
+        },
+    )
+    assert response.status_code == 201, response.text
+    action = response.json()
+
+    def transition(status: str) -> None:
+        nonlocal action
+        response = admin_client.post(
+            f"/api/v1/portfolio/actions/{action['id']}/transitions",
+            json={
+                "expected_version": action["version"],
+                "status": status,
+                "reason": "Historical interval golden",
+            },
+        )
+        assert response.status_code == 200, response.text
+        action = response.json()
+
+    def comparison(prior: dict, current: dict) -> dict:
+        response = admin_client.get(
+            f"{ROOT}/comparisons?from_snapshot_id={prior['id']}&to_snapshot_id={current['id']}"
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    transition("cancelled")
+    b = capture(admin_client, project_id)
+    assert b["payload"]["actions"] == []
+    assert b["payload"]["action_counts"]["cancelled"] == 1
+    assert b["payload"]["action_frontier"] == [
+        {"id": action["id"], "project_id": project_id, "version": action["version"]}
+    ]
+    ab = comparison(a, b)
+    board = admin_client.get(f"{ROOT}/snapshots/{b['id']}/board-pack").json()
+    assert ab["execution"]["created"] == ab["execution"]["cancelled"] == 1
+    transition("open")
+    transition("in_progress")
+    transition("completed")
+    c = capture(admin_client, project_id)
+    bc = comparison(b, c)
+    assert bc["execution"]["created"] == bc["execution"]["cancelled"] == 0
+    assert all(bc["execution"][key] == 1 for key in ("started", "completed", "reopened"))
+    assert comparison(a, b) == ab
+    assert admin_client.get(f"{ROOT}/snapshots/{b['id']}/board-pack").json() == board
+    ac = comparison(a, c)
+    for key in ("created", "started", "completed", "reopened", "cancelled"):
+        assert ac["execution"][key] == ab["execution"][key] + bc["execution"][key]

@@ -8,7 +8,7 @@ export type SnapshotHeader = {
   schema_version: number; project_count: number; incomplete_project_count: number; content_hash: string;
 };
 export type CapturedAction = { id: string; project_id: string; title: string; owner: Identity; due_date: string; status: string; source_type: string; source_code: string | null; created_at: string; updated_at: string; version: number };
-export type Snapshot = SnapshotHeader & { payload: { overview: Overview; projects: ProjectSummary[]; outlooks: Outlook[]; actions: CapturedAction[]; action_counts: { open: number; in_progress: number; overdue: number; completed: number; cancelled: number } } };
+export type Snapshot = SnapshotHeader & { payload: { overview: Overview; projects: ProjectSummary[]; outlooks: Outlook[]; actions: CapturedAction[]; development: { project_id: string; source_id: string; kind: string; label: string; status: string; due_date: string | null; blocking: boolean | null; planned_date: string | null; forecast_date: string | null; actual_date: string | null }[]; action_frontier: { id: string; project_id: string; version: number }[]; action_counts: { open: number; in_progress: number; overdue: number; completed: number; cancelled: number } } };
 export type SnapshotPage = { items: SnapshotHeader[]; total: number; limit: number; offset: number };
 export type Movement = { section: string; metric: string; project_id: string | null; project_code: string | null; currency: string | null; prior_currency: string | null; current_currency: string | null; unit: string; prior: string | null; current: string | null; delta: string | null; prior_availability: string; current_availability: string; comparable: boolean; reason: string | null; basis: string };
 export type Comparison = {

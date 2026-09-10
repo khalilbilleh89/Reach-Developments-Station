@@ -97,6 +97,21 @@ Action mutations change no source tables. One migration adds action/history
 tables, integrity indexes and a history update/delete rejection trigger;
 Outlook and Exceptions gain no persistence.
 
+M3-03 adds `management_reporting` as a prospective historical consumer. Its dedicated
+repeatable-read transaction uses the canonical engine and persists immutable JSONB
+snapshots plus complete project scope in revision `0020_management_reporting`,
+after `0019_management_actions`. Database triggers reject header/scope mutation;
+retained data blocks downgrade. All historical reads require current access to
+every retained project. Comparison and Board Pack financial values come from
+captured payloads, never mutable owner state.
+
+Action capture retains open/in-progress detail, all-status counts, and compact
+per-action ID/project/version frontiers. Terminal detail is omitted. Interval
+execution uses immutable Action history bounded by capture timestamps and the
+captured versions; no live Action or user join occurs during comparison. The
+frontier intentionally remains linear in Action count to preserve transaction
+visibility without a warehouse or a new event infrastructure.
+
 ---
 
 ## 5. Runtime architecture

@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.management_actions.schemas import ReportingAction
+from app.modules.management_actions.schemas import ReportingAction, ReportingFrontier
 from app.modules.portfolio.outlook_schemas import Outlook
 from app.modules.portfolio.schemas import Overview, ProjectSummary, Risk
 
@@ -54,6 +54,7 @@ class Payload(BaseModel):
     projects: list[ProjectSummary]
     outlooks: list[Outlook]
     actions: list[ReportingAction]
+    action_frontier: list[ReportingFrontier]
     action_counts: ActionCounts
     development: list[DevelopmentFact]
 

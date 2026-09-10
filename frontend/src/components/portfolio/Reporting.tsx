@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Badge, Button, ButtonRow, DataToolbar, EmptyState, Field, FormDialog, KeyValue, KeyValueGrid, Notice, PageHeader, TableScroll, Tabs, ToolbarFilter } from "@/components/ui";
+import { Button, ButtonRow, DataToolbar, EmptyState, Field, FormDialog, KeyValue, KeyValueGrid, Notice, PageHeader, TableScroll, ToolbarFilter } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import { reporting } from "@/lib/api/reporting";
 import type { Snapshot, SnapshotHeader } from "@/lib/api/reporting";
@@ -81,10 +81,29 @@ function HistoricalRecord({ snapshot }: { snapshot: Snapshot }) {
   const changes = useAnswer(Boolean(prior) && view === "comparison", () => reporting.compare(prior, snapshot.id), [prior,snapshot.id,view]);
   const pack = useAnswer(view === "board", () => reporting.board(snapshot.id, prior || undefined), [snapshot.id,prior,view]);
   useEffect(() => { heading.current?.focus({preventScroll:true}); }, [snapshot.id, view]);
+  useEffect(() => {
+    if (view !== "board") return;
+    let expanded: HTMLDetailsElement[] = [];
+    const preparePrint = () => {
+      expanded = Array.from(document.querySelectorAll<HTMLDetailsElement>(".reporting-board details:not([open])"));
+      expanded.forEach(section => { section.open = true; });
+    };
+    const restoreScreen = () => {
+      expanded.forEach(section => { section.open = false; });
+      expanded = [];
+    };
+    window.addEventListener("beforeprint", preparePrint);
+    window.addEventListener("afterprint", restoreScreen);
+    return () => {
+      window.removeEventListener("beforeprint", preparePrint);
+      window.removeEventListener("afterprint", restoreScreen);
+      restoreScreen();
+    };
+  }, [view]);
   return <article className={`reporting-record ${view === "board" ? "reporting-board" : ""}`}>
     <div className="reporting-controls"><Link href="/portfolio/?section=reporting">← Reporting register</Link></div>
     <header className="reporting-header"><p className="eyebrow">Reach Developments Station · Immutable snapshot</p><h1 ref={heading} tabIndex={-1}>{view === "board" ? "Board Pack" : snapshot.label ?? "Management snapshot"}</h1>{view === "board" ? <p>{snapshot.label ?? "Management review"}</p> : null}<SnapshotIdentity snapshot={snapshot} /><p className="footnote">Historical system position at capture. Current source records may have changed.</p></header>
-    <div className="reporting-controls stack"><Tabs label="Historical report views" tabs={[{key:"position",label:"Snapshot"},{key:"comparison",label:"Comparison"},{key:"board",label:"Board Pack"}]} active={view} onSelect={v => router.push(reportingHref(snapshot.id,v,prior))} />
+    <div className="reporting-controls stack"><nav className="tabs" aria-label="Historical report views">{[{key:"position",label:"Snapshot"},{key:"comparison",label:"Comparison"},{key:"board",label:"Board Pack"}].map(v => <Link key={v.key} className={`tab ${view === v.key ? "tab-active" : ""}`} aria-current={view === v.key ? "page" : undefined} href={reportingHref(snapshot.id,v.key,prior)}>{v.label}</Link>)}</nav>
       <Field label="Prior snapshot"><select className="input" value={prior} onChange={e => router.push(reportingHref(snapshot.id,view,e.target.value))}><option value="">No comparison selected</option>{prior && candidates.status === "ready" && !candidates.data.items.some(s => s.id===prior) ? <option value={prior}>Selected prior snapshot</option> : null}{candidates.status === "ready" ? candidates.data.items.filter(s=>s.id!==snapshot.id && s.captured_at<snapshot.captured_at).map(s=><option key={s.id} value={s.id}>{eventTime(s.captured_at)} · {s.label ?? "Management snapshot"}</option>) : null}</select></Field>
       {candidates.status === "ready" ? <><ButtonRow><Button small disabled={!offset} onClick={()=>setOffset(offset-20)}>Previous choices</Button><Button small disabled={offset+20>=candidates.data.total} onClick={()=>setOffset(offset+20)}>More choices</Button></ButtonRow>{candidates.data.total===1 ? <Notice tone="info">No earlier governed snapshot exists. Future captures enable comparison.</Notice> : null}</> : <ReadState answer={candidates} label="Reading compatible snapshot choices…" />}
       {view==="board" ? <Button onClick={()=>window.print()}>Print / Save as PDF</Button> : null}

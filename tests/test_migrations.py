@@ -153,12 +153,17 @@ def empty_database(postgres: None) -> None:
     command.downgrade(_alembic_config(), "base")
 
 
-def test_the_history_round_trips_from_empty_to_head_and_back(postgres: None) -> None:
+def test_the_history_round_trips_from_empty_to_head_and_back(empty_database: None) -> None:
     """Given PostgreSQL, when every revision is applied and reversed, then it round-trips."""
     config = _alembic_config()
+    assert _current_revision() is None
 
     command.upgrade(config, "head")
     assert _current_revision() == HEAD_REVISION
+
+    with get_engine().connect() as connection:
+        for table in ("management_report_snapshots", "management_report_snapshot_projects"):
+            assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
 
     command.downgrade(config, "base")
     assert _current_revision() is None
