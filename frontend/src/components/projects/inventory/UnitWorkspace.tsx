@@ -438,7 +438,8 @@ export function UnitWorkspace({
           </Button>
         ) : null}
         {canWriteStructure ? <>
-          <Button disabled={busy} onClick={() => { setActivityOpen(true); setError(null); }}>{unit.is_active ? "Deactivate unit" : "Reactivate unit"}</Button>
+          {unit.is_active && unit.commercial_status !== "unreleased" ? <p className="field-hint" id="deactivate-eligibility">Only unreleased units can be deactivated.</p> : null}
+          <Button aria-describedby="deactivate-eligibility" disabled={busy || (unit.is_active && unit.commercial_status !== "unreleased")} onClick={() => { setActivityOpen(true); setError(null); }}>{unit.is_active ? "Deactivate unit" : "Reactivate unit"}</Button>
           {unit.commercial_status === "unreleased" ? <Button onClick={() => { setMoveFloor(unit.floor_id); setMoving(true); void loadDestinations(); }}>Move unit</Button> : null}
         </> : null}
         </>

@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 
 import { Button } from "./Button";
 import { useOverlay } from "./overlay";
+import { requestFormLeave, UnsavedChangesGuard } from "./UnsavedChangesGuard";
+import { useFormDirty } from "./useFormDirty";
 
 /**
  * Ask for the several things an action needs, rather than the one.
@@ -39,13 +41,15 @@ export function FormDialog({
   onCancel: () => void;
   children: ReactNode;
 }) {
-  const dialog = useOverlay<HTMLFormElement>(onCancel, "input");
+  const dialog = useOverlay<HTMLFormElement>(element => requestFormLeave(element, onCancel), "input");
+  function close() { requestFormLeave(dialog.current, onCancel); }
+  const dirty = useFormDirty(dialog);
 
   return (
     <div
       className="dialog-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onCancel();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <form
@@ -54,16 +58,18 @@ export function FormDialog({
         aria-modal="true"
         aria-label={title}
         ref={dialog}
+        data-draft-boundary
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit();
+          if (!busy && !disabled) onSubmit();
         }}
       >
+        <UnsavedChangesGuard dirty={dirty} busy={busy} form={dialog} />
         <h2 className="dialog-title">{title}</h2>
         {description ? <p className="dialog-description">{description}</p> : null}
-        {children}
+        <fieldset disabled={busy} className="draft-fields">{children}</fieldset>
         <div className="dialog-actions">
-          <Button onClick={onCancel} disabled={busy}>
+          <Button onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button variant="primary" type="submit" disabled={busy || disabled}>

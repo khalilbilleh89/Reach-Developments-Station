@@ -8,6 +8,7 @@ import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
 import { useOverlay } from "./overlay";
 import { TabPanel, Tabs } from "./Tabs";
+import { requestFormLeave } from "./UnsavedChangesGuard";
 
 /** One supporting fact about the record: an area, a balance, a date. */
 export interface DrawerFact {
@@ -85,7 +86,8 @@ export function Drawer({
   inspector?: boolean;
   children: ReactNode;
 }) {
-  const panel = useOverlay<HTMLDivElement>(onClose, "container");
+  const panel = useOverlay<HTMLDivElement>(element => requestFormLeave(element, onClose), "container");
+  function close() { requestFormLeave(panel.current, onClose); }
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -101,7 +103,7 @@ export function Drawer({
     <div
       className="drawer-scrim"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <div
@@ -118,7 +120,7 @@ export function Drawer({
               type="button"
               className="icon-button drawer-back"
               aria-label="Back to the register"
-              onClick={onClose}
+              onClick={close}
             >
               <Icon name="arrow-left" />
             </button>
@@ -137,7 +139,7 @@ export function Drawer({
             ) : null}
             <div className="drawer-head-actions">
               {actions}
-              <Button className="drawer-close-desktop" onClick={onClose}>
+              <Button className="drawer-close-desktop" onClick={close}>
                 Close
               </Button>
             </div>

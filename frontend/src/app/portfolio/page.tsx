@@ -12,7 +12,7 @@ import { Reporting } from "@/components/portfolio/Reporting";
 import { PortfolioOutlook } from "@/components/portfolio/Outlook";
 
 function PortfolioScreen() {
-  const { state } = useSession();
+  const { state, refresh } = useSession();
   const params = useSearchParams();
   const router = useRouter();
   const id = params.get("project");
@@ -20,7 +20,7 @@ function PortfolioScreen() {
   const section = requested === "risks" ? "exceptions" : ["projects", "outlook", "exceptions", "actions", "reporting"].includes(requested ?? "") ? requested! : "overview";
   const projectDetail = Boolean(id) && section === "overview";
   useEffect(() => { if (state.status === "anonymous") router.replace("/login/"); }, [state.status, router]);
-  if (state.status !== "authenticated") return <SessionScreen status={state.status} />;
+  if (state.status !== "authenticated") return <SessionScreen status={state.status} onRetry={() => void refresh()} />;
   if (state.user.must_change_password) return <PasswordGate onChanged={() => router.replace("/login/")} />;
   const allowed = hasAnyRole(roleSet(state.user.roles), PORTFOLIO_READERS);
   const canWrite = hasAnyRole(roleSet(state.user.roles), PROJECT_WRITERS);

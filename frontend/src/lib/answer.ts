@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "./api";
 
@@ -30,33 +30,29 @@ export type Answer<T> =
  * regardless, and a 403 it still returns is reported as a refusal rather than
  * as a fault.
  */
-export function useAnswer<T>(enabled: boolean, load: () => Promise<T>, deps: unknown[]): Answer<T> {
-  const [answer, setAnswer] = useState<Answer<T>>(enabled ? { status: "loading" } : { status: "off" });
+export function useAnswer<T>(enabled: boolean, load: () => Promise<T>, deps: unknown[]): Answer<T> & { retry: () => void } {
+  const [revision, setRevision] = useState(0);
+  const retry = useCallback(() => setRevision(value => value + 1), []);
+  // Identity is compared during render, so new filters never caption old data.
+  const key = JSON.stringify([enabled, ...deps, revision]);
+  const identity = useMemo(() => ({ key }), [key]);
+  const [result, setResult] = useState<{ identity: object; answer: Answer<T> } | null>(null);
   useEffect(() => {
     let live = true;
-    void (async () => {
-      if (!enabled) {
-        await Promise.resolve();
-        if (live) setAnswer({ status: "off" });
-        return;
-      }
-      await Promise.resolve();
-      if (live) setAnswer({ status: "loading" });
+    if (enabled) void (async () => {
       try {
         const data = await load();
-        if (live) setAnswer({ status: "ready", data });
+        if (live) setResult({ identity, answer: { status: "ready", data } });
       } catch (caught) {
-        if (!live) return;
-        setAnswer(toAnswer(caught));
+        if (live) setResult({ identity, answer: toAnswer(caught) });
       }
     })();
-    return () => {
-      live = false;
-    };
-    // The loader is rebuilt on every render; the deps name what actually changes it.
+    return () => { live = false; };
+    // The caller names the request inputs; loader identity is incidental.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, ...deps]);
-  return answer;
+  }, [identity]);
+  const answer: Answer<T> = !enabled ? { status: "off" } : result?.identity === identity ? result.answer : { status: "loading" };
+  return { ...answer, retry };
 }
 
 /** The answer a caught error amounts to: a refusal, or a fault in words. */

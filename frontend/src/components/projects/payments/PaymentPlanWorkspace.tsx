@@ -1,4 +1,5 @@
 "use client";
+import { ValidationSummary } from "@/components/ui/ValidationSummary";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +14,7 @@ import {
   Badge,
   Button,
   ButtonRow,
+  DraftBoundary,
   RecordWorkspace,
   RecordLink,
   useRecordTab,
@@ -153,8 +155,10 @@ export function PaymentPlanWorkspace({
   const [milestones, setMilestones] = useState<MilestoneTriggerOption[] | null>(
     null,
   );
+  const [validationError, setValidationError] = useState<ApiError | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
 
@@ -220,17 +224,23 @@ export function PaymentPlanWorkspace({
     })();
   }, [showing, detail, projectId, planId]);
 
-  const run = async (action: () => Promise<unknown>, done: string) => {
+  const run = async (action: () => Promise<unknown>, done: string, onPersisted?: () => void) => {
+    if (busy) return;
     setBusy(true);
+    setConflict(false);
     setError(null);
+    setValidationError(null);
     setNotice(null);
     try {
       await action();
+      onPersisted?.();
       setNotice(done);
       setShowing(null);
       await load();
       await onChanged();
     } catch (caught) {
+      if (caught instanceof ApiError && caught.fieldErrors.length) setValidationError(caught);
+      setConflict(caught instanceof ApiError && caught.isConflict);
       setError(
         caught instanceof ApiError ? caught.message : "That did not work.",
       );
@@ -244,11 +254,11 @@ export function PaymentPlanWorkspace({
     action: (value: string) => Promise<unknown>,
     done: string,
   ) => {
+    setError(null); setConflict(false);
     setAsk({
       ...prompt,
       run: (value) => {
-        setAsk(null);
-        void run(() => action(value), done);
+        void run(() => action(value), done, () => setAsk(null));
       },
     });
   };
@@ -351,7 +361,7 @@ export function PaymentPlanWorkspace({
   if (error && detail === null) {
     return (
       <RecordWorkspace projectId={projectId} kind="payment-plan" eyebrow="Payment plan" icon="payments" title="Payment plan">
-        <Notice tone="error">{error}</Notice>
+        <Notice tone="error">{error} <Button onClick={() => void load()}>Retry</Button></Notice>
       </RecordWorkspace>
     );
   }
@@ -395,6 +405,14 @@ export function PaymentPlanWorkspace({
   );
   const isHistory = Boolean(version && !isCurrent && !isActive);
   // Only the version in preparation is editable, and only while it is a draft.
+  const scheduleDirty = Boolean(detail.current && (JSON.stringify(rows) !== JSON.stringify(detail.current.installments.map(rowFrom)) || allocationMode !== detail.current.version.allocation_mode || chargeMode !== detail.current.version.charge_allocation_mode));
+  const discardSchedule = () => {
+    if (!detail.current) return;
+    setValidationError(null); setError(null);
+    setRows(detail.current.installments.map(rowFrom));
+    setAllocationMode(detail.current.version.allocation_mode);
+    setChargeMode(detail.current.version.charge_allocation_mode);
+  };
   const isDraft = isCurrent && version?.status === "draft";
   const code = currencyCodeOf(detail.currency_id);
   const sections = [
@@ -444,7 +462,7 @@ export function PaymentPlanWorkspace({
   ];
 
   return (
-    <RecordWorkspace projectId={projectId} kind="payment-plan"
+    <DraftBoundary dirty={scheduleDirty} busy={busy} onDiscard={discardSchedule}><RecordWorkspace projectId={projectId} kind="payment-plan"
       eyebrow="Payment plan" icon="payments"
       title={detail.plan.plan_number}
       subtitle={`${detail.unit_reference} · ${detail.sale_number} · ${detail.client_display_name}`}
@@ -499,7 +517,7 @@ export function PaymentPlanWorkspace({
                 <Button
                   variant={isCurrent ? "primary" : "quiet"}
                   aria-pressed={isCurrent}
-                  onClick={() => setShowing(current.version.id)}
+                  data-leaves-editor onClick={() => setShowing(current.version.id)}
                 >
                   In preparation · v{current.version.version_number} ·{" "}
                   {versionLabel(current.version.status)}
@@ -507,7 +525,7 @@ export function PaymentPlanWorkspace({
                 <Button
                   variant={isActive ? "primary" : "quiet"}
                   aria-pressed={isActive}
-                  onClick={() => setShowing(active.version.id)}
+                  data-leaves-editor onClick={() => setShowing(active.version.id)}
                 >
                   Standing schedule · v{active.version.version_number} · Governs
                   this sale
@@ -530,7 +548,7 @@ export function PaymentPlanWorkspace({
               <button
                 className="button-link"
                 type="button"
-                onClick={() => setShowing(null)}
+                data-leaves-editor onClick={() => setShowing(null)}
               >
                 Back to the current version
               </button>
@@ -724,6 +742,7 @@ export function PaymentPlanWorkspace({
                     }
                   />
                 ) : (
+                  <><ValidationSummary error={validationError} />
                   <ScheduleEditor
                     rows={rows}
                     allocationMode={allocationMode}
@@ -732,7 +751,7 @@ export function PaymentPlanWorkspace({
                     milestones={milestones}
                     onChange={change}
                     onRemove={remove}
-                  />
+                  /></>
                 )}
                 <FormActions>
                   <Button
@@ -759,11 +778,12 @@ export function PaymentPlanWorkspace({
 
           <section>
             <SectionHeader title="What happens next" />
+            {scheduleDirty ? <Notice tone="info">Save schedule changes before submitting for approval.</Notice> : null}
             <ButtonRow>
               {canPrepare && isCurrent && isDraft ? (
                 <Button
                   variant="primary"
-                  disabled={busy || !shownDetail.reconciliation.is_reconciled}
+                  disabled={busy || scheduleDirty || !shownDetail.reconciliation.is_reconciled}
                   onClick={() =>
                     void run(
                       () =>
@@ -1064,7 +1084,7 @@ export function PaymentPlanWorkspace({
                     <Button
                       small
                       variant="quiet"
-                      onClick={() => {
+                      data-leaves-editor onClick={() => {
                         setShowing(entry.id);
                       }}
                     >
@@ -1098,7 +1118,6 @@ export function PaymentPlanWorkspace({
           onSubmit={() => {
             const row = attesting;
             const entered = attestation;
-            setAttesting(null);
             void run(
               () =>
                 paymentPlans.submitManualTrigger(projectId, planId, row.id, {
@@ -1107,9 +1126,11 @@ export function PaymentPlanWorkspace({
                   reason: entered.reason.trim(),
                 }),
               "Attestation submitted for approval.",
+              () => setAttesting(null),
             );
           }}
         >
+          <ValidationSummary error={validationError ?? error} />
           <Field
             label="Event date"
             hint="The day it actually happened. It cannot be in the future."
@@ -1170,7 +1191,6 @@ export function PaymentPlanWorkspace({
           onCancel={() => setRevising(false)}
           onSubmit={() => {
             const entered = revision;
-            setRevising(false);
             void run(
               () =>
                 paymentPlans.createVersion(projectId, planId, {
@@ -1178,9 +1198,11 @@ export function PaymentPlanWorkspace({
                   effective_date: entered.effective_date,
                 }),
               "Revision opened. The current schedule still governs the sale.",
+              () => setRevising(false),
             );
           }}
         >
+          <ValidationSummary error={validationError ?? error} />
           <Field label="Why are the terms changing?">
             <input
               className="input"
@@ -1210,6 +1232,8 @@ export function PaymentPlanWorkspace({
 
       {ask ? (
         <PromptDialog
+          onRefresh={conflict ? () => { if (busy) return; setBusy(true); void load().finally(() => setBusy(false)); } : undefined}
+          error={error}
           title={ask.title}
           label={ask.label}
           hint={ask.hint}
@@ -1219,7 +1243,7 @@ export function PaymentPlanWorkspace({
           onCancel={() => setAsk(null)}
         />
       ) : null}
-    </RecordWorkspace>
+    </RecordWorkspace></DraftBoundary>
   );
 }
 

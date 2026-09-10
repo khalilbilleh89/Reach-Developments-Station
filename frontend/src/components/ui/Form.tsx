@@ -277,7 +277,7 @@ export function StickyActions({
     <div className="sticky-actions">
       {note ? <p className="sticky-actions-note">{note}</p> : null}
       {onCancel ? (
-        <Button onClick={onCancel} disabled={busy}>
+        <Button data-leaves-editor onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
       ) : null}

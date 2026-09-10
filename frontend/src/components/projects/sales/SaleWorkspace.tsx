@@ -16,6 +16,7 @@ import type {
 } from "@/lib/api";
 import { Disclosure,
   Badge,
+  DraftBoundary,
   Button,
   ButtonRow,
   RecordWorkspace,
@@ -494,6 +495,7 @@ export function SaleWorkspace({
   const [ask, setAsk] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adjustment, setAdjustment] = useState({
     adjustment_type: ADJUSTMENT_TYPES[0],
@@ -591,16 +593,20 @@ export function SaleWorkspace({
     return () => { cancelled = true; };
   }, [section, client, projectId]);
 
-  const run = async (action: () => Promise<unknown>, done: string) => {
+  const run = async (action: () => Promise<unknown>, done: string, onPersisted?: () => void) => {
+    if (busy) return;
     setBusy(true);
+    setConflict(false);
     setError(null);
     setNotice(null);
     try {
       await action();
+      onPersisted?.();
       setNotice(done);
       await load();
       await onChanged();
     } catch (caught) {
+      setConflict(caught instanceof ApiError && caught.isConflict);
       setError(caught instanceof ApiError ? caught.message : "That did not work.");
     } finally {
       setBusy(false);
@@ -616,11 +622,11 @@ export function SaleWorkspace({
    * asked about while they answer.
    */
   const askThen = (prompt: Omit<Ask, "run">, action: (reason: string) => Promise<unknown>, done: string) => {
+    setError(null); setConflict(false);
     setAsk({
       ...prompt,
       run: (value) => {
-        setAsk(null);
-        void run(() => action(value), done);
+        void run(() => action(value), done, () => setAsk(null));
       },
     });
   };
@@ -629,7 +635,7 @@ export function SaleWorkspace({
     return (
       <RecordWorkspace projectId={projectId} kind={saleId ? "sale" : "reservation"} eyebrow="Sale workspace"
       icon="sales" title={unitReference ?? "Deal"}>
-        <Notice tone="error">{error}</Notice>
+        <Notice tone="error">{error} <Button onClick={() => void load()}>Retry</Button></Notice>
       </RecordWorkspace>
     );
   }
@@ -1302,7 +1308,7 @@ export function SaleWorkspace({
             </ButtonRow>
 
             {cancelling ? (
-              <SubPanel title="Open a cancellation">
+              <DraftBoundary dirty={cancelForm.initiated_by_party !== "buyer" || Object.entries(cancelForm).some(([key, value]) => key !== "initiated_by_party" && value !== "")} busy={busy} onDiscard={() => { setCancelling(false); setCancelForm({ initiated_by_party: "buyer", reason: "", notice_date: "", cure_deadline: "", forfeiture_amount: "", refund_due_amount: "" }); }}><SubPanel title="Open a cancellation">
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
@@ -1317,10 +1323,8 @@ export function SaleWorkspace({
                           ...(cancelForm.refund_due_amount ? { refund_due_amount: cancelForm.refund_due_amount } : {}),
                         }),
                       "Cancellation opened. The unit stays committed until it completes.",
-                    ).then(() => {
-                      setCancelling(false);
-                      setSection("closure");
-                    });
+                      () => { setCancelling(false); setSection("closure"); },
+                    );
                   }}
                 >
                   <FieldRow columns={2}>
@@ -1385,10 +1389,10 @@ export function SaleWorkspace({
                     <Button variant="primary" type="submit" disabled={busy}>
                       Open cancellation
                     </Button>
-                    <Button onClick={() => setCancelling(false)}>Cancel</Button>
+                    <Button data-leaves-editor onClick={() => setCancelling(false)}>Cancel</Button>
                   </FormActions>
                 </form>
-              </SubPanel>
+              </SubPanel></DraftBoundary>
             ) : null}
           </section>
         </>
@@ -1652,6 +1656,8 @@ export function SaleWorkspace({
 
       {ask ? (
         <PromptDialog
+          onRefresh={conflict ? () => { if (busy) return; setBusy(true); void load().finally(() => setBusy(false)); } : undefined}
+          error={error}
           title={ask.title}
           label={ask.label}
           hint={ask.hint}

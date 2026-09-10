@@ -137,11 +137,11 @@ export function ClientsPanel({
       actions={
         <>
           {canWrite ? (
-            <Button variant="primary" small onClick={() => setRegistering((open) => !open)}>
+            <Button variant="primary" small data-leaves-editor={registering || undefined} onClick={() => setRegistering(!registering)}>
               {registering ? "Cancel" : "Register a buyer"}
             </Button>
           ) : null}
-          <Button variant="quiet" small onClick={onClose}>
+          <Button variant="quiet" small data-leaves-editor onClick={onClose}>
             Close
           </Button>
         </>

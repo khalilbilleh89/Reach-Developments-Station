@@ -10,10 +10,12 @@
 const API_ROOT = "/api/v1";
 
 /** An error carrying the status and the API's `{ detail }` message. */
+export type FieldError = { path: (string | number)[]; message: string };
+
 export class ApiError extends Error {
   readonly status: number;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, readonly fieldErrors: FieldError[] = []) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -46,6 +48,7 @@ type Json = Record<string, unknown> | unknown[];
  */
 async function toApiError(response: Response): Promise<ApiError> {
   let detail = `Request failed (${response.status}).`;
+  const fieldErrors: FieldError[] = [];
   try {
     const body = (await response.json()) as { detail?: unknown };
     if (typeof body.detail === "string") {
@@ -54,7 +57,10 @@ async function toApiError(response: Response): Promise<ApiError> {
       const messages = body.detail
         .map((item) => {
           const entry = item as { loc?: unknown[]; msg?: string };
-          const field = Array.isArray(entry.loc) ? entry.loc.slice(1).join(".") : "";
+          const path = Array.isArray(entry.loc) ? entry.loc.filter((part): part is string | number => typeof part === "string" || typeof part === "number") : [];
+          if (["body", "query", "path"].includes(String(path[0]))) path.shift();
+          fieldErrors.push({ path, message: entry.msg ?? "Invalid value." });
+          const field = path.join(".");
           return field ? `${field}: ${entry.msg ?? ""}` : (entry.msg ?? "");
         })
         .filter(Boolean);
@@ -63,7 +69,7 @@ async function toApiError(response: Response): Promise<ApiError> {
   } catch {
     // A non-JSON body (a proxy error page, say) leaves the default message.
   }
-  return new ApiError(response.status, detail);
+  return new ApiError(response.status, detail, fieldErrors);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

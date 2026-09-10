@@ -1,9 +1,10 @@
 "use client";
+import { ValidationSummary } from "@/components/ui/ValidationSummary";
 
 import { useEffect, useState } from "react";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesClient } from "@/lib/api";
-import { Button, Field, FieldRow, FormActions, Loading, MoneyInput, Notice, SubPanel } from "@/components/ui";
+import { DraftBoundary, Button, Field, FieldRow, FormActions, Loading, MoneyInput, Notice, SubPanel } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { useCurrencyCode } from "@/lib/currency";
 import { todayISO } from "@/lib/format";
@@ -17,7 +18,7 @@ export function ReservationForm({ projectId, unitId, currencyId, onCreated, onCa
   const [addedBuyer, setAddedBuyer] = useState<SalesClient | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | ApiError | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ client_id: "", expires_on: "", price_locked_until: "", deposit_required_amount: "", sales_channel_code: "", sales_branch_code: "" });
   const currencyCodeOf = useCurrencyCode();
@@ -25,15 +26,15 @@ export function ReservationForm({ projectId, unitId, currencyId, onCreated, onCa
     let active = true;
     void sales.clients(projectId, { is_active: "true", ...(search.trim() ? { search: search.trim() } : {}) }).then((rows) => {
       if (active) { setBuyers(rows); setError(null); }
-    }).catch((caught) => { if (active) { setBuyers([]); setError(caught instanceof ApiError ? caught.message : "Could not load buyers."); } });
+    }).catch((caught) => { if (active) { setBuyers([]); setError(caught instanceof ApiError ? caught : "Could not load buyers."); } });
     return () => { active = false; };
   }, [projectId, search]);
   const options = addedBuyer && !buyers?.some((buyer) => buyer.id === addedBuyer.id)
     ? [addedBuyer, ...(buyers ?? [])] : (buyers ?? []);
-  if (adding) return <SubPanel title="Add a buyer"><BuyerForm projectId={projectId} onCancel={() => setAdding(false)} onSaved={(buyer) => {
+  const dirty = Object.values(form).some(value => value !== "");
+  return <DraftBoundary dirty={dirty} busy={busy}>{adding ? <SubPanel title="Add a buyer"><BuyerForm projectId={projectId} onCancel={() => setAdding(false)} onSaved={(buyer) => {
     setAddedBuyer(buyer); setForm({ ...form, client_id: buyer.id }); setAdding(false);
-  }} /></SubPanel>;
-  return <form onSubmit={async (event) => {
+  }} /></SubPanel> : <form onSubmit={async (event) => {
     event.preventDefault(); if (busy) return; setBusy(true); setError(null);
     try {
       const result = await sales.createReservation(projectId, {
@@ -43,27 +44,27 @@ export function ReservationForm({ projectId, unitId, currencyId, onCreated, onCa
         ...(form.sales_branch_code ? { sales_branch_code: form.sales_branch_code } : {}),
       });
       onCreated(result.reservation.id);
-    } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not prepare the reservation."); }
+    } catch (caught) { setError(caught instanceof ApiError ? caught : "Could not prepare the reservation."); }
     finally { setBusy(false); }
   }}>
     <Notice tone="info">Prepare the reservation, then review and activate it to reserve this unit. Saving a draft leaves the unit available.</Notice>
-    {error ? <Notice tone="error">{error}</Notice> : null}
+    <ValidationSummary error={error} />
     {buyers === null ? <Loading label="Loading buyers…" /> : <>
       <FieldRow columns={2}>
         <Field label="Find buyer"><input className="input" type="search" value={search} onChange={(e) => { setSearch(e.target.value); setAddedBuyer(null); setForm({ ...form, client_id: "" }); }} placeholder="Name or client number" /></Field>
-        <Field label="Buyer"><select className="input" required value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">Choose a buyer</option>{options.map((b) => <option key={b.id} value={b.id}>{b.client_number} · {b.display_name}</option>)}</select></Field>
+        <Field label="Buyer"><select className="input" required name="client_id" value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">Choose a buyer</option>{options.map((b) => <option key={b.id} value={b.id}>{b.client_number} · {b.display_name}</option>)}</select></Field>
       </FieldRow>
       <Button disabled={busy} onClick={() => setAdding(true)}>Add new buyer</Button>
       <FieldRow columns={3}>
-        <Field label="Reservation expires"><input className="input" type="date" required min={todayISO()} value={form.expires_on} onChange={(e) => setForm({ ...form, expires_on: e.target.value })} /></Field>
-        <Field label="Price locked until"><input className="input" type="date" required min={todayISO()} value={form.price_locked_until} onChange={(e) => setForm({ ...form, price_locked_until: e.target.value })} /></Field>
-        <Field label="Deposit required" optional hint="An activation gate; receipts are recorded in Collections."><MoneyInput code={currencyCodeOf(currencyId)} value={form.deposit_required_amount} onChange={(value) => setForm({ ...form, deposit_required_amount: value })} /></Field>
+        <Field label="Reservation expires"><input className="input" type="date" required min={todayISO()} name="expires_on" value={form.expires_on} onChange={(e) => setForm({ ...form, expires_on: e.target.value })} /></Field>
+        <Field label="Price locked until"><input className="input" type="date" required min={todayISO()} name="price_locked_until" value={form.price_locked_until} onChange={(e) => setForm({ ...form, price_locked_until: e.target.value })} /></Field>
+        <Field label="Deposit required" optional hint="An activation gate; receipts are recorded in Collections."><MoneyInput code={currencyCodeOf(currencyId)} name="deposit_required_amount" value={form.deposit_required_amount} onChange={(value) => setForm({ ...form, deposit_required_amount: value })} /></Field>
       </FieldRow>
       <FieldRow columns={2}>
-        <Field label="Sales channel" optional><input className="input" value={form.sales_channel_code} onChange={(e) => setForm({ ...form, sales_channel_code: e.target.value })} /></Field>
-        <Field label="Sales branch" optional><input className="input" value={form.sales_branch_code} onChange={(e) => setForm({ ...form, sales_branch_code: e.target.value })} /></Field>
+        <Field label="Sales channel" optional><input className="input" name="sales_channel_code" value={form.sales_channel_code} onChange={(e) => setForm({ ...form, sales_channel_code: e.target.value })} /></Field>
+        <Field label="Sales branch" optional><input className="input" name="sales_branch_code" value={form.sales_branch_code} onChange={(e) => setForm({ ...form, sales_branch_code: e.target.value })} /></Field>
       </FieldRow>
     </>}
-    <FormActions><Button type="submit" variant="primary" disabled={busy || !form.client_id}>Prepare reservation</Button><Button disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
-  </form>;
+    <FormActions><Button type="submit" variant="primary" disabled={busy || !form.client_id}>Prepare reservation</Button><Button disabled={busy} data-leaves-editor onClick={onCancel}>Cancel</Button></FormActions>
+  </form>}</DraftBoundary>;
 }

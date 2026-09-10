@@ -2123,6 +2123,13 @@ input[type="file"].input {
   max-width: 9rem;
 }
 
+.draft-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
 .fieldset {
   min-width: 0;
   margin: 0 0 var(--space-3);
