@@ -34,6 +34,8 @@ export function AccessTab({ projectId }: { projectId: string }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [chosen, setChosen] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [directoryError, setDirectoryError] = useState(false);
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scopeFor, setScopeFor] = useState<ProjectAccess | null>(null);
@@ -60,10 +62,11 @@ export function AccessTab({ projectId }: { projectId: string }) {
       // role list only labels the register, so one failing must not take the
       // other with it. The roles fall back to their keys.
       const [page, roleList] = await Promise.allSettled([users.list(), users.roles()]);
+      setDirectoryError(page.status === "rejected");
       if (page.status === "fulfilled") setCandidates(page.value.items.filter((user) => user.is_active));
       if (roleList.status === "fulfilled") setRoles(roleList.value);
     })();
-  }, []);
+  }, [directoryRevision]);
 
   const roleLabel = (key: string) => roles.find((role) => role.key === key)?.label ?? key;
 
@@ -84,7 +87,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
 
   const grant = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!chosen) return;
+    if (!chosen || directoryError) return;
     await act(chosen, true);
     setChosen("");
   };
@@ -97,6 +100,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
+        {directoryError ? <><Notice tone="error">Could not load the user directory.</Notice><Button onClick={() => setDirectoryRevision(v => v + 1)}>Retry users</Button></> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         <Card>
@@ -113,7 +117,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
                   ))}
               </select>
             </Field>
-            <Button variant="primary" type="submit" disabled={busy || !chosen}>
+            <Button variant="primary" type="submit" disabled={busy || !chosen || directoryError}>
               Grant access
             </Button>
           </form>

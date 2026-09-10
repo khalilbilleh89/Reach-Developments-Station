@@ -18,6 +18,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel,
+  cancelLabel = "Keep it",
   tone = "danger",
   busy,
   onConfirm,
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   title: string;
   body: string;
   confirmLabel: string;
+  cancelLabel?: string;
   tone?: "danger" | "primary";
   busy?: boolean;
   onConfirm: () => void;
@@ -45,7 +47,7 @@ export function ConfirmDialog({
         <p className="dialog-body">{body}</p>
         <div className="dialog-actions">
           <Button onClick={onCancel} disabled={busy}>
-            Keep it
+            {cancelLabel}
           </Button>
           <Button
             variant={tone === "danger" ? "danger" : "primary"}

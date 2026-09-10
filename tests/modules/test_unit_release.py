@@ -51,6 +51,30 @@ def test_completeness_rises_as_facts_are_recorded(
     assert after["missing_requirements"] == []
 
 
+def test_unit_without_type_can_be_complete_and_released(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    response = admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}", json={"unit_type_code": None}
+    )
+    assert response.status_code == 200
+    make_releasable(admin_client, project_id, unit_id, area_types, db)
+    body = _unit(admin_client, project_id, unit_id)
+    assert body["unit_type_code"] is None
+    assert body["is_complete"] is True
+    assert body["missing_requirements"] == []
+    assert body["release_eligible"] is True
+    response = admin_client.post(
+        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
+        json={"to_status": "available", "effective_date": "2026-02-01"},
+    )
+    assert response.status_code == 201, response.text
+
+
 def test_a_new_required_area_type_makes_a_complete_unit_incomplete_again(
     admin_client: TestClient, project_id: str, unit_id: str, area_types: dict[str, str]
 ) -> None:
@@ -199,7 +223,10 @@ def test_an_inactive_unit_is_never_releasable(
     db: Session,
 ) -> None:
     make_releasable(admin_client, project_id, unit_id, area_types, db)
-    admin_client.patch(f"{inventory_url(project_id)}/units/{unit_id}", json={"is_active": False})
+    admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}",
+        json={"is_active": False, "activity_reason": "Removed from active inventory"},
+    )
 
     assert "Unit is not active" in _unit(admin_client, project_id, unit_id)["release_blockers"]
 

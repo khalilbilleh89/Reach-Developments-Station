@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "Retry hierarchy",
+    "Retry document choices",
+    "Retry users",
+    "Move unit and restore original floor",
+    "Named consultant termination confirmation; cancel preserves active agreement",
+    "Commission URL, reload and browser Back",
+    "Payment-plan contract lookup retry"
+  ],
+  "errors": []
+}

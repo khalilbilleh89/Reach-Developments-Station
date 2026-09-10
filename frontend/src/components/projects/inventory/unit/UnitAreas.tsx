@@ -49,7 +49,7 @@ export function UnitAreas({
         />
         <KeyValueGrid columns={3}>
           <KeyValue label="Unit number" mono value={unit.unit_number} />
-          <KeyValue label="Type" value={`${unit.unit_type_code ?? "—"} · ${unit.asset_class}`} />
+          <KeyValue label="Asset class" value={unit.asset_class} />
           <KeyValue
             label="Bedrooms / bathrooms"
             value={`${unit.bedrooms ?? "—"} / ${unit.bathrooms ?? "—"}`}

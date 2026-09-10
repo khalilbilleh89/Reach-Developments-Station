@@ -237,6 +237,7 @@ class UnitUpdateRequest(_UnitFacts):
     sequence: int | None = Field(default=None, ge=0)
     asset_class: AssetClass | None = None
     is_active: bool | None = None
+    activity_reason: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class ReleaseControlsRequest(StrictRequest):

@@ -274,6 +274,44 @@ def _actor(admin: User) -> ActorContext:
     )
 
 
+def test_deactivation_rechecks_a_commercial_commitment_after_waiting(
+    admin: User, admin_client: TestClient, project_id: str, unit_id: str, db: Session
+) -> None:
+    actor = _actor(admin)
+    holder = get_session_factory()()
+    locked = holder.scalars(
+        select(Unit).where(Unit.id == uuid.UUID(unit_id)).with_for_update()
+    ).one()
+
+    def deactivate(session: Session) -> object:
+        project = session.get(Project, uuid.UUID(project_id))
+        unit = session.get(Unit, uuid.UUID(unit_id))
+        return service.update_unit(
+            session,
+            project=project,
+            unit=unit,
+            actor=actor,
+            is_active=False,
+            activity_reason="Inventory correction",
+        )
+
+    thread, outcome = _run(deactivate)
+    try:
+        blocked = _wait_until_a_backend_blocks()
+        locked.commercial_status = "reserved"
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+    assert blocked
+    assert not thread.is_alive()
+    assert isinstance(outcome[0], ConflictError), outcome
+    db.expire_all()
+    unit = db.get(Unit, uuid.UUID(unit_id))
+    assert unit.is_active is True
+    assert unit.commercial_status == "reserved"
+
+
 def test_an_import_cannot_move_a_unit_a_hold_has_already_claimed(
     admin: User,
     admin_client: TestClient,

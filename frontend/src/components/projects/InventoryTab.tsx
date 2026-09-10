@@ -1,5 +1,7 @@
 "use client";
 
+import { RegisterPagination } from "@/components/ui";
+
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -83,21 +85,29 @@ export function InventoryTab({
   canWriteStructure: boolean;
   canConfigure: boolean;
 }) {
+  const [pageFields, setPageFields] = useRegisterFields({offset: ""});
+  const parsedOffset = Number(pageFields.offset);
+  const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
+  const setOffset = (value: number) => setPageFields({offset: String(value)});
+  const [pageTotal, setPageTotal] = useState(0);
   const [register, setRegister] = useState<UnitRegister | null>(null);
   useRegisterRestore(register !== null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
-  const [filters, setFilters] = useRegisterFields({
+  const [filters, updateFilters] = useRegisterFields({
     phase_id: "",
     building_id: "",
     floor_id: "",
     commercial_status: "",
+    is_active: "",
     search: "",
   });
+  const setFilters = (changes: Partial<typeof filters>) => { updateFilters(changes); setPageFields({offset: ""}); };
   const [open, setOpen] = useState<"none" | "areas" | "import">("none");
   const [error, setError] = useState<string | null>(null);
+  const [hierarchyError, setHierarchyError] = useState<string | null>(null);
   // The unit is the record this business runs on, so it stays the view an
   // operator lands on. The other three are beside it and equally first-class,
   // which is the whole correction: they are no longer hidden inside a dialog
@@ -116,21 +126,24 @@ export function InventoryTab({
   const loadRegister = useCallback(async () => {
     const ticket = latestRequest.current + 1;
     latestRequest.current = ticket;
+    setRegister(null);
+    setError(null);
     try {
-      const query: Record<string, string> = { limit: PAGE };
+      const query: Record<string, string> = { limit: PAGE, offset: String(offset) };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
       const result = await inventory.units(projectId, query);
       if (ticket !== latestRequest.current) return;
       setRegister(result);
+      setPageTotal(result.total);
       setError(null);
     } catch (caught) {
       if (ticket !== latestRequest.current) return;
-      setRegister({ units: [], total: 0, available_count: 0, held_count: 0, unreleased_count: 0 });
+      setRegister(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load the inventory.");
     }
-  }, [projectId, filters]);
+  }, [projectId, filters, offset]);
 
   const loadHierarchy = useCallback(async () => {
     try {
@@ -144,8 +157,9 @@ export function InventoryTab({
       setBuildings(buildingList);
       setFloors(floorList);
       setAreaTypes(areaTypeList);
+      setHierarchyError(null);
     } catch {
-      // The filters degrade to "all"; the register itself still loads.
+      setHierarchyError("Could not load phases, buildings, floors or area types. Creation and hierarchy choices are unavailable until retried.");
     }
   }, [projectId]);
 
@@ -196,6 +210,7 @@ export function InventoryTab({
   //: already chose, and drawn only from what the server returned for them —
   //: a forbidden phase is absent from `floors`, never fetched and hidden.
   const floorsForNewUnit = floors.filter((floor) => {
+    if (!floor.is_active || !buildings.some(b => b.id === floor.building_id && b.is_active && phases.some(p => p.id === b.phase_id && p.is_active))) return false;
     if (filters.building_id) return floor.building_id === filters.building_id;
     if (filters.phase_id) {
       return buildings.some(
@@ -251,6 +266,7 @@ export function InventoryTab({
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
+        {hierarchyError ? <><Notice tone="error">{hierarchyError}</Notice><Button onClick={() => void loadHierarchy()}>Retry hierarchy</Button></> : null}
 
         {open === "areas" ? (
           <Card
@@ -380,14 +396,14 @@ export function InventoryTab({
           count={register ? { shown: register.units.length, total: register.total, noun: "unit" } : undefined}
           actions={
             canWriteStructure ? (
-              <Button variant="primary" onClick={() => setAddingUnit(true)}>
+              <Button variant="primary" disabled={!!hierarchyError} onClick={() => setAddingUnit(true)}>
                 Add unit
               </Button>
             ) : undefined
           }
           onReset={
             filtered
-              ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", commercial_status: "", search: "" })
+              ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", commercial_status: "", is_active: "", search: "" })
               : undefined
           }
         >
@@ -435,6 +451,7 @@ export function InventoryTab({
               ))}
             </select>
           </ToolbarFilter>
+          <ToolbarFilter label="Activity" active={filters.is_active !== ""}><select className="input" value={filters.is_active} onChange={e => setFilters({...filters, is_active: e.target.value})}><option value="">Active and inactive</option><option value="true">Active only</option><option value="false">Inactive only</option></select></ToolbarFilter>
           <ToolbarFilter label="Commercial status" active={filters.commercial_status !== ""}>
             <select
               className="input"
@@ -455,7 +472,7 @@ export function InventoryTab({
 
         <Card flush>
           {register === null ? (
-            <Loading label="Loading inventory…" shape="rows" rows={8} />
+            error ? <Button onClick={() => void loadRegister()}>Retry inventory</Button> : <Loading label="Loading inventory…" shape="rows" rows={8} />
           ) : register.units.length === 0 ? (
             <div className="card-body">
               <EmptyState
@@ -496,12 +513,13 @@ export function InventoryTab({
                             icon="inventory"
                             name={unit.unit_reference}
                             meta={
-                              [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]
+                              [unit.asset_class, unit.bedrooms === null ? null : `${unit.bedrooms} bed`]
                                 .filter(Boolean)
                                 .join(" · ") || unit.asset_class
                             }
                           />
                         </RecordLink>
+                        {!unit.is_active ? <Badge tone="neutral">Inactive</Badge> : null}
                       </th>
                       <td>
                         <PlaceCell
@@ -556,15 +574,11 @@ export function InventoryTab({
                   ))}
                 </tbody>
               </TableScroll>
-              {register.total > register.units.length ? (
-                <p className="table-foot">
-                  Showing the first {register.units.length} of {register.total} units. Narrow the filter to
-                  reach the rest.
-                </p>
-              ) : null}
+
             </>
           )}
         </Card>
+        {pageTotal > 0 || register ? <RegisterPagination offset={offset} total={pageTotal} busy={!register} onChange={setOffset} /> : null}
         </>
         ) : null}
         </TabPanel>
@@ -574,6 +588,8 @@ export function InventoryTab({
         <UnitForm
           projectId={projectId}
           floors={floorsForNewUnit}
+          buildings={buildings}
+          phases={phases}
           defaultFloorId={filters.floor_id}
           onCancel={() => setAddingUnit(false)}
           onSaved={async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Badge,
@@ -590,16 +590,22 @@ function Versions({
   const [open, setOpen] = useState<string | null>(versions[0]?.id ?? null);
   const [detail, setDetail] = useState<AllocationVersionDetail | null>(null);
   const [preview, setPreview] = useState<CalculationPreview | null>(null);
+  const detailRequest = useRef(0);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [addingPool, setAddingPool] = useState(false);
   const [rejecting, setRejecting] = useState<string | null>(null);
 
   const loadDetail = useCallback(async () => {
+    const ticket = ++detailRequest.current;
     if (open === null) {
       setDetail(null);
       return;
     }
-    setDetail(await unitEconomics.version(projectId, open));
+    setDetail(null);
+    setDetailError(null);
+    try { const result = await unitEconomics.version(projectId, open); if (ticket === detailRequest.current) setDetail(result); }
+    catch (caught) { if (ticket === detailRequest.current) setDetailError(caught instanceof ApiError ? caught.message : "Could not load this cost basis."); }
   }, [projectId, open]);
 
   useEffect(() => {
@@ -612,6 +618,7 @@ function Versions({
 
   return (
     <div className="grid-12">
+      {detailError ? <div className="span-12"><Notice tone="error">{detailError}</Notice><Button onClick={() => void loadDetail()}>Retry cost basis</Button></div> : null}
       <div className="span-4">
         <Card
           title="Versions"
@@ -698,7 +705,7 @@ function Versions({
               after(() => unitEconomics.removePool(projectId, detail.version.id, poolId), "Pool removed from the draft.")
             }
           />
-        ) : versions.length > 0 ? (
+        ) : versions.length > 0 && !detailError ? (
           <Card>
             <Loading label="Loading the version…" shape="metrics" />
           </Card>
@@ -1046,6 +1053,8 @@ function NewPoolDialog({
   const [category, setCategory] = useState<PoolCategory>("hard");
   const [amount, setAmount] = useState("0.00");
   const [scope, setScope] = useState<PoolScope>("project");
+  const [poolLookupError, setPoolLookupError] = useState(false);
+  const [poolLookupRevision, setPoolLookupRevision] = useState(0);
   const [phaseId, setPhaseId] = useState("");
   const [buildingId, setBuildingId] = useState("");
   const [method, setMethod] = useState<AllocationMethod>("unit_count");
@@ -1068,12 +1077,12 @@ function NewPoolDialog({
         setPhases(nextPhases);
         setBuildings(nextBuildings);
         setAreaTypes(nextAreaTypes);
+        setPoolLookupError(false);
       } catch {
-        // The pickers stay empty and the scope stays project-wide. A failed
-        // lookup must not stop somebody adding an ordinary pool.
+        setPoolLookupError(true);
       }
     })();
-  }, [projectId]);
+  }, [projectId, poolLookupRevision]);
 
   // Land is the register's figure, always. There is no second land number to
   // type, and a project-wide scope is the only defensible one without a
@@ -1089,7 +1098,7 @@ function NewPoolDialog({
       confirmLabel="Add pool"
       busy={busy}
       disabled={
-        poolNumber.trim().length === 0 ||
+        poolLookupError || poolNumber.trim().length === 0 ||
         name.trim().length === 0 ||
         (scopeKind === "phase" && phaseId === "") ||
         (scopeKind === "building" && buildingId === "") ||
@@ -1111,6 +1120,7 @@ function NewPoolDialog({
         })
       }
     >
+      {poolLookupError ? <><Notice tone="error">Allocation choices could not be loaded.</Notice><Button onClick={() => setPoolLookupRevision(v => v + 1)}>Retry allocation choices</Button></> : null}
       <FieldRow columns={2}>
         <Field label="Reference">
           <input className="input" value={poolNumber} onChange={(event) => setPoolNumber(event.target.value)} placeholder="HARD-01" required />

@@ -1,0 +1,11 @@
+{
+  "results": [
+    "Activity reason, deactivate and reactivate",
+    "Dirty editor stay/discard",
+    "Failed inventory suppresses zero position and retries",
+    "201-row pagination, refresh and previous",
+    "Cashflow widths 1600/1440/1280/1024/768/390",
+    "Failed expense preserves entered data"
+  ],
+  "errors": []
+}

@@ -69,7 +69,7 @@ export function UnitSummary({
       <section className="record-section record-standing">
         <SectionHeader title="Property profile" actions={<Button small onClick={() => onOpenTab("detail")}>Physical record</Button>} />
         <KeyValueGrid columns={3}>
-          <KeyValue label="Property" value={[unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bedrooms`, unit.bathrooms === null ? null : `${unit.bathrooms} bathrooms`].filter(Boolean).join(" · ") || unit.asset_class} />
+          <KeyValue label="Property" value={[unit.asset_class, unit.bedrooms === null ? null : `${unit.bedrooms} bedrooms`, unit.bathrooms === null ? null : `${unit.bathrooms} bathrooms`].filter(Boolean).join(" · ") || unit.asset_class} />
           <KeyValue label="Location" value={[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" → ") || "Not recorded"} />
           {unit.view_class_code || unit.orientation_code ? <KeyValue label="View / orientation" value={[unit.view_class_code, unit.orientation_code].filter(Boolean).join(" · ")} /> : null}
           <KeyValue label="Parking / storage" value={`${unit.parking_count} parking · ${unit.storage_count} storage`} />

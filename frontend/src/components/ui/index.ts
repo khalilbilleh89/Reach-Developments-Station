@@ -75,3 +75,6 @@ export type { AttentionEntry } from "./Attention";
 export { CountComposition, CountSeries } from "./CountVisuals";
 export { RecordWorkspace, RecordLink, useRecordTab } from "./RecordWorkspace";
 export type { WorkspaceFact, WorkspaceHeadline } from "./RecordWorkspace";
+
+export { RegisterPagination } from "./RegisterPagination";
+export { UnsavedChangesGuard } from "./UnsavedChangesGuard";

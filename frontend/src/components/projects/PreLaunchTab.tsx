@@ -85,6 +85,8 @@ export function PreLaunchTab({
     setError(null);
     try {
       await action();
+      setAdding(false);
+      setReversing(null);
       await load();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "That action could not be completed.");
@@ -132,13 +134,13 @@ export function PreLaunchTab({
           </TableScroll>
         )}
       </Card>
-      {adding ? <ExpenseDialog currencyId={currencyId} currencyCode={currencyCode} busy={busy} onCancel={() => setAdding(false)} onSubmit={(body) => { setAdding(false); void run(() => prelaunch.record(projectId, body)); }} /> : null}
-      {reversing ? <PromptDialog title="Reverse this expense" label="Reason" hint="The original remains in history and is removed from current actual cash." confirmLabel="Reverse" busy={busy} onCancel={() => setReversing(null)} onSubmit={(reason) => { const id = reversing; setReversing(null); void run(() => prelaunch.reverse(projectId, id, reason)); }} /> : null}
+      {adding ? <ExpenseDialog currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}
+      {reversing ? <PromptDialog title="Reverse this expense" label="Reason" hint="The original remains in history and is removed from current actual cash." confirmLabel="Reverse" busy={busy} error={error} onCancel={() => { if (!busy) setReversing(null); }} onSubmit={(reason) => { void run(() => prelaunch.reverse(projectId, reversing, reason)); }} /> : null}
     </div>
   );
 }
 
-function ExpenseDialog({ currencyId, currencyCode, busy, onCancel, onSubmit }: { currencyId: string; currencyCode: string | null; busy: boolean; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
+function ExpenseDialog({ currencyId, currencyCode, busy, error, onCancel, onSubmit }: { currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
   const [category, setCategory] = useState("permits");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -147,6 +149,7 @@ function ExpenseDialog({ currencyId, currencyCode, busy, onCancel, onSubmit }: {
   const [reference, setReference] = useState("");
   const [evidence, setEvidence] = useState("");
   return <FormDialog title="Add Pre-Launch expense" description="This records an entry. It is not cash until another authorised user confirms it." confirmLabel="Record expense" busy={busy} disabled={!description || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, currency_id: currencyId, counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
+    {error ? <Notice tone="error">{error}</Notice> : null}
     <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
     </FormSection><FormSection title="Payment and evidence"><FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>

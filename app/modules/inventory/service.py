@@ -1034,6 +1034,7 @@ def update_unit(
     project: Project,
     unit: Unit,
     actor: ActorContext,
+    activity_reason: str | None = None,
     **changes: object,
 ) -> Unit:
     """Change a unit's physical and classification facts.
@@ -1046,6 +1047,22 @@ def update_unit(
     updates = resolve_updates(changes, fields=_UNIT_UPDATABLE, clearable=_UNIT_CLEARABLE)
     project = lock_project(session, project.id)
     unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
+
+    activity_changed = "is_active" in updates and updates["is_active"] != unit.is_active
+    if activity_changed:
+        if not activity_reason or not activity_reason.strip():
+            raise ValidationError("Give a reason for deactivating or reactivating this unit.")
+        if updates["is_active"] is False and unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
+            raise ConflictError(
+                "Only an unreleased unit can be deactivated. Resolve any reservation or sale "
+                "through Sales, then return the unit to unreleased first."
+            )
+        if updates["is_active"] is True:
+            floor = get_floor(session, project_id=project.id, floor_id=unit.floor_id)
+            building = session.get(Building, floor.building_id)
+            phase = phase_of_floor(session, floor)
+            if not (floor.is_active and building and building.is_active and phase.is_active):
+                raise ConflictError("Reactivate the unit's phase, building and floor first.")
 
     if "floor_id" in updates and updates["floor_id"] != unit.floor_id:
         if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
@@ -1080,18 +1097,23 @@ def update_unit(
     )
     for field, value in updates.items():
         setattr(unit, field, value)
-    if priced_change:
+    if priced_change or activity_changed:
         invalidate_pricing(session, unit=unit)
     _flush(session)
     record_event(
         session,
-        action="unit.updated",
+        action=("unit.reactivated" if unit.is_active else "unit.deactivated")
+        if activity_changed
+        else "unit.updated",
         entity_type=ENTITY_UNIT,
         entity_id=unit.id,
         correlation_id=actor.correlation_id,
         actor_user_id=actor.user_id,
         before=before,
-        after=_snapshot(unit, _UNIT_FIELDS),
+        after={
+            **_snapshot(unit, _UNIT_FIELDS),
+            **({"activity_reason": activity_reason.strip()} if activity_changed else {}),
+        },
     )
     session.commit()
     session.refresh(unit)
@@ -2218,7 +2240,6 @@ def completeness_checks(
     checks: list[tuple[str, bool]] = [
         ("Hierarchy is active", hierarchy_live),
         ("Unit reference", bool(unit.unit_reference)),
-        ("Unit type", unit.unit_type_code is not None),
         (
             "Bedrooms",
             unit.bedrooms is not None or unit.asset_class == "commercial",

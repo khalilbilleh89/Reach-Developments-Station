@@ -75,6 +75,7 @@ export function PaymentPlansTab({
   const setStatus = (status: string) => setFilters({ status });
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [contractsError, setContractsError] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
@@ -94,9 +95,11 @@ export function PaymentPlansTab({
     try {
       if (!hasAnyRole(roles, SALES_READERS)) return;
       const contracts = await sales.contracts(projectId, {});
+      setContractsError(false);
       setSchedulable(contracts.filter((sale) => ["signature_pending", "active"].includes(sale.status)));
     } catch {
       setSchedulable([]);
+      setContractsError(true);
     }
   }, [projectId, roles]);
 
@@ -174,6 +177,7 @@ export function PaymentPlansTab({
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
+        {contractsError ? <><Notice tone="error">Eligible contracts could not be loaded. The absence of schedule actions does not mean every contract is scheduled.</Notice><Button onClick={() => void load()}>Retry contracts</Button></> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {/* Scheduling, governed. Every figure counts plans and instalments, not
