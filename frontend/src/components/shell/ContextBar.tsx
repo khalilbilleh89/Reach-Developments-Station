@@ -9,6 +9,8 @@ export interface Crumb {
   label: string;
   /** Absent on the current place, which is text rather than a link. */
   href?: string;
+  /** Keep the active project visible when the navigation rail is hidden. */
+  project?: boolean;
 }
 
 /**
@@ -54,11 +56,11 @@ export function ContextBar({
         <Icon name="panel-left" />
       </button>
       <nav aria-label="Breadcrumb">
-        <ol className="crumbs">
+        <ol className={`crumbs${crumbs.some(crumb => crumb.project) ? " crumbs-project" : ""}`}>
           {crumbs.map((crumb, index) => {
             const last = index === crumbs.length - 1;
             return (
-              <li key={`${crumb.label}-${index}`}>
+              <li key={`${crumb.label}-${index}`} className={crumb.project ? "crumb-project" : undefined}>
                 {crumb.href && !last ? (
                   <Link className="crumb crumb-link" href={crumb.href}>
                     {crumb.label}

@@ -177,9 +177,9 @@ export function ProjectWorkspace({
   const crumbs = [
     { label: "Projects", href: "/projects/" },
     ...(section === "overview"
-      ? [{ label: project?.name ?? "Project" }]
+      ? [{ label: project?.name ?? "Project", project: true }]
       : [
-          { label: project?.name ?? "Project", href: projectHref(projectId) },
+          { label: project?.name ?? "Project", href: projectHref(projectId), project: true },
           { label: item?.label ?? "Section" },
         ]),
   ];

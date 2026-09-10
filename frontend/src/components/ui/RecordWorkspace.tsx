@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
 import { Tabs, TabPanel } from "./Tabs";
-import { recordHref, recordModules, registerReturn } from "@/components/shell/recordRoutes";
+import { contextualRecordHref, recordReturn } from "@/components/shell/recordRoutes";
 import type { RecordKind } from "@/components/shell/recordRoutes";
 
 export type WorkspaceFact = { label: string; value: ReactNode; note?: ReactNode; tone?: "danger" | "muted" };
@@ -18,12 +18,17 @@ export function useRecordTab(fallback = "overview"): [string, (tab: string) => v
   return [params.get("tab") ?? fallback, (tab) => { const next = new URLSearchParams(params); next.set("tab", tab); router.push(`/projects/?${next}`, { scroll: false }); }];
 }
 
+export function useRecordHref(projectId: string) {
+  const params = useSearchParams();
+  return (kind: RecordKind, id: string, tab?: string) => contextualRecordHref(params, projectId, kind, id, tab);
+}
+
 export function RecordLink({ projectId, kind, id, tab, children, className = "button-link" }: {
   projectId: string; kind: RecordKind; id: string; tab?: string; children: ReactNode; className?: string;
 }) {
   const params = useSearchParams();
-  const source = params.has("record") ? params.get("return") : `/projects/?${params}`;
-  const href = recordHref(projectId, kind, id, tab) + (source ? `&return=${encodeURIComponent(source)}` : "");
+  const source = `/projects/?${params}`;
+  const href = contextualRecordHref(params, projectId, kind, id, tab);
   return <Link data-record-link className={className} href={href} onClick={() => {
     if (!params.has("record") && source) {
       try { sessionStorage.setItem(`reach-register:${source}`, JSON.stringify({ href, y: window.scrollY, tables: Array.from(document.querySelectorAll<HTMLElement>(".table-scroll")).map(table => ({ label: table.getAttribute("aria-label"), x: table.scrollLeft, y: table.scrollTop })) })); } catch { /* Storage may be disabled; URL context still works. */ }
@@ -39,7 +44,7 @@ export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitl
 }) {
   const params = useSearchParams(), router = useRouter(), heading = useRef<HTMLHeadingElement>(null);
   const identity = `${kind}:${params.get("unit") ?? params.get("sale") ?? params.get("reservation") ?? params.get("plan")}`;
-  const moduleSection = recordModules[kind], group = `${kind} workspace sections`;
+  const back = recordReturn(params, projectId, kind), group = `${kind} workspace sections`;
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [identity]);
   useEffect(() => {
     if (tabs?.length && activeTab && params.get("tab") !== activeTab) {
@@ -48,7 +53,11 @@ export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitl
     }
   }, [activeTab, tabs, params, router]);
   return <article className={`record-workspace workspace-${kind}`}>
-    <nav className="record-breadcrumb" aria-label="Record location"><Link href={registerReturn(params.get("return"), projectId, moduleSection)}>{moduleSection === "payments" ? "Payment Plans" : moduleSection === "sales" ? "Sales" : "Inventory"}</Link><span aria-hidden="true">/</span><span>{title}</span></nav>
+    <nav className="record-breadcrumb" aria-label="Record location">
+      <Link href={back.href}>Back to {back.label}</Link>
+      {back.href !== back.origin ? <><span aria-hidden="true">·</span><Link href={back.origin}>{back.originLabel} register</Link></> : null}
+      <span aria-hidden="true">/</span><span>{title}</span>
+    </nav>
     <header className="record-workspace-header">
       <div className="workspace-identity">{icon ? <Icon name={icon} /> : null}<div><p className="eyebrow">{eyebrow}</p><h1 ref={heading} tabIndex={-1}>{title}</h1>{subtitle ? <div className="workspace-context">{subtitle}</div> : null}</div></div>
       {headline ? <div className={`workspace-value ${headline.tone ? "workspace-value-secondary" : ""}`}><strong>{headline.value}</strong><span>{headline.label}</span></div> : null}

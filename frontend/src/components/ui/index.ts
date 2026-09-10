@@ -73,7 +73,7 @@ export { Disclosure } from "./Disclosure";
 export { AttentionList } from "./Attention";
 export type { AttentionEntry } from "./Attention";
 export { CountComposition, CountSeries } from "./CountVisuals";
-export { RecordWorkspace, RecordLink, useRecordTab } from "./RecordWorkspace";
+export { RecordWorkspace, RecordLink, useRecordTab, useRecordHref } from "./RecordWorkspace";
 export type { WorkspaceFact, WorkspaceHeadline } from "./RecordWorkspace";
 
 export { RegisterPagination } from "./RegisterPagination";

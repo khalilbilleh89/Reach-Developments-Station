@@ -8,8 +8,8 @@ about presentation, the same idiom as ``test_ux_copy.py`` and
 ``test_cashflow_workspace.py``, and for the same reason: these are defects a
 redesign commits silently, and each has a specific, expensive failure mode.
 
-There is no JavaScript test runner in this repository and this file does not
-introduce one. What it can prove without one is exactly the class of thing
+These structural guards complement the native Node routing tests. What this
+file can prove without rendering is exactly the class of thing
 that matters here: that the design system got simpler rather than larger,
 that no arithmetic crept into the browser during the restyle, that a role
 which may not read a module still never asks for it, that the overlays kept
@@ -1170,7 +1170,7 @@ class TestRecordWorkspaceArchitecture:
         assert "new URLSearchParams({ project: projectId" in routes
         assert "return `/projects/?${params}`" in routes
         assert "Object.hasOwn(recordModules, value)" in routes
-        assert 'params.get("project") === projectId' in routes
+        assert 'params.get("project") !== projectId' in routes
         assert '!params.has("record")' in routes
         for old in (
             "inventory/UnitDetailPanel.tsx",
