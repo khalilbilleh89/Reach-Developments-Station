@@ -1044,12 +1044,16 @@ const ASSET_CLASSES = ["apartment", "villa", "townhouse", "commercial", "other"]
 export function UnitForm({
   projectId,
   floors,
+  buildings,
+  phases,
   defaultFloorId,
   onCancel,
   onSaved,
 }: {
   projectId: string;
   floors: Floor[];
+  buildings: Building[];
+  phases: Phase[];
   defaultFloorId: string;
   onCancel: () => void;
   onSaved: () => Promise<void>;
@@ -1058,11 +1062,10 @@ export function UnitForm({
     // Preselected from the register's own context. Reaching Units through
     // Phase → Building → Floor → View units and then being asked which floor
     // is the screen forgetting what it just did.
-    floor_id: defaultFloorId || (floors.length === 1 ? floors[0].id : ""),
+    floor_id: floors.some(floor => floor.id === defaultFloorId) ? defaultFloorId : (floors.length === 1 ? floors[0].id : ""),
     unit_number: "",
     unit_reference: "",
     asset_class: "apartment",
-    unit_type_code: "",
     bedrooms: "",
     bathrooms: "",
   });
@@ -1078,7 +1081,6 @@ export function UnitForm({
         unit_number: values.unit_number,
         unit_reference: values.unit_reference,
         asset_class: values.asset_class,
-        ...(values.unit_type_code ? { unit_type_code: values.unit_type_code } : {}),
         ...(values.bedrooms ? { bedrooms: Number(values.bedrooms) } : {}),
         ...(values.bathrooms ? { bathrooms: Number(values.bathrooms) } : {}),
       });
@@ -1106,8 +1108,8 @@ export function UnitForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {floors.length === 0 ? (
         <Notice tone="warning">
-          A unit belongs to a floor, and this project has none yet. Add a floor first, or import
-          the structure from the Excel template.
+          No active floor is available in this selection. Choose another phase or building,
+          add a floor, or import the structure from the Excel template.
         </Notice>
       ) : null}
       <FieldRow columns={2}>
@@ -1122,7 +1124,7 @@ export function UnitForm({
             <option value="">Choose a floor</option>
             {floors.map((floor) => (
               <option key={floor.id} value={floor.id}>
-                {floor.code} — {floor.label}
+                {phases.find(p => p.id === buildings.find(b => b.id === floor.building_id)?.phase_id)?.code} / {buildings.find(b => b.id === floor.building_id)?.code} / {floor.code} — {floor.label}
               </option>
             ))}
           </select>
@@ -1157,14 +1159,7 @@ export function UnitForm({
           />
         </Field>
       </FieldRow>
-      <FieldRow columns={3}>
-        <Field label="Unit type" hint="A configured code." optional>
-          <input
-            className="input"
-            value={values.unit_type_code}
-            onChange={(event) => setValues({ ...values, unit_type_code: event.target.value })}
-          />
-        </Field>
+      <FieldRow columns={2}>
         <Field label="Bedrooms" optional>
           <input
             className="input"

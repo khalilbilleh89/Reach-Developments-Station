@@ -15,7 +15,7 @@ import {
   SectionHeader,
   SubPanel,
 } from "@/components/ui";
-import { businessDate } from "@/lib/format";
+import { businessDate, todayISO } from "@/lib/format";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -67,7 +67,7 @@ const TRANSITIONS: Record<string, string[]> = {
 
 const REASON_REQUIRED = new Set(["held", "unreleased"]);
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayISO;
 
 /**
  * What has to be true before this unit can be sold, and who says so.

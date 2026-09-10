@@ -63,6 +63,8 @@ export function DocumentsTab({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<DocumentReference | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupRevision, setLookupRevision] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -93,11 +95,12 @@ export function DocumentsTab({
         setTypes(values.filter((value) => value.is_active && value.category === "document_type"));
         setParcels(parcelList);
         setPermits(register.permits);
+        setLookupError(null);
       } catch {
-        // Only the create form and the "supports" column need these.
+        setLookupError("Could not load document types or attachment choices.");
       }
     })();
-  }, [projectId]);
+  }, [projectId, lookupRevision]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -170,6 +173,7 @@ export function DocumentsTab({
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
+        {lookupError ? <><Notice tone="error">{lookupError}</Notice><Button onClick={() => setLookupRevision(v => v + 1)}>Retry document choices</Button></> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {editing ? (
@@ -260,7 +264,7 @@ export function DocumentsTab({
                 </Field>
               </FieldRow>
               <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
+                <Button variant="primary" type="submit" disabled={busy || !!lookupError}>
                   {busy ? "Saving…" : "Record reference"}
                 </Button>
                 <Button onClick={() => setCreating(false)} disabled={busy}>

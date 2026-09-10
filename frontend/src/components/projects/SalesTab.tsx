@@ -1,8 +1,10 @@
 "use client";
 
+import { RegisterPagination } from "@/components/ui";
+
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, inventory, sales } from "@/lib/api";
 import type { Phase, SalesPolicy, SalesRegister } from "@/lib/api";
@@ -99,11 +101,17 @@ export function SalesTab({
   userId: string;
 }) {
   const ownOnly = restrictedToOwnClients(roles);
+  const [pageFields, setPageFields] = useRegisterFields({offset: ""});
+  const parsedOffset = Number(pageFields.offset);
+  const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
+  const setOffset = (value: number) => setPageFields({offset: String(value)});
+  const [pageTotal, setPageTotal] = useState(0);
   const [register, setRegister] = useState<SalesRegister | null>(null);
   useRegisterRestore(register !== null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
-  const [filters, setFilters] = useRegisterFields({ phase_id: "", commercial_status: "" });
+  const [filters, updateFilters] = useRegisterFields({ phase_id: "", commercial_status: "" });
+  const setFilters = (changes: Partial<typeof filters>) => { updateFilters(changes); setPageFields({offset: ""}); };
   const [searchFields, setSearchFields] = useRegisterFields({ search: "" });
   const search = searchFields.search;
   const setSearch = (search: string) => setSearchFields({ search });
@@ -121,9 +129,13 @@ export function SalesTab({
   const canWriteClients = roles.has("sales_operations") || roles.has("sales_advisor");
   const canSetPolicy = roles.has("system_admin") || roles.has("project_manager");
 
+  const pageRequest = useRef(0);
   const load = useCallback(async () => {
+    const ticket = ++pageRequest.current;
+    setRegister(null);
+    setError(null);
     try {
-      const query: Record<string, string> = { limit: "200" };
+      const query: Record<string, string> = { limit: "200", offset: String(offset) };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -132,15 +144,18 @@ export function SalesTab({
         inventory.phases(projectId),
         sales.policy(projectId),
       ]);
+      if (ticket !== pageRequest.current) return;
       setRegister(rows);
+      setPageTotal(rows.total);
       setPhases(phaseList);
       setPolicy(policyRow);
       setError(null);
     } catch (caught) {
+      if (ticket !== pageRequest.current) return;
       setRegister(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load sales.");
     }
-  }, [projectId, filters]);
+  }, [projectId, filters, offset]);
 
   useEffect(() => {
     void (async () => {
@@ -316,7 +331,7 @@ export function SalesTab({
         <DataToolbar
           framed
           activeSummary={[phases.find((phase) => phase.id === filters.phase_id)?.name, filters.commercial_status ? statusLabel(filters.commercial_status) : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
-          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search the sales register" }}
+          search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search this page" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
             filtered
@@ -470,6 +485,7 @@ export function SalesTab({
             </TableScroll>
           )}
         </Card>
+        {pageTotal > 0 || register ? <RegisterPagination offset={offset} total={pageTotal} busy={!register} onChange={setOffset} /> : null}
       </div>
 
     </>

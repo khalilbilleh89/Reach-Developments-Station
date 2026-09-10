@@ -607,7 +607,8 @@ class TestThePopulationSnapshot:
         """Drift in the other direction is drift too."""
         _first, second = priced_pair
         archived = admin_client.patch(
-            f"{inventory_url(project_id)}/units/{second}", json={"is_active": False}
+            f"{inventory_url(project_id)}/units/{second}",
+            json={"is_active": False, "activity_reason": "Removed from active inventory"},
         )
         assert archived.status_code == 200, archived.text
 

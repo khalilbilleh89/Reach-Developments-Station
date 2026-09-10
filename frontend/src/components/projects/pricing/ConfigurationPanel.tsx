@@ -26,6 +26,7 @@ import {
   InlineMetaItem,
   MoneyInput,
   Notice,
+  PromptDialog,
   RateInput,
   StatusDot,
   Steps,
@@ -133,6 +134,7 @@ export function ConfigurationPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [approval, setApproval] = useState<string | null>(null);
 
   const configuration = configurations.find((item) => item.id === selected) ?? null;
   const isDraft = configuration?.status === "draft";
@@ -171,6 +173,7 @@ export function ConfigurationPanel({
     setError(null);
     try {
       await run();
+      setApproval(null);
       setNotice(message);
       await onChanged();
       await loadRules();
@@ -216,6 +219,7 @@ export function ConfigurationPanel({
         </>
       }
     >
+      {approval ? <PromptDialog title="Approve pricing configuration" label="Approval rationale" description={`Configuration ${configurations.find(c => c.id === approval)?.name ?? approval}. State what you checked and why it is approved.`} confirmLabel="Approve configuration" busy={busy} error={error} onCancel={() => { if (!busy) setApproval(null); }} onSubmit={reason => void act(() => pricing.approveConfiguration(projectId, approval, reason), "Configuration approved.")} /> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -289,13 +293,7 @@ export function ConfigurationPanel({
                     <Button
                       variant="primary"
                       disabled={busy}
-                      onClick={() =>
-                        act(
-                          () =>
-                            pricing.approveConfiguration(projectId, configuration.id, "Reviewed against feasibility"),
-                          "Approved. Activate it to price from it.",
-                        )
-                      }
+                      onClick={() => { setApproval(configuration.id); setError(null); }}
                     >
                       Approve
                     </Button>

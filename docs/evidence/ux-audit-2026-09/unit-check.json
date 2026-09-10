@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "width": 1600,
+      "create": true,
+      "edit": true,
+      "noType": true
+    },
+    {
+      "width": 1440,
+      "create": true,
+      "edit": true,
+      "noType": true
+    },
+    {
+      "width": 1280,
+      "create": true,
+      "edit": true,
+      "noType": true
+    },
+    {
+      "width": 1024,
+      "create": true,
+      "edit": true,
+      "noType": true
+    },
+    {
+      "width": 768,
+      "create": true,
+      "edit": true,
+      "noType": true
+    },
+    {
+      "width": 390,
+      "create": true,
+      "edit": true,
+      "noType": true
+    }
+  ],
+  "created": "ac92869c-987a-4a21-842d-7021789ee446",
+  "errors": []
+}

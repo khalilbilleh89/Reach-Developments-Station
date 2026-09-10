@@ -852,11 +852,14 @@ function PermitFile({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [historyError, setHistoryError] = useState(false);
   const loadHistory = useCallback(async () => {
+    setHistoryError(false);
     try {
       setHistory(await projects.permitHistory(projectId, permit.id));
     } catch {
-      setHistory([]);
+      setHistory(null);
+      setHistoryError(true);
     }
   }, [projectId, permit.id]);
 
@@ -1085,7 +1088,7 @@ function PermitFile({
       ) : null}
 
       {section === "history" ? (
-        history === null ? (
+        historyError ? <><Notice tone="error">Permit history could not be loaded.</Notice><Button onClick={() => void loadHistory()}>Retry history</Button></> : history === null ? (
           <Loading label="Loading history…" lines={3} />
         ) : history.length === 0 ? (
           <EmptyState title="Nothing recorded yet" hint="Every status change is kept here with its effective date and reason." />

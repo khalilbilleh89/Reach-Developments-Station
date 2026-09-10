@@ -197,7 +197,7 @@ function FundingWindows({ summary }: { summary: CashflowSummary }) {
         {summary.funding_windows.map((window) => {
           const needed = isPositive(window.funding_requirement);
           return (
-            <div className="span-4" key={window.days}>
+            <div className="span-12" key={window.days}>
             <SubPanel title={`Next ${window.days} days`}>
               <Position compact>
                 <PositionFigure

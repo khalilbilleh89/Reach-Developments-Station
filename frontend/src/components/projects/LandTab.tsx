@@ -226,6 +226,7 @@ export function LandTab({
   const [planningForm, setPlanningForm] = useState(planningFrom(null));
   const [editingPlanning, setEditingPlanning] = useState(false);
   const [editingParcel, setEditingParcel] = useState(false);
+  const [documentsError, setDocumentsError] = useState(false);
   const [documents, setDocuments] = useState<DocumentReference[] | null>(null);
   const [form, setForm] = useState(emptyParcel());
   const [creating, setCreating] = useState(false);
@@ -273,6 +274,7 @@ export function LandTab({
     setNotice(null);
     setPlanning(null);
     setDocuments(null);
+    setDocumentsError(false);
     try {
       const control = await projects.planning(projectId, parcel.id);
       setPlanning(control);
@@ -289,7 +291,8 @@ export function LandTab({
     try {
       setDocuments(await projects.documents(projectId, { parcel_id: parcel.id }));
     } catch {
-      setDocuments([]);
+      setDocuments(null);
+      setDocumentsError(true);
     }
   };
 
@@ -1212,7 +1215,7 @@ export function LandTab({
                 title="Documents"
                 description="Where this parcel's papers live. The register records the reference; it does not hold the file."
               />
-              {documents === null ? (
+              {documentsError ? <><Notice tone="error">Supporting documents could not be loaded.</Notice><Button onClick={() => { setDocumentsError(false); void projects.documents(projectId, selected.id ? {parcel_id: selected.id} : {}).then(setDocuments).catch(() => setDocumentsError(true)); }}>Retry documents</Button></> : documents === null ? (
                 <Loading label="Loading documents…" shape="rows" rows={3} />
               ) : documents.length === 0 ? (
                 <EmptyState

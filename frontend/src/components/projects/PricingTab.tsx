@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useRegisterFields } from "@/components/shell/registerState";
+import { RegisterPagination } from "@/components/ui";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, inventory, pricing } from "@/lib/api";
 import type {
@@ -89,22 +92,34 @@ export function PricingTab({
   onOpenUnit: (unitId: string) => void;
 }) {
   const [overview, setOverview] = useState<PricingOverview | null>(null);
+  const [pageFields, setPageFields] = useRegisterFields({offset: ""});
+  const parsedOffset = Number(pageFields.offset);
+  const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
+  const setOffset = (value: number) => setPageFields({offset: String(value)});
+  const [pageTotal, setPageTotal] = useState(0);
   const [register, setRegister] = useState<PriceRegister | null>(null);
   const [configurations, setConfigurations] = useState<PricingConfiguration[]>([]);
   const [benchmarks, setBenchmarks] = useState<MarketBenchmark[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
-  const [filters, setFilters] = useState({ phase_id: "", market_flag: "" });
-  const [search, setSearch] = useState("");
+  const [filters, updateFilters] = useRegisterFields({ phase_id: "", market_flag: "" });
+  const setFilters = (changes: Partial<typeof filters>) => { updateFilters(changes); setPageFields({offset: ""}); };
+  const [searchFields, setSearchFields] = useRegisterFields({search: ""});
+  const search = searchFields.search;
+  const setSearch = (search: string) => setSearchFields({search});
   const [open, setOpen] = useState<"none" | "configuration" | "benchmarks">("none");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
 
+  const pageRequest = useRef(0);
   const load = useCallback(async () => {
+    const ticket = ++pageRequest.current;
+    setRegister(null);
+    setError(null);
     try {
-      const query: Record<string, string> = { limit: "200" };
+      const query: Record<string, string> = { limit: "200", offset: String(offset) };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
@@ -116,18 +131,21 @@ export function PricingTab({
         inventory.phases(projectId),
         inventory.areaTypes(projectId),
       ]);
+      if (ticket !== pageRequest.current) return;
       setOverview(head);
       setRegister(rows);
+      setPageTotal(rows.total);
       setConfigurations(configs);
       setBenchmarks(marks);
       setPhases(phaseList);
       setAreaTypes(typeList);
       setError(null);
     } catch (caught) {
+      if (ticket !== pageRequest.current) return;
       setOverview(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load pricing.");
     }
-  }, [projectId, filters]);
+  }, [projectId, filters, offset]);
 
   useEffect(() => {
     void (async () => {
@@ -192,7 +210,7 @@ export function PricingTab({
 
   const needle = search.trim().toLowerCase();
   const rows = (register?.rows ?? []).filter(
-    (row) => !needle || `${row.unit_reference} ${row.unit_number} ${row.unit_type_code ?? ""}`.toLowerCase().includes(needle),
+    (row) => !needle || `${row.unit_reference} ${row.unit_number}`.toLowerCase().includes(needle),
   );
   const filtered = search !== "" || filters.phase_id !== "" || filters.market_flag !== "";
 
@@ -243,7 +261,7 @@ export function PricingTab({
           ) : overview.configuration === null ? (
             <EmptyState
               title="No active pricing configuration"
-              hint="Create one, add the area rules and premiums it prices by, then have it approved and activated. Until then no unit can be priced."
+              hint="Enter a selling price from the unit record without a configuration. For rule-based price generation, prepare and activate a pricing configuration here."
               actions={
                 canPrice ? (
                   <Button variant="primary" onClick={() => setOpen("configuration")}>
@@ -307,7 +325,8 @@ export function PricingTab({
           />
         ) : null}
 
-        {open === "benchmarks" ? (
+        {pageTotal > 0 || register ? <RegisterPagination offset={offset} total={pageTotal} busy={!register} onChange={setOffset} /> : null}
+      {open === "benchmarks" ? (
           <BenchmarksPanel
             projectId={projectId}
             benchmarks={benchmarks}
@@ -320,7 +339,7 @@ export function PricingTab({
 
         <DataToolbar
           framed
-          search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search the price register" }}
+          search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search this page" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
           onReset={
             filtered
@@ -399,7 +418,7 @@ export function PricingTab({
                     <tr key={row.unit_id}>
                       <th scope="row">
                         <button className="button-link" type="button" onClick={() => onOpenUnit(row.unit_id)}>
-                          <IdentityCell name={row.unit_reference} meta={row.unit_type_code ?? row.unit_number} />
+                          <IdentityCell name={row.unit_reference} meta={row.unit_number} />
                         </button>
                       </th>
                       <td className="num">{row.internal_area_snapshot ?? "—"}</td>
@@ -451,12 +470,7 @@ export function PricingTab({
                   ))}
                 </tbody>
               </TableScroll>
-              {register.total > register.rows.length ? (
-                <p className="table-foot">
-                  Showing the first {register.rows.length} of {register.total} units. Narrow the filter to
-                  reach the rest.
-                </p>
-              ) : null}
+
             </>
           )}
         </Card>

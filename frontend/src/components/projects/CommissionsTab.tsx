@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, commissions } from "@/lib/api";
 import type { CommissionEligibleSale, CommissionGrant, CommissionAllocation } from "@/lib/api";
@@ -10,10 +12,13 @@ import { sectionDescription } from "@/components/shell/navigation";
 import { Badge, Button, ButtonRow, Card, Drawer, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
 
 export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
-  const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const [selected, setSelected] = useState<CommissionGrant | null>(null); const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
+  const selectedId = params.get("commission");
+  const selected = rows.find(row => row.id === selectedId) ?? null;
+  const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const canPrepare = hasAnyRole(roles, COMMISSION_PREPARERS); const canRelease = hasAnyRole(roles, COMMISSION_RELEASERS);
-  const load = useCallback(async () => { try { const [grants, sales] = await Promise.all([commissions.list(projectId), commissions.eligibleSales(projectId)]); setRows(grants); setEligible(sales); setSelected((old) => grants.find((x) => x.id === old?.id) ?? old); setLoaded(true); setError(null); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load commissions."); } }, [projectId]);
+  const load = useCallback(async () => { try { const [grants, sales] = await Promise.all([commissions.list(projectId), commissions.eligibleSales(projectId)]); setRows(grants); setEligible(sales);  setLoaded(true); setError(null); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load commissions."); } }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]); const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); setDialog(null); setAllocation(null); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "That action could not be completed."); } finally { setBusy(false); } };
   return <div className="stack">
     <PageHeader icon="money" title="Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
@@ -23,7 +28,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
         <TableScroll label="Commission register" fixedFirst>
           <thead><tr><th scope="col">Unit / sale</th><th scope="col">Buyer</th><th scope="col" className="num">Sold price</th><th scope="col" className="num">Commission base</th><th scope="col" className="num">Granted</th><th scope="col" className="num">Commission total</th><th scope="col">Status</th></tr></thead>
           <tbody>{rows.map((x) => <tr key={x.id} aria-selected={selected?.id === x.id}>
-            <th scope="row"><Button variant="link" onClick={() => setSelected(x)} aria-label={`Open ${x.unit_reference} commission`}><IdentityCell icon="inventory" name={x.unit_reference} meta={x.sale_reference} /></Button></th>
+            <th scope="row"><Link className="button-link" href={commissionHref(x.id)} scroll={false} aria-label={`Open ${x.unit_reference} commission`}><IdentityCell icon="inventory" name={x.unit_reference} meta={x.sale_reference} /></Link></th>
             <td>{x.buyer_display}</td>
             <td className="num">{money(x.sold_price_snapshot, currencyCodes[x.currency_id])}</td>
             <td className="num">{money(x.commissionable_base_amount, currencyCodes[x.currency_id])}</td>
@@ -35,6 +40,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
       ) : <div className="card-body"><EmptyState title="No commission grants" hint="Commission grants are prepared against active sold contracts." /></div>}
       <p className="table-foot">Beneficiary percentages apply directly to the commissionable base. Releasing this distribution does not change Unit Economics, the sale price, or project cash.</p>
     </Card>
+    {loaded && selectedId && !selected ? <Notice tone="error">This commission is unavailable. It may no longer be in your accessible register.</Notice> : null}
     {selected ? <Drawer
       eyebrow="Commission file"
       icon="money"
@@ -48,7 +54,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
         { label: "Distributed rate", value: percent(selected.allocation_rate_total) },
         { label: "Distributed amount", value: money(selected.allocation_amount_total, currencyCodes[selected.currency_id]) },
       ]}
-      onClose={() => { if (!busy) setSelected(null); }}
+      onClose={() => { if (!busy) router.push(commissionHref(null), {scroll: false}); }}
       actions={<ButtonRow>
         {canPrepare && selected.status === "draft" ? <Button disabled={busy} onClick={() => setDialog("edit")}>Edit Commission</Button> : null}
         {canRelease && selected.status === "draft" && selected.is_reconciled && selected.prepared_by_user_id !== userId ? <Button variant="primary" disabled={busy} onClick={() => void run(() => commissions.release(projectId, selected.id))}>Release</Button> : null}

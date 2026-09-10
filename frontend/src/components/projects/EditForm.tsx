@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 import { ApiError } from "@/lib/api";
 import { Button, Field, FieldRow, FormActions, FormSection, Notice } from "@/components/ui";
@@ -59,6 +60,8 @@ export function EditForm({
   const [values, setValues] = useState<EditValues>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const dirty = fields.some(field => field.visible !== false && values[field.name] !== initial[field.name]);
 
   const set = (name: string, value: string | boolean) =>
     setValues((current) => ({ ...current, [name]: value }));
@@ -170,7 +173,8 @@ export function EditForm({
   };
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} ref={form}>
+      <UnsavedChangesGuard dirty={dirty && !busy} form={form} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {groups.map((group, index) =>
         group.title ? (

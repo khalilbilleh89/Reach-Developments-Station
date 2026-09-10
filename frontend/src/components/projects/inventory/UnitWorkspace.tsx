@@ -28,7 +28,7 @@ import {
   SALES_READERS,
   hasAnyRole,
 } from "@/lib/roles";
-import { Button, Card, RecordWorkspace, RecordLink, Loading, Notice, useRecordTab } from "@/components/ui";
+import { Button, Card, FormDialog, Field, Badge, PromptDialog, RecordWorkspace, RecordLink, Loading, Notice, useRecordTab } from "@/components/ui";
 import type { WorkspaceFact, WorkspaceHeadline } from "@/components/ui";
 import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
@@ -53,7 +53,6 @@ import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
 const UNIT_FIELDS: EditField[] = [
   { name: "unit_reference", label: "Unit reference", group: "Identity", width: "medium" },
   { name: "unit_number", label: "Unit number", group: "Identity", width: "short" },
-  { name: "unit_type_code", label: "Unit type", group: "Identity", width: "short" },
   { name: "bedrooms", label: "Bedrooms", kind: "number", group: "Identity" },
   { name: "bathrooms", label: "Bathrooms", kind: "number", group: "Identity" },
   { name: "furnishing_specification_code", label: "Furnishing", group: "Features", width: "medium" },
@@ -67,7 +66,6 @@ const UNIT_FIELDS: EditField[] = [
   { name: "is_penthouse", label: "Penthouse", kind: "checkbox", group: "Features" },
   { name: "is_corner", label: "Corner unit", kind: "checkbox", group: "Features" },
   { name: "pool_access", label: "Pool access", kind: "checkbox", group: "Features" },
-  { name: "is_active", label: "Unit is active", kind: "checkbox", group: "Features" },
 ];
 
 
@@ -106,6 +104,22 @@ export function UnitWorkspace({
 }) {
   const router = useRouter();
   const [supportBusy, setSupportBusy] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [moveFloor, setMoveFloor] = useState("");
+  const [destinations, setDestinations] = useState<{value: string; label: string}[]>([]);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const loadDestinations = async () => {
+    setMoveError(null); setDestinations([]);
+    try {
+      const [floors, buildings, phases] = await Promise.all([inventory.floors(projectId), inventory.buildings(projectId), inventory.phases(projectId)]);
+      setDestinations(floors.filter(f => f.is_active && buildings.some(b => b.id === f.building_id && b.is_active && phases.some(p => p.id === b.phase_id && p.is_active))).map(f => {
+        const b = buildings.find(b => b.id === f.building_id)!;
+        const p = phases.find(p => p.id === b.phase_id)!;
+        return {value: f.id, label: `${p.code} / ${b.code} / ${f.code} — ${f.label}`};
+      }));
+    } catch (caught) { setMoveError(caught instanceof ApiError ? caught.message : "Could not load destination floors."); }
+  };
   const [detailRevision, setDetailRevision] = useState(-1);
   const [supportRevision, setSupportRevision] = useState(0);
   const supportLoaded = useRef<Record<string, number>>({});
@@ -126,6 +140,7 @@ export function UnitWorkspace({
   const [section, setSection] = useRecordTab();
   const [quoting, setQuoting] = useState(false);
   const [pricingBusy, setPricingBusy] = useState(false);
+  const [approvingPrice, setApprovingPrice] = useState<string | null>(null);
   const [editing, setEditing] = useState<"none" | "unit" | "fields">("none");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -270,7 +285,8 @@ export function UnitWorkspace({
    * replacing it: the API refuses a submitter approving their own price, and an
    * administrator approving anything, whichever button was on screen.
    */
-  const movePrice = async (action: "submit" | "approve" | "activate", versionId: string) => {
+  const movePrice = async (action: "submit" | "approve" | "activate", versionId: string, reason?: string) => {
+    if (action === "approve" && reason === undefined) { setApprovingPrice(versionId); setError(null); return; }
     setPricingBusy(true);
     setError(null);
     try {
@@ -278,7 +294,8 @@ export function UnitWorkspace({
         await pricing.submitPriceVersion(projectId, versionId);
         setNotice("Submitted for approval.");
       } else if (action === "approve") {
-        await pricing.approvePriceVersion(projectId, versionId, "Reviewed against feasibility");
+        await pricing.approvePriceVersion(projectId, versionId, reason!);
+        setApprovingPrice(null);
         setNotice("Approved. Activate it to make it the list price.");
       } else {
         await pricing.activatePriceVersion(projectId, versionId);
@@ -392,7 +409,7 @@ export function UnitWorkspace({
       icon="inventory"
       title={unit.unit_reference}
       subtitle={[
-        [unit.unit_type_code, unit.bedrooms === null ? null : `${unit.bedrooms} bedroom`].filter(Boolean).join(" · ") ||
+        [unit.asset_class, unit.bedrooms === null ? null : `${unit.bedrooms} bedroom`].filter(Boolean).join(" · ") ||
           unit.asset_class,
         [
           unit.phase_code ? `Phase ${unit.phase_code}` : null,
@@ -410,6 +427,7 @@ export function UnitWorkspace({
         {liveSale ? <RecordLink projectId={projectId} kind="sale" id={liveSale.id} className="button button-primary">Open Sale</RecordLink> : commitmentAnswer.status === "ready" && commitmentAnswer.data.reservation ? <RecordLink projectId={projectId} kind="reservation" id={commitmentAnswer.data.reservation.id} className="button button-primary">Open reservation</RecordLink> : seesSales ? <Button onClick={() => setSection("commercial")}>Sale options</Button> : null}
         {canWriteStructure ? (
           <Button
+            data-leaves-editor
             onClick={() => {
               setSection("detail");
               setEditing(editing === "unit" ? "none" : "unit");
@@ -418,8 +436,13 @@ export function UnitWorkspace({
             Edit unit
           </Button>
         ) : null}
+        {canWriteStructure ? <>
+          <Button disabled={busy} onClick={() => { setActivityOpen(true); setError(null); }}>{unit.is_active ? "Deactivate unit" : "Reactivate unit"}</Button>
+          {unit.commercial_status === "unreleased" ? <Button onClick={() => { setMoveFloor(unit.floor_id); setMoving(true); void loadDestinations(); }}>Move unit</Button> : null}
+        </> : null}
         </>
       }
+      meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}
       status={<UnitStanding unit={unit} />}
       facts={facts}
       tabs={sections}
@@ -447,6 +470,22 @@ export function UnitWorkspace({
         />
       ) : null}
 
+      {approvingPrice ? <PromptDialog title={`Approve price for ${unit.unit_reference}`} label="Approval rationale" description="Record what you checked and why this price is approved. Activation remains a separate step." confirmLabel="Approve price" error={error} busy={pricingBusy} onCancel={() => { if (!pricingBusy) setApprovingPrice(null); }} onSubmit={reason => void movePrice("approve", approvingPrice, reason)} /> : null}
+      {activityOpen ? <PromptDialog title={`${unit.is_active ? "Deactivate" : "Reactivate"} ${unit.unit_reference}`} label="Reason" description={unit.is_active ? "Only unreleased units can be deactivated. The unit leaves active sales and eligible reporting populations; existing records and historical reports remain. Use Hold for a temporary sales pause." : "The unit returns to active inventory. Its hierarchy must be active and pricing must be reviewed before release."} busy={busy} error={error} confirmLabel={unit.is_active ? "Deactivate unit" : "Reactivate unit"} onCancel={() => { if (!busy) setActivityOpen(false); }} onSubmit={async reason => {
+        setBusy(true); setError(null);
+        try { await inventory.updateUnit(projectId, unitId, {is_active: !unit.is_active, activity_reason: reason}); setActivityOpen(false); await load(); await onChanged(); }
+        catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not change unit activity."); }
+        finally { setBusy(false); }
+      }} /> : null}
+      {moving ? <FormDialog title={`Move ${unit.unit_reference}`} description="Only an unreleased unit may move. Its building, phase and phase-based access follow the destination floor; the price requires review again." confirmLabel="Move unit" busy={busy} disabled={!moveFloor || moveFloor === unit.floor_id || !!moveError} onCancel={() => { if (!busy) setMoving(false); }} onSubmit={async () => {
+        setBusy(true); setMoveError(null);
+        try { await inventory.updateUnit(projectId, unitId, {floor_id: moveFloor}); setMoving(false); await load(); await onChanged(); }
+        catch (caught) { setMoveError(caught instanceof ApiError ? caught.message : "Could not move the unit."); }
+        finally { setBusy(false); }
+      }}>
+        {moveError ? <><Notice tone="error">{moveError}</Notice><Button onClick={() => void loadDestinations()}>Retry floors</Button></> : null}
+        <Field label="Destination floor"><select className="input" value={moveFloor} onChange={e => setMoveFloor(e.target.value)}><option value="">Choose a floor</option>{destinations.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}</select></Field>
+      </FormDialog> : null}
       {activeSection === "detail" && supportBusy ? <Loading label="Loading property" /> : null}
       {activeSection === "detail" && !supportBusy ? (
         <>

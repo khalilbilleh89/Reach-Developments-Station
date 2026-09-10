@@ -19,6 +19,73 @@ from app.modules.inventory.models import Unit
 from tests.modules.conftest import PROJECTS, inventory_url, project_payload, unit_payload
 
 
+def test_activity_requires_reason_and_preserves_identity(
+    admin_client: TestClient, project_id: str, unit_id: str, db: Session
+) -> None:
+    url = f"{inventory_url(project_id)}/units/{unit_id}"
+    assert admin_client.patch(url, json={"is_active": False}).status_code == 422
+    assert (
+        admin_client.patch(url, json={"is_active": False, "activity_reason": "   "}).status_code
+        == 422
+    )
+    for active, action in [(False, "unit.deactivated"), (True, "unit.reactivated")]:
+        result = admin_client.patch(
+            url, json={"is_active": active, "activity_reason": "Correcting inventory scope"}
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["id"] == unit_id
+        assert result.json()["is_active"] is active
+        assert result.json()["pricing_approved"] is False
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == action)).one()
+        assert event.after_data["activity_reason"] == "Correcting inventory scope"
+
+
+@pytest.mark.parametrize(
+    "status", ["available", "held", "reserved", "contract_pending", "contracted"]
+)
+def test_only_unreleased_units_can_be_deactivated(
+    admin_client: TestClient, project_id: str, unit_id: str, db: Session, status: str
+) -> None:
+    unit = db.get(Unit, uuid.UUID(unit_id))
+    unit.commercial_status = status
+    db.commit()
+    response = admin_client.patch(
+        f"{inventory_url(project_id)}/units/{unit_id}",
+        json={"is_active": False, "activity_reason": "Attempted removal"},
+    )
+    assert response.status_code == 409, response.text
+    db.refresh(unit)
+    assert unit.is_active is True
+    assert unit.commercial_status == status
+
+
+def test_register_can_reach_unit_201_without_losing_totals(
+    admin_client: TestClient, project_id: str, unit_id: str, db: Session
+) -> None:
+    original = db.get(Unit, uuid.UUID(unit_id))
+    db.add_all(
+        [
+            Unit(
+                project_id=original.project_id,
+                floor_id=original.floor_id,
+                unit_number=f"PAGE-{index:03}",
+                unit_reference=f"PAGE-{index:03}",
+                asset_class="apartment",
+                created_by_user_id=original.created_by_user_id,
+            )
+            for index in range(200)
+        ]
+    )
+    db.commit()
+    url = f"{inventory_url(project_id)}/units"
+    first = admin_client.get(url, params={"limit": 200, "offset": 0}).json()
+    second = admin_client.get(url, params={"limit": 200, "offset": 200}).json()
+    assert first["total"] == second["total"] == 201
+    assert len(first["units"]) == 200
+    assert len(second["units"]) == 1
+    assert {row["id"] for row in first["units"]}.isdisjoint(row["id"] for row in second["units"])
+
+
 def test_a_unit_is_created_with_its_four_status_dimensions(
     admin_client: TestClient, project_id: str, floor_id: str
 ) -> None:
