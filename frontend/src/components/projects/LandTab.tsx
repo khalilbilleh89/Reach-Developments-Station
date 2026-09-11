@@ -1,5 +1,7 @@
 "use client";
 
+import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
@@ -562,161 +564,163 @@ export function LandTab({
           subtitle="The opening facts. Site diligence, utilities and planning are recorded on the parcel afterwards."
           onClose={() => setCreating(false)}
         >
-          <form onSubmit={createParcel}>
-            {formError ? <Notice tone="error">{formError}</Notice> : null}
-            <FormSection title="Identity">
-              <FieldRow columns={2}>
-                <Field label="Plot number">
-                  <input
-                    className="input input-medium"
-                    required
-                    maxLength={64}
-                    value={form.plot_number}
-                    onChange={(event) => setForm({ ...form, plot_number: event.target.value })}
-                  />
-                </Field>
-                <Field label="Title deed number" optional>
-                  <input
-                    className="input"
-                    maxLength={120}
-                    value={form.title_deed_number}
-                    onChange={(event) =>
-                      setForm({ ...form, title_deed_number: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Land area">
-                  <input
-                    className="input input-short"
-                    required
-                    inputMode="decimal"
-                    value={form.land_area}
-                    onChange={(event) => setForm({ ...form, land_area: event.target.value })}
-                  />
-                </Field>
-                <Field label="Area unit" optional hint="Defaults to the jurisdiction's unit.">
-                  <select
-                    className="input input-short"
-                    value={form.area_unit}
-                    onChange={(event) => setForm({ ...form, area_unit: event.target.value })}
-                  >
-                    <option value="">From the country pack</option>
-                    <option value="sqm">sqm</option>
-                    <option value="sqft">sqft</option>
-                  </select>
-                </Field>
-                <Field label="Cadastral reference" optional>
-                  <input
-                    className="input"
-                    maxLength={120}
-                    value={form.cadastral_reference}
-                    onChange={(event) =>
-                      setForm({ ...form, cadastral_reference: event.target.value })
-                    }
-                  />
-                </Field>
-              </FieldRow>
-            </FormSection>
+          <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(emptyParcel())} busy={busy} onDiscard={() => { setForm(emptyParcel()); }}>
+            <form onSubmit={createParcel}>
+              {formError ? <Notice tone="error">{formError}</Notice> : null}
+              <FormSection title="Identity">
+                <FieldRow columns={2}>
+                  <Field label="Plot number">
+                    <input
+                      className="input input-medium"
+                      required
+                      maxLength={64}
+                      value={form.plot_number}
+                      onChange={(event) => setForm({ ...form, plot_number: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Title deed number" optional>
+                    <input
+                      className="input"
+                      maxLength={120}
+                      value={form.title_deed_number}
+                      onChange={(event) =>
+                        setForm({ ...form, title_deed_number: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label="Land area">
+                    <input
+                      className="input input-short"
+                      required
+                      inputMode="decimal"
+                      value={form.land_area}
+                      onChange={(event) => setForm({ ...form, land_area: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Area unit" optional hint="Defaults to the jurisdiction's unit.">
+                    <select
+                      className="input input-short"
+                      value={form.area_unit}
+                      onChange={(event) => setForm({ ...form, area_unit: event.target.value })}
+                    >
+                      <option value="">From the country pack</option>
+                      <option value="sqm">sqm</option>
+                      <option value="sqft">sqft</option>
+                    </select>
+                  </Field>
+                  <Field label="Cadastral reference" optional>
+                    <input
+                      className="input"
+                      maxLength={120}
+                      value={form.cadastral_reference}
+                      onChange={(event) =>
+                        setForm({ ...form, cadastral_reference: event.target.value })
+                      }
+                    />
+                  </Field>
+                </FieldRow>
+              </FormSection>
 
-            <FormSection
-              title="Tenure and planning identity"
-              description="Recorded in the words the title and the planning decision use. The lists only suggest."
-            >
-              {CLASSIFICATIONS.map((classification) => (
+              <FormSection
+                title="Tenure and planning identity"
+                description="Recorded in the words the title and the planning decision use. The lists only suggest."
+              >
+                {CLASSIFICATIONS.map((classification) => (
+                  <Field
+                    key={classification.name}
+                    label={classification.label}
+                    optional
+                    hint={classification.hint}
+                  >
+                    <input
+                      className="input"
+                      maxLength={500}
+                      list={`land-${classification.name}`}
+                      value={form[classification.name]}
+                      onChange={(event) =>
+                        setForm({ ...form, [classification.name]: event.target.value })
+                      }
+                    />
+                  </Field>
+                ))}
                 <Field
-                  key={classification.name}
-                  label={classification.label}
+                  label="Ownership share"
                   optional
-                  hint={classification.hint}
+                  hint="A fraction of one: 0.500000 is a half share. Leave empty for the whole parcel."
                 >
                   <input
-                    className="input"
-                    maxLength={500}
-                    list={`land-${classification.name}`}
-                    value={form[classification.name]}
+                    className="input input-short"
+                    inputMode="decimal"
+                    value={form.ownership_share_fraction}
                     onChange={(event) =>
-                      setForm({ ...form, [classification.name]: event.target.value })
+                      setForm({ ...form, ownership_share_fraction: event.target.value })
                     }
                   />
                 </Field>
-              ))}
-              <Field
-                label="Ownership share"
-                optional
-                hint="A fraction of one: 0.500000 is a half share. Leave empty for the whole parcel."
+              </FormSection>
+
+              <FormSection
+                title="Acquisition"
+                description={
+                  canSeeCost
+                    ? "What was paid for the land, not what it is worth today."
+                    : "Consideration is recorded by the roles cleared to see development cost."
+                }
               >
-                <input
-                  className="input input-short"
-                  inputMode="decimal"
-                  value={form.ownership_share_fraction}
-                  onChange={(event) =>
-                    setForm({ ...form, ownership_share_fraction: event.target.value })
-                  }
-                />
-              </Field>
-            </FormSection>
+                <FieldRow columns={2}>
+                  <Field label="Acquisition date" optional>
+                    <input
+                      className="input input-short"
+                      type="date"
+                      value={form.acquisition_date}
+                      onChange={(event) => setForm({ ...form, acquisition_date: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Seller" optional>
+                    <input
+                      className="input"
+                      maxLength={200}
+                      value={form.seller}
+                      onChange={(event) => setForm({ ...form, seller: event.target.value })}
+                    />
+                  </Field>
+                  {canSeeCost ? (
+                    <>
+                      <Field label="Purchase price" optional>
+                        <input
+                          className="input input-medium"
+                          inputMode="decimal"
+                          value={form.purchase_price}
+                          onChange={(event) =>
+                            setForm({ ...form, purchase_price: event.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Acquisition fees" optional>
+                        <input
+                          className="input input-medium"
+                          inputMode="decimal"
+                          value={form.acquisition_fees}
+                          onChange={(event) =>
+                            setForm({ ...form, acquisition_fees: event.target.value })
+                          }
+                        />
+                      </Field>
+                    </>
+                  ) : null}
+                </FieldRow>
+              </FormSection>
 
-            <FormSection
-              title="Acquisition"
-              description={
-                canSeeCost
-                  ? "What was paid for the land, not what it is worth today."
-                  : "Consideration is recorded by the roles cleared to see development cost."
-              }
-            >
-              <FieldRow columns={2}>
-                <Field label="Acquisition date" optional>
-                  <input
-                    className="input input-short"
-                    type="date"
-                    value={form.acquisition_date}
-                    onChange={(event) => setForm({ ...form, acquisition_date: event.target.value })}
-                  />
-                </Field>
-                <Field label="Seller" optional>
-                  <input
-                    className="input"
-                    maxLength={200}
-                    value={form.seller}
-                    onChange={(event) => setForm({ ...form, seller: event.target.value })}
-                  />
-                </Field>
-                {canSeeCost ? (
-                  <>
-                    <Field label="Purchase price" optional>
-                      <input
-                        className="input input-medium"
-                        inputMode="decimal"
-                        value={form.purchase_price}
-                        onChange={(event) =>
-                          setForm({ ...form, purchase_price: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Acquisition fees" optional>
-                      <input
-                        className="input input-medium"
-                        inputMode="decimal"
-                        value={form.acquisition_fees}
-                        onChange={(event) =>
-                          setForm({ ...form, acquisition_fees: event.target.value })
-                        }
-                      />
-                    </Field>
-                  </>
-                ) : null}
-              </FieldRow>
-            </FormSection>
-
-            <FormActions>
-              <Button variant="primary" type="submit" disabled={busy}>
-                {busy ? "Registering…" : "Register parcel"}
-              </Button>
-              <Button onClick={() => setCreating(false)} disabled={busy}>
-                Cancel
-              </Button>
-            </FormActions>
-          </form>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy}>
+                  {busy ? "Registering…" : "Register parcel"}
+                </Button>
+                <Button data-leaves-editor onClick={() => setCreating(false)} disabled={busy}>
+                  Cancel
+                </Button>
+              </FormActions>
+            </form>
+          </DraftBoundary>
         </Drawer>
       ) : null}
 
@@ -887,7 +891,7 @@ export function LandTab({
                 description="What the authority permits on this parcel. Zoning says what it is classified as; this says what may be built."
                 actions={
                   canWritePlanning ? (
-                    <Button onClick={() => setEditingPlanning((open) => !open)}>
+                    <Button data-leaves-editor onClick={() => setEditingPlanning((open) => !open)}>
                       {editingPlanning ? "Stop editing" : planning ? "Edit planning" : "Record planning"}
                     </Button>
                   ) : undefined
@@ -901,7 +905,7 @@ export function LandTab({
                   hint="Coverage, floor area ratio, height and setbacks come from the planning decision for this parcel. Until they are recorded, nothing downstream can rely on them."
                   actions={
                     canWritePlanning ? (
-                      <Button onClick={() => setEditingPlanning(true)}>Record planning</Button>
+                      <Button data-leaves-editor onClick={() => setEditingPlanning(true)}>Record planning</Button>
                     ) : undefined
                   }
                 />
@@ -965,204 +969,206 @@ export function LandTab({
               ) : null}
 
               {editingPlanning ? (
-                <form onSubmit={savePlanning}>
-                  <FormSection
-                    title="Envelope"
-                    description="The whole envelope is written at once: a half-updated set would describe a planning position no authority granted."
-                  >
-                    <Field label="Permitted uses" optional>
-                      <input
-                        className="input"
-                        maxLength={2000}
-                        value={planningForm.permitted_uses}
-                        onChange={(event) =>
-                          setPlanningForm({ ...planningForm, permitted_uses: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <FieldRow columns={3}>
-                      <Field label="Site coverage" optional>
+                <DraftBoundary dirty={JSON.stringify(planningForm) !== JSON.stringify(planningFrom(planning))} busy={busy} onDiscard={() => { setPlanningForm(planningFrom(planning)); }}>
+                  <form onSubmit={savePlanning}>
+                    <FormSection
+                      title="Envelope"
+                      description="The whole envelope is written at once: a half-updated set would describe a planning position no authority granted."
+                    >
+                      <Field label="Permitted uses" optional>
                         <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.site_coverage_percent}
+                          className="input"
+                          maxLength={2000}
+                          value={planningForm.permitted_uses}
+                          onChange={(event) =>
+                            setPlanningForm({ ...planningForm, permitted_uses: event.target.value })
+                          }
+                        />
+                      </Field>
+                      <FieldRow columns={3}>
+                        <Field label="Site coverage" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.site_coverage_percent}
+                            onChange={(event) =>
+                              setPlanningForm({
+                                ...planningForm,
+                                site_coverage_percent: event.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field label="Floor area ratio" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.far_ratio}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, far_ratio: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Maximum GFA" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.maximum_gfa}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, maximum_gfa: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Maximum floors" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="numeric"
+                            value={planningForm.maximum_floors}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, maximum_floors: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Maximum height" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.maximum_height}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, maximum_height: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Density" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.density}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, density: event.target.value })
+                            }
+                          />
+                        </Field>
+                      </FieldRow>
+                    </FormSection>
+                    <FormSection title="Setbacks and minimums">
+                      <FieldRow columns={3}>
+                        <Field label="Front setback" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.front_setback}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, front_setback: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Side setback" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.side_setback}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, side_setback: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Rear setback" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.rear_setback}
+                            onChange={(event) =>
+                              setPlanningForm({ ...planningForm, rear_setback: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Minimum plot area" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.minimum_plot_area}
+                            onChange={(event) =>
+                              setPlanningForm({
+                                ...planningForm,
+                                minimum_plot_area: event.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field label="Minimum frontage" optional>
+                          <input
+                            className="input input-short"
+                            inputMode="decimal"
+                            value={planningForm.minimum_frontage}
+                            onChange={(event) =>
+                              setPlanningForm({
+                                ...planningForm,
+                                minimum_frontage: event.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                      </FieldRow>
+                      <Field label="Parking requirement" optional hint="The rule as written, not a number.">
+                        <input
+                          className="input"
+                          maxLength={500}
+                          value={planningForm.parking_requirement}
                           onChange={(event) =>
                             setPlanningForm({
                               ...planningForm,
-                              site_coverage_percent: event.target.value,
+                              parking_requirement: event.target.value,
                             })
                           }
                         />
                       </Field>
-                      <Field label="Floor area ratio" optional>
+                    </FormSection>
+                    <FormSection title="Variance and exclusions">
+                      <label className="checkbox">
                         <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.far_ratio}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, far_ratio: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Maximum GFA" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.maximum_gfa}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, maximum_gfa: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Maximum floors" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="numeric"
-                          value={planningForm.maximum_floors}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, maximum_floors: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Maximum height" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.maximum_height}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, maximum_height: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Density" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.density}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, density: event.target.value })
-                          }
-                        />
-                      </Field>
-                    </FieldRow>
-                  </FormSection>
-                  <FormSection title="Setbacks and minimums">
-                    <FieldRow columns={3}>
-                      <Field label="Front setback" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.front_setback}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, front_setback: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Side setback" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.side_setback}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, side_setback: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Rear setback" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.rear_setback}
-                          onChange={(event) =>
-                            setPlanningForm({ ...planningForm, rear_setback: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Minimum plot area" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.minimum_plot_area}
+                          type="checkbox"
+                          checked={planningForm.variance_required}
                           onChange={(event) =>
                             setPlanningForm({
                               ...planningForm,
-                              minimum_plot_area: event.target.value,
+                              variance_required: event.target.checked,
                             })
                           }
                         />
-                      </Field>
-                      <Field label="Minimum frontage" optional>
-                        <input
-                          className="input input-short"
-                          inputMode="decimal"
-                          value={planningForm.minimum_frontage}
+                        <span>A variance is required for the intended scheme</span>
+                      </label>
+                      <Field label="Variance notes" optional>
+                        <textarea
+                          className="input"
+                          maxLength={2000}
+                          value={planningForm.variance_notes}
                           onChange={(event) =>
-                            setPlanningForm({
-                              ...planningForm,
-                              minimum_frontage: event.target.value,
-                            })
+                            setPlanningForm({ ...planningForm, variance_notes: event.target.value })
                           }
                         />
                       </Field>
-                    </FieldRow>
-                    <Field label="Parking requirement" optional hint="The rule as written, not a number.">
-                      <input
-                        className="input"
-                        maxLength={500}
-                        value={planningForm.parking_requirement}
-                        onChange={(event) =>
-                          setPlanningForm({
-                            ...planningForm,
-                            parking_requirement: event.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                  </FormSection>
-                  <FormSection title="Variance and exclusions">
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={planningForm.variance_required}
-                        onChange={(event) =>
-                          setPlanningForm({
-                            ...planningForm,
-                            variance_required: event.target.checked,
-                          })
-                        }
-                      />
-                      <span>A variance is required for the intended scheme</span>
-                    </label>
-                    <Field label="Variance notes" optional>
-                      <textarea
-                        className="input"
-                        maxLength={2000}
-                        value={planningForm.variance_notes}
-                        onChange={(event) =>
-                          setPlanningForm({ ...planningForm, variance_notes: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Exclusions" optional>
-                      <textarea
-                        className="input"
-                        maxLength={2000}
-                        value={planningForm.exclusions}
-                        onChange={(event) =>
-                          setPlanningForm({ ...planningForm, exclusions: event.target.value })
-                        }
-                      />
-                    </Field>
-                  </FormSection>
-                  <FormActions>
-                    <Button variant="primary" type="submit" disabled={busy}>
-                      {busy ? "Saving…" : "Save planning envelope"}
-                    </Button>
-                    <Button onClick={() => setEditingPlanning(false)} disabled={busy}>
-                      Cancel
-                    </Button>
-                  </FormActions>
-                </form>
+                      <Field label="Exclusions" optional>
+                        <textarea
+                          className="input"
+                          maxLength={2000}
+                          value={planningForm.exclusions}
+                          onChange={(event) =>
+                            setPlanningForm({ ...planningForm, exclusions: event.target.value })
+                          }
+                        />
+                      </Field>
+                    </FormSection>
+                    <FormActions>
+                      <Button variant="primary" type="submit" disabled={busy}>
+                        {busy ? "Saving…" : "Save planning envelope"}
+                      </Button>
+                      <Button data-leaves-editor onClick={() => setEditingPlanning(false)} disabled={busy}>
+                        Cancel
+                      </Button>
+                    </FormActions>
+                  </form>
+                </DraftBoundary>
               ) : null}
             </section>
           ) : null}

@@ -38,8 +38,15 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   const [busy, setBusy] = useState(false);
   const [terminating, setTerminating] = useState<ConsultantEngagement | null>(null);
   const canEdit = hasAnyRole(roles, CONSULTANT_EDITORS);
-  const load = useCallback(async () => { setData(await api.workspace(projectId)); }, [projectId]);
-  useEffect(() => { void (async () => { try { await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load Consultant Engineer."); } })(); }, [load]);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const load = useCallback(async () => {
+    setRetrying(true);
+    try { setData(await api.workspace(projectId)); setReadError(null); }
+    catch (e) { setReadError(e instanceof ApiError ? e.message : "Could not load Consultant Engineer."); }
+    finally { setRetrying(false); }
+  }, [projectId]);
+  useEffect(() => { void (async () => { await load(); })(); }, [load]);
   const current = data?.active_engagement ?? data?.engagements.find((x) => x.status === "draft");
   const selected = data?.engagements.find((x) => x.id === selectedId) ?? current;
   const editable = canEdit && !!selected && ["draft", "active"].includes(selected.status);
@@ -77,6 +84,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   return <div className="stack">
     <PageHeader icon="building" title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
+    {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Consultant Engineer"}</Button></> : null}
     {data ? <Card tone="command" title="Design position across agreements">
       <Position compact>
         <PositionFigure lead label="Outstanding deliverables" value={data.outstanding_deliverables} />
@@ -84,7 +92,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         <PositionFigure label="Disciplines complete" value={data.completed_disciplines} note={`Of ${data.total_disciplines} disciplines`} />
         <PositionFigure label="Design stages complete" value={data.completed_stages} note={`Of ${data.total_stages} stages`} />
       </Position>
-    </Card> : !error ? <Loading label="Loading consultant agreement" shape="page" /> : null}
+    </Card> : !readError ? <Loading label="Loading consultant agreement" shape="page" /> : null}
     {data && !current ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
     {selected ? <>
       <Card title={selected.consultant_name} description="Consultant agreement and design programme" actions={current && selected.id !== current.id ? <Button small onClick={() => setSelectedId(current.id)}>Return to current agreement</Button> : undefined}>

@@ -1,5 +1,7 @@
 "use client";
 
+import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
+
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
 
 import { useCallback, useEffect, useState } from "react";
@@ -69,6 +71,7 @@ export function PaymentPlansTab({
     effective_date: todayISO(),
     source_version_id: "",
   });
+  const [initialForm] = useState(form);
   const [filters, setFilters] = useRegisterFields({ search: "", status: "" });
   const { search, status } = filters;
   const setSearch = (search: string) => setFilters({ search });
@@ -83,7 +86,9 @@ export function PaymentPlansTab({
 
   const canPrepare = roles.has("collections");
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setRegister(await paymentPlans.register(projectId));
       setError(null);
@@ -91,6 +96,7 @@ export function PaymentPlansTab({
       setRegister(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load the payment plans.");
     }
+    setRetrying(false);
     // Allowed to fail quietly: a reader who may see the register is not always
     // entitled to the contract list, and that should not blank the page.
     try {
@@ -133,6 +139,7 @@ export function PaymentPlansTab({
       <>
         {header()}
         <Notice tone="error">{error}</Notice>
+        <Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry payment plans"}</Button>
       </>
     );
   }
@@ -170,7 +177,7 @@ export function PaymentPlansTab({
     <>
       {header(
         canPrepare && unscheduled.length > 0 ? (
-          <Button variant="primary" onClick={() => setOpening((open) => !open)} aria-expanded={opening}>
+          <Button data-leaves-editor variant="primary" onClick={() => setOpening((open) => !open)} aria-expanded={opening}>
             New payment plan
           </Button>
         ) : undefined,
@@ -226,99 +233,102 @@ export function PaymentPlansTab({
           <Card
             title="Open a payment plan"
             description="Against a signed or live contract. The schedule itself is built next, in the plan's own file."
-            actions={<Button variant="quiet" onClick={() => setOpening(false)}>Cancel</Button>}
+            actions={<Button data-leaves-editor variant="quiet" onClick={() => setOpening(false)}>Cancel</Button>}
           >
-            <form
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setBusy(true);
-                setError(null);
-                try {
-                  const created = await paymentPlans.create(projectId, {
-                    sale_contract_id: form.sale_contract_id,
-                    name: form.name,
-                    reservation_treatment: form.reservation_treatment,
-                    effective_date: form.effective_date,
-                    ...(form.source_version_id
-                      ? { origin_type: "copied_plan", source_version_id: form.source_version_id }
-                      : {}),
-                  });
-                  setOpening(false);
-                  setNotice(`${created.plan.plan_number} opened. Build its schedule next.`);
-                  router.push(recordHref("payment-plan", created.plan.id));
-                  await load();
-                } catch (caught) {
-                  setError(caught instanceof ApiError ? caught.message : "Could not open the payment plan.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <FieldRow columns={3}>
-                <Field label="Contract" hint="Only a signed or live contract can be scheduled.">
-                  <select
-                    className="input"
-                    required
-                    value={form.sale_contract_id}
-                    onChange={(event) => setForm({ ...form, sale_contract_id: event.target.value })}
-                  >
-                    <option value="">Choose a contract</option>
-                    {unscheduled.map((sale) => (
-                      <option key={sale.id} value={sale.id}>
-                        {sale.sale_number}
-                        {sale.spa_number ? ` · ${sale.spa_number}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Name">
-                  <input
-                    className="input"
-                    required
-                    value={form.name}
-                    onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  />
-                </Field>
-                <Field label="Start from" hint="Copying brings the shape across. Every amount is re-derived against this contract.">
-                  <select
-                    className="input"
-                    value={form.source_version_id}
-                    onChange={(event) => setForm({ ...form, source_version_id: event.target.value })}
-                  >
-                    <option value="">A blank schedule</option>
-                    {copyable.map((row) => (
-                      <option key={row.plan_id} value={row.copy_source_version_id ?? ""}>
-                        {row.plan_number} · {row.unit_reference} · v{row.copy_source_version_number}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Takes effect" hint="When these terms start governing.">
-                  <input
-                    className="input input-short"
-                    type="date"
-                    required
-                    value={form.effective_date}
-                    onChange={(event) => setForm({ ...form, effective_date: event.target.value })}
-                  />
-                </Field>
-                <Field label="Reservation" hint="Either way the schedule covers the whole contract.">
-                  <select
-                    className="input"
-                    value={form.reservation_treatment}
-                    onChange={(event) => setForm({ ...form, reservation_treatment: event.target.value })}
-                  >
-                    <option value="reference_only">Held on the deal</option>
-                    <option value="included_in_schedule">Shown in the schedule</option>
-                  </select>
-                </Field>
-              </FieldRow>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  {busy ? "Opening…" : "Open plan"}
-                </Button>
-              </FormActions>
-            </form>
+            <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(initialForm)} busy={busy} onDiscard={() => { setForm(initialForm); }}>
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const created = await paymentPlans.create(projectId, {
+                      sale_contract_id: form.sale_contract_id,
+                      name: form.name,
+                      reservation_treatment: form.reservation_treatment,
+                      effective_date: form.effective_date,
+                      ...(form.source_version_id
+                        ? { origin_type: "copied_plan", source_version_id: form.source_version_id }
+                        : {}),
+                    });
+                    setForm(initialForm);
+                    setOpening(false);
+                    setNotice(`${created.plan.plan_number} opened. Build its schedule next.`);
+                    router.push(recordHref("payment-plan", created.plan.id));
+                    await load();
+                  } catch (caught) {
+                    setError(caught instanceof ApiError ? caught.message : "Could not open the payment plan.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <FieldRow columns={3}>
+                  <Field label="Contract" hint="Only a signed or live contract can be scheduled.">
+                    <select
+                      className="input"
+                      required
+                      value={form.sale_contract_id}
+                      onChange={(event) => setForm({ ...form, sale_contract_id: event.target.value })}
+                    >
+                      <option value="">Choose a contract</option>
+                      {unscheduled.map((sale) => (
+                        <option key={sale.id} value={sale.id}>
+                          {sale.sale_number}
+                          {sale.spa_number ? ` · ${sale.spa_number}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Name">
+                    <input
+                      className="input"
+                      required
+                      value={form.name}
+                      onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Start from" hint="Copying brings the shape across. Every amount is re-derived against this contract.">
+                    <select
+                      className="input"
+                      value={form.source_version_id}
+                      onChange={(event) => setForm({ ...form, source_version_id: event.target.value })}
+                    >
+                      <option value="">A blank schedule</option>
+                      {copyable.map((row) => (
+                        <option key={row.plan_id} value={row.copy_source_version_id ?? ""}>
+                          {row.plan_number} · {row.unit_reference} · v{row.copy_source_version_number}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Takes effect" hint="When these terms start governing.">
+                    <input
+                      className="input input-short"
+                      type="date"
+                      required
+                      value={form.effective_date}
+                      onChange={(event) => setForm({ ...form, effective_date: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Reservation" hint="Either way the schedule covers the whole contract.">
+                    <select
+                      className="input"
+                      value={form.reservation_treatment}
+                      onChange={(event) => setForm({ ...form, reservation_treatment: event.target.value })}
+                    >
+                      <option value="reference_only">Held on the deal</option>
+                      <option value="included_in_schedule">Shown in the schedule</option>
+                    </select>
+                  </Field>
+                </FieldRow>
+                <FormActions>
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    {busy ? "Opening…" : "Open plan"}
+                  </Button>
+                </FormActions>
+              </form>
+            </DraftBoundary>
           </Card>
         ) : null}
 

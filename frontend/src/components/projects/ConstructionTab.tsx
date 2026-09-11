@@ -93,7 +93,9 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
   const [summary, setSummary] = useState<ConstructionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setSummary(await construction.summary(projectId));
       setError(null);
@@ -104,6 +106,8 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the construction position.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -145,7 +149,7 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
         }
       />
 
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {error ? <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry construction position"}</Button></> : null}
 
       <Tabs
         label="Construction sections"
@@ -204,13 +208,16 @@ function BudgetSection({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       const versions = await construction.budgets(projectId);
       const current =
         versions.find((version) => version.status === "active") ?? versions[0];
+      setEmpty(!current);
       if (!current) {
-        setEmpty(true);
+        setError(null);
         return;
       }
       setDetail(await construction.budget(projectId, current.id));
@@ -221,6 +228,8 @@ function BudgetSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the budget.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -230,7 +239,7 @@ function BudgetSection({ projectId }: { projectId: string }) {
     })();
   }, [load]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (empty) {
     return (
       <EmptyState
@@ -345,7 +354,9 @@ function ContractsSection({ projectId }: { projectId: string }) {
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setRows(await construction.contracts(projectId));
       setError(null);
@@ -355,6 +366,8 @@ function ContractsSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the contracts.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -377,7 +390,7 @@ function ContractsSection({ projectId }: { projectId: string }) {
     });
   }, [rows, search, status]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the contracts" shape="rows" />;
 
   return (
@@ -517,7 +530,9 @@ function VariationsSection({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       const [variations, contracts] = await Promise.all([
         construction.variations(projectId), construction.contracts(projectId),
@@ -531,6 +546,8 @@ function VariationsSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the variations.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -545,7 +562,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
     [rows, status],
   );
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the variations" shape="rows" />;
 
   return (
@@ -643,7 +660,9 @@ function CertificatesSection({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const [contract, setContract] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       const [certificates, contracts] = await Promise.all([
         construction.certificates(projectId), construction.contracts(projectId),
@@ -657,6 +676,8 @@ function CertificatesSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the certificates.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -671,7 +692,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
     [rows, status],
   );
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the certificates" shape="rows" />;
 
   return (
@@ -797,7 +818,9 @@ function CashSection({ projectId }: { projectId: string }) {
   const [contracts, setContracts] = useState<ConstructionContract[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       const [claims, cash, contracts] = await Promise.all([
         construction.invoices(projectId),
@@ -814,6 +837,8 @@ function CashSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the cash position.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -823,7 +848,7 @@ function CashSection({ projectId }: { projectId: string }) {
     })();
   }, [load]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!invoices || !payments)
     return <Loading label="Loading invoices and payments" shape="rows" />;
 
@@ -938,7 +963,9 @@ function MilestonesSection({ projectId }: { projectId: string }) {
   const [rows, setRows] = useState<ConstructionMilestone[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setRows(await construction.milestones(projectId));
       setError(null);
@@ -948,6 +975,8 @@ function MilestonesSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the milestones.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -957,7 +986,7 @@ function MilestonesSection({ projectId }: { projectId: string }) {
     })();
   }, [load]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the milestones" shape="rows" />;
   if (rows.length === 0) {
     return (
@@ -1034,13 +1063,16 @@ function ForecastSection({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [empty, setEmpty] = useState(false);
 
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       const versions = await construction.forecasts(projectId);
       const current =
         versions.find((version) => version.status === "active") ?? versions[0];
+      setEmpty(!current);
       if (!current) {
-        setEmpty(true);
+        setError(null);
         return;
       }
       setDetail(await construction.forecast(projectId, current.id));
@@ -1051,6 +1083,8 @@ function ForecastSection({ projectId }: { projectId: string }) {
           ? caught.message
           : "Could not load the forecast.",
       );
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -1060,7 +1094,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
     })();
   }, [load]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (empty) {
     return (
       <EmptyState
