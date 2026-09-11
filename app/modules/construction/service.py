@@ -1338,7 +1338,7 @@ def create_contract(
     return contract
 
 
-def _require_contract_editable(contract: Contract) -> None:
+def validate_contract_editing(contract: Contract) -> None:
     if contract.status not in CONTRACT_EDITABLE:
         raise ConflictError(
             "This contract has left draft. Its original value and lines are what "
@@ -1346,10 +1346,64 @@ def _require_contract_editable(contract: Contract) -> None:
         )
 
 
+def update_contract(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    contract_id: uuid.UUID,
+    values: dict[str, Any],
+) -> Contract:
+    """Replace draft terms only; submitted or standing commitments are immutable."""
+    lock_project(session, project.id)
+    contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
+    validate_contract_editing(contract)
+    if values["currency_id"] != project.base_currency_id:
+        raise ValidationError("A contract must use the project's base currency.")
+    fields = (
+        "contract_number",
+        "contract_type",
+        "vendor_name",
+        "currency_id",
+        "original_contract_value_ex_tax",
+        "advance_entitlement_amount",
+        "retention_rate_fraction",
+        "tax_rate_fraction",
+        "vendor_registration_reference",
+        "vendor_tax_reference",
+        "vendor_contact_reference",
+        "payment_terms",
+        "planned_start_date",
+        "planned_completion_date",
+        "notes",
+    )
+    before = _snapshot(contract, fields)
+    for field in fields:
+        value = values[field]
+        if isinstance(value, str):
+            value = value.strip() or None
+        if field in {"original_contract_value_ex_tax", "advance_entitlement_amount"}:
+            value = money(value)
+        setattr(contract, field, value)
+    _flush(session)
+    record_event(
+        session,
+        action="construction.contract_updated",
+        entity_type=ENTITY_CONTRACT,
+        entity_id=contract.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(contract, fields),
+    )
+    return contract
+
+
 def set_contract_line(
     session: Session,
     *,
     project: Project,
+    actor: ActorContext,
     contract_id: uuid.UUID,
     sequence: int,
     description: str,
@@ -1360,7 +1414,7 @@ def set_contract_line(
     """Write one cost code's share of a draft contract's value."""
     lock_project(session, project.id)
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
-    _require_contract_editable(contract)
+    validate_contract_editing(contract)
     code = get_cost_code(session, project=project, cost_code_id=cost_code_id)
     if not code.is_active:
         raise ValidationError("That cost code has been retired and cannot take new commitment.")
@@ -1370,6 +1424,8 @@ def set_contract_line(
             ContractLine.contract_id == contract.id, ContractLine.sequence == sequence
         )
     ).first()
+    fields = ("sequence", "description", "cost_code_id", "original_amount_ex_tax", "notes")
+    before = _snapshot(line, fields) if line is not None else None
     if line is None:
         line = ContractLine(
             project_id=project.id,
@@ -1387,6 +1443,16 @@ def set_contract_line(
         line.original_amount_ex_tax = money(original_amount_ex_tax)
         line.notes = (notes or "").strip() or None
     _flush(session)
+    record_event(
+        session,
+        action="construction.contract_line_written",
+        entity_type=ENTITY_CONTRACT,
+        entity_id=contract.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(line, fields),
+    )
     return line
 
 
@@ -1396,7 +1462,7 @@ def remove_contract_line(
     """Drop a line from a draft contract."""
     lock_project(session, project.id)
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
-    _require_contract_editable(contract)
+    validate_contract_editing(contract)
     line = session.scalars(
         select(ContractLine).where(
             ContractLine.contract_id == contract.id, ContractLine.sequence == sequence
@@ -1418,15 +1484,19 @@ def contract_line_total(session: Session, *, contract_id: uuid.UUID) -> Decimal:
     return money(total or ZERO)
 
 
+def validate_contract_submission(session: Session, *, contract: Contract) -> None:
+    if contract.status != CONTRACT_DRAFT:
+        raise ConflictError("Only a draft contract can be submitted.")
+    _require_lines_reconcile(session, contract=contract)
+
+
 def submit_contract(
     session: Session, *, project: Project, actor: ActorContext, contract_id: uuid.UUID
 ) -> Contract:
     """Freeze a draft contract for financial authorisation."""
     lock_project(session, project.id)
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
-    if contract.status != CONTRACT_DRAFT:
-        raise ConflictError("Only a draft contract can be submitted.")
-    _require_lines_reconcile(session, contract=contract)
+    validate_contract_submission(session, contract=contract)
 
     before = _snapshot(contract, _CONTRACT_FIELDS)
     contract.status = CONTRACT_SUBMITTED
@@ -1463,20 +1533,9 @@ def _require_lines_reconcile(session: Session, *, contract: Contract) -> None:
         )
 
 
-def activate_contract(
-    session: Session, *, project: Project, actor: ActorContext, contract_id: uuid.UUID
-) -> Contract:
-    """Make a submitted contract a commitment, having proved the budget covers it.
-
-    Everything is re-proved here under lock rather than trusted from submission:
-    the lines still reconcile, the currency is still the project's, a budget is
-    still in force, and every cost code this contract touches still has room for
-    it beside whatever else has been committed since. The last of those is the
-    race — two contracts submitted against the same headroom, both activated,
-    neither aware of the other.
-    """
-    lock_project(session, project.id)
-    contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
+def validate_contract_activation(
+    session: Session, *, project: Project, actor: ActorContext, contract: Contract
+) -> None:
     if contract.status != CONTRACT_SUBMITTED:
         raise ConflictError("Only a submitted contract can be activated.")
     # Activating is the act that commits the company. The person who prepared
@@ -1502,6 +1561,23 @@ def activate_contract(
     others = committed_by_cost_code(session, project_id=project.id, exclude_contract_id=contract.id)
     mine = contract_committed_by_cost_code(session, project_id=project.id, contract_id=contract.id)
     _require_headroom(session, budget_lines=lines, standing=others, additional=mine)
+
+
+def activate_contract(
+    session: Session, *, project: Project, actor: ActorContext, contract_id: uuid.UUID
+) -> Contract:
+    """Make a submitted contract a commitment, having proved the budget covers it.
+
+    Everything is re-proved here under lock rather than trusted from submission:
+    the lines still reconcile, the currency is still the project's, a budget is
+    still in force, and every cost code this contract touches still has room for
+    it beside whatever else has been committed since. The last of those is the
+    race — two contracts submitted against the same headroom, both activated,
+    neither aware of the other.
+    """
+    lock_project(session, project.id)
+    contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
+    validate_contract_activation(session, project=project, actor=actor, contract=contract)
 
     before = _snapshot(contract, _CONTRACT_FIELDS)
     contract.status = CONTRACT_ACTIVE
@@ -1560,6 +1636,22 @@ def _require_headroom(
         )
 
 
+def validate_contract_close(*, contract: Contract, to_status: str) -> None:
+    if to_status == CONTRACT_CANCELLED and contract.status not in (
+        CONTRACT_DRAFT,
+        CONTRACT_SUBMITTED,
+    ):
+        raise ConflictError(
+            "Only a contract that never became a commitment can be cancelled. One "
+            "that did is terminated, and its money leaves through a variation."
+        )
+    if (
+        to_status in (CONTRACT_COMPLETED, CONTRACT_TERMINATED)
+        and contract.status != CONTRACT_ACTIVE
+    ):
+        raise ConflictError("Only an active contract can be completed or terminated.")
+
+
 def _close_contract(
     session: Session,
     *,
@@ -1581,19 +1673,7 @@ def _close_contract(
     """
     lock_project(session, project.id)
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
-    if to_status == CONTRACT_CANCELLED and contract.status not in (
-        CONTRACT_DRAFT,
-        CONTRACT_SUBMITTED,
-    ):
-        raise ConflictError(
-            "Only a contract that never became a commitment can be cancelled. One "
-            "that did is terminated, and its money leaves through a variation."
-        )
-    if (
-        to_status in (CONTRACT_COMPLETED, CONTRACT_TERMINATED)
-        and contract.status != CONTRACT_ACTIVE
-    ):
-        raise ConflictError("Only an active contract can be completed or terminated.")
+    validate_contract_close(contract=contract, to_status=to_status)
 
     before = _snapshot(contract, _CONTRACT_FIELDS)
     contract.status = to_status

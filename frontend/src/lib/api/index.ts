@@ -1753,6 +1753,8 @@ export const construction = {
     ),
   createContract: (projectId: string, body: Record<string, unknown>) =>
     post<ContractDetail>(`/projects/${projectId}/construction/contracts`, body),
+  updateConstructionContract: (projectId: string, contractId: string, body: Record<string, unknown>) =>
+    put<ContractDetail>(`/projects/${projectId}/construction/contracts/${contractId}`, body),
   writeContractLine: (
     projectId: string,
     contractId: string,

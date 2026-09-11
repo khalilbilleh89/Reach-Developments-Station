@@ -263,7 +263,7 @@ def contract_out(session: Session, *, project: Project, contract: Contract) -> s
 
 
 def contract_detail(
-    session: Session, *, project: Project, contract: Contract
+    session: Session, *, project: Project, contract: Contract, actor: ActorContext
 ) -> schemas.ContractDetailOut:
     """The contract file: what was committed, certified, invoiced and paid.
 
@@ -351,8 +351,59 @@ def contract_detail(
         session, project_id=project.id, contract_id=contract.id
     )
 
+    def editing() -> None:
+        permissions.require_construction_preparer(actor)
+        service.validate_contract_editing(contract)
+
+    def submission() -> None:
+        permissions.require_construction_preparer(actor)
+        service.validate_contract_submission(session, contract=contract)
+
+    def activation() -> None:
+        permissions.require_construction_activator(actor)
+        service.validate_contract_activation(
+            session, project=project, actor=actor, contract=contract
+        )
+
+    def closing(to_status: str) -> None:
+        if to_status == "cancelled":
+            permissions.require_construction_preparer(actor)
+        else:
+            permissions.require_construction_activator(actor)
+        service.validate_contract_close(contract=contract, to_status=to_status)
+
+    def blocker(check: Callable[[], None]) -> str | None:
+        try:
+            check()
+        except ServiceError as error:
+            return error.detail
+        return None
+
     return schemas.ContractDetailOut(
         **contract_out(session, project=project, contract=contract).model_dump(),
+        currency_id=contract.currency_id,
+        workflow=schemas.ContractWorkflowOut(
+            editing_blocker=blocker(editing),
+            submission_blocker=blocker(submission),
+            activation_blocker=blocker(activation),
+            cancellation_blocker=blocker(lambda: closing("cancelled")),
+            completion_blocker=blocker(lambda: closing("completed")),
+            termination_blocker=blocker(lambda: closing("terminated")),
+        ),
+        line_total=service.contract_line_total(session, contract_id=contract.id),
+        **{
+            field: getattr(contract, field)
+            for field in (
+                "created_at",
+                "submitted_at",
+                "activated_at",
+                "completed_at",
+                "terminated_at",
+                "cancelled_at",
+                "termination_reason",
+                "cancellation_reason",
+            )
+        },
         vendor_registration_reference=contract.vendor_registration_reference,
         vendor_tax_reference=contract.vendor_tax_reference,
         vendor_contact_reference=contract.vendor_contact_reference,

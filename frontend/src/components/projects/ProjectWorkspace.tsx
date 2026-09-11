@@ -315,7 +315,7 @@ export function ProjectWorkspace({
         ) : null}
         {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
         {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}
-        {section === "construction" ? <ConstructionTab projectId={projectId} roles={roles} /> : null}
+        {section === "construction" ? <ConstructionTab projectId={projectId} roles={roles} currencyId={project.base_currency_id} currencyCode={project.base_currency_code} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
