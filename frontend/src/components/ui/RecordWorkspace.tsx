@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { rememberRegisterLink } from "@/components/shell/registerState";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
 import { Tabs, TabPanel } from "./Tabs";
@@ -27,12 +28,9 @@ export function RecordLink({ projectId, kind, id, tab, children, className = "bu
   projectId: string; kind: RecordKind; id: string; tab?: string; children: ReactNode; className?: string;
 }) {
   const params = useSearchParams();
-  const source = `/projects/?${params}`;
   const href = contextualRecordHref(params, projectId, kind, id, tab);
   return <Link data-record-link className={className} href={href} onClick={() => {
-    if (!params.has("record") && source) {
-      try { sessionStorage.setItem(`reach-register:${source}`, JSON.stringify({ href, y: window.scrollY, tables: Array.from(document.querySelectorAll<HTMLElement>(".table-scroll")).map(table => ({ label: table.getAttribute("aria-label"), x: table.scrollLeft, y: table.scrollTop })) })); } catch { /* Storage may be disabled; URL context still works. */ }
-    }
+    if (!params.has("record")) rememberRegisterLink(href);
   }}>{children}</Link>;
 }
 

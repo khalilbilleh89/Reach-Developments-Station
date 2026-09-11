@@ -2851,3 +2851,15 @@ export interface ConsultantWorkspace { active_engagement: ConsultantEngagement |
 export interface CommissionAllocation { id: string; beneficiary_name: string; rate_fraction: RateStr; calculated_amount: MoneyStr; sequence: number; notes: string | null; updated_at: string; }
 export interface CommissionGrant { id: string; project_id: string; sale_contract_id: string; sale_reference: string; sale_status: string; unit_id: string; unit_reference: string; buyer_display: string; currency_id: string; sold_price_snapshot: MoneyStr; commissionable_base_amount: MoneyStr; granted_rate_fraction: RateStr; commission_total: MoneyStr; status: string; notes: string | null; prepared_by_user_id: string; released_by_user_id: string | null; released_at: string | null; reversed_by_user_id: string | null; reversed_at: string | null; reversal_reason: string | null; created_at: string; updated_at: string; allocations: CommissionAllocation[]; allocation_rate_total: RateStr; allocation_amount_total: MoneyStr; is_reconciled: boolean; }
 export interface CommissionEligibleSale { id: string; sale_reference: string; unit_reference: string; buyer_display: string; sold_price: MoneyStr; currency_id: string; }
+
+export interface SalesHistoryRow {
+  id: string;
+  kind: "reservation" | "sale";
+  reference: string;
+  status: string;
+  created_at: string;
+  unit_id: string;
+  unit_reference: string;
+  client_display_name: string;
+  spa_number: string | null;
+}

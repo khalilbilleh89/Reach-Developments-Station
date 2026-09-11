@@ -905,3 +905,20 @@ class SalesRegisterRead(BaseModel):
     rows: list[SalesRegisterRow]
     totals: SalesRegisterTotals
     total: int
+
+
+class SalesHistoryRow(BaseModel):
+    id: uuid.UUID
+    kind: Literal["reservation", "sale"]
+    reference: str
+    status: str
+    created_at: datetime
+    unit_id: uuid.UUID
+    unit_reference: str
+    client_display_name: str
+    spa_number: str | None
+
+
+class SalesHistoryRead(BaseModel):
+    items: list[SalesHistoryRow]
+    total: int

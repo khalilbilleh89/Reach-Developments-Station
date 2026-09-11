@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRegisterFields } from "@/components/shell/registerState";
 
 import {
   Badge,
@@ -60,13 +61,16 @@ const VIEWS = [
  * to look at.
  */
 export function CollectionsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
-  const [view, setView] = useState("accounts");
-  const [asOf, setAsOf] = useState(todayISO());
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [bucket, setBucket] = useState("");
-  const [only, setOnly] = useState("");
-  const [open, setOpen] = useState<CollectionRegisterRow | null>(null);
+  const [fields, change] = useRegisterFields({ view: "accounts", as_of: "", search: "", status: "", bucket: "", only: "", account: "" });
+  const { search, status, bucket, only } = fields;
+  const view = fields.view === "aging" ? "aging" : "accounts", asOf = fields.as_of || todayISO();
+  const setView = (view: string) => change({ view });
+  const setAsOf = (as_of: string) => change({ as_of });
+  const setSearch = (search: string) => change({ search });
+  const setStatus = (status: string) => change({ status });
+  const setBucket = (bucket: string) => change({ bucket });
+  const setOnly = (only: string) => change({ only });
+  const setOpen = (row: CollectionRegisterRow | null) => change({ account: row?.sale_id ?? "" });
   const currencyCodeOf = useCurrencyCode();
 
   const position = useAnswer(true, () => Promise.all([
@@ -75,6 +79,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
   const agingAnswer = useAnswer(view === "aging", () => collections.aging(projectId, { asOf, overdueOnly: only === "overdue" }), [projectId, asOf, only === "overdue"]);
   const summary = position.status === "ready" ? position.data[0] : null;
   const rows = position.status === "ready" ? position.data[1] : null;
+  const open = rows?.find(row => row.sale_id === fields.account) ?? null;
   const aging = agingAnswer.status === "ready" ? agingAnswer.data : null;
 
   const visible = useMemo(() => {
@@ -99,7 +104,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
   }, [rows, search, status, only, bucket]);
 
   const currencyFor = (row: { currency_id: string }) => currencyCodeOf(row.currency_id);
-  const filtered = search !== "" || status !== "" || bucket !== "" || only !== "";
+  const filtered = asOf !== todayISO() || search !== "" || status !== "" || bucket !== "" || only !== "";
 
   return (
     <>
@@ -129,6 +134,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
           onReset={
             filtered
               ? () => {
+                  setAsOf("");
                   setSearch("");
                   setStatus("");
                   setBucket("");
@@ -345,14 +351,15 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
         </Card>
       </div>
 
-      {open ? (
+      {fields.account ? (
         <CollectionAccount
+          key={fields.account}
           projectId={projectId}
-          saleId={open.sale_id}
-          saleNumber={open.sale_number}
-          unitNumber={open.unit_number}
-          clientName={open.client_display_name}
-          currencyCode={currencyFor(open)}
+          saleId={fields.account}
+          saleNumber={open?.sale_number ?? "Collection account"}
+          unitNumber={open?.unit_number ?? ""}
+          clientName={open?.client_display_name ?? ""}
+          currencyCode={open ? currencyFor(open) : ""}
           roles={roles}
           asOf={asOf}
           onClose={() => setOpen(null)}

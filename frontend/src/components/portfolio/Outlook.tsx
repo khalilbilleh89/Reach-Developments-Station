@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 
-import { useState } from "react";
+import { pageOffset, useRegisterFields } from "@/components/shell/registerState";
 
 import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, Drawer, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter } from "@/components/ui";
 
@@ -17,6 +17,7 @@ import type { OutlookItem } from "@/lib/api/management";
 
 import { businessDate, money } from "@/lib/format";
 
+import { ProjectChoice } from "./ActionRecord";
 import { SourceAction } from "./Actions";
 
 
@@ -75,20 +76,25 @@ function Observation({ item }: { item: OutlookItem }) {
 
 
 
-export function PortfolioOutlook({ project }: { project?: string }) {
+export function PortfolioOutlook() {
 
-  const [horizon, setHorizon] = useState(90);
-
-  const [kind, setKind] = useState("cashflow_forecast");
-
-  const [offset, setOffset] = useState(0);
-
-  const [selected, setSelected] = useState<OutlookItem | null>(null);
+  const [fields, change] = useRegisterFields({ project: "", horizon: "90", kind: "cashflow_forecast", offset: "", observation: "" });
+  const project = fields.project;
+  const horizon = [30, 60, 90].includes(Number(fields.horizon)) ? Number(fields.horizon) : 90;
+  const kind = groups.some(([key]) => key === fields.kind) || fields.kind === "" ? fields.kind : "cashflow_forecast";
+  const offset = pageOffset(fields.offset);
+  const setHorizon = (horizon: number) => change({ horizon: String(horizon), observation: "" });
+  const setKind = (kind: string) => change({ kind, observation: "" });
+  const setOffset = (offset: number) => change({ offset: String(offset), observation: "" });
+  const setSelected = (item: OutlookItem | null) => change({ observation: item?.source_key ?? "" });
 
   const answer = useAnswer(true, () => management.outlook(horizon, offset, kind, project), [horizon, offset, kind, project]);
 
-  return <div className="stack"><DataToolbar activeSummary={`${horizon} days · ${groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates"}`}>
+  const selected = answer.status === "ready" ? answer.data.items.find(item => item.source_key === fields.observation) : null;
 
+  return <div className="stack"><DataToolbar onReset={project || kind || horizon !== 90 || offset ? () => change({ project: "", horizon: "90", kind: "", offset: "", observation: "" }) : undefined} activeSummary={`${project ? "Selected development" : "All authorized developments"} · ${horizon} days · ${groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates"}`}>
+
+    <ProjectChoice value={project} onChange={project => change({ project, offset: "", observation: "" })} />
     <ToolbarFilter label="Outlook horizon"><select className="input" value={horizon} onChange={(event) => { setHorizon(Number(event.target.value)); setOffset(0); }}>{[30, 60, 90].map((days) => <option key={days} value={days}>{days} days</option>)}</select></ToolbarFilter>
 
     <ToolbarFilter label="Outlook source"><select className="input" value={kind} onChange={(event) => { setKind(event.target.value); setOffset(0); }}><option value="">All observations · date order</option>{groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></ToolbarFilter>
