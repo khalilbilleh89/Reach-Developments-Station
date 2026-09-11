@@ -23,9 +23,14 @@ Governed by [Engineering Rules](ENGINEERING_RULES.md),
    governance and frozen historic prices. Implemented as a draft; see
    [handoff and acceptance](COM_SALES_01_ACCEPTANCE.md). Browser/operator
    acceptance and independent review remain pending.
-6. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
+6. **Record correction and removal — focused UX audit, then fixes:** owner-added
+   priority immediately after Sales completion. Investigate every operator-created
+   record type for missing edit/delete actions, beginning with Pre-Launch expenses.
+   Publish the findings and bounded implementation plan before applying fixes;
+   see the scope below. This work is queued, not started or accepted.
+7. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
    filters; Portfolio return-to-page; Cashflow tab/date/forecast restoration.
-7. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project
+8. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project
    Management complete real tasks. Engineering checks do not substitute for use.
 
 No Experience 5, broad makeover, new state framework, generic workflow engine,
@@ -38,6 +43,36 @@ still includes later lifecycles. Before freeze, reconcile that broader scope
 with the proposed Budget/Contract release boundary. Do not mark unimplemented
 workflows accepted or silently expand this sequence. Existing API integration
 acceptance is not proof of completed operator UI workflows.
+
+## Queued record correction and removal audit
+
+Owner request: every record must have a usable way to correct or remove an
+entry made in error. The reported example is a Pre-Launch expense that cannot
+be edited or deleted after creation. Treat this as an issue to reproduce, not
+an already-verified diagnosis. Start this audit only after the Sales work is
+finished; keep the fixes in separate bounded PRs.
+
+Inventory all operator-created record types across the application, including
+Pre-Launch, Inventory, buyers/Sales, Payment Plans, Collections, Land, Permits,
+Documents, Construction and Cashflow. For each, record the page, lifecycle
+states, permitted roles, existing API support, visible edit/removal controls,
+dependencies, blocker messages and the actual correction journey. Distinguish
+missing UI from missing backend capability and intentional history protection.
+
+The acceptance target is a discoverable correction/removal path for every
+record type. Allow authorized editing and deletion of eligible draft or unused
+records. For posted, confirmed, signed or referenced records, investigate and
+provide the appropriate cancel, void, reverse, archive or amendment path, with
+plain-language reasons where physical deletion is blocked. Do not silently
+erase financial/legal evidence, break references or remove audit history.
+Reuse existing domain operations and permissions; no blanket CRUD engine.
+
+Report a concrete matrix of gaps and a prioritized fix plan before implementation,
+then fix and verify the agreed scope. Include accidental/duplicate Pre-Launch
+expenses, draft versus confirmed states, dependent records, unauthorized users,
+confirmation/reason retention, failed writes, stale state, financial reconciliation
+and mobile discoverability. No bulk or production-data deletion is authorized by
+this roadmap item. This is a focused operational audit, not another visual makeover.
 
 ## UX-11 candidate
 
@@ -101,6 +136,7 @@ remaining acceptance boundary are recorded in
 [Contract acceptance](CONSTRUCTION_MVP_CONTRACT_2026_09_11.md). Browser/mobile
 acceptance and independent review remain pending; this is not release acceptance.
 Contract #288 and owner controls #289 are now merged. The owner has prioritized
-PR-COM-SALES-01 next, followed by narrow UX-13, operator UAT and scope
+PR-COM-SALES-01 next, followed by the owner-requested record correction/removal
+audit and fixes, narrow UX-13, operator UAT and scope
 reconciliation/freeze. Historical pending browser/operator acceptance is not
 converted into a pass by either merge.
