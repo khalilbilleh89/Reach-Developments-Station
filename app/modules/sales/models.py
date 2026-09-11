@@ -59,6 +59,7 @@ from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import MONEY, RATE, Base, in_list
+from app.modules.sales.price_facts import variance_amount, variance_fraction, variance_percentage
 
 # --------------------------------------------------------------------------- #
 # Closed sets
@@ -134,7 +135,10 @@ EXCEPTION_REJECTED = "rejected"
 #: The commercial inputs a person may put into a quote. A closed list of real
 #: business levers — there is no formula column and no expression column, and
 #: adding a lever means a migration and a reviewed decision.
+NEGOTIATED_TYPES = ("negotiated_price_discount", "negotiated_price_premium")
+
 ADJUSTMENT_TYPES = (
+    *NEGOTIATED_TYPES,
     "percentage_discount",
     "fixed_discount",
     "seller_credit",
@@ -159,6 +163,8 @@ TREATMENT_ADDITION = "price_addition"
 #: The one true mapping. Everything else about an adjustment is input; this is
 #: policy, and it is stated once.
 ADJUSTMENT_TREATMENT_OF: dict[str, str] = {
+    "negotiated_price_discount": TREATMENT_CONCESSION,
+    "negotiated_price_premium": TREATMENT_ADDITION,
     "percentage_discount": TREATMENT_CONCESSION,
     "fixed_discount": TREATMENT_CONCESSION,
     "seller_credit": TREATMENT_CONCESSION,
@@ -532,6 +538,26 @@ class Reservation(Base):
     activation: that is the whole point of freezing it.
     """
 
+    @property
+    def sales_price_ex_tax(self) -> Decimal:
+        return self.net_contract_price_ex_tax
+
+    @property
+    def price_variance_amount(self) -> Decimal:
+        return variance_amount(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def price_variance_fraction(self) -> Decimal | None:
+        return variance_fraction(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def price_variance_percentage(self) -> str | None:
+        return variance_percentage(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def unit_reference(self) -> str:
+        return str((self.quote_snapshot_json or {}).get("unit_reference", ""))
+
     __tablename__ = "reservations"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -583,6 +609,13 @@ class Reservation(Base):
     currency_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("currencies.id", ondelete="RESTRICT"), nullable=False
     )
+    # Explicit intent; null means the historical adjustment-only workflow.
+    creation_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
+    creation_request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agreed_price_target_ex_tax: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+
     reference_price_ex_tax: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     paid_upgrade_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     payment_plan_adjustment_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
@@ -667,6 +700,13 @@ class Reservation(Base):
         ),
         CheckConstraint("expires_on >= reservation_date", name="expiry_after_start"),
         CheckConstraint("price_locked_until >= reservation_date", name="lock_after_start"),
+        UniqueConstraint(
+            "project_id", "creation_request_id", name="uq_reservation_creation_request"
+        ),
+        CheckConstraint(
+            "agreed_price_target_ex_tax IS NULL OR agreed_price_target_ex_tax >= 0",
+            name="target_nonneg",
+        ),
         CheckConstraint("reference_price_ex_tax >= 0", name="reference_nonneg"),
         CheckConstraint("gross_quoted_price_ex_tax >= 0", name="gross_nonneg"),
         CheckConstraint("net_contract_price_ex_tax >= 0", name="net_nonneg"),
@@ -751,11 +791,13 @@ class ReservationAdjustment(Base):
         # The type decides the treatment. Stated here so a direct write cannot
         # turn a furniture package into a discount by editing one column.
         CheckConstraint(
-            "(adjustment_type IN ('percentage_discount', 'fixed_discount', 'seller_credit') "
+            "(adjustment_type IN ('percentage_discount', 'fixed_discount', 'seller_credit', "
+            "'negotiated_price_discount') "
             "  AND treatment = 'price_concession') "
             "OR (adjustment_type IN ('package_cost', 'upgrade_allowance', 'commission_support', "
             "  'financing_subsidy', 'extended_terms_npv_cost') AND treatment = 'seller_cost') "
-            "OR (adjustment_type IN ('paid_upgrade', 'payment_plan_adjustment') "
+            "OR (adjustment_type IN ('paid_upgrade', 'payment_plan_adjustment', "
+            "'negotiated_price_premium') "
             "  AND treatment = 'price_addition')",
             name="treatment_matches_type",
         ),
@@ -830,6 +872,26 @@ class SaleContract(Base):
     ``sale_number`` is this system's reference; ``spa_number`` is the legal
     document's. Neither is identity.
     """
+
+    @property
+    def sales_price_ex_tax(self) -> Decimal:
+        return self.net_contract_price_ex_tax
+
+    @property
+    def price_variance_amount(self) -> Decimal:
+        return variance_amount(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def price_variance_fraction(self) -> Decimal | None:
+        return variance_fraction(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def price_variance_percentage(self) -> str | None:
+        return variance_percentage(self.reference_price_ex_tax, self.net_contract_price_ex_tax)
+
+    @property
+    def unit_reference(self) -> str:
+        return str((self.reservation_quote_snapshot_json or {}).get("unit_reference", ""))
 
     __tablename__ = "sale_contracts"
 

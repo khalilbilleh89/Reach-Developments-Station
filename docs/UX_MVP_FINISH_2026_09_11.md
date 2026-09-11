@@ -17,9 +17,15 @@ Governed by [Engineering Rules](ENGINEERING_RULES.md),
 4. **Construction Contract/commitment lifecycle:** prepare, validate, submit,
    activate, and explain headroom/role blockers. Shared product planning with
    Budget, but a separate PR.
-5. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
+5. **PR-COM-SALES-01:** Sales-owned unit selection, transaction register and
+   negotiated price variance. Explicit owner priority ahead of UX-13; see the
+   [implementation plan](COM_SALES_01_PLAN.md). Preserve quote/exception
+   governance and frozen historic prices. Implemented as a draft; see
+   [handoff and acceptance](COM_SALES_01_ACCEPTANCE.md). Browser/operator
+   acceptance and independent review remain pending.
+6. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
    filters; Portfolio return-to-page; Cashflow tab/date/forecast restoration.
-6. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project
+7. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project
    Management complete real tasks. Engineering checks do not substitute for use.
 
 No Experience 5, broad makeover, new state framework, generic workflow engine,
@@ -94,5 +100,7 @@ Budget merged in #287 (`327ed35`). Contract/commitment implementation and the
 remaining acceptance boundary are recorded in
 [Contract acceptance](CONSTRUCTION_MVP_CONTRACT_2026_09_11.md). Browser/mobile
 acceptance and independent review remain pending; this is not release acceptance.
-After Contract review and human merge, narrow UX-13 remains the final planned
-implementation slice before operator UAT and scope reconciliation/freeze.
+Contract #288 and owner controls #289 are now merged. The owner has prioritized
+PR-COM-SALES-01 next, followed by narrow UX-13, operator UAT and scope
+reconciliation/freeze. Historical pending browser/operator acceptance is not
+converted into a pass by either merge.

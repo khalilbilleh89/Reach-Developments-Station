@@ -72,6 +72,32 @@ def test_a_reservation_in_a_hidden_phase_answers_as_missing(
     assert response.json()["detail"] == "Unit not found."
 
 
+def test_sales_selection_and_price_intent_respect_hidden_phases(
+    hidden_phase_advisor: TestClient, project_id: str, reservation_id: str, released_unit: str
+) -> None:
+    base = sales_url(project_id)
+    assert hidden_phase_advisor.get(f"{base}/unit-options").json()["items"] == []
+    for suffix in ("transactions", "transactions?history=true"):
+        result = hidden_phase_advisor.get(f"{base}/{suffix}")
+        assert result.status_code == 200, result.text
+        assert result.json() == {"items": [], "total": 0}
+    preview = hidden_phase_advisor.post(
+        f"{base}/price-preview",
+        json={
+            "unit_id": released_unit,
+            "expected_price_version_id": str(uuid.uuid4()),
+            "sales_price_ex_tax": "95000",
+        },
+    )
+    assert preview.status_code == 404
+    for method, suffix in (("post", "price-preview"), ("put", "sales-price")):
+        result = getattr(hidden_phase_advisor, method)(
+            f"{base}/reservations/{reservation_id}/{suffix}",
+            json={"sales_price_ex_tax": "95000"},
+        )
+        assert result.status_code == 404, result.text
+
+
 def test_a_contract_in_a_hidden_phase_answers_as_missing(
     hidden_phase_advisor: TestClient, project_id: str, active_sale: str
 ) -> None:

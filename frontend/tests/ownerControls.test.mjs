@@ -10,6 +10,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 function mount(path, component, dependencies, props) {
   const slots = []; let cursor = 0; let effects = [];
   const react = {
+    useRef(initial) { const i = cursor++; slots[i] ??= { current: initial }; return slots[i]; },
     useState(initial) { const i = cursor++; slots[i] ??= { value: initial }; return [slots[i].value, value => { slots[i].value = typeof value === "function" ? value(slots[i].value) : value; }]; },
     useEffect(fn, deps) { const i = cursor++; if (!slots[i] || deps.some((value, n) => value !== slots[i].deps[n])) effects.push(() => { slots[i]?.cleanup?.(); slots[i] = { deps, cleanup: fn() }; }); },
   };
@@ -36,22 +37,25 @@ test("new buyer and sold commitment use one request; failure preserves inputs", 
   class ApiError extends Error {}
   const calls = []; let saved = false; let refuse = true;
   const render = mount("components/projects/sales/RegisterBuyerSaleForm.tsx", "RegisterBuyerSaleForm", {
+    "./SalesPriceInput": { SalesPriceInput: "SalesPriceInput" },
+    "@/components/ui/ValidationSummary": { ValidationSummary: "ValidationSummary" },
     "@/lib/api": { ApiError, sales: {
       clients: async () => [], registerBuyer: async (project, body) => { calls.push({ project, body }); if (refuse) throw new ApiError("Already committed"); return { sale: { id: "sale" } }; },
     }, pricing: { unit: async () => ({ active_price: { reference_price_ex_tax: "250000.00", currency_id: "EUR" }, repricing_required: false }) } },
     "@/lib/currency": { useCurrencyCode: () => id => id },
     "@/lib/format": { money: (amount, code) => `${code} ${amount}` },
-  }, { projectId: "project", unitId: "unit", onSaved: () => { saved = true; }, onCancel() {} });
+  }, { projectId: "project", unitId: "unit", unitOption: {unit_id: "unit", unit_price_version_id: "version", reference_price_ex_tax: "250000.00", currency_id: "EUR"}, onSaved: () => { saved = true; }, onCancel() {} });
   render(); await settle();
   field(render(), "Full buyer name").props.onChange({ target: { value: "Test Buyer" } });
   field(render(), "Owner confirmation / reason").props.onChange({ target: { value: "Confirmed sale" } });
+  nodes(render()).find(node => node.type === "SalesPriceInput").props.onPreview({sales_price_ex_tax: "250000.00"});
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.buyer.sole_purchaser_name, "Test Buyer");
   assert.equal(calls[0].body.unit_id, "unit");
   assert.equal(saved, false);
   assert.equal(field(render(), "Full buyer name").props.value, "Test Buyer");
-  assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children === "Already committed"));
+  assert.ok(nodes(render()).some(node => node.type === "ValidationSummary" && node.props.error?.message === "Already committed"));
   refuse = false;
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(saved, true);

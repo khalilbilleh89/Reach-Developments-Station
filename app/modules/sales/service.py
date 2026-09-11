@@ -39,6 +39,8 @@ precondition list, which is longer to write and possible to audit.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
@@ -140,6 +142,7 @@ from app.modules.sales.models import (
     HANDOVER_STATUSES,
     KYC_STATUSES,
     LEGAL_EVENT_TYPES,
+    NEGOTIATED_TYPES,
     PARTY_ROLES,
     RESERVATION_ACTIVE,
     RESERVATION_CANCELLED,
@@ -203,6 +206,7 @@ _CLIENT_FIELDS = (
 )
 _PARTY_FIELDS = ("party_role", "share_fraction", "is_primary", "is_active")
 _RESERVATION_FIELDS = (
+    "agreed_price_target_ex_tax",
     "reservation_number",
     "status",
     "unit_id",
@@ -1027,6 +1031,8 @@ def _quote_inputs(
     for adjustment in session.scalars(
         select(ReservationAdjustment).where(ReservationAdjustment.reservation_id == reservation_id)
     ):
+        if adjustment.adjustment_type in NEGOTIATED_TYPES:
+            continue
         key = _QUOTE_INPUT_OF[adjustment.adjustment_type]
         inputs[key] = (
             adjustment.rate_fraction
@@ -1048,6 +1054,7 @@ def _require_reconciled_quote(quote: dict[str, Any]) -> None:
         quote["approved_reference_price_ex_tax"]
         + quote["paid_upgrade_price"]
         + quote["payment_plan_price_adjustment"]
+        + quote.get("negotiated_price_premium", ZERO)
     )
     net = gross - quote["cash_discount"] - quote["seller_credit"]
     if (
@@ -1064,6 +1071,8 @@ def _freeze_quote(
     unit: Unit,
     reservation: Reservation,
     buyer_fee_total: Decimal,
+    actor: ActorContext,
+    requote: bool = False,
 ) -> dict[str, Any]:
     """Run the quote and copy its result onto the reservation.
 
@@ -1077,7 +1086,58 @@ def _freeze_quote(
     approved against a 12% discount must never remain approved beside a 20% one.
     """
     inputs = _quote_inputs(session, reservation_id=reservation.id, buyer_fee_total=buyer_fee_total)
-    quote = pricing_service.quote_preview(session, project=project, unit=unit, inputs=inputs)
+    target = reservation.agreed_price_target_ex_tax
+    frozen = (
+        reservation.unit_price_version_id
+        if target is not None and reservation.quote_snapshot_json and not requote
+        else None
+    )
+    if target is not None:
+        inputs["sales_price_ex_tax"] = target
+    quote = pricing_service.quote_preview(
+        session, project=project, unit=unit, inputs=inputs, frozen_version_id=frozen
+    )
+    if reservation.currency_id != quote["currency_id"]:
+        raise ConflictError(
+            "The quote currency differs from the reservation. Currency conversion is not supported."
+        )
+    if target is not None:
+        for kind in NEGOTIATED_TYPES:
+            adjustment = session.scalar(
+                select(ReservationAdjustment).where(
+                    ReservationAdjustment.reservation_id == reservation.id,
+                    ReservationAdjustment.adjustment_type == kind,
+                )
+            )
+            old_amount = adjustment.amount if adjustment else None
+            if adjustment is None:
+                adjustment = ReservationAdjustment(
+                    project_id=project.id,
+                    reservation_id=reservation.id,
+                    adjustment_type=kind,
+                    treatment=ADJUSTMENT_TREATMENT_OF[kind],
+                    amount=quote[kind],
+                    requested_by_user_id=actor.user_id,
+                )
+                session.add(adjustment)
+            else:
+                adjustment.amount = quote[kind]
+            _flush(session)
+            if old_amount != adjustment.amount:
+                record_event(
+                    session,
+                    action="reservation_adjustment.negotiated_price_set",
+                    entity_type=ENTITY_ADJUSTMENT,
+                    entity_id=adjustment.id,
+                    actor_user_id=actor.user_id,
+                    correlation_id=actor.correlation_id,
+                    before={"amount": old_amount},
+                    after={
+                        "amount": adjustment.amount,
+                        "adjustment_type": kind,
+                        "sales_price_ex_tax": target,
+                    },
+                )
     _require_reconciled_quote(quote)
 
     version = pricing_service.get_price_version(
@@ -1336,11 +1396,34 @@ def _require_open_exception(reservation: Reservation) -> None:
     )
 
 
+def require_available_reservation_unit(
+    session: Session,
+    *,
+    unit: Unit,
+    owner_override: bool = False,
+) -> None:
+    """Canonical unit eligibility, advisory on reads and locked on writes."""
+    today = inventory_fields.business_today()
+    if not unit.is_active:
+        raise ConflictError("This unit is not active.")
+    if unit.commercial_status != COMMERCIAL_STATUS_AVAILABLE:
+        raise ConflictError(
+            f"This unit is {unit.commercial_status.replace('_', ' ')}, not available."
+        )
+    blockers = inventory_service.release_blockers(session, unit=unit, today=today)
+    if blockers and not owner_override:
+        raise ConflictError("This unit is not released for sale: " + "; ".join(blockers) + ".")
+    _require_no_commitment(session, unit=unit, today=today)
+
+
 def create_reservation(
     session: Session,
     *,
     project: Project,
     actor: ActorContext,
+    sales_price_ex_tax: Decimal | None = None,
+    expected_price_version_id: uuid.UUID | None = None,
+    creation_request_id: uuid.UUID | None = None,
     unit_id: uuid.UUID,
     client_id: uuid.UUID,
     reservation_date: date | None = None,
@@ -1369,7 +1452,47 @@ def create_reservation(
     """
     permissions.require_reservation_writer(actor)
     permissions.require_operational_project(project)
+    request_fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "unit_id": unit_id,
+                "client_id": client_id,
+                "sales_price_ex_tax": sales_price_ex_tax,
+                "expected_price_version_id": expected_price_version_id,
+                "reservation_date": reservation_date,
+                "expires_on": expires_on,
+                "price_locked_until": price_locked_until,
+                "sales_channel_code": sales_channel_code,
+                "sales_branch_code": sales_branch_code,
+                "advisor_user_id": advisor_user_id,
+                "deposit_required_amount": deposit_required_amount,
+                "buyer_fee_total": buyer_fee_total,
+            },
+            sort_keys=True,
+            default=str,
+        ).encode()
+    ).hexdigest()
     project = lock_project(session, project.id)
+    if creation_request_id is not None:
+        previous = session.scalar(
+            select(Reservation).where(
+                Reservation.project_id == project.id,
+                Reservation.creation_request_id == creation_request_id,
+            )
+        )
+        if previous is not None:
+            previous = get_reservation(
+                session, project=project, actor=actor, reservation_id=previous.id
+            )
+            if (
+                previous.created_by_user_id != actor.user_id
+                or previous.creation_request_fingerprint != request_fingerprint
+            ):
+                raise ConflictError(
+                    "This request already prepared a reservation with different terms. "
+                    "Open the existing transaction before starting another."
+                )
+            return previous
     unit = permissions.require_sellable_unit(session, project=project, unit_id=unit_id, actor=actor)
     client = permissions.require_visible_client(
         session, project=project, client_id=client_id, actor=actor
@@ -1384,6 +1507,8 @@ def create_reservation(
     # already no and finding that out at activation is finding out late.
     unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=unit.id)
     _require_no_commitment(session, unit=unit, today=today)
+    if expected_price_version_id is not None:
+        require_available_reservation_unit(session, unit=unit)
     reservation_date = reservation_date or today
     if reservation_date > today:
         raise ValidationError("A reservation cannot be dated in the future.")
@@ -1400,6 +1525,12 @@ def create_reservation(
     active = pricing_service.active_price(session, unit_id=unit.id)
     if active is None:
         raise ConflictError("This unit has no active price to reserve against.")
+    if expected_price_version_id is not None and active.id != expected_price_version_id:
+        raise ConflictError(
+            "The unit list price changed. Refresh the price and review before saving."
+        )
+    if sales_price_ex_tax is not None and sales_price_ex_tax < ZERO:
+        raise ValidationError("The agreed sales price cannot be negative.")
     configuration = pricing_service.configuration_for_price(
         session, project_id=project.id, version=active
     )
@@ -1449,7 +1580,12 @@ def create_reservation(
         ),
         deposit_currency_id=active.currency_id if deposit_required_amount is not None else None,
         deposit_gate_status=GATE_PENDING if gate_required else GATE_NOT_REQUIRED,
+        agreed_price_target_ex_tax=money(sales_price_ex_tax)
+        if sales_price_ex_tax is not None
+        else None,
         currency_id=active.currency_id,
+        creation_request_id=creation_request_id,
+        creation_request_fingerprint=request_fingerprint if creation_request_id else None,
         quote_snapshot_json={},
         created_by_user_id=actor.user_id,
         # Written by _freeze_quote below, which is the only thing that ever sets
@@ -1473,6 +1609,7 @@ def create_reservation(
     _flush(session)
     _freeze_quote(
         session,
+        actor=actor,
         project=project,
         unit=unit,
         reservation=reservation,
@@ -1590,6 +1727,7 @@ def recalculate_reservation(
         reservation.buyer_fee_total = _amount(buyer_fee_total)
     _freeze_quote(
         session,
+        actor=actor,
         project=project,
         unit=unit,
         reservation=reservation,
@@ -1637,6 +1775,8 @@ def _validate_adjustment(
     letting a user choose it would be letting them decide whether the contract
     price falls.
     """
+    if adjustment_type in NEGOTIATED_TYPES:
+        raise ValidationError("Use Change sales price to manage negotiated price adjustments.")
     if adjustment_type not in ADJUSTMENT_TYPES:
         raise ValidationError("That is not an adjustment type.")
     if adjustment_type in ADJUSTMENT_RATE_TYPES:
@@ -1695,6 +1835,7 @@ def create_adjustment(
     _flush(session)
     _freeze_quote(
         session,
+        actor=actor,
         project=project,
         unit=unit,
         reservation=reservation,
@@ -1762,6 +1903,7 @@ def update_adjustment(
     _flush(session)
     _freeze_quote(
         session,
+        actor=actor,
         project=project,
         unit=unit,
         reservation=reservation,
@@ -2108,16 +2250,9 @@ def activate_reservation(
     effective_date = _effective(effective_date)
     if reservation.status not in RESERVATION_PREPARING:
         raise ConflictError("Only a reservation in preparation can be activated.")
-    if not unit.is_active:
-        raise ConflictError("This unit is not active.")
-    if unit.commercial_status != COMMERCIAL_STATUS_AVAILABLE:
-        raise ConflictError(
-            f"This unit is {unit.commercial_status.replace('_', ' ')}, not available."
-        )
-    blockers = inventory_service.release_blockers(session, unit=unit, today=today)
-    if blockers and owner_override_reason is None:
-        raise ConflictError("This unit is not released for sale: " + "; ".join(blockers) + ".")
-    _require_no_commitment(session, unit=unit, today=today)
+    require_available_reservation_unit(
+        session, unit=unit, owner_override=owner_override_reason is not None
+    )
     if not client.is_active:
         raise ConflictError("This client is not active.")
     _require_reconciled_shares(session, client=client)
@@ -2533,6 +2668,8 @@ def requote_reservation(
     before = _snapshot(reservation, _RESERVATION_FIELDS)
     _freeze_quote(
         session,
+        actor=actor,
+        requote=True,
         project=project,
         unit=unit,
         reservation=reservation,

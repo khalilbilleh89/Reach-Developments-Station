@@ -1,4 +1,6 @@
 "use client";
+import { PriceComparison } from "./PriceComparison";
+import { ChangeSalesPrice } from "./ChangeSalesPrice";
 import { collections } from "@/lib/api";
 import type { ReservationDetail, SaleDetail, SalesClient, CollectionSaleSummary } from "@/lib/api";
 import { useAnswer } from "@/lib/answer";
@@ -10,13 +12,15 @@ import { CollectionSnapshot } from "@/components/projects/inventory/unit/UnitSum
 import { statusLabel } from "@/components/projects/inventory/statusLabels";
 import { gateLabel } from "./labels";
 
-export function SaleOverview({ projectId, sale, reservation, client, roles, onOpenTab }: {
+export function SaleOverview({ projectId, sale, reservation, client, roles, onOpenTab, onChanged, priceReadError }: {
   projectId: string; sale: SaleDetail | null; reservation: ReservationDetail | null; client: SalesClient | null;
+  onChanged: () => Promise<void>; priceReadError?: string | null;
   roles: Set<string>; onOpenTab: (tab: string) => void;
 }) {
   const codeOf = useCurrencyCode();
   const account = useAnswer<CollectionSaleSummary>(!!sale && sale.sale.status !== "draft" && hasAnyRole(roles, COLLECTION_READERS), () => collections.account(projectId, sale!.sale.id), [projectId, sale?.sale.id]);
   return <div className="sale-overview">
+    {sale || reservation ? <section><SectionHeader level={2} title="Commercial price" /><PriceComparison facts={sale?.sale ?? reservation!.reservation} />{!sale && reservation ? <ChangeSalesPrice projectId={projectId} detail={reservation} onChanged={onChanged} unavailable={priceReadError} /> : null}</section> : null}
     <section><SectionHeader level={2} title="Transaction position" actions={<Button small onClick={() => onOpenTab(sale ? "contract" : "commercial")}>Inspect terms</Button>} />
       <KeyValueGrid columns={2}>
         <KeyValue label="Buyer" value={client?.display_name ?? "Not returned by source"} />

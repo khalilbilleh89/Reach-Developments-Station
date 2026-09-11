@@ -31,7 +31,7 @@ from fastapi import APIRouter, Query, Response, status
 
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.projects.models import Project
-from app.modules.sales import deletion, registration, service
+from app.modules.sales import deletion, registration, service, workspace
 from app.modules.sales.models import Client, HandoverRecord, Reservation, SaleContract
 from app.modules.sales.permissions import (
     SalesProject,
@@ -88,16 +88,122 @@ from app.modules.sales.schemas import (
     SalesHistoryRow,
     SalesPolicyRead,
     SalesPolicyWriteRequest,
+    SalesPricePreviewRead,
+    SalesPricePreviewRequest,
+    SalesPriceRequest,
     SalesRegisterRead,
     SalesRegisterRow,
     SalesRegisterTotals,
+    SalesTransactionsRead,
     SaleSubmitRequest,
+    SalesUnitOptionsRead,
     SaleTaxLineRead,
     SaleUpdateRequest,
     ShareReconciliationRead,
 )
 
 router = APIRouter(prefix="/projects", tags=["sales"])
+
+
+@router.get("/{project_id}/sales/unit-options", response_model=SalesUnitOptionsRead)
+def unit_options(
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+    search: Annotated[str, Query(max_length=200)] = "",
+    phase_id: uuid.UUID | None = None,
+    building_id: uuid.UUID | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=50)] = 30,
+) -> SalesUnitOptionsRead:
+    return SalesUnitOptionsRead(
+        **workspace.unit_options(
+            session,
+            project=project,
+            actor=actor,
+            search=search,
+            phase_id=phase_id,
+            building_id=building_id,
+            offset=offset,
+            limit=limit,
+        )
+    )
+
+
+@router.post("/{project_id}/sales/price-preview", response_model=SalesPricePreviewRead)
+def sales_price_preview(
+    payload: SalesPricePreviewRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesPricePreviewRead:
+    return SalesPricePreviewRead(
+        **workspace.preview(session, project=project, actor=actor, **payload.model_dump())
+    )
+
+
+@router.put(
+    "/{project_id}/sales/reservations/{reservation_id}/sales-price",
+    response_model=ReservationDetailRead,
+)
+def change_sales_price(
+    reservation_id: uuid.UUID,
+    payload: SalesPriceRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> ReservationDetailRead:
+    reservation = workspace.change_price(
+        session, project=project, actor=actor, reservation_id=reservation_id, **payload.model_dump()
+    )
+    return _reservation_detail(session, reservation, actor)
+
+
+@router.post(
+    "/{project_id}/sales/reservations/{reservation_id}/price-preview",
+    response_model=SalesPricePreviewRead,
+)
+def reservation_price_preview(
+    reservation_id: uuid.UUID,
+    payload: SalesPriceRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesPricePreviewRead:
+    return SalesPricePreviewRead(
+        **workspace.reservation_preview(
+            session,
+            project=project,
+            actor=actor,
+            reservation_id=reservation_id,
+            **payload.model_dump(),
+        )
+    )
+
+
+@router.get("/{project_id}/sales/transactions", response_model=SalesTransactionsRead)
+def sales_transactions(
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+    search: Annotated[str, Query(max_length=200)] = "",
+    history: bool = False,
+    status: Annotated[str | None, Query(max_length=40)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> SalesTransactionsRead:
+    return SalesTransactionsRead(
+        **workspace.transactions(
+            session,
+            project=project,
+            actor=actor,
+            search=search,
+            history=history,
+            status=status,
+            offset=offset,
+            limit=limit,
+        )
+    )
 
 
 @router.post(
@@ -340,10 +446,13 @@ def update_party(
 # --------------------------------------------------------------------------- #
 
 
-def _reservation_detail(session: DbSession, reservation: Reservation) -> ReservationDetailRead:
+def _reservation_detail(
+    session: DbSession, reservation: Reservation, actor: ActorContext
+) -> ReservationDetailRead:
     """A reservation with its inputs, its history and the frozen calculation."""
     return ReservationDetailRead(
         reservation=ReservationRead.model_validate(reservation),
+        sales_price_edit_blocker=workspace.price_edit_blocker(actor, reservation),
         adjustments=[
             AdjustmentRead.model_validate(item)
             for item in service.list_adjustments(session, reservation=reservation)
@@ -398,7 +507,7 @@ def create_reservation(
     reservation = service.create_reservation(
         session, project=project, actor=actor, **payload.model_dump(exclude_unset=True)
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.get(
@@ -415,7 +524,7 @@ def read_reservation(
     reservation = service.get_reservation(
         session, project=project, reservation_id=reservation_id, actor=actor
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.patch(
@@ -437,7 +546,7 @@ def update_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -459,7 +568,7 @@ def recalculate_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.get(
@@ -505,7 +614,7 @@ def create_adjustment(
     reservation = service.get_reservation(
         session, project=project, reservation_id=reservation_id, actor=actor
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.patch(
@@ -550,7 +659,7 @@ def requote_reservation(
         reason=payload.reason,
         price_locked_until=payload.price_locked_until,
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -572,7 +681,7 @@ def submit_exception(
         actor=actor,
         reason=payload.reason,
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -595,7 +704,7 @@ def decide_exception(
         approved=payload.approved,
         reason=payload.reason,
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -617,7 +726,7 @@ def confirm_deposit(
         actor=actor,
         evidence_reference=payload.evidence_reference,
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -639,7 +748,7 @@ def waive_deposit(
         actor=actor,
         reason=payload.reason,
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -661,7 +770,7 @@ def activate_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -683,7 +792,7 @@ def extend_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -705,7 +814,7 @@ def expire_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 @router.post(
@@ -727,7 +836,7 @@ def cancel_reservation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return _reservation_detail(session, reservation)
+    return _reservation_detail(session, reservation, actor)
 
 
 # --------------------------------------------------------------------------- #

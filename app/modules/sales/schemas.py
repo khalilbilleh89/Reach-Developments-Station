@@ -283,14 +283,11 @@ class ShareReconciliationRead(BaseModel):
 
 
 class ReservationCreateRequest(StrictRequest):
-    """What a person chooses. Every money figure on the reservation is derived.
+    """Sales intent, reconciled through the governed quote and approval rules."""
 
-    There is no price field here and there never will be. The quote is produced
-    by pricing from the unit's live approved price and the recorded adjustments,
-    and a client that could post a net contract price would be a client that
-    could sell a flat for a number nobody approved.
-    """
-
+    sales_price_ex_tax: Money | None = None
+    expected_price_version_id: uuid.UUID | None = None
+    creation_request_id: uuid.UUID | None = None
     unit_id: uuid.UUID
     client_id: uuid.UUID
     reservation_date: date | None = None
@@ -311,6 +308,74 @@ class ReservationUpdateRequest(StrictRequest):
     sales_branch_code: Code | None = None
     advisor_user_id: uuid.UUID | None = None
     deposit_required_amount: Money | None = None
+
+
+class SalesPriceRequest(StrictRequest):
+    sales_price_ex_tax: Money
+
+
+class SalesPricePreviewRequest(SalesPriceRequest):
+    unit_id: uuid.UUID
+    expected_price_version_id: uuid.UUID
+
+
+class SalesPricePreviewRead(BaseModel):
+    reference_price_ex_tax: DecimalStr
+    sales_price_ex_tax: DecimalStr
+    price_variance_amount: DecimalStr
+    price_variance_fraction: DecimalStr | None
+    price_variance_percentage: str | None
+    currency_id: uuid.UUID
+    unit_price_version_id: uuid.UUID
+    exception_approval_required: bool
+    exception_reason: str | None
+    tax_total: DecimalStr
+    total_buyer_payable: DecimalStr
+
+
+class SalesUnitOption(BaseModel):
+    unit_id: uuid.UUID
+    unit_reference: str
+    phase_name: str
+    building_name: str
+    floor_name: str
+    unit_type: str | None
+    commercial_availability: str
+    gross_area: DecimalStr | None
+    area_unit: str | None
+    unit_price_version_id: uuid.UUID
+    reference_price_ex_tax: DecimalStr
+    currency_id: uuid.UUID
+
+
+class SalesUnitOptionsRead(BaseModel):
+    items: list[SalesUnitOption]
+    next_offset: int | None
+
+
+class SalesTransactionRow(BaseModel):
+    id: uuid.UUID
+    kind: Literal["reservation", "sale"]
+    reference: str
+    status: str
+    created_at: datetime
+    unit_id: uuid.UUID
+    unit_reference: str
+    client_display_name: str
+    currency_id: uuid.UUID
+    reference_price_ex_tax: DecimalStr
+    sales_price_ex_tax: DecimalStr
+    price_variance_amount: DecimalStr
+    price_variance_fraction: DecimalStr | None
+    price_variance_percentage: str | None
+    legal_status: str
+    collection_status: str
+    spa_number: str | None
+
+
+class SalesTransactionsRead(BaseModel):
+    items: list[SalesTransactionRow]
+    total: int
 
 
 class ReservationRecalculateRequest(StrictRequest):
@@ -434,6 +499,11 @@ class ReservationRead(BaseModel):
     deposit_waiver_reason: str | None
 
     currency_id: uuid.UUID
+    unit_reference: str
+    sales_price_ex_tax: DecimalStr
+    price_variance_amount: DecimalStr
+    price_variance_fraction: DecimalStr | None
+    price_variance_percentage: str | None
     reference_price_ex_tax: DecimalStr
     paid_upgrade_amount: DecimalStr
     payment_plan_adjustment_amount: DecimalStr
@@ -468,6 +538,7 @@ class ReservationDetailRead(BaseModel):
     """A reservation with its inputs, its history and the whole frozen calculation."""
 
     reservation: ReservationRead
+    sales_price_edit_blocker: str | None
     adjustments: list[AdjustmentRead]
     events: list[ReservationStatusEventRead]
     quote_snapshot: dict[str, Any]
@@ -492,6 +563,8 @@ class SaleCreateRequest(StrictRequest):
 
 
 class BuyerRegistrationRequest(StrictRequest):
+    sales_price_ex_tax: Money | None = None
+    expected_price_version_id: uuid.UUID | None = None
     unit_id: uuid.UUID
     client_id: uuid.UUID | None = None
     buyer: ClientCreateRequest | None = None
@@ -585,6 +658,11 @@ class SaleRead(BaseModel):
     contract_date: date
     status: str
 
+    unit_reference: str
+    sales_price_ex_tax: DecimalStr
+    price_variance_amount: DecimalStr
+    price_variance_fraction: DecimalStr | None
+    price_variance_percentage: str | None
     reference_price_ex_tax: DecimalStr
     gross_quoted_price_ex_tax: DecimalStr
     cash_discount_amount: DecimalStr

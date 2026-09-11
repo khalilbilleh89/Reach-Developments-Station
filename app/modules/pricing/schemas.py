@@ -634,6 +634,8 @@ class QuotePreviewRead(BaseModel):
     currency_id: uuid.UUID
 
     approved_reference_price_ex_tax: DecimalStr
+    negotiated_price_discount: DecimalStr
+    negotiated_price_premium: DecimalStr
     paid_upgrade_price: DecimalStr
     payment_plan_price_adjustment: DecimalStr
     payment_plan_adjustment_fraction: DecimalStr
