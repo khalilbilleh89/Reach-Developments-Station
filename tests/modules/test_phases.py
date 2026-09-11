@@ -67,20 +67,20 @@ def test_two_projects_may_use_the_same_phase_code(
     assert response.status_code == 201, response.text
 
 
-def test_a_phase_code_cannot_be_changed(
-    admin_client: TestClient, project_id: str, phase_id: str
+def test_an_administrator_can_correct_a_phase_code_with_audit(
+    admin_client: TestClient, project_id: str, phase_id: str, db: Session
 ) -> None:
-    """Given a code on a PATCH body, then the whole request is refused.
-
-    Rows point at the identifier, so the code is a label — but a label people
-    quote in correspondence, and silently accepting a change to it would leave
-    two documents naming different things.
-    """
+    """Owner controls permit label corrections while preserving identity and evidence."""
     response = admin_client.patch(
         f"{inventory_url(project_id)}/phases/{phase_id}", json={"code": "PHASE-2"}
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == phase_id
+    assert response.json()["code"] == "PHASE-2"
+    event = db.scalars(select(AuditEvent).where(AuditEvent.action == "phase.updated")).one()
+    assert event.before_data["code"] == "PHASE-1"
+    assert event.after_data["code"] == "PHASE-2"
 
 
 def test_planned_dates_must_be_in_order(
@@ -130,10 +130,17 @@ def test_a_phase_with_active_buildings_cannot_be_deactivated(
     assert "still has active buildings" in response.json()["detail"]
 
 
-def test_a_phase_is_never_deleted(admin_client: TestClient, project_id: str, phase_id: str) -> None:
-    response = admin_client.delete(f"{inventory_url(project_id)}/phases/{phase_id}")
+def test_phase_deletion_requires_a_reason_and_preserves_the_phase_when_missing(
+    admin_client: TestClient, project_id: str, phase_id: str
+) -> None:
+    url = f"{inventory_url(project_id)}/phases/{phase_id}"
+    response = admin_client.delete(url)
 
-    assert response.status_code == 404
+    assert response.status_code == 422, response.text
+    assert any(error["loc"] == ["query", "reason"] for error in response.json()["detail"])
+    remaining = admin_client.get(url)
+    assert remaining.status_code == 200, remaining.text
+    assert remaining.json()["id"] == phase_id
 
 
 def test_an_unknown_phase_is_not_found(admin_client: TestClient, project_id: str) -> None:
