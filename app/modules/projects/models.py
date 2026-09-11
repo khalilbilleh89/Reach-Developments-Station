@@ -258,6 +258,21 @@ class LandParcel(Base):
     #: Denominated in the owning project's base currency.
     purchase_price: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     acquisition_fees: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    # Additional itemized charges. Zero means no additional charge recorded;
+    # existing acquisition_fees are retained, never redistributed by migration.
+    acquisition_tax_rate_fraction: Mapped[Decimal | None] = mapped_column(
+        RATE.evaluates_none(), nullable=True, default=Decimal("0"), server_default="0"
+    )
+    agent_fee_amount: Mapped[Decimal | None] = mapped_column(
+        MONEY.evaluates_none(), nullable=True, default=Decimal("0"), server_default="0"
+    )
+    legal_fee_amount: Mapped[Decimal | None] = mapped_column(
+        MONEY.evaluates_none(), nullable=True, default=Decimal("0"), server_default="0"
+    )
+    registration_fee_amount: Mapped[Decimal | None] = mapped_column(
+        MONEY.evaluates_none(), nullable=True, default=Decimal("0"), server_default="0"
+    )
+    expected_gdv_amount: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     seller: Mapped[str | None] = mapped_column(String(200), nullable=True)
     #: Free text, as ownership is. A title office says "Transfer pending" or
     #: "Mortgage release pending" in its own words, and the register records
@@ -313,6 +328,20 @@ class LandParcel(Base):
             "acquisition_fees IS NULL OR acquisition_fees >= 0", name="fees_non_negative"
         ),
         CheckConstraint("frontage IS NULL OR frontage >= 0", name="frontage_non_negative"),
+        CheckConstraint(
+            "acquisition_tax_rate_fraction IS NULL OR "
+            "acquisition_tax_rate_fraction BETWEEN 0 AND 1",
+            name="acquisition_tax_range",
+        ),
+        *(
+            CheckConstraint(f"{field} IS NULL OR {field} >= 0", name=f"{field}_nonneg")
+            for field in (
+                "agent_fee_amount",
+                "legal_fee_amount",
+                "registration_fee_amount",
+                "expected_gdv_amount",
+            )
+        ),
         # A classification is either recorded or not yet established. An empty
         # string is neither, and it reads on screen as the second while
         # sorting, filtering and exporting as the first.
@@ -325,6 +354,28 @@ class LandParcel(Base):
             name="title_status_not_blank",
         ),
         CheckConstraint("zoning IS NULL OR length(btrim(zoning)) > 0", name="zoning_not_blank"),
+    )
+
+
+class LandMarketAssumption(Base):
+    """One editable annual assumption per parcel; prior values remain in audit."""
+
+    __tablename__ = "land_market_assumptions"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    parcel_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("land_parcels.id", ondelete="RESTRICT"), nullable=False
+    )
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    change_rate_fraction: Mapped[Decimal] = mapped_column(RATE, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("parcel_id", "year"),
+        CheckConstraint("year BETWEEN 1900 AND 2200", name="year_range"),
+        CheckConstraint("change_rate_fraction BETWEEN -1 AND 10", name="change_range"),
     )
 
 

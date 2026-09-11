@@ -213,10 +213,38 @@ export interface LandParcel {
   /** Null when the caller is not cleared to see development cost. */
   purchase_price: string | null;
   acquisition_fees: string | null;
+  acquisition_tax_rate_fraction: string | null;
+  acquisition_tax_amount: string | null;
+  agent_fee_amount: string | null;
+  legal_fee_amount: string | null;
+  registration_fee_amount: string | null;
+  expected_gdv_amount: string | null;
+  total_acquisition_fees: string | null;
+  agent_fee_rate_fraction: string | null;
+  legal_fee_rate_fraction: string | null;
+  registration_fee_rate_fraction: string | null;
   total_acquisition_cost: string | null;
   total_acquisition_cost_basis: "complete" | "incomplete_inputs" | "restricted";
   financials_visible: boolean;
   base_currency_code: string | null;
+}
+
+export interface LandAnalytics {
+  land_area_sqm: string;
+  max_buildable_area_sqm: string | null;
+  purchase_cost_per_sqm: string | null;
+  purchase_cost_per_buildable_sqm: string | null;
+  acquisition_cost_per_sqm: string | null;
+  acquisition_cost_per_buildable_sqm: string | null;
+  purchase_cost_to_gdv_fraction: string | null;
+  acquisition_cost_to_gdv_fraction: string | null;
+  market_years: {
+    year: number;
+    change_rate_fraction: string;
+    opening_value: string | null;
+    estimated_value: string | null;
+    value_basis: string;
+  }[];
 }
 
 export interface PlanningControl {

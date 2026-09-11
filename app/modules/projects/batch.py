@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
+from app.modules.projects.land_analytics import cost_breakdown
 from app.modules.projects.models import LandParcel, Permit
 from app.modules.projects.service import _SATISFYING_STATUSES, _sla_overdue_clause
 
@@ -91,8 +92,9 @@ def positions(
     ):
         target = result.setdefault(parcel.project_id, DevelopmentPosition())
         target.land_count += 1
-        if parcel.purchase_price is None or parcel.acquisition_fees is None:
+        cost = cost_breakdown(parcel)["total_acquisition_cost"]
+        if cost is None:
             target.land_incomplete = True
         else:
-            target.land_total += parcel.purchase_price + parcel.acquisition_fees
+            target.land_total += cost
     return result

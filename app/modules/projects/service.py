@@ -390,7 +390,12 @@ def _guard_base_currency_change(session: Session, project_id: uuid.UUID) -> None
         select(LandParcel.id)
         .where(
             LandParcel.project_id == project_id,
-            (LandParcel.purchase_price.is_not(None)) | (LandParcel.acquisition_fees.is_not(None)),
+            (LandParcel.purchase_price.is_not(None))
+            | (LandParcel.acquisition_fees.is_not(None))
+            | (LandParcel.agent_fee_amount > 0)
+            | (LandParcel.legal_fee_amount > 0)
+            | (LandParcel.registration_fee_amount > 0)
+            | (LandParcel.expected_gdv_amount.is_not(None)),
         )
         .limit(1)
         .union_all(
@@ -817,6 +822,11 @@ _PARCEL_FIELDS = (
     "acquisition_date",
     "purchase_price",
     "acquisition_fees",
+    "acquisition_tax_rate_fraction",
+    "agent_fee_amount",
+    "legal_fee_amount",
+    "registration_fee_amount",
+    "expected_gdv_amount",
     "seller",
     "title_status",
     "zoning",
@@ -850,7 +860,17 @@ _PARCEL_CLEARABLE = frozenset(
 
 #: The parcel fields denominated in the project's base currency. Writing one is
 #: what establishes a monetary fact the currency can no longer be changed under.
-_PARCEL_MONEY_FIELDS = frozenset({"purchase_price", "acquisition_fees"})
+_PARCEL_MONEY_FIELDS = frozenset(
+    {
+        "purchase_price",
+        "acquisition_fees",
+        "acquisition_tax_rate_fraction",
+        "agent_fee_amount",
+        "legal_fee_amount",
+        "registration_fee_amount",
+        "expected_gdv_amount",
+    }
+)
 
 #: How this parcel is held, where its title stands, and how it is zoned.
 #:
@@ -985,6 +1005,7 @@ def update_parcel(
     # analysis.
     if not _PARCEL_MONEY_FIELDS.isdisjoint(updates):
         project = lock_project(session, project.id)
+        session.refresh(parcel)
 
     _normalize_classifications(updates)
     if "plot_number" in updates and updates["plot_number"] != parcel.plot_number:

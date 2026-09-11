@@ -81,6 +81,11 @@ _RESERVED_KEYS: dict[str, frozenset[str]] = {
             "land_area",
             "purchase_price",
             "acquisition_fees",
+            "acquisition_tax_rate_fraction",
+            "agent_fee_amount",
+            "legal_fee_amount",
+            "registration_fee_amount",
+            "expected_gdv_amount",
             "ownership_share_fraction",
             "is_active",
         }

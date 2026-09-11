@@ -35,6 +35,8 @@ from app.modules.projects.schemas import (
     DocumentReferenceCreateRequest,
     DocumentReferenceRead,
     DocumentReferenceUpdateRequest,
+    LandAnalyticsRead,
+    LandMarketAssumptionWrite,
     LandParcelCreateRequest,
     LandParcelRead,
     LandParcelUpdateRequest,
@@ -78,10 +80,13 @@ def _parcel_read(
     session: DbSession, project: Project, parcel: object, actor: ActorContext
 ) -> LandParcelRead:
     include = can_view_project_financials(actor)
+    from app.modules.projects.land_analytics import cost_breakdown
+
     return LandParcelRead.build(
         parcel,
         include_financials=include,
         base_currency_code=_currency_code(session, project.base_currency_id) if include else None,
+        costs=cost_breakdown(parcel) if include else {},
     )
 
 
@@ -369,6 +374,50 @@ def update_parcel(
         **payload.model_dump(exclude_unset=True),
     )
     return _parcel_read(session, project, updated, actor)
+
+
+# --------------------------------------------------------------------------- #
+# Land analytics
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/{project_id}/parcels/{parcel_id}/analytics", response_model=LandAnalyticsRead)
+def read_land_analytics(
+    parcel_id: uuid.UUID, project: AccessibleProject, session: DbSession, actor: ActiveActor
+) -> LandAnalyticsRead:
+    from app.core.errors import PermissionDeniedError
+    from app.modules.projects import land_analytics
+
+    parcel = service.get_parcel(session, project_id=project.id, parcel_id=parcel_id)
+    if not can_view_project_financials(actor):
+        raise PermissionDeniedError("You do not have permission to view land financial analytics.")
+    return LandAnalyticsRead.model_validate(land_analytics.read_analytics(session, parcel=parcel))
+
+
+@router.put(
+    "/{project_id}/parcels/{parcel_id}/market-assumptions/{year}", response_model=LandAnalyticsRead
+)
+def write_land_market_assumption(
+    parcel_id: uuid.UUID,
+    year: Annotated[int, Path(ge=1900, le=2200)],
+    payload: LandMarketAssumptionWrite,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> LandAnalyticsRead:
+    from app.modules.projects import land_analytics
+
+    require_project_writer(actor)
+    land_analytics.write_market_assumption(
+        session,
+        project=project,
+        parcel_id=parcel_id,
+        year=year,
+        change_rate_fraction=payload.change_rate_fraction,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+    return read_land_analytics(parcel_id, project, session, actor)
 
 
 # --------------------------------------------------------------------------- #

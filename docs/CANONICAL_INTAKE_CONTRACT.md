@@ -176,6 +176,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 |---|---|
 | `land_parcels` | Land acquisition is history the operating system does not need to run. Add it when somebody names a report that requires it. |
 | `planning_controls` | As above. |
+| `land_market_assumptions` | Owner-entered annual estimates; no legacy import or inferred market rates. |
 | `permits` | Live permits are re-entered through the application, where the status machine applies. A migrated permit with no event history is a permit whose SLA clock never started. |
 | `document_references` | Pointers to files the migration does not move. |
 | `unit_features` | MVP 2 descriptive annotations, entered through the unit workspace; excluded from the legacy batch contract. |
