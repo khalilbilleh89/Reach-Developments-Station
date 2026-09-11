@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   Badge,
+  Button,
   Drawer,
   EmptyState,
   IdentityCell,
@@ -18,6 +19,9 @@ import {
   SectionHeader,
   TableScroll,
 } from "@/components/ui";
+import { ContractWorkflow } from "./ContractWorkflow";
+import { useRegisterFields } from "@/components/shell/registerState";
+import { useAnswer } from "@/lib/answer";
 import { ApiError, construction } from "@/lib/api";
 import type {
   Certificate,
@@ -42,6 +46,7 @@ import {
 } from "./labels";
 
 const TABS = [
+  { key: "manage", label: "Manage contract" },
   { key: "position", label: "Position" },
   { key: "lines", label: "Lines" },
   { key: "variations", label: "Variations" },
@@ -69,12 +74,19 @@ export function ContractFile({
   projectId,
   contractId,
   onClose,
+  onChanged = async () => {},
 }: {
   projectId: string;
   contractId: string;
   onClose: () => void;
+  onChanged?: () => Promise<void>;
 }) {
-  const [tab, setTab] = useState("position");
+  const [view, setView] = useRegisterFields({ contractTab: "manage" });
+  const tab = TABS.some(item => item.key === view.contractTab) ? view.contractTab : "manage";
+  const setTab = (contractTab: string) => setView({ contractTab });
+  const [reading, setReading] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
+  const codes = useAnswer(true, () => construction.costCodes(projectId), [projectId]);
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [variations, setVariations] = useState<Variation[] | null>(null);
   const [certificates, setCertificates] = useState<Certificate[] | null>(null);
@@ -83,27 +95,24 @@ export function ContractFile({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setReading(true);
     try {
-      const [file, changes, valuations, claims, cash] = await Promise.all([
-        construction.contract(projectId, contractId),
-        construction.variations(projectId, contractId),
-        construction.certificates(projectId, contractId),
-        construction.invoices(projectId, contractId),
-        construction.payments(projectId, contractId),
-      ]);
-      setContract(file);
-      setVariations(changes);
-      setCertificates(valuations);
-      setInvoices(claims);
-      setPayments(cash);
-      setError(null);
+      const file = await construction.contract(projectId, contractId);
+      setContract(file); setError(null);
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not load this contract.",
-      );
+      setError(caught instanceof ApiError ? caught.message : "Could not refresh this contract. Retry before taking action.");
     }
+    const support = await Promise.allSettled([
+      construction.variations(projectId, contractId), construction.certificates(projectId, contractId),
+      construction.invoices(projectId, contractId), construction.payments(projectId, contractId),
+    ]);
+    const [changes, valuations, claims, cash] = support;
+    setVariations(changes.status === "fulfilled" ? changes.value : null);
+    setCertificates(valuations.status === "fulfilled" ? valuations.value : null);
+    setInvoices(claims.status === "fulfilled" ? claims.value : null);
+    setPayments(cash.status === "fulfilled" ? cash.value : null);
+    setSupportError(support.some(item => item.status === "rejected") ? "Some related records could not be loaded. Retry to recover the related tabs." : null);
+    setReading(false);
   }, [projectId, contractId]);
 
   useEffect(() => {
@@ -112,10 +121,10 @@ export function ContractFile({
     })();
   }, [load]);
 
-  if (error) {
+  if (error && !contract) {
     return (
       <Drawer title="Contract" onClose={onClose}>
-        <Notice tone="error">{error}</Notice>
+        <Notice tone="error">{error}</Notice><Button disabled={reading} onClick={() => void load()}>Retry contract</Button>
       </Drawer>
     );
   }
@@ -129,6 +138,7 @@ export function ContractFile({
   }
 
   const code = contract.currency_code;
+  const uncommitted = ["draft", "submitted", "cancelled"].includes(contract.status);
 
   return (
     <Drawer
@@ -142,7 +152,7 @@ export function ContractFile({
       }
       facts={[
         {
-          label: "Revised commitment",
+          label: ["draft", "submitted", "cancelled"].includes(contract.status) ? "Proposed value" : "Revised commitment",
           value: money(contract.revised_commitment, code),
         },
         {
@@ -156,18 +166,24 @@ export function ContractFile({
       onSelectTab={setTab}
       onClose={onClose}
     >
+      {error ? <Notice tone="error">The last displayed record could not be refreshed: {error}</Notice> : null}
+      {supportError ? <Notice tone="warning">{supportError}</Notice> : null}
+      <Button small disabled={reading} onClick={() => void load()}>{reading ? "Refreshing…" : "Refresh contract and related records"}</Button>
+      {codes.status === "failed" ? <><Notice tone="error">Cost codes could not be loaded. Line editing is unavailable until they recover.</Notice><Button onClick={codes.retry}>Retry contract cost codes</Button></> : null}
+      {tab === "manage" ? <ContractWorkflow projectId={projectId} detail={contract} codes={codes.status === "ready" ? codes.data : []} codesReady={codes.status === "ready"} reading={reading} unavailable={!!error} onRefresh={load} onChanged={async () => { await load(); await onChanged(); }} /> : null}
+      {uncommitted && tab !== "manage" ? <Notice tone="info">These are proposed contract values. No financial commitment exists until independent authorization and activation.</Notice> : null}
       {tab === "position" ? (
         <div className="stack">
           <section className="stack stack-tight">
             <SectionHeader
-              title="Commitment"
-              description="Excluding tax. What the company has signed itself up to."
+              title={uncommitted ? "Proposed contract" : "Commitment"}
+              description={uncommitted ? "Excluding tax. These terms have not become a commitment." : "Excluding tax. What the company has signed itself up to."}
             />
             <Position compact>
               <PositionFigure
                 label="Original value"
                 value={money(contract.original_contract_value_ex_tax, code)}
-                note="Never moves"
+                note={uncommitted ? "Frozen on submission" : "Never moves"}
               />
               <PositionFigure
                 label="Approved variations"
@@ -176,7 +192,7 @@ export function ContractFile({
               />
               <PositionFigure
                 lead
-                label="Revised commitment"
+                label={uncommitted ? "Proposed value" : "Revised commitment"}
                 value={money(contract.revised_commitment, code)}
                 note="The limit certification is measured against"
               />
@@ -408,7 +424,7 @@ export function ContractFile({
         </div>
       ) : null}
 
-      {tab === "variations" ? (
+      {tab === "variations" && variations ? (
         !variations || variations.length === 0 ? (
           <EmptyState
             title="No variations"
@@ -448,7 +464,7 @@ export function ContractFile({
         )
       ) : null}
 
-      {tab === "certificates" ? (
+      {tab === "certificates" && certificates ? (
         !certificates || certificates.length === 0 ? (
           <EmptyState
             title="No certificates"
@@ -495,7 +511,7 @@ export function ContractFile({
         )
       ) : null}
 
-      {tab === "cash" ? (
+      {tab === "cash" && invoices && payments ? (
         <div className="stack">
           <section className="stack stack-tight">
             <SectionHeader title="Invoices" description="Including tax." />

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
+import { ContractHeaderEditor } from "./construction/ContractWorkflow";
+import { hasAnyRole } from "@/lib/roles";
 import { BudgetWorkspace } from "./construction/BudgetWorkspace";
 
 import {
@@ -86,7 +88,7 @@ const SECTIONS = [
  * thing the browser decides is which rows to draw — and only ever as a subset
  * of the rows the server already narrowed by role and by phase.
  */
-export function ConstructionTab({ projectId, roles = new Set<string>() }: { projectId: string; roles?: Set<string> }) {
+export function ConstructionTab({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null }) {
   const [view, setView] = useRegisterFields({ constructionTab: "overview" });
   const section = SECTIONS.some(item => item.key === view.constructionTab) ? view.constructionTab : "overview";
   const setSection = (constructionTab: string) => setView({ constructionTab });
@@ -170,7 +172,7 @@ export function ConstructionTab({ projectId, roles = new Set<string>() }: { proj
 
       {section === "budget" ? <BudgetWorkspace projectId={projectId} roles={roles} onChanged={load} /> : null}
       {section === "contracts" ? (
-        <ContractsSection projectId={projectId} />
+        <ContractsSection projectId={projectId} roles={roles} currencyId={currencyId} currencyCode={currencyCode} onChanged={load} />
       ) : null}
       {section === "variations" ? (
         <VariationsSection projectId={projectId} />
@@ -198,12 +200,27 @@ export function ConstructionTab({ projectId, roles = new Set<string>() }: { proj
 // Contracts
 // --------------------------------------------------------------------------- //
 
-function ContractsSection({ projectId }: { projectId: string }) {
+function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null, onChanged = async () => {} }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null; onChanged?: () => Promise<void> }) {
   const [rows, setRows] = useState<ConstructionContract[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [open, setOpen] = useState<string | null>(null);
+  const [view, setView] = useRegisterFields({ contractSearch: "", contractStatus: "", constructionContract: "", contractTab: "manage" });
+  const search = view.contractSearch; const status = view.contractStatus; const open = view.constructionContract;
+  const setSearch = (contractSearch: string) => setView({ contractSearch });
+  const setStatus = (contractStatus: string) => setView({ contractStatus });
+  const setOpen = (constructionContract: string | null) => setView({ constructionContract: constructionContract ?? "", contractTab: "manage" });
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [writeError, setWriteError] = useState<Error | null>(null);
+  async function create(body: Record<string, unknown>) {
+    if (saving) return;
+    setSaving(true); setWriteError(null);
+    try {
+      const created = await construction.createContract(projectId, body);
+      setCreating(false); setOpen(created.id); await load(); void onChanged();
+    } catch (caught) { setWriteError(caught instanceof Error ? caught : new Error("Could not create contract.")); }
+    finally { setSaving(false); }
+  }
+
 
   const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
@@ -246,6 +263,8 @@ function ContractsSection({ projectId }: { projectId: string }) {
 
   return (
     <div className="stack stack-tight">
+      {hasAnyRole(roles, new Set(["finance", "project_manager"])) ? <Button variant="primary" disabled={!currencyId} onClick={() => { setWriteError(null); setCreating(true); }}>Create contract draft</Button> : null}
+      {creating ? <ContractHeaderEditor currencyId={currencyId} currencyCode={currencyCode} busy={saving} failure={writeError} onSubmit={body => void create(body)} onCancel={() => setCreating(false)} /> : null}
       <DataToolbar
         framed
         search={{
@@ -335,7 +354,7 @@ function ContractsSection({ projectId }: { projectId: string }) {
                   {money(row.approved_variation_delta, row.currency_code)}
                 </td>
                 <td className="num">
-                  {money(row.revised_commitment, row.currency_code)}
+                  {["draft", "submitted", "cancelled"].includes(row.status) ? "Not committed" : money(row.revised_commitment, row.currency_code)}
                 </td>
                 <td className="num">
                   {money(row.certified_to_date, row.currency_code)}
@@ -353,9 +372,10 @@ function ContractsSection({ projectId }: { projectId: string }) {
       )}
 
       {open ? (
-        <ContractFile
+        <ContractFile key={open}
           projectId={projectId}
           contractId={open}
+          onChanged={async () => { await load(); void onChanged(); }}
           onClose={() => setOpen(null)}
         />
       ) : null}

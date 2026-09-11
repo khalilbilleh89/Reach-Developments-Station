@@ -87,3 +87,12 @@ Budget workspace and its correction path. See the shared
 [Budget/Contract plan and Budget acceptance](CONSTRUCTION_MVP_BUDGET_2026_09_11.md).
 Contracts remain the next separate PR after Budget review and human merge.
 Operator UAT and the MVP scope reconciliation remain pending.
+
+## Construction Contract candidate
+
+Budget merged in #287 (`327ed35`). Contract/commitment implementation and the
+remaining acceptance boundary are recorded in
+[Contract acceptance](CONSTRUCTION_MVP_CONTRACT_2026_09_11.md). Browser/mobile
+acceptance and independent review remain pending; this is not release acceptance.
+After Contract review and human merge, narrow UX-13 remains the final planned
+implementation slice before operator UAT and scope reconciliation/freeze.

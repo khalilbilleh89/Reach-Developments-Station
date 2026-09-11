@@ -409,7 +409,7 @@ def create_contract(
         notes=payload.notes,
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.get("/contracts/{contract_id}", response_model=schemas.ContractDetailOut)
@@ -420,9 +420,28 @@ def read_contract(
     actor: ActiveActor,
 ) -> schemas.ContractDetailOut:
     """The contract file: commitment, certification and cash, each on its own basis."""
-    del actor
     contract = service.get_contract(session, project=project, contract_id=contract_id)
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
+
+
+@router.put("/contracts/{contract_id}", response_model=schemas.ContractDetailOut)
+def update_contract(
+    project: GovernedConstructionProject,
+    contract_id: uuid.UUID,
+    payload: schemas.ContractCreate,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.ContractDetailOut:
+    permissions.require_construction_preparer(actor)
+    contract = service.update_contract(
+        session,
+        project=project,
+        actor=actor,
+        contract_id=contract_id,
+        values=payload.model_dump(),
+    )
+    session.commit()
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.put("/contracts/{contract_id}/lines", response_model=schemas.ContractDetailOut)
@@ -437,6 +456,7 @@ def write_contract_line(
     service.set_contract_line(
         session,
         project=project,
+        actor=actor,
         contract_id=contract_id,
         sequence=payload.sequence,
         description=payload.description,
@@ -446,7 +466,7 @@ def write_contract_line(
     )
     session.commit()
     contract = service.get_contract(session, project=project, contract_id=contract_id)
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.post("/contracts/{contract_id}/submit", response_model=schemas.ContractDetailOut)
@@ -461,7 +481,7 @@ def submit_contract(
         session, project=project, actor=actor, contract_id=contract_id
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.post("/contracts/{contract_id}/activate", response_model=schemas.ContractDetailOut)
@@ -477,7 +497,7 @@ def activate_contract(
         session, project=project, actor=actor, contract_id=contract_id
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.post("/contracts/{contract_id}/complete", response_model=schemas.ContractDetailOut)
@@ -492,7 +512,7 @@ def complete_contract(
         session, project=project, actor=actor, contract_id=contract_id
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.post("/contracts/{contract_id}/terminate", response_model=schemas.ContractDetailOut)
@@ -513,7 +533,7 @@ def terminate_contract(
         reason=payload.reason,
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 @router.post("/contracts/{contract_id}/cancel", response_model=schemas.ContractDetailOut)
@@ -533,7 +553,7 @@ def cancel_contract(
         reason=payload.reason,
     )
     session.commit()
-    return contract_detail(session, project=project, contract=contract)
+    return contract_detail(session, project=project, contract=contract, actor=actor)
 
 
 # --------------------------------------------------------------------------- #

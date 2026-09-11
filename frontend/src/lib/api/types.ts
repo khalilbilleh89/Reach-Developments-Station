@@ -2161,11 +2161,29 @@ export interface ContractCostCodePosition {
 }
 
 export interface ContractDetail extends ConstructionContract {
+  currency_id: string;
+  workflow: {
+    editing_blocker: string | null;
+    submission_blocker: string | null;
+    activation_blocker: string | null;
+    cancellation_blocker: string | null;
+    completion_blocker: string | null;
+    termination_blocker: string | null;
+  };
+  line_total: string;
+  created_at: string;
+  submitted_at: string | null;
+  activated_at: string | null;
+  completed_at: string | null;
+  terminated_at: string | null;
+  cancelled_at: string | null;
+  termination_reason: string | null;
+  cancellation_reason: string | null;
   vendor_registration_reference: string | null;
   vendor_tax_reference: string | null;
   vendor_contact_reference: string | null;
   payment_terms: string | null;
-  tax_rate_fraction: string;
+  tax_rate_fraction: string | null;
   notes: string | null;
   lines: ContractLine[];
   cost_code_position: ContractCostCodePosition[];

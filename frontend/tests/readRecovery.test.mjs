@@ -27,7 +27,7 @@ function mount(file, name, dependencies, props) {
     if (key in dependencies) return dependencies[key];
     if (key === "@/lib/api") return { ApiError: class extends Error { fieldErrors = []; } };
     if (key === "@/components/ui") return ui;
-    if (key === "@/components/shell/navigation") return { sectionDescription: () => "" };
+    if (key === "@/components/shell/navigation") return { sectionDescription: () => "", projectHref: () => "/projects/" };
     if (key === "@/lib/roles") return { hasAnyRole: () => false };
     if (key.startsWith("@/") || key.startsWith("./")) return {};
     return require(key);
@@ -48,7 +48,7 @@ function apiFixture() {
 for (const component of ["ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
   test(`${component}: failed read retries GETs and accepts a recovered empty response`, async () => {
     const f = apiFixture();
-    const render = mount("projects/ConstructionTab", component, { "@/lib/api": { ApiError: f.ApiError, construction: f.api } }, { projectId: "synthetic" });
+    const render = mount("projects/ConstructionTab", component, { "@/lib/api": { ApiError: f.ApiError, construction: f.api }, "@/components/shell/registerState": { useRegisterFields: () => [{ contractSearch: "", contractStatus: "", constructionContract: "" }, () => {}] } }, { projectId: "synthetic" });
     render(); await settle();
     const failed = nodes(render());
     assert.ok(failed.some(node => node.type === "Notice" && node.props.children === "Temporary read failure"));
@@ -199,4 +199,61 @@ test("Budget revision waits for its selected source instead of silently copying 
   const tree = nodes(render());
   assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Create budget revision").props.disabled, true);
   assert.ok(tree.some(node => node.type === "Button" && node.props.children === "Retry selected budget"));
+});
+
+const contractFormat = {};
+runInNewContext(ts.transpileModule(readFileSync(new URL('../src/lib/format.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: contractFormat });
+
+test("Contract draft preserves exact amounts, percentage conversion and unstated tax", () => {
+  let payload;
+  const render = mount("projects/construction/ContractWorkflow", "ContractHeaderEditor", { "@/lib/format": contractFormat }, { currencyId: "jod", currencyCode: "JOD", busy: false, failure: null, onSubmit: body => { payload = body; }, onCancel() {} });
+  const set = (label, value, custom = false) => {
+    const field = nodes(render()).find(node => node.type === "Field" && node.props.label === label);
+    field.props.children.props.onChange(custom ? value : { target: { value } });
+  };
+  set("Contract reference", "CT-EXACT"); set("Vendor name", "Vendor");
+  set("Contract value excluding tax", "123456789.12", true); set("Retention percentage", "5.5", true);
+  render().props.onSubmit();
+  assert.equal(payload.original_contract_value_ex_tax, "123456789.12");
+  assert.equal(payload.retention_rate_fraction, "0.055");
+  assert.equal(payload.tax_rate_fraction, null);
+  assert.equal(payload.currency_id, "jod");
+  set("Tax percentage", "0", true); render().props.onSubmit();
+  assert.equal(payload.tax_rate_fraction, "0");
+});
+
+test("Contract line edits retain sequence and send explicit zero without deleting history", () => {
+  let payload;
+  const render = mount("projects/construction/ContractWorkflow", "ContractLineEditor", {}, { detail: { currency_code: "JOD", lines: [] }, line: { sequence: 7, cost_code_id: "code", description: "Retained line", original_amount_ex_tax: "50.00" }, codes: [{ id: "code", is_active: true }], failure: null, busy: false, onSubmit: body => { payload = body; }, onCancel() {} });
+  const field = nodes(render()).find(node => node.type === "Field" && node.props.label === "Line value excluding tax");
+  field.props.children.props.onChange("0.00"); render().props.onSubmit();
+  assert.equal(payload.sequence, 7); assert.equal(payload.original_amount_ex_tax, "0.00");
+});
+
+test("Contract cancellation keeps the reason after a failed request and remains cancelable on failed refresh", () => {
+  const props = { action: "cancel", busy: false, failure: null, onSubmit() {}, onCancel() {} };
+  const render = mount("projects/construction/ContractWorkflow", "ContractDecision", {}, props);
+  nodes(render()).find(node => node.type === "Field").props.children.props.onChange({ target: { value: "Wrong scope; prepare replacement" } });
+  props.failure = new Error("Conflict"); props.unavailable = true;
+  const tree = render();
+  assert.equal(tree.props.disabled, true); assert.equal(tree.props.busy, false);
+  assert.equal(nodes(tree).find(node => node.type === "Field").props.children.props.value, "Wrong scope; prepare replacement");
+});
+
+test("Contract workspace renders server activation blockers and offers no draft edits after submission", () => {
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: "Budget has no room", cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} });
+  const tree = nodes(render());
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.disabled, true);
+  assert.ok(!tree.some(node => node.type === "Button" && node.props.children === "Edit draft terms"));
+  assert.ok(tree.some(node => node.props.children === "Budget has no room"));
+});
+
+test("Contract confirmation disables itself when refreshed eligibility changes", () => {
+  const props = { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: null, cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} };
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, props);
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.onClick();
+  props.detail.workflow.activation_blocker = "Already activated by another operator";
+  const dialog = nodes(render()).find(node => typeof node.type === "function" && node.type.name === "ContractDecision");
+  assert.equal(dialog.props.unavailable, true);
+  assert.equal(dialog.props.failure.message, "Already activated by another operator");
 });

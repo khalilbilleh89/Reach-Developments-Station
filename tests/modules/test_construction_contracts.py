@@ -206,3 +206,120 @@ class TestContractFile:
 
         found = admin_client.get(f"{construction_url(other_id)}/contracts/{active_contract}")
         assert found.status_code == 404, found.text
+
+
+class TestContractWorkspace:
+    def test_draft_terms_reconcile_then_freeze_and_remain_committed_on_completion(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        admin_client: TestClient,
+        project_id: str,
+        currency_id: str,
+        cost_codes: dict[str, str],
+        active_budget: str,
+    ) -> None:
+        created = create_contract(finance_client, project_id, currency_id)
+        assert created.status_code == 201, created.text
+        detail = created.json()
+        base = f"{construction_url(project_id)}/contracts/{detail['id']}"
+        payload = {
+            "contract_number": "CT-EDITED",
+            "contract_type": "works",
+            "vendor_name": "Revised vendor",
+            "currency_id": currency_id,
+            "original_contract_value_ex_tax": "200000.25",
+            "advance_entitlement_amount": "1000.00",
+            "retention_rate_fraction": "0.055000",
+            "tax_rate_fraction": None,
+            "payment_terms": "Net 30",
+            "notes": "Draft correction",
+        }
+        assert admin_client.put(base, json=payload).status_code == 403
+        edited = finance_client.put(base, json=payload)
+        assert edited.status_code == 200, edited.text
+        assert edited.json()["contract_number"] == "CT-EDITED"
+        assert edited.json()["original_contract_value_ex_tax"] == "200000.25"
+        assert edited.json()["retention_rate_fraction"] == "0.055000"
+        assert edited.json()["tax_rate_fraction"] is None
+        assert edited.json()["workflow"]["submission_blocker"]
+        result = set_contract_line(
+            finance_client,
+            project_id,
+            detail["id"],
+            sequence=1,
+            cost_code_id=cost_codes["hard"],
+            original_amount_ex_tax="200000.25",
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["line_total"] == "200000.25"
+        assert result.json()["workflow"]["submission_blocker"] is None
+        submitted = finance_client.post(f"{base}/submit", json={})
+        assert submitted.status_code == 200, submitted.text
+        assert "person who submitted" in submitted.json()["workflow"]["activation_blocker"]
+        assert finance_client.put(base, json=payload).status_code == 409
+        assert cfo_client.get(base).json()["workflow"]["activation_blocker"] is None
+        assert cfo_client.post(f"{base}/activate", json={}).status_code == 200
+        assert finance_client.put(base, json=payload).status_code == 409
+        active = finance_client.get(base).json()
+        assert active["workflow"]["cancellation_blocker"]
+        assert (
+            finance_client.post(f"{base}/cancel", json={"reason": "No longer wanted"}).status_code
+            == 409
+        )
+        completed = cfo_client.post(f"{base}/complete", json={})
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["revised_commitment"] == active["revised_commitment"]
+        assert completed.json()["completed_at"]
+        assert completed.json()["workflow"]["completion_blocker"]
+
+    def test_submitted_contract_explains_missing_budget_and_can_be_cancelled_with_history(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        currency_id: str,
+        cost_codes: dict[str, str],
+    ) -> None:
+        created = create_contract(finance_client, project_id, currency_id).json()
+        base = f"{construction_url(project_id)}/contracts/{created['id']}"
+        assert (
+            set_contract_line(
+                finance_client,
+                project_id,
+                created["id"],
+                sequence=1,
+                cost_code_id=cost_codes["hard"],
+                original_amount_ex_tax=created["original_contract_value_ex_tax"],
+            ).status_code
+            == 200
+        )
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        blocker = cfo_client.get(base).json()["workflow"]["activation_blocker"]
+        assert "no active construction budget" in blocker
+        refused = cfo_client.post(f"{base}/activate", json={})
+        assert refused.status_code == 409
+        assert refused.json()["detail"] == blocker
+        cancelled = finance_client.post(
+            f"{base}/cancel", json={"reason": "Prepare corrected terms instead"}
+        )
+        assert cancelled.status_code == 200, cancelled.text
+        assert cancelled.json()["cancellation_reason"] == "Prepare corrected terms instead"
+        assert cancelled.json()["cancelled_at"]
+        assert cancelled.json()["submitted_at"]
+        assert len(cancelled.json()["lines"]) == 1
+        assert cancelled.json()["workflow"]["editing_blocker"]
+
+    def test_invalid_draft_terms_return_validation_errors(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        currency_id: str,
+    ) -> None:
+        for invalid in (
+            {"vendor_name": "   "},
+            {"planned_start_date": "2026-10-10", "planned_completion_date": "2026-10-01"},
+            {"status": "active"},
+        ):
+            response = create_contract(finance_client, project_id, currency_id, **invalid)
+            assert response.status_code == 422, response.text

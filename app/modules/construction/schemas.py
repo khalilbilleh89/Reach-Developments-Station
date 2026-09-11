@@ -40,7 +40,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator, model_validator
 
 from app.modules.construction.models import (
     CONTRACT_TYPES,
@@ -283,6 +283,23 @@ class ContractCreate(StrictRequest):
     planned_completion_date: date | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
+    @field_validator("contract_number", "vendor_name")
+    @classmethod
+    def require_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a non-blank value.")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def planned_dates_in_order(self) -> ContractCreate:
+        if (
+            self.planned_start_date
+            and self.planned_completion_date
+            and self.planned_completion_date < self.planned_start_date
+        ):
+            raise ValueError("Planned completion must be on or after planned start.")
+        return self
+
 
 class ContractLineWrite(StrictRequest):
     sequence: int = Field(ge=1)
@@ -359,9 +376,29 @@ class ContractOut(Response):
     actual_completion_date: date | None
 
 
+class ContractWorkflowOut(Response):
+    editing_blocker: str | None
+    submission_blocker: str | None
+    activation_blocker: str | None
+    cancellation_blocker: str | None
+    completion_blocker: str | None
+    termination_blocker: str | None
+
+
 class ContractDetailOut(ContractOut):
     """The contract file: one record, on both bases, each labelled."""
 
+    currency_id: uuid.UUID
+    workflow: ContractWorkflowOut
+    line_total: Money
+    created_at: datetime
+    submitted_at: datetime | None
+    activated_at: datetime | None
+    completed_at: datetime | None
+    terminated_at: datetime | None
+    cancelled_at: datetime | None
+    termination_reason: str | None
+    cancellation_reason: str | None
     vendor_registration_reference: str | None
     vendor_tax_reference: str | None
     vendor_contact_reference: str | None
