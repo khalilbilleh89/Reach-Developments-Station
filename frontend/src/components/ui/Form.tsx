@@ -1,19 +1,12 @@
 "use client";
 
-import type { ChangeEvent, FormEvent, InputHTMLAttributes, ReactNode } from "react";
-import { useId, useState } from "react";
+import type { ChangeEvent, FormEvent, InputHTMLAttributes, ReactNode, ReactElement } from "react";
+import { Children, cloneElement, isValidElement, useId, useState } from "react";
 
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
-/**
- * One labelled control.
- *
- * The label wraps the control rather than pointing at it by id, so every field
- * is clickable, nothing depends on an id staying unique across a screen that
- * renders the same form twice, and the hint and the error are read out as part
- * of the label without any wiring.
- */
+/** One labelled control, with explicit hint and validation associations. */
 export function Field({
   label,
   hint,
@@ -32,16 +25,33 @@ export function Field({
   grow?: boolean;
   className?: string;
 }) {
+  const id = useId();
+  const description = [error ? `${id}-error` : "", hint ? `${id}-hint` : ""].filter(Boolean).join(" ");
+  // Follow native wrappers and the shared compound inputs without replacing
+  // existing descriptions (for example denomination or server validation).
+  function associate(nodes: ReactNode): ReactNode {
+    return Children.map(nodes, (node) => {
+      if (!isValidElement(node)) return node;
+      const child = node as ReactElement<InputHTMLAttributes<HTMLInputElement>>;
+      const control = (child.type === "input" || child.type === "select" || child.type === "textarea" || child.type === MoneyInput || child.type === RateInput);
+      if (control) return cloneElement(child, {
+        "aria-labelledby": child.props["aria-labelledby"] ?? (child.props["aria-label"] ? undefined : `${id}-label`),
+        "aria-describedby": [child.props["aria-describedby"], description].filter(Boolean).join(" ") || undefined,
+        "aria-invalid": error ? true : child.props["aria-invalid"],
+      });
+      return child.props.children ? cloneElement(child, {}, associate(child.props.children)) : child;
+    });
+  }
   const classes = ["field", grow ? "field-grow" : "", className ?? ""].filter(Boolean).join(" ");
   return (
     <label className={classes}>
-      <span className="field-label">
+      <span id={`${id}-label`} className="field-label">
         {label}
         {optional ? <span className="field-optional">Optional</span> : null}
       </span>
-      {children}
-      {error ? <span className="field-error">{error}</span> : null}
-      {hint ? <span className="field-hint">{hint}</span> : null}
+      {associate(children)}
+      {error ? <span id={`${id}-error`} className="field-error">{error}</span> : null}
+      {hint ? <span id={`${id}-hint`} className="field-hint">{hint}</span> : null}
     </label>
   );
 }

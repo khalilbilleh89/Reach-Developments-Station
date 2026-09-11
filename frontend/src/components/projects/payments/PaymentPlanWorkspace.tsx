@@ -495,17 +495,17 @@ export function PaymentPlanWorkspace({
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {section === "overview" ? <section className="stack">
-        <SectionHeader title={active ? "Governing schedule" : "Schedule in preparation"} actions={<Button onClick={() => setSection("schedule")}>{canPrepare && current?.version.status === "draft" ? "Build schedule" : "Inspect installments"}</Button>} />
+        <SectionHeader level={2} title={active ? "Governing schedule" : "Schedule in preparation"} actions={<Button onClick={() => setSection("schedule")}>{canPrepare && current?.version.status === "draft" ? "Build schedule" : "Inspect installments"}</Button>} />
         {revisionOpen ? <Notice tone="info">v{current?.version.version_number} is being prepared. v{active?.version.version_number} continues to govern this Sale.</Notice> : null}
         {shownDetail ? <><KeyValueGrid columns={3}><KeyValue label="Plan name" value={detail.plan.name} /><KeyValue label="Next scheduled date" value={shownDetail.next_scheduled_date ? businessDate(shownDetail.next_scheduled_date) : "No future scheduled date"} /><KeyValue label="Next forecast date" value={shownDetail.next_forecast_date ? businessDate(shownDetail.next_forecast_date) : "No future forecast date"} /></KeyValueGrid><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /><ScheduleTable installments={shownDetail.installments} currencyId={detail.currency_id} /></> : <EmptyState compact title="No version" hint="Inspect the schedule to prepare the first version." />}
       </section> : null}
-      {section === "reconciliation" && shownDetail ? <section className="stack"><SectionHeader title="Reconciliation" description={`v${version?.version_number} · ${isActive ? "Governing schedule" : "Selected version"}`} /><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /></section> : null}
+      {section === "reconciliation" && shownDetail ? <section className="stack"><SectionHeader level={2} title="Reconciliation" description={`v${version?.version_number} · ${isActive ? "Governing schedule" : "Selected version"}`} /><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /></section> : null}
 
       {section === "schedule" && shownDetail && version ? (
         <>
           {revisionOpen && current && active ? (
             <section>
-              <SectionHeader
+              <SectionHeader level={2}
                 title="Two schedules"
                 description="One is being prepared. The other is the one this buyer is being held to until the revision is activated."
               />
@@ -556,7 +556,7 @@ export function PaymentPlanWorkspace({
           ) : null}
 
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title={
                 isActive && revisionOpen
                   ? "The standing schedule"
@@ -594,7 +594,7 @@ export function PaymentPlanWorkspace({
           </section>
 
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Schedule totals"
               description="The saved instalments must match the SPA amount before approval."
             />
@@ -605,7 +605,7 @@ export function PaymentPlanWorkspace({
           </section>
 
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Instalments"
               description={
                 isDraft
@@ -777,7 +777,7 @@ export function PaymentPlanWorkspace({
           </section>
 
           <section>
-            <SectionHeader title="What happens next" />
+            <SectionHeader level={2} title="What happens next" />
             {scheduleDirty ? <Notice tone="info">Save schedule changes before submitting for approval.</Notice> : null}
             <ButtonRow>
               {canPrepare && isCurrent && isDraft ? (
@@ -983,7 +983,7 @@ export function PaymentPlanWorkspace({
 
       {section === "terms" && version ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Basis"
             description="Frozen from the contract when this version was created. Never recomputed."
           />
@@ -1043,7 +1043,7 @@ export function PaymentPlanWorkspace({
 
       {section === "history" ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Versions"
             description="Every schedule this plan has had. Open one to read it exactly as it stood."
           />
@@ -1106,7 +1106,7 @@ export function PaymentPlanWorkspace({
       {attesting ? (
         <FormDialog
           title={`Attest that ${attesting.label} occurred`}
-          description="This records an event that has already happened. An Approver / CFO must sanction it before the amount falls due."
+          description="This records an event that has already happened. An Approver / CFO must approve it before the amount falls due."
           confirmLabel="Submit attestation"
           busy={busy}
           disabled={
@@ -1167,7 +1167,7 @@ export function PaymentPlanWorkspace({
           </Field>
           <Field
             label="Reason"
-            hint="What an approver needs to know to sanction this."
+            hint="What an approver needs to know to approve this."
           >
             <input
               className="input"
@@ -1288,7 +1288,7 @@ function ContingentSection({
 
   return (
     <section>
-      <SectionHeader
+      <SectionHeader level={2}
         title={governing ? "Waiting on an event" : "Events and attestations"}
         description={
           governing
@@ -1387,13 +1387,13 @@ function ContingentSection({
             !canPrepare ? (
               <p className="footnote">
                 Collections attests that this event occurred; an Approver / CFO
-                sanctions it.
+                approves it.
               </p>
             ) : null}
             {governing && standing && !canApprove ? (
               <p className="footnote">
                 Submitted, and waiting on an Approver / CFO. Nothing is due
-                until they sanction it.
+                until they approve it.
               </p>
             ) : null}
           </div>

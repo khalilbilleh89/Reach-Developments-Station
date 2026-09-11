@@ -131,7 +131,7 @@ export function ImportPanel({
         </Field>
         <Field
           label="Mode"
-          hint="Create refuses a code that already exists. Upsert updates the record that code names."
+          hint="Create new records rejects existing codes. Create or update matches existing records by code."
         >
           <select
             className="input"
@@ -142,7 +142,7 @@ export function ImportPanel({
             }}
           >
             <option value="create">Create</option>
-            <option value="upsert">Upsert</option>
+            <option value="upsert">Create or update</option>
           </select>
         </Field>
       </FieldRow>
@@ -318,7 +318,7 @@ function CsvImport({
             onChange={(event) => setMode(event.target.value as "create" | "upsert")}
           >
             <option value="create">Create</option>
-            <option value="upsert">Upsert</option>
+            <option value="upsert">Create or update</option>
           </select>
         </Field>
         <Field label="Structure">

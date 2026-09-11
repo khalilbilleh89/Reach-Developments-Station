@@ -1,0 +1,416 @@
+[
+  {
+    "journey": "Sales → Unit",
+    "result": {
+      "focus": "B1-101",
+      "headings": [
+        [
+          "H1",
+          "B1-101"
+        ],
+        [
+          "H2",
+          "Property profile"
+        ],
+        [
+          "H2",
+          "Collections"
+        ],
+        [
+          "H2",
+          "Price"
+        ],
+        [
+          "H2",
+          "Commitment"
+        ]
+      ],
+      "page": 375,
+      "title": "B1-101 · Amman Residences · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Unit → Sales",
+    "result": {
+      "focus": "View unit B1-101",
+      "url": "http://127.0.0.1:8780/projects/?project=39ca7950-5afb-45b4-9de1-bc8a1f874853&section=sales"
+    }
+  },
+  {
+    "journey": "Sale overview",
+    "result": {
+      "headings": [
+        [
+          "H1",
+          "SALE-000001 · SPA-0001"
+        ],
+        [
+          "H3",
+          "Transaction position"
+        ],
+        [
+          "H3",
+          "Collections position"
+        ],
+        [
+          "H2",
+          "SPA payment schedule"
+        ]
+      ],
+      "page": 375,
+      "title": "SALE-000001 · SPA-0001 · Amman Residences · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Sale → Payment Plan",
+    "result": {
+      "focus": "PLN-000001",
+      "headings": [
+        [
+          "H1",
+          "PLN-000001"
+        ],
+        [
+          "H2",
+          "Governing schedule"
+        ]
+      ],
+      "page": 375,
+      "title": "PLN-000001 · Amman Residences · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Dirty unit editor Stay",
+    "result": {
+      "fields": [
+        {
+          "labelledby": "_r_p_-label",
+          "value": "B1-101 QA draft"
+        }
+      ],
+      "focus": "Overview"
+    }
+  },
+  {
+    "journey": "Mobile menu Escape",
+    "result": {
+      "dialogs": 0,
+      "focus": "Open navigation"
+    }
+  },
+  {
+    "journey": "Portfolio risk → actions",
+    "result": {
+      "headings": [
+        [
+          "H1",
+          "Portfolio"
+        ]
+      ],
+      "title": "Portfolio · Reach",
+      "url": "http://127.0.0.1:8780/portfolio/?section=actions&project=39ca7950-5afb-45b4-9de1-bc8a1f874853&source_key=39ca7950-5afb-45b4-9de1-bc8a1f874853%3AUNRESOLVED_BLOCKING_PERMIT%3Acf99fa77-f5bb-4524-bd43-531149c9a3b5"
+    }
+  },
+  {
+    "journey": "Snapshot verification",
+    "result": {
+      "page": 375,
+      "title": "UX09 isolated return acceptance · Reach",
+      "verification": [
+        "Snapshot verificationIntegrity reference44389159748f4ca175d250cff848a859d1a9a0580f5b4c40075d326d8e8c9354SchemaVersion 1",
+        "90-day captured outlookThrough 9 Dec 2026 · 12 observationsFORECAST: governed monthly closing positions for calendar months intersecting the horizon, including full boundary months; no daily proration.90-day contractual currency positionsOriginal currencyScheduled outstanding dueCoverageJODUnavailableunavailable · 1 unavailable projects90-day histo"
+      ],
+      "width": 390
+    }
+  },
+  {
+    "journey": "Final Sales 390",
+    "result": {
+      "client": 375,
+      "firstRow": 640.8624877929688,
+      "page": 375,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Final Sales 320",
+    "result": {
+      "client": 305,
+      "firstRow": 719.3624877929688,
+      "page": 305,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 320
+    }
+  },
+  {
+    "journey": "Sales width 768",
+    "result": {
+      "client": 768,
+      "firstRow": 604.5625,
+      "page": 768,
+      "width": 768
+    }
+  },
+  {
+    "journey": "Sales width 1024",
+    "result": {
+      "client": 1024,
+      "firstRow": 560.5625,
+      "page": 1024,
+      "width": 1024
+    }
+  },
+  {
+    "journey": "Sales width 1280",
+    "result": {
+      "client": 1280,
+      "firstRow": 541.0625,
+      "page": 1280,
+      "width": 1280
+    }
+  },
+  {
+    "journey": "Sales width 1440",
+    "result": {
+      "client": 1440,
+      "firstRow": 541.0625,
+      "page": 1440,
+      "width": 1440
+    }
+  },
+  {
+    "journey": "Sales width 1600",
+    "result": {
+      "client": 1600,
+      "firstRow": 541.0625,
+      "page": 1600,
+      "width": 1600
+    }
+  },
+  {
+    "journey": "Final Sale headings",
+    "result": {
+      "headings": [
+        [
+          "H1",
+          "SALE-000001 · SPA-0001"
+        ],
+        [
+          "H2",
+          "Transaction position"
+        ],
+        [
+          "H2",
+          "Collections position"
+        ],
+        [
+          "H2",
+          "SPA payment schedule"
+        ]
+      ],
+      "title": "SALE-000001 · SPA-0001 · Overview · Amman Residences · Reach"
+    }
+  },
+  {
+    "journey": "Snapshot comparison",
+    "result": {
+      "headings": [
+        [
+          "H1",
+          "UX10 comparison acceptance"
+        ],
+        [
+          "H2",
+          "Changes since prior snapshot"
+        ],
+        [
+          "H3",
+          "Exceptions: new, resolved and continuing"
+        ],
+        [
+          "H3",
+          "Management execution in the interval"
+        ]
+      ],
+      "title": "UX10 comparison acceptance · Reporting · Reach",
+      "url": "http://127.0.0.1:8780/portfolio/?section=reporting&snapshot=86de3469-2cf3-4772-93a6-7de1e2d53598&view=comparison&prior=93a387b9-edf0-4cf3-970e-884d171115b7"
+    }
+  },
+  {
+    "journey": "Final Board Pack",
+    "result": {
+      "client": 375,
+      "page": 375,
+      "title": "Board Pack · Reporting · Reach",
+      "url": "http://127.0.0.1:8780/portfolio/?section=reporting&snapshot=86de3469-2cf3-4772-93a6-7de1e2d53598&view=board&prior=93a387b9-edf0-4cf3-970e-884d171115b7",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Final Portfolio order",
+    "result": {
+      "client": 375,
+      "headings": [
+        "Portfolio",
+        "Portfolio position",
+        "Commercial and capital position",
+        "Needs attention"
+      ],
+      "page": 375,
+      "prioritySources": 3,
+      "title": "Portfolio · Overview · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Final Outlook heading and title",
+    "result": {
+      "headings": [
+        [
+          "H1",
+          "Portfolio"
+        ],
+        [
+          "H2",
+          "Cash and funding outlook"
+        ],
+        [
+          "H2",
+          "Coverage and horizon basis"
+        ]
+      ],
+      "title": "Portfolio · Outlook · Reach"
+    }
+  },
+  {
+    "journey": "Advisor search beyond first 200 units",
+    "result": {
+      "client": 375,
+      "page": 375,
+      "rows": [
+        "UX278-029No current sale or reservationView unit UX278-029—Unreleased——No SPA——Not started"
+      ],
+      "title": "Sales · Coastal Gardens — original-currency source conflict · Reach",
+      "url": "http://127.0.0.1:8780/projects/?project=e46af43a-db86-409c-b9b5-49b14286b0ab&section=sales&search=UX278-029",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Advisor Unit → filtered Sales",
+    "result": {
+      "focus": "View unit UX278-029",
+      "search": "UX278-029",
+      "url": "http://127.0.0.1:8780/projects/?project=e46af43a-db86-409c-b9b5-49b14286b0ab&section=sales&search=UX278-029"
+    }
+  },
+  {
+    "journey": "Auditor Actions",
+    "result": {
+      "createButtons": [],
+      "title": "Portfolio · Actions · Reach"
+    }
+  },
+  {
+    "journey": "Auditor Reporting",
+    "result": {
+      "captureButtons": [],
+      "snapshots": [
+        "UX10 comparison acceptance11 Sept 2026, 03:16 UTCproject · 1 projectM302 Master1 with incomplete coverageCompare",
+        "UX09 isolated return acceptance10 Sept 2026, 19:05 UTCproject · 1 projectM302 Master1 with incomplete coverageCompare"
+      ],
+      "title": "Reporting · Reach"
+    }
+  },
+  {
+    "journey": "Auditor snapshot read",
+    "result": {
+      "heading": "UX10 comparison acceptance",
+      "title": "UX10 comparison acceptance · Reporting · Reach"
+    }
+  },
+  {
+    "journey": "Verified Advisor restricted copy",
+    "result": {
+      "client": 375,
+      "firstRow": "B1-101Transaction details unavailableView unit B1-101—Contracted——Fully signed——Not started",
+      "page": 375,
+      "pipeline": "Commercial pipelineAuthorized units and readable transactions matching the search and filters, across all pages.No readable contract valueContracted valueLive contracts, ex taxPipeline detailsContracted: 1 of 2061 of 206ContractedUnits0Live reservations2AvailableContract pending0Active contracts0Returned0Open cancellations0",
+      "title": "Sales · Coastal Gardens — original-currency source conflict · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Verified Sales 320",
+    "result": {
+      "client": 305,
+      "firstRow": 738.8624877929688,
+      "page": 305,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 320
+    }
+  },
+  {
+    "journey": "Verified Sales 390",
+    "result": {
+      "client": 375,
+      "firstRow": 640.8624877929688,
+      "page": 375,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 390
+    }
+  },
+  {
+    "journey": "Verified Sales 768",
+    "result": {
+      "client": 768,
+      "firstRow": 604.5625,
+      "page": 768,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 768
+    }
+  },
+  {
+    "journey": "Verified Sales 1024",
+    "result": {
+      "client": 1024,
+      "firstRow": 560.5625,
+      "page": 1024,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 1024
+    }
+  },
+  {
+    "journey": "Verified Sales 1280",
+    "result": {
+      "client": 1280,
+      "firstRow": 541.0625,
+      "page": 1280,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 1280
+    }
+  },
+  {
+    "journey": "Verified Sales 1440",
+    "result": {
+      "client": 1440,
+      "firstRow": 541.0625,
+      "page": 1440,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 1440
+    }
+  },
+  {
+    "journey": "Verified Sales 1600",
+    "result": {
+      "client": 1600,
+      "firstRow": 541.0625,
+      "page": 1600,
+      "title": "Sales · Amman Residences · Reach",
+      "width": 1600
+    }
+  }
+]

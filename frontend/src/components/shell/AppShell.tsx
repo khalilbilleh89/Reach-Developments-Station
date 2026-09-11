@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
@@ -64,6 +64,7 @@ export function AppShell({
   utilities?: ReactNode;
   children: ReactNode;
 }) {
+  const content = useRef<HTMLElement>(null);
   const router = useRouter();
   const { signOut } = useSession();
   const [rail, setRail] = useState<RailState>("auto");
@@ -92,6 +93,22 @@ export function AppShell({
     })();
     return () => query.removeEventListener("change", sync);
   }, []);
+
+  // The rendered heading is authoritative, including asynchronously loaded
+  // record references. Keep project identity in browser tabs and history.
+  useEffect(() => {
+    const main = content.current;
+    if (!main) return;
+    const updateTitle = () => {
+      const title = main.querySelector("h1")?.textContent?.trim() || "Reach workspace";
+      const tab = main.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim();
+      document.title = [title, tab && tab !== title ? tab : undefined, title === project?.name ? undefined : project?.name, "Reach"].filter(Boolean).join(" · ");
+    };
+    updateTitle();
+    const observer = new MutationObserver(updateTitle);
+    observer.observe(main, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-selected"] });
+    return () => observer.disconnect();
+  }, [project?.name]);
 
   const collapsed = rail === "collapsed" || (rail === "auto" && narrow);
 
@@ -127,6 +144,7 @@ export function AppShell({
 
   return (
     <div className={narrow ? "app app-narrow" : "app"} data-rail={rail}>
+      <a className="skip-link" href="#main" onClick={() => content.current?.focus()}>Skip to main content</a>
       <AppSidebar {...sidebarProps} />
       {navOpen ? (
         <MobileNavigation {...sidebarProps} onClose={() => setNavOpen(false)} />
@@ -139,7 +157,7 @@ export function AppShell({
           onToggleRail={toggleRail}
           onOpenNav={() => setNavOpen(true)}
         />
-        <main id="main" className="app-content">
+        <main ref={content} id="main" tabIndex={-1} className="app-content">
           {children}
         </main>
       </div>

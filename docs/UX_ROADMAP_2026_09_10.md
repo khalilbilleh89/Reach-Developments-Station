@@ -235,3 +235,71 @@ Native Node behavior tests: 19 passed. Initial PostgreSQL search/history/Audit
 suite: 14 passed. Sales security and Product Experience regression: 124 passed.
 Final Sales query/representative-reservation rerun: 4 passed. Exact candidate CI
 results are recorded in the PR. Full operator/browser/accessibility acceptance remains PR-UX-10.
+
+## PR-UX-10 — Operational polish and accessibility acceptance
+
+Fourth and final planned UX slice, based on merged PR-UX-09 (#283).
+Governed by [Engineering Rules](ENGINEERING_RULES.md). This is a Draft review
+candidate; historical Partial/Pending UAT and release gates remain unchanged.
+
+### Implementation
+
+- Sales keeps contracted value visible and puts detailed pipeline counts behind
+  a labelled disclosure. Contract price follows transaction identity in the
+  register. Totals explicitly describe authorized units/readable transactions.
+  A restricted transaction says “Transaction details unavailable”; absence of a
+  readable contract currency is not displayed as an unexplained zero.
+- Portfolio shows original-currency capital before the exception list. The
+  overview retains three priority risks and links to the complete risk register.
+  Reasons, severity, source evidence and owning actions remain available.
+- Sales gates, import mode and approval instructions use business language.
+  Actions summaries expand workflow identifiers into words. Project and snapshot
+  count copy handles the single-record case. Snapshot verification details are
+  disclosed in the record instead of taking a register column.
+- The shell has a visible-on-focus skip link to a focusable main landmark.
+  Browser titles follow the rendered page/record heading, selected tab and
+  project identity, including asynchronously loaded record references.
+- Unit, Sale, Payment Plan, Portfolio and Outlook page sections use level-two
+  headings; subordinate pricing and report sections retain their hierarchy.
+- Shared Field associates labels, hints and errors with native inputs and the
+  shared MoneyInput/RateInput, including controls inside wrappers. Existing
+  caller labels/descriptions and exact input strings are preserved.
+
+### Contract and dependencies
+
+No API shape, schema, migration, authorization, calculation, FX, financial
+rounding or lifecycle change. The only backend change is the explanatory text
+for the existing unresolved blocking-permit risk. Historical snapshots remain
+immutable, including their previously captured wording. No production or
+development dependencies added or removed. CI configuration is unchanged.
+
+### Engineering acceptance
+
+Production static export served by FastAPI against isolated `reach_ux10_uat`,
+cloned from the previous synthetic acceptance database. Pytest used a separate
+`reach_ux10_test` database. No production records were accessed or changed.
+
+| Check | Observed result |
+| --- | --- |
+| Sales → Unit → Sales | Correct Sales return destination; Unit heading receives focus. Advisor return preserves its search and originating link. |
+| Sale → Payment Plan → Sale | Correct immediate parent and register origin; governing principal remains JOD 165,000 and the three-installment schedule remains reconciled. |
+| Keyboard | Skip link Enter focuses main; record tab arrows move focus; dirty-editor dialog wraps focus; mobile navigation Escape returns focus to its opener. |
+| Draft safety | Changing the Unit reference and attempting to leave opens the warning. Stay retains the exact draft; explicit Cancel removes the editor without saving it. |
+| Search and authorization | Advisor search finds UX278-029 beyond the initial 200 of 206 units. Advisor has no Sales gates or Portfolio navigation; unreadable transaction links are absent. Auditor has no Create action or Capture snapshot action and can read authorized snapshots. |
+| Portfolio | Capital heading precedes Needs attention; three priority source links remain. Risk → Actions retains the source filter. |
+| Reporting | Existing snapshot/no-prior state, new synthetic capture, comparison against the earlier snapshot, Board Pack with selected prior, and register return exercised. Full hash/schema are accessible in Snapshot verification. |
+| Reflow | Sales measured at 320, 390, 768, 1024, 1280, 1440 and 1600 CSS pixels without document overflow. Wide tables scroll inside their register. Unit, Sale, Plan and Board Pack checked at phone width; long project identity wraps. |
+| Headings and titles | Final Sale outline is h1 then h2 Transaction position, Collections position and SPA payment schedule. Unit and Plan identify the record/project in the browser title; Portfolio tabs change the title. |
+
+Evidence: [screenshots and browser observations](evidence/ux10-operational-accessibility/).
+Local checks: 23 native frontend behavior tests, 104 UI structure/copy tests and
+8 Portfolio-risk/Sales-history regressions passed. Production build/TypeScript,
+frontend lint, Ruff, Python compilation and dependency consistency passed.
+Exact candidate CI results belong in the PR.
+
+This records engineering acceptance, not a screen-reader certification or
+stakeholder sign-off. Actual assistive-technology use, native browser zoom/print,
+additional browsers/devices and the full operator/phase-restricted role matrix
+still need human acceptance. Previous UAT rows remain Partial/Pending where
+already recorded. Independent review and exact-head Full Backend + Frontend
+remain required before a human merge; no merge or deployment is performed here.

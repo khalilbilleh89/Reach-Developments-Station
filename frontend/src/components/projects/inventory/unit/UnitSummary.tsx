@@ -67,7 +67,7 @@ export function UnitSummary({
   return (
     <div className="record-overview">
       <section className="record-section record-standing">
-        <SectionHeader title="Property profile" actions={<Button small onClick={() => onOpenTab("detail")}>Physical record</Button>} />
+        <SectionHeader level={2} title="Property profile" actions={<Button small onClick={() => onOpenTab("detail")}>Physical record</Button>} />
         <KeyValueGrid columns={3}>
           <KeyValue label="Property" value={[unit.asset_class, unit.bedrooms === null ? null : `${unit.bedrooms} bedrooms`, unit.bathrooms === null ? null : `${unit.bathrooms} bathrooms`].filter(Boolean).join(" · ") || unit.asset_class} />
           <KeyValue label="Location" value={[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" → ") || "Not recorded"} />
@@ -80,7 +80,7 @@ export function UnitSummary({
       </section>
       {collection.status === "off" ? null : (
         <section className="record-section unit-account">
-          <SectionHeader
+          <SectionHeader level={2}
             title="Collections"
             actions={
               collection.status === "ready" ? (
@@ -96,7 +96,7 @@ export function UnitSummary({
 
       {pricing.status === "off" ? null : (
         <section className="record-section">
-          <SectionHeader
+          <SectionHeader level={2}
             title="Price"
             actions={
               pricing.status === "ready" ? (
@@ -112,7 +112,7 @@ export function UnitSummary({
 
       {commitment.status === "off" ? null : (
         <section className="record-section">
-          <SectionHeader
+          <SectionHeader level={2}
             title="Commitment"
             actions={
               commitment.status === "ready" ? (

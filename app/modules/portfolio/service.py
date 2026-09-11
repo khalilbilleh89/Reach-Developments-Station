@@ -448,7 +448,7 @@ def _risks(
                 severity,
                 title,
                 label,
-                "Current unresolved owner predicate; issued/renewed/withdrawn excluded.",
+                "Includes unresolved permits; issued, renewed and withdrawn permits are excluded.",
                 f"/projects/?project={project.project_id}&section=permits",
                 str(identifier),
             )

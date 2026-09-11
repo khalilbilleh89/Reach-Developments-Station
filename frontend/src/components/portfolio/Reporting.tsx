@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, ButtonRow, DataToolbar, EmptyState, Field, FormDialog, KeyValue, KeyValueGrid, Notice, PageHeader, TableScroll, ToolbarFilter } from "@/components/ui";
+import { Button, ButtonRow, DataToolbar, Disclosure, EmptyState, Field, FormDialog, KeyValue, KeyValueGrid, Notice, PageHeader, TableScroll, ToolbarFilter } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import { reporting } from "@/lib/api/reporting";
 import type { Snapshot, SnapshotHeader } from "@/lib/api/reporting";
@@ -53,10 +53,10 @@ function SnapshotRegister({ canWrite }: { canWrite: boolean }) {
     <PageHeader icon="projects" eyebrow="Historical management" title="Reporting" subtitle="Capture what the system says now. Compare governed snapshots as history grows." />
     <DataToolbar onReset={scope || project || offset ? () => change({ scope: "", project: "", offset: "" }) : undefined} activeSummary={project ? "Selected development" : "All authorized developments"} count={answer.status === "ready" ? { shown: answer.data.items.length, total: answer.data.total, noun: "snapshot" } : undefined} actions={canWrite ? <Button variant="primary" onClick={() => setCreating(true)}>Capture management snapshot</Button> : undefined}>
       <ToolbarFilter label="Scope"><select className="input" value={scope} onChange={e => change({scope:e.target.value, project: e.target.value === "portfolio" ? "" : project, offset:""})}><option value="">All accessible snapshots</option><option value="portfolio">Portfolio</option><option value="project">Project</option></select></ToolbarFilter>
-      <ProjectChoice value={project} onChange={project => change({ project, scope: project ? "project" : "", offset: "" })} />
+      <ProjectChoice emptyLabel="All authorized developments" value={project} onChange={project => change({ project, scope: project ? "project" : "", offset: "" })} />
     </DataToolbar>
     {answer.status !== "ready" ? <ReadState answer={answer} label="Reading snapshots…" /> : !answer.data.total ? <EmptyState title="No governed snapshots yet" hint="The first capture starts management history. Earlier periods are not reconstructed from today's data." /> : <>
-      <TableScroll label="Management snapshot register" stickyHeader><thead><tr>{["Captured / label", "Scope", "Created by", "Coverage", "Integrity", "Open"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{answer.data.items.map(s => <tr key={s.id}><th scope="row" className="cell-prose"><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "position", "", params))} href={reportingHref(s.id, "position", "", params)}>{s.label ?? "Management snapshot"}</Link><p className="muted">{eventTime(s.captured_at)}</p></th><td>{s.scope_type} · {s.project_count} projects</td><td>{s.creator_display_name}</td><td>{s.incomplete_project_count} with incomplete coverage</td><td className="mono">{s.content_hash.slice(0,12)}</td><td><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "comparison", "", params))} href={reportingHref(s.id,"comparison", "", params)}>Compare</Link></td></tr>)}</tbody></TableScroll>
+      <TableScroll label="Management snapshot register" stickyHeader><thead><tr>{["Captured / label", "Scope", "Created by", "Coverage", "Open"].map(t => <th scope="col" key={t}>{t}</th>)}</tr></thead><tbody>{answer.data.items.map(s => <tr key={s.id}><th scope="row" className="cell-prose"><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "position", "", params))} href={reportingHref(s.id, "position", "", params)}>{s.label ?? "Management snapshot"}</Link><p className="muted">{eventTime(s.captured_at)}</p></th><td>{s.scope_type} · {s.project_count} {s.project_count === 1 ? "project" : "projects"}</td><td>{s.creator_display_name}</td><td>{s.incomplete_project_count} with incomplete coverage</td><td><Link data-record-link onClick={() => rememberRegisterLink(reportingHref(s.id, "comparison", "", params))} href={reportingHref(s.id,"comparison", "", params)}>Compare</Link></td></tr>)}</tbody></TableScroll>
       <ButtonRow><Button disabled={!offset} onClick={() => change({offset:String(Math.max(0,offset-20))})}>Previous snapshots</Button><Button disabled={offset+20>=answer.data.total} onClick={() => change({offset:String(offset+20)})}>Next snapshots</Button></ButtonRow>
     </>}
     {creating && canWrite ? <Capture initialProject={project} onClose={() => setCreating(false)} /> : null}
@@ -64,7 +64,7 @@ function SnapshotRegister({ canWrite }: { canWrite: boolean }) {
 }
 
 export function SnapshotIdentity({ snapshot }: { snapshot: SnapshotHeader }) {
-  return <KeyValueGrid><KeyValue label="Captured (UTC)" value={eventTime(snapshot.captured_at)} /><KeyValue label="As of" value={businessDate(snapshot.as_of_date)} /><KeyValue label="Scope" value={`${snapshot.scope_type} · ${snapshot.project_count} projects`} /><KeyValue label="Captured by" value={snapshot.creator_display_name} /><KeyValue label="Integrity reference" value={<span className="mono">{snapshot.content_hash.slice(0,16)}</span>} /><KeyValue label="Schema" value={`Version ${snapshot.schema_version}`} /></KeyValueGrid>;
+  return <><KeyValueGrid><KeyValue label="Captured (UTC)" value={eventTime(snapshot.captured_at)} /><KeyValue label="As of" value={businessDate(snapshot.as_of_date)} /><KeyValue label="Scope" value={`${snapshot.scope_type} · ${snapshot.project_count} ${snapshot.project_count === 1 ? "project" : "projects"}`} /><KeyValue label="Captured by" value={snapshot.creator_display_name} /></KeyValueGrid><Disclosure title="Snapshot verification"><KeyValueGrid><KeyValue label="Integrity reference" value={<span className="mono">{snapshot.content_hash}</span>} /><KeyValue label="Schema" value={`Version ${snapshot.schema_version}`} /></KeyValueGrid></Disclosure></>;
 }
 
 function SnapshotRecord({ id }: { id: string }) {

@@ -43,7 +43,7 @@ export function UnitAreas({
   return (
     <>
       <section>
-        <SectionHeader
+        <SectionHeader level={2}
           title="Identity"
           actions={onEditUnit ? <Button small onClick={onEditUnit}>Edit unit</Button> : undefined}
         />
@@ -61,7 +61,7 @@ export function UnitAreas({
       </section>
 
       <section>
-        <SectionHeader title="Areas" />
+        <SectionHeader level={2} title="Areas" />
         {unit.area_lines.length === 0 ? (
           <EmptyState
             title="No approved measurement yet"
@@ -129,7 +129,7 @@ export function UnitAreas({
       </section>
 
       <section>
-        <SectionHeader title="Parking and storage" />
+        <SectionHeader level={2} title="Parking and storage" />
         {assets.length === 0 ? (
           <p className="subtle">No parking or storage linked to this unit.</p>
         ) : (
@@ -148,7 +148,7 @@ export function UnitAreas({
 
       {values.length > 0 ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Additional fields"
             actions={
               onEditFields && editableFieldCount > 0 ? (

@@ -344,7 +344,7 @@ function HandoverView({
   return (
     <>
       <section>
-        <SectionHeader
+        <SectionHeader level={2}
           title="Progress"
           actions={
             <Badge tone={handoverTone(detail.handover.status)}>{handoverLabel(detail.handover.status)}</Badge>
@@ -363,7 +363,7 @@ function HandoverView({
       </section>
 
       <section>
-        <SectionHeader
+        <SectionHeader level={2}
           title="Clearances"
           description="Three departments, three sign-offs. None of them is anybody else's to give."
         />
@@ -741,13 +741,13 @@ export function SaleWorkspace({
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} /> : null}
-      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
+      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader level={2} title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
 
       {activeSection === "commercial" && terms ? (
         <>
           {preparing && terms.deposit_gate_status === "pending" ? <Notice tone="info">Sales Operations must record deposit evidence, or the approver must waive the deposit, before this unit can be reserved.</Notice> : null}
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Reservation"
               actions={
                 <>
@@ -779,9 +779,9 @@ export function SaleWorkspace({
           </section>
 
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Quote"
-              description="Every figure here was computed by the server. The browser does no pricing arithmetic."
+              description="Agreed price, taxes and fees for this transaction."
             />
             <Position compact>
               <PositionFigure
@@ -794,7 +794,7 @@ export function SaleWorkspace({
               <PositionFigure label="Buyer fees" value={money(terms.buyer_fee_total, quoteCode)} />
               <PositionFigure label="Total buyer payable" value={money(terms.total_buyer_payable, quoteCode)} />
             </Position>
-            <h4 className="section-heading">How it was reached</h4>
+            <h3 className="section-heading">How it was reached</h3>
             <Waterfall>
               <WaterfallRow label="Approved list price" note="Ex tax" amount={money(terms.reference_price_ex_tax, quoteCode)} />
               <WaterfallRow label="Paid upgrades" amount={money(terms.paid_upgrade_amount, quoteCode)} />
@@ -815,7 +815,7 @@ export function SaleWorkspace({
             </p>
             {terms.exception_approval_required ? (
               <Notice tone="warning">
-                {terms.exception_reason ?? "This quote needs sanctioning."}{" "}
+                {terms.exception_reason ?? "This quote needs approval."}{" "}
                 {terms.exception_required_role
                   ? `Only ${terms.exception_required_role.replace("_", " ")} may approve it.`
                   : ""}
@@ -824,7 +824,7 @@ export function SaleWorkspace({
           </section>
 
           <Disclosure title={<> Discounts, packages & other commercial inputs </>}>
-            <SectionHeader title="Commercial inputs" />
+            <SectionHeader level={2} title="Commercial inputs" />
             {reservation && reservation.adjustments.length > 0 ? (
               <TableScroll label="Commercial inputs" compact>
                 <thead>
@@ -929,7 +929,7 @@ export function SaleWorkspace({
           </Disclosure>
 
           <section>
-            <SectionHeader title="What happens next" />
+            <SectionHeader level={2} title="What happens next" />
             <ButtonRow>
               {canPrepare && (preparing || live) && terms.exception_approval_status === "pending" ? (
                 <Button
@@ -942,7 +942,7 @@ export function SaleWorkspace({
                         confirmLabel: "Submit",
                       },
                       (reason) => sales.submitException(projectId, terms.id, reason),
-                      "Put forward for sanction.",
+                      "Submit for approval.",
                     )
                   }
                 >
@@ -1098,7 +1098,7 @@ export function SaleWorkspace({
 
       {activeSection === "buyers" ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Buyer"
             actions={
               client ? <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge> : undefined
@@ -1118,11 +1118,11 @@ export function SaleWorkspace({
                 {"phone" in client ? <KeyValue label="Phone" value={client.phone} /> : null}
                 {"address" in client ? <KeyValue label="Address" value={client.address} /> : null}
               </KeyValueGrid>
-              <h4 className="section-heading">Named parties</h4>
+              <h3 className="section-heading">Named parties</h3>
               <PartyList parties={parties} />
               {sale ? (
                 <>
-                  <h4 className="section-heading">Parties on the contract</h4>
+                  <h3 className="section-heading">Parties on the contract</h3>
                   <PartyList parties={sale.parties} />
                 </>
               ) : null}
@@ -1140,7 +1140,7 @@ export function SaleWorkspace({
             onSave={(body) => run(() => sales.updateContract(projectId, sale.sale.id, body), "SPA details saved.")} /> : null}
           {sale.sale.status === "signature_pending" ? <Notice tone="info">Legal must record the SPA preparation and both signatures under SPA & registry. Sales Operations can then complete the sale after the required payment evidence is recorded.</Notice> : null}
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Sale contract"
               actions={
                 <Badge tone={gateTone(sale.sale.first_payment_gate_status)}>
@@ -1182,7 +1182,7 @@ export function SaleWorkspace({
 
           {sale.tax_lines.length > 0 ? (
             <section>
-              <SectionHeader
+              <SectionHeader level={2}
                 title="Frozen taxes"
                 description="The rates that applied on the contract date, kept whatever changes since."
               />
@@ -1220,7 +1220,7 @@ export function SaleWorkspace({
           ) : null}
 
           <section>
-            <SectionHeader title="What happens next" />
+            <SectionHeader level={2} title="What happens next" />
             <ButtonRow>
               {canWriteSale && sale.sale.status === "draft" ? (
                 <Button
@@ -1403,7 +1403,7 @@ export function SaleWorkspace({
           <LegalSummary timeline={sale.legal} />
           <Notice tone="info">Land registry lodging records the submission date and reference. Registry acceptance, registration and title transfer remain separate events.</Notice>
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Legal timeline"
               description="Each milestone as it was recorded. A withdrawal never deletes what it undoes."
               actions={
@@ -1502,7 +1502,7 @@ export function SaleWorkspace({
 
       {activeSection === "collections" && sale && seesCollections ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Collections"
             description="What actually arrived, where it was applied, and what is still owed."
           />
@@ -1513,7 +1513,7 @@ export function SaleWorkspace({
       {activeSection === "closure" && sale?.cancellation ? (
         <>
           <section>
-            <SectionHeader
+            <SectionHeader level={2}
               title="Cancellation"
               actions={
                 <>
@@ -1560,7 +1560,7 @@ export function SaleWorkspace({
           </section>
 
           <section>
-            <SectionHeader title="What happens next" />
+            <SectionHeader level={2} title="What happens next" />
             <ButtonRow>
               {canApprove &&
               sale.cancellation.financial_approval_required &&
