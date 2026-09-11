@@ -70,3 +70,11 @@ Draft review, required CI and human merge remain separate gates. Historical
 Partial/Pending UAT is preserved. Candidate validation and observed browser
 results are recorded in the PR; this document does not declare operator UAT or
 MVP release complete.
+
+## UX-12 candidate
+
+Named draft protection, principal-read Retry controls and currency/percentage
+accessibility context are implemented using existing primitives. Candidate
+validation is recorded in [UX-12 acceptance](UX12_ACCEPTANCE_2026_09_11.md).
+This does not declare operator UAT or MVP release complete. Construction Budget
+remains the next implementation slice after review and human merge of UX-12.

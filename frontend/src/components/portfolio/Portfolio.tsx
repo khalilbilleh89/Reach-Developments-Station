@@ -20,9 +20,9 @@ const labels: Record<string, string> = {
   commission_released: "Released commissions (non-cash)",
 };
 
-function Pending({ answer }: { answer: Answer<unknown> }) {
+function Pending({ answer }: { answer: Answer<unknown> & { retry: () => void } }) {
   if (answer.status === "denied" || answer.status === "off") return <Notice tone="info">Portfolio is not available to your role.</Notice>;
-  if (answer.status === "failed") return <Notice tone="error">{answer.message}</Notice>;
+  if (answer.status === "failed") return <><Notice tone="error">{answer.message}</Notice><Button onClick={answer.retry}>Retry portfolio</Button></>;
   return <Loading label="Reading authorized portfolio…" shape="page" />;
 }
 

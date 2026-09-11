@@ -1,5 +1,7 @@
 "use client";
 
+import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, projects } from "@/lib/api";
@@ -385,7 +387,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
         compact
         actions={
           canWrite ? (
-            <Button
+            <Button data-leaves-editor
               variant="primary"
               onClick={() => {
                 setFormError(null);
@@ -560,113 +562,115 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
             setFormError(null);
           }}
         >
-          <form onSubmit={create}>
-            {formError ? <Notice tone="error">{formError}</Notice> : null}
-            <FormSection title="Consent">
-              <FieldRow columns={2}>
-                <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
-                  <input
-                    className="input input-medium"
-                    required
-                    maxLength={64}
-                    value={form.permit_code}
-                    onChange={(event) => setForm({ ...form, permit_code: event.target.value })}
-                  />
-                </Field>
-                <Field label="Authority">
-                  <input
-                    className="input"
-                    required
-                    maxLength={200}
-                    value={form.authority}
-                    onChange={(event) => setForm({ ...form, authority: event.target.value })}
-                  />
-                </Field>
-              </FieldRow>
-              <PermitTypeChoice
-                types={types}
-                value={form.permit_type_code}
-                canWrite={canWrite}
-                onChange={(code) => setForm({ ...form, permit_type_code: code })}
-                onAdd={() => setAddingType(true)}
-              />
-              {/* Only asked where there is something to answer with. A lone
-                  "not tied to one parcel" option is a question the project
-                  cannot yet have an opinion about. */}
-              {parcels.length > 0 ? (
-                <Field
-                  label="Parcel"
-                  optional
-                  hint="Where the consent applies, where that is known."
-                >
-                  <select
-                    className="input"
-                    value={form.parcel_id}
-                    onChange={(event) => setForm({ ...form, parcel_id: event.target.value })}
-                  >
-                    <option value="">Not tied to one parcel</option>
-                    {parcels.map((parcel) => (
-                      <option key={parcel.id} value={parcel.id}>
-                        {parcel.plot_number}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null}
-            </FormSection>
-            <FormSection title="Programme">
-              <FieldRow columns={3}>
-                <Field label="Planned submission" optional>
-                  <input
-                    className="input input-short"
-                    type="date"
-                    value={form.planned_submission_date}
-                    onChange={(event) =>
-                      setForm({ ...form, planned_submission_date: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="Planned issue" optional>
-                  <input
-                    className="input input-short"
-                    type="date"
-                    value={form.planned_issue_date}
-                    onChange={(event) =>
-                      setForm({ ...form, planned_issue_date: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field
-                  label="Statutory period"
-                  optional
-                  hint="How long the authority has by law."
-                >
-                  <span className="input-shell input-shell-rate">
+          <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(EMPTY_PERMIT)} busy={busy} onDiscard={() => { setForm(EMPTY_PERMIT); }}>
+            <form onSubmit={create}>
+              {formError ? <Notice tone="error">{formError}</Notice> : null}
+              <FormSection title="Consent">
+                <FieldRow columns={2}>
+                  <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
+                    <input
+                      className="input input-medium"
+                      required
+                      maxLength={64}
+                      value={form.permit_code}
+                      onChange={(event) => setForm({ ...form, permit_code: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Authority">
                     <input
                       className="input"
-                      type="number"
-                      min="1"
-                      value={form.statutory_sla_days}
+                      required
+                      maxLength={200}
+                      value={form.authority}
+                      onChange={(event) => setForm({ ...form, authority: event.target.value })}
+                    />
+                  </Field>
+                </FieldRow>
+                <PermitTypeChoice
+                  types={types}
+                  value={form.permit_type_code}
+                  canWrite={canWrite}
+                  onChange={(code) => setForm({ ...form, permit_type_code: code })}
+                  onAdd={() => setAddingType(true)}
+                />
+                {/* Only asked where there is something to answer with. A lone
+                    "not tied to one parcel" option is a question the project
+                    cannot yet have an opinion about. */}
+                {parcels.length > 0 ? (
+                  <Field
+                    label="Parcel"
+                    optional
+                    hint="Where the consent applies, where that is known."
+                  >
+                    <select
+                      className="input"
+                      value={form.parcel_id}
+                      onChange={(event) => setForm({ ...form, parcel_id: event.target.value })}
+                    >
+                      <option value="">Not tied to one parcel</option>
+                      {parcels.map((parcel) => (
+                        <option key={parcel.id} value={parcel.id}>
+                          {parcel.plot_number}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ) : null}
+              </FormSection>
+              <FormSection title="Programme">
+                <FieldRow columns={3}>
+                  <Field label="Planned submission" optional>
+                    <input
+                      className="input input-short"
+                      type="date"
+                      value={form.planned_submission_date}
                       onChange={(event) =>
-                        setForm({ ...form, statutory_sla_days: event.target.value })
+                        setForm({ ...form, planned_submission_date: event.target.value })
                       }
                     />
-                    <span className="input-affix" aria-hidden="true">
-                      days
+                  </Field>
+                  <Field label="Planned issue" optional>
+                    <input
+                      className="input input-short"
+                      type="date"
+                      value={form.planned_issue_date}
+                      onChange={(event) =>
+                        setForm({ ...form, planned_issue_date: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Statutory period"
+                    optional
+                    hint="How long the authority has by law."
+                  >
+                    <span className="input-shell input-shell-rate">
+                      <input
+                        className="input"
+                        type="number"
+                        min="1"
+                        value={form.statutory_sla_days}
+                        onChange={(event) =>
+                          setForm({ ...form, statutory_sla_days: event.target.value })
+                        }
+                      />
+                      <span className="input-affix" aria-hidden="true">
+                        days
+                      </span>
                     </span>
-                  </span>
-                </Field>
-              </FieldRow>
-            </FormSection>
-            <FormActions>
-              <Button variant="primary" type="submit" disabled={busy || !form.permit_type_code}>
-                {busy ? "Saving…" : "Register permit"}
-              </Button>
-              <Button onClick={() => setCreating(false)} disabled={busy}>
-                Cancel
-              </Button>
-            </FormActions>
-          </form>
+                  </Field>
+                </FieldRow>
+              </FormSection>
+              <FormActions>
+                <Button variant="primary" type="submit" disabled={busy || !form.permit_type_code}>
+                  {busy ? "Saving…" : "Register permit"}
+                </Button>
+                <Button data-leaves-editor onClick={() => setCreating(false)} disabled={busy}>
+                  Cancel
+                </Button>
+              </FormActions>
+            </form>
+          </DraftBoundary>
         </Drawer>
       ) : null}
 
@@ -848,7 +852,8 @@ function PermitFile({
   const [section, setSection] = useState("permit");
   const [history, setHistory] = useState<PermitStatusEvent[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [move, setMove] = useState({ to_status: "", effective_date: todayISO(), reason: "" });
+  const [moveBaseline, setMoveBaseline] = useState({ to_status: "", effective_date: todayISO(), reason: "" });
+  const [move, setMove] = useState(moveBaseline);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -880,7 +885,9 @@ function PermitFile({
         ...(move.reason ? { reason: move.reason } : {}),
       });
       onNotice(`${updated.permit_code} moved to ${STATUS_LABELS[updated.status] ?? updated.status}.`);
-      setMove({ to_status: "", effective_date: todayISO(), reason: "" });
+      const emptyMove = { to_status: "", effective_date: todayISO(), reason: "" };
+      setMove(emptyMove);
+      setMoveBaseline(emptyMove);
       await onChanged(updated);
       await loadHistory();
     } catch (caught) {
@@ -934,7 +941,7 @@ function PermitFile({
       ]}
       actions={
         canWrite ? (
-          <Button onClick={() => setEditing((open) => !open)}>{editing ? "Cancel edit" : "Edit permit"}</Button>
+          <Button data-leaves-editor onClick={() => setEditing((open) => !open)}>{editing ? "Cancel edit" : "Edit permit"}</Button>
         ) : undefined
       }
       tabs={SECTIONS}
@@ -1037,51 +1044,53 @@ function PermitFile({
                 title="Change status"
                 description="Recorded with the date it took effect and the reason, and kept in the history. Status is never edited as a field."
               />
-              <form onSubmit={transition}>
-                <FieldRow columns={3}>
-                  <Field label="Move to">
-                    <select
-                      className="input"
-                      required
-                      value={move.to_status}
-                      onChange={(event) => setMove({ ...move, to_status: event.target.value })}
+              <DraftBoundary dirty={JSON.stringify(move) !== JSON.stringify(moveBaseline)} busy={busy} onDiscard={() => setMove(moveBaseline)}>
+                <form onSubmit={transition}>
+                  <FieldRow columns={3}>
+                    <Field label="Move to">
+                      <select
+                        className="input"
+                        required
+                        value={move.to_status}
+                        onChange={(event) => setMove({ ...move, to_status: event.target.value })}
+                      >
+                        <option value="">Choose…</option>
+                        {moves.map((value) => (
+                          <option key={value} value={value}>
+                            {STATUS_LABELS[value]}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Effective date">
+                      <input
+                        className="input input-short"
+                        type="date"
+                        required
+                        value={move.effective_date}
+                        onChange={(event) => setMove({ ...move, effective_date: event.target.value })}
+                      />
+                    </Field>
+                    <Field
+                      label="Reason"
+                      optional={!REASON_REQUIRED.has(move.to_status)}
+                      hint={REASON_REQUIRED.has(move.to_status) ? "Required for this move." : undefined}
                     >
-                      <option value="">Choose…</option>
-                      {moves.map((value) => (
-                        <option key={value} value={value}>
-                          {STATUS_LABELS[value]}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Effective date">
-                    <input
-                      className="input input-short"
-                      type="date"
-                      required
-                      value={move.effective_date}
-                      onChange={(event) => setMove({ ...move, effective_date: event.target.value })}
-                    />
-                  </Field>
-                  <Field
-                    label="Reason"
-                    optional={!REASON_REQUIRED.has(move.to_status)}
-                    hint={REASON_REQUIRED.has(move.to_status) ? "Required for this move." : undefined}
-                  >
-                    <input
-                      className="input"
-                      required={REASON_REQUIRED.has(move.to_status)}
-                      value={move.reason}
-                      onChange={(event) => setMove({ ...move, reason: event.target.value })}
-                    />
-                  </Field>
-                </FieldRow>
-                <FormActions>
-                  <Button variant="primary" type="submit" disabled={busy}>
-                    {busy ? "Recording…" : "Record status change"}
-                  </Button>
-                </FormActions>
-              </form>
+                      <input
+                        className="input"
+                        required={REASON_REQUIRED.has(move.to_status)}
+                        value={move.reason}
+                        onChange={(event) => setMove({ ...move, reason: event.target.value })}
+                      />
+                    </Field>
+                  </FieldRow>
+                  <FormActions>
+                    <Button variant="primary" type="submit" disabled={busy}>
+                      {busy ? "Recording…" : "Record status change"}
+                    </Button>
+                  </FormActions>
+                </form>
+              </DraftBoundary>
             </section>
           ) : null}
         </>

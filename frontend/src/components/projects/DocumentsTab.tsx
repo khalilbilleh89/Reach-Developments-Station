@@ -1,5 +1,7 @@
 "use client";
 
+import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
@@ -60,6 +62,7 @@ export function DocumentsTab({
     reference_number: "",
     attach_to: "",
   });
+  const [initialForm] = useState(form);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<DocumentReference | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +71,18 @@ export function DocumentsTab({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [readError, setReadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setRows(await projects.documents(projectId));
-      setError(null);
+      setReadError(null);
     } catch (caught) {
       setRows([]);
-      setError(caught instanceof ApiError ? caught.message : "Could not load documents.");
+      setReadError(caught instanceof ApiError ? caught.message : "Could not load documents.");
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -164,7 +172,7 @@ export function DocumentsTab({
         compact
         actions={
           canWrite ? (
-            <Button variant="primary" onClick={() => setCreating((open) => !open)}>
+            <Button data-leaves-editor variant="primary" onClick={() => setCreating((open) => !open)}>
               {creating ? "Cancel" : "New reference"}
             </Button>
           ) : undefined
@@ -173,6 +181,7 @@ export function DocumentsTab({
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
+        {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry documents"}</Button></> : null}
         {lookupError ? <><Notice tone="error">{lookupError}</Notice><Button onClick={() => setLookupRevision(v => v + 1)}>Retry document choices</Button></> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -202,81 +211,83 @@ export function DocumentsTab({
             title="New document reference"
             description="A pointer to a document held elsewhere. The file itself is never uploaded here."
           >
-            <form onSubmit={submit}>
-              <FieldRow columns={3}>
-                <Field label="Title">
-                  <input
-                    className="input"
-                    required
-                    value={form.title}
-                    onChange={(event) => setForm({ ...form, title: event.target.value })}
-                  />
-                </Field>
-                <Field label="Document type">
-                  <select
-                    className="input"
-                    required
-                    value={form.document_type_code}
-                    onChange={(event) => setForm({ ...form, document_type_code: event.target.value })}
-                  >
-                    <option value="">Choose…</option>
-                    {types.map((value) => (
-                      <option key={value.id} value={value.code}>
-                        {value.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Reference number" optional>
-                  <input
-                    className="input"
-                    value={form.reference_number}
-                    onChange={(event) => setForm({ ...form, reference_number: event.target.value })}
-                  />
-                </Field>
-                <Field label="Link" hint="A web address where the document is held." className="field-span-2">
-                  <input
-                    className="input"
-                    type="url"
-                    required
-                    value={form.external_url}
-                    onChange={(event) => setForm({ ...form, external_url: event.target.value })}
-                  />
-                </Field>
-                <Field label="Supports" hint="The project, or one parcel or permit.">
-                  <select
-                    className="input"
-                    value={form.attach_to}
-                    onChange={(event) => setForm({ ...form, attach_to: event.target.value })}
-                  >
-                    <option value="">The project</option>
-                    {parcels.map((parcel) => (
-                      <option key={parcel.id} value={`parcel:${parcel.id}`}>
-                        Plot {parcel.plot_number}
-                      </option>
-                    ))}
-                    {permits.map((permit) => (
-                      <option key={permit.id} value={`permit:${permit.id}`}>
-                        {permit.permit_code}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </FieldRow>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy || !!lookupError}>
-                  {busy ? "Saving…" : "Record reference"}
-                </Button>
-                <Button onClick={() => setCreating(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              </FormActions>
-            </form>
+            <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(initialForm)} busy={busy} onDiscard={() => { setForm(initialForm); }}>
+              <form onSubmit={submit}>
+                <FieldRow columns={3}>
+                  <Field label="Title">
+                    <input
+                      className="input"
+                      required
+                      value={form.title}
+                      onChange={(event) => setForm({ ...form, title: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Document type">
+                    <select
+                      className="input"
+                      required
+                      value={form.document_type_code}
+                      onChange={(event) => setForm({ ...form, document_type_code: event.target.value })}
+                    >
+                      <option value="">Choose…</option>
+                      {types.map((value) => (
+                        <option key={value.id} value={value.code}>
+                          {value.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Reference number" optional>
+                    <input
+                      className="input"
+                      value={form.reference_number}
+                      onChange={(event) => setForm({ ...form, reference_number: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Link" hint="A web address where the document is held." className="field-span-2">
+                    <input
+                      className="input"
+                      type="url"
+                      required
+                      value={form.external_url}
+                      onChange={(event) => setForm({ ...form, external_url: event.target.value })}
+                    />
+                  </Field>
+                  <Field label="Supports" hint="The project, or one parcel or permit.">
+                    <select
+                      className="input"
+                      value={form.attach_to}
+                      onChange={(event) => setForm({ ...form, attach_to: event.target.value })}
+                    >
+                      <option value="">The project</option>
+                      {parcels.map((parcel) => (
+                        <option key={parcel.id} value={`parcel:${parcel.id}`}>
+                          Plot {parcel.plot_number}
+                        </option>
+                      ))}
+                      {permits.map((permit) => (
+                        <option key={permit.id} value={`permit:${permit.id}`}>
+                          {permit.permit_code}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </FieldRow>
+                <FormActions>
+                  <Button variant="primary" type="submit" disabled={busy || !!lookupError}>
+                    {busy ? "Saving…" : "Record reference"}
+                  </Button>
+                  <Button data-leaves-editor onClick={() => setCreating(false)} disabled={busy}>
+                    Cancel
+                  </Button>
+                </FormActions>
+              </form>
+            </DraftBoundary>
           </Card>
         ) : null}
 
         <Card flush>
-          {error && !rows?.length ? null : rows === null ? (
+          {readError && !rows?.length ? null : rows === null ? (
             <Loading label="Loading references…" shape="rows" rows={4} />
           ) : rows.length === 0 ? (
             <div className="card-body">

@@ -65,12 +65,17 @@ export function PreLaunchTab({
   const canRecord = hasAnyRole(roles, PRELAUNCH_RECORDERS);
   const canConfirm = hasAnyRole(roles, CASHFLOW_CONFIRMERS);
 
+  const [readError, setReadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    setRetrying(true);
     try {
       setRegister(await prelaunch.register(projectId));
-      setError(null);
+      setReadError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load Pre-Launch expenses.");
+      setReadError(caught instanceof ApiError ? caught.message : "Could not load Pre-Launch expenses.");
+    } finally {
+      setRetrying(false);
     }
   }, [projectId]);
 
@@ -107,6 +112,7 @@ export function PreLaunchTab({
         actions={canRecord ? <Button variant="primary" onClick={() => setAdding(true)}>Add expense</Button> : undefined}
       />
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Pre-Launch expenses"}</Button></> : null}
       {register ? (
         <Card tone="command" title="Expense position"><Position compact>
           <PositionFigure label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
@@ -114,7 +120,7 @@ export function PreLaunchTab({
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment.</p></Card>
       ) : null}
       <Card flush>
-        {register === null ? error ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
+        {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : (
           <TableScroll label="Pre-Launch expense register" fixedFirst>

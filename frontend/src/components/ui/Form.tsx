@@ -97,11 +97,12 @@ type ShellInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | 
  * Money entry: the amount, with its denomination attached.
  *
  * The value stays the exact string the person typed and the server will
- * receive; nothing here parses it into a float. The code is decoration on the
+ * receive; nothing here parses it into a float. The code names the denomination on the
  * control — the record's own currency, resolved by the caller — and it is
  * shown as a dash where the caller genuinely cannot name one, never guessed.
  */
 export function MoneyInput({ code, value, onChange, className, ...rest }: ShellInputProps & { code: string | null }) {
+  const unitId = useId();
   return (
     <span className={className ? `input-shell input-shell-money ${className}` : "input-shell input-shell-money"}>
       <input
@@ -111,10 +112,12 @@ export function MoneyInput({ code, value, onChange, className, ...rest }: ShellI
         value={value}
         onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
         {...rest}
+        aria-describedby={[rest["aria-describedby"], unitId].filter(Boolean).join(" ")}
       />
       <span className="input-affix" aria-hidden="true">
         {code ?? "—"}
       </span>
+      <span id={unitId} className="visually-hidden">{code ? `Currency: ${code}` : "Currency unavailable"}</span>
     </span>
   );
 }
@@ -128,6 +131,7 @@ export function MoneyInput({ code, value, onChange, className, ...rest }: ShellI
  * different, and this is what makes them different.
  */
 export function RateInput({ value, onChange, className, ...rest }: ShellInputProps) {
+  const unitId = useId();
   return (
     <span className={className ? `input-shell input-shell-rate ${className}` : "input-shell input-shell-rate"}>
       <input
@@ -137,10 +141,12 @@ export function RateInput({ value, onChange, className, ...rest }: ShellInputPro
         value={value}
         onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
         {...rest}
+        aria-describedby={[rest["aria-describedby"], unitId].filter(Boolean).join(" ")}
       />
       <span className="input-affix" aria-hidden="true">
         %
       </span>
+      <span id={unitId} className="visually-hidden">Percent</span>
     </span>
   );
 }
