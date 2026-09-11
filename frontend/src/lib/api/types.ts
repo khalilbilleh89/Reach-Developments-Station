@@ -2735,8 +2735,13 @@ export interface CashflowDevelopmentMovement {
   counts_as_cash: boolean;
 }
 
+export interface PreLaunchExpense extends CashflowDevelopmentMovement {
+  can_confirm: boolean;
+  confirmation_blocker: string | null;
+}
+
 export interface PreLaunchRegister {
-  expenses: CashflowDevelopmentMovement[];
+  expenses: PreLaunchExpense[];
   /** Unconfirmed entries only; never added to confirmed paid. */
   recorded_amount: MoneyStr;
   confirmed_paid_amount: MoneyStr;

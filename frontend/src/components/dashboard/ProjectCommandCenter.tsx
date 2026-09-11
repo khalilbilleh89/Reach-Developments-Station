@@ -867,7 +867,7 @@ function BuildPosition({ summary }: { summary: ConstructionSummary }) {
  * spend. The ninety-day requirement and the peak deficit are the two questions
  * that follow it, and both arrive computed — this component adds nothing.
  */
-function ProjectCashPosition({ summary }: { summary: CashflowSummary }) {
+export function ProjectCashPosition({ summary }: { summary: CashflowSummary }) {
   const code = summary.basis.currency_code;
   const ninety = summary.funding_windows.find((window) => window.days === 90);
   return (
@@ -881,19 +881,19 @@ function ProjectCashPosition({ summary }: { summary: CashflowSummary }) {
           note="Spendable today"
         />
         <PositionFigure label="Restricted" value={money(summary.position.restricted_cash, code)} note="Held in escrow" />
-        {ninety ? (
+        {ninety && summary.has_active_forecast ? (
           <PositionFigure
             label="Funding required, 90 days"
             value={money(ninety.funding_requirement, code)}
             tone={isPositive(ninety.funding_requirement) ? "danger" : "neutral"}
           />
-        ) : null}
+        ) : <PositionFigure label="Funding required, 90 days" value="Unavailable" note={summary.has_active_forecast ? "No 90-day funding window available" : "No cashflow forecast in force"} />}
         <PositionFigure
           label="Peak funding requirement"
-          value={money(summary.peak_deficit.peak_funding_deficit, code)}
-          tone={isPositive(summary.peak_deficit.peak_funding_deficit) ? "danger" : "neutral"}
+          value={summary.has_active_forecast ? money(summary.peak_deficit.peak_funding_deficit, code) : "Unavailable"}
+          tone={summary.has_active_forecast && isPositive(summary.peak_deficit.peak_funding_deficit) ? "danger" : "neutral"}
           note={
-            summary.peak_deficit.peak_deficit_month
+            !summary.has_active_forecast ? "No cashflow forecast in force" : summary.peak_deficit.peak_deficit_month
               ? `Expected ${businessDate(summary.peak_deficit.peak_deficit_month)}`
               : "No month runs short"
           }
@@ -911,6 +911,7 @@ function ProjectCashPosition({ summary }: { summary: CashflowSummary }) {
         />
       </PositionSupport>
       <p className="footnote">As at {businessDate(summary.basis.as_of_date)}.</p>
+      {summary.has_active_forecast && summary.staleness?.is_stale ? <Notice tone="warning">Sources have changed since the forecast in force was prepared. Open Cashflow to review its basis before making a funding decision.</Notice> : null}
     </>
   );
 }

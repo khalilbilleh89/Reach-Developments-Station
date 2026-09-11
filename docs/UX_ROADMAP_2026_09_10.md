@@ -1,5 +1,9 @@
 # UX audit follow-up — 10 September 2026
 
+The bounded round-2 finish sequence is recorded in
+[MVP finish plan](UX_MVP_FINISH_2026_09_11.md). The implementation and acceptance
+history below is retained unchanged.
+
 Baseline: main `f4e8f9e895c5b9f91c102a88a868260e6597f7e2` (merged #280).
 Governing references: [Engineering Rules](ENGINEERING_RULES.md),
 [Architecture](ARCHITECTURE.md), [UX System](UX_SYSTEM.md).

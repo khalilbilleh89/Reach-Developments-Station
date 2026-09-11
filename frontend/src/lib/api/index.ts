@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  PreLaunchExpense,
   AdminUser,
   CashflowAccuracy,
   CashflowDevelopmentMovement,
@@ -2256,14 +2257,14 @@ export const prelaunch = {
   register: (projectId: string) =>
     get<PreLaunchRegister>(`/projects/${projectId}/pre-launch/expenses`),
   record: (projectId: string, body: Record<string, unknown>) =>
-    post<CashflowDevelopmentMovement>(`/projects/${projectId}/pre-launch/expenses`, body),
+    post<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses`, body),
   confirm: (projectId: string, movementId: string) =>
-    post<CashflowDevelopmentMovement>(
+    post<PreLaunchExpense>(
       `/projects/${projectId}/pre-launch/expenses/${movementId}/confirm`,
       {},
     ),
   reverse: (projectId: string, movementId: string, reason: string) =>
-    post<CashflowDevelopmentMovement>(
+    post<PreLaunchExpense>(
       `/projects/${projectId}/pre-launch/expenses/${movementId}/reverse`,
       { reason },
     ),

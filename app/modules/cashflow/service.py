@@ -1433,6 +1433,10 @@ def confirm_development_movement(
         row_id=movement_id,
         missing=permissions.movement_not_found,
     )
+    if movement.status == MOVEMENT_RECORDED:
+        permissions.require_development_movement_confirmer(
+            actor, recorded_by_user_id=movement.recorded_by_user_id
+        )
     _confirm_movement(
         session,
         row=movement,

@@ -89,6 +89,9 @@ export function PreLaunchTab({
       setReversing(null);
       await load();
     } catch (caught) {
+      // Refresh eligibility after a stale-state or permission refusal, without
+      // retrying the write or losing the server's explanation.
+      if (caught instanceof ApiError && (caught.status === 403 || caught.status === 409)) await load();
       setError(caught instanceof ApiError ? caught.message : "That action could not be completed.");
     } finally {
       setBusy(false);
@@ -125,8 +128,13 @@ export function PreLaunchTab({
                 <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}</td>
                 <td><Badge tone={statusTone(row.status)}>{row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></td>
                 <td>{row.invoice_reference ?? row.evidence_reference ?? "—"}</td>
-                <td><ButtonRow>
-                  {canConfirm && row.status === "recorded" ? <Button small disabled={busy} onClick={() => void run(() => prelaunch.confirm(projectId, row.id))}>Confirm</Button> : null}
+                <td className="cell-prose"><ButtonRow>
+                  {canConfirm && row.status === "recorded" ? (
+                    <div>
+                      <Button small disabled={busy || !row.can_confirm} onClick={() => void run(() => prelaunch.confirm(projectId, row.id))}>Confirm</Button>
+                      {!row.can_confirm ? <p className="footnote">{row.confirmation_blocker ?? "Confirmation is unavailable. Refresh this register to check current eligibility."}</p> : null}
+                    </div>
+                  ) : null}
                   {canConfirm && row.status === "confirmed" ? <Button small variant="danger" disabled={busy} onClick={() => setReversing(row.id)}>Reverse</Button> : null}
                 </ButtonRow></td>
               </tr>

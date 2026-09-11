@@ -2,6 +2,7 @@
 
 import {
   Badge,
+  Button,
   Card,
   Disclosure,
   KeyValue,
@@ -36,7 +37,7 @@ import { irrReasonLabel } from "./labels";
  * NPV and the equity IRR — because a cash position recalculated in a browser is
  * a position that can disagree with the one Finance will act on.
  */
-export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
+export function CashflowOverview({ summary, onOpenForecast }: { summary: CashflowSummary; onOpenForecast: () => void }) {
   const { basis, position, peak_deficit: peak, returns } = summary;
   const currency = basis.currency_code;
   const shortOfCash = isPositive(peak.peak_funding_deficit);
@@ -93,15 +94,14 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
         </Disclosure>
       </Card>
 
-      {summary.has_active_forecast ? null : (
-        <Notice tone="info">
-          No cashflow forecast is in force for this project. The figures above are
-          the cash that has actually moved; nothing ahead of today is expected
-          until a forecast is prepared and activated.
-        </Notice>
-      )}
+      {!summary.has_active_forecast ? (
+        <Card title="Forecast-dependent figures unavailable">
+          <Notice tone="info">No cashflow forecast is in force. Actual cash is shown above. Funding requirements, projected cash, collection coverage and investment returns are unavailable until a forecast is activated. Missing forecasts do not mean no funding is needed.</Notice>
+          <Button onClick={onOpenForecast}>Open Forecast</Button>
+        </Card>
+      ) : null}
 
-      {summary.staleness?.is_stale ? (
+      {summary.has_active_forecast && summary.staleness?.is_stale ? (
         <Notice tone="warning">
           The forecast in force was built on sources that have since changed.
           Its figures are what was approved and are still reported exactly as
@@ -109,6 +109,7 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
         </Notice>
       ) : null}
 
+      {summary.has_active_forecast ? <>
       <FundingWindows summary={summary} />
 
       <div className="split split-even">
@@ -173,6 +174,7 @@ export function CashflowOverview({ summary }: { summary: CashflowSummary }) {
       </div>
 
       <Returns returns={returns} currency={currency} />
+      </> : null}
     </div>
   );
 }

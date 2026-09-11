@@ -23,12 +23,14 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import PermissionDeniedError
 from app.core.standing import CONFIRMED as STANDING_CONFIRMED
 from app.modules.access.dependencies import ActorContext
-from app.modules.cashflow import calculator, schemas, service
+from app.modules.cashflow import calculator, permissions, schemas, service
 from app.modules.cashflow.calculator import ZERO, money
 from app.modules.cashflow.models import (
     MOVEMENT_CONFIRMED,
+    MOVEMENT_RECORDED,
     CashflowDevelopmentMovement,
     CashflowFinancingMovement,
     CashflowForecastLine,
@@ -207,6 +209,26 @@ def development_movement_out(
         evidence_reference=movement.evidence_reference,
         notes=movement.notes,
         counts_as_cash=movement.status == MOVEMENT_CONFIRMED,
+    )
+
+
+def prelaunch_expense_out(
+    session: Session, *, movement: CashflowDevelopmentMovement, actor: ActorContext
+) -> schemas.PreLaunchExpenseOut:
+    """Current-actor guidance; the locked write still enforces every rule."""
+    blocker = None
+    try:
+        permissions.require_development_movement_confirmer(
+            actor, recorded_by_user_id=movement.recorded_by_user_id
+        )
+    except PermissionDeniedError as error:
+        blocker = str(error)
+    if movement.status != MOVEMENT_RECORDED:
+        blocker = "Only a recorded expense can be confirmed."
+    return schemas.PreLaunchExpenseOut(
+        **development_movement_out(session, movement=movement).model_dump(),
+        can_confirm=blocker is None,
+        confirmation_blocker=blocker,
     )
 
 

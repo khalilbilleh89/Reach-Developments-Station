@@ -184,6 +184,21 @@ def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uui
         raise PermissionDeniedError(_MAKER)
 
 
+def require_development_movement_confirmer(
+    actor: ActorContext, *, recorded_by_user_id: uuid.UUID
+) -> None:
+    """Match the persisted development-movement separation for every actor.
+
+    Unlike the general Master permission exception, this row's database check
+    cannot admit the recorder as confirmer. Return a readable refusal before SQL.
+    """
+    require_cashflow_confirmer(actor)
+    if recorded_by_user_id == actor.user_id:
+        raise PermissionDeniedError(
+            "Awaiting confirmation by another authorized Finance or CFO user."
+        )
+
+
 def require_different_approver(actor: ActorContext, *, submitted_by_user_id: uuid.UUID) -> None:
     """Refuse an approval by the person who submitted the forecast."""
     if actor.is_master_admin:
