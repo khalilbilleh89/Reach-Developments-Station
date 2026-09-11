@@ -365,6 +365,8 @@ export const projects = {
  * server, and every path here is scoped to the project that owns the records.
  */
 export const inventory = {
+  deleteRecord: (projectId: string, kind: "units" | "floors" | "buildings" | "phases", id: string, reason: string) =>
+    remove(`/projects/${projectId}/inventory/${kind}/${id}?${new URLSearchParams({reason})}`),
   phases: (projectId: string) =>
     get<Phase[]>(`/projects/${projectId}/inventory/phases`),
   createPhase: (projectId: string, input: Record<string, unknown>) =>
@@ -837,6 +839,10 @@ export const pricing = {
  * sends inputs and displays what comes back.
  */
 export const sales = {
+  registerBuyer: (projectId: string, input: Record<string, unknown>) =>
+    post<SaleDetail>(`/projects/${projectId}/sales/buyer-registrations`, input),
+  deleteClient: (projectId: string, id: string, reason: string) =>
+    remove(`/projects/${projectId}/sales/clients/${id}?${new URLSearchParams({reason})}`),
   history: (projectId: string, query: Record<string, string>) =>
     get<{ items: SalesHistoryRow[]; total: number }>(`/projects/${projectId}/sales/history?${new URLSearchParams(query)}`),
   policy: (projectId: string) =>

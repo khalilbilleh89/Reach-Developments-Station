@@ -521,7 +521,10 @@ class TestOnlyEntitledReadersAsk:
         assert headline.startswith("soldContract")
         assert "soldContract.net_contract_price_ex_tax" in headline
         assert 'const liveSale = commitmentAnswer.status === "ready"' in unit
-        assert '["active", "termination_pending"].includes(liveSale.status)' in unit
+        assert (
+            '["signature_pending", "active", "termination_pending"].includes(liveSale.status)'
+            in unit
+        )
         assert 'const committedUnit = ["contract_pending", "contracted"]' in unit
         committed_branch = headline.split(": committedUnit")[1].split(": unitPricing")[0]
         assert 'commitmentAnswer.status === "failed"' in committed_branch

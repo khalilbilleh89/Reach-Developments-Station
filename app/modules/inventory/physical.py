@@ -46,7 +46,18 @@ def gross_measurement(lines: list[dict[str, Any]]) -> dict[str, Any]:
         if duplicate
         else None
     )
+    net_lines = [line for line in measured if line["physical_component"] in ("internal", "balcony")]
+    net_units = {line["unit_of_measure"] for line in net_lines}
+    net_complete = (
+        len(net_lines) == 2
+        and {line["physical_component"] for line in net_lines} == {"internal", "balcony"}
+        and len(net_units) == 1
+    )
     return {
+        "net_area": sum((line["raw_area"] for line in net_lines), Decimal("0"))
+        if net_complete
+        else None,
+        "net_area_unit": next(iter(net_units)) if len(net_units) == 1 else None,
         "gross_area": None
         if reason
         else sum((line["raw_area"] for line in measured), Decimal("0")),

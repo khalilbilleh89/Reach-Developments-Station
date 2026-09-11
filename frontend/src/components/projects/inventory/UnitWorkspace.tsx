@@ -42,15 +42,21 @@ import { useRouter } from "next/navigation";
 import { useRecordHref } from "@/components/ui";
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
+import { RegisterBuyerSaleForm } from "@/components/projects/sales/RegisterBuyerSaleForm";
 import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
 import { UnitHistory } from "@/components/projects/inventory/unit/UnitHistory";
 import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPricingSection";
 import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
 import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
+import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
 const UNIT_FIELDS: EditField[] = [
+  { name: "asset_class", label: "Property class", kind: "select", options: ["apartment", "villa", "townhouse", "commercial", "other"].map(value => ({ value, label: value })), group: "Identity" },
+  { name: "unit_type_code", label: "Unit type code", group: "Identity" },
+  { name: "sequence", label: "Display order", kind: "number", group: "Identity" },
+  { name: "plot_coverage_fraction", label: "Plot coverage fraction", hint: "0 to 1; for example 0.40 means 40%", group: "Features" },
   { name: "unit_reference", label: "Unit reference", group: "Identity", width: "medium" },
   { name: "unit_number", label: "Unit number", group: "Identity", width: "short" },
   { name: "bedrooms", label: "Bedrooms", kind: "number", group: "Identity" },
@@ -125,6 +131,7 @@ export function UnitWorkspace({
   const [supportRevision, setSupportRevision] = useState(0);
   const supportLoaded = useRef<Record<string, number>>({});
   const [reserving, setReserving] = useState(false);
+  const [registeringSale, setRegisteringSale] = useState(false);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [schedules, setSchedules] = useState<AreaSchedule[]>([]);
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
@@ -365,10 +372,10 @@ export function UnitWorkspace({
   // is requested only for a role the server answers, so for Legal and
   // Collections there is no headline and nothing to hide; a failed request is
   // said as a failure, never drawn as "not priced".
-  const soldContract = liveSale && ["active", "termination_pending"].includes(liveSale.status) ? liveSale : null;
+  const soldContract = liveSale && ["signature_pending", "active", "termination_pending"].includes(liveSale.status) ? liveSale : null;
   const committedUnit = ["contract_pending", "contracted"].includes(unit.commercial_status);
   const headline: WorkspaceHeadline | undefined = soldContract
-    ? { value: money(soldContract.net_contract_price_ex_tax, currencyCodeOf(soldContract.currency_id)), label: `${soldContract.sale_number} · Active contract · ex tax` }
+    ? { value: money(soldContract.net_contract_price_ex_tax, currencyCodeOf(soldContract.currency_id)), label: `${soldContract.sale_number} · Sold${soldContract.status === "signature_pending" ? " · SPA pending" : ""} · ex tax` }
     : committedUnit
       ? commitmentAnswer.status === "failed"
         ? { value: "Unavailable", label: "Contract could not be loaded", tone: "muted" }
@@ -390,18 +397,28 @@ export function UnitWorkspace({
       : undefined;
   const facts: WorkspaceFact[] = [
     {
+      label: "Net area · Internal + balconies",
+      value: unit.net_area == null ? "Not measured" : `${unit.net_area} ${unit.net_area_unit ?? ""}`,
+    },
+    {
       label: "Internal area",
       value: unit.internal_area === null ? "Not measured" : `${unit.internal_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
       tone: unit.internal_area === null ? ("muted" as const) : undefined,
     },
     {
-      label: "Gross area",
+      label: "Gross area · Net + roof garden + terrace + front garden + porches",
       value:
         unit.gross_area === null
           ? "Not measured"
           : `${unit.gross_area} ${unit.gross_area_unit ?? ""}`.trim(),
       tone: unit.gross_area === null ? ("muted" as const) : undefined,
     },
+    ...(seesListPrice ? [{
+      label: `Price per ${soldContract?.gross_area_unit ?? unitPricing?.gross_area_unit ?? "sqm"} · Unit price ÷ gross area`,
+      value: soldContract
+        ? soldContract.price_per_gross_area == null ? "Unavailable" : money(soldContract.price_per_gross_area, currencyCodeOf(soldContract.currency_id))
+        : committedUnit || unitPricing?.price_per_gross_area == null ? "Unavailable" : money(unitPricing.price_per_gross_area, priceCode),
+    }] : []),
   ];
 
   return (
@@ -425,6 +442,7 @@ export function UnitWorkspace({
       headline={headline}
       actions={
         <>
+        {roles.has("system_admin") || roles.has("master_admin") ? <DeleteRecordButton label="unit" onDelete={reason => inventory.deleteRecord(projectId, "units", unitId, reason)} onDeleted={async () => { await onChanged(); router.push(`/projects/?project=${projectId}&section=inventory`); }} /> : null}
         {liveSale ? <RecordLink projectId={projectId} kind="sale" id={liveSale.id} className="button button-primary">Open Sale</RecordLink> : commitmentAnswer.status === "ready" && commitmentAnswer.data.reservation ? <RecordLink projectId={projectId} kind="reservation" id={commitmentAnswer.data.reservation.id} className="button button-primary">Open reservation</RecordLink> : seesSales ? <Button onClick={() => setSection("commercial")}>Sale options</Button> : null}
         {canWriteStructure ? (
           <Button
@@ -440,7 +458,7 @@ export function UnitWorkspace({
         {canWriteStructure ? <>
           {unit.is_active && unit.commercial_status !== "unreleased" ? <p className="field-hint" id="deactivate-eligibility">Only unreleased units can be deactivated.</p> : null}
           <Button aria-describedby="deactivate-eligibility" disabled={busy || (unit.is_active && unit.commercial_status !== "unreleased")} onClick={() => { setActivityOpen(true); setError(null); }}>{unit.is_active ? "Deactivate unit" : "Reactivate unit"}</Button>
-          {unit.commercial_status === "unreleased" ? <Button onClick={() => { setMoveFloor(unit.floor_id); setMoving(true); void loadDestinations(); }}>Move unit</Button> : null}
+          {unit.commercial_status === "unreleased" || roles.has("master_admin") ? <Button onClick={() => { setMoveFloor(unit.floor_id); setMoving(true); void loadDestinations(); }}>Move unit</Button> : null}
         </> : null}
         </>
       }
@@ -479,7 +497,7 @@ export function UnitWorkspace({
         catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not change unit activity."); }
         finally { setBusy(false); }
       }} /> : null}
-      {moving ? <FormDialog title={`Move ${unit.unit_reference}`} description="Only an unreleased unit may move. Its building, phase and phase-based access follow the destination floor; the price requires review again." confirmLabel="Move unit" busy={busy} disabled={!moveFloor || moveFloor === unit.floor_id || !!moveError} onCancel={() => { if (!busy) setMoving(false); }} onSubmit={async () => {
+      {moving ? <FormDialog title={`Move ${unit.unit_reference}`} description="Master Administrator can correct a unit's floor at any commercial stage. Its building, phase and phase-based access follow the destination floor; the price requires review again. Existing sale terms are preserved." confirmLabel="Move unit" busy={busy} disabled={!moveFloor || moveFloor === unit.floor_id || !!moveError} onCancel={() => { if (!busy) setMoving(false); }} onSubmit={async () => {
         setBusy(true); setMoveError(null);
         try { await inventory.updateUnit(projectId, unitId, {floor_id: moveFloor}); setMoving(false); await load(); await onChanged(); }
         catch (caught) { setMoveError(caught instanceof ApiError ? caught.message : "Could not move the unit."); }
@@ -604,7 +622,13 @@ export function UnitWorkspace({
 
       {activeSection === "commercial" ? (
         <>
-          {commitmentAnswer.status === "ready" ? (
+          {roles.has("master_admin") && !liveSale && unit.is_active && ["unreleased", "held", "available", "reserved"].includes(unit.commercial_status) ? (
+            registeringSale ? <RegisterBuyerSaleForm projectId={projectId} unitId={unitId}
+              clientId={unit.commercial_status === "reserved" && commitmentAnswer.status === "ready" ? commitmentAnswer.data.reservation?.client_id : null}
+              onCancel={() => setRegisteringSale(false)} onSaved={saleId => { setRegisteringSale(false); void onChanged(); router.push(recordHref("sale", saleId)); }} />
+              : <Button variant="primary" data-leaves-editor onClick={() => { setReserving(false); setRegisteringSale(true); }}>Register buyer & mark sold</Button>
+          ) : null}
+          {!registeringSale && commitmentAnswer.status === "ready" ? (
             commitmentAnswer.data.reservation || commitmentAnswer.data.sale ? (
               <RecordLink projectId={projectId} kind={liveSale ? "sale" : "reservation"} id={liveSale?.id ?? commitmentAnswer.data.reservation!.id} className="button button-primary">{liveSale ? "Open Sale" : "Open Reservation"}</RecordLink>
             ) : (roles.has("sales_operations") || roles.has("sales_advisor")) && unit.commercial_status === "available" ? (
@@ -613,7 +637,7 @@ export function UnitWorkspace({
                 : <Button variant="primary" onClick={() => setReserving(true)}>Add buyer & reserve</Button>
             ) : null
           ) : null}
-          {!reserving ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} /> : null}
+          {!reserving && !registeringSale ? <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} /> : null}
         </>
       ) : null}
 

@@ -23,6 +23,9 @@ import {
   TableScroll,
 } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
+import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
+import { EditForm, asValue } from "@/components/projects/EditForm";
+import type { EditField } from "@/components/projects/EditForm";
 import { kycLabel, kycTone } from "@/components/projects/sales/labels";
 
 /**
@@ -39,6 +42,7 @@ import { kycLabel, kycTone } from "@/components/projects/sales/labels";
  * finding out too late.
  */
 export function ClientsPanel({
+  canAdmin = false,
   projectId,
   canWrite,
   onChanged,
@@ -46,6 +50,7 @@ export function ClientsPanel({
 }: {
   projectId: string;
   canWrite: boolean;
+  canAdmin?: boolean;
   onChanged: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -58,6 +63,26 @@ export function ClientsPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [editing, setEditing] = useState<SalesClient | null>(null);
+  const [editingParty, setEditingParty] = useState<ClientParty | null>(null);
+  const partyFields: EditField[] = [
+    { name: "name_as_identification", label: "Full name as identification" },
+    { name: "share_fraction", label: "Ownership share", hint: "1 = 100%; 0.5 = 50%" },
+    { name: "nationality_code", label: "Nationality code" },
+    { name: "residency_code", label: "Residency code" },
+    { name: "party_role", label: "Party role", kind: "select", options: [{ value: "purchaser", label: "Purchaser" }, { value: "joint_purchaser", label: "Joint purchaser" }] },
+    ...["tax_id", "identity_document_type", "identity_document_number", "representative_name", "poa_reference"].map(name => ({ name, label: name.replaceAll("_", " "), visible: editingParty ? name in editingParty : false })),
+    { name: "is_primary", label: "Primary purchaser", kind: "checkbox" },
+    { name: "is_active", label: "Active party", kind: "checkbox" },
+  ];
+  const clientFields: EditField[] = [
+    { name: "display_name", label: "Buyer name" },
+    { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
+    { name: "address", label: "Address" },
+    { name: "preferred_language_code", label: "Language code" },
+    { name: "kyc_status", label: "KYC status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
+    { name: "is_active", label: "Active buyer", kind: "checkbox" },
+  ];
   const [party, setParty] = useState({
     name_as_identification: "",
     share_fraction: "1.000000",
@@ -149,6 +174,12 @@ export function ClientsPanel({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
+      {editing ? <SubPanel title={`Edit ${editing.display_name}`}><EditForm
+        key={editing.id} fields={clientFields}
+        initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}
+        onCancel={() => setEditing(null)} onSave={async changes => {
+          await sales.updateClient(projectId, editing.id, changes); setEditing(null); await load(); await onChanged();
+        }} /></SubPanel> : null}
 
       {canWrite && registering ? (
         <SubPanel title="Register a buyer">
@@ -220,10 +251,13 @@ export function ClientsPanel({
                     small
                     variant="quiet"
                     aria-expanded={selected === client.id}
-                    onClick={() => setSelected(selected === client.id ? null : client.id)}
+                    data-leaves-editor
+                    onClick={() => { setEditingParty(null); setParties([]); setShares(null); setSelected(selected === client.id ? null : client.id); }}
                   >
                     {selected === client.id ? "Hide parties" : "Parties"}
                   </Button>
+                  {canWrite ? <Button small data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
+                  {canAdmin ? <DeleteRecordButton label="buyer" onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
                 </td>
               </tr>
             ))}
@@ -251,6 +285,11 @@ export function ClientsPanel({
             ) : undefined
           }
         >
+          {editingParty ? <EditForm key={editingParty.id} fields={partyFields}
+            initial={Object.fromEntries(partyFields.map(field => [field.name, asValue(editingParty[field.name as keyof ClientParty] as never)]))}
+            onCancel={() => setEditingParty(null)} onSave={async changes => {
+              await sales.updateParty(projectId, editingParty.id, changes); setEditingParty(null); await loadParties(selected); await onChanged();
+            }} /> : null}
           {parties.length === 0 ? (
             <EmptyState compact title="No parties recorded" hint="A unit cannot be committed until the buyer shares total 1.000000." />
           ) : (
@@ -285,6 +324,7 @@ export function ClientsPanel({
                       ) : (
                         <StatusDot tone="muted">Inactive</StatusDot>
                       )}
+                      {canWrite ? <Button small data-leaves-editor onClick={() => setEditingParty(item)}>Edit party</Button> : null}
                     </td>
                   </tr>
                 ))}

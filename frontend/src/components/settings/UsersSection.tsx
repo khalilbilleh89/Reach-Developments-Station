@@ -24,7 +24,7 @@ const EMPTY_DRAFT = { email: "", display_name: "", initial_password: "", role_ke
 const EMPTY_PERMISSION_DRAFT = { role_keys: [] as string[], reason: "" };
 
 /** User administration: who exists, what they may do, and access resets. */
-export function UsersSection() {
+export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { currentUserId?: string; onOwnPermissionsChanged?: () => Promise<void> }) {
   const [rows, setRows] = useState<AdminUser[] | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [search, setSearch] = useState("");
@@ -129,6 +129,7 @@ export function UsersSection() {
                   role_keys: permissionDraft.role_keys,
                   reason: permissionDraft.reason.trim() || undefined,
                 });
+                if (editing.id === currentUserId) await onOwnPermissionsChanged?.();
                 closePermissionEditor();
               }, "User permissions updated.");
             }}

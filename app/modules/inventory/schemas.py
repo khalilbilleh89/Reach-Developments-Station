@@ -80,7 +80,7 @@ Notes = Annotated[str, Field(max_length=2000)]
 
 
 class PhaseCreateRequest(StrictRequest):
-    """``code`` is normalised to upper case and immutable once issued."""
+    """``code`` is normalised to upper case; the UUID remains the stable identity."""
 
     code: Code
     name: Name
@@ -92,8 +92,9 @@ class PhaseCreateRequest(StrictRequest):
 
 
 class PhaseUpdateRequest(StrictRequest):
-    """``code`` is absent: a phase code is immutable once issued."""
+    """Correct human labels without replacing the stable record identifier."""
 
+    code: Code | None = None
     name: Name | None = None
     sequence: int | None = Field(default=None, ge=0)
     status: PhaseStatus | None = None
@@ -136,8 +137,10 @@ class BuildingCreateRequest(StrictRequest):
 
 
 class BuildingUpdateRequest(StrictRequest):
-    """``phase_id`` and ``code`` are absent: a building does not change phase."""
+    """Administrator corrections may also change code and parent."""
 
+    code: Code | None = None
+    phase_id: uuid.UUID | None = None
     name: Name | None = None
     zone: str | None = Field(default=None, max_length=120)
     block: str | None = Field(default=None, max_length=120)
@@ -170,6 +173,8 @@ class FloorCreateRequest(StrictRequest):
 
 
 class FloorUpdateRequest(StrictRequest):
+    code: FloorCode | None = None
+    building_id: uuid.UUID | None = None
     label: Name | None = None
     level_number: int | None = None
     sequence: int | None = Field(default=None, ge=0)
@@ -297,6 +302,8 @@ class UnitSummary(BaseModel):
     unit_type_code: str | None
     bedrooms: int | None
     #: The project's primary internal area from the current approved schedule.
+    net_area: DecimalStr | None = None
+    net_area_unit: str | None = None
     gross_area: DecimalStr | None = None
     gross_area_unit: str | None = None
     internal_area: DecimalStr | None = None
@@ -366,6 +373,8 @@ class UnitRegister(BaseModel):
     available_count: int
     held_count: int
     unreleased_count: int
+    reserved_count: int = 0
+    sold_count: int = 0
 
 
 class UnitStatusEventRead(BaseModel):

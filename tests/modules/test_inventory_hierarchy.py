@@ -234,18 +234,14 @@ def test_hierarchy_creation_is_audited(
     assert actions == {"building.created", "floor.created"}
 
 
-def test_a_floor_keeps_its_building(
+def test_floor_move_rejects_unknown_building(
     admin_client: TestClient, project_id: str, floor_id: str, db: Session
 ) -> None:
-    """Given a PATCH naming a building, then the request is refused.
-
-    Moving a floor between buildings would move every unit on it, which is a
-    larger change than a floor edit and is not on offer.
-    """
+    """An administrator correction still requires a real same-project building."""
     response = admin_client.patch(
         f"{inventory_url(project_id)}/floors/{floor_id}",
         json={"building_id": str(uuid.uuid4())},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 404
     assert db.scalars(select(Floor)).one().id == uuid.UUID(floor_id)

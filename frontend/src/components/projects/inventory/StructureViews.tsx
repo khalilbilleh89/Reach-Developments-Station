@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
+import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 import type { Building, Floor, Phase } from "@/lib/api";
 import {
   Badge,
@@ -65,6 +66,7 @@ function matches(haystack: string, needle: string): boolean {
 // --------------------------------------------------------------------------- //
 
 export function PhasesView({
+  canAdmin = false,
   projectId,
   phases,
   canConfigure,
@@ -73,6 +75,7 @@ export function PhasesView({
 }: {
   projectId: string;
   phases: Phase[];
+  canAdmin?: boolean;
   canConfigure: boolean;
   onChanged: () => Promise<void>;
   onViewBuildings: (phase: Phase) => void;
@@ -184,6 +187,7 @@ export function PhasesView({
         >
           <KeyValueGrid>
             <KeyValue label="Planned start" value={selected.planned_start ?? "Not stated"} />
+            {canAdmin ? <DeleteRecordButton label="phase" onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue
               label="Planned completion"
               value={selected.planned_completion ?? "Not stated"}
@@ -247,9 +251,7 @@ function PhaseForm({
       if (phase === null) {
         await inventory.createPhase(projectId, { ...body, code: values.code });
       } else {
-        // `code` is absent on purpose: a phase code is immutable once issued
-        // and the request schema refuses it rather than quietly ignoring it.
-        await inventory.updatePhase(projectId, phase.id, body);
+        await inventory.updatePhase(projectId, phase.id, { ...body, code: values.code });
       }
       await onSaved();
     } catch (caught) {
@@ -277,7 +279,6 @@ function PhaseForm({
           <input
             className="input"
             value={values.code}
-            disabled={phase !== null}
             onChange={(event) => setValues({ ...values, code: event.target.value })}
           />
         </Field>
@@ -348,6 +349,7 @@ function PhaseForm({
 // --------------------------------------------------------------------------- //
 
 export function BuildingsView({
+  canAdmin = false,
   projectId,
   phases,
   buildings,
@@ -360,6 +362,7 @@ export function BuildingsView({
   projectId: string;
   phases: Phase[];
   buildings: Building[];
+  canAdmin?: boolean;
   phaseId: string;
   onPhase: (phaseId: string) => void;
   canWriteStructure: boolean;
@@ -507,6 +510,7 @@ export function BuildingsView({
         >
           <KeyValueGrid>
             <KeyValue label="Zone" value={selected.zone ?? "Not stated"} />
+            {canAdmin ? <DeleteRecordButton label="building" onDelete={reason => inventory.deleteRecord(projectId, "buildings", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue label="Block" value={selected.block ?? "Not stated"} />
             <KeyValue label="Entrance / wing" value={selected.entrance_wing ?? "Not stated"} />
           </KeyValueGrid>
@@ -515,6 +519,7 @@ export function BuildingsView({
 
       {editing ? (
         <BuildingForm
+          canAdmin={canAdmin}
           projectId={projectId}
           phases={phases}
           building={editing === "new" ? null : editing}
@@ -532,6 +537,7 @@ export function BuildingsView({
 }
 
 function BuildingForm({
+  canAdmin,
   projectId,
   phases,
   building,
@@ -542,6 +548,7 @@ function BuildingForm({
   projectId: string;
   phases: Phase[];
   building: Building | null;
+  canAdmin: boolean;
   defaultPhaseId: string;
   onCancel: () => void;
   onSaved: () => Promise<void>;
@@ -579,9 +586,7 @@ function BuildingForm({
           code: values.code,
         });
       } else {
-        // Neither `phase_id` nor `code` is sent: a building does not change
-        // phase and its code is identity. The update schema refuses both.
-        await inventory.updateBuilding(projectId, building.id, body);
+        await inventory.updateBuilding(projectId, building.id, { ...body, code: values.code, ...(values.phase_id !== building.phase_id ? {phase_id: values.phase_id} : {}) });
       }
       await onSaved();
     } catch (caught) {
@@ -605,11 +610,11 @@ function BuildingForm({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       <FieldRow columns={2}>
-        <Field label="Phase" hint={building === null ? undefined : "A building does not change phase."}>
+        <Field label="Phase" hint={building === null ? undefined : "Administrators can correct the parent phase; affected unit prices need review."}>
           <select
             className="input"
             value={values.phase_id}
-            disabled={building !== null}
+            disabled={building !== null && !canAdmin}
             onChange={(event) => setValues({ ...values, phase_id: event.target.value })}
           >
             <option value="">Choose a phase</option>
@@ -624,7 +629,6 @@ function BuildingForm({
           <input
             className="input"
             value={values.code}
-            disabled={building !== null}
             onChange={(event) => setValues({ ...values, code: event.target.value })}
           />
         </Field>
@@ -679,6 +683,7 @@ function BuildingForm({
 // --------------------------------------------------------------------------- //
 
 export function FloorsView({
+  canAdmin = false,
   projectId,
   phases,
   buildings,
@@ -695,6 +700,7 @@ export function FloorsView({
   phases: Phase[];
   buildings: Building[];
   floors: Floor[];
+  canAdmin?: boolean;
   phaseId: string;
   buildingId: string;
   onPhase: (phaseId: string) => void;
@@ -873,6 +879,7 @@ export function FloorsView({
         >
           <KeyValueGrid>
             <KeyValue label="Sequence" value={String(selected.sequence)} />
+            {canAdmin ? <DeleteRecordButton label="floor" onDelete={reason => inventory.deleteRecord(projectId, "floors", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue
               label="Level number"
               value={selected.level_number === null ? "Not stated" : String(selected.level_number)}
@@ -883,6 +890,7 @@ export function FloorsView({
 
       {editing ? (
         <FloorForm
+          canAdmin={canAdmin}
           projectId={projectId}
           buildings={offered.length > 0 ? offered : buildings}
           floor={editing === "new" ? null : editing}
@@ -900,6 +908,7 @@ export function FloorsView({
 }
 
 function FloorForm({
+  canAdmin,
   projectId,
   buildings,
   floor,
@@ -910,6 +919,7 @@ function FloorForm({
   projectId: string;
   buildings: Building[];
   floor: Floor | null;
+  canAdmin: boolean;
   defaultBuildingId: string;
   onCancel: () => void;
   onSaved: () => Promise<void>;
@@ -940,7 +950,7 @@ function FloorForm({
           code: values.code,
         });
       } else {
-        await inventory.updateFloor(projectId, floor.id, body);
+        await inventory.updateFloor(projectId, floor.id, { ...body, code: values.code, ...(values.building_id !== floor.building_id ? {building_id: values.building_id} : {}) });
       }
       await onSaved();
     } catch (caught) {
@@ -968,7 +978,7 @@ function FloorForm({
           <select
             className="input"
             value={values.building_id}
-            disabled={floor !== null}
+            disabled={floor !== null && !canAdmin}
             onChange={(event) => setValues({ ...values, building_id: event.target.value })}
           >
             <option value="">Choose a building</option>
@@ -986,7 +996,6 @@ function FloorForm({
           <input
             className="input"
             value={values.code}
-            disabled={floor !== null}
             onChange={(event) => setValues({ ...values, code: event.target.value })}
           />
         </Field>

@@ -20,7 +20,7 @@ from sqlalchemy import select
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.inventory import custom_fields as fields_service
-from app.modules.inventory import import_service, physical, service, workbook
+from app.modules.inventory import deletion, import_service, physical, service, workbook
 from app.modules.inventory.models import (
     SCOPE_PROJECT,
     SCOPE_UNIT_TYPE,
@@ -89,6 +89,26 @@ router = APIRouter(prefix="/projects", tags=["inventory"])
 #: A page of a unit register. Large enough for a floor, bounded so one request
 #: cannot ask for a whole development.
 _MAX_PAGE = 200
+
+
+@router.delete("/{project_id}/inventory/{kind}/{identifier}", status_code=204)
+def delete_inventory_record(
+    kind: str,
+    identifier: uuid.UUID,
+    session: DbSession,
+    actor: SystemAdmin,
+    project: InventoryProject,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    deletion.delete_record(
+        session,
+        project=project,
+        actor=actor,
+        kind=kind,
+        identifier=identifier,
+        reason=reason,
+    )
+    return Response(status_code=204)
 
 
 # --------------------------------------------------------------------------- #
@@ -235,6 +255,8 @@ def update_building(
     require_inventory_structure_writer(actor)
     building = service.get_building(session, project_id=project.id, building_id=building_id)
     require_phase(session, project=project, phase_id=building.phase_id, actor=actor)
+    if "phase_id" in payload.model_fields_set and not actor.is_system_admin:
+        raise PermissionDeniedError("Only an administrator may move a building to another phase.")
     updated = service.update_building(
         session,
         building=building,
@@ -304,6 +326,8 @@ def update_floor(
     floor = service.get_floor(session, project_id=project.id, floor_id=floor_id)
     phase = service.phase_of_floor(session, floor)
     require_phase(session, project=project, phase_id=phase.id, actor=actor)
+    if "building_id" in payload.model_fields_set and not actor.is_system_admin:
+        raise PermissionDeniedError("Only an administrator may move a floor to another building.")
     updated = service.update_floor(
         session,
         floor=floor,

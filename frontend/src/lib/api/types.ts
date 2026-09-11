@@ -388,6 +388,8 @@ export type AreaLine = {
 };
 
 export type UnitSummary = {
+  net_area: string | null;
+  net_area_unit: string | null;
   gross_area: string | null;
   gross_area_unit: string | null;
   id: string;
@@ -457,6 +459,8 @@ export type UnitRegister = {
   available_count: number;
   held_count: number;
   unreleased_count: number;
+  reserved_count: number;
+  sold_count: number;
 };
 
 export type UnitStatusEvent = {
@@ -1026,6 +1030,8 @@ export interface SaleTaxLine {
 }
 
 export interface SaleContract {
+  price_per_gross_area: string | null;
+  gross_area_unit: string | null;
   id: string;
   project_id: string;
   sale_number: string;

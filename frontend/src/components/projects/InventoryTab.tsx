@@ -74,6 +74,7 @@ const PAGE = "200";
  * register that scrolls sideways before it answers anything.
  */
 export function InventoryTab({
+  roles,
   projectId,
   projectStatus,
   canWriteStructure,
@@ -312,6 +313,7 @@ export function InventoryTab({
 
         {view === "phases" ? (
           <PhasesView
+            canAdmin={roles.has("system_admin") || roles.has("master_admin")}
             projectId={projectId}
             phases={phases}
             canConfigure={canConfigure}
@@ -325,6 +327,7 @@ export function InventoryTab({
 
         {view === "buildings" ? (
           <BuildingsView
+            canAdmin={roles.has("system_admin") || roles.has("master_admin")}
             projectId={projectId}
             phases={phases}
             buildings={buildings}
@@ -346,6 +349,7 @@ export function InventoryTab({
 
         {view === "floors" ? (
           <FloorsView
+            canAdmin={roles.has("system_admin") || roles.has("master_admin")}
             projectId={projectId}
             phases={phases}
             buildings={buildings}
@@ -369,7 +373,8 @@ export function InventoryTab({
             <Position compact>
               <PositionFigure lead label="Units" value={register.total} />
               <PositionFigure label="Available" value={register.available_count} />
-              <PositionFigure label="Held" value={register.held_count} tone={register.held_count > 0 ? "warning" : "neutral"} />
+              <PositionFigure label="Reserved" value={register.reserved_count} />
+              <PositionFigure label="Sold" value={register.sold_count} />
               <PositionFigure label="Unreleased" value={register.unreleased_count} />
             </Position>
             {areaTypes.length === 0 ? <p className="footnote">No area types configured — no unit can be measured or released.</p> : null}
@@ -459,10 +464,10 @@ export function InventoryTab({
               onChange={(event) => setFilters({ ...filters, commercial_status: event.target.value })}
             >
               <option value="">Any status</option>
-              {["unreleased", "held", "available", "reserved", "contract_pending", "contracted", "returned"].map(
+              {["available", "reserved_stock", "sold", "unreleased", "held", "reserved", "contract_pending", "contracted", "returned"].map(
                 (status) => (
                   <option key={status} value={status}>
-                    {statusLabel(status)}
+                    {status === "reserved" ? "Reserved · active reservation" : status === "contracted" ? "Sold · contracted" : statusLabel(status)}
                   </option>
                 ),
               )}

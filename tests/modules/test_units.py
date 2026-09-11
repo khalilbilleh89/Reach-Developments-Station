@@ -357,12 +357,17 @@ def test_a_retired_code_stays_on_the_record_that_carries_it(
     assert response.json()["unit_type_code"] == "2BR"
 
 
-def test_units_have_no_delete_endpoint(
+def test_unit_deletion_requires_a_reason_and_preserves_the_unit_when_missing(
     admin_client: TestClient, project_id: str, unit_id: str
 ) -> None:
-    response = admin_client.delete(f"{inventory_url(project_id)}/units/{unit_id}")
+    url = f"{inventory_url(project_id)}/units/{unit_id}"
+    response = admin_client.delete(url)
 
-    assert response.status_code == 404
+    assert response.status_code == 422, response.text
+    assert any(error["loc"] == ["query", "reason"] for error in response.json()["detail"])
+    remaining = admin_client.get(url)
+    assert remaining.status_code == 200, remaining.text
+    assert remaining.json()["id"] == unit_id
 
 
 def test_the_register_counts_the_whole_set_not_the_page(
