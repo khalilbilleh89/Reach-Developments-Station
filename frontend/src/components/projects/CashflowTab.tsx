@@ -242,7 +242,7 @@ export function CashflowTab({
         ) : summary.status === "denied" ? (
           <Notice tone="info">The cash position is not available to your role.</Notice>
         ) : summary.status === "ready" ? (
-          <CashflowOverview summary={summary.data} />
+          <CashflowOverview summary={summary.data} onOpenForecast={() => setSection("forecast")} />
         ) : null
       ) : null}
 

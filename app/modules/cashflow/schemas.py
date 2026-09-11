@@ -216,10 +216,15 @@ class DevelopmentMovementOut(Response):
     counts_as_cash: bool
 
 
+class PreLaunchExpenseOut(DevelopmentMovementOut):
+    can_confirm: bool
+    confirmation_blocker: str | None
+
+
 class PreLaunchRegisterOut(Response):
     """Development-facing view of the same governed movement rows."""
 
-    expenses: list[DevelopmentMovementOut]
+    expenses: list[PreLaunchExpenseOut]
     recorded_amount: Money
     confirmed_paid_amount: Money
 

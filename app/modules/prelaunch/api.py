@@ -38,14 +38,18 @@ PRELAUNCH_CATEGORIES = frozenset(
 )
 
 
-def _register(session: DbSession, project: CashflowProject) -> schemas.PreLaunchRegisterOut:
+def _register(
+    session: DbSession, project: CashflowProject, actor: ActiveActor
+) -> schemas.PreLaunchRegisterOut:
     movements = [
         movement
         for movement in service.list_development_movements(session, project=project)
         if movement.category in PRELAUNCH_CATEGORIES
     ]
     return schemas.PreLaunchRegisterOut(
-        expenses=[read.development_movement_out(session, movement=row) for row in movements],
+        expenses=[
+            read.prelaunch_expense_out(session, movement=row, actor=actor) for row in movements
+        ],
         recorded_amount=sum(
             (row.amount for row in movements if row.status == "recorded"), start=Decimal("0.00")
         ),
@@ -60,13 +64,12 @@ def _register(session: DbSession, project: CashflowProject) -> schemas.PreLaunch
 def list_expenses(
     project: CashflowProject, session: DbSession, actor: ActiveActor
 ) -> schemas.PreLaunchRegisterOut:
-    del actor
-    return _register(session, project)
+    return _register(session, project, actor)
 
 
 @router.post(
     "/expenses",
-    response_model=schemas.DevelopmentMovementOut,
+    response_model=schemas.PreLaunchExpenseOut,
     status_code=status.HTTP_201_CREATED,
 )
 def record_expense(
@@ -74,7 +77,7 @@ def record_expense(
     payload: schemas.DevelopmentMovementCreate,
     session: DbSession,
     actor: ActiveActor,
-) -> schemas.DevelopmentMovementOut:
+) -> schemas.PreLaunchExpenseOut:
     permissions.require_prelaunch_recorder(actor)
     if payload.category not in PRELAUNCH_CATEGORIES:
         raise ValidationError("That category cannot be recorded through Pre-Launch.")
@@ -95,16 +98,16 @@ def record_expense(
         notes=payload.notes,
     )
     session.commit()
-    return read.development_movement_out(session, movement=movement)
+    return read.prelaunch_expense_out(session, movement=movement, actor=actor)
 
 
-@router.post("/expenses/{movement_id}/confirm", response_model=schemas.DevelopmentMovementOut)
+@router.post("/expenses/{movement_id}/confirm", response_model=schemas.PreLaunchExpenseOut)
 def confirm_expense(
     project: CashflowProject,
     movement_id: uuid.UUID,
     session: DbSession,
     actor: ActiveActor,
-) -> schemas.DevelopmentMovementOut:
+) -> schemas.PreLaunchExpenseOut:
     permissions.require_cashflow_confirmer(actor)
     movement = service.confirm_development_movement(
         session, project=project, actor=actor, movement_id=movement_id
@@ -113,17 +116,17 @@ def confirm_expense(
         session.rollback()
         raise ValidationError("That movement is not a Pre-Launch expense.")
     session.commit()
-    return read.development_movement_out(session, movement=movement)
+    return read.prelaunch_expense_out(session, movement=movement, actor=actor)
 
 
-@router.post("/expenses/{movement_id}/reverse", response_model=schemas.DevelopmentMovementOut)
+@router.post("/expenses/{movement_id}/reverse", response_model=schemas.PreLaunchExpenseOut)
 def reverse_expense(
     project: CashflowProject,
     movement_id: uuid.UUID,
     payload: schemas.ReasonRequest,
     session: DbSession,
     actor: ActiveActor,
-) -> schemas.DevelopmentMovementOut:
+) -> schemas.PreLaunchExpenseOut:
     permissions.require_cashflow_confirmer(actor)
     movement = service.reverse_development_movement(
         session, project=project, actor=actor, movement_id=movement_id, reason=payload.reason
@@ -132,4 +135,4 @@ def reverse_expense(
         session.rollback()
         raise ValidationError("That movement is not a Pre-Launch expense.")
     session.commit()
-    return read.development_movement_out(session, movement=movement)
+    return read.prelaunch_expense_out(session, movement=movement, actor=actor)

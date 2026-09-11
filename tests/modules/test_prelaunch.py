@@ -78,6 +78,7 @@ def test_project_manager_records_the_same_unconfirmed_cashflow_row(
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["status"] == "recorded" and body["counts_as_cash"] is False
+    assert body["can_confirm"] is False and body["confirmation_blocker"]
     stored = db.scalars(select(CashflowDevelopmentMovement)).one()
     assert str(stored.id) == body["id"] and stored.amount == Decimal("1250.25")
     generic = finance_client.get(f"{PROJECTS}/{project_id}/cashflow/development-movements")
@@ -96,12 +97,25 @@ def test_maker_checker_confirmation_and_reversal_count_the_row_once(
 ) -> None:
     created = finance_client.post(root(project_id), json=payload(currency_id))
     movement_id = created.json()["id"]
+    assert created.json()["can_confirm"] is False
+    assert "another authorized" in created.json()["confirmation_blocker"]
+    maker_view = finance_client.get(root(project_id)).json()["expenses"][0]
+    checker_view = second_finance_client.get(root(project_id)).json()["expenses"][0]
+    assert maker_view["can_confirm"] is False
+    assert checker_view["can_confirm"] is True and checker_view["confirmation_blocker"] is None
     assert (
         finance_client.post(f"{root(project_id)}/{movement_id}/confirm", json={}).status_code == 403
     )
 
     confirmed = second_finance_client.post(f"{root(project_id)}/{movement_id}/confirm", json={})
     assert confirmed.status_code == 200 and confirmed.json()["counts_as_cash"] is True
+    assert confirmed.json()["can_confirm"] is False
+    # Eligibility is guidance, not a capability token: the previously eligible
+    # actor cannot confirm an already confirmed expense again.
+    assert (
+        second_finance_client.post(f"{root(project_id)}/{movement_id}/confirm", json={}).status_code
+        == 409
+    )
     register = finance_client.get(root(project_id)).json()
     assert register["recorded_amount"] == "0.00"
     assert register["confirmed_paid_amount"] == "1250.25"
@@ -111,6 +125,7 @@ def test_maker_checker_confirmation_and_reversal_count_the_row_once(
         f"{root(project_id)}/{movement_id}/reverse", json={"reason": "Duplicate invoice"}
     )
     assert reversed_response.status_code == 200
+    assert reversed_response.json()["can_confirm"] is False
     assert finance_client.get(root(project_id)).json()["confirmed_paid_amount"] == "0.00"
     assert db.scalar(select(func.count()).select_from(CashflowDevelopmentMovement)) == 1
     actions = set(db.scalars(select(AuditEvent.action)).all())
@@ -119,6 +134,40 @@ def test_maker_checker_confirmation_and_reversal_count_the_row_once(
         "cashflow.development_movement_confirmed",
         "cashflow.development_movement_reversed",
     } <= actions
+
+
+def test_read_only_actor_gets_no_confirmation_authority(
+    finance_client: TestClient, executive_client: TestClient, project_id: str, currency_id: str
+) -> None:
+    created = finance_client.post(root(project_id), json=payload(currency_id)).json()
+    row = executive_client.get(root(project_id)).json()["expenses"][0]
+    assert row["can_confirm"] is False and row["confirmation_blocker"]
+    assert "recorded_by_user_id" not in row
+    assert (
+        executive_client.post(f"{root(project_id)}/{created['id']}/confirm", json={}).status_code
+        == 403
+    )
+
+
+def test_master_eligibility_respects_persisted_separation_and_keeps_other_confirmation_authority(
+    db: Session, finance_client: TestClient, project_id: str, currency_id: str
+) -> None:
+    master = make_user(db, email="ux11-master@example.com", roles=("master_admin",))
+    client = client_for(master.email)
+    response = client.post(root(project_id), json=payload(currency_id))
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert row["can_confirm"] is False and "another authorized" in row["confirmation_blocker"]
+    assert client.get(root(project_id)).json()["expenses"][0]["can_confirm"] is False
+    refused = client.post(f"{root(project_id)}/{row['id']}/confirm", json={})
+    assert refused.status_code == 403
+    assert "another authorized" in refused.json()["detail"]
+    other = finance_client.post(root(project_id), json=payload(currency_id)).json()
+    eligible = next(
+        x for x in client.get(root(project_id)).json()["expenses"] if x["id"] == other["id"]
+    )
+    assert eligible["can_confirm"] is True and eligible["confirmation_blocker"] is None
+    assert client.post(f"{root(project_id)}/{other['id']}/confirm", json={}).status_code == 200
 
 
 def test_prelaunch_never_grants_broader_cash_authority(
