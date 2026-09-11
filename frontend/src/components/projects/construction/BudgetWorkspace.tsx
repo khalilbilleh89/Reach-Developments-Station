@@ -79,7 +79,7 @@ export function BudgetWorkspace({ projectId, roles, onChanged }: { projectId: st
     <SectionHeader title="Construction budget" description="Prepare an authorization, have it checked, then put it into force. Draft and approved versions do not change the current budget." />
     <ButtonRow>
       {view.budgetVersion ? <Link className="button" href={listHref}>Back to budget versions</Link> : null}
-      {canPrepare && register.status === "ready" && !open ? <Button variant="primary" onClick={() => begin({ kind: "create", source: detail?.id })}>{versions.length ? "Create budget revision" : "Create first budget"}</Button> : null}
+      {canPrepare && register.status === "ready" && !open ? <Button variant="primary" disabled={!!view.budgetVersion && record.status !== "ready"} onClick={() => begin({ kind: "create", source: detail?.id })}>{versions.length ? "Create budget revision" : "Create first budget"}</Button> : null}
       {open && open.id !== view.budgetVersion ? <Link className="button button-primary" href={versionHref(open.id)}>Continue v{open.version_number} · {budgetLabel(open.status)}</Link> : null}
       {canPrepare && register.status === "ready" && codes.status === "ready" && (!open || open.status === "draft") ? <Button onClick={() => begin({ kind: "code" })}>Add cost code</Button> : null}
     </ButtonRow>

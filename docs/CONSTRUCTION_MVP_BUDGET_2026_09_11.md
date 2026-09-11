@@ -28,7 +28,7 @@ complete; this sequence does not silently accept deferred workflows.
 
 The register separates the active authorization, the single open candidate and
 version history. A selected version is bookmarked by `constructionTab=budget`
-and `budgetVersion`; Back returns to Budget versions. The editor preserves exact
+and `budgetVersion`; Back returns to Budget versions. Revision creation waits for the selected source read, so a failed/loading record cannot silently fall back to copying another budget. The editor preserves exact
 amount strings and copied baselines. The small Add cost code form enables an
 empty project to start without database/API setup by an operator.
 

@@ -182,3 +182,21 @@ test("Budget workspace offers correction when activation is blocked, without ope
   assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Return for correction").props.disabled, false);
   assert.ok(!tree.some(node => node.type === "Button" && node.props.children === "Create budget revision"));
 });
+
+
+test("Budget revision waits for its selected source instead of silently copying the active version", () => {
+  let count = 0;
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetWorkspace", {
+    "@/lib/answer": { useAnswer: () => [
+      { status: "ready", data: [{ id: "active", status: "active", version_number: 1 }] },
+      { status: "ready", data: [] },
+      { status: "failed", message: "Selected version unavailable", retry() {} },
+    ][count++ % 3] },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ budgetVersion: "rejected-source" }, () => {}] },
+    "@/components/shell/navigation": { projectHref: () => "/projects/" },
+    "@/lib/roles": { hasAnyRole: () => true },
+  }, { projectId: "synthetic", roles: new Set(["finance"]), onChanged: async () => {} });
+  const tree = nodes(render());
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Create budget revision").props.disabled, true);
+  assert.ok(tree.some(node => node.type === "Button" && node.props.children === "Retry selected budget"));
+});
