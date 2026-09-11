@@ -21,6 +21,7 @@ from app.modules.projects.models import Project
 from tests.conftest import alembic_config
 from tests.factories import client_for, make_user
 from tests.modules.conftest import grant_access
+from tests.test_migrations import HEAD_REVISION
 
 
 def root(project_id: str) -> str:
@@ -201,10 +202,7 @@ def test_retained_commission_refuses_downgrade(
         ):
             command.downgrade(alembic_config(), "0016_prelaunch_utilities")
         assert snapshot(db) == before
-        assert (
-            db.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0020_management_reporting"
-        )
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
     finally:
         db.rollback()
         command.upgrade(alembic_config(), "head")

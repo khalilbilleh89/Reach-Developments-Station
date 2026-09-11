@@ -7,6 +7,17 @@ of that candidate. The owner authorized isolated draft implementation during
 post-merge CI. Main's Phase expectation failures are isolated in PR #290.
 Independent review, exact-head Full and human merge remain separate gates.
 
+### CI follow-up
+
+Run 34632214272 shard 1 passed 819 tests and failed the retained-commission
+downgrade assertion, which still named migration 0020. Four migration tests now
+use the shared HEAD_REVISION constant. The reporting integrity test also releases
+its snapshot read transaction before Alembic alters source tables on a separate
+connection, avoiding a self-blocking migration. No application or financial
+behavior changed. All six affected migration/retention tests passed locally;
+full Ruff check/format and whitespace checks passed. Merged #290 is incorporated
+from main (`6b627e7`). The new exact-head CI run remains required.
+
 ## Product and read contracts
 
 - Current Sales contains preparing/live Reservations, excluding each source
@@ -172,4 +183,8 @@ that cannot preserve negotiated intent. This PR remains Draft and is not merged.
 - `tests/modules/test_sales_concurrency.py`
 - `tests/modules/test_sales_negotiated_price.py`
 - `tests/modules/test_sales_security.py`
+- `tests/modules/test_commissions_review.py`
+- `tests/modules/test_consultant_engineering_review.py`
+- `tests/modules/test_management_reporting_integrity.py`
+- `tests/modules/test_project_analysis.py`
 - `tests/test_migrations.py`

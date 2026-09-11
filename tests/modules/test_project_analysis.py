@@ -354,6 +354,7 @@ def test_deployed_main_upgrade_retains_source_data(
     from sqlalchemy import text
 
     from tests.conftest import alembic_config
+    from tests.test_migrations import HEAD_REVISION
 
     del manager_member_client, project_id, unit_id, confirmed_receipt
     excluded = (
@@ -371,7 +372,7 @@ def test_deployed_main_upgrade_retains_source_data(
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0020_management_reporting"
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
     assert snapshot(db, excluded) == before
 
 
