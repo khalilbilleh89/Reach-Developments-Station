@@ -265,7 +265,7 @@ def create_budget(
         source_version_id=payload.source_version_id,
     )
     session.commit()
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.get("/budgets/{version_id}", response_model=schemas.BudgetDetailOut)
@@ -275,9 +275,8 @@ def read_budget(
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.BudgetDetailOut:
-    del actor
     version = service.get_budget(session, project=project, version_id=version_id)
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.put("/budgets/{version_id}/lines", response_model=schemas.BudgetDetailOut)
@@ -304,7 +303,7 @@ def write_budget_line(
     )
     session.commit()
     version = service.get_budget(session, project=project, version_id=version_id)
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.post("/budgets/{version_id}/submit", response_model=schemas.BudgetDetailOut)
@@ -317,7 +316,7 @@ def submit_budget(
     permissions.require_construction_preparer(actor)
     version = service.submit_budget(session, project=project, actor=actor, version_id=version_id)
     session.commit()
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.post("/budgets/{version_id}/approve", response_model=schemas.BudgetDetailOut)
@@ -330,7 +329,7 @@ def approve_budget(
     permissions.require_construction_approver(actor)
     version = service.approve_budget(session, project=project, actor=actor, version_id=version_id)
     session.commit()
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.post("/budgets/{version_id}/reject", response_model=schemas.BudgetDetailOut)
@@ -346,7 +345,7 @@ def reject_budget(
         session, project=project, actor=actor, version_id=version_id, reason=payload.reason
     )
     session.commit()
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 @router.post("/budgets/{version_id}/activate", response_model=schemas.BudgetDetailOut)
@@ -360,7 +359,7 @@ def activate_budget(
     permissions.require_construction_activator(actor)
     version = service.activate_budget(session, project=project, actor=actor, version_id=version_id)
     session.commit()
-    return budget_detail(session, project=project, version=version)
+    return budget_detail(session, project=project, version=version, actor=actor)
 
 
 # --------------------------------------------------------------------------- #

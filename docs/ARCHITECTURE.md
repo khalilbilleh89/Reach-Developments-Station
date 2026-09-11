@@ -948,6 +948,16 @@ authorisation, and refusing it would make every forecast unreadable the moment
 the next budget was activated. The check is re-proved at submission and at
 activation rather than trusted from when the draft was opened.
 
+**Budget correction preserves the authorization trail.** An independent CFO
+may reject a submitted candidate or return an approved, not-yet-active candidate
+for correction with a reason. Approval attribution and lines remain historical;
+a preparer copies them into a new draft. The budget in force never changes on
+rejection. An approved candidate underpinning an active forecast cannot be
+returned until that forecast is replaced with another governed basis. Budget
+rejection and forecast activation take the same project lock, so neither can
+withdraw the other's basis concurrently. Existing forecast submission/activation
+checks refuse a budget that was returned while the forecast was still open.
+
 **A contract line carries only what that line owns.** Two lines may name one
 cost code, and nothing in the model allocates a variation or a certificate back
 to one line rather than the other, because no such business rule exists: a

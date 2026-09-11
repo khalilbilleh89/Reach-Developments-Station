@@ -1012,12 +1012,10 @@ def _require_cost_code_coverage(
         )
 
 
-def submit_budget(
-    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
-) -> BudgetVersion:
-    """Hand a draft budget to a checker."""
-    lock_project(session, project.id)
-    version = _lock_budget(session, project_id=project.id, version_id=version_id)
+def validate_budget_submission(
+    session: Session, *, project: Project, version: BudgetVersion
+) -> None:
+    """Read-only submission checks, re-run under the write lock."""
     if version.status != BUDGET_DRAFT:
         raise ConflictError("Only a draft budget version can be submitted.")
     lines = session.scalars(
@@ -1026,6 +1024,15 @@ def submit_budget(
     if not lines:
         raise ValidationError("A budget with no lines authorises nothing.")
     _require_cost_code_coverage(session, project=project, version=version)
+
+
+def submit_budget(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> BudgetVersion:
+    """Hand a draft budget to a checker."""
+    lock_project(session, project.id)
+    version = _lock_budget(session, project_id=project.id, version_id=version_id)
+    validate_budget_submission(session, project=project, version=version)
 
     before = _snapshot(version, _BUDGET_FIELDS)
     version.status = BUDGET_SUBMITTED
@@ -1073,6 +1080,28 @@ def approve_budget(
     return version
 
 
+def validate_budget_rejection(
+    session: Session, *, version: BudgetVersion, actor: ActorContext
+) -> None:
+    """A checker may return a submitted or approved candidate, never the budget in force."""
+    if version.status not in {BUDGET_SUBMITTED, BUDGET_APPROVED}:
+        raise ConflictError(
+            "Only a submitted or approved budget can be rejected or returned for correction."
+        )
+    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    in_force = session.scalar(
+        select(ForecastVersion.id).where(
+            ForecastVersion.budget_version_id == version.id,
+            ForecastVersion.status == FORECAST_ACTIVE,
+        )
+    )
+    if in_force is not None:
+        raise ConflictError(
+            "This budget is the basis of the forecast in force. Replace that forecast "
+            "with one based on another governed budget before returning this version."
+        )
+
+
 def reject_budget(
     session: Session,
     *,
@@ -1081,12 +1110,10 @@ def reject_budget(
     version_id: uuid.UUID,
     reason: str,
 ) -> BudgetVersion:
-    """Refuse a submitted budget, with the reason on the record."""
+    """Refuse a submission or return an approved candidate, retaining its history."""
     lock_project(session, project.id)
     version = _lock_budget(session, project_id=project.id, version_id=version_id)
-    if version.status != BUDGET_SUBMITTED:
-        raise ConflictError("Only a submitted budget version can be rejected.")
-    permissions.require_different_approver(actor, submitted_by_user_id=version.submitted_by_user_id)
+    validate_budget_rejection(session, version=version, actor=actor)
 
     before = _snapshot(version, _BUDGET_FIELDS)
     version.status = BUDGET_REJECTED
@@ -1108,21 +1135,10 @@ def reject_budget(
     return version
 
 
-def activate_budget(
-    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
-) -> BudgetVersion:
-    """Put an approved budget into force, having proved it covers what is committed.
-
-    The check that matters is the last one. Every commitment already signed is
-    re-read under lock and tested against the authorisation this version would
-    give its cost code, and a version that would leave a standing contract
-    outside its own budget is refused. The right order is to revise the budget
-    and then commit; activating a budget that retrospectively puts an existing
-    contract over its limit gets that order backwards and hides the overrun in
-    the same move.
-    """
-    lock_project(session, project.id)
-    version = _lock_budget(session, project_id=project.id, version_id=version_id)
+def validate_budget_activation(
+    session: Session, *, project: Project, version: BudgetVersion
+) -> None:
+    """Read-only activation checks, re-run under the project/version locks."""
     if version.status != BUDGET_APPROVED:
         raise ConflictError("Only an approved budget version can be activated.")
     if version.currency_id != project.base_currency_id:
@@ -1168,6 +1184,24 @@ def activate_budget(
             + ". Revise the budget upward, or reduce the commitment with an approved "
             "variation, before activating."
         )
+
+
+def activate_budget(
+    session: Session, *, project: Project, actor: ActorContext, version_id: uuid.UUID
+) -> BudgetVersion:
+    """Put an approved budget into force, having proved it covers what is committed.
+
+    The check that matters is the last one. Every commitment already signed is
+    re-read under lock and tested against the authorisation this version would
+    give its cost code, and a version that would leave a standing contract
+    outside its own budget is refused. The right order is to revise the budget
+    and then commit; activating a budget that retrospectively puts an existing
+    contract over its limit gets that order backwards and hides the overrun in
+    the same move.
+    """
+    lock_project(session, project.id)
+    version = _lock_budget(session, project_id=project.id, version_id=version_id)
+    validate_budget_activation(session, project=project, version=version)
 
     current = active_budget(session, project_id=project.id)
     if current is not None:

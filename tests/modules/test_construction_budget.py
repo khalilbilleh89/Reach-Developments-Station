@@ -11,9 +11,10 @@ motion that hides it.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
     construction_url,
@@ -331,3 +332,125 @@ class TestHeadroomGovernsCommitment:
 
         refused = govern_contract(finance_client, cfo_client, project_id, contract_id)
         assert refused.status_code == 409, refused.text
+
+
+class TestBudgetWorkspaceEligibility:
+    def test_read_checks_missing_lines_roles_and_future_activation(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        admin_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+    ) -> None:
+        future = (date.today() + timedelta(days=30)).isoformat()
+        created = create_budget(finance_client, project_id, effective_date=future)
+        assert created.status_code == 201, created.text
+        body = created.json()
+        assert body["workflow"]["editing_blocker"] is None
+        assert set(body["workflow"]["missing_cost_codes"]) == {
+            "HRD-01",
+            "SFT-01",
+            "CNT-01",
+            "OTH-01",
+        }
+        assert body["workflow"]["submission_blocker"]
+        base = f"{construction_url(project_id)}/budgets/{body['id']}"
+        assert admin_client.get(base).json()["workflow"]["editing_blocker"]
+        cover_budget(finance_client, project_id, body["id"], cost_codes)
+        ready = finance_client.get(base).json()
+        assert ready["workflow"]["missing_cost_codes"] == []
+        assert ready["workflow"]["submission_blocker"] is None
+        submitted = finance_client.post(f"{base}/submit", json={})
+        assert submitted.status_code == 200, submitted.text
+        assert submitted.json()["workflow"]["approval_blocker"]
+        assert cfo_client.get(base).json()["workflow"]["approval_blocker"] is None
+        approved = cfo_client.post(f"{base}/approve", json={})
+        assert approved.status_code == 200, approved.text
+        assert future in approved.json()["workflow"]["activation_blocker"]
+        assert finance_client.post(f"{base}/activate", json={}).status_code == 409
+        # The new recovery path must preserve approval history and free the draft slot.
+        assert (
+            finance_client.post(f"{base}/reject", json={"reason": "Not my authority"}).status_code
+            == 403
+        )
+        returned = cfo_client.post(f"{base}/reject", json={"reason": "Correct the effective date"})
+        assert returned.status_code == 200, returned.text
+        assert returned.json()["status"] == "rejected"
+        assert datetime.fromisoformat(returned.json()["approved_at"]) == datetime.fromisoformat(
+            approved.json()["approved_at"]
+        )
+        assert returned.json()["rejection_reason"] == "Correct the effective date"
+        corrected = create_budget(finance_client, project_id, source_version_id=body["id"])
+        assert corrected.status_code == 201, corrected.text
+        assert corrected.json()["source_version_id"] == body["id"]
+        assert corrected.json()["lines"] == ready["lines"]
+        assert (
+            govern_budget(
+                finance_client, cfo_client, project_id, corrected.json()["id"]
+            ).status_code
+            == 200
+        )
+        current = f"{construction_url(project_id)}/budgets/{corrected.json()['id']}"
+        assert cfo_client.get(current).json()["workflow"]["rejection_blocker"]
+        assert (
+            cfo_client.post(
+                f"{current}/reject", json={"reason": "Cannot reject in-force history"}
+            ).status_code
+            == 409
+        )
+
+    def test_dual_role_submitter_is_not_offered_an_approval(
+        self,
+        db: Session,
+        admin_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+    ) -> None:
+        from tests.factories import client_for, make_user
+        from tests.modules.conftest import grant_access
+
+        user = make_user(
+            db, email="budget-maker-checker@example.com", roles=("finance", "approver_cfo")
+        )
+        grant_access(admin_client, project_id, user)
+        with client_for(user.email) as client:
+            created = create_budget(client, project_id).json()
+            cover_budget(client, project_id, created["id"], cost_codes)
+            base = f"{construction_url(project_id)}/budgets/{created['id']}"
+            submitted = client.post(f"{base}/submit", json={})
+            assert submitted.status_code == 200, submitted.text
+            workflow = client.get(base).json()["workflow"]
+            assert "person who submitted" in workflow["approval_blocker"]
+            assert "person who submitted" in workflow["rejection_blocker"]
+            assert client.post(f"{base}/approve", json={}).status_code == 403
+            assert (
+                client.post(f"{base}/reject", json={"reason": "Self decision"}).status_code == 403
+            )
+
+    def test_in_force_forecast_protects_its_approved_budget_basis(
+        self,
+        finance_client: TestClient,
+        cfo_client: TestClient,
+        project_id: str,
+        cost_codes: dict[str, str],
+    ) -> None:
+        from tests.modules.conftest import create_forecast, govern_forecast
+        from tests.modules.test_construction_forecast import cover_forecast
+
+        budget = create_budget(finance_client, project_id).json()
+        cover_budget(finance_client, project_id, budget["id"], cost_codes)
+        base = f"{construction_url(project_id)}/budgets/{budget['id']}"
+        assert finance_client.post(f"{base}/submit", json={}).status_code == 200
+        assert cfo_client.post(f"{base}/approve", json={}).status_code == 200
+        forecast = create_forecast(finance_client, project_id, budget_version_id=budget["id"])
+        assert forecast.status_code == 201, forecast.text
+        cover_forecast(finance_client, project_id, forecast.json()["id"], cost_codes)
+        result = govern_forecast(finance_client, cfo_client, project_id, forecast.json()["id"])
+        assert result.status_code == 200, result.text
+        blocker = cfo_client.get(base).json()["workflow"]["rejection_blocker"]
+        assert "forecast in force" in blocker
+        refused = cfo_client.post(f"{base}/reject", json={"reason": "Cannot withdraw active basis"})
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["detail"] == blocker
+        assert cfo_client.get(base).json()["status"] == "approved"

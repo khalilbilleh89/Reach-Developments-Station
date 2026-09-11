@@ -78,3 +78,12 @@ accessibility context are implemented using existing primitives. Candidate
 validation is recorded in [UX-12 acceptance](UX12_ACCEPTANCE_2026_09_11.md).
 This does not declare operator UAT or MVP release complete. Construction Budget
 remains the next implementation slice after review and human merge of UX-12.
+
+
+## Construction Budget candidate
+
+UX-12 merged in #286 (`3844623`). The next bounded candidate completes the
+Budget workspace and its correction path. See the shared
+[Budget/Contract plan and Budget acceptance](CONSTRUCTION_MVP_BUDGET_2026_09_11.md).
+Contracts remain the next separate PR after Budget review and human merge.
+Operator UAT and the MVP scope reconciliation remain pending.

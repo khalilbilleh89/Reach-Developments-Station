@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRegisterFields } from "@/components/shell/registerState";
+import { BudgetWorkspace } from "./construction/BudgetWorkspace";
 
 import {
   Badge,
@@ -19,7 +21,6 @@ import {
 } from "@/components/ui";
 import { ApiError, construction } from "@/lib/api";
 import type {
-  BudgetDetail,
   Certificate,
   ConstructionContract,
   ConstructionInvoice,
@@ -36,15 +37,12 @@ import { CertificateFile } from "@/components/projects/construction/CertificateF
 import { ConstructionSummaryView } from "@/components/projects/construction/ConstructionSummaryView";
 import { ContractFile } from "@/components/projects/construction/ContractFile";
 import {
-  budgetLabel,
-  budgetTone,
   certificateLabel,
   certificateTone,
   contractLabel,
   contractTone,
   forecastLabel,
   forecastTone,
-  headroomTone,
   invoiceLabel,
   invoiceTone,
   milestoneLabel,
@@ -88,8 +86,10 @@ const SECTIONS = [
  * thing the browser decides is which rows to draw — and only ever as a subset
  * of the rows the server already narrowed by role and by phase.
  */
-export function ConstructionTab({ projectId }: { projectId: string }) {
-  const [section, setSection] = useState("overview");
+export function ConstructionTab({ projectId, roles = new Set<string>() }: { projectId: string; roles?: Set<string> }) {
+  const [view, setView] = useRegisterFields({ constructionTab: "overview" });
+  const section = SECTIONS.some(item => item.key === view.constructionTab) ? view.constructionTab : "overview";
+  const setSection = (constructionTab: string) => setView({ constructionTab });
   const [summary, setSummary] = useState<ConstructionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -168,7 +168,7 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
         )
       ) : null}
 
-      {section === "budget" ? <BudgetSection projectId={projectId} /> : null}
+      {section === "budget" ? <BudgetWorkspace projectId={projectId} roles={roles} onChanged={load} /> : null}
       {section === "contracts" ? (
         <ContractsSection projectId={projectId} />
       ) : null}
@@ -193,155 +193,6 @@ export function ConstructionTab({ projectId }: { projectId: string }) {
 // --------------------------------------------------------------------------- //
 // Budget
 // --------------------------------------------------------------------------- //
-
-/**
- * The authorisation in force, cost code by cost code.
- *
- * Headroom is the column somebody opens this for, and it is allowed to go
- * negative: a cost code committed beyond its budget reads as a negative number
- * in danger tone rather than as a zero. Clamping it at zero would render "we
- * are 400,000 over on structural steel" and "we have exactly nothing left"
- * identically, and only one of those is a problem.
- */
-function BudgetSection({ projectId }: { projectId: string }) {
-  const [detail, setDetail] = useState<BudgetDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [empty, setEmpty] = useState(false);
-
-  const [retrying, setRetrying] = useState(false);
-  const load = useCallback(async () => {
-    setRetrying(true);
-    try {
-      const versions = await construction.budgets(projectId);
-      const current =
-        versions.find((version) => version.status === "active") ?? versions[0];
-      setEmpty(!current);
-      if (!current) {
-        setError(null);
-        return;
-      }
-      setDetail(await construction.budget(projectId, current.id));
-      setError(null);
-    } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not load the budget.",
-      );
-    } finally {
-      setRetrying(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void (async () => {
-      await load();
-    })();
-  }, [load]);
-
-  if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
-  if (empty) {
-    return (
-      <EmptyState
-        title="No budget yet"
-        hint="Nothing has been authorised for this development. Until a budget is in force, no contract can be signed against it."
-      />
-    );
-  }
-  if (!detail) return <Loading label="Loading the budget" shape="rows" />;
-
-  const code = detail.currency_code;
-
-  return (
-    <Card
-      flush
-      title={`Budget version ${detail.version_number}`}
-      description={`Effective ${businessDate(detail.effective_date)}. ${detail.change_reason}`}
-      actions={
-        <Badge tone={budgetTone(detail.status)}>
-          {budgetLabel(detail.status)}
-        </Badge>
-      }
-    >
-      <TableScroll label="Budget by cost code" fixedFirst>
-        <thead>
-          <tr>
-            <th scope="col">Cost code</th>
-            <th scope="col">Category</th>
-            <th scope="col" className="num">
-              Baseline
-            </th>
-            <th scope="col" className="num">
-              Approved
-            </th>
-            <th scope="col" className="num">
-              Contingency
-            </th>
-            <th scope="col" className="num">
-              Control budget
-            </th>
-            <th scope="col" className="num">
-              Committed
-            </th>
-            <th scope="col" className="num">
-              Headroom
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {detail.lines.map((line) => (
-            <tr key={line.cost_code_id}>
-              <td>
-                <IdentityCell
-                  name={line.cost_code}
-                  meta={line.cost_code_name}
-                />
-              </td>
-              <td>{line.cost_category}</td>
-              <td className="num">{money(line.baseline_amount, code)}</td>
-              <td className="num">
-                {money(line.approved_budget_amount, code)}
-              </td>
-              <td className="num">
-                {money(line.contingency_amount, code)}
-              </td>
-              <td className="num">{money(line.control_budget, code)}</td>
-              <td className="num">
-                {money(line.revised_commitment, code)}
-              </td>
-              <td
-                className={
-                  headroomTone(line.headroom) === "danger"
-                    ? "num figure-danger"
-                    : "num"
-                }
-              >
-                {money(line.headroom, code)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th scope="row" colSpan={2}>
-              Project
-            </th>
-            <td className="num">{money(detail.total_baseline, code)}</td>
-            <td className="num">
-              {money(detail.total_approved_budget, code)}
-            </td>
-            <td className="num">{money(detail.total_contingency, code)}</td>
-            <td className="num">
-              {money(detail.total_control_budget, code)}
-            </td>
-            <td className="num" />
-            <td className="num" />
-          </tr>
-        </tfoot>
-      </TableScroll>
-    </Card>
-  );
-}
 
 // --------------------------------------------------------------------------- //
 // Contracts
