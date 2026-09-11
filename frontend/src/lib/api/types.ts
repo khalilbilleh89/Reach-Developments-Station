@@ -2098,6 +2098,14 @@ export interface BudgetLine {
 }
 
 export interface BudgetDetail extends BudgetVersion {
+  workflow: {
+    editing_blocker: string | null;
+    submission_blocker: string | null;
+    approval_blocker: string | null;
+    rejection_blocker: string | null;
+    activation_blocker: string | null;
+    missing_cost_codes: string[];
+  };
   lines: BudgetLine[];
   total_baseline: string;
   total_approved_budget: string;

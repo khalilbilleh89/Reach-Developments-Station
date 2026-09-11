@@ -25,6 +25,7 @@ function mount(file, name, dependencies, props) {
   runInNewContext(`(function(require, exports) { ${code}\n})`)(key => {
     if (key === "react") return react;
     if (key in dependencies) return dependencies[key];
+    if (key === "@/lib/api") return { ApiError: class extends Error { fieldErrors = []; } };
     if (key === "@/components/ui") return ui;
     if (key === "@/components/shell/navigation") return { sectionDescription: () => "" };
     if (key === "@/lib/roles") return { hasAnyRole: () => false };
@@ -44,7 +45,7 @@ function apiFixture() {
   const api = new Proxy({}, { get: (_, name) => async () => { calls.push(name); if (failed) throw new ApiError("Temporary read failure"); return []; } });
   return { ApiError, api, calls, recover() { failed = false; } };
 }
-for (const component of ["BudgetSection", "ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
+for (const component of ["ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
   test(`${component}: failed read retries GETs and accepts a recovered empty response`, async () => {
     const f = apiFixture();
     const render = mount("projects/ConstructionTab", component, { "@/lib/api": { ApiError: f.ApiError, construction: f.api } }, { projectId: "synthetic" });
@@ -121,4 +122,81 @@ test("Portfolio offers the existing retry on failure, never on denied access", (
   button.props.onClick(); assert.equal(calls, 1);
   const denied = mount("portfolio/Portfolio", "Pending", {}, { answer: { status: "denied", retry } });
   assert.ok(!nodes(denied()).some(node => node.type === "Button"));
+});
+
+
+test("Budget workspace retains failed-read recovery after adding the version register", () => {
+  let failed = true; let retries = 0;
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetWorkspace", {
+    "@/lib/answer": { useAnswer: () => failed ? { status: "failed", message: "Temporary read failure", retry() { retries++; failed = false; } } : { status: "ready", data: [], retry() {} } },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ budgetVersion: "" }, () => {}] },
+    "@/components/shell/navigation": { projectHref: () => "/projects/" },
+  }, { projectId: "synthetic", roles: new Set(), onChanged: async () => {} });
+  const button = nodes(render()).find(node => node.type === "Button" && node.props.children === "Retry budget versions");
+  assert.ok(button); button.props.onClick(); assert.equal(retries, 1);
+  const recovered = nodes(render());
+  assert.ok(recovered.some(node => node.type === "EmptyState" && node.props.title === "No budget versions"));
+  assert.ok(!recovered.some(node => node.type === "Notice" && node.props.children === "Temporary read failure"));
+});
+
+test("Budget line editor submits exact decimal strings and never rewrites a copied baseline", () => {
+  let payload;
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetEditor", {
+    "@/lib/format": { todayISO: () => "2026-09-11" },
+  }, { editor: { kind: "line", code: { id: "code", code: "HARD", name: "Works" }, line: { approved_budget_amount: "1.00", contingency_amount: "0.00", baseline_amount: "900.00" } }, detail: { source_version_id: "source", currency_code: "JOD" }, versions: [], busy: false, failure: null, onSubmit: body => { payload = body; }, onCancel() {} });
+  const amount = nodes(render()).find(node => node.type === "Field" && node.props.label === "Budget authorization");
+  amount.props.children.props.onChange("123456789.12");
+  render().props.onSubmit();
+  assert.equal(payload.approved_budget_amount, "123456789.12");
+  assert.equal(payload.contingency_amount, "0.00");
+  assert.ok(!("baseline_amount" in payload));
+});
+
+test("Budget rejection keeps the typed reason when the server refuses the write", () => {
+  let payload;
+  const props = { editor: { kind: "reject" }, detail: { status: "approved" }, versions: [], busy: false, failure: null, onSubmit: body => { payload = body; }, onCancel() {} };
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetEditor", { "@/lib/format": { todayISO: () => "2026-09-11" } }, props);
+  const reason = nodes(render()).find(node => node.type === "Field" && node.props.label === "Rejection reason");
+  reason.props.children.props.onChange({ target: { value: "Recheck commitment coverage" } });
+  render().props.onSubmit();
+  assert.equal(payload.reason, "Recheck commitment coverage");
+  props.failure = new Error("Conflict: version changed");
+  const failed = render();
+  assert.equal(failed.props.title, "Return budget for correction");
+  assert.equal(nodes(failed).find(node => node.type === "Field" && node.props.label === "Rejection reason").props.children.props.value, "Recheck commitment coverage");
+  assert.ok(nodes(failed).some(node => node.type === "Notice" && node.props.children === props.failure.message));
+});
+
+test("Budget workspace offers correction when activation is blocked, without opening a second candidate", () => {
+  let count = 0;
+  const detail = { id: "candidate", version_number: 2, status: "approved", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: "Existing commitments exceed authorization", rejection_blocker: null } };
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetWorkspace", {
+    "@/lib/answer": { useAnswer: () => ({ status: "ready", data: [[{ id: "candidate", status: "approved", version_number: 2 }], [], detail][count++ % 3], retry() {} }) },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ budgetVersion: "candidate" }, () => {}] },
+    "@/components/shell/navigation": { projectHref: () => "/projects/" },
+    "@/lib/roles": { hasAnyRole: () => true },
+    "@/lib/format": { businessDate: () => "Date" },
+  }, { projectId: "synthetic", roles: new Set(["approver_cfo"]), onChanged: async () => {} });
+  const tree = nodes(render());
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Activate budget").props.disabled, true);
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Return for correction").props.disabled, false);
+  assert.ok(!tree.some(node => node.type === "Button" && node.props.children === "Create budget revision"));
+});
+
+
+test("Budget revision waits for its selected source instead of silently copying the active version", () => {
+  let count = 0;
+  const render = mount("projects/construction/BudgetWorkspace", "BudgetWorkspace", {
+    "@/lib/answer": { useAnswer: () => [
+      { status: "ready", data: [{ id: "active", status: "active", version_number: 1 }] },
+      { status: "ready", data: [] },
+      { status: "failed", message: "Selected version unavailable", retry() {} },
+    ][count++ % 3] },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ budgetVersion: "rejected-source" }, () => {}] },
+    "@/components/shell/navigation": { projectHref: () => "/projects/" },
+    "@/lib/roles": { hasAnyRole: () => true },
+  }, { projectId: "synthetic", roles: new Set(["finance"]), onChanged: async () => {} });
+  const tree = nodes(render());
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Create budget revision").props.disabled, true);
+  assert.ok(tree.some(node => node.type === "Button" && node.props.children === "Retry selected budget"));
 });

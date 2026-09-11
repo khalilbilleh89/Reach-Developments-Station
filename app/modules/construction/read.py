@@ -15,13 +15,15 @@ routes.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.errors import ConflictError, ServiceError
 from app.modules.access.dependencies import ActorContext
-from app.modules.construction import calculator, schemas, service
+from app.modules.construction import calculator, permissions, schemas, service
 from app.modules.construction.calculator import ZERO, money
 from app.modules.construction.models import (
     INVOICE_STANDING,
@@ -100,7 +102,7 @@ def budget_out(session: Session, *, version: BudgetVersion) -> schemas.BudgetOut
 
 
 def budget_detail(
-    session: Session, *, project: Project, version: BudgetVersion
+    session: Session, *, project: Project, version: BudgetVersion, actor: ActorContext
 ) -> schemas.BudgetDetailOut:
     """One budget version with its lines, each showing what it now carries.
 
@@ -148,8 +150,52 @@ def budget_detail(
         contingency = money(contingency + line.contingency_amount)
         control = money(control + line_control)
 
+    def editing() -> None:
+        permissions.require_construction_preparer(actor)
+        if version.status != "draft":
+            raise ConflictError(
+                "Only draft budgets can be edited. Create a revision to change this budget."
+            )
+
+    def submission() -> None:
+        permissions.require_construction_preparer(actor)
+        service.validate_budget_submission(session, project=project, version=version)
+
+    def approval() -> None:
+        permissions.require_construction_approver(actor)
+        if version.status != "submitted":
+            raise ConflictError("Only a submitted budget can be approved.")
+        permissions.require_different_approver(
+            actor, submitted_by_user_id=version.submitted_by_user_id
+        )
+
+    def rejection() -> None:
+        permissions.require_construction_approver(actor)
+        service.validate_budget_rejection(session, version=version, actor=actor)
+
+    def activation() -> None:
+        permissions.require_construction_activator(actor)
+        service.validate_budget_activation(session, project=project, version=version)
+
+    def blocker(check: Callable[[], None]) -> str | None:
+        try:
+            check()
+        except ServiceError as error:
+            return error.detail
+        return None
+
     return schemas.BudgetDetailOut(
         **budget_out(session, version=version).model_dump(),
+        workflow=schemas.BudgetWorkflowOut(
+            editing_blocker=blocker(editing),
+            submission_blocker=blocker(submission),
+            approval_blocker=blocker(approval),
+            rejection_blocker=blocker(rejection),
+            activation_blocker=blocker(activation),
+            missing_cost_codes=sorted(
+                code.code for code in codes.values() if code.is_active and code.id not in lines
+            ),
+        ),
         lines=out_lines,
         total_baseline=baseline,
         total_approved_budget=approved,

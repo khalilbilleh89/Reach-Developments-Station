@@ -241,7 +241,19 @@ class BudgetOut(Response):
     superseded_at: datetime | None
 
 
+class BudgetWorkflowOut(Response):
+    """A null blocker means the current actor may attempt that action."""
+
+    editing_blocker: str | None
+    submission_blocker: str | None
+    approval_blocker: str | None
+    rejection_blocker: str | None
+    activation_blocker: str | None
+    missing_cost_codes: list[str]
+
+
 class BudgetDetailOut(BudgetOut):
+    workflow: BudgetWorkflowOut
     lines: list[BudgetLineOut]
     total_baseline: Money
     total_approved_budget: Money
