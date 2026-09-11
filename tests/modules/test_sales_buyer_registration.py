@@ -26,6 +26,26 @@ def new_buyer(unit_id: str) -> dict:
     }
 
 
+def test_owner_sales_workspace_preserves_explicit_negotiated_price(
+    owner_client: TestClient, project_id: str, released_unit: str
+) -> None:
+    base = sales_url(project_id)
+    options = owner_client.get(f"{base}/unit-options")
+    assert options.status_code == 200, options.text
+    unit = next(row for row in options.json()["items"] if row["unit_id"] == released_unit)
+    response = owner_client.post(
+        f"{base}/buyer-registrations",
+        json={
+            **new_buyer(released_unit),
+            "sales_price_ex_tax": "143000.00",
+            "expected_price_version_id": unit["unit_price_version_id"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["sale"]["sales_price_ex_tax"] == "143000.00"
+    assert response.json()["sale"]["reference_price_ex_tax"] == unit["reference_price_ex_tax"]
+
+
 def test_owner_registers_new_buyer_as_sold_without_fictional_signatures(
     owner_client: TestClient,
     admin_client: TestClient,

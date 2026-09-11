@@ -48,6 +48,8 @@ const EXCEPTION_LABELS: Record<string, string> = {
 };
 
 const ADJUSTMENT_LABELS: Record<string, string> = {
+  negotiated_price_discount: "Negotiated price discount",
+  negotiated_price_premium: "Negotiated price premium",
   percentage_discount: "Percentage discount",
   fixed_discount: "Fixed discount",
   seller_credit: "Seller credit",

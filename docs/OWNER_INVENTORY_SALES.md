@@ -47,8 +47,8 @@ contract totals, receipts, weighted pricing calculations or historical sale term
 
 ## Register a buyer and mark sold
 
-Master Administrators can choose **Register buyer & mark sold** inside Sales or
-the unit's Sales & legal tab. Select an existing buyer or register a new sole
+Master Administrators can choose **Owner: register buyer & mark sold** after
+selecting an eligible unit in Sales > New Reservation. Select an existing buyer or register a new sole
 purchaser, enter a reason, and optionally the sale date. Existing buyers retain
 their named-party shares; those shares must total a whole unit.
 
@@ -65,6 +65,13 @@ Stale prices, invalid shares, another buyer's reservation, an existing sale or a
 inactive unit are refused. Failure rolls back the buyer and all intermediate
 changes. Project/unit locking prevents simultaneous buyers acquiring the unit.
 
+The Sales preparation form accepts an agreed price and expected list version.
+Its selected units obey ordinary release/current-price eligibility. Existing
+privileged API release overrides remain permission- and reason-gated, but are
+not offered through this ordinary selector. An existing reservation cannot be
+silently assigned a different agreed price during owner conversion. Inventory's
+Sales & legal tab provides inspection and existing transaction links.
+
 ## Inventory status
 
 - **Available**: available for a new commitment.
@@ -78,7 +85,9 @@ underlying legal or commercial lifecycle states.
 
 ## Deployment and rollback
 
-No dependencies, migrations, backfills or environment changes are required.
+The original owner-controls change required no dependencies, migrations,
+backfills or environment changes. The subsequent Sales workspace requires
+migration 0021; see COM_SALES_01_ACCEPTANCE.md for its guarded rollback.
 Deploy backend and frontend together. Roll back code using the prior release;
 database records use existing schema and remain valid. A code rollback cannot
 restore intentionally deleted records; restore from a verified backup if needed.

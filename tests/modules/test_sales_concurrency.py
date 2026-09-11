@@ -113,6 +113,7 @@ def _second_reservation(client: TestClient, project_id: str, unit_id: str, clien
     return reservation_id
 
 
+@pytest.mark.parametrize("negotiated", [False, True])
 def test_two_reservations_cannot_both_commit_the_same_unit(
     sales_ops_client: TestClient,
     sales_ops: User,
@@ -121,6 +122,7 @@ def test_two_reservations_cannot_both_commit_the_same_unit(
     buyer_id: str,
     reservation_id: str,
     db: Session,
+    negotiated: bool,
 ) -> None:
     """Given a held unit lock, then the second activation sees the first.
 
@@ -132,6 +134,14 @@ def test_two_reservations_cannot_both_commit_the_same_unit(
         json={"evidence_reference": "BANK-REF-A"},
     )
     second = _second_reservation(sales_ops_client, project_id, released_unit, buyer_id)
+    if negotiated:
+        for identifier in (reservation_id, second):
+            url = f"{sales_url(project_id)}/reservations/{identifier}"
+            reference = sales_ops_client.get(url).json()["reservation"]["reference_price_ex_tax"]
+            changed = sales_ops_client.put(
+                f"{url}/sales-price", json={"sales_price_ex_tax": reference}
+            )
+            assert changed.status_code == 200, changed.text
 
     factory = get_session_factory()
     holder = factory()

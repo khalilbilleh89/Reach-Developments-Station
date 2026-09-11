@@ -53,7 +53,7 @@ import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 import { useRecordHref } from "@/components/ui";
 import { SaleOverview } from "./SaleOverview";
-import { inventory } from "@/lib/api";
+
 import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 import { DealCollections } from "@/components/projects/collections/DealCollections";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
@@ -559,7 +559,7 @@ export function SaleWorkspace({
       }
       const unitId = loadedSale?.sale.unit_id ?? loadedReservation?.reservation.unit_id;
       if (unitId) {
-        try { setUnitLabel((await inventory.unit(projectId, unitId)).unit_reference); } catch { setUnitLabel(""); }
+        setUnitLabel(loadedSale?.sale.unit_reference ?? loadedReservation?.reservation.unit_reference ?? "");
       }
       setError(null);
     } catch (caught) {
@@ -712,7 +712,7 @@ export function SaleWorkspace({
           : (terms?.reservation_number ?? "Deal")
       }
       subtitle={<>{unitLabel || "Property transaction"}{client?.display_name ? ` · ${client.display_name}` : ""}</>}
-      actions={<RecordLink projectId={projectId} kind="unit" id={(sale?.sale.unit_id ?? terms?.unit_id)!}>Open Unit {unitLabel}</RecordLink>}
+      actions={<Button disabled={busy} onClick={() => void load()}>Refresh transaction</Button>}
       headline={sale ? { value: money(sale.sale.total_contract_price, saleCode), label: "Contract value · buyer payable" } : terms ? { value: money(terms.total_buyer_payable, quoteCode), label: "Reservation · buyer payable" } : undefined}
       meta={
         <>
@@ -735,12 +735,13 @@ export function SaleWorkspace({
       onSelectTab={setSection}
      
     >
+      <p className="subtle"><RecordLink projectId={projectId} kind="unit" id={(sale?.sale.unit_id ?? terms?.unit_id)!}>Inspect unit reference {unitLabel}</RecordLink></p>
       <Steps label="Where the deal has got to" steps={lifecycle(terms, sale)} />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} /> : null}
+      {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} onChanged={load} priceReadError={error} /> : null}
       {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader level={2} title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
 
       {activeSection === "commercial" && terms ? (
@@ -799,8 +800,9 @@ export function SaleWorkspace({
               <WaterfallRow label="Approved list price" note="Ex tax" amount={money(terms.reference_price_ex_tax, quoteCode)} />
               <WaterfallRow label="Paid upgrades" amount={money(terms.paid_upgrade_amount, quoteCode)} />
               <WaterfallRow label="Payment plan adjustment" amount={money(terms.payment_plan_adjustment_amount, quoteCode)} />
+              <WaterfallRow label="Negotiated price premium" amount={money(String(reservation?.quote_snapshot.negotiated_price_premium ?? "0"), quoteCode)} />
               <WaterfallRow label="Gross quoted price" note="Ex tax" amount={money(terms.gross_quoted_price_ex_tax, quoteCode)} kind="subtotal" />
-              <WaterfallRow label="Cash discount" note="Reduces what the buyer pays" amount={money(terms.cash_discount_amount, quoteCode)} />
+              <WaterfallRow label="Discounts including negotiated reduction" note="Reduces what the buyer pays" amount={money(terms.cash_discount_amount, quoteCode)} />
               <WaterfallRow label="Seller credit" amount={money(terms.seller_credit_amount, quoteCode)} />
               <WaterfallRow label="Net contract price" note="Ex tax" amount={money(terms.net_contract_price_ex_tax, quoteCode)} kind="total" />
             </Waterfall>

@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  SalesUnitOption, SalesPricePreview, SalesTransaction,
   PreLaunchExpense,
   AdminUser,
   CashflowAccuracy,
@@ -839,6 +840,16 @@ export const pricing = {
  * sends inputs and displays what comes back.
  */
 export const sales = {
+  unitOptions: (projectId: string, query: Record<string, string> = {}) =>
+    get<{items: SalesUnitOption[]; next_offset: number | null}>(`/projects/${projectId}/sales/unit-options?${new URLSearchParams(query)}`),
+  transactions: (projectId: string, query: Record<string, string> = {}) =>
+    get<{items: SalesTransaction[]; total: number}>(`/projects/${projectId}/sales/transactions?${new URLSearchParams(query)}`),
+  pricePreview: (projectId: string, body: Record<string, unknown>) =>
+    post<SalesPricePreview>(`/projects/${projectId}/sales/price-preview`, body),
+  reservationPricePreview: (projectId: string, id: string, body: Record<string, unknown>) =>
+    post<SalesPricePreview>(`/projects/${projectId}/sales/reservations/${id}/price-preview`, body),
+  changeSalesPrice: (projectId: string, id: string, sales_price_ex_tax: string) =>
+    put<ReservationDetail>(`/projects/${projectId}/sales/reservations/${id}/sales-price`, {sales_price_ex_tax}),
   registerBuyer: (projectId: string, input: Record<string, unknown>) =>
     post<SaleDetail>(`/projects/${projectId}/sales/buyer-registrations`, input),
   deleteClient: (projectId: string, id: string, reason: string) =>
