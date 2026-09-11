@@ -36,6 +36,7 @@ import {
 } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 import { ReservationForm } from "@/components/projects/sales/ReservationForm";
+import { RegisterBuyerSaleForm } from "@/components/projects/sales/RegisterBuyerSaleForm";
 import { ClientsPanel } from "@/components/projects/sales/ClientsPanel";
 import { RecordLink } from "@/components/ui";
 import { useRouter } from "next/navigation";
@@ -122,6 +123,7 @@ export function SalesTab({
   const search = searchFields.search;
   const setSearch = (search: string) => { setSearchFields({ search }); setPageFields({offset: ""}); };
   const [open, setOpen] = useState<"none" | "clients" | "policy">("none");
+  const [registeringSale, setRegisteringSale] = useState<{ unitId: string; reference: string; clientId: string | null } | null>(null);
   const router = useRouter();
   const recordHref = useRecordHref(projectId);
   // Reserving is the one thing that starts at a unit rather than at a deal, so
@@ -278,7 +280,7 @@ export function SalesTab({
         </Card></div>
 
         {open === "clients" ? (
-          <ClientsPanel projectId={projectId} canWrite={canWriteClients} onChanged={load} onClose={() => setOpen("none")} />
+          <ClientsPanel projectId={projectId} canWrite={canWriteClients} canAdmin={roles.has("system_admin") || roles.has("master_admin")} onChanged={load} onClose={() => setOpen("none")} />
         ) : null}
 
         {auxError ? <Notice tone="error">{auxError}<Button onClick={() => void load()}>Retry sales filters and gates</Button></Notice> : null}
@@ -325,6 +327,10 @@ export function SalesTab({
           </Card></DraftBoundary>
         ) : null}
 
+        {registeringSale ? <Card title={`Register buyer & mark ${registeringSale.reference} sold`}>
+          <RegisterBuyerSaleForm key={registeringSale.unitId} projectId={projectId} unitId={registeringSale.unitId} clientId={registeringSale.clientId}
+            onCancel={() => setRegisteringSale(null)} onSaved={saleId => { setRegisteringSale(null); void load(); router.push(recordHref("sale", saleId)); }} />
+        </Card> : null}
         {reserving ? (
           <Card
             title={`Reserve ${reserving.reference}`}
@@ -431,10 +437,11 @@ export function SalesTab({
                         <>
                           <IdentityCell icon="sales" name={row.unit_reference} meta={["reserved", "contract_pending", "contracted"].includes(row.commercial_status) ? "Transaction details unavailable" : "No current sale or reservation"} />
                           {canWriteClients && row.commercial_status === "available" ? (
-                            <Button small onClick={() => setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id })}>Reserve {row.unit_reference}</Button>
+                            <Button small data-leaves-editor onClick={() => { setRegisteringSale(null); setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id }); }}>Reserve {row.unit_reference}</Button>
                           ) : null}
                         </>
                       )}
+                      {roles.has("master_admin") && !row.sale_id && ["unreleased", "held", "available", "reserved"].includes(row.commercial_status) ? <Button small variant="primary" data-leaves-editor onClick={() => { setReserving(null); setRegisteringSale({ unitId: row.unit_id, reference: row.unit_reference, clientId: row.commercial_status === "reserved" ? row.client_id : null }); }}>Register buyer & mark sold</Button> : null}
                       <span className="cell-secondary"><RecordLink projectId={projectId} kind="unit" id={row.unit_id}>View unit {row.unit_reference}</RecordLink></span>
                     </th>
                     <td className="num">{money(row.total_contract_price, currencyCodeOf(row.currency_id))}</td>

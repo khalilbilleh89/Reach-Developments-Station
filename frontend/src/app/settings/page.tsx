@@ -57,7 +57,7 @@ function SettingsScreen() {
       crumbs={[{ label: "Settings", href: settingsHref() }, { label: item?.label ?? "Settings" }]}
     >
       <PageHeader icon="settings" eyebrow="Settings" title={item?.label ?? "Settings"} subtitle={item?.description} />
-      {section === "users" ? <UsersSection /> : null}
+      {section === "users" ? <UsersSection currentUserId={user.id} onOwnPermissionsChanged={refresh} /> : null}
       {section === "audit" ? <AuditSection /> : null}
       {section === "account" ? (
         <AccountSection onChanged={() => router.replace("/login/")} />

@@ -66,9 +66,10 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
           const lines = unit.area_lines.filter(line => line.physical_component === key);
           return <KeyValue key={key} label={title} value={lines.length === 1 ? `${lines[0].raw_area} ${lines[0].unit_of_measure}` : lines.length > 1 ? "Multiple measurements — review revision" : "Not measured"} />;
         })}
+        <KeyValue label="Net area" value={unit.net_area == null ? "Incomplete measurement" : `${unit.net_area} ${unit.net_area_unit ?? ""}`} />
         <KeyValue label="Gross area" value={unit.gross_area === null ? "Incomplete measurement" : `${unit.gross_area} ${unit.gross_area_unit ?? ""}`} />
       </KeyValueGrid>
-      <p className="subtle">Gross area = internal + balcony + roof garden + front garden + terrace + porches. Parking and storage are excluded. This is an unweighted physical total.</p>
+      <p className="subtle">Net area = total internal areas + balcony areas. Gross area = Net area + Roof Garden + Terrace + Front Garden + Porches. Parking and storage are excluded. These are unweighted physical totals.</p>
       {unit.gross_area_reason ? <Notice tone="info">{unit.gross_area_reason}</Notice> : null}
       {canWrite && schedules.some(s => s.status === "draft") ? <div className="button-row">{schedules.filter(s => s.status === "draft").map(s => <Button key={s.id} small disabled={busy} onClick={() => startMeasurement(s)}>Edit draft {s.revision_code}</Button>)}</div> : null}
       {measuring && areaTypes.some(t => !t.is_active && measurements[t.id] !== undefined) ? <Notice tone="warning">Retired area types are omitted from the saved draft. Record any replacement measurement using an active type.</Notice> : null}

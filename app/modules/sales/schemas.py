@@ -491,6 +491,14 @@ class SaleCreateRequest(StrictRequest):
     first_payment_required_amount: Money | None = None
 
 
+class BuyerRegistrationRequest(StrictRequest):
+    unit_id: uuid.UUID
+    client_id: uuid.UUID | None = None
+    buyer: ClientCreateRequest | None = None
+    reason: ShortReason
+    sale_date: date | None = None
+
+
 class SaleUpdateRequest(StrictRequest):
     """Draft only, and never a money column. After submission this route refuses."""
 
@@ -562,6 +570,8 @@ class SaleRead(BaseModel):
     """A contract and the commercial terms it was signed on."""
 
     model_config = _READ
+    price_per_gross_area: DecimalStr | None = None
+    gross_area_unit: str | None = None
 
     id: uuid.UUID
     project_id: uuid.UUID

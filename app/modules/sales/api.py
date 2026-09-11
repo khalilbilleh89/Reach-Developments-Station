@@ -11,8 +11,9 @@ four different rights and four different sets of preconditions, so each has its
 own route. A status column a client could set would be an approval a client
 could grant itself.
 
-There are no DELETE routes. A reservation expires, a contract is cancelled, a
-legal event is reversed by another event, a clearance is revoked and kept. The
+Only unused buyer records can be deleted by an administrator. A reservation
+expires, a contract is cancelled, a legal event is reversed by another event,
+a clearance is revoked and kept. The
 record of the wrong thing having been believed is itself a fact somebody will
 need.
 
@@ -26,11 +27,11 @@ import uuid
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
-from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession
+from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.projects.models import Project
-from app.modules.sales import service
+from app.modules.sales import deletion, registration, service
 from app.modules.sales.models import Client, HandoverRecord, Reservation, SaleContract
 from app.modules.sales.permissions import (
     SalesProject,
@@ -41,6 +42,7 @@ from app.modules.sales.schemas import (
     AdjustmentCreateRequest,
     AdjustmentRead,
     AdjustmentUpdateRequest,
+    BuyerRegistrationRequest,
     CancellationAdvanceRequest,
     CancellationCompleteRequest,
     CancellationCreateRequest,
@@ -96,6 +98,33 @@ from app.modules.sales.schemas import (
 )
 
 router = APIRouter(prefix="/projects", tags=["sales"])
+
+
+@router.post(
+    "/{project_id}/sales/buyer-registrations", response_model=SaleDetailRead, status_code=201
+)
+def register_buyer(
+    payload: BuyerRegistrationRequest, session: DbSession, actor: ActiveActor, project: SalesProject
+) -> SaleDetailRead:
+    sale = registration.register_buyer(
+        session, project=project, actor=actor, **payload.model_dump()
+    )
+    return _sale_detail(session, actor, project, sale)
+
+
+@router.delete("/{project_id}/sales/clients/{client_id}", status_code=204)
+def delete_client(
+    client_id: uuid.UUID,
+    session: DbSession,
+    actor: SystemAdmin,
+    project: SalesProject,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    deletion.delete_client(
+        session, project=project, actor=actor, client_id=client_id, reason=reason
+    )
+    return Response(status_code=204)
+
 
 _MAX_PAGE = 500
 
@@ -739,6 +768,11 @@ def _handover_detail(
     return _handover_payload(session, project, sale, handover)
 
 
+def _sale_read(session: DbSession, sale: SaleContract) -> SaleRead:
+    data = SaleRead.model_validate(sale).model_dump()
+    return SaleRead.model_validate({**data, **service.sale_gross_price(session, sale=sale)})
+
+
 def _sale_detail(
     session: DbSession, actor: ActorContext, project: Project, sale: SaleContract
 ) -> SaleDetailRead:
@@ -747,7 +781,7 @@ def _sale_detail(
     parties = service.list_sale_parties(session, sale=sale)
     cancellation = service.get_cancellation(session, project=project, sale=sale)
     return SaleDetailRead(
-        sale=SaleRead.model_validate(sale),
+        sale=_sale_read(session, sale),
         parties=(
             [SalePartyDetailRead.model_validate(party) for party in parties]
             if may_read_client_pii(actor, client=client)
@@ -787,7 +821,7 @@ def list_sales(
         unit_id=unit_id,
         client_id=client_id,
     )
-    return [SaleRead.model_validate(item) for item in sales]
+    return [_sale_read(session, item) for item in sales]
 
 
 @router.post(

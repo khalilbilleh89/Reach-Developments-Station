@@ -510,7 +510,12 @@ def get_client(
 
 
 def create_client(
-    session: Session, *, project: Project, actor: ActorContext, **fields: object
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    commit: bool = True,
+    **fields: object,
 ) -> Client:
     """Register a buyer against this project."""
     permissions.require_client_writer(actor)
@@ -519,7 +524,7 @@ def create_client(
 
     advisor_user_id = fields.pop("owner_advisor_user_id", None)
     sole_purchaser_name = fields.pop("sole_purchaser_name", None)
-    if advisor_user_id is None and "sales_advisor" in actor.role_keys:
+    if advisor_user_id is None and "sales_advisor" in actor.role_keys and not actor.is_master_admin:
         # An advisor creating a buyer owns it. Leaving it unassigned would make
         # the row invisible to the person who just created it.
         advisor_user_id = actor.user_id
@@ -583,8 +588,9 @@ def create_client(
             actor_user_id=actor.user_id,
             after=_snapshot(party, _PARTY_FIELDS),
         )
-    session.commit()
-    session.refresh(client)
+    if commit:
+        session.commit()
+        session.refresh(client)
     return client
 
 
@@ -992,6 +998,27 @@ def economic_contract_date(session: Session, *, sale: SaleContract) -> date | No
     return economic_contract_dates(session, sale_ids=[sale.id]).get(sale.id)
 
 
+def sale_gross_price(session: Session, *, sale: SaleContract) -> dict[str, Any]:
+    """Agreed unit price divided by current approved gross area, never the list price."""
+    from app.modules.inventory.physical import gross_measurement
+
+    schedule = inventory_service.approved_schedule(session, unit_id=sale.unit_id)
+    measured = gross_measurement(
+        inventory_service.area_lines(
+            session,
+            project_id=sale.project_id,
+            schedule=schedule,
+        )
+    )
+    gross = measured["gross_area"]
+    return {
+        "price_per_gross_area": _amount(sale.net_contract_price_ex_tax / gross)
+        if gross is not None and gross > 0
+        else None,
+        "gross_area_unit": measured["gross_area_unit"],
+    }
+
+
 def _quote_inputs(
     session: Session, *, reservation_id: uuid.UUID, buyer_fee_total: Decimal
 ) -> dict[str, Any]:
@@ -1324,6 +1351,7 @@ def create_reservation(
     advisor_user_id: uuid.UUID | None = None,
     deposit_required_amount: Decimal | None = None,
     buyer_fee_total: Decimal | None = None,
+    commit: bool = True,
 ) -> Reservation:
     """Open a reservation against a unit's live price, and freeze that quote.
 
@@ -1460,8 +1488,9 @@ def create_reservation(
         actor_user_id=actor.user_id,
         after=_snapshot(reservation, _RESERVATION_FIELDS),
     )
-    session.commit()
-    session.refresh(reservation)
+    if commit:
+        session.commit()
+        session.refresh(reservation)
     return reservation
 
 
@@ -1767,6 +1796,7 @@ def submit_exception(
     reservation_id: uuid.UUID,
     actor: ActorContext,
     reason: str,
+    commit: bool = True,
 ) -> Reservation:
     """Put a quote that breaches the country's thresholds forward for sanction."""
     permissions.require_reservation_writer(actor)
@@ -1797,8 +1827,9 @@ def submit_exception(
         before=before,
         after=_snapshot(reservation, _RESERVATION_FIELDS),
     )
-    session.commit()
-    session.refresh(reservation)
+    if commit:
+        session.commit()
+        session.refresh(reservation)
     return reservation
 
 
@@ -1810,6 +1841,7 @@ def decide_exception(
     actor: ActorContext,
     approved: bool,
     reason: str,
+    commit: bool = True,
 ) -> Reservation:
     """Sanction or refuse a submitted exception.
 
@@ -1855,8 +1887,9 @@ def decide_exception(
         before=before,
         after=_snapshot(reservation, _RESERVATION_FIELDS),
     )
-    session.commit()
-    session.refresh(reservation)
+    if commit:
+        session.commit()
+        session.refresh(reservation)
     return reservation
 
 
@@ -1915,6 +1948,7 @@ def waive_deposit(
     reservation_id: uuid.UUID,
     actor: ActorContext,
     reason: str,
+    commit: bool = True,
 ) -> Reservation:
     """Let a reservation proceed without its deposit, on a named signature."""
     permissions.require_financial_approver(actor)
@@ -1945,8 +1979,9 @@ def waive_deposit(
         before=before,
         after=_snapshot(reservation, _RESERVATION_FIELDS),
     )
-    session.commit()
-    session.refresh(reservation)
+    if commit:
+        session.commit()
+        session.refresh(reservation)
     return reservation
 
 
@@ -2035,6 +2070,8 @@ def activate_reservation(
     reservation_id: uuid.UUID,
     actor: ActorContext,
     effective_date: date | None = None,
+    commit: bool = True,
+    owner_override_reason: str | None = None,
 ) -> Reservation:
     """Commit the unit to this buyer. One transaction, one commit.
 
@@ -2049,6 +2086,11 @@ def activate_reservation(
     every other operation in this module takes them, because two operations
     taking two locks in two orders is a deadlock waiting for load.
     """
+    if owner_override_reason is not None:
+        if not actor.is_master_admin:
+            raise PermissionDeniedError("Only Master Administrator may override release gates.")
+        if not owner_override_reason.strip():
+            raise ValidationError("Give a reason for the owner override.")
     permissions.require_reservation_writer(actor)
     permissions.require_operational_project(project)
     reservation = get_reservation(
@@ -2073,7 +2115,7 @@ def activate_reservation(
             f"This unit is {unit.commercial_status.replace('_', ' ')}, not available."
         )
     blockers = inventory_service.release_blockers(session, unit=unit, today=today)
-    if blockers:
+    if blockers and owner_override_reason is None:
         raise ConflictError("This unit is not released for sale: " + "; ".join(blockers) + ".")
     _require_no_commitment(session, unit=unit, today=today)
     if not client.is_active:
@@ -2117,8 +2159,9 @@ def activate_reservation(
         before=before,
         after=_snapshot(reservation, _RESERVATION_FIELDS),
     )
-    session.commit()
-    session.refresh(reservation)
+    if commit:
+        session.commit()
+        session.refresh(reservation)
     return reservation
 
 
@@ -2597,6 +2640,7 @@ def create_sale(
     contract_date: date | None = None,
     spa_number: str | None = None,
     first_payment_required_amount: Decimal | None = None,
+    commit: bool = True,
 ) -> SaleContract:
     """Open a contract draft on an active reservation, copying its frozen quote.
 
@@ -2701,8 +2745,9 @@ def create_sale(
         actor_user_id=actor.user_id,
         after={**_snapshot(sale, _SALE_FIELDS), "policy_id": policy.id},
     )
-    session.commit()
-    session.refresh(sale)
+    if commit:
+        session.commit()
+        session.refresh(sale)
     return sale
 
 
@@ -2843,6 +2888,7 @@ def submit_sale(
     actor: ActorContext,
     spa_number: str | None = None,
     effective_date: date | None = None,
+    commit: bool = True,
 ) -> SaleContract:
     """Hand the unit's commitment from the reservation to the contract.
 
@@ -2946,8 +2992,9 @@ def submit_sale(
         before=before,
         after=_snapshot(sale, _SALE_FIELDS),
     )
-    session.commit()
-    session.refresh(sale)
+    if commit:
+        session.commit()
+        session.refresh(sale)
     return sale
 
 

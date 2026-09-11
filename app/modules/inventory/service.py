@@ -29,7 +29,7 @@ from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.core.patching import resolve_updates
 from app.db.base import MEASURE_EXPONENT
 from app.modules.access.dependencies import ActorContext
@@ -300,6 +300,7 @@ def _normalize_reference(reference: str) -> str:
 # --------------------------------------------------------------------------- #
 
 _PHASE_UPDATABLE = (
+    "code",
     "name",
     "sequence",
     "status",
@@ -391,6 +392,9 @@ def stage_update_phase(
     lock_project(session, phase.project_id)
     _reload(session, phase)
 
+    if "code" in updates:
+        updates["code"] = normalize_code(str(updates["code"]), label="A phase code")
+
     resulting_start = updates.get("planned_start", phase.planned_start)
     resulting_end = updates.get("planned_completion", phase.planned_completion)
     require_phase_dates_ordered(resulting_start, resulting_end)
@@ -439,9 +443,18 @@ def _refuse_deactivation_with_children(session: Session, *, phase: Phase) -> Non
 # Building and floor
 # --------------------------------------------------------------------------- #
 
-_BUILDING_UPDATABLE = ("name", "zone", "block", "entrance_wing", "sequence", "is_active")
+_BUILDING_UPDATABLE = (
+    "code",
+    "phase_id",
+    "name",
+    "zone",
+    "block",
+    "entrance_wing",
+    "sequence",
+    "is_active",
+)
 _BUILDING_CLEARABLE = frozenset({"zone", "block", "entrance_wing"})
-_FLOOR_UPDATABLE = ("label", "level_number", "sequence", "is_active")
+_FLOOR_UPDATABLE = ("code", "building_id", "label", "level_number", "sequence", "is_active")
 _FLOOR_CLEARABLE = frozenset({"level_number"})
 
 
@@ -514,6 +527,25 @@ def stage_update_building(
     updates = resolve_updates(changes, fields=_BUILDING_UPDATABLE, clearable=_BUILDING_CLEARABLE)
     lock_project(session, building.project_id)
     _reload(session, building)
+    if "code" in updates:
+        updates["code"] = normalize_code(str(updates["code"]), label="A building code")
+    if "phase_id" in updates and updates["phase_id"] != building.phase_id:
+        target = session.scalar(
+            select(Phase).where(
+                Phase.id == updates["phase_id"],
+                Phase.project_id == building.project_id,
+            )
+        )
+        if target is None:
+            raise NotFoundError("Phase not found.")
+        if not target.is_active:
+            raise ConflictError("Reactivate the destination phase first.")
+        for unit in session.scalars(
+            select(Unit)
+            .join(Floor, Unit.floor_id == Floor.id)
+            .where(Floor.building_id == building.id)
+        ):
+            invalidate_pricing(session, unit=unit)
     if updates.get("is_active") is False and building.is_active:
         active_floor = session.scalars(
             select(Floor.id).where(Floor.building_id == building.id, Floor.is_active.is_(True))
@@ -611,6 +643,19 @@ def stage_update_floor(
     updates = resolve_updates(changes, fields=_FLOOR_UPDATABLE, clearable=_FLOOR_CLEARABLE)
     lock_project(session, floor.project_id)
     _reload(session, floor)
+    if "code" in updates:
+        updates["code"] = normalize_code(
+            str(updates["code"]), label="A floor code", pattern=FLOOR_CODE_PATTERN
+        )
+    if "building_id" in updates and updates["building_id"] != floor.building_id:
+        target = get_building(
+            session, project_id=floor.project_id, building_id=updates["building_id"]
+        )
+        parent = session.get(Phase, target.phase_id)
+        if not target.is_active or not parent.is_active:
+            raise ConflictError("Reactivate the destination building and phase first.")
+        for unit in session.scalars(select(Unit).where(Unit.floor_id == floor.id)):
+            invalidate_pricing(session, unit=unit)
     if updates.get("is_active") is False and floor.is_active:
         active_unit = session.scalars(
             select(Unit.id).where(Unit.floor_id == floor.id, Unit.is_active.is_(True))
@@ -1065,13 +1110,14 @@ def update_unit(
                 raise ConflictError("Reactivate the unit's phase, building and floor first.")
 
     if "floor_id" in updates and updates["floor_id"] != unit.floor_id:
-        if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED:
+        if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED and not actor.is_master_admin:
             raise ConflictError(
                 "A unit can only be moved while it is unreleased. Return it to unreleased first."
             )
         target = get_floor(session, project_id=project.id, floor_id=updates["floor_id"])
-        if not target.is_active:
-            raise ConflictError("That floor is not active.")
+        target_building = session.get(Building, target.building_id)
+        if not target.is_active or not target_building or not target_building.is_active:
+            raise ConflictError("The destination floor and building must be active.")
         destination = phase_of_floor(session, target)
         if not destination.is_active:
             raise ConflictError("That phase is not active.")
@@ -1226,6 +1272,8 @@ def transition_commercial_status(
     reason: str | None = None,
     notes: str | None = None,
     actor: ActorContext | None = None,
+    owner_override_reason: str | None = None,
+    commit: bool = True,
 ) -> Unit:
     """Move a unit between the commercial states inventory owns.
 
@@ -1233,6 +1281,11 @@ def transition_commercial_status(
     entry all commit together, so the register can never show a status whose
     history is missing.
     """
+    if owner_override_reason is not None:
+        if actor is None or not actor.is_master_admin or actor.user_id != actor_user_id:
+            raise PermissionDeniedError("Only Master Administrator may override release gates.")
+        if not owner_override_reason.strip():
+            raise ValidationError("Give a reason for the owner override.")
     unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
     from_status = unit.commercial_status
 
@@ -1258,7 +1311,7 @@ def transition_commercial_status(
 
     if to_status == COMMERCIAL_STATUS_AVAILABLE:
         blockers = release_blockers(session, unit=unit, today=effective_date, actor=actor)
-        if blockers:
+        if blockers and owner_override_reason is None:
             raise ConflictError("This unit cannot be released yet: " + "; ".join(blockers) + ".")
 
     before = _snapshot(unit, _UNIT_FIELDS)
@@ -1287,8 +1340,9 @@ def transition_commercial_status(
         before=before,
         after=_snapshot(unit, _UNIT_FIELDS),
     )
-    session.commit()
-    session.refresh(unit)
+    if commit:
+        session.commit()
+        session.refresh(unit)
     return unit
 
 
@@ -2550,7 +2604,11 @@ def _unit_filters(
     rows they are reported alongside.
     """
     clauses: list[ColumnElement[bool]] = [Unit.project_id == project_id]
-    if commercial_status is not None:
+    if commercial_status == "sold":
+        clauses.append(Unit.commercial_status.in_(("contract_pending", "contracted")))
+    elif commercial_status == "reserved_stock":
+        clauses.append(Unit.commercial_status.in_(("reserved", "held")))
+    elif commercial_status is not None:
         clauses.append(Unit.commercial_status == commercial_status)
     if unit_type_code is not None:
         clauses.append(Unit.unit_type_code == unit_type_code)
@@ -2611,6 +2669,10 @@ def unit_register_totals(
             func.count(Unit.id).filter(Unit.commercial_status == COMMERCIAL_STATUS_AVAILABLE),
             func.count(Unit.id).filter(Unit.commercial_status == COMMERCIAL_STATUS_HELD),
             func.count(Unit.id).filter(Unit.commercial_status == COMMERCIAL_STATUS_UNRELEASED),
+            func.count(Unit.id).filter(Unit.commercial_status.in_(("reserved", "held"))),
+            func.count(Unit.id).filter(
+                Unit.commercial_status.in_(("contract_pending", "contracted"))
+            ),
         ).where(*clauses),
         session,
         project_id=project.id,
@@ -2622,6 +2684,8 @@ def unit_register_totals(
         "available_count": row[1],
         "held_count": row[2],
         "unreleased_count": row[3],
+        "reserved_count": row[4],
+        "sold_count": row[5],
     }
 
 
