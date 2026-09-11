@@ -60,7 +60,7 @@ function CapitalBands({ rows }: { rows: MoneyMetric[] }) {
       const row = rows.find((entry) => entry.currency === currency && entry.metric_code === code);
       if (!row) return null;
       return <Metric key={code} label={labels[code]} value={row.amount === null ? "Unavailable" : money(row.amount, row.currency)}
-        note={<><span>{row.availability === "available" ? `${row.contributing_project_count} contributing projects` : `${row.availability} · ${row.reason}`}</span><Link href={row.drilldown}>Inspect source</Link></>} />;
+        note={<><span>{row.availability === "available" ? `${row.contributing_project_count} contributing ${row.contributing_project_count === 1 ? "project" : "projects"}` : `${row.availability} · ${row.reason}`}</span><Link href={row.drilldown}>Inspect source</Link></>} />;
     })}</MetricGroup>
   </section>)}</div>;
 }
@@ -88,15 +88,16 @@ export function PortfolioOverview() {
         <Link href="/portfolio/?section=projects">Explore developments →</Link>
       </PositionSupport>
     </Card>
-    <Card title="Needs attention" description="Reported risks, with the reason and a route to the source." actions={<Link href="/portfolio/?section=risks">All risks →</Link>}>
-      <RiskRegister rows={data.priority_risks} />
-    </Card>
     <section className="stack" aria-label="Commercial and capital position">
-      <SectionHeader title="Commercial and capital position" />
+      <SectionHeader level={2} title="Commercial and capital position" />
       <Notice tone="info">{data.projects_with_incomplete_coverage} projects have incomplete source coverage. Amounts remain in their original currencies; partial sums exclude unavailable project amounts.</Notice>
       <CapitalBands rows={data.money} />
       <Disclosure title="All source positions" context="Commercial · collections · cash · construction · land"><MoneyRegister rows={data.money} /></Disclosure>
     </section>
+    <Card title="Needs attention" description="Reported risks, with the reason and a route to the source." actions={<Link href="/portfolio/?section=risks">All risks →</Link>}>
+      <RiskRegister rows={data.priority_risks.slice(0, 3)} />
+      <p className="footnote">Showing up to three priority risks. Open All risks for the complete register.</p>
+    </Card>
     <Disclosure title="Risk evaluation coverage" context="Unavailable is not a health assessment">
       <KeyValueGrid>{Object.entries(data.unavailable_risk_evaluations).map(([key, count]) => <KeyValue key={key} label={key.replaceAll("_", " ")} value={`${count} projects not fully evaluable`} />)}</KeyValueGrid>
       <p className="footnote">{data.source_basis}</p>
@@ -141,7 +142,7 @@ export function PortfolioProject({ id }: { id: string }) {
   const answer = useAnswer(true, () => portfolio.project(id), [id]);
   if (answer.status !== "ready") return <Pending answer={answer} />;
   const project = answer.data;
-  return <><SectionHeader title={`${project.code} · ${project.name}`} /><p>{project.status} · {project.currency} · {businessDate(project.as_of)} · Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project workspace</Link>
+  return <><SectionHeader level={2} title={`${project.code} · ${project.name}`} /><p>{project.status} · {project.currency} · {businessDate(project.as_of)} · Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project workspace</Link>
     {project.cashflow_reason_code ? <Notice tone="warning">Cashflow unavailable: source currency mismatch. Observed currencies: {project.cashflow_observed_currencies.join(", ")}. No partial cash balance is reported.</Notice> : null}
     <Card tone="command" title="Commercial position"><MetricGroup><Metric label="Eligible units" value={project.eligible_units} /><Metric label="Committed" value={project.committed_units} /><Metric label="Active sold" value={project.active_sold_units} /><Metric label="Sales penetration" value={project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`} /><Metric label="Net sales / month" value={project.sales_run_rate.average_monthly_absorption ?? "Unavailable"} note="Three complete UTC months" /></MetricGroup></Card>
     <Card title="Project risks"><RiskRegister rows={project.risks} /></Card><Card title="Source positions" flush><MoneyRegister rows={project.money} /></Card>

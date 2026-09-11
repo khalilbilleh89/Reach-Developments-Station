@@ -101,7 +101,7 @@ export function UnitRelease({
   return (
     <>
       <section>
-        <SectionHeader
+        <SectionHeader level={2}
           title="Release gates"
           description="Each gate is somebody's to give. The server refuses the rest, whoever is asking."
           actions={
@@ -157,7 +157,7 @@ export function UnitRelease({
       </section>
 
       <section>
-        <SectionHeader title="Commercial status" />
+        <SectionHeader level={2} title="Commercial status" />
         <p className="section-description">
           Currently{" "}
           <Badge tone={statusTone(unit.commercial_status)}>

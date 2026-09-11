@@ -17,7 +17,7 @@ export function SaleOverview({ projectId, sale, reservation, client, roles, onOp
   const codeOf = useCurrencyCode();
   const account = useAnswer<CollectionSaleSummary>(!!sale && sale.sale.status !== "draft" && hasAnyRole(roles, COLLECTION_READERS), () => collections.account(projectId, sale!.sale.id), [projectId, sale?.sale.id]);
   return <div className="sale-overview">
-    <section><SectionHeader title="Transaction position" actions={<Button small onClick={() => onOpenTab(sale ? "contract" : "commercial")}>Inspect terms</Button>} />
+    <section><SectionHeader level={2} title="Transaction position" actions={<Button small onClick={() => onOpenTab(sale ? "contract" : "commercial")}>Inspect terms</Button>} />
       <KeyValueGrid columns={2}>
         <KeyValue label="Buyer" value={client?.display_name ?? "Not returned by source"} />
         <KeyValue label="Governing record" value={sale?.sale.spa_number ?? sale?.sale.sale_number ?? reservation?.reservation.reservation_number} />
@@ -25,6 +25,6 @@ export function SaleOverview({ projectId, sale, reservation, client, roles, onOp
       </KeyValueGrid>
       {!sale ? <Notice tone="info">Complete the reservation&apos;s deposit and approval gates before creating the Sale Contract. Its SPA schedule is prepared after the contract reaches an eligible state.</Notice> : null}
     </section>
-    {account.status !== "off" ? <section><SectionHeader title="Collections position" actions={<Button small onClick={() => onOpenTab("collections")}>Account detail</Button>} /><CollectionSnapshot answer={account} /></section> : null}
+    {account.status !== "off" ? <section><SectionHeader level={2} title="Collections position" actions={<Button small onClick={() => onOpenTab("collections")}>Account detail</Button>} /><CollectionSnapshot answer={account} /></section> : null}
   </div>;
 }

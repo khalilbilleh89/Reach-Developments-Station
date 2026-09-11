@@ -13,10 +13,10 @@ import { management } from "@/lib/api/management";
 import type { ActionSource, ActionStatus, ManagementAction } from "@/lib/api/management";
 import { businessDate, eventTime } from "@/lib/format";
 
-export function ProjectChoice({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function ProjectChoice({ value, onChange, emptyLabel = "Select a development" }: { value: string; onChange: (value: string) => void; emptyLabel?: string }) {
   const [offset, setOffset] = useState(0);
   const answer = useAnswer(true, () => management.projects(offset), [offset]);
-  return <div className="stack"><Field label="Project"><select className="input" value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select a development</option>{value && answer.status === "ready" && !answer.data.items.some((row) => row.id === value) ? <option value={value}>Selected development</option> : null}{answer.status === "ready" ? answer.data.items.map((project) => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>) : null}</select></Field>
+  return <div className="stack"><Field label="Project"><select className="input" value={value} onChange={(event) => onChange(event.target.value)}><option value="">{emptyLabel}</option>{value && answer.status === "ready" && !answer.data.items.some((row) => row.id === value) ? <option value={value}>Selected development</option> : null}{answer.status === "ready" ? answer.data.items.map((project) => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>) : null}</select></Field>
     {answer.status === "failed" ? <span className="field-error">{answer.message}</span> : null}
     {answer.status === "ready" && answer.data.total > 100 ? <ButtonRow><Button small disabled={!offset} onClick={() => setOffset(offset - 100)}>Previous projects</Button><Button small disabled={offset + 100 >= answer.data.total} onClick={() => setOffset(offset + 100)}>More projects</Button></ButtonRow> : null}
   </div>;

@@ -281,6 +281,21 @@ textarea {
   font-weight: 600;
 }
 
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 100;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-control);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -5068,6 +5083,9 @@ a:not([class]):hover { color: var(--accent-hover); }
 }
 
 @media (width < 48rem) {
+  .register-position .position { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .register-position .position-figure-lead { grid-column: 1 / -1; }
+
   .drawer-state { padding: 0 var(--space-4); }
   .drawer-state .standing { padding: var(--space-2) 0; }
   .drawer-state .standing-label { margin-bottom: var(--space-1); }

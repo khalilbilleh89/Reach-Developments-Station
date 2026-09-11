@@ -60,7 +60,7 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
   return <div className="stack">
     {error ? <Notice tone="error">{error}</Notice> : null}
     <section>
-      <SectionHeader title="Physical measurements" actions={canWrite ? <Button small disabled={busy} onClick={() => startMeasurement()}>New measurement</Button> : undefined} />
+      <SectionHeader level={2} title="Physical measurements" actions={canWrite ? <Button small disabled={busy} onClick={() => startMeasurement()}>New measurement</Button> : undefined} />
       <KeyValueGrid columns={3}>
         {PHYSICAL_COMPONENTS.map(([key, title]) => {
           const lines = unit.area_lines.filter(line => line.physical_component === key);
@@ -91,19 +91,19 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </form> : null}
     </section>
     <section>
-      <SectionHeader title="Record completeness" />
+      <SectionHeader level={2} title="Record completeness" />
       <KeyValueGrid columns={2}><KeyValue label="Inventory requirements" value={`${unit.completeness_percent}%`} /><KeyValue label="Release" value={unit.release_eligible ? "Eligible" : "Requirements outstanding"} /></KeyValueGrid>
       {unit.missing_requirements.length ? <ul>{unit.missing_requirements.map(item => <li key={item}>{item}</li>)}</ul> : <p>Inventory requirements are complete.</p>}
       <p className="subtle">Document links and descriptive features do not replace drawing, legal or pricing approvals. Gross measurement completeness is shown separately above.</p>
     </section>
     <section>
-      <SectionHeader title="Unit features" />
+      <SectionHeader level={2} title="Unit features" />
       <p className="subtle">Descriptive features can be added freely. Priced attributes remain in the governed unit fields.</p>
       {!loaded ? <p>{error ? "Features unavailable." : "Loading features…"}</p> : features.length === 0 ? <p className="subtle">No additional features recorded.</p> : <ul className="chip-list">{features.map(f => <li key={f.id} className="chip"><span>{f.label}{f.is_active ? "" : " · retired"}</span>{canWrite && f.is_active ? <Button small disabled={busy} onClick={() => void save(() => inventory.retireUnitFeature(projectId, unit.id, f.id))}>Retire</Button> : null}</li>)}</ul>}
       {canWrite ? <form onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.addUnitFeature(projectId, unit.id, { label }); setLabel(""); }); }}><Field label="New feature"><input className="input" required maxLength={200} disabled={busy} value={label} onChange={e => setLabel(e.target.value)} /></Field><FormActions><Button type="submit" disabled={busy}>Add feature</Button></FormActions></form> : null}
     </section>
     <section>
-      <SectionHeader title="Unit documents" />
+      <SectionHeader level={2} title="Unit documents" />
       <p className="subtle">Link the unit plans and specifications in your document system. Access to the linked file is controlled there.</p>
       {!loaded ? <p>{error ? "Documents unavailable." : "Loading documents…"}</p> : documents.length === 0 ? <p className="subtle">No unit documents linked.</p> : <ul>{documents.map(d => <li key={d.id}><a href={d.url} target="_blank" rel="noopener noreferrer">{d.title}</a>{d.revision ? ` · ${d.revision}` : ""}{d.is_active ? "" : " · retired"}{canWrite && d.is_active ? <Button small disabled={busy} onClick={() => void save(() => inventory.retireUnitDocument(projectId, unit.id, d.id))}>Retire</Button> : null}</li>)}</ul>}
       {canWrite ? <form onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.addUnitDocument(projectId, unit.id, { ...doc, revision: doc.revision || null }); setDoc({ title: "", url: "", revision: "" }); }); }}><FieldRow columns={3}>
@@ -113,7 +113,7 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </FieldRow><FormActions><Button type="submit" disabled={busy}>Link document</Button></FormActions></form> : null}
     </section>
     {canWrite ? <section>
-      <SectionHeader title="Attach parking or storage" actions={<Button small disabled={busy} onClick={() => setAssetForm(!assetForm)}>Add attached asset</Button>} />
+      <SectionHeader level={2} title="Attach parking or storage" actions={<Button small disabled={busy} onClick={() => setAssetForm(!assetForm)}>Add attached asset</Button>} />
       {assetForm ? <form onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.createSubAsset(projectId, { ...asset, area: asset.area || null, linked_unit_id: unit.id, floor_id: unit.floor_id, transfer_mode: "attached" }); setAssetForm(false); setAsset({ asset_reference: "", asset_type: "parking", area: "" }); }); }}>
         <FieldRow columns={3}><Field label="Asset reference"><input className="input" required maxLength={64} disabled={busy} value={asset.asset_reference} onChange={e => setAsset({ ...asset, asset_reference: e.target.value })} /></Field><Field label="Asset type"><select className="input" disabled={busy} value={asset.asset_type} onChange={e => setAsset({ ...asset, asset_type: e.target.value })}><option value="parking">Parking</option><option value="storage">Storage</option></select></Field><Field label="Area (optional)"><input className="input" inputMode="decimal" disabled={busy} value={asset.area} onChange={e => setAsset({ ...asset, area: e.target.value })} /></Field></FieldRow><FormActions><Button type="submit" disabled={busy}>Attach asset</Button></FormActions>
       </form> : null}

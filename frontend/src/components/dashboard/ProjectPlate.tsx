@@ -58,7 +58,7 @@ export function ProjectPlate({ project, actions, unitCount }: { project: Project
               <InlineMetaItem label="Type">{project.project_type_code}</InlineMetaItem>
             ) : null}
             {programme ? <InlineMetaItem label="Programme">{programme}</InlineMetaItem> : null}
-            {unitCount !== undefined ? <InlineMetaItem label="Inventory">{unitCount} units</InlineMetaItem> : null}
+            {unitCount !== undefined ? <InlineMetaItem label="Inventory">{unitCount} {unitCount === 1 ? "unit" : "units"}</InlineMetaItem> : null}
             <InlineMetaItem label="Base">{project.base_currency_code ?? "—"}</InlineMetaItem>
             {project.reporting_currency_code && project.reporting_currency_code !== project.base_currency_code ? (
               <InlineMetaItem label="Reporting">{project.reporting_currency_code}</InlineMetaItem>

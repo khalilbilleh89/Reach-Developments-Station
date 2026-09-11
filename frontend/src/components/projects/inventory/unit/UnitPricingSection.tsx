@@ -111,7 +111,7 @@ export function UnitPricingSection({
 
       {pending ? (
         <section>
-          <SectionHeader
+          <SectionHeader level={2}
             title="Price in progress"
             actions={
               <Badge tone={VERSION_TONES[pending.status] ?? "neutral"}>
@@ -153,7 +153,7 @@ export function UnitPricingSection({
       ) : null}
 
       <section>
-        <SectionHeader
+        <SectionHeader level={2}
           title="Live list price"
           actions={
             active ? (
@@ -198,7 +198,7 @@ export function UnitPricingSection({
                 size="sm"
               />
             </MetricGroup>
-            <h4 className="section-heading">How it was built</h4>
+            <h3 className="section-heading">How it was built</h3>
             <PriceWaterfall version={active} />
           </>
         )}
@@ -206,7 +206,7 @@ export function UnitPricingSection({
 
       {unitPricing.history.length > 1 ? (
         <section>
-          <SectionHeader title="Price history" />
+          <SectionHeader level={2} title="Price history" />
           <TableScroll label="Price history" compact>
             <thead>
               <tr>

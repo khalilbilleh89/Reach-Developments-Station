@@ -19,6 +19,7 @@ import {
   Button,
   Card,
   DataToolbar,
+  Disclosure,
   IdentityCell,
   EmptyState,
   FormActions,
@@ -235,7 +236,7 @@ export function SalesTab({
         <div className="register-position"><Card
           tone={totals ? "command" : undefined}
           title="Commercial pipeline"
-          description={totals ? "Current units matching the search and filters, across all pages." : undefined}
+          description={totals ? "Authorized units and readable transactions matching the search and filters, across all pages." : undefined}
         >
           {totals === null ? (
             <Loading label="Loading sales…" shape="metrics" />
@@ -248,10 +249,15 @@ export function SalesTab({
                   value={
                     totals.mixed_currency
                       ? "Not summed"
-                      : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
+                      : totals.currency_id === null
+                        ? "No readable contract value"
+                        : money(totals.contracted_value, currencyCodeOf(totals.currency_id))
                   }
                   note={totals.mixed_currency ? "Contracts in more than one currency" : "Live contracts, ex tax"}
                 />
+              </Position>
+              <Disclosure title="Pipeline details" context={`Contracted: ${totals.contracted} of ${totals.units}`}>
+              <Position compact>
                 <PositionFigure
                   label="Contracted"
                   value={`${totals.contracted} of ${totals.units}`}
@@ -266,6 +272,7 @@ export function SalesTab({
                 <PositionSupportItem label="Returned" value={totals.returned} />
                 <PositionSupportItem label="Open cancellations" value={totals.open_cancellations} />
               </PositionSupport>
+              </Disclosure>
             </>
           )}
         </Card></div>
@@ -278,7 +285,7 @@ export function SalesTab({
         {open === "policy" && policy ? (
           <DraftBoundary dirty={JSON.stringify(policy) !== JSON.stringify(savedPolicy)} busy={busy} onDiscard={() => setPolicy(savedPolicy)}><Card
             title="Sales gates"
-            description="Six named choices this project makes about what a sale must clear. Not a rules engine, and never becoming one."
+            description="Choose the checks a sale must pass before activation."
             actions={<Button variant="quiet" data-leaves-editor onClick={() => setOpen("none")}>Close</Button>}
           >
             <form
@@ -337,7 +344,6 @@ export function SalesTab({
           </Card>
         ) : null}
 
-        <p className="hint">Current position totals cover every authorized unit matching the search and filters, across all pages. Historical transactions are listed separately.</p>
         <DataToolbar
           framed
           activeSummary={[phases.find((phase) => phase.id === filters.phase_id)?.name, filters.commercial_status ? statusLabel(filters.commercial_status) : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
@@ -397,12 +403,12 @@ export function SalesTab({
               <thead>
                 <tr>
                   <th scope="col">Sale / reservation</th>
-                  <th scope="col">Commercial</th>
-                  <th scope="col">Reservation</th>
-                  <th scope="col">Contract</th>
                   <th scope="col" className="num">
                     Contract price
                   </th>
+                  <th scope="col">Commercial</th>
+                  <th scope="col">Reservation</th>
+                  <th scope="col">Contract</th>
                   <th scope="col">Legal</th>
                   <th scope="col">Next legal step</th>
                   <th scope="col">Handover</th>
@@ -423,7 +429,7 @@ export function SalesTab({
                         )
                       ) : (
                         <>
-                          <IdentityCell icon="sales" name={row.unit_reference} meta="No current sale or reservation" />
+                          <IdentityCell icon="sales" name={row.unit_reference} meta={["reserved", "contract_pending", "contracted"].includes(row.commercial_status) ? "Transaction details unavailable" : "No current sale or reservation"} />
                           {canWriteClients && row.commercial_status === "available" ? (
                             <Button small onClick={() => setReserving({ unitId: row.unit_id, reference: row.unit_reference, currencyId: row.currency_id })}>Reserve {row.unit_reference}</Button>
                           ) : null}
@@ -431,6 +437,7 @@ export function SalesTab({
                       )}
                       <span className="cell-secondary"><RecordLink projectId={projectId} kind="unit" id={row.unit_id}>View unit {row.unit_reference}</RecordLink></span>
                     </th>
+                    <td className="num">{money(row.total_contract_price, currencyCodeOf(row.currency_id))}</td>
                     <td>
                       <Badge tone={statusTone(row.commercial_status)}>{statusLabel(row.commercial_status)}</Badge>
                     </td>
@@ -465,7 +472,6 @@ export function SalesTab({
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td className="num">{money(row.total_contract_price, currencyCodeOf(row.currency_id))}</td>
                     <td>
                       <StatusDot tone={statusTone(row.legal_status)}>{statusLabel(row.legal_status)}</StatusDot>
                     </td>

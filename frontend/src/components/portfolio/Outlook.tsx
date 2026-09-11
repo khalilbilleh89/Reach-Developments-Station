@@ -94,7 +94,7 @@ export function PortfolioOutlook() {
 
   return <div className="stack"><DataToolbar onReset={project || kind || horizon !== 90 || offset ? () => change({ project: "", horizon: "90", kind: "", offset: "", observation: "" }) : undefined} activeSummary={`${project ? "Selected development" : "All authorized developments"} · ${horizon} days · ${groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates"}`}>
 
-    <ProjectChoice value={project} onChange={project => change({ project, offset: "", observation: "" })} />
+    <ProjectChoice emptyLabel="All authorized developments" value={project} onChange={project => change({ project, offset: "", observation: "" })} />
     <ToolbarFilter label="Outlook horizon"><select className="input" value={horizon} onChange={(event) => { setHorizon(Number(event.target.value)); setOffset(0); }}>{[30, 60, 90].map((days) => <option key={days} value={days}>{days} days</option>)}</select></ToolbarFilter>
 
     <ToolbarFilter label="Outlook source"><select className="input" value={kind} onChange={(event) => { setKind(event.target.value); setOffset(0); }}><option value="">All observations · date order</option>{groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></ToolbarFilter>
@@ -103,7 +103,7 @@ export function PortfolioOutlook() {
 
     {answer.status === "ready" ? <><p>As of {businessDate(answer.data.as_of)} through {businessDate(answer.data.horizon_end)} · {answer.data.authorized_project_count} authorized developments</p>
 
-      <SectionHeader title={groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates and owner observations"} />
+      <SectionHeader level={2} title={groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates and owner observations"} />
 
       <Notice tone="info">{kind === "cashflow_forecast" ? answer.data.cashflow_basis : answer.data.date_basis}</Notice>
 
