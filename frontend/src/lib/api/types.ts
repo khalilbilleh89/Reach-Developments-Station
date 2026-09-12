@@ -2799,6 +2799,12 @@ export interface CashflowDevelopmentMovement {
 }
 
 export interface PreLaunchExpense extends CashflowDevelopmentMovement {
+  can_edit: boolean;
+  edit_blocker: string | null;
+  can_remove: boolean;
+  removal_blocker: string | null;
+  removed_without_confirmation: boolean;
+  reversal_reason: string | null;
   can_confirm: boolean;
   confirmation_blocker: string | null;
 }

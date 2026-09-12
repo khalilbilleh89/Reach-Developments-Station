@@ -21,6 +21,7 @@ from tests.modules.conftest import (
     set_cashflow_line,
 )
 from tests.modules.test_portfolio_scale import copy_project
+from tests.modules.test_prelaunch import editable
 from tests.modules.test_prelaunch import payload as expense_payload
 
 
@@ -260,7 +261,13 @@ def test_cashflow_mismatch_removes_both_candidates_and_keeps_coverage(
     expenses = f"/api/v1/projects/{project_id}/pre-launch/expenses"
     expense = finance_client.post(expenses, json=expense_payload(currency_id))
     assert expense.status_code == 201, expense.text
-    assert cfo_client.post(f"{expenses}/{expense.json()['id']}/confirm", json={}).status_code == 200
+    assert (
+        cfo_client.post(
+            f"{expenses}/{expense.json()['id']}/confirm",
+            json={"expected": editable(expense.json())},
+        ).status_code
+        == 200
+    )
     url = "/api/v1/portfolio/risks?limit=100"
     cash_codes = {"ACTUAL_CASH_DEFICIT", "FORECAST_CASH_DEFICIT"}
     safe = finance_client.get(url).json()

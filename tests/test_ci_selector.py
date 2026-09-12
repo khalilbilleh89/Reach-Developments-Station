@@ -167,6 +167,7 @@ def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "unit_economics",
     ]
@@ -198,6 +199,7 @@ def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "sales",
         "unit_economics",
@@ -220,6 +222,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "pricing",
         "project_analysis",
         "sales",
@@ -244,6 +247,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "pricing",
         "project_analysis",
         "sales",
@@ -270,6 +274,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "pricing",
         "project_analysis",
         "sales",
@@ -315,6 +320,7 @@ def test_unit_economics_is_not_reached_from_collections() -> None:
         "cutover",
         "management_reporting",
         "portfolio",
+        "prelaunch",
         "project_analysis",
     ]
     assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
@@ -655,6 +661,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "pricing",
         "project_analysis",
         "sales",
@@ -669,6 +676,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "sales",
         "unit_economics",
@@ -681,6 +689,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "unit_economics",
     ]
@@ -693,6 +702,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cutover",
         "management_reporting",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "unit_economics",
     ]
@@ -703,6 +713,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cutover",
         "management_reporting",
         "portfolio",
+        "prelaunch",
         "project_analysis",
     ]
     assert selector.closure({"unit_economics"}) == ["unit_economics"]
@@ -714,6 +725,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "cutover",
         "management_reporting",
         "portfolio",
+        "prelaunch",
         "project_analysis",
     ]
     assert selector.closure({"cutover"}) == ["cutover"]
@@ -737,6 +749,7 @@ def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
         "cutover",
         "management_reporting",
         "portfolio",
+        "prelaunch",
         "project_analysis",
     ]
     assert "tests/modules/test_collection_receipts.py" in result.paths
@@ -760,6 +773,7 @@ def test_a_payment_plan_change_now_reaches_collections() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "unit_economics",
     ]
@@ -780,6 +794,7 @@ def test_a_sales_change_reaches_collections_transitively() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "project_analysis",
         "sales",
         "unit_economics",
@@ -799,6 +814,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
         "management_reporting",
         "payment_plans",
         "portfolio",
+        "prelaunch",
         "pricing",
         "project_analysis",
         "sales",

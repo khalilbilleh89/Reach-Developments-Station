@@ -30,8 +30,9 @@ Governed by [Engineering Rules](ENGINEERING_RULES.md),
    record type for missing edit/delete actions, beginning with Pre-Launch expenses.
    Publish the findings and bounded implementation plan before applying fixes;
    see the [source audit and proposed PRs](RECORD_CORRECTION_AUDIT.md).
-   Audit findings are documented; next implementation is PR-REC-01, Pre-Launch
-   expense correction and removal. Fixes and operator acceptance remain pending.
+   PR-REC-01 implements Pre-Launch expense correction and removal as a candidate;
+   see [candidate acceptance](REC01_ACCEPTANCE.md). Review, full CI and operator
+   acceptance remain pending. Other record-family fixes are separate.
 7. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
    filters; Portfolio return-to-page; Cashflow tab/date/forecast restoration.
 8. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project

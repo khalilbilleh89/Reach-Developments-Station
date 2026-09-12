@@ -72,6 +72,7 @@ function mount(file, name, dependencies, props) {
   const slots = []; let cursor = 0; let effects = [];
   const same = (a, b) => a?.length === b.length && b.every((v, i) => Object.is(v, a[i]));
   const react = {
+    useRef(initial) { const i = cursor++; slots[i] ??= { current: initial }; return slots[i]; },
     useState(initial) { const i = cursor++; slots[i] ??= { value: typeof initial === "function" ? initial() : initial }; return [slots[i].value, v => { slots[i].value = typeof v === "function" ? v(slots[i].value) : v; }]; },
     useMemo(fn, deps) { const i = cursor++; if (!same(slots[i]?.deps, deps)) slots[i] = { deps, value: fn() }; return slots[i].value; },
     useCallback(fn, deps) { return react.useMemo(() => fn, deps); },
@@ -104,6 +105,49 @@ function apiFixture() {
   const api = new Proxy({}, { get: (_, name) => async () => { calls.push(name); if (failed) throw new ApiError("Temporary read failure"); return []; } });
   return { ApiError, api, calls, recover() { failed = false; } };
 }
+
+test("Pre-Launch keeps a failed removal open, refreshes eligibility and blocks duplicate submits", async () => {
+  const row = { id: "expense", category: "utilities", amount: "1250.25", movement_date: "2026-01-01",
+    notes: "Water fee", counterparty_reference: null, invoice_reference: null, evidence_reference: null,
+    status: "recorded", can_edit: true, can_remove: true, currency_code: "USD" };
+  const calls = []; let reject; let reads = 0;
+  class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
+  const prelaunch = {
+    register: async () => { reads++; return { expenses: [row], recorded_amount: "1250.25", confirmed_paid_amount: "0" }; },
+    remove: (...args) => { calls.push(args); return new Promise((_, no) => { reject = no; }); },
+  };
+  const render = mount("projects/PreLaunchTab", "PreLaunchTab", {
+    "@/lib/api": { ApiError, prelaunch }, "@/lib/format": landFormat,
+  }, { projectId: "project", currencyId: "currency", currencyCode: "USD", roles: [] });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Remove").props.onClick();
+  const dialog = nodes(render()).find(n => n.type === "PromptDialog");
+  dialog.props.onSubmit("Duplicate"); dialog.props.onSubmit("Duplicate");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][2].expected.amount, "1250.25");
+  reject(new ApiError(409, "Expense changed")); await settle();
+  const failed = nodes(render()).find(n => n.type === "PromptDialog");
+  assert.equal(failed.props.error, "Expense changed");
+  assert.equal(failed.props.busy, false);
+  assert.equal(reads, 2);
+});
+
+test("Pre-Launch editor sends only editable fields and retains corrected values after an error", () => {
+  const initial = { id: "expense", category: "utilities", amount: "1250.25", movement_date: "2026-01-01",
+    notes: "Water fee", counterparty_reference: "Authority", invoice_reference: "INV", evidence_reference: "proof" };
+  let submitted;
+  const props = { initial, currencyId: "currency", currencyCode: "USD", busy: false, error: null,
+    onCancel() {}, onSubmit(body) { submitted = body; } };
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {}, props);
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("99.99");
+  nodes(render()).find(n => n.type === "FormDialog").props.onSubmit();
+  assert.equal(submitted.amount, "99.99");
+  assert.equal(submitted.invoice_reference, "INV");
+  assert.ok(!("currency_id" in submitted));
+  props.error = "Validation refused";
+  assert.equal(nodes(render()).find(n => n.type === "MoneyInput").props.value, "99.99");
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Validation refused"));
+});
 for (const component of ["ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
   test(`${component}: failed read retries GETs and accepts a recovered empty response`, async () => {
     const f = apiFixture();

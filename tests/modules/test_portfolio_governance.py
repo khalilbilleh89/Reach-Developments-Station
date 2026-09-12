@@ -17,6 +17,7 @@ from tests.modules.conftest import (
     set_cashflow_line,
 )
 from tests.modules.test_portfolio import metric
+from tests.modules.test_prelaunch import editable
 from tests.modules.test_prelaunch import payload as expense_payload
 
 
@@ -99,7 +100,11 @@ def test_prelaunch_commission_and_consultant_independence(
     created = finance_client.post(expense_url, json=expense_payload(currency_id))
     assert created.status_code == 201, created.text
     assert (
-        cfo_client.post(f"{expense_url}/{created.json()['id']}/confirm", json={}).status_code == 200
+        cfo_client.post(
+            f"{expense_url}/{created.json()['id']}/confirm",
+            json={"expected": editable(created.json())},
+        ).status_code
+        == 200
     )
     after = finance_client.get(url).json()
     assert Decimal(metric(after, "unrestricted_cash")["amount"]) == Decimal(

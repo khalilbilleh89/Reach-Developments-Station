@@ -1,6 +1,8 @@
 # Record editing and removal audit — implementation plan
 
-Status: source audit and proposed sequence, before implementation.
+Status: baseline source audit and approved sequence. PR-REC-01 now has an
+[implementation candidate](REC01_ACCEPTANCE.md); the findings below describe
+the pre-fix base, not release acceptance. Other findings remain queued.
 Base: `97e08d3af058b19e7197648891eb10fce109b40e`, merged Land #292 and Sales #293.
 Governed by [Engineering Rules](ENGINEERING_RULES.md) and the
 [owner-directed finish roadmap](UX_MVP_FINISH_2026_09_11.md).
