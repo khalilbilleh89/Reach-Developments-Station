@@ -85,3 +85,101 @@ test("ordinary Sales workflow has a Sales API boundary and Inventory has no comm
   assert.match(sales,/sales\.transactions\(/);
   assert.doesNotMatch(sales,/sales\.register\(/);
 });
+
+const formatExports = {};
+runInNewContext(`(function(exports){${ts.transpileModule(readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText}\n})`)(formatExports);
+const inventoryUnit = {...unit, unit_type:"2BR", building_name:"Building A", floor_name:"Floor 3", phase_name:"Phase 1", gross_area:"118.00", area_unit:"m²"};
+const textOf = tree => {
+  if (tree == null || typeof tree === "boolean") return "";
+  if (typeof tree !== "object") return String(tree);
+  if (Array.isArray(tree)) return tree.map(textOf).join(" ");
+  return textOf(tree.props?.children);
+};
+const button = (view, label) => nodes(view.render()).find(node => ["Button", "button"].includes(node.type) && textOf(node).includes(label));
+function picker() {
+  const pending = []; const selected = []; let cancelled = false;
+  const view = mount("SalesUnitPicker", "SalesUnitPicker", {
+    "@/lib/api": {ApiError, sales:{unitOptions:(project, query) => new Promise((resolve,reject)=>pending.push({project,query,resolve,reject}))}},
+    "@/lib/format": formatExports,
+  }, {projectId:"project", onSelect:value=>selected.push(value), onCancel:()=>{cancelled=true;}});
+  const search = value => {nodes(view.render()).find(node=>node.type==="input").props.onChange({target:{value}}); view.render(); view.flush();};
+  return {view,pending,selected,search,cancelled:()=>cancelled};
+}
+
+test("browse-first options display governed details and select the exact unit", async()=>{
+  const f=picker(); f.view.render(); f.view.flush();
+  assert.equal(f.pending[0].query.search, ""); assert.equal(f.pending[0].query.offset,"0");
+  f.pending[0].resolve({items:[inventoryUnit],next_offset:null}); await settle();
+  const option=button(f.view,"A-301");
+  for(const value of ["2BR","Building A","Floor 3","Phase 1","118.00 m²","JOD 150,000.00","ex tax"]) assert.ok(textOf(option).includes(value));
+  assert.equal(option.type,"button"); assert.equal(option.props.type,"button");
+  option.props.onClick(); assert.equal(f.selected[0],inventoryUnit);
+  assert.equal(button(f.view,"Load more units"),undefined);
+  button(f.view,"Cancel").props.onClick(); assert.ok(f.cancelled());
+});
+
+test("load more appends, deduplicates and retains units through a recoverable failure",async()=>{
+  const f=picker(); f.view.render(); f.view.flush();
+  f.pending[0].resolve({items:[inventoryUnit],next_offset:30}); await settle();
+  button(f.view,"Load more units").props.onClick(); f.view.render(); f.view.flush();
+  assert.equal(f.pending[1].query.offset,"30");
+  assert.equal(button(f.view,"Load more units").props.disabled,true);
+  assert.ok(button(f.view,"A-301"));
+  f.pending[1].reject(new ApiError("Temporary failure")); await settle();
+  assert.ok(button(f.view,"A-301")); assert.doesNotMatch(textOf(f.view.render()),/No units|No matching/);
+  button(f.view,"Retry available units").props.onClick(); f.view.render(); f.view.flush();
+  assert.equal(f.pending[2].query.offset,"30");
+  f.pending[2].resolve({items:[inventoryUnit,{...inventoryUnit,unit_id:"second",unit_reference:"A-302",unit_type:null,gross_area:null}],next_offset:null}); await settle();
+  assert.equal(nodes(f.view.render()).filter(node=>node.type==="button").length,2);
+  assert.doesNotMatch(textOf(button(f.view,"A-302")),/2BR|118|0 m²/);
+  assert.ok(button(f.view,"A-301")); assert.equal(button(f.view,"Load more units"),undefined);
+});
+
+test("server search resets offset, hides prior results immediately and ignores late queries",async()=>{
+  const f=picker(); f.view.render(); f.view.flush();
+  f.pending[0].resolve({items:[inventoryUnit],next_offset:30}); await settle();
+  button(f.view,"Load more units").props.onClick(); f.view.render(); f.view.flush();
+  f.search("Building B"); assert.equal(button(f.view,"A-301"),undefined);
+  assert.equal(f.pending[2].query.offset,"0"); assert.equal(f.pending[2].query.search,"Building B");
+  f.search("Phase 2");
+  f.pending[3].resolve({items:[{...inventoryUnit,unit_reference:"B-101"}],next_offset:null}); await settle();
+  f.pending[2].resolve({items:[inventoryUnit],next_offset:30});
+  f.pending[1].resolve({items:[inventoryUnit],next_offset:60}); await settle();
+  assert.ok(button(f.view,"B-101")); assert.equal(button(f.view,"A-301"),undefined);
+});
+
+for(const query of ["", "unknown", "   "]) test(`empty state for ${JSON.stringify(query)} waits for exhausted eligible inventory`,async()=>{
+  const f=picker(); f.search(query);
+  f.pending[0].resolve({items:[],next_offset:30}); await settle();
+  assert.equal(f.pending[1].query.offset,"30"); assert.doesNotMatch(textOf(f.view.render()),/No units|No matching/);
+  f.pending[1].resolve({items:[],next_offset:null}); await settle();
+  assert.ok(textOf(f.view.render()).includes(query.trim() ? "No matching available units" : "No units are currently available for reservation"));
+});
+
+test("initial failure preserves search and retry can discover units after sparse batches",async()=>{
+  const f=picker(); f.search("Building A"); f.pending[0].reject(new ApiError("Unavailable")); await settle();
+  assert.doesNotMatch(textOf(f.view.render()),/No units|No matching/);
+  assert.equal(nodes(f.view.render()).find(node=>node.type==="input").props.value,"Building A");
+  button(f.view,"Retry available units").props.onClick(); f.view.render(); f.view.flush();
+  assert.equal(f.pending[1].query.search,"Building A");
+  f.pending[1].resolve({items:[],next_offset:30}); await settle();
+  f.pending[2].resolve({items:[inventoryUnit],next_offset:null}); await settle();
+  assert.ok(button(f.view,"A-301"));
+});
+
+test("New Reservation forwards the selected option to both flows and Change unit remounts a fresh picker",async()=>{
+  const view=mount("NewReservation","NewReservation",{"@/lib/format":formatExports},{projectId:"project",allowOwner:true,onCreated(){},onSaleCreated(){},onCancel(){}});
+  nodes(view.render()).find(node=>node.type==="SalesUnitPicker").props.onSelect(inventoryUnit);
+  let tree=nodes(view.render());
+  assert.equal(tree.find(node=>node.type==="ReservationForm").props.unitOption,inventoryUnit);
+  assert.ok(/Inventory list price:\s+JOD 150,000.00/.test(textOf(view.render())));
+  button(view,"Owner:").props.onClick();
+  assert.equal(nodes(view.render()).find(node=>node.type==="RegisterBuyerSaleForm").props.unitOption,inventoryUnit);
+  button(view,"Prepare standard reservation").props.onClick();
+  nodes(view.render()).find(node=>node.type==="ReservationForm").props.onChangeUnit();
+  assert.ok(nodes(view.render()).find(node=>node.type==="SalesUnitPicker"));
+  assert.equal(nodes(view.render()).find(node=>node.type==="ReservationForm"),undefined);
+  const refreshed=picker(); refreshed.view.render(); refreshed.view.flush();
+  refreshed.pending[0].resolve({items:[],next_offset:null}); await settle();
+  assert.equal(button(refreshed.view,"A-301"),undefined);
+});
