@@ -836,3 +836,53 @@ class LaunchRegister(BaseModel):
     unpriced_count: int
     totals: list[LaunchCurrencyTotal]
     rows: list[LaunchPriceRow]
+
+
+InventoryCategory = Literal[
+    "unit_type",
+    "floor_band",
+    "orientation",
+    "view_class",
+    "furnishing_specification",
+    "accessibility",
+    "garden_class",
+    "sub_asset_subtype",
+]
+
+
+class InventoryOptionCreate(StrictRequest):
+    category: InventoryCategory
+    code: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=200)
+    sort_order: int = 0
+
+    @field_validator("code", "label")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a nonblank value.")
+        return value.strip()
+
+
+class InventoryOptionUpdate(StrictRequest):
+    label: str | None = Field(default=None, min_length=1, max_length=200)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+    @field_validator("label")
+    @classmethod
+    def nonblank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Enter a nonblank label.")
+        return value.strip() if value else value
+
+
+class InventoryOptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    project_id: uuid.UUID
+    category: InventoryCategory
+    code: str
+    label: str
+    sort_order: int
+    is_active: bool

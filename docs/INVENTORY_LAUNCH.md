@@ -57,3 +57,28 @@ components remain unknown; zero remains zero. Existing server calculations
 supply net/gross. Currency totals stay separate, and no tax rate is assumed.
 Commercial statuses, buyers and contracts stay in Sales. Stock is an inventory
 and launch-value overview, not an unsold-stock or contracted-revenue report.
+
+
+## Project configuration
+
+Inventory > Configuration owns each project's unit types, views, orientations,
+floor bands, furnishing, accessibility, garden classes and parking/storage
+subtypes. Project administrators/managers can add, rename, order, deactivate and
+reactivate choices. Every read and mutation is scoped to the accessible project;
+configuration changes and unit assignments use the same project lock.
+
+Property uses these labels in dropdowns and retains the current retired choice.
+Optional facts can be cleared to Not assigned. Counts and yes/no facts retain
+their natural controls. Imports and matching Pricing rules use the same project
+catalogue; there is no live global/country fallback. Choice codes are immutable,
+so renaming a label does not rewrite unit facts or pricing matches. Custom field
+options retain their separate existing definition contract.
+
+Migration 0023_inventory_options snapshots the effective global/country choices
+for existing projects, respecting country overrides, including inactive values.
+Availability is evaluated on the migration date; future/expired choices require
+explicit activation in the new project configuration. New projects start empty.
+Existing units, pricing rules and shared reference data are unchanged.
+Downgrade removes the new configuration table, not unit facts. Export project
+choices before deliberate rollback; new project-only codes need reconciliation
+with the old shared catalogue before old-version writes resume.

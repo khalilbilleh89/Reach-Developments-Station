@@ -42,6 +42,7 @@ from app.modules.audit.service import record_event
 from app.modules.inventory import custom_fields as inventory_fields
 from app.modules.inventory import models as inventory_models
 from app.modules.inventory import service as inventory
+from app.modules.inventory.configuration import require_option
 from app.modules.inventory.models import (
     AREA_ROLE_INTERNAL,
     CATEGORY_ACCESSIBILITY,
@@ -1055,11 +1056,11 @@ def _validate_premium_rule(
         # supplied still has to be one the catalogue knows, or the rule counts
         # nothing for ever.
         if match_code is not None:
-            settings_service.require_active_reference_value(
+            require_option(
                 session,
                 category=CATEGORY_SUB_ASSET_SUBTYPE,
                 code=match_code,
-                country_pack_id=project.country_pack_id,
+                project_id=project.id,
             )
         return
     if match_code is None:
@@ -1076,11 +1077,11 @@ def _validate_premium_rule(
         # so a rule cannot name a value no unit could ever carry. A typo like
         # 'SEAA_VEIW' saves happily and then prices nothing, which is the
         # failure that never announces itself.
-        settings_service.require_active_reference_value(
+        require_option(
             session,
             category=PREMIUM_REFERENCE_CATEGORIES[source_kind],
             code=match_code,
-            country_pack_id=project.country_pack_id,
+            project_id=project.id,
         )
 
 
@@ -1373,11 +1374,11 @@ def create_escalation_rule(
     ):
         raise ValidationError("A project-scoped escalation names no phase or unit type.")
     if scope_type == ESCALATION_SCOPE_UNIT_TYPE:
-        settings_service.require_active_reference_value(
+        require_option(
             session,
             category=CATEGORY_UNIT_TYPE,
             code=str(fields["unit_type_code"]),
-            country_pack_id=project.country_pack_id,
+            project_id=project.id,
         )
     _validate_escalation_rule(
         trigger_type=str(fields["trigger_type"]),

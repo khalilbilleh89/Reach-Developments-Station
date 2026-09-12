@@ -1140,3 +1140,40 @@ class UnitDocument(Base):
         CheckConstraint("length(trim(title)) > 0", name="label_not_blank"),
         Index("ix_unit_documents_unit_id", "unit_id"),
     )
+
+
+INVENTORY_OPTION_CATEGORIES = (
+    CATEGORY_UNIT_TYPE,
+    CATEGORY_FLOOR_BAND,
+    CATEGORY_ORIENTATION,
+    CATEGORY_VIEW_CLASS,
+    CATEGORY_FURNISHING,
+    CATEGORY_ACCESSIBILITY,
+    CATEGORY_GARDEN_CLASS,
+    CATEGORY_SUB_ASSET_SUBTYPE,
+)
+
+
+class InventoryOption(Base):
+    """A project-local, retireable choice; codes remain stable for stored unit facts."""
+
+    __tablename__ = "inventory_options"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "category", "code"),
+        CheckConstraint(in_list("category", INVENTORY_OPTION_CATEGORIES), name="category_allowed"),
+        CheckConstraint(
+            "length(trim(code)) > 0 AND length(trim(label)) > 0", name="labels_not_blank"
+        ),
+    )
