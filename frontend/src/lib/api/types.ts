@@ -416,6 +416,10 @@ export type AreaLine = {
 };
 
 export type UnitSummary = {
+  bathrooms: number | null;
+  orientation_code: string | null;
+  view_class_code: string | null;
+  physical_components: Record<string,{area:string|null;unit:string|null}>;
   net_area: string | null;
   net_area_unit: string | null;
   gross_area: string | null;

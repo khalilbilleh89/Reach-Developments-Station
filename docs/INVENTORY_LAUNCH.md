@@ -43,3 +43,17 @@ and parking/storage each have their own editor; their creation forms are hidden
 until Edit is pressed. Read-only users can inspect attachments without receiving
 write controls. A failed Property read has a retry instead of rendering stale
 editable fields.
+
+## Stock
+
+Inventory > Stock is a dedicated shareable view (`section=inventory&view=stock`)
+with a sidebar entry. The same authorised register filters and pagination feed
+its unit schedule and full-selection launch totals. The compact schedule shows
+location, bedrooms/bathrooms, view/orientation, internal/balcony/net/gross areas
+and current launch price. Show all areas adds gardens, terrace and porches.
+
+Component areas come from the approved physical revision. Missing or ambiguous
+components remain unknown; zero remains zero. Existing server calculations
+supply net/gross. Currency totals stay separate, and no tax rate is assumed.
+Commercial statuses, buyers and contracts stay in Sales. Stock is an inventory
+and launch-value overview, not an unsold-stock or contracted-revenue report.

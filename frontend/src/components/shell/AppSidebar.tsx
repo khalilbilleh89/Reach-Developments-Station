@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
@@ -57,6 +58,8 @@ export function SidebarContent({
   onSignOut,
   onClose,
 }: SidebarProps & { onClose?: () => void }) {
+  const query = useSearchParams();
+  const stock = section === "inventory" && query.get("view") === "stock" && !query.get("record");
   const roles = user.roles.map((role) => role.label).join(", ");
   const onProjects = area === "projects";
   const insideProject = onProjects && Boolean(projectId);
@@ -123,7 +126,7 @@ export function SidebarContent({
             {group.label ? <p className="nav-group-label">{group.label}</p> : null}
             <ul className="nav-list">
               {group.items.map((item) => {
-                const current = item.key === section;
+                const current = item.key === section && !(item.key === "inventory" && stock);
                 return (
                   <li key={item.key}>
                     <Link
@@ -136,6 +139,7 @@ export function SidebarContent({
                       <Icon name={item.icon} className="nav-icon" />
                       <span className="nav-label">{item.label}</span>
                     </Link>
+                    {area === "projects" && item.key === "inventory" && projectId ? <Link href={`${sectionHref(area,projectId,"inventory")}&view=stock`} className="nav-item nav-stock" data-label="Stock" aria-current={stock ? "page" : undefined} onClick={onClose}><Icon name="inventory" className="nav-icon" /><span className="nav-label">Stock</span></Link> : null}
                   </li>
                 );
               })}

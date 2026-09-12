@@ -29,6 +29,7 @@ import {
   TabPanel,
   ToolbarFilter,
 } from "@/components/ui";
+import { StockSummary, StockTable } from "./inventory/StockView";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
 import { ImportPanel } from "@/components/projects/inventory/ImportPanel";
 import {
@@ -91,7 +92,8 @@ export function InventoryTab({
   // which is the whole correction: they are no longer hidden inside a dialog
   // called "Add structure".
   const [viewFields, setViewFields] = useRegisterFields({ view: "units" });
-  const view = (["phases", "buildings", "floors", "units"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units";
+  const view = (["phases", "buildings", "floors", "units", "stock"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units" | "stock";
+  const [stockFields,setStockFields]=useRegisterFields({stock_areas:""});
   const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);
 
@@ -176,6 +178,7 @@ export function InventoryTab({
   //: the operator to read out of three dropdowns. Nothing here is derived from
   //: a rendered row: these are the records the server returned.
   const noun = {
+    stock: "units",
     phases: "phases",
     buildings: "buildings",
     floors: "floors",
@@ -224,8 +227,8 @@ export function InventoryTab({
     <>
       <PageHeader
         icon="inventory"
-        title="Inventory"
-        subtitle={sectionDescription("inventory")}
+        title={view === "stock" ? "Stock" : "Inventory"}
+        subtitle={view === "stock" ? "Your inventory, clearly laid out." : sectionDescription("inventory")}
         compact
         actions={
           <>
@@ -276,6 +279,7 @@ export function InventoryTab({
           active={view}
           onSelect={(key) => setView(key as typeof view)}
           tabs={[
+            { key: "stock", label: "Stock" },
             { key: "phases", label: "Phases" },
             { key: "buildings", label: "Buildings" },
             { key: "floors", label: "Floors" },
@@ -362,7 +366,9 @@ export function InventoryTab({
           </section>
         ) : null}
 
-        {view === "units" ? (
+        {view === "stock" && register ? <StockSummary register={register} prices={launchValues} /> : null}
+        {view === "stock" && priceError ? <Notice tone="error">{priceError}</Notice> : null}
+        {view === "units" || view === "stock" ? (
         <>
         <DataToolbar
           framed
@@ -381,7 +387,7 @@ export function InventoryTab({
           }}
           count={register ? { shown: register.units.length, total: register.total, noun: "unit" } : undefined}
           actions={
-            canWriteStructure ? (
+            canWriteStructure && view !== "stock" ? (
               <Button variant="primary" disabled={!!hierarchyError} onClick={() => setAddingUnit(true)}>
                 Add unit
               </Button>
@@ -444,6 +450,8 @@ export function InventoryTab({
         <Card flush>
           {register === null ? (
             error ? <Button onClick={() => void loadRegister()}>Retry inventory</Button> : <Loading label="Loading inventory…" shape="rows" rows={8} />
+          ) : view === "stock" ? (
+            <StockTable projectId={projectId} register={register} prices={launchValues} seesPrice={seesPrice} priceError={priceError} expanded={stockFields.stock_areas==="all"} onExpanded={()=>setStockFields({stock_areas:stockFields.stock_areas==="all" ? "" : "all"})} />
           ) : register.units.length === 0 ? (
             <div className="card-body">
               <EmptyState
