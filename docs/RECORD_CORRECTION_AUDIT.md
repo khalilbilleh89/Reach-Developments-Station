@@ -1,5 +1,16 @@
 # Record editing and removal audit — implementation plan
 
+Current status (2026-09-12): REC-01 / F1 merged in #295. REC-02A is addressing
+F2 on main `a638294`: Cashflow recorded development/financing Delete through the
+existing retained reversal, including failure retention. F3 and F4 remain separate
+slices. Later Inventory/Permits changes require a fresh check before acting on F5.
+The matrix below is the historical audit, not a current list of missing UI.
+REC-02A verification also found that the generic Cashflow API accepts a
+whitespace-only reversal reason before stripping it. The UI trims and sends an
+empty reason, which is rejected; direct API validation needs a separate backend
+hardening slice. See REC02A_ACCEPTANCE_2026_09_12.md.
+
+
 Status: baseline source audit and approved sequence. PR-REC-01 now has an
 [implementation candidate](REC01_ACCEPTANCE.md); the findings below describe
 the pre-fix base, not release acceptance. Other findings remain queued.

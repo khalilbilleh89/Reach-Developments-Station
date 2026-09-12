@@ -1,8 +1,6 @@
 [
   "access.create_user",
   "cashflow.create_forecast",
-  "cashflow.record_development_movement",
-  "cashflow.record_financing_movement",
   "cashflow.record_release",
   "cashflow.record_restriction",
   "collections.create_action",

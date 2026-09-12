@@ -72,19 +72,19 @@ export function CashflowMovements({
   error: string | null;
   onRecordDevelopment: (body: Record<string, unknown>) => void;
   onConfirmDevelopment: (movementId: string) => void;
-  onReverseDevelopment: (movementId: string, reason: string) => void;
+  onReverseDevelopment: (movementId: string, reason: string) => Promise<boolean>;
   onRecordFinancing: (body: Record<string, unknown>) => void;
   onConfirmFinancing: (movementId: string) => void;
-  onReverseFinancing: (movementId: string, reason: string) => void;
+  onReverseFinancing: (movementId: string, reason: string) => Promise<boolean>;
 }) {
   const [recording, setRecording] = useState<"development" | "financing" | null>(null);
-  const [reversing, setReversing] = useState<{ kind: "development" | "financing"; id: string } | null>(
+  const [reversing, setReversing] = useState<{ kind: "development" | "financing"; movement: Movement } | null>(
     null,
   );
 
   return (
     <div className="stack">
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {error && !reversing ? <Notice tone="error">{error}</Notice> : null}
 
       <Card
         title="Development cash"
@@ -105,7 +105,7 @@ export function CashflowMovements({
           emptyTitle="No development cash recorded"
           emptyHint="Consultants, permits and insurance paid by the developer are recorded here, then confirmed by a second person."
           onConfirm={onConfirmDevelopment}
-          onReverse={(id) => setReversing({ kind: "development", id })}
+          onReverse={(movement) => setReversing({ kind: "development", movement })}
           describe={(row) => categoryLabel((row as CashflowDevelopmentMovement).category)}
           direction={() => "Cash out"}
         />
@@ -130,7 +130,7 @@ export function CashflowMovements({
           emptyTitle="No financing cash recorded"
           emptyHint="Equity contributions, debt drawdowns and the payments back out are recorded here."
           onConfirm={onConfirmFinancing}
-          onReverse={(id) => setReversing({ kind: "financing", id })}
+          onReverse={(movement) => setReversing({ kind: "financing", movement })}
           describe={(row) => categoryLabel((row as CashflowFinancingMovement).movement_type)}
           direction={(row) =>
             (row as CashflowFinancingMovement).flow_direction === "inflow" ? "Cash in" : "Cash out"
@@ -155,16 +155,20 @@ export function CashflowMovements({
 
       {reversing ? (
         <PromptDialog
-          title="Reverse this movement"
-          label="Why is it being reversed?"
-          hint="Kept on the record. The movement is withdrawn from the cash position, not deleted."
-          confirmLabel="Reverse"
+          title={`${reversing.movement.status === "recorded" ? "Delete" : "Reverse"} ${reversing.movement.movement_reference}`}
+          label="Reason"
+          hint={reversing.movement.status === "recorded"
+            ? "This unconfirmed movement will be removed from use. It has never counted as cash. The record and your reason are retained for audit."
+            : "The movement will be withdrawn from the current cash position. The record, historical cash evidence and your reason are retained for audit."}
+          confirmLabel={reversing.movement.status === "recorded" ? "Delete" : "Reverse"}
+          error={error}
           busy={busy}
           onCancel={() => setReversing(null)}
-          onSubmit={(reason) => {
-            if (reversing.kind === "development") onReverseDevelopment(reversing.id, reason);
-            else onReverseFinancing(reversing.id, reason);
-            setReversing(null);
+          onSubmit={async (reason) => {
+            const removed = reversing.kind === "development"
+              ? await onReverseDevelopment(reversing.movement.id, reason)
+              : await onReverseFinancing(reversing.movement.id, reason);
+            if (removed) setReversing(null);
           }}
         />
       ) : null}
@@ -191,7 +195,7 @@ function MovementTable({
   emptyTitle: string;
   emptyHint: string;
   onConfirm: (movementId: string) => void;
-  onReverse: (movementId: string) => void;
+  onReverse: (movement: Movement) => void;
   describe: (row: Movement) => string;
   direction: (row: Movement) => string;
 }) {
@@ -238,9 +242,9 @@ function MovementTable({
                     Confirm
                   </Button>
                 ) : null}
-                {canConfirm && row.status === "confirmed" ? (
-                  <Button small variant="danger" onClick={() => onReverse(row.id)} disabled={busy}>
-                    Reverse
+                {canConfirm && (row.status === "recorded" || row.status === "confirmed") ? (
+                  <Button small variant="danger" onClick={() => onReverse(row)} disabled={busy}>
+                    {row.status === "recorded" ? "Delete" : "Reverse"}
                   </Button>
                 ) : null}
               </ButtonRow>
