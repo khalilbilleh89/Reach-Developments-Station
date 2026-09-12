@@ -19,8 +19,15 @@ from sqlalchemy import select
 
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
+from app.modules.inventory import (
+    configuration,
+    deletion,
+    import_service,
+    physical,
+    service,
+    workbook,
+)
 from app.modules.inventory import custom_fields as fields_service
-from app.modules.inventory import deletion, import_service, physical, service, workbook
 from app.modules.inventory.models import (
     SCOPE_PROJECT,
     SCOPE_UNIT_TYPE,
@@ -59,6 +66,9 @@ from app.modules.inventory.schemas import (
     FloorRead,
     FloorUpdateRequest,
     ImportReport,
+    InventoryOptionCreate,
+    InventoryOptionRead,
+    InventoryOptionUpdate,
     LaunchRegister,
     PhaseAccessRead,
     PhaseAccessRequest,
@@ -1596,4 +1606,53 @@ def read_launch_values(
     )
     return LaunchRegister.model_validate(
         launch.launch_register(session, selection=selection, limit=limit, offset=offset)
+    )
+
+
+@router.get("/{project_id}/inventory/configuration", response_model=list[InventoryOptionRead])
+def inventory_configuration(
+    session: DbSession, actor: ActiveActor, project: AccessibleProject
+) -> list[InventoryOptionRead]:
+    return [
+        InventoryOptionRead.model_validate(row)
+        for row in configuration.list_options(session, project.id)
+    ]
+
+
+@router.post(
+    "/{project_id}/inventory/configuration", response_model=InventoryOptionRead, status_code=201
+)
+def add_inventory_option(
+    payload: InventoryOptionCreate,
+    session: DbSession,
+    actor: ActiveActor,
+    project: AccessibleProject,
+) -> InventoryOptionRead:
+    require_project_configurer(actor)
+    return InventoryOptionRead.model_validate(
+        configuration.create_option(
+            session, project_id=project.id, actor=actor, **payload.model_dump()
+        )
+    )
+
+
+@router.patch(
+    "/{project_id}/inventory/configuration/{option_id}", response_model=InventoryOptionRead
+)
+def edit_inventory_option(
+    option_id: uuid.UUID,
+    payload: InventoryOptionUpdate,
+    session: DbSession,
+    actor: ActiveActor,
+    project: AccessibleProject,
+) -> InventoryOptionRead:
+    require_project_configurer(actor)
+    return InventoryOptionRead.model_validate(
+        configuration.update_option(
+            session,
+            project_id=project.id,
+            option_id=option_id,
+            actor=actor,
+            changes=payload.model_dump(exclude_unset=True),
+        )
     )

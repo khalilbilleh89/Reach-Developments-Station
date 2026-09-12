@@ -29,6 +29,7 @@ import {
   TabPanel,
   ToolbarFilter,
 } from "@/components/ui";
+import { InventoryConfiguration } from "./inventory/InventoryConfiguration";
 import { StockSummary, StockTable } from "./inventory/StockView";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
 import { ImportPanel } from "@/components/projects/inventory/ImportPanel";
@@ -92,7 +93,7 @@ export function InventoryTab({
   // which is the whole correction: they are no longer hidden inside a dialog
   // called "Add structure".
   const [viewFields, setViewFields] = useRegisterFields({ view: "units" });
-  const view = (["phases", "buildings", "floors", "units", "stock"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units" | "stock";
+  const view = (["phases", "buildings", "floors", "units", "stock", "configuration"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units" | "stock" | "configuration";
   const [stockFields,setStockFields]=useRegisterFields({stock_areas:""});
   const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);
@@ -179,6 +180,7 @@ export function InventoryTab({
   //: a rendered row: these are the records the server returned.
   const noun = {
     stock: "units",
+    configuration: "choices",
     phases: "phases",
     buildings: "buildings",
     floors: "floors",
@@ -209,6 +211,9 @@ export function InventoryTab({
   // Inventory is refused while the project is in setup, because that is the
   // window in which its country and currencies can still change under whatever
   // was validated against them. Saying so beats eleven identical 409s.
+  if (projectStatus === "setup" && view === "configuration") {
+    return <><PageHeader icon="inventory" title="Inventory Configuration" subtitle="Project-specific unit choices" compact /><InventoryConfiguration key={projectId} projectId={projectId} canConfigure={canConfigure} /></>;
+  }
   if (projectStatus === "setup") {
     return (
       <>
@@ -227,8 +232,8 @@ export function InventoryTab({
     <>
       <PageHeader
         icon="inventory"
-        title={view === "stock" ? "Stock" : "Inventory"}
-        subtitle={view === "stock" ? "Your inventory, clearly laid out." : sectionDescription("inventory")}
+        title={view === "configuration" ? "Inventory Configuration" : view === "stock" ? "Stock" : "Inventory"}
+        subtitle={view === "configuration" ? "Set the unit choices for this project." : view === "stock" ? "Your inventory, clearly laid out." : sectionDescription("inventory")}
         compact
         actions={
           <>
@@ -241,7 +246,7 @@ export function InventoryTab({
                 Area types
               </Button>
             ) : null}
-            {canWriteStructure ? (
+            {canWriteStructure && view !== "configuration" ? (
               <Button onClick={() => setOpen(open === "import" ? "none" : "import")} aria-expanded={open === "import"}>
                 Import
               </Button>
@@ -280,6 +285,7 @@ export function InventoryTab({
           onSelect={(key) => setView(key as typeof view)}
           tabs={[
             { key: "stock", label: "Stock" },
+            { key: "configuration", label: "Configuration" },
             { key: "phases", label: "Phases" },
             { key: "buildings", label: "Buildings" },
             { key: "floors", label: "Floors" },
@@ -366,6 +372,7 @@ export function InventoryTab({
           </section>
         ) : null}
 
+        {view === "configuration" ? <InventoryConfiguration key={projectId} projectId={projectId} canConfigure={canConfigure} /> : null}
         {view === "stock" && register ? <StockSummary register={register} prices={launchValues} /> : null}
         {view === "stock" && priceError ? <Notice tone="error">{priceError}</Notice> : null}
         {view === "units" || view === "stock" ? (

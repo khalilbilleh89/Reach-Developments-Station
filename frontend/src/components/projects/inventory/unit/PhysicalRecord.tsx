@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import type { ComponentProps } from "react";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import { ApiError, inventory } from "@/lib/api";
-import type { AreaSchedule, AreaType, SubAsset, Unit, UnitDocument, UnitFeature } from "@/lib/api";
+import type { AreaSchedule, AreaType, InventoryOption, SubAsset, Unit, UnitDocument, UnitFeature } from "@/lib/api";
 import { Button, Field, FieldRow, FormActions, FormSection, KeyValue, KeyValueGrid, Notice, SectionHeader } from "@/components/ui";
 
 export const PHYSICAL_COMPONENTS = [
@@ -13,9 +13,9 @@ export const PHYSICAL_COMPONENTS = [
 ] as const;
 
 /** One unit's physical file. Amounts and completeness are always server answers. */
-export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, canWrite, canApprove, onChanged }: {
+export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, options = [], canWrite, canApprove, onChanged }: {
   projectId: string; unit: Unit; areaTypes: AreaType[]; schedules: AreaSchedule[];
-  assets: SubAsset[]; canWrite: boolean; canApprove: boolean; onChanged: () => Promise<void>;
+  assets: SubAsset[]; options?: InventoryOption[]; canWrite: boolean; canApprove: boolean; onChanged: () => Promise<void>;
 }) {
   const [features, setFeatures] = useState<UnitFeature[]>([]);
   const [documents, setDocuments] = useState<UnitDocument[]>([]);
@@ -29,7 +29,7 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
   const [docEditing,setDocEditing] = useState(false);
   const [measurementBaseline,setMeasurementBaseline] = useState("");
   const [assetForm, setAssetForm] = useState(false);
-  const [asset, setAsset] = useState({ asset_reference: "", asset_type: "parking", area: "" });
+  const [asset, setAsset] = useState({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" });
   const [revision, setRevision] = useState("");
   const [draftId, setDraftId] = useState<string | null>(null);
   const [measurements, setMeasurements] = useState<Record<string, string>>({});
@@ -116,10 +116,10 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
     </section>
     <section>
       <SectionHeader level={2} title="Parking and storage" actions={canWrite ? <Button small data-leaves-editor disabled={busy} onClick={() => setAssetForm(!assetForm)}>{assetForm ? "Close editor" : "Edit parking and storage"}</Button> : undefined} />
-      {canWrite && assetForm ? <PropertyForm onDiscard={()=>{setAsset({asset_reference:"",asset_type:"parking",area:""});setAssetForm(false);}} busy={busy} dirty={asset.asset_reference !== "" || asset.area !== "" || asset.asset_type !== "parking"} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.createSubAsset(projectId, { ...asset, area: asset.area || null, linked_unit_id: unit.id, floor_id: unit.floor_id, transfer_mode: "attached" }); setAssetForm(false); setAsset({ asset_reference: "", asset_type: "parking", area: "" }); }); }}>
-        <FieldRow columns={3}><Field label="Asset reference"><input className="input" required maxLength={64} disabled={busy} value={asset.asset_reference} onChange={e => setAsset({ ...asset, asset_reference: e.target.value })} /></Field><Field label="Asset type"><select className="input" disabled={busy} value={asset.asset_type} onChange={e => setAsset({ ...asset, asset_type: e.target.value })}><option value="parking">Parking</option><option value="storage">Storage</option></select></Field><Field label="Area (optional)"><input className="input" inputMode="decimal" disabled={busy} value={asset.area} onChange={e => setAsset({ ...asset, area: e.target.value })} /></Field></FieldRow><FormActions><Button type="submit" disabled={busy}>Attach asset</Button><Button disabled={busy} onClick={()=>{setAsset({asset_reference:"",asset_type:"parking",area:""});setAssetForm(false);}}>Cancel</Button></FormActions>
+      {canWrite && assetForm ? <PropertyForm onDiscard={()=>{setAsset({asset_reference:"",asset_type:"parking",area:"",subtype_code:""});setAssetForm(false);}} busy={busy} dirty={asset.asset_reference !== "" || asset.area !== "" || asset.subtype_code !== "" || asset.asset_type !== "parking"} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.createSubAsset(projectId, { ...asset, subtype_code:asset.subtype_code || null, area: asset.area || null, linked_unit_id: unit.id, floor_id: unit.floor_id, transfer_mode: "attached" }); setAssetForm(false); setAsset({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" }); }); }}>
+        <FieldRow columns={3}><Field label="Asset reference"><input className="input" required maxLength={64} disabled={busy} value={asset.asset_reference} onChange={e => setAsset({ ...asset, asset_reference: e.target.value })} /></Field><Field label="Asset type"><select className="input" disabled={busy} value={asset.asset_type} onChange={e => setAsset({ ...asset, asset_type: e.target.value })}><option value="parking">Parking</option><option value="storage">Storage</option></select></Field><Field label="Parking / storage type"><select className="input" disabled={busy} value={asset.subtype_code} onChange={e=>setAsset({...asset,subtype_code:e.target.value})}><option value="">Not assigned</option>{options.filter(option=>option.category==="sub_asset_subtype" && option.is_active).map(option=><option key={option.id} value={option.code}>{option.label}</option>)}</select></Field><Field label="Area (optional)"><input className="input" inputMode="decimal" disabled={busy} value={asset.area} onChange={e => setAsset({ ...asset, area: e.target.value })} /></Field></FieldRow><FormActions><Button type="submit" disabled={busy}>Attach asset</Button><Button disabled={busy} onClick={()=>{setAsset({asset_reference:"",asset_type:"parking",area:"",subtype_code:""});setAssetForm(false);}}>Cancel</Button></FormActions>
       </PropertyForm> : null}
-      {assets.filter(a => a.is_active && ["parking", "storage"].includes(a.asset_type)).map(a => <div key={a.id} className="button-row"><span>{a.asset_reference} · {a.asset_type}</span>{canWrite && assetForm ? <Button small disabled={busy} onClick={() => void save(() => inventory.updateSubAsset(projectId, a.id, { linked_unit_id: null }))}>Detach</Button> : null}</div>)}
+      {assets.filter(a => a.is_active && ["parking", "storage"].includes(a.asset_type)).map(a => <div key={a.id} className="button-row"><span>{a.asset_reference} · {a.asset_type}{a.subtype_code ? ` · ${options.find(option=>option.category==="sub_asset_subtype" && option.code===a.subtype_code)?.label ?? a.subtype_code}` : ""}</span>{canWrite && assetForm ? <Button small disabled={busy} onClick={() => void save(() => inventory.updateSubAsset(projectId, a.id, { linked_unit_id: null }))}>Detach</Button> : null}</div>)}
       {assets.filter(a=>a.is_active && ["parking","storage"].includes(a.asset_type)).length===0 ? <p className="subtle">No parking or storage attached.</p> : null}
     </section>
   </div>;
