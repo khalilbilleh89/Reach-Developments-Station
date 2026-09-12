@@ -143,11 +143,15 @@ def test_a_premium_naming_a_retired_code_is_refused(
 ) -> None:
     """Historical rules keep retired codes; a new rule may not adopt one."""
     values = admin_client.get(
-        "/api/v1/settings/reference-values",
-        params={"country_pack_id": country_pack_id, "category": "view_class"},
+        f"/api/v1/projects/{project_id}/inventory/configuration",
     ).json()
-    identifier = next(item["id"] for item in values if item["code"] == "SEA")
-    admin_client.patch(f"/api/v1/settings/reference-values/{identifier}", json={"is_active": False})
+    identifier = next(
+        item["id"] for item in values if item["category"] == "view_class" and item["code"] == "SEA"
+    )
+    admin_client.patch(
+        f"/api/v1/projects/{project_id}/inventory/configuration/{identifier}",
+        json={"is_active": False},
+    )
 
     response = _premium(
         finance_client, project_id, draft_configuration, source_kind="view_class", match_code="SEA"

@@ -2975,3 +2975,9 @@ export type LaunchRegister = {
   totals: {currency_id:string; amount:string}[];
   rows: {unit_id:string;currency_id:string|null;price:string|null;repricing_required:boolean}[];
 };
+
+
+export interface InventoryOption {
+  id: string; project_id: string; category: string; code: string; label: string;
+  sort_order: number; is_active: boolean;
+}

@@ -34,7 +34,7 @@ function nodes(tree) {
 test("Identity and Features edit in their own sections and save only that section", async () => {
   const updates=[];let refreshed=0;
   const render=mount("components/projects/inventory/unit/UnitProperty.tsx","UnitProperty",{
-    "@/lib/api":{inventory:{updateUnit:async (...args)=>updates.push(args)}},
+    "@/lib/api":{inventory:{configuration:async()=>[],updateUnit:async (...args)=>updates.push(args)}},
     "@/components/projects/EditForm":{EditForm:"EditForm",asValue:value=>value},
     "./PhysicalRecord":{PhysicalRecord:"PhysicalRecord"},
   },{projectId:"p",unit:{id:"u",unit_reference:"A101",bedrooms:2,view_class_code:"Garden"},values:[],assets:[],schedules:[],areaTypes:[],canWrite:true,canApprove:true,onChanged:async()=>{refreshed++;}});
@@ -58,9 +58,30 @@ test("Identity and Features edit in their own sections and save only that sectio
 
 test("read-only Property has no edit actions but retains attachments", () => {
   const render=mount("components/projects/inventory/unit/UnitProperty.tsx","UnitProperty",{
-    "@/lib/api":{inventory:{}},"@/components/projects/EditForm":{EditForm:"EditForm",asValue:value=>value},"./PhysicalRecord":{PhysicalRecord:"PhysicalRecord"},
+    "@/lib/api":{inventory:{configuration:async()=>[]}},"@/components/projects/EditForm":{EditForm:"EditForm",asValue:value=>value},"./PhysicalRecord":{PhysicalRecord:"PhysicalRecord"},
   },{projectId:"p",unit:{id:"u"},values:[],assets:[{id:"parking"}],schedules:[],areaTypes:[],canWrite:false,canApprove:false,onChanged:async()=>{}});
   assert.ok(nodes(render()).filter(node=>node.type==="SectionHeader").every(node=>node.props.actions===undefined));
   assert.equal(nodes(render()).find(node=>node.type==="PhysicalRecord").props.assets.length,1);
 });
 
+
+test("configured unit fields use project choices and preserve only the current inactive choice", async () => {
+  const requests=[];
+  const render=mount("components/projects/inventory/unit/UnitProperty.tsx","UnitProperty",{
+    "@/lib/api":{inventory:{configuration:async id=>{requests.push(id);return [{category:"view_class",code:"SEA",label:"Sea view",is_active:true},{category:"view_class",code:"OLD",label:"Old garden",is_active:false},{category:"view_class",code:"RETIRED",label:"Retired other",is_active:false},{category:"orientation",code:"N",label:"North",is_active:true}];}}},
+    "@/components/projects/EditForm":{EditForm:"EditForm",asValue:value=>value},
+    "./PhysicalRecord":{PhysicalRecord:"PhysicalRecord"},
+  },{projectId:"project-a",unit:{id:"u",view_class_code:"OLD"},values:[],assets:[],schedules:[],areaTypes:[],canWrite:true,canApprove:true,onChanged:async()=>{}});
+  assert.equal(nodes(render()).find(n=>n.type==="SectionHeader" && n.props.title==="Features").props.actions.props.disabled,true);
+  await Promise.resolve();
+  const edit=nodes(render()).find(n=>n.type==="SectionHeader" && n.props.title==="Features").props.actions;
+  assert.equal(edit.props.disabled,false); edit.props.onClick();
+  const fields=nodes(render()).find(n=>n.type==="EditForm").props.fields;
+  const view=fields.find(f=>f.name==="view_class_code");
+  assert.equal(view.kind,"select");
+  assert.equal(JSON.stringify(view.options.map(o=>o.value)),JSON.stringify(["","SEA","OLD"]));
+  assert.equal(view.options[1].label,"Sea view");
+  const orientation=fields.find(f=>f.name==="orientation_code");
+  assert.equal(JSON.stringify(orientation.options.map(o=>o.value)),JSON.stringify(["","N"]));
+  assert.deepEqual(requests,["project-a"]);
+});

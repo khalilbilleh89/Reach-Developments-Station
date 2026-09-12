@@ -36,6 +36,7 @@ from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.inventory import service
+from app.modules.inventory.configuration import require_option
 from app.modules.inventory.custom_fields import (
     can_edit,
     can_view,
@@ -69,7 +70,6 @@ from app.modules.inventory.permissions import (
 )
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
-from app.modules.settings.service import require_active_reference_value
 
 #: Generous for a development: the reference project is 247 units. The point is
 #: to refuse a file nobody meant to send, not to ration ordinary work.
@@ -1142,11 +1142,11 @@ def _check_codes(
         if code is None:
             continue
         try:
-            require_active_reference_value(
+            require_option(
                 session,
                 category=category,
                 code=str(code),
-                country_pack_id=project.country_pack_id,
+                project_id=project.id,
             )
         except ValidationError as exc:
             batch.error(index, column, str(exc))
