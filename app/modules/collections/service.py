@@ -1277,6 +1277,55 @@ def confirm_receipt(
     return receipt
 
 
+def void_receipt(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    receipt_id: uuid.UUID,
+    reason: str,
+    correlation_id: uuid.UUID,
+) -> CollectionReceipt:
+    """Remove an unconfirmed claim from use while retaining its identity and audit."""
+    permissions.require_collection_writer(actor)
+    reason = _require_text(reason, detail="Say why this receipt is being removed.")
+    project = lock_project(session, project.id)
+    receipt, sale = visible_receipt(session, project=project, receipt_id=receipt_id, actor=actor)
+    receipt = _lock_receipt(session, project_id=project.id, receipt_id=receipt.id)
+    if receipt.status != RECEIPT_RECORDED or receipt.confirmed_at is not None:
+        raise ConflictError(
+            "Only an unconfirmed receipt can be removed. Ask Finance to reverse confirmed cash."
+        )
+    if _active_allocations_of_receipt(session, receipt_id=receipt.id):
+        raise ConflictError(
+            "Reverse this receipt's active allocations before removing it. "
+            "Their history will be retained."
+        )
+    receipt.status = RECEIPT_REVERSED
+    receipt.reversed_at = _now()
+    receipt.reversed_by_user_id = actor.user_id
+    receipt.reversal_reason = reason
+    session.flush()
+    record_event(
+        session,
+        action="collections.receipt_voided",
+        entity_type="collection_receipt",
+        entity_id=receipt.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before={"status": RECEIPT_RECORDED},
+        after={
+            "status": RECEIPT_REVERSED,
+            "receipt_number": receipt.receipt_number,
+            "sale_number": sale.sale_number,
+            "amount": receipt.amount,
+            "confirmed_at": None,
+        },
+    )
+    return receipt
+
+
 def reverse_receipt(
     session: Session,
     *,
@@ -2934,6 +2983,51 @@ def confirm_refund(
             "refund_number": refund.refund_number,
             "sale_number": sale.sale_number,
             "amount": refund.amount,
+        },
+    )
+    return refund
+
+
+def void_refund(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    refund_id: uuid.UUID,
+    reason: str,
+    correlation_id: uuid.UUID,
+) -> CollectionRefund:
+    """Remove an unconfirmed claim from use while retaining its identity and audit."""
+    permissions.require_collection_writer(actor)
+    reason = _require_text(reason, detail="Say why this refund is being removed.")
+    project = lock_project(session, project.id)
+    refund, sale = _visible_refund(session, project=project, refund_id=refund_id, actor=actor)
+    _lock_cancellation(session, project_id=project.id, cancellation_id=refund.cancellation_id)
+    refund = _lock_refund(session, project_id=project.id, refund_id=refund.id)
+    if refund.status != REFUND_RECORDED or refund.confirmed_at is not None:
+        raise ConflictError(
+            "Only an unconfirmed refund can be removed. Ask Finance to reverse confirmed cash."
+        )
+    refund.status = REFUND_REVERSED
+    refund.reversed_at = _now()
+    refund.reversed_by_user_id = actor.user_id
+    refund.reversal_reason = reason
+    session.flush()
+    record_event(
+        session,
+        action="collections.refund_voided",
+        entity_type="collection_refund",
+        entity_id=refund.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before={"status": REFUND_RECORDED},
+        after={
+            "status": REFUND_REVERSED,
+            "refund_number": refund.refund_number,
+            "sale_number": sale.sale_number,
+            "amount": refund.amount,
+            "confirmed_at": None,
         },
     )
     return refund

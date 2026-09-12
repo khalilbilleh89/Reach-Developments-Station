@@ -66,18 +66,18 @@
   {
     "handler": "collections.create_receipt",
     "create_route": "POST /sales/{sale_id}/receipts",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+    "status": "implemented",
+    "removal_route": "POST /receipts/{receipt_id}/void",
+    "ui_file": "frontend/src/components/projects/collections/ReceiptPanel.tsx",
+    "notes": "Collections may Delete recorded entries using a reason-required retained void. Confirmed cash stays Finance-only reversal. Project/phase scope and locked state checks apply; active receipt allocations must be reversed explicitly first. Failure retains the prompt; success refreshes the register. No hard deletion."
   },
   {
     "handler": "collections.create_refund",
     "create_route": "POST /sales/{sale_id}/refunds",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+    "status": "implemented",
+    "removal_route": "POST /refunds/{refund_id}/void",
+    "ui_file": "frontend/src/components/projects/collections/CollectionAccount.tsx",
+    "notes": "Collections may Delete recorded entries using a reason-required retained void. Confirmed cash stays Finance-only reversal. Project/phase scope and locked state checks apply; active receipt allocations must be reversed explicitly first. Failure retains the prompt; success refreshes the register. No hard deletion."
   },
   {
     "handler": "collections.create_restructure",

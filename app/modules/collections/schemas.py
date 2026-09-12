@@ -90,7 +90,7 @@ class ReceiptCreate(StrictRequest):
 
 
 class ReversalRequest(StrictRequest):
-    """Undo something that was confirmed. The reason is not optional."""
+    """Withdraw a recorded claim or reverse confirmed cash. A reason is required."""
 
     reason: str = _REASON
 

@@ -481,6 +481,31 @@ def confirm_receipt(
 
 
 @router.post(
+    "/receipts/{receipt_id}/void",
+    response_model=ReceiptRead,
+    summary="Remove an unconfirmed receipt; retain its record and reason",
+)
+def void_receipt(
+    receipt_id: uuid.UUID,
+    payload: ReversalRequest,
+    project: CollectionProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> ReceiptRead:
+    receipt = service.void_receipt(
+        session,
+        project=project,
+        actor=actor,
+        receipt_id=receipt_id,
+        reason=payload.reason,
+        correlation_id=actor.correlation_id,
+    )
+    session.commit()
+    session.refresh(receipt)
+    return _receipt_read(session, receipt)
+
+
+@router.post(
     "/receipts/{receipt_id}/reverse",
     response_model=ReceiptRead,
     summary="Undo a confirmation, and every allocation that depended on it",
@@ -957,6 +982,31 @@ def confirm_refund(
         project=project,
         actor=actor,
         refund_id=refund_id,
+        correlation_id=actor.correlation_id,
+    )
+    session.commit()
+    session.refresh(refund)
+    return RefundRead.model_validate(refund)
+
+
+@router.post(
+    "/refunds/{refund_id}/void",
+    response_model=RefundRead,
+    summary="Remove an unconfirmed refund; retain its record and reason",
+)
+def void_refund(
+    refund_id: uuid.UUID,
+    payload: ReversalRequest,
+    project: CollectionProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> RefundRead:
+    refund = service.void_refund(
+        session,
+        project=project,
+        actor=actor,
+        refund_id=refund_id,
+        reason=payload.reason,
         correlation_id=actor.correlation_id,
     )
     session.commit()
