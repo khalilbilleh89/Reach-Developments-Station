@@ -189,6 +189,7 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         ("tests/test_migrations.py::test_parallel_permit_and_inventory_histories_converge",),
     ),
     "0023_permit_removal.py": ("projects", ("tests/modules/test_permit_entry_removal.py",)),
+    "0025_permit_completed.py": ("projects", ("tests/modules/test_permit_completed.py",)),
     "0023_inventory_options.py": (
         "inventory",
         (

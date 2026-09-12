@@ -346,6 +346,7 @@ def domain_of_migration(path: str) -> str | None:
     if stem.endswith("_project_land_permits") or stem in {
         "0022_land_analytics",
         "0023_permit_removal",
+        "0025_permit_completed",
     }:
         return "projects"
     if stem.endswith("_governance_access"):
