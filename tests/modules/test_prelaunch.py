@@ -409,7 +409,7 @@ def test_read_only_actor_gets_no_confirmation_authority(
     )
 
 
-def test_master_eligibility_respects_persisted_separation_and_keeps_other_confirmation_authority(
+def test_master_can_self_confirm_and_keeps_other_confirmation_authority(
     db: Session, finance_client: TestClient, project_id: str, currency_id: str
 ) -> None:
     master = make_user(db, email="ux11-master@example.com", roles=("master_admin",))
@@ -417,13 +417,13 @@ def test_master_eligibility_respects_persisted_separation_and_keeps_other_confir
     response = client.post(root(project_id), json=payload(currency_id))
     assert response.status_code == 201, response.text
     row = response.json()
-    assert row["can_confirm"] is False and "another authorized" in row["confirmation_blocker"]
-    assert client.get(root(project_id)).json()["expenses"][0]["can_confirm"] is False
-    refused = client.post(
+    assert row["can_confirm"] is True and row["confirmation_blocker"] is None
+    assert client.get(root(project_id)).json()["expenses"][0]["can_confirm"] is True
+    confirmed = client.post(
         f"{root(project_id)}/{row['id']}/confirm", json={"expected": editable(row)}
     )
-    assert refused.status_code == 403
-    assert "another authorized" in refused.json()["detail"]
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["counts_as_cash"] is True
     other = finance_client.post(root(project_id), json=payload(currency_id)).json()
     eligible = next(
         x for x in client.get(root(project_id)).json()["expenses"] if x["id"] == other["id"]

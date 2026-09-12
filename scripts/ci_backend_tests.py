@@ -339,6 +339,8 @@ def domain_of_migration(path: str) -> str | None:
             continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
+    if stem == "0025_prelaunch_master":
+        return "cashflow"
     if stem == "0023_inventory_options":
         return "inventory"
     if stem.endswith("_sales_legal"):

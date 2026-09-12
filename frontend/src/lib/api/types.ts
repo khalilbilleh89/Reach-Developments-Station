@@ -2814,6 +2814,7 @@ export interface PreLaunchExpense extends CashflowDevelopmentMovement {
 }
 
 export interface PreLaunchRegister {
+  categories: { category: string; recorded_amount: MoneyStr; confirmed_paid_amount: MoneyStr; total_amount: MoneyStr; confirmed_share_percent: string }[];
   expenses: PreLaunchExpense[];
   /** Unconfirmed entries only; never added to confirmed paid. */
   recorded_amount: MoneyStr;

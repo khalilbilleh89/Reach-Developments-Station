@@ -136,7 +136,7 @@ _MOVEMENT_FIELDS = (
     "value_date",
     "status",
 )
-_DEVELOPMENT_FIELDS = (*_MOVEMENT_FIELDS, "category", "phase_id")
+_DEVELOPMENT_FIELDS = (*_MOVEMENT_FIELDS, "category", "phase_id", "master_self_confirmed")
 _PRELAUNCH_CORRECTION_FIELDS = (
     *_DEVELOPMENT_FIELDS,
     "counterparty_reference",
@@ -1269,6 +1269,10 @@ def _confirm_movement(
     row.status = MOVEMENT_CONFIRMED
     row.confirmed_at = _now()
     row.confirmed_by_user_id = actor.user_id
+    if isinstance(row, CashflowDevelopmentMovement):
+        row.master_self_confirmed = (
+            actor.is_master_admin and row.recorded_by_user_id == actor.user_id
+        )
     _flush(session)
     record_event(
         session,
@@ -1361,6 +1365,27 @@ PRELAUNCH_CATEGORIES = frozenset(
         "other",
     }
 )
+
+
+def prelaunch_category_summary(
+    movements: list[CashflowDevelopmentMovement],
+) -> list[schemas.PreLaunchCategoryOut]:
+    """Current category position; reversed/removed history contributes no amount."""
+    totals = {category: [ZERO, ZERO] for category in sorted(PRELAUNCH_CATEGORIES)}
+    for row in movements:
+        if row.category in totals and row.status in {MOVEMENT_RECORDED, MOVEMENT_CONFIRMED}:
+            totals[row.category][int(row.status == MOVEMENT_CONFIRMED)] += row.amount
+    paid = sum((values[1] for values in totals.values()), start=ZERO)
+    return [
+        schemas.PreLaunchCategoryOut(
+            category=category,
+            recorded_amount=values[0],
+            confirmed_paid_amount=values[1],
+            total_amount=values[0] + values[1],
+            confirmed_share_percent=money(values[1] * 100 / paid) if paid else ZERO,
+        )
+        for category, values in totals.items()
+    ]
 
 
 def correct_prelaunch_expense(
@@ -1537,7 +1562,9 @@ def confirm_development_movement(
     )
     if movement.status == MOVEMENT_RECORDED:
         permissions.require_development_movement_confirmer(
-            actor, recorded_by_user_id=movement.recorded_by_user_id
+            actor,
+            recorded_by_user_id=movement.recorded_by_user_id,
+            prelaunch=movement.category in PRELAUNCH_CATEGORIES,
         )
     if expected is not None and any(
         getattr(movement, key) != value for key, value in expected.model_dump().items()
@@ -3538,9 +3565,8 @@ def reconciliation(session: Session, *, project: Project, as_of: date) -> list[c
         )
     )
 
-    # Confirmed cash that has not been confirmed by a second person is cash one
-    # person moved alone. The database refuses it; this proves none slipped past
-    # an earlier revision of the constraint.
+    # Confirmed cash requires separation, except a retained Master Pre-Launch
+    # self-confirmation validated by the database at confirmation time.
     for model, label in (
         (CashflowDevelopmentMovement, "development"),
         (CashflowFinancingMovement, "financing"),
@@ -3553,13 +3579,21 @@ def reconciliation(session: Session, *, project: Project, as_of: date) -> list[c
                 model.project_id == project.id,
                 model.status == MOVEMENT_CONFIRMED,
                 model.confirmed_by_user_id == model.recorded_by_user_id,
+                *(
+                    [model.master_self_confirmed.is_(False)]
+                    if model is CashflowDevelopmentMovement
+                    else []
+                ),
             )
         ).first()
         checks.append(
             calculator.count_check(
                 name=f"{label}_maker_is_not_checker",
                 actual=int(unchecked or 0),
-                detail="A confirmation by the person who recorded it is not a second pair of eyes.",
+                detail=(
+                    "Confirmations require a second person or a recorded "
+                    "Master Pre-Launch exception."
+                ),
             )
         )
 

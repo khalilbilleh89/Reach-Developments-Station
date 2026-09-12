@@ -34,6 +34,7 @@ def _register(
         if movement.category in PRELAUNCH_CATEGORIES
     ]
     return schemas.PreLaunchRegisterOut(
+        categories=service.prelaunch_category_summary(movements),
         expenses=[
             read.prelaunch_expense_out(session, movement=row, actor=actor) for row in movements
         ],
