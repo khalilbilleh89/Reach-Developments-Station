@@ -238,7 +238,17 @@ class LandParcelRead(_ParcelFacts):
     #: exposed" — never a zero, which would read as a real figure of zero.
     purchase_price: DecimalStr | None = None
     acquisition_fees: DecimalStr | None = None
-    #: Derived from both inputs only. An unknown component makes the answer
+    acquisition_tax_rate_fraction: DecimalStr | None = None
+    acquisition_tax_amount: DecimalStr | None = None
+    agent_fee_amount: DecimalStr | None = None
+    legal_fee_amount: DecimalStr | None = None
+    registration_fee_amount: DecimalStr | None = None
+    expected_gdv_amount: DecimalStr | None = None
+    total_acquisition_fees: DecimalStr | None = None
+    agent_fee_rate_fraction: DecimalStr | None = None
+    legal_fee_rate_fraction: DecimalStr | None = None
+    registration_fee_rate_fraction: DecimalStr | None = None
+    #: Derived from all acquisition inputs. An unknown component makes the answer
     #: incomplete rather than silently becoming zero.
     total_acquisition_cost: DecimalStr | None = None
     total_acquisition_cost_basis: str = "restricted"
@@ -253,18 +263,15 @@ class LandParcelRead(_ParcelFacts):
         *,
         include_financials: bool,
         base_currency_code: str | None,
+        costs: dict[str, Any],
     ) -> LandParcelRead:
         """Assemble a response, dropping cost entirely when it may not be shown."""
         read = cls.model_validate(parcel)
         if include_financials:
             read.purchase_price = parcel.purchase_price
             read.acquisition_fees = parcel.acquisition_fees
-            if parcel.purchase_price is not None and parcel.acquisition_fees is not None:
-                read.total_acquisition_cost = parcel.purchase_price + parcel.acquisition_fees
-                read.total_acquisition_cost_basis = "complete"
-            else:
-                read.total_acquisition_cost = None
-                read.total_acquisition_cost_basis = "incomplete_inputs"
+            for field, value in costs.items():
+                setattr(read, field, value)
             read.financials_visible = True
             read.base_currency_code = base_currency_code
         else:
@@ -274,6 +281,19 @@ class LandParcelRead(_ParcelFacts):
             read.total_acquisition_cost_basis = "restricted"
             read.financials_visible = False
             read.base_currency_code = None
+            for field in (
+                "acquisition_tax_rate_fraction",
+                "acquisition_tax_amount",
+                "agent_fee_amount",
+                "legal_fee_amount",
+                "registration_fee_amount",
+                "expected_gdv_amount",
+                "total_acquisition_fees",
+                "agent_fee_rate_fraction",
+                "legal_fee_rate_fraction",
+                "registration_fee_rate_fraction",
+            ):
+                setattr(read, field, None)
         return read
 
 
@@ -284,6 +304,11 @@ class LandParcelCreateRequest(_ParcelFacts):
     area_unit: AreaUnit | None = None
     purchase_price: Money | None = None
     acquisition_fees: Money | None = None
+    acquisition_tax_rate_fraction: RateFraction | None = Decimal("0")
+    agent_fee_amount: Money | None = Decimal("0")
+    legal_fee_amount: Money | None = Decimal("0")
+    registration_fee_amount: Money | None = Decimal("0")
+    expected_gdv_amount: Money | None = None
 
 
 class LandParcelUpdateRequest(_ParcelFacts):
@@ -292,7 +317,41 @@ class LandParcelUpdateRequest(_ParcelFacts):
     area_unit: AreaUnit | None = None
     purchase_price: Money | None = None
     acquisition_fees: Money | None = None
+    acquisition_tax_rate_fraction: RateFraction | None = None
+    agent_fee_amount: Money | None = None
+    legal_fee_amount: Money | None = None
+    registration_fee_amount: Money | None = None
+    expected_gdv_amount: Money | None = None
     is_active: bool | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Land analytics
+# --------------------------------------------------------------------------- #
+
+
+class LandMarketAssumptionWrite(StrictRequest):
+    change_rate_fraction: Annotated[DecimalStr, Field(ge=-1, le=10, decimal_places=6)]
+
+
+class LandMarketYearRead(BaseModel):
+    year: int
+    change_rate_fraction: DecimalStr
+    opening_value: DecimalStr | None
+    estimated_value: DecimalStr | None
+    value_basis: str
+
+
+class LandAnalyticsRead(BaseModel):
+    land_area_sqm: DecimalStr
+    max_buildable_area_sqm: DecimalStr | None
+    purchase_cost_per_sqm: DecimalStr | None
+    purchase_cost_per_buildable_sqm: DecimalStr | None
+    acquisition_cost_per_sqm: DecimalStr | None
+    acquisition_cost_per_buildable_sqm: DecimalStr | None
+    purchase_cost_to_gdv_fraction: DecimalStr | None
+    acquisition_cost_to_gdv_fraction: DecimalStr | None
+    market_years: list[LandMarketYearRead]
 
 
 # --------------------------------------------------------------------------- #

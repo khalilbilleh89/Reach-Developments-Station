@@ -269,6 +269,10 @@ export const projects = {
       is_active: isActive,
     }),
 
+  landAnalytics: (id: string, parcelId: string) =>
+    get<import("./types").LandAnalytics>(`/projects/${id}/parcels/${parcelId}/analytics`),
+  writeLandMarketYear: (id: string, parcelId: string, year: string, changeRate: string) =>
+    put<import("./types").LandAnalytics>(`/projects/${id}/parcels/${parcelId}/market-assumptions/${year}`, { change_rate_fraction: changeRate }),
   parcels: (id: string) => get<LandParcel[]>(`/projects/${id}/parcels`),
   createParcel: (id: string, input: Record<string, unknown>) =>
     post<LandParcel>(`/projects/${id}/parcels`, input),

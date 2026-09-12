@@ -7,6 +7,65 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+const landFormat = {};
+runInNewContext(ts.transpileModule(readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: landFormat });
+
+function landFixture(canWrite = true) {
+  let rejectWrite = true;
+  const calls = [];
+  const analytics = {
+    land_area_sqm: "100", max_buildable_area_sqm: "200", purchase_cost_per_sqm: "1000.00",
+    purchase_cost_per_buildable_sqm: "500.00", acquisition_cost_per_sqm: "1100.00",
+    acquisition_cost_per_buildable_sqm: "550.00", purchase_cost_to_gdv_fraction: null,
+    acquisition_cost_to_gdv_fraction: null, market_years: [],
+  };
+  const props = { projectId: "project", parcel: { id: "parcel", expected_gdv_amount: null, base_currency_code: "EUR", purchase_price: "100000.00", total_acquisition_cost: "110000.00" }, canWrite,
+    onChanged: async () => { props.parcel = { ...props.parcel, expected_gdv_amount: "200000.00" }; } };
+  class ApiError extends Error {}
+  const projects = {
+    landAnalytics: async () => analytics,
+    writeLandMarketYear: async (...args) => { calls.push(args); if (rejectWrite) throw new ApiError("Write refused"); return analytics; },
+    updateParcel: async (...args) => { calls.push(args); return { ...props.parcel, expected_gdv_amount: "200000.00" }; },
+  };
+  const render = mount("projects/land/LandAnalytics", "LandAnalytics", {
+    "@/lib/api": { ApiError, projects }, "@/lib/format": landFormat,
+  }, props);
+  return { render, calls, recover() { rejectWrite = false; } };
+}
+
+test("Land analytics preserves a failed annual draft and sends the exact signed percentage", async () => {
+  const f = landFixture(); f.render(); await settle();
+  let tree = nodes(f.render());
+  tree.find(n => n.type === "Field" && n.props.label === "Year").props.children.props.onChange({ target: { value: "2027" } });
+  tree.find(n => n.type === "Field" && n.props.label === "Expected increase / decrease (%)").props.children.props.onChange({ target: { value: "-5.25" } });
+  await nodes(f.render()).filter(n => n.type === "form")[1].props.onSubmit({ preventDefault() {} });
+  tree = nodes(f.render());
+  assert.equal(f.calls[0][3], "-0.0525");
+  assert.equal(tree.find(n => n.type === "Field" && n.props.label === "Year").props.children.props.value, "2027");
+  assert.ok(JSON.stringify(tree).includes("Write refused"));
+  f.recover();
+  await tree.filter(n => n.type === "form")[1].props.onSubmit({ preventDefault() {} });
+  assert.equal(nodes(f.render()).find(n => n.type === "Field" && n.props.label === "Year").props.children.props.value, "");
+});
+
+test("Land analytics canonicalizes saved GDV so a successful save leaves no false dirty draft", async () => {
+  const f = landFixture(); f.render(); await settle();
+  nodes(f.render()).find(n => n.type === "Field" && n.props.label === "Expected GDV for this parcel").props.children.props.onChange({ target: { value: "200000" } });
+  await nodes(f.render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(f.calls[0][2].expected_gdv_amount, "200000");
+  assert.equal(f.render().props.dirty, false);
+});
+
+test("Land analytics read-only permission exposes metrics but no write controls", async () => {
+  const f = landFixture(false); f.render(); await settle();
+  const tree = nodes(f.render());
+  assert.ok(tree.some(n => n.type === "KeyValue" && n.props.value === "EUR 1,000.00"));
+  assert.ok(!tree.some(n => n.type === "form"));
+  assert.equal(f.calls.length, 0);
+});
+
 // Execute the real reader callbacks and render branches with a small hook
 // lifecycle. No requests are made and no component implementation is copied.
 function mount(file, name, dependencies, props) {

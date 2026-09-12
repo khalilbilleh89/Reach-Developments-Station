@@ -37,6 +37,8 @@ import {
 import type { DrawerFact } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
+import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
+import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
 function utility(value: boolean | null): string {
@@ -90,7 +92,11 @@ function emptyParcel() {
     acquisition_date: "",
     seller: "",
     purchase_price: "",
-    acquisition_fees: "",
+    acquisition_fees: "0",
+    acquisition_tax_percent: "0",
+    agent_fee_amount: "0",
+    legal_fee_amount: "0",
+    registration_fee_amount: "0",
   };
 }
 
@@ -172,12 +178,23 @@ function parcelFields(parcel: LandParcel, canSeeCost: boolean): EditField[] {
     },
     {
       name: "acquisition_fees",
-      label: "Acquisition fees",
+      label: "Other / previously recorded fees",
+      hint: "Exclude taxes, agent, legal and registration entered separately below.",
       kind: "number",
       visible: canSeeCost,
       group: "Acquisition",
       affix: code,
     },
+    {
+      name: "acquisition_tax_rate_fraction", label: "Taxes (%)", kind: "number",
+      hint: "Percentage of purchase price, e.g. 5 = 5%.", visible: canSeeCost,
+      group: "Acquisition", affix: "%",
+    },
+    ...[
+      { name: "agent_fee_amount", label: "Agent fee amount" },
+      { name: "legal_fee_amount", label: "Legal fee amount" },
+      { name: "registration_fee_amount", label: "Registration fee amount" },
+    ].map(field => ({ ...field, kind: "number" as const, visible: canSeeCost, group: "Acquisition", affix: code })),
     { name: "frontage", label: "Frontage", kind: "number", group: "Site" },
     { name: "road_access", label: "Road access", group: "Site" },
     { name: "topography", label: "Topography", group: "Site" },
@@ -205,8 +222,8 @@ function parcelFields(parcel: LandParcel, canSeeCost: boolean): EditField[] {
  * Planning is read first and edited on intent. The envelope is a standing fact
  * issued by an authority — permitted use, coverage, FAR, height, setbacks — and
  * showing it as a permanently open form said, wrongly, that it is something the
- * project decides. Nothing here computes: no yield, no buildable area, no
- * residual value. The envelope is recorded; feasibility belongs elsewhere.
+ * project decides. Analytics uses the recorded envelope and owner-entered
+ * assumptions; it never invents a planning allowance or a market rate.
  */
 export function LandTab({
   projectId,
@@ -325,9 +342,14 @@ export function LandTab({
         "seller",
         "purchase_price",
         "acquisition_fees",
+        "agent_fee_amount",
+        "legal_fee_amount",
+        "registration_fee_amount",
       ] as const) {
         if (form[key]) payload[key] = form[key];
       }
+      if (canSeeCost) payload.acquisition_tax_rate_fraction = form.acquisition_tax_percent.trim()
+        ? fractionFromPercent(form.acquisition_tax_percent) : null;
       await projects.createParcel(projectId, payload);
       setNotice(`Parcel ${form.plot_number} registered.`);
       setForm(emptyParcel());
@@ -696,7 +718,7 @@ export function LandTab({
                           }
                         />
                       </Field>
-                      <Field label="Acquisition fees" optional>
+                      <Field label="Other / previously recorded fees" optional hint="Exclude the itemized fees entered below.">
                         <input
                           className="input input-medium"
                           inputMode="decimal"
@@ -706,6 +728,18 @@ export function LandTab({
                           }
                         />
                       </Field>
+                      <Field label="Taxes (% of purchase price)" optional>
+                        <input className="input" inputMode="decimal" value={form.acquisition_tax_percent}
+                          onChange={event => setForm({ ...form, acquisition_tax_percent: event.target.value })} />
+                      </Field>
+                      {([
+                        ["agent_fee_amount", "Agent fee amount"],
+                        ["legal_fee_amount", "Legal fee amount"],
+                        ["registration_fee_amount", "Registration fee amount"],
+                      ] as const).map(([name, label]) => <Field key={name} label={label} optional>
+                        <input className="input" inputMode="decimal" value={form[name]}
+                          onChange={event => setForm({ ...form, [name]: event.target.value })} />
+                      </Field>)}
                     </>
                   ) : null}
                 </FieldRow>
@@ -778,6 +812,7 @@ export function LandTab({
             { key: "planning", label: "Planning" },
             { key: "site", label: "Site & utilities" },
             { key: "documents", label: "Documents" },
+            { key: "analytics", label: "Analytics" },
           ]}
           activeTab={section}
           onSelectTab={setSection}
@@ -791,10 +826,15 @@ export function LandTab({
                 initial={Object.fromEntries(
                   parcelFields(selected, selected.financials_visible).map((field) => [
                     field.name,
-                    asValue(selected[field.name as keyof LandParcel] as never),
+                    field.name === "acquisition_tax_rate_fraction"
+                      ? percentInput(selected.acquisition_tax_rate_fraction)
+                      : asValue(selected[field.name as keyof LandParcel] as never),
                   ]),
                 )}
                 onSave={async (changes) => {
+                  if (typeof changes.acquisition_tax_rate_fraction === "string") {
+                    changes.acquisition_tax_rate_fraction = fractionFromPercent(changes.acquisition_tax_rate_fraction);
+                  }
                   await projects.updateParcel(projectId, selected.id, changes);
                   await refreshSelected(selected.id);
                   setEditingParcel(false);
@@ -842,7 +882,7 @@ export function LandTab({
                       value={selected.total_acquisition_cost
                         ? money(selected.total_acquisition_cost, selected.base_currency_code)
                         : "Incomplete"}
-                      note={selected.total_acquisition_cost ? "Purchase price and acquisition fees" : "Record both inputs"}
+                      note={selected.total_acquisition_cost ? "Purchase price + taxes + other fees + agent + legal + registration" : "Record every cost input; use zero where no additional fee is recorded"}
                     />
                   </Position>
                 ) : null}
@@ -864,7 +904,7 @@ export function LandTab({
                         }
                       />
                       <KeyValue
-                        label="Acquisition fees"
+                        label="Other / previously recorded fees"
                         value={
                           selected.acquisition_fees
                             ? money(selected.acquisition_fees, selected.base_currency_code)
@@ -874,7 +914,7 @@ export function LandTab({
                     </>
                   ) : null}
                 </KeyValueGrid>
-                {selected.financials_visible ? null : (
+                {selected.financials_visible ? <AcquisitionCosts parcel={selected} /> : (
                   <p className="footnote">
                     Development cost is shown to the roles cleared for it. This record is complete
                     otherwise.
@@ -1009,7 +1049,7 @@ export function LandTab({
                             }
                           />
                         </Field>
-                        <Field label="Maximum GFA" optional>
+                        <Field label="Maximum GFA" optional hint={`Max buildable area, in ${selected.area_unit}.`}>
                           <input
                             className="input input-short"
                             inputMode="decimal"
@@ -1214,6 +1254,11 @@ export function LandTab({
               </section>
             </>
           ) : null}
+
+          {section === "analytics" ? selected.financials_visible
+            ? <LandAnalytics key={selected.id} projectId={projectId} parcel={selected} canWrite={canWriteLand} onChanged={() => refreshSelected(selected.id)} />
+            : <Notice tone="info">Land financial analytics are not available to your role.</Notice>
+            : null}
 
           {section === "documents" ? (
             <section>

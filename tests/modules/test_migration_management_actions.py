@@ -22,88 +22,99 @@ def test_action_migration_roundtrip_constraints_and_history(
 ) -> None:
     owner = make_user(db, email="migration-action-owner@example.com", roles=("project_manager",))
     grant_access(admin_client, project_id, owner)
-    before = snapshot(
-        db,
-        (
-            "management_actions",
-            "management_action_history",
-            "alembic_version",
-            "management_report_snapshots",
-            "management_report_snapshot_projects",
-        ),
-    )
-    reply = admin_client.post(
-        "/api/v1/portfolio/actions",
-        json={
-            "project_id": project_id,
-            "title": "Governed history",
-            "owner_user_id": str(owner.id),
-            "due_date": str(datetime.now(UTC).date()),
-        },
-    )
-    assert reply.status_code == 201, reply.text
-    identifier = uuid.UUID(reply.json()["id"])
-    for assignment in (
-        "status = 'invented'",
-        "version = 0",
-        "title = ' '",
-        "owner_user_id = NULL",
-        "source_type = 'engine'",
-    ):
-        with pytest.raises(SQLAlchemyError), db.begin_nested():
-            db.execute(
-                text(f"UPDATE management_actions SET {assignment} WHERE id = :id"),
-                {"id": identifier},
+    # Exercise the action revision against its own predecessor. Later revisions
+    # legitimately add source columns/tables and cannot be compared to 0018.
+    db.rollback()
+    try:
+        command.downgrade(alembic_config(), "0018_master_admin")
+        command.upgrade(alembic_config(), "0019_management_actions")
+        before = snapshot(
+            db,
+            (
+                "management_actions",
+                "management_action_history",
+                "alembic_version",
+                "management_report_snapshots",
+                "management_report_snapshot_projects",
+            ),
+        )
+        reply = admin_client.post(
+            "/api/v1/portfolio/actions",
+            json={
+                "project_id": project_id,
+                "title": "Governed history",
+                "owner_user_id": str(owner.id),
+                "due_date": str(datetime.now(UTC).date()),
+            },
+        )
+        assert reply.status_code == 201, reply.text
+        identifier = uuid.UUID(reply.json()["id"])
+        for assignment in (
+            "status = 'invented'",
+            "version = 0",
+            "title = ' '",
+            "owner_user_id = NULL",
+            "source_type = 'engine'",
+        ):
+            with pytest.raises(SQLAlchemyError), db.begin_nested():
+                db.execute(
+                    text(f"UPDATE management_actions SET {assignment} WHERE id = :id"),
+                    {"id": identifier},
+                )
+        for statement in (
+            "UPDATE management_action_history SET reason = 'rewrite'",
+            "DELETE FROM management_action_history",
+        ):
+            with pytest.raises(SQLAlchemyError, match="append-only"), db.begin_nested():
+                db.execute(text(statement))
+        assert (
+            snapshot(
+                db,
+                (
+                    "management_actions",
+                    "management_action_history",
+                    "alembic_version",
+                    "management_report_snapshots",
+                    "management_report_snapshot_projects",
+                ),
             )
-    for statement in (
-        "UPDATE management_action_history SET reason = 'rewrite'",
-        "DELETE FROM management_action_history",
-    ):
-        with pytest.raises(SQLAlchemyError, match="append-only"), db.begin_nested():
-            db.execute(text(statement))
-    assert (
-        snapshot(
-            db,
-            (
-                "management_actions",
-                "management_action_history",
-                "alembic_version",
-                "management_report_snapshots",
-                "management_report_snapshot_projects",
-            ),
+            == before
         )
-        == before
-    )
-    db.rollback()
-    command.downgrade(alembic_config(), "0018_master_admin")
-    assert "management_actions" not in inspect(get_engine()).get_table_names()
-    assert (
-        snapshot(
-            db,
-            (
-                "alembic_version",
-                "management_report_snapshots",
-                "management_report_snapshot_projects",
-            ),
+        db.rollback()
+        command.downgrade(alembic_config(), "0018_master_admin")
+        assert "management_actions" not in inspect(get_engine()).get_table_names()
+        assert (
+            snapshot(
+                db,
+                (
+                    "alembic_version",
+                    "management_report_snapshots",
+                    "management_report_snapshot_projects",
+                ),
+            )
+            == before
         )
-        == before
-    )
-    db.rollback()
-    command.upgrade(alembic_config(), "head")
-    command.check(alembic_config())
-    assert {"management_actions", "management_action_history"} <= set(
-        inspect(get_engine()).get_table_names()
-    )
-    assert (
-        snapshot(
-            db,
-            (
-                "management_actions",
-                "management_action_history",
-                "alembic_version",
-                "management_report_snapshots",
-                "management_report_snapshot_projects",
-            ),
+        db.rollback()
+        command.upgrade(alembic_config(), "0019_management_actions")
+        assert {"management_actions", "management_action_history"} <= set(
+            inspect(get_engine()).get_table_names()
         )
-        == before
-    )
+        assert (
+            snapshot(
+                db,
+                (
+                    "management_actions",
+                    "management_action_history",
+                    "alembic_version",
+                    "management_report_snapshots",
+                    "management_report_snapshot_projects",
+                ),
+            )
+            == before
+        )
+    finally:
+        # Restore the complete schema even when an assertion fails, so unrelated
+        # tests do not cascade into missing-table failures.
+        db.rollback()
+        command.upgrade(alembic_config(), "head")
+        command.check(alembic_config())

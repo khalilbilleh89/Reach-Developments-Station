@@ -58,7 +58,7 @@ from app.modules.inventory.models import (
 from app.modules.inventory.service import area_lines, weighted_saleable_area
 from app.modules.pricing.models import STATUS_ACTIVE as PRICE_ACTIVE
 from app.modules.pricing.models import UnitPriceVersion
-from app.modules.projects.models import LandParcel, Project
+from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.sales import service as sales_service
 from app.modules.sales.models import (
@@ -307,13 +307,9 @@ def project_land_total(session: Session, *, project_id: uuid.UUID) -> Decimal:
     rate: this is cost allocation, and a pool seeded from what the land is
     *worth* would allocate a profit as though it were a cost.
     """
-    total = session.scalar(
-        select(
-            func.coalesce(func.sum(func.coalesce(LandParcel.purchase_price, 0)), 0)
-            + func.coalesce(func.sum(func.coalesce(LandParcel.acquisition_fees, 0)), 0)
-        ).where(LandParcel.project_id == project_id, LandParcel.is_active.is_(True))
-    )
-    return money(Decimal(total or 0))
+    from app.modules.projects.land_analytics import project_acquisition_total
+
+    return project_acquisition_total(session, project_id=project_id)
 
 
 # --------------------------------------------------------------------------- #
