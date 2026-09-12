@@ -329,11 +329,16 @@ def domain_of_migration(path: str) -> str | None:
     answer for one that reshapes something shared.
     """
     stem = Path(path).stem
+    # This revision joins two domain histories; keep the complete regression fallback.
+    if stem == "0024_merge_permits_inventory":
+        return None
     for domain in DOMAIN_TEST_PREFIXES:
         if domain in NON_SCHEMA_DOMAINS:
             continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
+    if stem == "0023_inventory_options":
+        return "inventory"
     if stem.endswith("_sales_legal"):
         return "sales"
     if stem.endswith("_project_land_permits") or stem in {

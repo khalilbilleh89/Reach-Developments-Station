@@ -416,6 +416,10 @@ export type AreaLine = {
 };
 
 export type UnitSummary = {
+  bathrooms: number | null;
+  orientation_code: string | null;
+  view_class_code: string | null;
+  physical_components: Record<string,{area:string|null;unit:string|null}>;
   net_area: string | null;
   net_area_unit: string | null;
   gross_area: string | null;
@@ -2963,4 +2967,17 @@ export interface SalesTransaction extends SalesPriceFacts {
   id: string; kind: "reservation" | "sale"; reference: string; status: string;
   created_at: string; unit_id: string; unit_reference: string; client_display_name: string;
   legal_status: string; collection_status: string; spa_number: string | null;
+}
+
+
+export type LaunchRegister = {
+  total: number; priced_count: number; unpriced_count: number; repricing_count: number;
+  totals: {currency_id:string; amount:string}[];
+  rows: {unit_id:string;currency_id:string|null;price:string|null;repricing_required:boolean}[];
+};
+
+
+export interface InventoryOption {
+  id: string; project_id: string; category: string; code: string; label: string;
+  sort_order: number; is_active: boolean;
 }

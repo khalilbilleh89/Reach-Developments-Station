@@ -215,6 +215,12 @@ def inventory_reference_data(
         )
         assert response.status_code == 201, response.text
 
+        response = admin_client.post(
+            f"{inventory_url(operational_project)}/configuration",
+            json={"category": category, "code": code, "label": label},
+        )
+        assert response.status_code == 201, response.text
+
 
 @pytest.fixture
 def phase_id(admin_client: TestClient, project_id: str, inventory_reference_data: None) -> str:

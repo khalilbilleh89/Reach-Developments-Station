@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  InventoryOption,
   SalesUnitOption, SalesPricePreview, SalesTransaction,
   PreLaunchExpense,
   AdminUser,
@@ -121,6 +122,7 @@ import type {
   UnitFeature, UnitDocument,
   UnitPricing,
   UnitRegister,
+  LaunchRegister,
   UnitStatusEvent,
   AllocationVersion,
   AllocationVersionDetail,
@@ -372,6 +374,10 @@ export const projects = {
  * server, and every path here is scoped to the project that owns the records.
  */
 export const inventory = {
+  configuration: (projectId:string) => get<InventoryOption[]>(`/projects/${projectId}/inventory/configuration`),
+  createOption: (projectId:string,input:Record<string,unknown>) => post<InventoryOption>(`/projects/${projectId}/inventory/configuration`,input),
+  updateOption: (projectId:string,id:string,input:Record<string,unknown>) => patch<InventoryOption>(`/projects/${projectId}/inventory/configuration/${id}`,input),
+  launchValues: (projectId: string, query: Record<string,string> = {}) => get<LaunchRegister>(`/projects/${projectId}/inventory/launch-values?${new URLSearchParams(query)}`),
   deleteRecord: (projectId: string, kind: "units" | "floors" | "buildings" | "phases", id: string, reason: string) =>
     remove(`/projects/${projectId}/inventory/${kind}/${id}?${new URLSearchParams({reason})}`),
   phases: (projectId: string) =>

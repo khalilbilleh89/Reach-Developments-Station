@@ -115,7 +115,7 @@ def test_direct_price_without_configuration_requires_separate_approval(
         command.downgrade(config, "0013_unit_master")
 
 
-def test_direct_price_validates_amount_reason_and_exclusive_inputs(
+def test_direct_price_validates_amount_and_exclusive_inputs_with_optional_reason(
     admin_client: TestClient,
     finance_client: TestClient,
     project_id: str,
@@ -130,11 +130,13 @@ def test_direct_price_validates_amount_reason_and_exclusive_inputs(
         {"selling_price": "0"},
         {"selling_price": "-1"},
         {"selling_price": "NaN"},
-        {"change_reason": " "},
         {"internal_rate_override": "12"},
     ):
         response = finance_client.post(url, json={**payload, **change})
         assert response.status_code == 422, response.text
+    optional = finance_client.post(url, json={"selling_price": "100000", "change_reason": " "})
+    assert optional.status_code == 201, optional.text
+    assert optional.json()["change_reason"] is None
     record = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}").json()
     assert record["pricing_approved"] is False
 

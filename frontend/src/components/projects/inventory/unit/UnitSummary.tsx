@@ -5,7 +5,6 @@ import type { Answer } from "@/lib/answer";
 import {
   Badge,
   Button,
-  Disclosure,
   EmptyState,
   KeyValue,
   KeyValueGrid,
@@ -33,36 +32,16 @@ import {
 /** The commercial states in which a reservation or contract owns the unit. */
 const COMMITTED = new Set(["reserved", "contract_pending", "contracted"]);
 
-/**
- * The first screen of Unit 360: where this unit stands, in one view.
- *
- * The four status dimensions are shown side by side and never merged. "Sold" is
- * not one fact in this product — a unit can be contracted, unpaid, unregistered
- * and undelivered at the same time, and three different teams need to see their
- * own answer without reading somebody else's as theirs.
- *
- * Nothing here is computed. Every status, blocker, gate and figure came back
- * from the API on this request; the browser decides only how to arrange them.
- * Every module here is one answer, made once by the unit file for the header
- * and the sections alike — one request each, only for a role the server
- * answers — so the overview and the section can never disagree. A module that
- * was refused says so, one that failed says so, and neither is drawn as a
- * unit with no price or no commitment.
- */
+/** Inventory profile and launch price; transaction snapshots below serve Sales. */
 export function UnitSummary({
   unit,
   pricing,
-  commitment,
-  collection,
   onOpenTab,
 }: {
   unit: Unit;
   pricing: Answer<UnitPricing>;
-  commitment: Answer<Commitment>;
-  collection: Answer<CollectionSaleSummary>;
   onOpenTab: (tab: string) => void;
 }) {
-  const blocked = unit.release_blockers.length > 0;
 
   return (
     <div className="record-overview">
@@ -74,26 +53,9 @@ export function UnitSummary({
           {unit.view_class_code || unit.orientation_code ? <KeyValue label="View / orientation" value={[unit.view_class_code, unit.orientation_code].filter(Boolean).join(" · ")} /> : null}
           <KeyValue label="Parking / storage" value={`${unit.parking_count} parking · ${unit.storage_count} storage`} />
           <KeyValue label="Area revision" value={unit.area_revision_code ?? "Not recorded"} />
-          <KeyValue label="Delivery" value={<Button small variant="quiet" onClick={() => onOpenTab("construction")}>Inspect construction stages</Button>} />
         </KeyValueGrid>
         <p className="footnote">Parking and storage remain separate attached assets, excluded from gross area.</p>
       </section>
-      {collection.status === "off" ? null : (
-        <section className="record-section unit-account">
-          <SectionHeader level={2}
-            title="Collections"
-            actions={
-              collection.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("collections")}>
-                  Account position
-                </Button>
-              ) : undefined
-            }
-          />
-          <CollectionSnapshot answer={collection} />
-        </section>
-      )}
-
       {pricing.status === "off" ? null : (
         <section className="record-section">
           <SectionHeader level={2}
@@ -110,44 +72,15 @@ export function UnitSummary({
         </section>
       )}
 
-      {commitment.status === "off" ? null : (
-        <section className="record-section">
-          <SectionHeader level={2}
-            title="Commitment"
-            actions={
-              commitment.status === "ready" ? (
-                <Button small onClick={() => onOpenTab("commercial")}>
-                  Sale and legal
-                </Button>
-              ) : undefined
-            }
-          />
-          <CommitmentSnapshot answer={commitment} commercialStatus={unit.commercial_status} />
-        </section>
-      )}
-      <Disclosure title="Release readiness" context="Configuration · approvals · release controls">
-        <Button small onClick={() => onOpenTab("release")}>Release controls</Button>
-        <MetricGroup compact>
-          <Metric
-            label="Data completeness"
-            value={`${unit.completeness_percent}%`}
-            note={unit.is_complete ? "Complete" : "Incomplete"}
-            size="sm"
-          />
-          <Metric label="Drawings" value={unit.drawings_approved ? "Approved" : "Not approved"} size="sm" />
-          <Metric label="Legally saleable" value={unit.legal_sale_eligible ? "Yes" : "No"} size="sm" />
-          <Metric label="Pricing" value={unit.pricing_approved ? "Approved" : "Not approved"} size="sm" />
-          <Metric label="Release date" value={businessDate(unit.release_date)} size="sm" />
-        </MetricGroup>
-        {blocked ? (
-          <Notice tone="warning">Not releasable yet: {unit.release_blockers.join("; ")}.</Notice>
-        ) : (
-          <p className="footnote">Nothing recorded is standing in the way of release.</p>
-        )}
-        {unit.missing_requirements.length > 0 ? (
-          <p className="footnote">Outstanding: {unit.missing_requirements.join(", ")}.</p>
-        ) : null}
-      </Disclosure>
+      <section className="record-section">
+        <SectionHeader level={2} title="Launch preparation" actions={<Button small onClick={() => onOpenTab("release")}>Release</Button>} />
+        <KeyValueGrid columns={3}>
+          <KeyValue label="Drawings" value={unit.drawings_approved ? "Approved" : "Not approved"} />
+          <KeyValue label="Launch price" value={unit.pricing_approved ? "Approved" : "Not approved"} />
+          <KeyValue label="Release date" value={businessDate(unit.release_date)} />
+          <KeyValue label="Release batch" value={unit.release_batch} />
+        </KeyValueGrid>
+      </section>
 
     </div>
   );

@@ -34,6 +34,7 @@ from app.core.patching import resolve_updates
 from app.db.base import MEASURE_EXPONENT
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
+from app.modules.inventory.configuration import require_option
 from app.modules.inventory.models import (
     AREA_ROLE_INTERNAL,
     AREA_SCHEDULE_APPROVED,
@@ -94,7 +95,6 @@ from app.modules.projects.models import (
     UserProjectAccess,
 )
 from app.modules.projects.service import lock_project
-from app.modules.settings.service import require_active_reference_value
 
 #: Codes are typed, read aloud and quoted, so they stay to characters that
 #: survive all three.
@@ -948,7 +948,7 @@ _RELEASE_CLEARABLE = frozenset({"release_date", "release_batch", "block_reason"}
 
 
 def _validate_unit_codes(
-    session: Session, *, country_pack_id: uuid.UUID, values: dict[str, Any]
+    session: Session, *, project_id: uuid.UUID, values: dict[str, Any]
 ) -> None:
     """Check every configurable code a unit newly names.
 
@@ -959,9 +959,7 @@ def _validate_unit_codes(
     for field, category in _UNIT_REFERENCE_FIELDS.items():
         code = values.get(field)
         if code is not None:
-            require_active_reference_value(
-                session, category=category, code=code, country_pack_id=country_pack_id
-            )
+            require_option(session, category=category, code=code, project_id=project_id)
 
 
 #: Unit facts a price is calculated from. Changing any of them means the active
@@ -1034,14 +1032,13 @@ def create_unit(
     asset_class: str,
     **fields: object,
 ) -> Unit:
-    # The configurable codes below are validated against the project's country
-    # pack, so read that project under lock: a jurisdiction change must either
-    # land first and be validated against, or wait behind this unit.
+    # Configuration and assignment share the project lock, so retirement cannot
+    # race a new choice onto a unit.
     project = lock_project(session, project.id)
     _reload(session, floor)
     if not floor.is_active:
         raise ConflictError("That floor is not active.")
-    _validate_unit_codes(session, country_pack_id=project.country_pack_id, values=fields)
+    _validate_unit_codes(session, project_id=project.id, values=fields)
 
     unit = Unit(
         project_id=project.id,
@@ -1134,7 +1131,11 @@ def update_unit(
     if "unit_number" in updates and updates["unit_number"] is not None:
         updates["unit_number"] = str(updates["unit_number"]).strip()
 
-    _validate_unit_codes(session, country_pack_id=project.country_pack_id, values=dict(updates))
+    _validate_unit_codes(
+        session,
+        project_id=project.id,
+        values={key: value for key, value in updates.items() if value != getattr(unit, key)},
+    )
 
     before = _snapshot(unit, _UNIT_FIELDS)
     priced_change = any(
@@ -2476,11 +2477,11 @@ def _validate_sub_asset_links(
             )
     subtype = values.get("subtype_code")
     if subtype is not None:
-        require_active_reference_value(
+        require_option(
             session,
             category=CATEGORY_SUB_ASSET_SUBTYPE,
             code=subtype,
-            country_pack_id=project.country_pack_id,
+            project_id=project.id,
         )
 
 
@@ -2632,6 +2633,18 @@ def _unit_filters(
         pattern = f"%{search.strip()}%"
         clauses.append(Unit.unit_reference.ilike(pattern) | Unit.unit_number.ilike(pattern))
     return clauses
+
+
+def unit_selection(
+    session: Session, *, project: Project, actor: ActorContext, **filters: object
+) -> Select:
+    """Public SQL scope for inventory consumers; filters can only narrow access."""
+    return visible_units(
+        select(Unit.id).where(*_unit_filters(project_id=project.id, **filters)),
+        session,
+        project_id=project.id,
+        actor=actor,
+    )
 
 
 def list_units(

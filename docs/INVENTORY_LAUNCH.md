@@ -1,0 +1,84 @@
+# Inventory launch scope
+
+Owner-requested scope, 12 September 2026. Governing policy: [ENGINEERING_RULES.md](ENGINEERING_RULES.md).
+
+Inventory maintains phases, buildings, floors, unit features, measured areas and
+launch list prices. A unit has Overview, Property, Pricing and Release tabs.
+Release offers only release as Available; server eligibility, permissions and
+append-only history remain authoritative. Removing completeness cards does not
+remove release validation.
+
+Sales > Commercial stock owns the manual uncommitted status controls, legal
+eligibility, holds, four status dimensions, status history and delivery detail.
+Reservations, buyer registration, contracts and collections continue through
+their existing Sales workspaces. Unit records and existing transaction history
+are preserved; this is a UI ownership change, not a database migration.
+
+Direct launch price drafts no longer require a change reason. Existing reasons
+remain stored. Approval rationale and maker/checker rules are unchanged.
+
+`GET /projects/{project_id}/inventory/launch-values` returns paginated current
+launch prices and totals across the complete matching inventory selection.
+Inventory supplies a SQL selection narrowed by project/phase permissions and
+the same physical filters used by its register. Pricing computes the values.
+Readers must have live-price access; legal-only roles are refused. Totals are
+separate per currency and exclude missing prices and prices requiring review.
+The population includes previously released inventory and is labelled as such;
+these are potential list values, not contracted revenue or remaining-stock value.
+
+No production data changes, migrations or new dependencies are required.
+
+## Property editing
+
+Identity, Features and Additional fields each own a local Edit/Save/Cancel form.
+Each form exposes only its section's fields, sends changed fields through the
+existing PATCH contract, and retains inputs on validation failure. Navigation
+uses the existing unsaved-change guard. The broad top-level Edit unit action is
+replaced by the local section actions.
+
+Physical measurements appear once; editing starts or resumes a draft revision,
+and approval is available beside that revision. Approved history and computed
+Net/Gross values remain read-only. Additional features, plans/specifications,
+and parking/storage each have their own editor; their creation forms are hidden
+until Edit is pressed. Read-only users can inspect attachments without receiving
+write controls. A failed Property read has a retry instead of rendering stale
+editable fields.
+
+## Stock
+
+Inventory > Stock is a dedicated shareable view (`section=inventory&view=stock`)
+with a sidebar entry. The same authorised register filters and pagination feed
+its unit schedule and full-selection launch totals. The compact schedule shows
+location, bedrooms/bathrooms, view/orientation, internal/balcony/net/gross areas
+and current launch price. Show all areas adds gardens, terrace and porches.
+
+Component areas come from the approved physical revision. Missing or ambiguous
+components remain unknown; zero remains zero. Existing server calculations
+supply net/gross. Currency totals stay separate, and no tax rate is assumed.
+Commercial statuses, buyers and contracts stay in Sales. Stock is an inventory
+and launch-value overview, not an unsold-stock or contracted-revenue report.
+
+
+## Project configuration
+
+Inventory > Configuration owns each project's unit types, views, orientations,
+floor bands, furnishing, accessibility, garden classes and parking/storage
+subtypes. Project administrators/managers can add, rename, order, deactivate and
+reactivate choices. Every read and mutation is scoped to the accessible project;
+configuration changes and unit assignments use the same project lock.
+
+Property uses these labels in dropdowns and retains the current retired choice.
+Optional facts can be cleared to Not assigned. Counts and yes/no facts retain
+their natural controls. Imports and matching Pricing rules use the same project
+catalogue; there is no live global/country fallback. Choice codes are immutable,
+so renaming a label does not rewrite unit facts or pricing matches. Custom field
+options retain their separate existing definition contract.
+
+Migration 0023_inventory_options snapshots the effective global/country choices
+for existing projects, respecting country overrides, including inactive values.
+Availability is evaluated on the migration date; future/expired choices require
+explicit activation in the new project configuration. New projects start empty.
+Existing units, pricing rules and shared reference data are unchanged.
+Downgrade removes the new configuration table, not unit facts. Export project
+choices before deliberate rollback; new project-only codes need reconciliation
+with the old shared catalogue before old-version writes resume.

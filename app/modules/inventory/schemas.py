@@ -283,6 +283,11 @@ class AreaLine(BaseModel):
     weighted_area: DecimalStr
 
 
+class PhysicalComponentRead(BaseModel):
+    area: DecimalStr | None
+    unit: str | None
+
+
 class UnitSummary(BaseModel):
     """A row of the unit register: what a manager scans, and nothing more."""
 
@@ -311,6 +316,10 @@ class UnitSummary(BaseModel):
     #: The unit that figure is in. A weighted area without its unit is a
     #: number two people can read two different ways.
     weighted_saleable_area_unit: str | None = None
+    bathrooms: int | None = None
+    orientation_code: str | None = None
+    view_class_code: str | None = None
+    physical_components: dict[str, PhysicalComponentRead] = Field(default_factory=dict)
     parking_count: int = 0
     storage_count: int = 0
     commercial_status: str
@@ -805,4 +814,75 @@ class UnitDocumentRead(BaseModel):
     title: str
     url: str
     revision: str | None
+    is_active: bool
+
+
+class LaunchPriceRow(BaseModel):
+    unit_id: uuid.UUID
+    currency_id: uuid.UUID | None
+    price: DecimalStr | None
+    repricing_required: bool
+
+
+class LaunchCurrencyTotal(BaseModel):
+    currency_id: uuid.UUID
+    amount: DecimalStr
+
+
+class LaunchRegister(BaseModel):
+    total: int
+    priced_count: int
+    repricing_count: int
+    unpriced_count: int
+    totals: list[LaunchCurrencyTotal]
+    rows: list[LaunchPriceRow]
+
+
+InventoryCategory = Literal[
+    "unit_type",
+    "floor_band",
+    "orientation",
+    "view_class",
+    "furnishing_specification",
+    "accessibility",
+    "garden_class",
+    "sub_asset_subtype",
+]
+
+
+class InventoryOptionCreate(StrictRequest):
+    category: InventoryCategory
+    code: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=200)
+    sort_order: int = 0
+
+    @field_validator("code", "label")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a nonblank value.")
+        return value.strip()
+
+
+class InventoryOptionUpdate(StrictRequest):
+    label: str | None = Field(default=None, min_length=1, max_length=200)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+    @field_validator("label")
+    @classmethod
+    def nonblank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Enter a nonblank label.")
+        return value.strip() if value else value
+
+
+class InventoryOptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    project_id: uuid.UUID
+    category: InventoryCategory
+    code: str
+    label: str
+    sort_order: int
     is_active: bool

@@ -501,36 +501,26 @@ class TestOnlyEntitledReadersAsk:
         assert "unitEconomics.unit(" not in unit
         assert "UnitEconomicsSection" not in unit
         assert "const seesListPrice = hasAnyRole(roles, LIST_PRICE_READERS);" in unit
-        assert "const seesCollections = hasAnyRole(roles, COLLECTION_READERS);" in unit
+        assert "COLLECTION_READERS" not in unit
+        assert "collections." not in unit
+        assert not re.search(r"sales\.\w+\(", unit)
         assert re.search(
             r"if \(!seesListPrice\) \{\s*setPricingAnswer\(\{ status: \"off\" \}\);\s*return;", unit
         )
-        assert 'if (seesCollections && sale && sale.sale.status !== "draft")' in unit
+        assert "commitmentAnswer" not in unit
 
-    def test_the_unit_headline_follows_authorized_contract_or_pricing_answers(self) -> None:
-        """A sold asset leads with its readable contract; asking price remains gated.
-
-        A committed unit with no readable contract must not fall back to a list
-        price and imply that it is the sold amount. Neither source gains a fetch.
-        """
+    def test_the_inventory_headline_is_an_authorized_launch_price(self) -> None:
+        """Inventory shows list pricing; contract evidence belongs in Sales."""
         unit = read(UNIT_360)
         assert (
             'const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;'
             in unit
         )
         headline = unit.split("const headline: WorkspaceHeadline | undefined = ")[1].split(";")[0]
-        assert headline.startswith("soldContract")
-        assert "soldContract.net_contract_price_ex_tax" in headline
-        assert 'const liveSale = commitmentAnswer.status === "ready"' in unit
-        assert (
-            '["signature_pending", "active", "termination_pending"].includes(liveSale.status)'
-            in unit
-        )
-        assert 'const committedUnit = ["contract_pending", "contracted"]' in unit
-        committed_branch = headline.split(": committedUnit")[1].split(": unitPricing")[0]
-        assert 'commitmentAnswer.status === "failed"' in committed_branch
-        assert ": undefined" in committed_branch
+        assert headline.startswith("unitPricing")
+        assert "repricing_required" in headline
         assert "reference_price_ex_tax" in headline
+        assert "soldContract" not in unit and "net_contract_price_ex_tax" not in unit
 
     def test_navigation_groups_are_the_developers_departments_in_order(self) -> None:
         navigation = read(NAVIGATION)
@@ -731,7 +721,9 @@ class TestRecordsAndDialogsKeepTheirSemantics:
             assert f'["{dimension}_status",' in standing
         assert "statusLabel(unit[key])" in standing
         assert "statusTone(unit[key])" in standing
-        assert "status={<UnitStanding unit={unit} />}" in read(UNIT_360)
+        assert "UnitStanding" not in read(UNIT_360)
+        commercial = read(PROJECTS / "sales" / "CommercialUnits.tsx")
+        assert "UnitStanding" in commercial
         assert "UnitStanding" not in read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
 
     def test_every_table_has_a_caption(self) -> None:

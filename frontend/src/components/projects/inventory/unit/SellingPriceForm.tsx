@@ -13,7 +13,6 @@ export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }:
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
   const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +27,10 @@ export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }:
       try {
         await pricing.createPriceVersion(projectId, unitId, {
           selling_price: amount,
-          change_reason: reason,
           valid_from: date || null,
         });
         setOpen(false);
         setAmount("");
-        setReason("");
         setDate("");
         await onChanged();
       } catch (caught) {
@@ -44,12 +41,9 @@ export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }:
     }}>
       <FormSection title="Enter selling price" description="Enter the total before tax in the project base currency. Save a draft, then submit it for approval by a different person. Approved measurements are required; pricing configuration is not.">
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <FieldRow columns={3}>
+        <FieldRow columns={2}>
           <Field label={`Selling price (${currencyCode ?? "project base currency"}, ex tax)`}>
             <input className="input" required inputMode="decimal" disabled={busy} value={amount} onChange={e => setAmount(e.target.value)} />
-          </Field>
-          <Field label="Reason">
-            <input className="input" required maxLength={500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} />
           </Field>
           <Field label="Effective date" hint="Leave blank for today.">
             <input className="input" type="date" disabled={busy} value={date} onChange={e => setDate(e.target.value)} />
