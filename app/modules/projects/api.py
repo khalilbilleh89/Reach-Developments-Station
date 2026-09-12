@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy import select
 
 from app.modules.access.dependencies import (
@@ -520,6 +520,33 @@ def create_permit_type(
 # --------------------------------------------------------------------------- #
 # Permits
 # --------------------------------------------------------------------------- #
+
+
+@router.get("/{project_id}/permit-assignees")
+def list_permit_assignees(
+    project: AccessibleProject, session: DbSession, actor: ActiveActor
+) -> list[dict[str, str]]:
+    require_technical_writer(actor)
+    return [
+        {"id": str(user.id), "display_name": user.display_name}
+        for user in service.permit_assignees(
+            session, project_id=project.id, actor_user_id=actor.user_id
+        )
+    ]
+
+
+@router.delete("/{project_id}/permits/{permit_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_permit(
+    permit_id: uuid.UUID, project: AccessibleProject, session: DbSession, actor: SystemAdmin
+) -> Response:
+    service.remove_permit(
+        session,
+        project=project,
+        permit_id=permit_id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{project_id}/permits", response_model=PermitRegister, summary="Permit register")

@@ -50,7 +50,7 @@ def reporting_permits(session: Session, scope: Select) -> list[PermitFact]:
         )
         for p in session.scalars(
             select(Permit)
-            .where(Permit.project_id.in_(scope))
+            .where(Permit.project_id.in_(scope), Permit.deleted_at.is_(None))
             .order_by(Permit.project_id, Permit.id)
         )
     ]
@@ -61,7 +61,9 @@ def positions(
 ) -> dict[uuid.UUID, DevelopmentPosition]:
     result: dict[uuid.UUID, DevelopmentPosition] = {}
     for permit, overdue in session.execute(
-        select(Permit, _sla_overdue_clause(as_of)).where(Permit.project_id.in_(project_ids))
+        select(Permit, _sla_overdue_clause(as_of)).where(
+            Permit.project_id.in_(project_ids), Permit.deleted_at.is_(None)
+        )
     ):
         target = result.setdefault(permit.project_id, DevelopmentPosition())
         target.permit_count += 1

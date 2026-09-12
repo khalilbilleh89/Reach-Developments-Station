@@ -21,13 +21,13 @@ import {
   Card,
   DataToolbar,
   IdentityCell,
-  Drawer,
+  ConfirmDialog,
+  Tabs,
+  TabPanel,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
-  FormDialog,
-  FormSection,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -43,6 +43,7 @@ import {
   ToolbarFilter,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
+import { PermitCreatePage } from "./PermitCreatePage";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -134,20 +135,6 @@ const STATUS_TONES: Record<string, Tone> = {
 /** Moves the API requires an explanation for. */
 const REASON_REQUIRED = new Set(["rejected", "on_hold", "withdrawn", "preparing"]);
 
-/** A blank permit form. Named once so the reset cannot drift from the initial. */
-const EMPTY_PERMIT = {
-  permit_code: "",
-  permit_type_code: "",
-  authority: "",
-  parcel_id: "",
-  planned_submission_date: "",
-  planned_issue_date: "",
-  statutory_sla_days: "",
-};
-
-/** A blank permit type. */
-const EMPTY_TYPE = { code: "", label: "" };
-
 function slaLabel(permit: Permit): string {
   if (permit.sla_days_remaining === null) return "—";
   return permit.sla_overdue
@@ -165,7 +152,7 @@ function slaLabel(permit: Permit): string {
  * Identity fields are still offered before submission; once the application is
  * with the authority the API refuses them and the conflict is shown.
  */
-function permitFields(permit: Permit, types: PermitType[]): EditField[] {
+function permitFields(permit: Permit, types: PermitType[], permits: Permit[]): EditField[] {
   const frozen = !["not_started", "preparing"].includes(permit.status);
   return [
     { name: "authority", label: "Authority", visible: !frozen, hint: "Fixed once the application is submitted.", group: "Application" },
@@ -182,6 +169,7 @@ function permitFields(permit: Permit, types: PermitType[]): EditField[] {
         .filter((type) => type.is_active || type.code === permit.permit_type_code)
         .map((type) => ({ value: type.code, label: type.label })),
     },
+    { name: "prerequisite_permit_id", label: "Prerequisite permit", kind: "select", group: "Application", options: permits.filter(row => row.id !== permit.id).map(row => ({ value: row.id, label: row.permit_code })) },
     { name: "authority_reference", label: "Authority reference", group: "Application", width: "medium" },
     { name: "consultant", label: "Consultant", group: "Application" },
     { name: "statutory_sla_days", label: "Statutory period", kind: "number", group: "Application", affix: "days" },
@@ -224,24 +212,17 @@ type Filter = "" | "blocking" | "critical" | "overdue";
  * moves through "Change status", which records why and when, because the
  * history is the record of what the authority actually did.
  */
-export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrite: boolean }) {
+export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost = false, currencyCode = null }: { projectId: string; canWrite: boolean; canDelete?: boolean; canSeeCost?: boolean; currencyCode?: string | null }) {
   const [register, setRegister] = useState<PermitRegister | null>(null);
   const [types, setTypes] = useState<PermitType[] | null>(null);
   const [selected, setSelected] = useState<Permit | null>(null);
   const [parcels, setParcels] = useState<LandParcel[]>([]);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState(EMPTY_PERMIT);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [addingType, setAddingType] = useState(false);
-  const [typeDraft, setTypeDraft] = useState(EMPTY_TYPE);
-  const [typeBusy, setTypeBusy] = useState(false);
-  const [typeError, setTypeError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -295,64 +276,6 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
 
   const typeLabel = (code: string) => types?.find((value) => value.code === code)?.label ?? code;
 
-  /**
-   * Add the missing consent type from inside the permit form.
-   *
-   * The point of the whole endpoint is what does *not* happen here: the permit
-   * being drafted is untouched, so nothing typed so far is the price of
-   * discovering the vocabulary was short one entry. On success the new type is
-   * selected, because it is the one the operator went looking for.
-   */
-  const addPermitType = async () => {
-    setTypeBusy(true);
-    setTypeError(null);
-    try {
-      const created = await projects.createPermitType(projectId, {
-        code: typeDraft.code.trim(),
-        label: typeDraft.label.trim(),
-      });
-      await loadTypes();
-      setForm((current) => ({ ...current, permit_type_code: created.code }));
-      setTypeDraft(EMPTY_TYPE);
-      setAddingType(false);
-      setNotice(`Permit type ${created.label} added for this jurisdiction.`);
-    } catch (caught) {
-      setTypeError(
-        caught instanceof ApiError ? caught.message : "Could not add the permit type.",
-      );
-    } finally {
-      setTypeBusy(false);
-    }
-  };
-
-  const create = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setFormError(null);
-    try {
-      const payload: Record<string, unknown> = {
-        permit_code: form.permit_code,
-        permit_type_code: form.permit_type_code,
-        authority: form.authority,
-      };
-      if (form.parcel_id) payload.parcel_id = form.parcel_id;
-      if (form.planned_submission_date) payload.planned_submission_date = form.planned_submission_date;
-      if (form.planned_issue_date) payload.planned_issue_date = form.planned_issue_date;
-      if (form.statutory_sla_days) payload.statutory_sla_days = Number(form.statutory_sla_days);
-      await projects.createPermit(projectId, payload);
-      setNotice(`Permit ${form.permit_code} registered.`);
-      setCreating(false);
-      setForm(EMPTY_PERMIT);
-      await load();
-    } catch (caught) {
-      setFormError(
-        caught instanceof ApiError ? caught.message : "Could not register the permit.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   // Narrowing happens here, over rows the server already decided this reader
   // may see. The counts on the strip stay the server's, over the whole set.
   const shown = useMemo(() => {
@@ -380,6 +303,7 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
 
   return (
     <>
+      {!creating && !selected ? <>
       <PageHeader
         icon="permits"
         title="Permits"
@@ -390,11 +314,10 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
             <Button data-leaves-editor
               variant="primary"
               onClick={() => {
-                setFormError(null);
                 setCreating((open) => !open);
               }}
             >
-              {creating ? "Cancel" : "New permit"}
+              Add permit
             </Button>
           ) : undefined
         }
@@ -494,7 +417,6 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
                   // status and flag columns still say which of the two it is.
                   <tr
                     key={permit.id}
-                    aria-selected={selected?.id === permit.id}
                     className={permit.sla_overdue || permit.is_blocking ? "row-flag" : undefined}
                   >
                     <th scope="row">
@@ -551,177 +473,22 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
         </Card>
       </div>
 
-      {creating ? (
-        <Drawer
-          narrow
-          eyebrow="New record"
-          title="Register a permit"
-          subtitle="The consent, who issues it, and when it is planned. Everything else is maintained from the permit's file."
-          onClose={() => {
-            setCreating(false);
-            setFormError(null);
-          }}
-        >
-          <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(EMPTY_PERMIT)} busy={busy} onDiscard={() => { setForm(EMPTY_PERMIT); }}>
-            <form onSubmit={create}>
-              {formError ? <Notice tone="error">{formError}</Notice> : null}
-              <FormSection title="Consent">
-                <FieldRow columns={2}>
-                  <Field label="Permit code" hint="Unique within this project, e.g. BLD-001.">
-                    <input
-                      className="input input-medium"
-                      required
-                      maxLength={64}
-                      value={form.permit_code}
-                      onChange={(event) => setForm({ ...form, permit_code: event.target.value })}
-                    />
-                  </Field>
-                  <Field label="Authority">
-                    <input
-                      className="input"
-                      required
-                      maxLength={200}
-                      value={form.authority}
-                      onChange={(event) => setForm({ ...form, authority: event.target.value })}
-                    />
-                  </Field>
-                </FieldRow>
-                <PermitTypeChoice
-                  types={types}
-                  value={form.permit_type_code}
-                  canWrite={canWrite}
-                  onChange={(code) => setForm({ ...form, permit_type_code: code })}
-                  onAdd={() => setAddingType(true)}
-                />
-                {/* Only asked where there is something to answer with. A lone
-                    "not tied to one parcel" option is a question the project
-                    cannot yet have an opinion about. */}
-                {parcels.length > 0 ? (
-                  <Field
-                    label="Parcel"
-                    optional
-                    hint="Where the consent applies, where that is known."
-                  >
-                    <select
-                      className="input"
-                      value={form.parcel_id}
-                      onChange={(event) => setForm({ ...form, parcel_id: event.target.value })}
-                    >
-                      <option value="">Not tied to one parcel</option>
-                      {parcels.map((parcel) => (
-                        <option key={parcel.id} value={parcel.id}>
-                          {parcel.plot_number}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                ) : null}
-              </FormSection>
-              <FormSection title="Programme">
-                <FieldRow columns={3}>
-                  <Field label="Planned submission" optional>
-                    <input
-                      className="input input-short"
-                      type="date"
-                      value={form.planned_submission_date}
-                      onChange={(event) =>
-                        setForm({ ...form, planned_submission_date: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field label="Planned issue" optional>
-                    <input
-                      className="input input-short"
-                      type="date"
-                      value={form.planned_issue_date}
-                      onChange={(event) =>
-                        setForm({ ...form, planned_issue_date: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="Statutory period"
-                    optional
-                    hint="How long the authority has by law."
-                  >
-                    <span className="input-shell input-shell-rate">
-                      <input
-                        className="input"
-                        type="number"
-                        min="1"
-                        value={form.statutory_sla_days}
-                        onChange={(event) =>
-                          setForm({ ...form, statutory_sla_days: event.target.value })
-                        }
-                      />
-                      <span className="input-affix" aria-hidden="true">
-                        days
-                      </span>
-                    </span>
-                  </Field>
-                </FieldRow>
-              </FormSection>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy || !form.permit_type_code}>
-                  {busy ? "Saving…" : "Register permit"}
-                </Button>
-                <Button data-leaves-editor onClick={() => setCreating(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              </FormActions>
-            </form>
-          </DraftBoundary>
-        </Drawer>
-      ) : null}
-
-      {/* Opened from inside the permit form and closed back into it. The
-          permit's own fields are untouched while this is open, so nothing
-          typed so far is lost to adding the type it needed. */}
-      {addingType ? (
-        <FormDialog
-          title="Add a permit type"
-          description="Added to this project's jurisdiction and available immediately. It becomes part of the vocabulary every permit register here filters and reports on."
-          confirmLabel="Add permit type"
-          busy={typeBusy}
-          disabled={!typeDraft.code.trim() || !typeDraft.label.trim()}
-          onSubmit={() => void addPermitType()}
-          onCancel={() => {
-            setAddingType(false);
-            setTypeError(null);
-          }}
-        >
-          {typeError ? <Notice tone="error">{typeError}</Notice> : null}
-          <Field label="Name" hint="What operators read: Civil defence approval.">
-            <input
-              className="input"
-              required
-              maxLength={200}
-              value={typeDraft.label}
-              onChange={(event) => setTypeDraft({ ...typeDraft, label: event.target.value })}
-            />
-          </Field>
-          <Field
-            label="Short code"
-            hint="The identifier registers and reports group by. Chosen once and not generated: CIVIL_DEFENCE."
-          >
-            <input
-              className="input input-medium mono"
-              required
-              maxLength={64}
-              value={typeDraft.code}
-              onChange={(event) => setTypeDraft({ ...typeDraft, code: event.target.value })}
-            />
-          </Field>
-        </FormDialog>
-      ) : null}
+      </> : null}
+      {creating && canWrite ? <PermitCreatePage projectId={projectId} types={types} parcels={parcels}
+        permits={register?.permits ?? []} statuses={STATUS_LABELS} canSeeCost={canSeeCost}
+        currencyCode={currencyCode} onCancel={() => setCreating(false)}
+        onCreated={async created => { setCreating(false); setSelected(created); setNotice(`Permit ${created.permit_code} added.`); await load(); await loadTypes(); }} /> : null}
 
       {selected ? (
         <PermitFile
           projectId={projectId}
           permit={selected}
           types={types ?? []}
+          permits={register?.permits ?? []}
           typeLabel={typeLabel}
           canWrite={canWrite}
+          canDelete={canDelete}
+          onDeleted={async () => { setSelected(null); setNotice("Permit deleted from the active register."); await load(); }}
           onClose={() => setSelected(null)}
           onChanged={async (updated) => {
             setSelected(updated);
@@ -729,90 +496,6 @@ export function PermitsTab({ projectId, canWrite }: { projectId: string; canWrit
           }}
           onNotice={setNotice}
         />
-      ) : null}
-    </>
-  );
-}
-
-/**
- * Choosing the consent type, and adding one when the list is short of it.
- *
- * Permit type stayed a controlled vocabulary on purpose — it is filtered,
- * counted and reported on, and left open it becomes "Building Permit",
- * "building permit" and "BLDG" inside a month. What PR-V2-01 removes is the
- * detour: the operator who needs a type nobody configured used to abandon the
- * permit, find a System Administrator, learn what a reference category is, and
- * come back. So the way in is here, beside the field that needed it.
- *
- * Retired types are not offered. They still render on the permits already
- * filed under them; they are not choices for a new application.
- */
-function PermitTypeChoice({
-  types,
-  value,
-  canWrite,
-  onChange,
-  onAdd,
-}: {
-  /** `null` while the vocabulary is still loading. */
-  types: PermitType[] | null;
-  value: string;
-  canWrite: boolean;
-  onChange: (code: string) => void;
-  onAdd: () => void;
-}) {
-  if (types === null) {
-    return <Loading label="Loading permit types…" lines={1} />;
-  }
-
-  const available = types.filter((type) => type.is_active);
-
-  // A jurisdiction nobody has configured yet. An empty dropdown would look
-  // broken and say nothing; the reason and the way out belong in its place.
-  if (available.length === 0) {
-    return (
-      <EmptyState
-        title="No permit types yet"
-        hint={
-          canWrite
-            ? "This project's jurisdiction has no consent types configured. Add the first one to file a permit under it."
-            : "This project's jurisdiction has no consent types configured. Somebody with technical write access has to add one before a permit can be filed."
-        }
-        actions={
-          canWrite ? (
-            <Button variant="primary" onClick={onAdd}>
-              Add permit type
-            </Button>
-          ) : undefined
-        }
-      />
-    );
-  }
-
-  return (
-    <>
-      <Field
-        label="Permit type"
-        hint="The vocabulary this project's registers and reports group by."
-      >
-        <select
-          className="input"
-          required
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">Choose…</option>
-          {available.map((type) => (
-            <option key={type.id} value={type.code}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {canWrite ? (
-        <ButtonRow>
-          <Button onClick={onAdd}>Add permit type</Button>
-        </ButtonRow>
       ) : null}
     </>
   );
@@ -835,20 +518,28 @@ function PermitFile({
   permit,
   types,
   typeLabel,
+  permits,
   canWrite,
   onClose,
   onChanged,
   onNotice,
+  canDelete,
+  onDeleted,
 }: {
   projectId: string;
   permit: Permit;
   types: PermitType[];
+  permits: Permit[];
   typeLabel: (code: string) => string;
   canWrite: boolean;
   onClose: () => void;
   onChanged: (updated: Permit) => Promise<void>;
   onNotice: (message: string) => void;
+  canDelete: boolean;
+  onDeleted: () => Promise<void>;
 }) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [section, setSection] = useState("permit");
   const [history, setHistory] = useState<PermitStatusEvent[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -900,55 +591,27 @@ function PermitFile({
   const moves = TRANSITIONS[permit.status] ?? [];
 
   return (
-    <Drawer
-      narrow
-      icon="permits"
-      eyebrow={typeLabel(permit.permit_type_code)}
-      title={permit.permit_code}
-      subtitle={permit.authority}
-      meta={
-        <>
-          <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
-            {STATUS_LABELS[permit.status] ?? permit.status}
-          </Badge>
-          {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
-          {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
-          {permit.sla_overdue ? <Badge tone="danger">{slaLabel(permit)}</Badge> : null}
-        </>
-      }
-      // Where the consent stands with the authority, set large. A permit is
-      // opened to answer one question — is it late — and the statutory clock is
-      // the server's answer to it, not a countdown computed here.
-      headline={
-        permit.sla_days_remaining === null
-          ? undefined
-          : {
-              value: slaLabel(permit),
-              label: permit.sla_overdue ? "Past the statutory period" : "Statutory period",
-              tone: permit.sla_overdue ? "danger" : undefined,
-            }
-      }
-      facts={[
-        { label: "Status since", value: businessDate(permit.status_effective_date) },
-        { label: "Days in stage", value: permit.days_in_stage },
-        { label: "Required by", value: businessDate(permit.planned_issue_date) },
-        ...(permit.statutory_sla_days === null
-          ? [{ label: "Statutory period", value: "Not set", tone: "muted" as const }]
-          : []),
-        ...(permit.financials_visible
-          ? [{ label: "Fee", value: money(permit.fee_amount, permit.base_currency_code) }]
-          : []),
-      ]}
-      actions={
-        canWrite ? (
-          <Button data-leaves-editor onClick={() => setEditing((open) => !open)}>{editing ? "Cancel edit" : "Edit permit"}</Button>
-        ) : undefined
-      }
-      tabs={SECTIONS}
-      activeTab={section}
-      onSelectTab={setSection}
-      onClose={onClose}
-    >
+    <article className="record-workspace">
+      <Button data-leaves-editor onClick={onClose} disabled={busy}>Back to permits</Button>
+      <PageHeader icon="permits" title={permit.permit_code} subtitle={permit.authority}
+        actions={<ButtonRow>
+          {canWrite ? <Button data-leaves-editor onClick={() => setEditing(open => !open)}>{editing ? "Cancel edit" : "Edit permit"}</Button> : null}
+          {canDelete ? <Button data-leaves-editor variant="danger" disabled={busy} onClick={() => { setDeleteError(null); setDeleting(true); }}>Delete permit</Button> : null}
+        </ButtonRow>} />
+      <div className="row-actions"><Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>{STATUS_LABELS[permit.status] ?? permit.status}</Badge>
+        <span>{typeLabel(permit.permit_type_code)}</span>
+        {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+        {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
+        {permit.sla_overdue ? <Badge tone="danger">{slaLabel(permit)}</Badge> : null}
+      </div>
+      <KeyValueGrid columns={3}>
+        <KeyValue label="Status since" value={businessDate(permit.status_effective_date)} />
+        <KeyValue label="Days in stage" value={permit.days_in_stage} />
+        <KeyValue label="Statutory period" value={slaLabel(permit)} />
+        {permit.financials_visible ? <KeyValue label="Fee" value={money(permit.fee_amount, permit.base_currency_code)} /> : null}
+      </KeyValueGrid>
+      <Tabs label="Permit sections" tabs={SECTIONS} active={section} onSelect={setSection} />
+      <TabPanel group="Permit sections" tab={section}>
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       {section === "permit" ? (
@@ -956,10 +619,10 @@ function PermitFile({
           {editing ? (
             <Card title="Edit permit">
               <EditForm
-                fields={permitFields(permit, types)}
+                fields={permitFields(permit, types, permits)}
                 columns={2}
                 initial={Object.fromEntries(
-                  permitFields(permit, types).map((field) => [
+                  permitFields(permit, types, permits).map((field) => [
                     field.name,
                     asValue(permit[field.name as keyof Permit] as never),
                   ]),
@@ -1130,6 +793,15 @@ function PermitFile({
           </Timeline>
         )
       ) : null}
-    </Drawer>
+      </TabPanel>
+      {deleting ? <ConfirmDialog title={`Delete permit ${permit.permit_code}?`}
+        body={deleteError ?? "Remove this permit from active screens and counts? Audit history and document references are retained. An active dependent permit must be unlinked first."}
+        confirmLabel="Delete permit" busy={busy} onCancel={() => { if (!busy) setDeleting(false); }}
+        onConfirm={() => { if (busy) return; setBusy(true); setDeleteError(null);
+          void projects.removePermit(projectId, permit.id).then(onDeleted)
+            .catch(caught => setDeleteError(caught instanceof ApiError ? caught.message : "Could not delete the permit."))
+            .finally(() => setBusy(false));
+        }} /> : null}
+    </article>
   );
 }

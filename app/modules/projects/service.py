@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.patching import resolve_updates
-from app.modules.access.models import ROLE_SYSTEM_ADMIN, User
+from app.modules.access.models import ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN, User
 from app.modules.audit.service import record_event
 from app.modules.projects.models import (
     CATEGORY_DOCUMENT_TYPE,
@@ -543,7 +543,7 @@ def _require_project_member(
     route into security administration.
     """
     user = _require_active_user(session, user_id, label=label)
-    if ROLE_SYSTEM_ADMIN in user.role_keys:
+    if {ROLE_SYSTEM_ADMIN, ROLE_MASTER_ADMIN} & user.role_keys:
         return user
     if not _has_active_access(session, project_id=project_id, user_id=user_id):
         raise ValidationError(f"{label} must already have access to this project.")
@@ -780,7 +780,7 @@ def permit_summary(session: Session, project_ids: list[uuid.UUID]) -> dict[uuid.
             func.count(Permit.id).filter(Permit.is_critical_path.is_(True)),
             func.count(Permit.id).filter(_sla_overdue_clause(today)),
         )
-        .where(Permit.project_id.in_(project_ids))
+        .where(Permit.project_id.in_(project_ids), Permit.deleted_at.is_(None))
         .group_by(Permit.project_id)
     ).all()
     return {
@@ -1402,7 +1402,10 @@ def _permit_filters(
     Built once so the counts can never describe a different population from the
     rows they are reported alongside.
     """
-    clauses: list[ColumnElement[bool]] = [Permit.project_id == project_id]
+    clauses: list[ColumnElement[bool]] = [
+        Permit.project_id == project_id,
+        Permit.deleted_at.is_(None),
+    ]
     if status is not None:
         clauses.append(Permit.status == status)
     if permit_type_code is not None:
@@ -1488,7 +1491,9 @@ def permit_register_totals(
 def get_permit(session: Session, *, project_id: uuid.UUID, permit_id: uuid.UUID) -> Permit:
     """Load a permit within a project. Scoped for the same reason parcels are."""
     permit = session.scalars(
-        select(Permit).where(Permit.id == permit_id, Permit.project_id == project_id)
+        select(Permit).where(
+            Permit.id == permit_id, Permit.project_id == project_id, Permit.deleted_at.is_(None)
+        )
     ).first()
     if permit is None:
         raise NotFoundError("Permit not found.")
@@ -1506,7 +1511,7 @@ def _lock_permit(session: Session, *, project_id: uuid.UUID, permit_id: uuid.UUI
     """
     permit = session.scalars(
         select(Permit)
-        .where(Permit.id == permit_id, Permit.project_id == project_id)
+        .where(Permit.id == permit_id, Permit.project_id == project_id, Permit.deleted_at.is_(None))
         .with_for_update()
         # See ``_lock_project``: the lock alone would return stale attributes.
         .execution_options(populate_existing=True)
@@ -1543,7 +1548,11 @@ def _require_prerequisite(
         raise ValidationError("A permit cannot be its own prerequisite.")
 
     prerequisite = session.scalars(
-        select(Permit).where(Permit.id == prerequisite_id, Permit.project_id == project_id)
+        select(Permit).where(
+            Permit.id == prerequisite_id,
+            Permit.project_id == project_id,
+            Permit.deleted_at.is_(None),
+        )
     ).first()
     if prerequisite is None:
         raise ValidationError("The prerequisite permit must belong to this project.")
@@ -1611,6 +1620,8 @@ def create_permit(
     permit_code: str,
     permit_type_code: str,
     authority: str,
+    initial_status: str = PERMIT_STATUS_NOT_STARTED,
+    new_permit_type: dict[str, Any] | None = None,
     status_effective_date: date | None = None,
     **fields: object,
 ) -> Permit:
@@ -1622,13 +1633,34 @@ def create_permit(
     # validated against a jurisdiction the project has already left.
     project = lock_project(session, project.id)
 
+    if initial_status not in PERMIT_STATUSES:
+        raise ValidationError("Unknown permit status.")
+    if new_permit_type is not None:
+        if new_permit_type["code"].strip() != permit_type_code.strip():
+            raise ValidationError("The new permit type code must match the selected type.")
+        create_reference_value(
+            session,
+            actor_user_id=actor_user_id,
+            correlation_id=correlation_id,
+            country_pack_id=project.country_pack_id,
+            category=CATEGORY_PERMIT_TYPE,
+            code=permit_type_code,
+            label=new_permit_type["label"],
+            description=new_permit_type.get("description"),
+            sort_order=0,
+            valid_from=None,
+            valid_to=None,
+            commit=False,
+        )
     values = dict(fields)
     values["permit_type_code"] = permit_type_code
     _validate_permit_links(session, project=project, permit_id=None, values=values)
 
     code = permit_code.strip()
     existing = session.scalars(
-        select(Permit).where(Permit.project_id == project.id, Permit.permit_code == code)
+        select(Permit).where(
+            Permit.project_id == project.id, Permit.permit_code == code, Permit.deleted_at.is_(None)
+        )
     ).first()
     if existing is not None:
         raise ConflictError("A permit with that code already exists in this project.")
@@ -1638,7 +1670,7 @@ def create_permit(
         permit_code=code,
         permit_type_code=permit_type_code,
         authority=authority.strip(),
-        status=PERMIT_STATUS_NOT_STARTED,
+        status=initial_status,
         status_effective_date=status_effective_date or date.today(),
         **{key: value for key, value in fields.items() if key in _PERMIT_UPDATABLE},
     )
@@ -1648,6 +1680,21 @@ def create_permit(
         constraint=_PERMIT_CODE_CONSTRAINT,
         detail="A permit with that code already exists in this project.",
     )
+    if initial_status != PERMIT_STATUS_NOT_STARTED:
+        milestone = _MILESTONE_FOR_STATUS.get(initial_status)
+        if milestone and getattr(permit, milestone) is None:
+            setattr(permit, milestone, permit.status_effective_date)
+        session.add(
+            PermitStatusEvent(
+                permit_id=permit.id,
+                from_status=PERMIT_STATUS_NOT_STARTED,
+                to_status=initial_status,
+                effective_date=permit.status_effective_date,
+                reason="Initial recorded status",
+                notes="Recorded when adding the permit; not a new authority decision.",
+                changed_by_user_id=actor_user_id,
+            )
+        )
     record_event(
         session,
         action="permit.created",
@@ -1660,6 +1707,63 @@ def create_permit(
     session.commit()
     session.refresh(permit)
     return permit
+
+
+def remove_permit(
+    session: Session,
+    *,
+    project: Project,
+    permit_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Remove from active use without erasing authority/audit history."""
+    lock_project(session, project.id)
+    permit = _lock_permit(session, project_id=project.id, permit_id=permit_id)
+    dependent = session.scalar(
+        select(Permit)
+        .where(
+            Permit.project_id == project.id,
+            Permit.prerequisite_permit_id == permit.id,
+            Permit.deleted_at.is_(None),
+        )
+        .order_by(Permit.permit_code)
+        .limit(1)
+    )
+    if dependent is not None:
+        raise ConflictError(
+            f"Permit {dependent.permit_code} depends on this permit. Clear its prerequisite first."
+        )
+    before = _snapshot(permit, _PERMIT_FIELDS)
+    permit.deleted_at = datetime.now(UTC)
+    record_event(
+        session,
+        action="permit.removed",
+        entity_type=ENTITY_PERMIT,
+        entity_id=permit.id,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        before=before,
+        after={"deleted_at": permit.deleted_at.isoformat()},
+        reason="Removed from active permit register by administrator",
+    )
+    session.commit()
+
+
+def permit_assignees(
+    session: Session, *, project_id: uuid.UUID, actor_user_id: uuid.UUID
+) -> list[User]:
+    """Active project members plus the current authorized operator; no access grants."""
+    members = select(UserProjectAccess.user_id).where(
+        UserProjectAccess.project_id == project_id, UserProjectAccess.is_active.is_(True)
+    )
+    return list(
+        session.scalars(
+            select(User)
+            .where(User.is_active.is_(True), (User.id.in_(members)) | (User.id == actor_user_id))
+            .order_by(User.display_name, User.id)
+        )
+    )
 
 
 def update_permit(
@@ -1838,7 +1942,9 @@ def derive_permit_metrics(
     if permit.prerequisite_permit_id is not None:
         prerequisite = session.get(Permit, permit.prerequisite_permit_id)
         prerequisite_satisfied = (
-            prerequisite is not None and prerequisite.status in _SATISFYING_STATUSES
+            prerequisite is not None
+            and prerequisite.deleted_at is None
+            and prerequisite.status in _SATISFYING_STATUSES
         )
 
     return {

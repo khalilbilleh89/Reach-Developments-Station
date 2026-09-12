@@ -594,7 +594,7 @@ def technical(session: Session, project: Project, ctx: out.Context) -> out.Techn
     permits = dict(
         session.execute(
             select(Permit.status, func.count())
-            .where(Permit.project_id == project.id)
+            .where(Permit.project_id == project.id, Permit.deleted_at.is_(None))
             .group_by(Permit.status)
         ).all()
     )

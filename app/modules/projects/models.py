@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -463,6 +464,8 @@ class Permit(Base):
 
     __tablename__ = "permits"
 
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
@@ -524,7 +527,13 @@ class Permit(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("project_id", "permit_code"),
+        Index(
+            "uq_permits_project_id_permit_code",
+            "project_id",
+            "permit_code",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         CheckConstraint("length(permit_code) > 0", name="code_not_blank"),
         CheckConstraint(in_list("status", PERMIT_STATUSES), name="status_allowed"),
         CheckConstraint("fee_amount IS NULL OR fee_amount >= 0", name="fee_non_negative"),

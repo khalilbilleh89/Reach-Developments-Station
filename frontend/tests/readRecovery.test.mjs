@@ -7,6 +7,56 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test("Permit deletion waits for confirmation and keeps server refusal visible", async () => {
+  const calls = []; let removed = 0;
+  class ApiError extends Error {}
+  const render = mount("projects/PermitsTab", "PermitFile", {
+    "@/lib/api": { ApiError, projects: { permitHistory: async () => [], removePermit: async (...args) => { calls.push(args); throw new ApiError("Clear dependent first"); } } },
+    "@/lib/format": { todayISO: () => "2026-09-12", businessDate: value => value },
+  }, { projectId: "project", permit: { id: "permit", permit_code: "TEST", status: "not_started", prerequisite_satisfied: true },
+    types: [], permits: [], canWrite: false, canDelete: true, typeLabel: value => value,
+    onClose() {}, onNotice() {}, onChanged: async () => {}, onDeleted: async () => { removed++; } });
+  render(); await settle();
+  const header = nodes(render()).find(n => n.type === "PageHeader");
+  nodes(header.props.actions).find(n => n.type === "Button" && n.props.children === "Delete permit").props.onClick();
+  assert.equal(calls.length, 0);
+  nodes(render()).find(n => n.type === "ConfirmDialog").props.onConfirm();
+  await settle();
+  assert.equal(calls.length, 1);
+  assert.equal(removed, 0);
+  assert.equal(nodes(render()).find(n => n.type === "ConfirmDialog").props.body, "Clear dependent first");
+});
+
+test("Permit creation is a full-page single save, retaining all fields after failure", async () => {
+  const calls = []; let fail = true; let completed = 0;
+  class ApiError extends Error {}
+  const render = mount("projects/PermitCreatePage", "PermitCreatePage", {
+    "@/lib/api": { ApiError, projects: {
+      permitAssignees: async () => [],
+      createPermit: async (...args) => { calls.push(args); if (fail) throw new ApiError("Save refused"); return { id: "permit" }; },
+    } },
+    "@/lib/format": { todayISO: () => "2026-09-12" },
+  }, { projectId: "project", types: [], parcels: [], permits: [], statuses: { issued: "Issued" }, canSeeCost: true,
+    currencyCode: "EUR", onCancel() {}, onCreated: async () => { completed++; } });
+  render(); await settle();
+  const change = (label, value) => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children.props.onChange({ target: { value } });
+  nodes(render()).find(n => n.type === "input" && n.props.type === "checkbox").props.onChange({ target: { checked: true } });
+  for (const [label, value] of [["Permit code", "TEST"], ["Authority", "Council"], ["New type code", "new"], ["New type name", "New consent"], ["Current status", "issued"], ["Fee", "1234.56"], ["Conditions", "Keep this condition"], ["Issued", "2026-09-10"]]) change(label, value);
+  assert.ok(nodes(render()).some(n => n.type === "article"));
+  assert.ok(!nodes(render()).some(n => ["Drawer", "FormDialog"].includes(n.type)));
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1].new_permit_type.label, "New consent");
+  assert.equal(calls[0][1].fee_amount, "1234.56");
+  assert.equal(calls[0][1].initial_status, "issued");
+  assert.equal(calls[0][1].issue_date, "2026-09-10");
+  assert.equal(nodes(render()).find(n => n.type === "Field" && n.props.label === "Conditions").props.children.props.value, "Keep this condition");
+  assert.equal(completed, 0);
+  fail = false;
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(completed, 1);
+});
+
 const landFormat = {};
 runInNewContext(ts.transpileModule(readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

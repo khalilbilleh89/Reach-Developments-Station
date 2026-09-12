@@ -251,6 +251,8 @@ export const audit = {
  * itself on each request; these helpers just describe the shape of the call.
  */
 export const projects = {
+  permitAssignees: (id: string) => get<{ id: string; display_name: string }[]>(`/projects/${id}/permit-assignees`),
+  removePermit: (id: string, permitId: string) => remove(`/projects/${id}/permits/${permitId}`),
   list: (query: { search?: string; status?: string } = {}) => {
     const params = new URLSearchParams({ limit: "100" });
     if (query.search) params.set("search", query.search);
