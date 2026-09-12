@@ -78,7 +78,7 @@ export function PermitCreatePage({ projectId, types, parcels, permits, statuses,
       <PageHeader icon="permits" title="Add permit" subtitle="Enter everything you know and save once. No preliminary registration is needed." />
       <Card><form onSubmit={submit}>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <fieldset disabled={busy} className="draft-fields">
           <FormSection title="Permit">
             <FieldRow columns={3}>
               <Field label="Permit code"><input className="input" required maxLength={64} value={String(values.permit_code)} onChange={e => set("permit_code", e.target.value)} /></Field>
