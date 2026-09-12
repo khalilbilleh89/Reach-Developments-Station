@@ -77,6 +77,7 @@ administrator, and are refused if a bundle tries to supply them.
 | `country_packs`, `country_approval_thresholds` | Jurisdiction configuration is a decision, not data. |
 | `currencies` | A currency invented by an import is a currency nobody chose. |
 | `reference_values` | The controlled vocabularies (`*_code` columns) are configuration. |
+| `inventory_options` | Project-specific unit choices must be configured for the target project before loading units. |
 | `tax_rules` | Tax treatment is configuration in force at a date, not a per-row value. |
 | `roles`, `user_roles` | Authorisation is never a side effect of a data load. |
 | The project itself | Its country pack, base and reporting currency, fiscal year start and manager are decisions. A cutover that can bring a project into existence can bring the wrong one. |
@@ -350,7 +351,7 @@ floor, so it is not the key.
 | `legal_status` | yes | **Mapping BLOCKED.** |
 | `collection_status` | yes | **Mapping BLOCKED.** |
 | `delivery_status` | yes | **Mapping BLOCKED.** |
-| `bedrooms`, `bathrooms`, `unit_type_code`, view/orientation/floor-band codes | no | All `*_code` values resolve against `reference_values`. |
+| `bedrooms`, `bathrooms`, `unit_type_code`, view/orientation/floor-band codes | no | Inventory choice codes resolve against active `inventory_options` for the target project; another project's choices do not apply. |
 | `has_maid_room`, `is_duplex`, `is_penthouse`, `is_corner`, `pool_access` | no | Default false. |
 | `release_date`, `release_batch`, `block_reason` | no | |
 
