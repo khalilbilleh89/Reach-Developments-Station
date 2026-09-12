@@ -86,6 +86,7 @@ export function ReceiptPanel({
   const [reversing, setReversing] = useState<{ kind: "receipt" | "allocation"; id: string } | null>(
     null,
   );
+  const [removing, setRemoving] = useState<Receipt | null>(null);
   const [restricting, setRestricting] = useState<Receipt | null>(null);
 
   const load = useCallback(async () => {
@@ -267,7 +268,7 @@ export function ReceiptPanel({
                   </td>
                   <td>
                     <Badge tone={receiptTone(receipt.status)}>
-                      {receiptLabel(receipt.status)}
+                      {receipt.status === "reversed" && receipt.confirmed_at === null ? "Removed" : receiptLabel(receipt.status)}
                     </Badge>
                     {!receipt.counts_as_cash && receipt.status === "recorded" ? (
                       <p className="hint">Not counted as cash yet</p>
@@ -279,6 +280,11 @@ export function ReceiptPanel({
                   <td>{receipt.bank_reference ?? "—"}</td>
                   <td>
                     <ButtonRow>
+                      {canRecord && receipt.status === "recorded" ? (
+                        <Button variant="danger" disabled={busy} onClick={() => setRemoving(receipt)}>
+                          Delete
+                        </Button>
+                      ) : null}
                       {canConfirm && receipt.status === "recorded" ? (
                         <Button
                           disabled={busy}
@@ -479,6 +485,23 @@ export function ReceiptPanel({
             </FormActions>
           </Form>
         </SubPanel>
+      ) : null}
+
+      {removing ? (
+        <PromptDialog
+          title={`Delete ${removing.receipt_number}`}
+          hint="This unconfirmed receipt will be removed from use. It has never counted as cash. Its record and your reason remain in the audit history. Reverse active allocations first. Confirmed receipts must be reversed by Finance."
+          label="Reason"
+          confirmLabel="Delete"
+          busy={busy}
+          error={error}
+          onCancel={() => setRemoving(null)}
+          onSubmit={(reason) => void act(
+            () => collections.voidReceipt(projectId, removing.id, reason),
+            `${removing.receipt_number} removed. Audit history retained.`,
+            () => setRemoving(null),
+          )}
+        />
       ) : null}
 
       {reversing ? (

@@ -7,8 +7,6 @@
   "cashflow.record_restriction",
   "collections.create_action",
   "collections.create_allocation",
-  "collections.create_receipt",
-  "collections.create_refund",
   "collections.create_restructure",
   "collections.open_dispute",
   "collections.submit_waiver",

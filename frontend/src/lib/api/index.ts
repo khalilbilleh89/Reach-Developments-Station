@@ -1418,6 +1418,8 @@ export const collections = {
       `/projects/${projectId}/collections/receipts/${receiptId}/confirm`,
       {},
     ),
+  voidReceipt: (projectId: string, receiptId: string, reason: string) =>
+    post<Receipt>(`/projects/${projectId}/collections/receipts/${receiptId}/void`, { reason }),
   reverseReceipt: (projectId: string, receiptId: string, reason: string) =>
     post<Receipt>(
       `/projects/${projectId}/collections/receipts/${receiptId}/reverse`,
@@ -1542,6 +1544,8 @@ export const collections = {
       `/projects/${projectId}/collections/refunds/${refundId}/confirm`,
       {},
     ),
+  voidRefund: (projectId: string, refundId: string, reason: string) =>
+    post<CollectionRefund>(`/projects/${projectId}/collections/refunds/${refundId}/void`, { reason }),
   reverseRefund: (projectId: string, refundId: string, reason: string) =>
     post<CollectionRefund>(
       `/projects/${projectId}/collections/refunds/${refundId}/reverse`,

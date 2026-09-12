@@ -153,15 +153,18 @@ export function CollectionAccount({
   };
 
   const act = async (run: () => Promise<unknown>, done: string) => {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     try {
       await run();
       setNotice(done);
       await refresh();
+      return true;
     } catch (caught) {
       setNotice(null);
       setError(caught instanceof ApiError ? caught.message : "That did not work.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -306,6 +309,7 @@ export function CollectionAccount({
               canCollect={canCollect}
               canConfirm={canConfirm}
               busy={busy}
+              error={error}
               onAct={act}
             />
           ) : null}
@@ -315,7 +319,7 @@ export function CollectionAccount({
   );
 }
 
-type Act = (run: () => Promise<unknown>, done: string) => Promise<void>;
+type Act = (run: () => Promise<unknown>, done: string) => Promise<boolean>;
 
 /* ------------------------------------------------------------------------- */
 
@@ -1319,6 +1323,7 @@ function RefundsTab({
   canCollect,
   canConfirm,
   busy,
+  error,
   onAct,
 }: {
   projectId: string;
@@ -1328,13 +1333,20 @@ function RefundsTab({
   canCollect: boolean;
   canConfirm: boolean;
   busy: boolean;
+  error: string | null;
   onAct: Act;
 }) {
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<CollectionRefund[] | null>(null);
-  const [reversing, setReversing] = useState<string | null>(null);
+  const [reversing, setReversing] = useState<CollectionRefund | null>(null);
 
   const load = useCallback(async () => {
-    setRefunds(await collections.refunds(projectId, saleId).catch(() => []));
+    try {
+      setRefunds(await collections.refunds(projectId, saleId));
+      setLoadError(null);
+    } catch (caught) {
+      setLoadError(caught instanceof ApiError ? caught.message : "Could not load the refunds.");
+    }
   }, [projectId, saleId]);
 
   useEffect(() => {
@@ -1350,7 +1362,10 @@ function RefundsTab({
   // withdrawn cancellation takes the amount due back to zero, and hiding the
   // panel on that alone would take a confirmed payment off the screen with it.
   const hasRefundHistory =
-    isPositive(summary.refund_due_total) || isPositive(summary.refund_confirmed_total);
+    isPositive(summary.refund_due_total) || isPositive(summary.refund_confirmed_total) || Boolean(refunds?.length);
+
+  if (loadError) return <Notice tone="error">{loadError}<Button onClick={() => void load()}>Retry</Button></Notice>;
+  if (refunds === null) return <Loading label="Loading refunds" shape="rows" />;
 
   if (!hasRefundHistory) {
     return (
@@ -1414,13 +1429,18 @@ function RefundsTab({
                 <td>{businessDate(refund.refund_date)}</td>
                 <td className="num">{money(refund.amount, currencyCode)}</td>
                 <td>
-                  <Badge tone={refundTone(refund.status)}>{refundLabel(refund.status)}</Badge>
+                  <Badge tone={refundTone(refund.status)}>{refund.status === "reversed" && refund.confirmed_at === null ? "Removed" : refundLabel(refund.status)}</Badge>
                   {refund.reversal_reason ? (
                     <p className="hint">{refund.reversal_reason}</p>
                   ) : null}
                 </td>
                 <td>
                   <ButtonRow>
+                    {canCollect && refund.status === "recorded" ? (
+                      <Button variant="danger" disabled={busy} onClick={() => setReversing(refund)}>
+                        Delete
+                      </Button>
+                    ) : null}
                     {canConfirm && refund.status === "recorded" ? (
                       <Button
                         disabled={busy}
@@ -1435,7 +1455,7 @@ function RefundsTab({
                       </Button>
                     ) : null}
                     {canConfirm && refund.status === "confirmed" ? (
-                      <Button disabled={busy} onClick={() => setReversing(refund.id)}>
+                      <Button disabled={busy} onClick={() => setReversing(refund)}>
                         Reverse
                       </Button>
                     ) : null}
@@ -1456,19 +1476,27 @@ function RefundsTab({
 
       {reversing ? (
         <PromptDialog
-          title="Reverse this refund"
-          hint="The row stays, reversed, and the amount goes back to still-to-pay."
+          title={`${reversing.status === "recorded" ? "Delete" : "Reverse"} ${reversing.refund_number}`}
+          hint={reversing.status === "recorded"
+            ? "This unconfirmed refund will be removed from use. It has never counted as paid. The record and your reason remain in the audit history. The approved amount due is unchanged."
+            : "The row stays, reversed, and the amount goes back to still-to-pay."}
+          error={error}
           label="Reason"
-          confirmLabel="Reverse"
+          confirmLabel={reversing.status === "recorded" ? "Delete" : "Reverse"}
           busy={busy}
           onCancel={() => setReversing(null)}
-          onSubmit={(reason) => {
+          onSubmit={async (reason) => {
             const target = reversing;
-            setReversing(null);
-            after(
-              () => collections.reverseRefund(projectId, target, reason),
-              "Refund reversed.",
+            const saved = await onAct(
+              () => target.status === "recorded"
+                ? collections.voidRefund(projectId, target.id, reason)
+                : collections.reverseRefund(projectId, target.id, reason),
+              target.status === "recorded" ? "Refund removed. Audit history retained." : "Refund reversed.",
             );
+            if (saved) {
+              setReversing(null);
+              await load();
+            }
           }}
         />
       ) : null}
