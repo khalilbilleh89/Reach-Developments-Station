@@ -10,7 +10,7 @@ type NavigateEvent = Event & {
 };
 type NavigationSurface = EventTarget & { traverseTo: (key: string) => unknown };
 
-/** Explicit close paths (Escape, backdrop, drawer close) ask the contained draft first. */
+/** Explicit close paths (Escape, backdrop, page Back) ask the contained draft first. */
 export function requestFormLeave(root: HTMLElement | null, action: () => void) {
   const event = new CustomEvent("reach:form-leave", { cancelable: true, detail: { root, action } });
   if (document.dispatchEvent(event)) action();

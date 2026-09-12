@@ -22,4 +22,13 @@ Do not deliver Add/Edit without completing the matching deletion flow.
   while the audit still records missing implementations.
 - Apply this checklist on every future feature, even when the user does not repeat it.
 
+## Full pages, never side drawers
+
+Use a full page for record creation, editing, detail, inspection and drilldowns.
+Side drawers, slide-overs and narrow side inspectors are prohibited at every viewport.
+Use `RecordPage` for state-owned flows in the shared shell, or an existing routed page.
+Keep Back navigation, register state, unsaved-change protection and deletion controls.
+Small centered confirmations, reason prompts and short forms are allowed.
+Mobile navigation must also use a full-width page. See `docs/UX_PAGE_AUDIT.md`.
+
 The user's explicit instructions take precedence over repository guidance.

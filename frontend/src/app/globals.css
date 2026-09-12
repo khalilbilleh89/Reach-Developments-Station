@@ -164,8 +164,6 @@
   --content-gap: 1.5rem;
   --content-narrow: 26rem;
   --prose-max: 60rem;
-  --drawer-width: 70rem;
-  --drawer-width-narrow: 46rem;
   --control-height: 2.25rem;
   --control-height-sm: 1.75rem;
   --control-height-lg: 2.5rem;
@@ -233,7 +231,7 @@ textarea {
 /* The rail is dark, so its focus ring is drawn in a light tint of the accent
  * rather than the accent itself, which would vanish against navy. */
 .sidebar :focus-visible,
-.nav-drawer :focus-visible {
+.nav-page :focus-visible {
   outline-color: var(--nav-focus);
 }
 
@@ -342,7 +340,7 @@ textarea {
 /* A vertical stack never squashes what it holds; the surface it sits in
    scrolls instead. Without this, a child whose overflow is not `visible` — an
    attention card, say — has an automatic minimum size of zero, and inside a
-   scrolling drawer the flex algorithm compresses it to its own borders. */
+   scrolling record-page the flex algorithm compresses it to its own borders. */
 .stack > * {
   flex-shrink: 0;
 }
@@ -627,7 +625,7 @@ textarea {
 
 /* Two ways to be collapsed: the person pinned it, or the viewport is narrow
  * and the rail is on automatic. Both share one set of rules, and the rules
- * name the sticky rail so the phone's navigation drawer — the same content,
+ * name the sticky rail so the phone's navigation page — the same content,
  * drawn inside the same shell — keeps its labels. */
 .app[data-rail="collapsed"] .sidebar .brand,
 .app[data-rail="auto"].app-narrow .sidebar .brand {
@@ -777,7 +775,7 @@ textarea {
 
 /* The switcher menu is light: it is a list of records, and records live on
  * the working surface. It floats over the rail on desktop and fills the
- * navigation drawer on a phone. */
+ * navigation page on a phone. */
 .switcher-menu {
   position: fixed;
   z-index: 70;
@@ -1019,36 +1017,24 @@ textarea {
   display: none;
 }
 
-/* ---- Mobile navigation drawer ---------------------------------------- */
+/* ---- Mobile navigation page ---------------------------------------- */
 
-.nav-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 44;
-  background-color: var(--scrim);
-}
-
-.nav-drawer {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 45;
+.nav-page {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  width: min(20rem, 88vw);
-  overflow: hidden;
+  width: 100%;
+  min-height: 100dvh;
   background-color: var(--nav-bg);
   color: var(--nav-text);
-  box-shadow: var(--shadow-lg);
-  animation: drawer-left-in var(--motion-base) var(--ease);
 }
+.app-main[hidden], .app:has(> .nav-page) > .sidebar { display: none; }
 
-.nav-drawer .brand {
+.nav-page .brand {
   padding-right: var(--space-2);
 }
 
-.nav-drawer-close {
+.nav-page-close {
   margin-left: auto;
 }
 
@@ -2702,7 +2688,7 @@ input[type="file"].input {
   opacity: 1;
 }
 
-/* The row whose record is open behind the drawer, so closing it lands the
+/* The row whose record is open behind the record-page, so closing it lands the
  * reader back where they were. */
 .table tbody tr[aria-selected="true"],
 .table tbody tr[aria-current="true"] {
@@ -3895,53 +3881,37 @@ input[type="file"].input {
 }
 
 /* --------------------------------------------------------------------------
- * Record file — the drawer
+ * Full-page record layout
  *
- * Unit 360, the deal file, a payment plan and a collections account open over
- * the register that led to them. Opening one should feel like opening a file:
+ * Record content replaces the register in the main workspace:
  *
  *   identity      eyebrow · title · where it is · state
  *   headline      the one value the record is about, where the role may see it
  *   actions       the one or two things this record invites
  *   facts strip   three or four supporting figures
  *   sections      the departments, as tabs
- *   body          the selected section, scrolling under the fixed header
+ *   body          the selected section, scrolling with the document
  * ------------------------------------------------------------------------ */
 
-.drawer-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  justify-content: flex-end;
-  background-color: var(--scrim);
+/* Record pages replace the register in the main document, never at its side. */
+.app-content:has(.record-pages > .record-page) > .workspace-register {
+  display: none;
 }
-
-.drawer {
-  display: flex;
-  flex-direction: column;
-  width: min(var(--drawer-width), calc(100% - 1.5rem));
-  height: calc(100dvh - 1.5rem);
+.record-pages:empty { display: none; }
+.record-pages > .record-page:not(:last-child) { display: none; }
+.record-page {
+  width: 100%;
+  min-width: 0;
   background-color: var(--canvas);
-  box-shadow: var(--shadow-lg);
-  animation: drawer-in var(--motion-base) var(--ease);
-  margin: var(--space-3);
-  border-radius: var(--radius-card);
-  overflow: hidden;
 }
 
-.drawer-inspector { --drawer-width-narrow: 30rem; }
-.drawer-narrow {
-  width: min(var(--drawer-width-narrow), 100%);
-}
-
-.drawer-head {
+.record-page-head {
   flex: none;
   border-bottom: 1px solid var(--line-soft);
   background-color: var(--surface);
 }
 
-.drawer-head-top {
+.record-page-head-top {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
@@ -4001,16 +3971,16 @@ input[type="file"].input {
   margin-top: 0;
 }
 
-.drawer-back {
-  display: none;
+.record-page-back {
+  display: inline-flex;
 }
 
-.drawer-identity {
+.record-page-identity {
   flex: 1;
   min-width: 0;
 }
 
-.drawer-eyebrow {
+.record-page-eyebrow {
   margin: 0 0 0.2rem;
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -4019,7 +3989,7 @@ input[type="file"].input {
   text-transform: uppercase;
 }
 
-.drawer-title {
+.record-page-title {
   margin: 0;
   font-size: var(--title-record);
   font-weight: 650;
@@ -4028,14 +3998,14 @@ input[type="file"].input {
   overflow-wrap: anywhere;
 }
 
-.drawer-subtitle {
+.record-page-subtitle {
   overflow-wrap: anywhere;
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
   font-size: var(--text-base);
 }
 
-.drawer-meta {
+.record-page-meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
@@ -4046,14 +4016,14 @@ input[type="file"].input {
 /* The one value the record is about — a price, a balance — set large beside
  * the identity, with its basis in words beneath. Present only when the role
  * may read it: a role refused the figure never has it fetched. */
-.drawer-headline {
+.record-page-headline {
   flex: none;
   min-width: 0;
   max-width: 100%;
   text-align: right;
 }
 
-.drawer-headline-value {
+.record-page-headline-value {
   margin: 0;
   font-size: var(--metric-hero);
   font-weight: 600;
@@ -4064,23 +4034,23 @@ input[type="file"].input {
   overflow-wrap: anywhere;
 }
 
-.drawer-headline-label {
+.record-page-headline-label {
   margin: var(--space-1) 0 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
 }
 
-.drawer-headline-danger .drawer-headline-value {
+.record-page-headline-danger .record-page-headline-value {
   color: var(--danger);
 }
 
-.drawer-headline-muted .drawer-headline-value {
+.record-page-headline-muted .record-page-headline-value {
   color: var(--text-muted);
   font-weight: 550;
 }
 
-.drawer-head-actions {
+.record-page-head-actions {
   display: flex;
   flex: none;
   gap: var(--space-2);
@@ -4088,7 +4058,7 @@ input[type="file"].input {
 }
 
 /* The record's supporting facts, on one ruled strip. */
-.drawer-facts {
+.record-page-facts {
   display: grid;
   flex-wrap: wrap;
   gap: var(--space-4);
@@ -4099,14 +4069,14 @@ input[type="file"].input {
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
 }
 
-.drawer-fact-label {
+.record-page-fact-label {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
 }
 
-.drawer-fact-value {
+.record-page-fact-value {
   margin: 0.15rem 0 0;
   font-size: var(--text-lg);
   font-weight: 600;
@@ -4116,62 +4086,58 @@ input[type="file"].input {
   overflow-wrap: anywhere;
 }
 
-.drawer-fact-note {
+.record-page-fact-note {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
 
-.drawer-fact-danger .drawer-fact-value {
+.record-page-fact-danger .record-page-fact-value {
   color: var(--danger);
 }
 
-.drawer-fact-muted .drawer-fact-value {
+.record-page-fact-muted .record-page-fact-value {
   color: var(--text-muted);
   font-weight: 550;
 }
 
-.drawer-sections {
+.record-page-sections {
   padding: 0 var(--space-6);
   border-top: 1px solid var(--line-soft);
 }
 
-.drawer-sections .tabs {
+.record-page-sections .tabs {
   margin-bottom: 0;
   border-bottom: 0;
 }
 
-.drawer-head-pad {
+.record-page-head-pad {
   height: var(--space-5);
 }
 
-.drawer-body {
-  flex: 1;
-  overflow-y: auto;
+.record-page-body {
   padding: var(--space-6);
-  scrollbar-width: thin;
-  min-height: 0;
-  overflow-x: hidden;
+  min-width: 0;
 }
 
-.drawer-body .card-body .table-scroll,
-.drawer-body .table-scroll {
+.record-page-body .card-body .table-scroll,
+.record-page-body .table-scroll {
   margin: 0;
   border: 0;
   background-color: var(--surface);
 }
 
-.drawer-body .table th:first-child,
-.drawer-body .table td:first-child {
+.record-page-body .table th:first-child,
+.record-page-body .table td:first-child {
   padding-left: var(--space-3);
 }
 
-.drawer-body .table th:last-child,
-.drawer-body .table td:last-child {
+.record-page-body .table th:last-child,
+.record-page-body .table td:last-child {
   padding-right: var(--space-3);
 }
 
-.drawer-body .table-scroll {
+.record-page-body .table-scroll {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-control);
 }
@@ -4696,33 +4662,11 @@ input[type="file"].input {
 /* --------------------------------------------------------------------------
  * Motion
  *
- * Restrained: a drawer enters, a dialog settles, a menu drops. Nothing bounces
+ * Restrained: a dialog settles, a menu drops. Nothing bounces
  * and nothing counts up. Reduced motion removes all of it.
  * ------------------------------------------------------------------------ */
 
-@keyframes drawer-in {
-  from {
-    opacity: 0;
-    translate: 1.5rem 0;
-  }
 
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-
-@keyframes drawer-left-in {
-  from {
-    translate: -1.5rem 0;
-    opacity: 0;
-  }
-
-  to {
-    translate: 0 0;
-    opacity: 1;
-  }
-}
 
 @keyframes dialog-in {
   from {
@@ -4769,7 +4713,7 @@ a:not([class]):hover { color: var(--accent-hover); }
   border-bottom: 1px solid var(--nav-line);
 }
 
-.drawer-state {
+.record-page-state {
   padding: 0 var(--space-6);
 }
 
@@ -4929,7 +4873,7 @@ a:not([class]):hover { color: var(--accent-hover); }
  *   ≥ 90rem (1440)  full rail, full command centre, registers use the width
  *   ≥ 80rem (1280)  full rail; registers begin to scroll inside themselves
  *   < 75rem (1200)  the rail collapses by default and can be expanded
- *   < 64rem (1024)  the rail becomes a drawer; record drawers take the width
+ *   < 64rem (1024)  navigation opens as a full page
  *   < 48rem (768)   single-column forms, stacked facts, tab rows scroll
  *   < 34rem (544)   phone: compact padding, metrics in two columns
  * ------------------------------------------------------------------------ */
@@ -4945,7 +4889,7 @@ a:not([class]):hover { color: var(--accent-hover); }
 }
 
 @media (width >= 64rem) {
-  .drawer:not(.drawer-narrow) .form-section {
+  .record-page .form-section {
     display: grid;
     grid-template-columns: minmax(10rem, 0.65fr) minmax(0, 2fr);
     gap: var(--space-6);
@@ -4986,11 +4930,6 @@ a:not([class]):hover { color: var(--accent-hover); }
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .drawer {
-    margin: 0;
-    height: 100dvh;
-    border-radius: 0;
-  }
 
   .app {
     grid-template-columns: minmax(0, 1fr);
@@ -5018,18 +4957,11 @@ a:not([class]):hover { color: var(--accent-hover); }
     grid-column: span 12;
   }
 
-  .drawer,
-  .drawer-narrow {
-    width: 100%;
-  }
 
-  .drawer-back {
+  .record-page-back {
     display: inline-grid;
   }
 
-  .drawer-close-desktop {
-    display: none;
-  }
 
   .context-utilities .context-fact {
     display: none;
@@ -5084,9 +5016,9 @@ a:not([class]):hover { color: var(--accent-hover); }
   .register-position .position { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .register-position .position-figure-lead { grid-column: 1 / -1; }
 
-  .drawer-state { padding: 0 var(--space-4); }
-  .drawer-state .standing { padding: var(--space-2) 0; }
-  .drawer-state .standing-label { margin-bottom: var(--space-1); }
+  .record-page-state { padding: 0 var(--space-4); }
+  .record-page-state .standing { padding: var(--space-2) 0; }
+  .record-page-state .standing-label { margin-bottom: var(--space-1); }
   .record-standing .kv-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .standing { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
   .portfolio-penetration { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
@@ -5099,11 +5031,11 @@ a:not([class]):hover { color: var(--accent-hover); }
   .table-scroll-register .table-fixed-first th:first-child,
   .table-scroll-register .table-fixed-first td:first-child { left: auto; box-shadow: none; }
 
-  .drawer {
+  .record-page {
     overflow-y: auto;
   }
 
-  .drawer .drawer-body {
+  .record-page .record-page-body {
     flex: none;
     overflow: visible;
   }
@@ -5216,38 +5148,38 @@ a:not([class]):hover { color: var(--accent-hover); }
     padding: var(--space-3) var(--space-4);
   }
 
-  .drawer-head-top {
+  .record-page-head-top {
     flex-wrap: wrap;
     padding: var(--space-3) var(--space-4) 0;
   }
 
-  .drawer-headline {
+  .record-page-headline {
     order: 3;
     flex-basis: 100%;
     text-align: left;
   }
 
-  .drawer-headline-value {
+  .record-page-headline-value {
     font-size: var(--metric);
   }
 
-  .drawer-head-actions {
+  .record-page-head-actions {
     order: 4;
     flex-basis: 100%;
     flex-wrap: wrap;
   }
 
-  .drawer-facts,
-  .drawer-sections {
+  .record-page-facts,
+  .record-page-sections {
     padding-right: var(--space-4);
     padding-left: var(--space-4);
   }
 
-  .drawer-body {
+  .record-page-body {
     padding: var(--space-4);
   }
 
-  .drawer-title {
+  .record-page-title {
     font-size: var(--text-xl);
   }
 
@@ -5305,7 +5237,7 @@ a:not([class]):hover { color: var(--accent-hover); }
 }
 
 @media (width < 34rem) {
-  .drawer-facts {
+  .record-page-facts {
     gap: var(--space-2) var(--space-5);
   }
 

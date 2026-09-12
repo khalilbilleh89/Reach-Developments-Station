@@ -13,7 +13,7 @@ import {
   Button,
   Card,
   DataToolbar,
-  Drawer,
+  RecordPage,
   EmptyState,
   ExternalLink,
   Field,
@@ -34,7 +34,7 @@ import {
   StatusDot,
   TableScroll,
 } from "@/components/ui";
-import type { DrawerFact } from "@/components/ui";
+import type { RecordPageFact } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
@@ -419,7 +419,7 @@ export function LandTab({
         .includes(needle),
   );
 
-  const facts: DrawerFact[] = selected
+  const facts: RecordPageFact[] = selected
     ? [
         {
           label: "Ownership share",
@@ -579,8 +579,7 @@ export function LandTab({
       </div>
 
       {creating ? (
-        <Drawer
-          narrow
+        <RecordPage
           eyebrow="New record"
           title="Register a parcel"
           subtitle="The opening facts. Site diligence, utilities and planning are recorded on the parcel afterwards."
@@ -755,7 +754,7 @@ export function LandTab({
               </FormActions>
             </form>
           </DraftBoundary>
-        </Drawer>
+        </RecordPage>
       ) : null}
 
       {/* One datalist per classification, rendered once for whichever form is
@@ -770,7 +769,7 @@ export function LandTab({
       ))}
 
       {selected ? (
-        <Drawer
+        <RecordPage
           eyebrow="Land asset"
           icon="land"
           title={selected.plot_number}
@@ -1301,7 +1300,7 @@ export function LandTab({
               )}
             </section>
           ) : null}
-        </Drawer>
+        </RecordPage>
       ) : null}
     </>
   );

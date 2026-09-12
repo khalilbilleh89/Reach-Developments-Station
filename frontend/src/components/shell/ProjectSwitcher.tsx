@@ -39,7 +39,7 @@ export function ProjectSwitcher({
   project: ProjectDetail | null;
   projectId: string;
   section?: string;
-  /** Called when a project is chosen, so a drawer holding the switcher can close. */
+  /** Called when a project is chosen, so a page holding the switcher can close. */
   onNavigate?: () => void;
 }) {
   const [open, setOpen] = useState(false);

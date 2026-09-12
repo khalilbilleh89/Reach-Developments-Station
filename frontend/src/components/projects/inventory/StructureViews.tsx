@@ -10,7 +10,7 @@ import {
   Button,
   Card,
   DataToolbar,
-  Drawer,
+  RecordPage,
   EmptyState,
   Field,
   FieldRow,
@@ -158,7 +158,7 @@ export function PhasesView({
       </Card>
 
       {selected ? (
-        <Drawer inspector
+        <RecordPage
           eyebrow={selected.code}
           title={selected.name}
           onClose={() => setSelected(null)}
@@ -194,7 +194,7 @@ export function PhasesView({
             />
             <KeyValue label="Notes" value={selected.notes ?? "None"} />
           </KeyValueGrid>
-        </Drawer>
+        </RecordPage>
       ) : null}
 
       {editing ? (
@@ -480,7 +480,7 @@ export function BuildingsView({
       </Card>
 
       {selected ? (
-        <Drawer inspector
+        <RecordPage
           eyebrow={selected.code}
           title={selected.name}
           subtitle={phaseOf(selected)?.name ?? undefined}
@@ -514,7 +514,7 @@ export function BuildingsView({
             <KeyValue label="Block" value={selected.block ?? "Not stated"} />
             <KeyValue label="Entrance / wing" value={selected.entrance_wing ?? "Not stated"} />
           </KeyValueGrid>
-        </Drawer>
+        </RecordPage>
       ) : null}
 
       {editing ? (
@@ -842,7 +842,7 @@ export function FloorsView({
       </Card>
 
       {selected ? (
-        <Drawer inspector
+        <RecordPage
           eyebrow={selected.code}
           title={selected.label}
           subtitle={(() => {
@@ -885,7 +885,7 @@ export function FloorsView({
               value={selected.level_number === null ? "Not stated" : String(selected.level_number)}
             />
           </KeyValueGrid>
-        </Drawer>
+        </RecordPage>
       ) : null}
 
       {editing ? (

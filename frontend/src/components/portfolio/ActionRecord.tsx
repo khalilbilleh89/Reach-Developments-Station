@@ -4,7 +4,7 @@ import { ValidationSummary } from "@/components/ui/ValidationSummary";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { DraftBoundary, Badge, Button, ButtonRow, Drawer, Field, FieldRow, FormSection, KeyValue, KeyValueGrid, Notice } from "@/components/ui";
+import { DraftBoundary, Badge, Button, ButtonRow, RecordPage, Field, FieldRow, FormSection, KeyValue, KeyValueGrid, Notice } from "@/components/ui";
 import { requestFormLeave } from "@/components/ui/UnsavedChangesGuard";
 import { ReadState } from "./ReadState";
 import { useAnswer } from "@/lib/answer";
@@ -59,11 +59,11 @@ function ActionForm({ project, initial, source, onSaved, onCancel }: { project: 
 export function CreateAction({ projectId, source = { source_type: "manual" }, onClose, onSaved }: { projectId?: string; source?: ActionSource; onClose: () => void; onSaved: (action: ManagementAction) => void }) {
   const [project, setProject] = useState(projectId ?? "");
   const root = useRef<HTMLDivElement>(null);
-  return <Drawer title="Create management action" subtitle="Owner · due date · accountable history" onClose={onClose}><div ref={root}>
+  return <RecordPage title="Create management action" subtitle="Owner · due date · accountable history" onClose={onClose}><div ref={root}>
     {!projectId ? <ProjectChoice value={project} onChange={value => requestFormLeave(root.current, () => setProject(value))} /> : null}
     {source.source_type !== "manual" ? <Notice tone="info">Linked to the current {source.source_type === "portfolio_risk" ? "risk" : "Outlook"} observation. The server verifies its source when you save.</Notice> : null}
     {project ? <ActionForm key={project} project={project} source={source} onSaved={onSaved} onCancel={onClose} /> : <Notice tone="info">Choose the development this action belongs to.</Notice>}
-  </div></Drawer>;
+  </div></RecordPage>;
 }
 
 const transitions: Record<ActionStatus, ActionStatus[]> = { open: ["in_progress", "completed", "cancelled"], in_progress: ["open", "completed", "cancelled"], completed: ["open"], cancelled: ["open"] };
@@ -89,7 +89,7 @@ export function ActionRecord({ id, canWrite, onClose, onChanged }: { id: string;
     finally { setBusy(false); }
   }
   const action = answer.status === "ready" ? answer.data : null;
-  return <Drawer title={action?.title ?? "Management action"} subtitle={action ? `${action.project_code} · ${action.project_name}` : undefined}
+  return <RecordPage title={action?.title ?? "Management action"} subtitle={action ? `${action.project_code} · ${action.project_name}` : undefined}
     status={action ? <Badge>{action.status.replaceAll("_", " ")}</Badge> : undefined}
     facts={action ? [{ label: "Owner", value: action.owner.display_name }, { label: "Due", value: businessDate(action.due_date), note: action.due_state.replaceAll("_", " "), tone: action.due_state === "overdue" ? "danger" : undefined }] : undefined}
     tabs={[{ key: "action", label: "Action" }, { key: "source", label: "Source" }, { key: "history", label: "History" }]} activeTab={tab} onSelectTab={setTab} onClose={onClose}><DraftBoundary dirty={!editing && reason !== ""} busy={busy} onDiscard={() => setReason("")}>
@@ -110,5 +110,5 @@ export function ActionRecord({ id, canWrite, onClose, onChanged }: { id: string;
       <ul>{Object.entries(event.changes).map(([field, change]) => <li key={field}>{field.replaceAll("_", " ")}: {change.old_display_name ?? change.old ?? "Not set"} → {change.new_display_name ?? change.new ?? "Cleared"}</li>)}</ul>{event.reason ? <p>Reason: {event.reason}</p> : null}</li>)}</ol>
       <ButtonRow><Button disabled={!historyOffset} onClick={() => setHistoryOffset(historyOffset - 20)}>Earlier history</Button><Button disabled={historyOffset + 20 >= history.data.total} onClick={() => setHistoryOffset(historyOffset + 20)}>Later history</Button></ButtonRow>
     </div> : <ReadState answer={history} label="Reading history…" />}
-  </DraftBoundary></Drawer>;
+  </DraftBoundary></RecordPage>;
 }

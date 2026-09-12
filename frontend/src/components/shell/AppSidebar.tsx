@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { Icon } from "@/components/ui";
-import { useOverlay } from "@/components/ui/overlay";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import {
   isProjectSection,
@@ -46,7 +45,7 @@ function sectionHref(area: ShellArea, projectId: string | undefined, key: string
  * Top to bottom: the product, the open project, the sections of the place you
  * are in, and at the foot the person signed in with the way to Settings and
  * the way out. The same content is rendered inside the sticky desktop rail and
- * inside the phone's navigation drawer, so the two never drift apart.
+ * inside the phone's navigation page, so the two never drift apart.
  */
 export function SidebarContent({
   user,
@@ -78,7 +77,7 @@ export function SidebarContent({
         {onClose ? (
           <button
             type="button"
-            className="icon-button icon-button-nav nav-drawer-close"
+            className="icon-button icon-button-nav nav-page-close"
             aria-label="Close navigation"
             onClick={onClose}
           >
@@ -196,39 +195,23 @@ export function AppSidebar(props: SidebarProps) {
   );
 }
 
-/**
- * The same rail as a drawer, for a phone or a narrow tablet.
- *
- * Mounted only while open, so the shared overlay helper gives it the modal
- * behaviour every other overlay has: focus moves in, Tab stays inside, Escape
- * closes it, the page behind stops scrolling, and focus returns to the menu
- * button afterwards.
- */
+/** Full-page navigation on phones and narrow tablets. */
 export function MobileNavigation({ onClose, ...props }: SidebarProps & { onClose: () => void }) {
-  const panel = useOverlay<HTMLElement>(onClose, "container");
-
+  const panel = useRef<HTMLElement>(null);
   useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.current?.focus();
+    return () => { requestAnimationFrame(() => opener?.isConnected && opener.focus()); };
   }, []);
-
   return (
-    <>
-      <div className="nav-scrim" onMouseDown={onClose} />
-      <aside
+      <nav
         id="mobile-navigation"
-        className="nav-drawer"
-        role="dialog"
-        aria-modal="true"
+        className="nav-page"
         aria-label="Navigation"
         tabIndex={-1}
         ref={panel}
       >
         <SidebarContent {...props} onClose={onClose} />
-      </aside>
-    </>
+      </nav>
   );
 }

@@ -9,7 +9,7 @@ import { money, percent, percentInput, fractionFromPercent } from "@/lib/format"
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, Drawer, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, RecordPage, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
 
 export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
@@ -41,7 +41,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
       <p className="table-foot">Beneficiary percentages apply directly to the commissionable base. Releasing this distribution does not change Unit Economics, the sale price, or project cash.</p>
     </Card>
     {loaded && selectedId && !selected ? <Notice tone="error">This commission is unavailable. It may no longer be in your accessible register.</Notice> : null}
-    {selected ? <Drawer
+    {selected ? <RecordPage
       eyebrow="Commission file"
       icon="money"
       title={`${selected.unit_reference} commission`}
@@ -78,7 +78,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
           </tr>)}</tbody>
         </TableScroll> : <EmptyState compact title="No beneficiaries assigned" hint="The distribution records each beneficiary's percentage against the base." />}
       </section>
-    </Drawer> : null}
+    </RecordPage> : null}
     {dialog === "grant" ? <GrantDialog busy={busy} error={error} sales={eligible} codes={currencyCodes} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.create(projectId, body))} /> : null}
     {dialog === "edit" && selected ? <EditCommissionDialog grant={selected} code={currencyCodes[selected.currency_id]} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.update(projectId, selected.id, body))} /> : null}
     {dialog === "allocation" && selected ? <AllocationDialog allocation={allocation} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => allocation ? commissions.updateAllocation(projectId, selected.id, allocation.id, { ...body, expected_updated_at: allocation.updated_at }) : commissions.addAllocation(projectId, selected.id, body))} /> : null}

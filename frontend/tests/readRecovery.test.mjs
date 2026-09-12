@@ -43,7 +43,7 @@ test("Permit creation is a full-page single save, retaining all fields after fai
   nodes(render()).find(n => n.type === "input" && n.props.type === "checkbox").props.onChange({ target: { checked: true } });
   for (const [label, value] of [["Permit code", "TEST"], ["Authority", "Council"], ["New type code", "new"], ["New type name", "New consent"], ["Current status", "issued"], ["Fee", "1234.56"], ["Conditions", "Keep this condition"], ["Issued", "2026-09-10"]]) change(label, value);
   assert.ok(nodes(render()).some(n => n.type === "article"));
-  assert.ok(!nodes(render()).some(n => ["Drawer", "FormDialog"].includes(n.type)));
+  assert.ok(!nodes(render()).some(n => ["RecordPage", "FormDialog"].includes(n.type)));
   await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(calls.length, 1);
   assert.equal(calls[0][1].new_permit_type.label, "New consent");

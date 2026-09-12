@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
   Button,
-  Drawer,
+  RecordPage,
   EmptyState,
   IdentityCell,
   KeyValue,
@@ -123,17 +123,17 @@ export function ContractFile({
 
   if (error && !contract) {
     return (
-      <Drawer title="Contract" onClose={onClose}>
+      <RecordPage title="Contract" onClose={onClose}>
         <Notice tone="error">{error}</Notice><Button disabled={reading} onClick={() => void load()}>Retry contract</Button>
-      </Drawer>
+      </RecordPage>
     );
   }
 
   if (!contract) {
     return (
-      <Drawer title="Contract" onClose={onClose}>
+      <RecordPage title="Contract" onClose={onClose}>
         <Loading label="Loading this contract" />
-      </Drawer>
+      </RecordPage>
     );
   }
 
@@ -141,7 +141,7 @@ export function ContractFile({
   const uncommitted = ["draft", "submitted", "cancelled"].includes(contract.status);
 
   return (
-    <Drawer
+    <RecordPage
       eyebrow="Contract" icon="building"
       title={contract.contract_number}
       subtitle={contract.vendor_name}
@@ -606,6 +606,6 @@ export function ContractFile({
           </section>
         </div>
       ) : null}
-    </Drawer>
+    </RecordPage>
   );
 }

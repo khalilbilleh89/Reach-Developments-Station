@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { pageOffset, useRegisterFields } from "@/components/shell/registerState";
 
-import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, Drawer, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, RecordPage, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter } from "@/components/ui";
 
 import { ReadState } from "./ReadState";
 import { useAnswer } from "@/lib/answer";
@@ -133,7 +133,7 @@ export function PortfolioOutlook() {
 
     </> : <ReadState answer={answer} label="Reading the authorized forward outlook…" />}
 
-    {selected ? <Drawer title={selected.title} subtitle={`${selected.project_code} · ${selected.project_name}`} onClose={() => setSelected(null)}><Observation item={selected} /></Drawer> : null}
+    {selected ? <RecordPage title={selected.title} subtitle={`${selected.project_code} · ${selected.project_name}`} onClose={() => setSelected(null)}><Observation item={selected} /></RecordPage> : null}
 
   </div>;
 
