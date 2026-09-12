@@ -22,43 +22,20 @@ import {
   PRICING_WRITERS,
   hasAnyRole,
 } from "@/lib/roles";
-import { Button, Card, Badge, PromptDialog, RecordWorkspace, Loading, Notice, useRecordTab } from "@/components/ui";
+import { Button, Badge, PromptDialog, RecordWorkspace, Loading, Notice, useRecordTab } from "@/components/ui";
 import type { WorkspaceFact, WorkspaceHeadline } from "@/components/ui";
-import { EditForm, asValue } from "@/components/projects/EditForm";
-import type { EditField } from "@/components/projects/EditForm";
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
-import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
-import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
 import { useRouter } from "next/navigation";
 
 
 import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPricingSection";
 import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
+import { UnitProperty } from "./unit/UnitProperty";
 import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
-const UNIT_FIELDS: EditField[] = [
-  { name: "asset_class", label: "Property class", kind: "select", options: ["apartment", "villa", "townhouse", "commercial", "other"].map(value => ({ value, label: value })), group: "Identity" },
-  { name: "unit_type_code", label: "Unit type code", group: "Identity" },
-  { name: "sequence", label: "Display order", kind: "number", group: "Identity" },
-  { name: "plot_coverage_fraction", label: "Plot coverage fraction", hint: "0 to 1; for example 0.40 means 40%", group: "Features" },
-  { name: "unit_reference", label: "Unit reference", group: "Identity", width: "medium" },
-  { name: "unit_number", label: "Unit number", group: "Identity", width: "short" },
-  { name: "bedrooms", label: "Bedrooms", kind: "number", group: "Identity" },
-  { name: "bathrooms", label: "Bathrooms", kind: "number", group: "Identity" },
-  { name: "furnishing_specification_code", label: "Furnishing", group: "Features", width: "medium" },
-  { name: "floor_band_code", label: "Floor band", group: "Features", width: "short" },
-  { name: "orientation_code", label: "Orientation", group: "Features", width: "short" },
-  { name: "view_class_code", label: "View", group: "Features", width: "short" },
-  { name: "accessibility_code", label: "Accessibility", group: "Features", width: "short" },
-  { name: "garden_class_code", label: "Garden", group: "Features", width: "short" },
-  { name: "has_maid_room", label: "Maid room", kind: "checkbox", group: "Features" },
-  { name: "is_duplex", label: "Duplex", kind: "checkbox", group: "Features" },
-  { name: "is_penthouse", label: "Penthouse", kind: "checkbox", group: "Features" },
-  { name: "is_corner", label: "Corner unit", kind: "checkbox", group: "Features" },
-  { name: "pool_access", label: "Pool access", kind: "checkbox", group: "Features" },
-];
+
 
 
 /** Inventory facts, launch pricing and release for one unit. */
@@ -78,6 +55,7 @@ export function UnitWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const router = useRouter();
+  const [supportError,setSupportError] = useState<string | null>(null);
   const [supportBusy, setSupportBusy] = useState(false);
   const [detailRevision, setDetailRevision] = useState(-1);
   const [supportRevision, setSupportRevision] = useState(0);
@@ -97,7 +75,6 @@ export function UnitWorkspace({
   const [section, setSection] = useRecordTab();
   const [pricingBusy, setPricingBusy] = useState(false);
   const [approvingPrice, setApprovingPrice] = useState<string | null>(null);
-  const [editing, setEditing] = useState<"none" | "unit" | "fields">("none");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -150,7 +127,7 @@ export function UnitWorkspace({
     if (!unit || section !== "detail" || supportLoaded.current[section] === supportRevision) return;
     let cancelled = false;
     void (async () => {
-      setSupportBusy(true);
+      setSupportBusy(true);setSupportError(null);
       try {
 
           const [scheduleList, typeList, assetList, valueList] = await Promise.all([
@@ -159,7 +136,7 @@ export function UnitWorkspace({
           ]);
           if (!cancelled) { setSchedules(scheduleList); setAreaTypes(typeList); setAssets(assetList); setValues(valueList); setDetailRevision(supportRevision); }
         if (!cancelled) supportLoaded.current[section] = supportRevision;
-      } catch (caught) { if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Could not load this section."); }
+      } catch (caught) { if (!cancelled) setSupportError(caught instanceof ApiError ? caught.message : "Could not load this section."); }
       finally { if (!cancelled) setSupportBusy(false); }
     })();
     return () => { cancelled = true; };
@@ -216,17 +193,6 @@ export function UnitWorkspace({
     }
   };
 
-  const approveSchedule = async (scheduleId: string) => {
-    try {
-      await inventory.approveAreaSchedule(projectId, unitId, scheduleId);
-      setNotice("Revision approved.");
-      await load();
-      await onChanged();
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not approve the revision.");
-    }
-  };
-
   if (error && unit === null) {
     return (
       <RecordWorkspace projectId={projectId} kind="unit" title="Unit">
@@ -243,7 +209,6 @@ export function UnitWorkspace({
     );
   }
 
-  const editableValues = values.filter((value) => value.is_editable);
   const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;
   const price = unitPricing?.active_price ?? null;
   const priceCode = currencyCodeOf(price?.currency_id);
@@ -317,17 +282,6 @@ export function UnitWorkspace({
       actions={
         <>
         {roles.has("system_admin") || roles.has("master_admin") ? <DeleteRecordButton label="unit" onDelete={reason => inventory.deleteRecord(projectId, "units", unitId, reason)} onDeleted={async () => { await onChanged(); router.push(`/projects/?project=${projectId}&section=inventory`); }} /> : null}
-        {canWriteStructure ? (
-          <Button
-            data-leaves-editor
-            onClick={() => {
-              setSection("detail");
-              setEditing(editing === "unit" ? "none" : "unit");
-            }}
-          >
-            Edit unit
-          </Button>
-        ) : null}
         </>
       }
       meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}
@@ -355,80 +309,11 @@ export function UnitWorkspace({
       ) : null}
 
       {approvingPrice ? <PromptDialog title={`Approve price for ${unit.unit_reference}`} label="Approval rationale" description="Record what you checked and why this price is approved. Activation remains a separate step." confirmLabel="Approve price" error={error} busy={pricingBusy} onCancel={() => { if (!pricingBusy) setApprovingPrice(null); }} onSubmit={reason => void movePrice("approve", approvingPrice, reason)} /> : null}
+      {activeSection === "detail" && supportError ? <Notice tone="error">{supportError}<Button onClick={()=>setSupportRevision(value=>value+1)}>Retry property</Button></Notice> : null}
       {activeSection === "detail" && supportBusy ? <Loading label="Loading property" /> : null}
-      {activeSection === "detail" && !supportBusy ? (
-        <>
-          {editing === "unit" ? (
-            <Card title="Edit unit">
-              <EditForm
-                fields={UNIT_FIELDS}
-                columns={3}
-                initial={Object.fromEntries(
-                  UNIT_FIELDS.map((field) => [field.name, asValue(unit[field.name as keyof Unit] as never)]),
-                )}
-                onSave={async (changes) => {
-                  await inventory.updateUnit(projectId, unitId, changes);
-                  await load();
-                  await onChanged();
-                  setNotice("Unit updated.");
-                  setEditing("none");
-                }}
-                onCancel={() => setEditing("none")}
-              />
-            </Card>
-          ) : null}
-          {editing === "fields" ? (
-            <Card title="Additional fields">
-              <EditForm
-                fields={editableValues.map((value) => ({
-                  name: value.field_key,
-                  label: value.display_label,
-                  hint: value.help_text ?? undefined,
-                  affix: value.unit_of_measure ?? undefined,
-                  kind:
-                    value.data_type === "boolean"
-                      ? "checkbox"
-                      : value.data_type === "date"
-                        ? "date"
-                        : value.data_type === "option"
-                          ? "select"
-                          : value.data_type === "text"
-                            ? "text"
-                            : "number",
-                  options:
-                    value.data_type === "option"
-                      ? value.options.map((option) => ({ value: option.code, label: option.label }))
-                      : undefined,
-                }))}
-                columns={3}
-                submitLabel="Save fields"
-                initial={Object.fromEntries(editableValues.map((value) => [value.field_key, asValue(value.value)]))}
-                onSave={async (changes) => {
-                  await inventory.writeUnitValues(projectId, unitId, changes);
-                  await load();
-                  await onChanged();
-                  setNotice("Fields updated.");
-                  setEditing("none");
-                }}
-                onCancel={() => setEditing("none")}
-              />
-            </Card>
-          ) : null}
-          <PhysicalRecord key={unitId} projectId={projectId} unit={unit} areaTypes={areaTypes}
-            schedules={schedules} assets={assets} canWrite={canWriteStructure}
-            onChanged={async () => { await load(); await onChanged(); }} />
-          <UnitAreas
-            unit={unit}
-            schedules={schedules}
-            assets={assets}
-            values={values}
-            canApproveSchedule={canConfigure}
-            onApproveSchedule={(scheduleId) => void approveSchedule(scheduleId)}
-            onEditUnit={canWriteStructure ? () => setEditing(editing === "unit" ? "none" : "unit") : undefined}
-            onEditFields={() => setEditing(editing === "fields" ? "none" : "fields")}
-            editableFieldCount={editableValues.length}
-          />
-        </>
+      {activeSection === "detail" && !supportBusy && detailRevision === supportRevision ? (
+        <UnitProperty key={unitId} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} values={values}
+          canWrite={canWriteStructure} canApprove={canConfigure} onChanged={async()=>{await load();await onChanged();}} />
       ) : null}
 
       {activeSection === "release" ? (
