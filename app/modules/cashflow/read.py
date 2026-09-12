@@ -225,10 +225,29 @@ def prelaunch_expense_out(
         blocker = str(error)
     if movement.status != MOVEMENT_RECORDED:
         blocker = "Only a recorded expense can be confirmed."
+    correction_blockers = []
+    for removal in (False, True):
+        correction_blocker = None
+        try:
+            permissions.require_prelaunch_correction(
+                actor, recorded_by_user_id=movement.recorded_by_user_id, removal=removal
+            )
+        except PermissionDeniedError as error:
+            correction_blocker = str(error)
+        if movement.status != MOVEMENT_RECORDED:
+            correction_blocker = "Only an unconfirmed recorded expense can be edited or removed."
+        correction_blockers.append(correction_blocker)
     return schemas.PreLaunchExpenseOut(
         **development_movement_out(session, movement=movement).model_dump(),
         can_confirm=blocker is None,
         confirmation_blocker=blocker,
+        can_edit=correction_blockers[0] is None,
+        edit_blocker=correction_blockers[0],
+        can_remove=correction_blockers[1] is None,
+        removal_blocker=correction_blockers[1],
+        removed_without_confirmation=movement.status == "reversed"
+        and movement.confirmed_at is None,
+        reversal_reason=movement.reversal_reason,
     )
 
 

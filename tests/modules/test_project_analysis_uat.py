@@ -24,6 +24,7 @@ from tests.modules.conftest import (
 )
 from tests.modules.test_commissions_review import snapshot
 from tests.modules.test_construction_invoices_payments import allocate, approve_invoice
+from tests.modules.test_prelaunch import editable
 from tests.modules.test_project_analysis import root
 
 
@@ -159,8 +160,16 @@ def test_integrated_gate0a_journey(
     )
     assert expense.status_code == 201, expense.text
     confirm_url = f"{expense_url}/{expense.json()['id']}/confirm"
-    assert finance_client.post(confirm_url, json={}).status_code == 403
-    assert second_finance_client.post(confirm_url, json={}).status_code == 200
+    assert (
+        finance_client.post(confirm_url, json={"expected": editable(expense.json())}).status_code
+        == 403
+    )
+    assert (
+        second_finance_client.post(
+            confirm_url, json={"expected": editable(expense.json())}
+        ).status_code
+        == 200
+    )
     recorded = record_receipt(
         collections_client, project_id, collecting_sale, "10000", receipt_date=today
     )

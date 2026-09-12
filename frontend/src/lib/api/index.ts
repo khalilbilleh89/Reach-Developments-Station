@@ -2277,14 +2277,18 @@ export const cashflow = {
 
 /** Development language over the same Cashflow Development Movement rows. */
 export const prelaunch = {
+  update: (projectId: string, movementId: string, body: Record<string, unknown>) =>
+    patch<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses/${movementId}`, body),
+  remove: (projectId: string, movementId: string, body: Record<string, unknown>) =>
+    post<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses/${movementId}/remove`, body),
   register: (projectId: string) =>
     get<PreLaunchRegister>(`/projects/${projectId}/pre-launch/expenses`),
   record: (projectId: string, body: Record<string, unknown>) =>
     post<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses`, body),
-  confirm: (projectId: string, movementId: string) =>
+  confirm: (projectId: string, movementId: string, expected: Record<string, unknown>) =>
     post<PreLaunchExpense>(
       `/projects/${projectId}/pre-launch/expenses/${movementId}/confirm`,
-      {},
+      { expected },
     ),
   reverse: (projectId: string, movementId: string, reason: string) =>
     post<PreLaunchExpense>(

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, prelaunch } from "@/lib/api";
-import type { PreLaunchRegister } from "@/lib/api";
+import type { PreLaunchExpense, PreLaunchRegister } from "@/lib/api";
 import { businessDate, money } from "@/lib/format";
 import { CASHFLOW_CONFIRMERS, PRELAUNCH_RECORDERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
@@ -46,6 +46,12 @@ const categoryLabel = (key: string) => CATEGORIES.find(([value]) => value === ke
 const statusTone = (status: string): Tone =>
   status === "confirmed" ? "success" : status === "reversed" ? "muted" : "warning";
 
+const editableFields = (row: PreLaunchExpense) => ({
+  category: row.category, amount: row.amount, movement_date: row.movement_date,
+  counterparty_reference: row.counterparty_reference, invoice_reference: row.invoice_reference,
+  evidence_reference: row.evidence_reference, notes: row.notes,
+});
+
 export function PreLaunchTab({
   projectId,
   currencyId,
@@ -61,6 +67,9 @@ export function PreLaunchTab({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<PreLaunchExpense | null>(null);
+  const [removing, setRemoving] = useState<PreLaunchExpense | null>(null);
+  const submitting = useRef(false);
   const [reversing, setReversing] = useState<string | null>(null);
   const canRecord = hasAnyRole(roles, PRELAUNCH_RECORDERS);
   const canConfirm = hasAnyRole(roles, CASHFLOW_CONFIRMERS);
@@ -86,12 +95,16 @@ export function PreLaunchTab({
   }, [load]);
 
   const run = async (action: () => Promise<unknown>) => {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError(null);
     try {
       await action();
       setAdding(false);
       setReversing(null);
+      setEditing(null);
+      setRemoving(null);
       await load();
     } catch (caught) {
       // Refresh eligibility after a stale-state or permission refusal, without
@@ -99,6 +112,7 @@ export function PreLaunchTab({
       if (caught instanceof ApiError && (caught.status === 403 || caught.status === 409)) await load();
       setError(caught instanceof ApiError ? caught.message : "That action could not be completed.");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -132,12 +146,15 @@ export function PreLaunchTab({
                 <td>{row.counterparty_reference ?? "—"}</td>
                 <td>{businessDate(row.movement_date)}</td>
                 <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}</td>
-                <td><Badge tone={statusTone(row.status)}>{row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></td>
+                <td><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
                 <td>{row.invoice_reference ?? row.evidence_reference ?? "—"}</td>
                 <td className="cell-prose"><ButtonRow>
+                  {row.can_edit ? <Button small disabled={busy} onClick={() => { setError(null); setEditing(row); }}>Edit</Button> : null}
+                  {row.can_remove ? <Button small variant="danger" disabled={busy} onClick={() => { setError(null); setRemoving(row); }}>Remove</Button> : null}
+                  {row.status === "recorded" && !row.can_edit && !row.can_remove ? <p className="footnote">{row.removal_blocker ?? row.edit_blocker}</p> : null}
                   {canConfirm && row.status === "recorded" ? (
                     <div>
-                      <Button small disabled={busy || !row.can_confirm} onClick={() => void run(() => prelaunch.confirm(projectId, row.id))}>Confirm</Button>
+                      <Button small disabled={busy || !row.can_confirm} onClick={() => void run(() => prelaunch.confirm(projectId, row.id, editableFields(row)))}>Confirm</Button>
                       {!row.can_confirm ? <p className="footnote">{row.confirmation_blocker ?? "Confirmation is unavailable. Refresh this register to check current eligibility."}</p> : null}
                     </div>
                   ) : null}
@@ -149,20 +166,22 @@ export function PreLaunchTab({
         )}
       </Card>
       {adding ? <ExpenseDialog currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}
+      {editing ? <ExpenseDialog key={editing.id} initial={editing} currencyId={currencyId} currencyCode={editing.currency_code ?? currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={(changes) => { void run(() => prelaunch.update(projectId, editing.id, { expected: editableFields(editing), changes })); }} /> : null}
+      {removing ? <PromptDialog title="Remove this recorded expense" label="Reason" hint={`${removing.notes ?? removing.movement_reference} · ${money(removing.amount, removing.currency_code ?? currencyCode)}. This unconfirmed entry will leave recorded totals and remain in history. Confirmed cash is unchanged.`} confirmLabel="Remove expense" busy={busy} error={error} onCancel={() => { if (!busy) setRemoving(null); }} onSubmit={(reason) => { void run(() => prelaunch.remove(projectId, removing.id, { expected: editableFields(removing), reason })); }} /> : null}
       {reversing ? <PromptDialog title="Reverse this expense" label="Reason" hint="The original remains in history and is removed from current actual cash." confirmLabel="Reverse" busy={busy} error={error} onCancel={() => { if (!busy) setReversing(null); }} onSubmit={(reason) => { void run(() => prelaunch.reverse(projectId, reversing, reason)); }} /> : null}
     </div>
   );
 }
 
-function ExpenseDialog({ currencyId, currencyCode, busy, error, onCancel, onSubmit }: { currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
-  const [category, setCategory] = useState("permits");
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState("");
-  const [counterparty, setCounterparty] = useState("");
-  const [reference, setReference] = useState("");
-  const [evidence, setEvidence] = useState("");
-  return <FormDialog title="Add Pre-Launch expense" description="This records an entry. It is not cash until another authorised user confirms it." confirmLabel="Record expense" busy={busy} disabled={!description || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, currency_id: currencyId, counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
+function ExpenseDialog({ initial, currencyId, currencyCode, busy, error, onCancel, onSubmit }: { initial?: PreLaunchExpense; currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
+  const [category, setCategory] = useState<string>(initial?.category ?? "permits");
+  const [description, setDescription] = useState(initial?.notes ?? "");
+  const [amount, setAmount] = useState(initial?.amount ?? "");
+  const [date, setDate] = useState(initial?.movement_date ?? "");
+  const [counterparty, setCounterparty] = useState(initial?.counterparty_reference ?? "");
+  const [reference, setReference] = useState(initial?.invoice_reference ?? "");
+  const [evidence, setEvidence] = useState(initial?.evidence_reference ?? "");
+  return <FormDialog title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} description="This records an entry. It is not cash until another authorised user confirms it." confirmLabel={initial ? "Save changes" : "Record expense"} busy={busy} disabled={!description.trim() || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
     {error ? <Notice tone="error">{error}</Notice> : null}
     <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>

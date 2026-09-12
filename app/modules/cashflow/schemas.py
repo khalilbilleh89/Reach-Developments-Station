@@ -216,9 +216,38 @@ class DevelopmentMovementOut(Response):
     counts_as_cash: bool
 
 
+class PreLaunchEditableFields(StrictRequest):
+    category: DevelopmentCategory
+    amount: PositiveMoney
+    movement_date: date
+    counterparty_reference: str | None = Field(max_length=200)
+    invoice_reference: str | None = Field(max_length=200)
+    evidence_reference: str | None = Field(max_length=500)
+    notes: str | None = Field(max_length=2000)
+
+
+class PreLaunchExpenseUpdate(StrictRequest):
+    expected: PreLaunchEditableFields
+    changes: PreLaunchEditableFields
+
+
+class PreLaunchExpenseRemove(ReasonRequest):
+    expected: PreLaunchEditableFields
+
+
+class PreLaunchExpenseConfirm(StrictRequest):
+    expected: PreLaunchEditableFields
+
+
 class PreLaunchExpenseOut(DevelopmentMovementOut):
     can_confirm: bool
     confirmation_blocker: str | None
+    can_edit: bool
+    edit_blocker: str | None
+    can_remove: bool
+    removal_blocker: str | None
+    removed_without_confirmation: bool
+    reversal_reason: str | None
 
 
 class PreLaunchRegisterOut(Response):

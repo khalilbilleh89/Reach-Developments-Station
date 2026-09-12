@@ -158,6 +158,25 @@ def require_cashflow_confirmer(actor: ActorContext) -> None:
     )
 
 
+def require_prelaunch_correction(
+    actor: ActorContext, *, recorded_by_user_id: uuid.UUID, removal: bool = False
+) -> None:
+    """Own unconfirmed corrections retain the original maker identity.
+
+    Existing Finance/CFO reversal authority also permits recorded removal,
+    but never editing someone else's amount before confirming it.
+    """
+    if removal and actor.role_keys.intersection(CASHFLOW_CONFIRMER_ROLES):
+        return
+    require_prelaunch_recorder(actor)
+    if actor.user_id != recorded_by_user_id:
+        raise PermissionDeniedError(
+            "Only the original recorder or Finance/CFO may remove this expense."
+            if removal
+            else "Only the original recorder may edit this expense."
+        )
+
+
 def require_cashflow_approver(actor: ActorContext) -> None:
     """Gate approving or rejecting a submitted forecast."""
     _require_any(

@@ -22,20 +22,7 @@ router = APIRouter(prefix="/projects/{project_id}/pre-launch", tags=["pre-launch
 # No construction, financing, escrow, commission distribution or handover can
 # enter through this contextual surface. ``other`` remains for explicit costs
 # whose business wording does not fit a narrow governed category.
-PRELAUNCH_CATEGORIES = frozenset(
-    {
-        "land_fees",
-        "design",
-        "consultants",
-        "permits",
-        "utilities",
-        "insurance",
-        "developer_overhead",
-        "marketing",
-        "tax",
-        "other",
-    }
-)
+PRELAUNCH_CATEGORIES = service.PRELAUNCH_CATEGORIES
 
 
 def _register(
@@ -101,16 +88,57 @@ def record_expense(
     return read.prelaunch_expense_out(session, movement=movement, actor=actor)
 
 
+@router.patch("/expenses/{movement_id}", response_model=schemas.PreLaunchExpenseOut)
+def update_expense(
+    project: CashflowProject,
+    movement_id: uuid.UUID,
+    payload: schemas.PreLaunchExpenseUpdate,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.PreLaunchExpenseOut:
+    movement = service.correct_prelaunch_expense(
+        session,
+        project=project,
+        actor=actor,
+        movement_id=movement_id,
+        expected=payload.expected,
+        changes=payload.changes,
+    )
+    session.commit()
+    return read.prelaunch_expense_out(session, movement=movement, actor=actor)
+
+
+@router.post("/expenses/{movement_id}/remove", response_model=schemas.PreLaunchExpenseOut)
+def remove_expense(
+    project: CashflowProject,
+    movement_id: uuid.UUID,
+    payload: schemas.PreLaunchExpenseRemove,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.PreLaunchExpenseOut:
+    movement = service.correct_prelaunch_expense(
+        session,
+        project=project,
+        actor=actor,
+        movement_id=movement_id,
+        expected=payload.expected,
+        removal_reason=payload.reason,
+    )
+    session.commit()
+    return read.prelaunch_expense_out(session, movement=movement, actor=actor)
+
+
 @router.post("/expenses/{movement_id}/confirm", response_model=schemas.PreLaunchExpenseOut)
 def confirm_expense(
     project: CashflowProject,
     movement_id: uuid.UUID,
+    payload: schemas.PreLaunchExpenseConfirm,
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.PreLaunchExpenseOut:
     permissions.require_cashflow_confirmer(actor)
     movement = service.confirm_development_movement(
-        session, project=project, actor=actor, movement_id=movement_id
+        session, project=project, actor=actor, movement_id=movement_id, expected=payload.expected
     )
     if movement.category not in PRELAUNCH_CATEGORIES:
         session.rollback()

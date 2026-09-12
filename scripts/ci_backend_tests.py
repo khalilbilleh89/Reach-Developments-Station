@@ -187,7 +187,8 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # ``cashflow.service.reconciliation`` — and, through the ``construction ->
     # cashflow`` edge above, this one line is also what carries a construction
     # change to the cutover. One edge, because the closure is transitive.
-    "cashflow": ("cutover", "project_analysis"),
+    "cashflow": ("cutover", "project_analysis", "prelaunch"),
+    "prelaunch": ("project_analysis", "portfolio"),
     # The cutover claims a batch through ``record_event``, so a change to the
     # audit write contract can break it. The edge points *into* the cutover,
     # never out: nothing in ``app/`` imports this package.

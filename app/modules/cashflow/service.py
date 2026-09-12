@@ -52,7 +52,7 @@ from app.core.standing import CONFIRMED as STANDING_CONFIRMED
 from app.core.standing import standing_conditions
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
-from app.modules.cashflow import calculator, permissions
+from app.modules.cashflow import calculator, permissions, schemas
 from app.modules.cashflow.calculator import ZERO, money
 from app.modules.cashflow.models import (
     CATEGORY_CONSTRUCTION,
@@ -137,6 +137,13 @@ _MOVEMENT_FIELDS = (
     "status",
 )
 _DEVELOPMENT_FIELDS = (*_MOVEMENT_FIELDS, "category", "phase_id")
+_PRELAUNCH_CORRECTION_FIELDS = (
+    *_DEVELOPMENT_FIELDS,
+    "counterparty_reference",
+    "invoice_reference",
+    "evidence_reference",
+    "notes",
+)
 _FINANCING_FIELDS = (*_MOVEMENT_FIELDS, "movement_type", "flow_direction")
 _RESTRICTION_FIELDS = ("id", "receipt_id", "restricted_amount", "reason", "status")
 _RELEASE_FIELDS = ("id", "restriction_id", "amount", "release_date", "status")
@@ -1340,6 +1347,96 @@ def _lock_row(
 # --------------------------------------------------------------------------- #
 
 
+PRELAUNCH_CATEGORIES = frozenset(
+    {
+        "land_fees",
+        "design",
+        "consultants",
+        "permits",
+        "utilities",
+        "insurance",
+        "developer_overhead",
+        "marketing",
+        "tax",
+        "other",
+    }
+)
+
+
+def correct_prelaunch_expense(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    movement_id: uuid.UUID,
+    expected: schemas.PreLaunchEditableFields,
+    changes: schemas.PreLaunchEditableFields | None = None,
+    removal_reason: str | None = None,
+) -> CashflowDevelopmentMovement:
+    """Correct or remove an unconfirmed entry, under the same lock as confirmation."""
+    lock_project(session, project.id)
+    movement = _lock_row(
+        session,
+        model=CashflowDevelopmentMovement,
+        project_id=project.id,
+        row_id=movement_id,
+        missing=permissions.movement_not_found,
+    )
+    if movement.category not in PRELAUNCH_CATEGORIES:
+        raise ValidationError("That movement is not a Pre-Launch expense.")
+    permissions.require_prelaunch_correction(
+        actor,
+        recorded_by_user_id=movement.recorded_by_user_id,
+        removal=removal_reason is not None,
+    )
+    if movement.status != MOVEMENT_RECORDED:
+        raise ConflictError(
+            "This expense is no longer recorded. Refresh before choosing an action."
+        )
+    if any(getattr(movement, key) != value for key, value in expected.model_dump().items()):
+        raise ConflictError(
+            "This expense changed. Your draft is kept; reopen it from the refreshed "
+            "register to review the latest values."
+        )
+    if removal_reason is not None:
+        if not removal_reason.strip():
+            raise ValidationError("Enter a reason for removing this expense.")
+        _reverse_movement(
+            session,
+            row=movement,
+            actor=actor,
+            reason=removal_reason,
+            fields=_DEVELOPMENT_FIELDS,
+            entity_type=ENTITY_DEVELOPMENT,
+            action="cashflow.development_movement_reversed",
+            noun="development movement",
+        )
+        return movement
+    if changes is None:
+        raise ValidationError("Enter the corrected expense details.")
+    if changes.category not in PRELAUNCH_CATEGORIES:
+        raise ValidationError("That category cannot be recorded through Pre-Launch.")
+    if changes.movement_date > business_today():
+        raise ValidationError("A movement cannot be dated in the future.")
+    before = _snapshot(movement, _PRELAUNCH_CORRECTION_FIELDS)
+    for key, value in changes.model_dump().items():
+        if key in {"counterparty_reference", "invoice_reference", "evidence_reference", "notes"}:
+            value = (value or "").strip() or None
+        setattr(movement, key, value)
+    _flush(session)
+    record_event(
+        session,
+        action="cashflow.development_movement_corrected",
+        entity_type=ENTITY_DEVELOPMENT,
+        entity_id=movement.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        before=before,
+        after=_snapshot(movement, _PRELAUNCH_CORRECTION_FIELDS),
+    )
+    return movement
+
+
 def list_development_movements(
     session: Session, *, project: Project
 ) -> list[CashflowDevelopmentMovement]:
@@ -1422,7 +1519,12 @@ def record_development_movement(
 
 
 def confirm_development_movement(
-    session: Session, *, project: Project, actor: ActorContext, movement_id: uuid.UUID
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    movement_id: uuid.UUID,
+    expected: schemas.PreLaunchEditableFields | None = None,
 ) -> CashflowDevelopmentMovement:
     """Confirm that development cash actually left. This is the moment it counts."""
     lock_project(session, project.id)
@@ -1436,6 +1538,12 @@ def confirm_development_movement(
     if movement.status == MOVEMENT_RECORDED:
         permissions.require_development_movement_confirmer(
             actor, recorded_by_user_id=movement.recorded_by_user_id
+        )
+    if expected is not None and any(
+        getattr(movement, key) != value for key, value in expected.model_dump().items()
+    ):
+        raise ConflictError(
+            "This expense changed. Refresh and review its current values before confirming."
         )
     _confirm_movement(
         session,
