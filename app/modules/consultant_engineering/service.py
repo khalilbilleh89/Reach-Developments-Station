@@ -151,8 +151,8 @@ def update_engagement(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantEngagement, project, identifier)
-    if row.status != "draft":
-        raise ConflictError("Only a draft engagement may be edited.")
+    if row.status not in {"draft", "active"}:
+        raise ConflictError("Historical consultant engagements are read-only.")
     if row.updated_at != payload.expected_updated_at:
         raise ConflictError("Engagement changed. Reload before saving.")
     _validate_engagement_dates(payload)

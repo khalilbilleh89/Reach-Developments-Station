@@ -204,14 +204,12 @@ def require_different_confirmer(actor: ActorContext, *, recorded_by_user_id: uui
 
 
 def require_development_movement_confirmer(
-    actor: ActorContext, *, recorded_by_user_id: uuid.UUID
+    actor: ActorContext, *, recorded_by_user_id: uuid.UUID, prelaunch: bool = False
 ) -> None:
-    """Match the persisted development-movement separation for every actor.
-
-    Unlike the general Master permission exception, this row's database check
-    cannot admit the recorder as confirmer. Return a readable refusal before SQL.
-    """
+    """Allow the explicit Master exception only for Pre-Launch categories."""
     require_cashflow_confirmer(actor)
+    if actor.is_master_admin and prelaunch:
+        return
     if recorded_by_user_id == actor.user_id:
         raise PermissionDeniedError(
             "Awaiting confirmation by another authorized Finance or CFO user."
