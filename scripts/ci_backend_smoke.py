@@ -188,6 +188,11 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "cashflow",
         ("tests/modules/test_prelaunch_amendments.py::test_master_migration_guards_and_rollback",),
     ),
+    "0026_common_areas.py": (
+        "inventory",
+        ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
+
+    ),
     "0024_merge_permits_inventory.py": (
         "projects",
         ("tests/test_migrations.py::test_parallel_permit_and_inventory_histories_converge",),

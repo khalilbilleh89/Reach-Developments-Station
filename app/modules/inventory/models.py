@@ -535,6 +535,43 @@ class Unit(Base):
     )
 
 
+class CommonArea(Base):
+    """One measured shared area, optionally allocated to one apartment."""
+
+    __tablename__ = "inventory_common_areas"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    apartment_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    area_sqm: Mapped[Decimal] = mapped_column(MEASURE, nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("project_id", "label"),
+        ForeignKeyConstraint(
+            ["apartment_id", "project_id"],
+            ["units.id", "units.project_id"],
+            ondelete="RESTRICT",
+            name="apartment",
+        ),
+        CheckConstraint(
+            "category IN ('common', 'garage', 'community', 'roads_pavements')",
+            name="category_allowed",
+        ),
+        CheckConstraint("apartment_id IS NULL OR category = 'common'", name="allocation_common"),
+        CheckConstraint("area_sqm >= 0", name="area_nonneg"),
+        CheckConstraint(
+            "length(trim(label)) > 0 AND length(trim(source_reference)) > 0",
+            name="labels_not_blank",
+        ),
+        Index("ix_inventory_common_areas_project_id", "project_id"),
+    )
+
+
 class UnitStatusEvent(Base):
     """One recorded movement of a unit on one status dimension.
 

@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { useAnswer } from "@/lib/answer";
 import { projectAnalysis } from "@/lib/api/analysis";
-import type { Availability, Context, Demand, Fundamental, Financial, Technical, Money, Ranking, Ratio, Section } from "@/lib/api/analysis";
+import type { Availability, Context, Demand, Fundamental, Financial, Technical, Feasibility, Money, Ranking, Ratio, Section } from "@/lib/api/analysis";
 import { ANALYSIS_FINANCIAL_READERS, ANALYSIS_FUNDAMENTAL_READERS, ANALYSIS_TECHNICAL_READERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
 import { CountComposition, CountSeries, Disclosure, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
-const labels = { fundamental: "Fundamental", financial: "Financial", technical: "Technical" };
-const readers = { fundamental: ANALYSIS_FUNDAMENTAL_READERS, financial: ANALYSIS_FINANCIAL_READERS, technical: ANALYSIS_TECHNICAL_READERS };
+import { FeasibilityView } from "./FeasibilityView";
+
+const labels = { fundamental: "Fundamental", financial: "Financial", technical: "Technical", feasibility: "Feasibility" };
+const readers = { fundamental: ANALYSIS_FUNDAMENTAL_READERS, financial: ANALYSIS_FINANCIAL_READERS, technical: ANALYSIS_TECHNICAL_READERS, feasibility: ANALYSIS_TECHNICAL_READERS };
 const display = (value: string) => value.replaceAll("_", " ");
 const percentage = (value: Ratio) => value.percentage === null ? "Unavailable" : `${value.percentage}% (${value.numerator} / ${value.denominator})`;
 const amounts = (values: Money[]) => values.length ? values.map((value) => money(value.amount, value.currency)).join(" · ") : "No sale activations";
@@ -122,11 +124,11 @@ function TechnicalView({ data }: { data: Technical }) {
     </div><Disclosure title={<> Physical area ranges </>}><Basis value={data.area_coverage} /><TableScroll fixedFirst label="Approved physical areas"><thead><tr><th scope="col">Component</th><th scope="col">Measure</th><th scope="col" className="num">Minimum</th><th scope="col" className="num">Maximum</th><th scope="col" className="num">Average</th><th scope="col" className="num">Sample</th></tr></thead><tbody>{data.areas.map((row) => <tr key={`${row.component}-${row.unit_of_measure}`}><th scope="row">{display(row.component)}</th><td>{row.unit_of_measure}</td><td className="num">{row.minimum}</td><td className="num">{row.maximum}</td><td className="num">{row.average}</td><td className="num">{row.sample_size}</td></tr>)}</tbody></TableScroll><p>Gross uses all six approved physical components. Parking and storage are separate attachments.</p></Disclosure><Disclosure title="Recorded features"><Counts label="Recorded features" values={data.features} /></Disclosure><Disclosure title={<> Permits · Obtained / Issued </>}><Basis value={data.permit_basis} /><Counts label="Statutory permit status" values={data.permits} /></Disclosure><Disclosure title={<> Consultant design context </>}><Basis value={data.consultant_basis} />{Object.entries(data.consultant).map(([key, value]) => <p key={key}>{display(key)}: {value ?? "Not recorded"}</p>)}</Disclosure><Disclosure title={<> Physical construction progress </>}><Basis value={data.construction_basis} /><TableScroll fixedFirst label="Construction stages"><thead><tr><th scope="col">Stage</th><th scope="col" className="num">Completed units</th><th scope="col" className="num">Units in scope</th></tr></thead><tbody>{data.construction_stages.map((row) => <tr key={row.name}><th scope="row">{row.name}</th><td className="num">{row.completed_units}</td><td className="num">{row.denominator}</td></tr>)}</tbody></TableScroll></Disclosure></div>;
 }
 function AnalysisAnswer({ projectId, section, query }: { projectId: string; section: Section; query: string }) {
-  const answer = useAnswer<Fundamental | Financial | Technical>(true, () => projectAnalysis[section](projectId, query), [projectId, section, query]);
+  const answer = useAnswer<Fundamental | Financial | Technical | Feasibility>(true, () => projectAnalysis[section](projectId, query), [projectId, section, query]);
   if (answer.status === "denied") return <Notice tone="info">Not authorized: whole-project access and the appropriate Analysis role are required.</Notice>;
   if (answer.status === "failed") return <Notice tone="info">Analysis could not be loaded. {answer.message}</Notice>;
   if (answer.status !== "ready") return <Loading label="Loading analysis" />;
-  return section === "fundamental" ? <FundamentalView data={answer.data as Fundamental} /> : section === "financial" ? <FinancialView data={answer.data as Financial} /> : <TechnicalView data={answer.data as Technical} />;
+  return section === "feasibility" ? <FeasibilityView data={answer.data as Feasibility} /> : section === "fundamental" ? <FundamentalView data={answer.data as Fundamental} /> : section === "financial" ? <FinancialView data={answer.data as Financial} /> : <TechnicalView data={answer.data as Technical} />;
 }
 export function ProjectAnalysis({ projectId, roles }: { projectId: string; roles: Roles }) {
   const enabled = (Object.keys(labels) as Section[]).filter((key) => hasAnyRole(roles, readers[key]));

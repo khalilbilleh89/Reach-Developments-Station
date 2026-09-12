@@ -630,5 +630,13 @@
     "removal_route": null,
     "ui_file": null,
     "notes": "Unit costs reverse; editable allocation-version Delete is missing."
+  },
+  {
+    "handler": "inventory.create_common_area",
+    "create_route": "POST /{project_id}/inventory/common-areas",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/common-areas/{area_id}",
+    "ui_file": "frontend/src/components/projects/inventory/CommonAreas.tsx",
+    "notes": "Common Areas row Delete requires a reason, whole-project structure permission and scoped project lock; retains source values in audit and refreshes register. Allocated apartments are protected by a restrictive foreign key."
   }
 ]
