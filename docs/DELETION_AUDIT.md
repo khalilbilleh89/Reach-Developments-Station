@@ -2,10 +2,10 @@
 
 Remaining remediation is tracked in [GitHub issue #303](https://github.com/khalilbilleh89/Reach-Developments-Station/issues/303).
 
-Source audit of `main` at `2c0c735`, plus the Inventory fixes in this change.
+Source audit of `main` at `c771620`, plus the Inventory fixes in this change.
 This inventories named record creators and endpoints returning HTTP 201, their removal routes, and UI source locations. It is not browser verification or a claim of complete system-wide remediation.
 
-79 creation/event handlers: 12 have removal coverage recorded, 62 remain gaps, and 5 create retained evidence.
+79 creation/event handlers: 13 have removal coverage recorded, 61 remain gaps, and 5 create retained evidence.
 
 Rows with existing cancellation, reversal or retirement remain gaps when unused/draft Delete is absent. Imports use the corresponding record deletion paths; nested row replacement and access revocation also remain subject to the standing policy.
 
@@ -67,11 +67,11 @@ Rows with existing cancellation, reversal or retirement remain gaps when unused/
 | `pricing.create_premium_rule` | missing | Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained. |
 | `pricing.create_price_version` | missing | Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained. |
 | `pricing.generate_price_versions` | missing | Bulk-created price versions need the same draft Delete as individually created versions; missing. |
-| `projects.create_document` | missing | Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base. |
-| `projects.create_parcel` | missing | Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base. |
-| `projects.create_permit` | missing | Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base. |
-| `projects.create_permit_type` | missing | Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base. |
-| `projects.create_project` | missing | Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base. |
+| `projects.create_document` | missing | Delete is missing on current main. |
+| `projects.create_parcel` | missing | Delete is missing on current main. |
+| `projects.create_permit` | implemented | Administrator Delete retains permit history and records the removal reason; removed permits leave the active register. |
+| `projects.create_permit_type` | missing | Delete is missing on current main. |
+| `projects.create_project` | missing | Delete is missing on current main. |
 | `projects.transition_permit` | retained | Immutable permit status history; correct the current status through a permitted transition. |
 | `sales.create_adjustment` | missing | Review retention and source-record removal. |
 | `sales.create_client` | implemented | Unused buyer only; administrator; contracts and payments protected. |

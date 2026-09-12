@@ -80,6 +80,8 @@ ALWAYS_RUN = (
     "tests/test_ci_workflow.py",
     "tests/test_ci_smoke.py",
     "tests/test_ci_shards.py",
+    # Deletion coverage applies to record creation in every domain.
+    "tests/test_deletion_contracts.py",
     # The canonical intake contract's disposition of every table in the schema.
     # It belongs here rather than to the ``cutover`` domain because of what it
     # guards: a new table that nobody classified. The change that adds a table

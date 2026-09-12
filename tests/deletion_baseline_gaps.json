@@ -43,7 +43,6 @@
   "pricing.generate_price_versions",
   "projects.create_document",
   "projects.create_parcel",
-  "projects.create_permit",
   "projects.create_permit_type",
   "projects.create_project",
   "sales.create_adjustment",

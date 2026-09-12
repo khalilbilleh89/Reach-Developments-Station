@@ -453,7 +453,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+    "notes": "Delete is missing on current main."
   },
   {
     "handler": "projects.create_parcel",
@@ -461,15 +461,15 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+    "notes": "Delete is missing on current main."
   },
   {
     "handler": "projects.create_permit",
     "create_route": "POST /{project_id}/permits",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/permits/{permit_id}",
+    "ui_file": "frontend/src/components/projects/PermitsTab.tsx",
+    "notes": "Administrator Delete retains permit history and records the removal reason; removed permits leave the active register."
   },
   {
     "handler": "projects.create_permit_type",
@@ -477,7 +477,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+    "notes": "Delete is missing on current main."
   },
   {
     "handler": "projects.create_project",
@@ -485,7 +485,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+    "notes": "Delete is missing on current main."
   },
   {
     "handler": "projects.transition_permit",
