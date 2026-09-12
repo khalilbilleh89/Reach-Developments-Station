@@ -249,7 +249,7 @@ def test_measurement_conversion_and_invalid_components() -> None:
 
 def test_common_area_migration_roundtrip(db: Session) -> None:
     db.rollback()
-    command.downgrade(alembic_config(), "0024_merge_permits_inventory")
+    command.downgrade(alembic_config(), "0025_prelaunch_master")
     command.upgrade(alembic_config(), "head")
     assert db.scalar(text("SELECT count(*) FROM inventory_common_areas")) == 0
 
@@ -354,5 +354,5 @@ def test_populated_migration_refuses_loss(
     assert admin_client.post(common_url(project_id), json=area_payload()).status_code == 201
     db.rollback()
     with pytest.raises(RuntimeError, match="Common area measurements exist"):
-        command.downgrade(alembic_config(), "0024_merge_permits_inventory")
+        command.downgrade(alembic_config(), "0025_prelaunch_master")
     assert db.scalar(text("SELECT count(*) FROM inventory_common_areas")) == 1

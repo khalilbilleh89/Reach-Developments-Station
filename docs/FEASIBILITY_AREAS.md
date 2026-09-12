@@ -84,8 +84,7 @@ are project scoped and use bulk unit/schedule reads.
 Migration `0026_common_areas` adds only `inventory_common_areas`, with numeric, category,
 allocation and project/unit constraints. No source backfill. Downgrade refuses a
 populated table: export its measurements and remove them through the audited API
-before downgrade, or roll forward. Audit survives downgrade. Coordinate any parallel
-0025 branch migrations through a reviewed merge revision before promotion.
+before downgrade, or roll forward. Audit survives downgrade. This revision follows `0025_prelaunch_master` on the current migration chain.
 
 ## Verification
 
