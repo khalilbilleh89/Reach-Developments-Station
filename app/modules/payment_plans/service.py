@@ -43,6 +43,7 @@ from app.modules.inventory.models import Unit
 from app.modules.payment_plans import permissions, schedule
 from app.modules.payment_plans.models import (
     ALLOCATION_PERCENTAGE,
+    CHARGE_PER_INSTALLMENT,
     CHARGE_PRO_RATA,
     ORIGIN_COPIED,
     ORIGIN_CUSTOM,
@@ -367,12 +368,24 @@ def reconcile_rows(
         )
         for row in rows
     ]
+    # Keep the original sale snapshots intact; only the schedule basis changes.
+    # Recompute from principal and rates, never validate a tax total against itself.
+    expected_tax = version.tax_total_snapshot
+    expected_total = version.total_buyer_payable_snapshot
+    if version.charge_allocation_mode == CHARGE_PER_INSTALLMENT:
+        expected_tax = sum(
+            (schedule.installment_tax(row.principal_amount, row.tax_rate_fraction) for row in rows),
+            schedule.ZERO_MONEY,
+        )
+        expected_total = (
+            version.contract_value_covered + expected_tax + version.buyer_fee_total_snapshot
+        )
     return schedule.reconcile(
         lines,
         contract_value_covered=version.contract_value_covered,
-        tax_total_snapshot=version.tax_total_snapshot,
+        tax_total_snapshot=expected_tax,
         buyer_fee_total_snapshot=version.buyer_fee_total_snapshot,
-        total_buyer_payable_snapshot=version.total_buyer_payable_snapshot,
+        total_buyer_payable_snapshot=expected_total,
     )
 
 
@@ -670,6 +683,11 @@ def _copy_installments(
     principals = schedule.allocate(target.contract_value_covered, fractions)
     taxes = _charge_lines(target, fractions, target.tax_total_snapshot)
     fees = _charge_lines(target, fractions, target.buyer_fee_total_snapshot)
+    if target.charge_allocation_mode == CHARGE_PER_INSTALLMENT:
+        taxes = [
+            schedule.installment_tax(principal, row.tax_rate_fraction)
+            for principal, row in zip(principals, rows, strict=True)
+        ]
     for index, row in enumerate(rows):
         session.add(
             PaymentPlanInstallment(
@@ -692,6 +710,9 @@ def _copy_installments(
                 grace_days=row.grace_days,
                 principal_amount=principals[index],
                 principal_fraction=fractions[index],
+                tax_rate_fraction=row.tax_rate_fraction
+                if target.charge_allocation_mode == CHARGE_PER_INSTALLMENT
+                else None,
                 tax_amount=taxes[index],
                 fee_amount=fees[index],
                 trigger_status=_initial_trigger_status(row.trigger_type),
@@ -705,7 +726,7 @@ def _charge_lines(
     version: PaymentPlanVersion, fractions: list[Decimal], total: Decimal
 ) -> list[Decimal]:
     """Spread a frozen charge across the schedule, or leave it to be typed."""
-    if version.charge_allocation_mode == CHARGE_PRO_RATA:
+    if version.charge_allocation_mode in {CHARGE_PRO_RATA, CHARGE_PER_INSTALLMENT}:
         return schedule.allocate(total, fractions)
     return [schedule.ZERO_MONEY for _ in fractions]
 
@@ -872,6 +893,7 @@ class InstallmentDraft:
         "recurrence_index",
         "sequence",
         "tax_amount",
+        "tax_rate_fraction",
         "trigger_reference",
         "trigger_type",
     )
@@ -931,7 +953,7 @@ def replace_schedule(
 
     ordered = sorted(rows, key=lambda row: row.sequence)
     principals, fractions = _derive_money(version, ordered)
-    taxes, fees = _derive_charges(version, ordered, fractions)
+    taxes, fees = _derive_charges(version, ordered, fractions, principals)
 
     session.query(PaymentPlanInstallment).filter(
         PaymentPlanInstallment.payment_plan_version_id == version.id
@@ -959,6 +981,9 @@ def replace_schedule(
                 grace_days=row.grace_days or 0,
                 principal_amount=principals[index],
                 principal_fraction=fractions[index],
+                tax_rate_fraction=row.tax_rate_fraction
+                if version.charge_allocation_mode == CHARGE_PER_INSTALLMENT
+                else None,
                 tax_amount=taxes[index],
                 fee_amount=fees[index],
                 trigger_status=_initial_trigger_status(row.trigger_type),
@@ -981,6 +1006,9 @@ def replace_schedule(
             "installment_count": reconciliation.installment_count,
             "scheduled_principal_total": reconciliation.scheduled_principal_total,
             "is_reconciled": reconciliation.is_reconciled,
+            "charge_allocation_mode": version.charge_allocation_mode,
+            "scheduled_tax_total": reconciliation.scheduled_tax_total,
+            "tax_rates": [row.tax_rate_fraction for row in ordered],
         },
     )
     return version
@@ -1013,7 +1041,10 @@ def _required(value: Decimal | None, row: InstallmentDraft, what: str) -> Decima
 
 
 def _derive_charges(
-    version: PaymentPlanVersion, rows: list[InstallmentDraft], fractions: list[Decimal]
+    version: PaymentPlanVersion,
+    rows: list[InstallmentDraft],
+    fractions: list[Decimal],
+    principals: list[Decimal],
 ) -> tuple[list[Decimal], list[Decimal]]:
     """Spread the frozen tax and fees, or take what the preparer typed.
 
@@ -1023,6 +1054,16 @@ def _derive_charges(
     is shown the penny rather than being silently corrected, because somebody
     chose those numbers for a reason.
     """
+    if version.charge_allocation_mode == CHARGE_PER_INSTALLMENT:
+        taxes = [
+            schedule.installment_tax(
+                principal, _required(row.tax_rate_fraction, row, "a VAT / Tax percentage")
+            )
+            for principal, row in zip(principals, rows, strict=True)
+        ]
+        return taxes, schedule.allocate(version.buyer_fee_total_snapshot, fractions)
+    if any(row.tax_rate_fraction is not None for row in rows):
+        raise ValidationError("VAT / Tax percentages require per-instalment tax mode.")
     if version.charge_allocation_mode == CHARGE_PRO_RATA:
         return (
             schedule.allocate(version.tax_total_snapshot, fractions),

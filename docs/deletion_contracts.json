@@ -357,7 +357,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing."
+    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing. Per-installment VAT adds fields only; draft installment Remove + Save remains available."
   },
   {
     "handler": "payment_plans.create_version",
@@ -365,7 +365,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing."
+    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing. Per-installment VAT adds fields only; draft installment Remove + Save remains available."
   },
   {
     "handler": "payment_plans.submit_manual_trigger",

@@ -1316,7 +1316,7 @@ export interface PaymentPlanVersion {
   buyer_fee_total_snapshot: string;
   total_buyer_payable_snapshot: string;
   allocation_mode: "percentage" | "amount";
-  charge_allocation_mode: "pro_rata" | "manual";
+  charge_allocation_mode: "pro_rata" | "manual" | "per_installment";
   reservation_treatment: "included_in_schedule" | "reference_only";
   origin_type: "custom" | "copied_plan";
   source_version_id: string | null;
@@ -1369,6 +1369,7 @@ export interface PlanInstallment {
   grace_days: number;
   principal_amount: string;
   principal_fraction: string;
+  tax_rate_fraction: string | null;
   tax_amount: string;
   fee_amount: string;
   total_scheduled_amount: string;

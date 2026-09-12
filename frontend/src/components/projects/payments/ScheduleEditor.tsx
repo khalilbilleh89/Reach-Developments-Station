@@ -33,6 +33,8 @@ export type DraftRow = {
   grace_days: string;
   principal_fraction: string;
   principal_amount: string;
+  total_scheduled_amount: string;
+  tax_rate_fraction: string;
   tax_amount: string;
   fee_amount: string;
 };
@@ -50,6 +52,8 @@ export function emptyRow(sequence: number): DraftRow {
     grace_days: "0",
     principal_fraction: "",
     principal_amount: "",
+    total_scheduled_amount: "",
+    tax_rate_fraction: "",
     tax_amount: "",
     fee_amount: "",
   };
@@ -70,6 +74,8 @@ export function rowFrom(installment: PlanInstallment): DraftRow {
     grace_days: String(installment.grace_days),
     principal_fraction: percentInput(installment.principal_fraction),
     principal_amount: installment.principal_amount,
+    total_scheduled_amount: installment.total_scheduled_amount,
+    tax_rate_fraction: installment.tax_rate_fraction == null ? "" : percentInput(installment.tax_rate_fraction),
     tax_amount: installment.tax_amount,
     fee_amount: installment.fee_amount,
   };
@@ -122,6 +128,7 @@ export function ScheduleEditor({
   const code = currencyCodeOf(currencyId);
   const byPercentage = allocationMode === "percentage";
   const manualCharges = chargeMode === "manual";
+  const rateCharges = chargeMode === "per_installment";
 
   return (
     <div className="schedule-editor">
@@ -143,6 +150,7 @@ export function ScheduleEditor({
             <th scope="col" className="num">
               {byPercentage ? "Share" : "Principal"}
             </th>
+            {rateCharges ? <><th scope="col">VAT / Tax %</th><th scope="col" className="num">VAT / Tax (saved)</th><th scope="col" className="num">Total (saved)</th></> : null}
             {manualCharges ? (
               <>
                 <th scope="col" className="num">
@@ -220,6 +228,13 @@ export function ScheduleEditor({
                   />
                 )}
               </td>
+              {rateCharges ? (
+                <>
+                  <td className="num"><RateInput aria-label={`VAT / Tax percentage for instalment ${row.sequence}`} name={`installments.${row.sequence - 1}.tax_rate_fraction`} value={row.tax_rate_fraction} onChange={(value) => onChange(row.key, "tax_rate_fraction", value)} /></td>
+                  <td className="num">{row.tax_amount ? money(row.tax_amount, code) : "Save to calculate"}</td>
+                  <td className="num">{row.total_scheduled_amount ? money(row.total_scheduled_amount, code) : "Save to calculate"}</td>
+                </>
+              ) : null}
               {manualCharges ? (
                 <>
                   <td className="num">
@@ -278,7 +293,7 @@ export function ScheduleEditor({
           {byPercentage
             ? "each amount from its share"
             : "each share from its amount"}
-          {manualCharges ? "" : ", and spreads tax and buyer fees pro rata"}.
+          {rateCharges ? ", calculates VAT / Tax from each instalment’s principal and rate, and spreads buyer fees pro rata" : manualCharges ? "" : ", and spreads tax and buyer fees pro rata"}.
         </p>
       ) : null}
     </div>
@@ -457,7 +472,10 @@ export function ScheduleTable({
             Principal
           </th>
           <th scope="col" className="num">
-            Tax
+            VAT / Tax %
+          </th>
+          <th scope="col" className="num">
+            VAT / Tax
           </th>
           <th scope="col" className="num">
             Fee
@@ -495,6 +513,7 @@ export function ScheduleTable({
             <td className="figure">{businessDate(row.actual_due_date)}</td>
             <td className="num">{percent(row.principal_fraction)}</td>
             <td className="num">{money(row.principal_amount, code)}</td>
+            <td className="num">{row.tax_rate_fraction == null ? "Legacy allocation" : percent(row.tax_rate_fraction)}</td>
             <td className="num">{money(row.tax_amount, code)}</td>
             <td className="num">{money(row.fee_amount, code)}</td>
             <td className="num">{money(row.total_scheduled_amount, code)}</td>
