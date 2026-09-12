@@ -59,6 +59,7 @@ export function SidebarContent({
   onClose,
 }: SidebarProps & { onClose?: () => void }) {
   const query = useSearchParams();
+  const configuration = section === "inventory" && query.get("view") === "configuration" && !query.get("record");
   const stock = section === "inventory" && query.get("view") === "stock" && !query.get("record");
   const roles = user.roles.map((role) => role.label).join(", ");
   const onProjects = area === "projects";
@@ -126,7 +127,7 @@ export function SidebarContent({
             {group.label ? <p className="nav-group-label">{group.label}</p> : null}
             <ul className="nav-list">
               {group.items.map((item) => {
-                const current = item.key === section && !(item.key === "inventory" && stock);
+                const current = item.key === section && !(item.key === "inventory" && (stock || configuration));
                 return (
                   <li key={item.key}>
                     <Link
@@ -140,6 +141,7 @@ export function SidebarContent({
                       <span className="nav-label">{item.label}</span>
                     </Link>
                     {area === "projects" && item.key === "inventory" && projectId ? <Link href={`${sectionHref(area,projectId,"inventory")}&view=stock`} className="nav-item nav-stock" data-label="Stock" aria-current={stock ? "page" : undefined} onClick={onClose}><Icon name="inventory" className="nav-icon" /><span className="nav-label">Stock</span></Link> : null}
+                    {area === "projects" && item.key === "inventory" && projectId ? <Link href={`${sectionHref(area,projectId,"inventory")}&view=configuration`} className="nav-item nav-stock" data-label="Configuration" aria-current={configuration ? "page" : undefined} onClick={onClose}><Icon name="settings" className="nav-icon" /><span className="nav-label">Configuration</span></Link> : null}
                   </li>
                 );
               })}

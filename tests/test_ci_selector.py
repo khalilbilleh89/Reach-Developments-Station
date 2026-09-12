@@ -450,6 +450,7 @@ def test_application_code_outside_a_domain_falls_back() -> None:
         ("0003_inventory.py", "inventory"),
         ("0002_project_land_permits.py", "projects"),
         ("0022_land_analytics.py", "projects"),
+        ("0023_inventory_options.py", "inventory"),
         ("0001_governance_access.py", "access"),
         ("0010_something_shared.py", None),
     ],
