@@ -200,7 +200,7 @@ jobs:
       - name: Check for model and schema drift
         run: alembic check
       - name: CI contract guards
-        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py
+        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_deletion_contracts.py
       - name: Validate complete Full assignment
         run: python scripts/ci_backend_shards.py --count 4
 

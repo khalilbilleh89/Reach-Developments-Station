@@ -12,8 +12,10 @@ from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError,
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.inventory.models import (
+    AreaType,
     Building,
     Floor,
+    InventorySubAsset,
     Phase,
     Unit,
     UnitAreaSchedule,
@@ -41,7 +43,15 @@ def delete_record(
         raise PermissionDeniedError("Only an administrator may delete inventory records.")
     if not reason.strip():
         raise ValidationError("Give a reason for deleting this record.")
-    model = {"units": Unit, "floors": Floor, "buildings": Building, "phases": Phase}.get(kind)
+    model = {
+        "units": Unit,
+        "floors": Floor,
+        "buildings": Building,
+        "phases": Phase,
+        "area-types": AreaType,
+        "sub-assets": InventorySubAsset,
+        "area-schedules": UnitAreaSchedule,
+    }.get(kind)
     if model is None:
         raise NotFoundError("Inventory record not found.")
     lock_project(session, project.id)
@@ -61,7 +71,36 @@ def delete_record(
             "This unit has a sales commitment. Cancel it through Sales; "
             "its history cannot be deleted."
         )
-    reference = getattr(row, "unit_reference", None) or row.code
+    if isinstance(row, UnitAreaSchedule) and row.status != "draft":
+        raise ConflictError("Approved measurements are retained. Create a new revision instead.")
+    if isinstance(row, AreaType):
+        from app.modules.pricing.option_usage import inventory_option_in_use
+
+        if inventory_option_in_use(
+            session, project_id=project.id, category="area_type", code=row.code
+        ):
+            raise ConflictError("This area type is used by pricing. Retire it to preserve history.")
+    if isinstance(row, InventorySubAsset) and row.linked_unit_id is not None:
+        from app.modules.pricing.option_usage import unit_has_price_history
+
+        linked = session.get(Unit, row.linked_unit_id)
+        if (
+            linked is None
+            or linked.commercial_status != "unreleased"
+            or unit_has_price_history(session, project_id=project.id, unit_id=row.linked_unit_id)
+        ):
+            raise ConflictError(
+                "This asset belongs to a released or priced unit. "
+                "Review its unit and detach it before deleting the unused asset."
+            )
+    reference = next(
+        (
+            getattr(row, key)
+            for key in ("unit_reference", "code", "asset_reference", "revision_code")
+            if getattr(row, key, None)
+        ),
+        str(identifier),
+    )
     try:
         if isinstance(row, Unit):
             schedules = select(UnitAreaSchedule.id).where(UnitAreaSchedule.unit_id == row.id)
@@ -73,12 +112,16 @@ def delete_record(
                 session.execute(delete(child).where(child.unit_id == row.id))
         elif isinstance(row, Phase):
             session.execute(delete(UserPhaseAccess).where(UserPhaseAccess.phase_id == row.id))
+        elif isinstance(row, UnitAreaSchedule):
+            session.execute(
+                delete(UnitAreaValue).where(UnitAreaValue.unit_area_schedule_id == row.id)
+            )
         session.delete(row)
         session.flush()
         record_event(
             session,
-            action=f"{kind[:-1]}.deleted",
-            entity_type=kind[:-1],
+            action=f"{kind[:-1].replace('-', '_')}.deleted",
+            entity_type=kind[:-1].replace("-", "_"),
             entity_id=identifier,
             actor_user_id=actor.user_id,
             correlation_id=actor.correlation_id,

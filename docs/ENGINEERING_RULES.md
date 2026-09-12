@@ -4,6 +4,10 @@ Permanent engineering policy for MVP 1.0. **Every future PR must reference this
 file.** Rules here are not suggestions; changing one is a reviewed decision, not
 a drive-by edit.
 
+Every record-creating feature must implement its deletion flow in the same change.
+The mandatory checklist and retained-history rules are in [DELETION_POLICY.md](DELETION_POLICY.md).
+This applies to configuration choices and child rows as well as primary records.
+
 ---
 
 ## 1. Anti-overengineering constitution

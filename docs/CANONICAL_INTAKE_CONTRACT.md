@@ -8,7 +8,7 @@ has not been seen. When the source arrives, a second document maps it onto this
 one. The two are deliberately separate — a mapping written before the contract
 tends to become the contract.
 
-The disposition table below covers **every one of the 101 tables** in the schema.
+The disposition table below covers **every application table** in the schema.
 `tests/modules/test_cutover_intake_contract.py` fails if it does not: a new
 table that nobody has classified is a table somebody may quietly start
 importing.
@@ -101,7 +101,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `country_packs` | Jurisdiction configuration. |
 | `country_approval_thresholds` | Jurisdiction configuration. |
 | `currencies` | Configuration; a batch declares which it expects, never defines them. |
-| `reference_values` | The controlled vocabularies behind every `*_code` column. |
+| `reference_values` | The controlled vocabularies behind shared `*_code` columns. |
+| `inventory_options` | Project-local inventory choices, administered through project Configuration before intake; a bundle may reference approved codes but must not define them. |
 | `tax_rules` | Configuration in force at a date. |
 | `audit_events` | Reach writes it. The cutover writes its own batch rows here and reads nothing from the source. |
 | `projects` | **Corrected.** Creating one is a set of governance decisions — jurisdiction, base and reporting currency, fiscal year, manager — not data anybody extracts. The manifest *names* a project; it does not bring one into being. |

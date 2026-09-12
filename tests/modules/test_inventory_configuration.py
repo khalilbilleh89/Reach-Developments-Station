@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -9,7 +10,167 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_engine
-from tests.modules.conftest import PROJECTS, inventory_url, project_payload
+from tests.modules.conftest import PROJECTS, inventory_url, pricing_url, project_payload
+
+
+@pytest.mark.parametrize(
+    "category,source",
+    [
+        ("unit_type", "unit_type"),
+        ("view_class", "view_class"),
+        ("sub_asset_subtype", "parking"),
+        ("sub_asset_subtype", "storage"),
+    ],
+)
+def test_choice_referenced_by_pricing_cannot_be_deleted(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    draft_configuration: str,
+    category: str,
+    source: str,
+) -> None:
+    url = f"{inventory_url(project_id)}/configuration"
+    option = admin_client.post(
+        url, json={"category": category, "code": "PRICED", "label": "Priced"}
+    )
+    assert option.status_code == 201, option.text
+    rule = finance_client.post(
+        f"{pricing_url(project_id)}/configurations/{draft_configuration}/premium-rules",
+        json={
+            "code": "PREM",
+            "label": "Premium",
+            "method": "fixed",
+            "amount": "500",
+            "source_kind": source,
+            "match_code": "PRICED",
+        },
+    )
+    assert rule.status_code == 201, rule.text
+    deleted = admin_client.delete(f"{url}/{option.json()['id']}", params={"reason": "Remove"})
+    assert deleted.status_code == 409, deleted.text
+    assert any(row["id"] == option.json()["id"] for row in admin_client.get(url).json())
+
+
+def test_subtype_used_by_asset_cannot_be_deleted(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+) -> None:
+    url = f"{inventory_url(project_id)}/configuration"
+    option = admin_client.post(
+        url,
+        json={
+            "category": "sub_asset_subtype",
+            "code": "SPECIAL",
+            "label": "Special parking",
+        },
+    )
+    assert option.status_code == 201, option.text
+    asset = admin_client.post(
+        f"{inventory_url(project_id)}/sub-assets",
+        json={
+            "asset_reference": "P-SPECIAL",
+            "asset_type": "parking",
+            "subtype_code": "SPECIAL",
+            "linked_unit_id": unit_id,
+        },
+    )
+    assert asset.status_code == 201, asset.text
+    deleted = admin_client.delete(f"{url}/{option.json()['id']}", params={"reason": "Remove"})
+    assert deleted.status_code == 409, deleted.text
+
+
+@pytest.mark.parametrize(
+    "category",
+    [
+        "unit_type",
+        "view_class",
+        "orientation",
+        "floor_band",
+        "furnishing_specification",
+        "accessibility",
+        "garden_class",
+        "sub_asset_subtype",
+    ],
+)
+def test_delete_unused_choice_is_scoped_authorized_and_audited(
+    admin_client: TestClient,
+    advisor_client: TestClient,
+    project_id: str,
+    country_pack_id: str,
+    currency_id: str,
+    db: Session,
+    category: str,
+) -> None:
+    url = f"{inventory_url(project_id)}/configuration"
+    payload = {"category": category, "code": "DELETE-ME", "label": "Delete me"}
+    response = admin_client.post(url, json=payload)
+    assert response.status_code == 201, response.text
+    identifier = response.json()["id"]
+    endpoint = f"{url}/{identifier}"
+    assert advisor_client.delete(endpoint, params={"reason": "Mistake"}).status_code == 403
+    assert admin_client.delete(endpoint, params={"reason": " "}).status_code == 422
+    other = admin_client.post(
+        PROJECTS,
+        json=project_payload(country_pack_id, currency_id, code="OTHER", name="Other"),
+    ).json()["id"]
+    assert (
+        admin_client.delete(
+            f"{inventory_url(other)}/configuration/{identifier}", params={"reason": "Mistake"}
+        ).status_code
+        == 404
+    )
+    assert admin_client.delete(endpoint, params={"reason": "Entered in error"}).status_code == 204
+    assert all(row["id"] != identifier for row in admin_client.get(url).json())
+    assert admin_client.delete(endpoint, params={"reason": "Again"}).status_code == 404
+    assert (
+        db.scalar(
+            text(
+                "SELECT count(*) FROM audit_events WHERE action='inventory_option.deleted' "
+                "AND entity_id=:id AND reason='Entered in error'"
+            ),
+            {"id": identifier},
+        )
+        == 1
+    )
+    assert admin_client.post(url, json=payload).status_code == 201
+
+
+@pytest.mark.parametrize(
+    "category",
+    [
+        "unit_type",
+        "view_class",
+        "orientation",
+        "floor_band",
+        "furnishing_specification",
+        "accessibility",
+        "garden_class",
+    ],
+)
+def test_delete_choice_preserves_unit_references(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    category: str,
+) -> None:
+    url = f"{inventory_url(project_id)}/configuration"
+    created = admin_client.post(url, json={"category": category, "code": "USED", "label": "Used"})
+    assert created.status_code == 201, created.text
+    identifier = created.json()["id"]
+    unit_url = f"{inventory_url(project_id)}/units/{unit_id}"
+    field = f"{category}_code"
+    assert admin_client.patch(unit_url, json={field: "USED"}).status_code == 200
+    deleted = admin_client.delete(f"{url}/{identifier}", params={"reason": "Wrong choice"})
+    assert deleted.status_code == 409, deleted.text
+    assert admin_client.get(unit_url).json()[field] == "USED"
+    assert any(row["id"] == identifier for row in admin_client.get(url).json())
+    assert admin_client.patch(unit_url, json={field: None}).status_code == 200
+    assert (
+        admin_client.delete(f"{url}/{identifier}", params={"reason": "Unused now"}).status_code
+        == 204
+    )
 
 
 def test_project_choices_are_isolated_and_retirement_preserves_units(

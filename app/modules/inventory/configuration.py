@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
-from app.modules.inventory.models import InventoryOption
+from app.modules.inventory.models import (
+    CustomFieldDefinition,
+    InventoryOption,
+    InventorySubAsset,
+    Unit,
+)
+from app.modules.inventory.permissions import require_project_configurer
 from app.modules.projects.service import lock_project
 
 
@@ -127,3 +133,76 @@ def update_option(
     session.commit()
     session.refresh(option)
     return option
+
+
+def delete_option(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    option_id: uuid.UUID,
+    actor: ActorContext,
+    reason: str,
+) -> None:
+    """Remove an unused choice without orphaning code-based unit or pricing references."""
+    from app.modules.pricing.option_usage import inventory_option_in_use
+
+    require_project_configurer(actor)
+    if not reason.strip():
+        raise ValidationError("Give a reason for deleting this choice.")
+    lock_project(session, project_id)
+    option = session.scalar(
+        select(InventoryOption)
+        .where(InventoryOption.project_id == project_id, InventoryOption.id == option_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if option is None:
+        raise NotFoundError("Inventory choice not found.")
+    if option.category == "sub_asset_subtype":
+        used = session.scalar(
+            select(InventorySubAsset.id)
+            .where(
+                InventorySubAsset.project_id == project_id,
+                InventorySubAsset.subtype_code == option.code,
+            )
+            .limit(1)
+        )
+    else:
+        used = session.scalar(
+            select(Unit.id)
+            .where(
+                Unit.project_id == project_id,
+                getattr(Unit, f"{option.category}_code") == option.code,
+            )
+            .limit(1)
+        )
+    if option.category == "unit_type":
+        used = used or session.scalar(
+            select(CustomFieldDefinition.id)
+            .where(
+                CustomFieldDefinition.project_id == project_id,
+                CustomFieldDefinition.unit_type_code == option.code,
+            )
+            .limit(1)
+        )
+    if used or inventory_option_in_use(
+        session, project_id=project_id, category=option.category, code=option.code
+    ):
+        raise ConflictError(
+            "This choice is used by inventory, custom fields or pricing records. "
+            "Clear those references first, or deactivate the choice to preserve existing records."
+        )
+    before = {"project_id": str(project_id), **_snapshot(option)}
+    session.delete(option)
+    session.flush()
+    record_event(
+        session,
+        action="inventory_option.deleted",
+        entity_type="inventory_option",
+        entity_id=option_id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason.strip(),
+        before=before,
+    )
+    session.commit()
