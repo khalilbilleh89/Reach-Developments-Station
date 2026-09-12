@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteRecordButton } from "../DeleteRecordButton";
 import { useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
@@ -33,7 +34,9 @@ export function AreaTypesPanel({
   projectId,
   areaTypes,
   onChanged,
+  canDelete = false,
 }: {
+  canDelete?: boolean;
   projectId: string;
   areaTypes: AreaType[];
   onChanged: () => Promise<void>;
@@ -157,6 +160,7 @@ export function AreaTypesPanel({
                     <Button small variant="quiet" onClick={() => void toggle(areaType, { is_active: !areaType.is_active })}>
                       {areaType.is_active ? "Retire" : "Restore"}
                     </Button>
+                    {canDelete ? <DeleteRecordButton label={areaType.label} description="Delete this unused area type permanently. Existing measurements and pricing references are protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "area-types", areaType.id, reason)} onDeleted={onChanged} /> : null}
                   </div>
                 </td>
               </tr>

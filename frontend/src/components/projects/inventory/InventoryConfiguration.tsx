@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ApiError, inventory } from "@/lib/api";
 import type { InventoryOption } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, Field, Loading, Notice, TableScroll } from "@/components/ui";
+import { DeleteRecordButton } from "../DeleteRecordButton";
 import { EditForm } from "../EditForm";
 
 export const INVENTORY_CATEGORIES = [
@@ -35,7 +36,7 @@ export function InventoryConfiguration({projectId,canConfigure}: {projectId:stri
         initial={editing==="new" ? {code:"",label:"",sort_order:"0"} : {label:editing.label,sort_order:String(editing.sort_order),is_active:editing.is_active}}
         submitLabel={editing==="new" ? "Add choice" : "Save choice"} onCancel={()=>setEditing(null)}
         onSave={async changes=>{if(editing==="new") await inventory.createOption(projectId,{category,...changes}); else await inventory.updateOption(projectId,editing.id,changes);setEditing(null);await load();}} /> : null}
-      {rows.filter(row=>row.category===category).length ? <TableScroll label="Configured choices"><thead><tr><th>Name</th><th>Code</th><th>Display order</th><th>Status</th>{canConfigure ? <th>Edit</th> : null}</tr></thead><tbody>{rows.filter(row=>row.category===category).map(row=><tr key={row.id}><th scope="row">{row.label}</th><td>{row.code}</td><td>{row.sort_order}</td><td><Badge tone={row.is_active ? "success" : "muted"}>{row.is_active ? "Active" : "Inactive"}</Badge></td>{canConfigure ? <td><Button small data-leaves-editor onClick={()=>setEditing(row)}>Edit {row.label}</Button></td> : null}</tr>)}</tbody></TableScroll> : <EmptyState title="No choices configured" hint="Add the choices that apply to this project. Unit fields may also be left unassigned." />}
+      {rows.filter(row=>row.category===category).length ? <TableScroll label="Configured choices"><thead><tr><th>Name</th><th>Code</th><th>Display order</th><th>Status</th>{canConfigure ? <th>Actions</th> : null}</tr></thead><tbody>{rows.filter(row=>row.category===category).map(row=><tr key={row.id}><th scope="row">{row.label}</th><td>{row.code}</td><td>{row.sort_order}</td><td><Badge tone={row.is_active ? "success" : "muted"}>{row.is_active ? "Active" : "Inactive"}</Badge></td>{canConfigure ? <td><div className="button-row"><Button small data-leaves-editor onClick={()=>setEditing(row)}>Edit {row.label}</Button>{!editing ? <DeleteRecordButton label={row.label} description="Delete this project choice permanently. Choices used by inventory or pricing must be unassigned first; you can deactivate them instead to preserve existing records. The audit trail is retained." onDelete={reason=>inventory.deleteOption(projectId,row.id,reason)} onDeleted={async()=>{load();}} /> : null}</div></td> : null}</tr>)}</tbody></TableScroll> : <EmptyState title="No choices configured" hint="Add the choices that apply to this project. Unit fields may also be left unassigned." />}
       <p className="footnote">Renaming updates the displayed name. Deactivating a choice preserves existing unit selections and removes it from new selections. Codes stay unchanged so pricing rules continue to match.</p>
     </>}
   </Card>;

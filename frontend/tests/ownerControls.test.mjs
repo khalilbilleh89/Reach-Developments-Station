@@ -86,3 +86,40 @@ test("commercial labels distinguish Available, Reserved and Sold without relabel
   assert.equal(exports.statusLabel("contract_pending"), "Sold · SPA pending");
   assert.equal(exports.statusLabel("no_spa"), "No SPA");
 });
+
+test("project choice Delete targets the selected project and refreshes the register", async () => {
+  let choices = [{ id: "sea", category: "unit_type", code: "SEA", label: "Sea View", sort_order: 0, is_active: true }];
+  const calls = [];
+  const render = mount("components/projects/inventory/InventoryConfiguration.tsx", "InventoryConfiguration", {
+    "../EditForm": { EditForm: "EditForm" },
+    "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+    "@/lib/api": { ApiError: Error, inventory: {
+      configuration: async project => { calls.push(["load", project]); return choices; },
+      deleteOption: async (...args) => { calls.push(["delete", ...args]); choices = []; },
+    } },
+  }, { projectId: "pyla", canConfigure: true });
+  render(); await settle();
+  field(render(), "Configure").props.onChange({ target: { value: "unit_type" } });
+  const control = nodes(render()).find(node => node.type === "DeleteRecordButton");
+  assert.equal(control.props.label, "Sea View");
+  assert.equal(calls.filter(call => call[0] === "delete").length, 0);
+  await control.props.onDelete("Entered wrong choice");
+  await control.props.onDeleted();
+  render(); await settle();
+  assert.deepEqual(calls.find(call => call[0] === "delete"), ["delete", "pyla", "sea", "Entered wrong choice"]);
+  assert.equal(nodes(render()).filter(node => node.type === "DeleteRecordButton").length, 0);
+  assert.ok(nodes(render()).some(node => node.type === "EmptyState"));
+});
+
+test("read-only project configuration exposes no deletion control", async () => {
+  const render = mount("components/projects/inventory/InventoryConfiguration.tsx", "InventoryConfiguration", {
+    "../EditForm": { EditForm: "EditForm" },
+    "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+    "@/lib/api": { ApiError: Error, inventory: { configuration: async () => [
+      { id: "sea", category: "view_class", code: "SEA", label: "Sea View", sort_order: 0, is_active: true },
+    ] } },
+  }, { projectId: "pyla", canConfigure: false });
+  render(); await settle();
+  assert.equal(nodes(render()).filter(node => node.type === "DeleteRecordButton").length, 0);
+  assert.equal(nodes(render()).filter(node => node.type === "Button").length, 0);
+});

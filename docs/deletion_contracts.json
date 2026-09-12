@@ -1,0 +1,634 @@
+[
+  {
+    "handler": "access.create_user",
+    "create_route": "POST /users",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "User deactivation exists; unused-account Delete is missing. Never erase audit actor identity."
+  },
+  {
+    "handler": "cashflow.create_forecast",
+    "create_route": "POST /forecasts",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+  },
+  {
+    "handler": "cashflow.record_development_movement",
+    "create_route": "POST /development-movements",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+  },
+  {
+    "handler": "cashflow.record_financing_movement",
+    "create_route": "POST /financing-movements",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+  },
+  {
+    "handler": "cashflow.record_release",
+    "create_route": "POST /restrictions/{restriction_id}/releases",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+  },
+  {
+    "handler": "cashflow.record_restriction",
+    "create_route": "POST /receipts/{receipt_id}/restriction",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+  },
+  {
+    "handler": "collections.create_action",
+    "create_route": "POST /sales/{sale_id}/actions",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.create_allocation",
+    "create_route": "POST /receipts/{receipt_id}/allocations",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.create_receipt",
+    "create_route": "POST /sales/{sale_id}/receipts",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.create_refund",
+    "create_route": "POST /sales/{sale_id}/refunds",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.create_restructure",
+    "create_route": "POST /sales/{sale_id}/restructures",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.open_dispute",
+    "create_route": "POST /installments/{installment_id}/disputes",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "collections.submit_waiver",
+    "create_route": "POST /installments/{installment_id}/waivers",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Posted receipts/refunds/allocations have reversal workflows; draft and action Delete coverage is missing."
+  },
+  {
+    "handler": "commissions.add_allocation",
+    "create_route": "POST /{commission_id}/allocations",
+    "status": "implemented",
+    "removal_route": "DELETE /{commission_id}/allocations/{allocation_id}",
+    "ui_file": "frontend/src/components/projects/CommissionsTab.tsx",
+    "notes": "Existing draft allocation removal; released grants use reversal."
+  },
+  {
+    "handler": "commissions.create_grant",
+    "create_route": "POST ",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Released grants reverse; unused grant Delete is missing."
+  },
+  {
+    "handler": "construction.add_dependency",
+    "create_route": "PUT /milestones/{milestone_id}/dependencies",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_budget",
+    "create_route": "POST /budgets",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_certificate",
+    "create_route": "POST /contracts/{contract_id}/certificates",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_contract",
+    "create_route": "POST /contracts",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_cost_code",
+    "create_route": "POST /cost-codes",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_forecast",
+    "create_route": "POST /forecasts",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_milestone",
+    "create_route": "POST /milestones",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_stage",
+    "create_route": "POST /stages",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.create_variation",
+    "create_route": "POST /contracts/{contract_id}/variations",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.record_invoice",
+    "create_route": "POST /contracts/{contract_id}/invoices",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.record_payment",
+    "create_route": "POST /contracts/{contract_id}/payments",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "construction.record_unit_stage",
+    "create_route": "POST /units/{unit_id}/stages/{stage_id}/completion",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+  },
+  {
+    "handler": "consultant_engineering.create_deliverable",
+    "create_route": "POST /engagements/{engagement_id}/deliverables",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Engagement termination exists; draft engagement and child Delete are missing."
+  },
+  {
+    "handler": "consultant_engineering.create_discipline",
+    "create_route": "POST /engagements/{engagement_id}/disciplines",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Engagement termination exists; draft engagement and child Delete are missing."
+  },
+  {
+    "handler": "consultant_engineering.create_engagement",
+    "create_route": "POST /engagements",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Engagement termination exists; draft engagement and child Delete are missing."
+  },
+  {
+    "handler": "consultant_engineering.create_stage",
+    "create_route": "POST /engagements/{engagement_id}/stages",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Engagement termination exists; draft engagement and child Delete are missing."
+  },
+  {
+    "handler": "inventory.add_inventory_option",
+    "create_route": "POST /{project_id}/inventory/configuration",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/configuration/{option_id}",
+    "ui_file": "frontend/src/components/projects/inventory/InventoryConfiguration.tsx",
+    "notes": "Unused choice; project configurer; unit, asset, custom-field and pricing references protected."
+  },
+  {
+    "handler": "inventory.create_area_schedule",
+    "create_route": "POST /{project_id}/inventory/units/{unit_id}/area-schedules",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/unit/PhysicalRecord.tsx",
+    "notes": "Draft measurement only; approved revisions retained; administrator."
+  },
+  {
+    "handler": "inventory.create_area_type",
+    "create_route": "POST /{project_id}/inventory/area-types",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/AreaTypesPanel.tsx",
+    "notes": "Unused area type; administrator; measurements and pricing protected."
+  },
+  {
+    "handler": "inventory.create_building",
+    "create_route": "POST /{project_id}/inventory/buildings",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/StructureViews.tsx",
+    "notes": "Empty building; administrator; dependencies block deletion."
+  },
+  {
+    "handler": "inventory.create_field_definition",
+    "create_route": "POST /{project_id}/field-definitions",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Retirement exists for features/documents/fields; visible Delete and complete removal coverage remain missing for this record."
+  },
+  {
+    "handler": "inventory.create_floor",
+    "create_route": "POST /{project_id}/inventory/floors",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/StructureViews.tsx",
+    "notes": "Empty floor; administrator; dependencies block deletion."
+  },
+  {
+    "handler": "inventory.create_phase",
+    "create_route": "POST /{project_id}/inventory/phases",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/StructureViews.tsx",
+    "notes": "Unused phase; administrator; child records block deletion."
+  },
+  {
+    "handler": "inventory.create_sub_asset",
+    "create_route": "POST /{project_id}/inventory/sub-assets",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/unit/PhysicalRecord.tsx",
+    "notes": "Unlinked asset or an unpriced, unreleased unit; administrator."
+  },
+  {
+    "handler": "inventory.create_unit",
+    "create_route": "POST /{project_id}/inventory/units",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
+    "ui_file": "frontend/src/components/projects/inventory/UnitWorkspace.tsx",
+    "notes": "No sales commitment or retained references; administrator."
+  },
+  {
+    "handler": "inventory.create_unit_document",
+    "create_route": "POST /{project_id}/inventory/units/{unit_id}/documents",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Retirement exists for features/documents/fields; visible Delete and complete removal coverage remain missing for this record."
+  },
+  {
+    "handler": "inventory.create_unit_feature",
+    "create_route": "POST /{project_id}/inventory/units/{unit_id}/features",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Retirement exists for features/documents/fields; visible Delete and complete removal coverage remain missing for this record."
+  },
+  {
+    "handler": "inventory.transition_unit",
+    "create_route": "POST /{project_id}/inventory/units/{unit_id}/commercial-transitions",
+    "status": "retained",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Immutable unit status event. Correct the unit through its permitted status transitions; retain the event trail."
+  },
+  {
+    "handler": "management_reporting.capture",
+    "create_route": "POST /snapshots",
+    "status": "retained",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Immutable reporting snapshot; deletion would erase issued evidence. Correct source data and capture a new snapshot."
+  },
+  {
+    "handler": "payment_plans.create_plan",
+    "create_route": "POST ",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing."
+  },
+  {
+    "handler": "payment_plans.create_version",
+    "create_route": "POST /{plan_id}/versions",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing."
+  },
+  {
+    "handler": "payment_plans.submit_manual_trigger",
+    "create_route": "POST /{plan_id}/installments/{installment_id}/manual-trigger",
+    "status": "retained",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Manual trigger event has approval/reversal; retain issued event evidence."
+  },
+  {
+    "handler": "prelaunch.record_expense",
+    "create_route": "POST /expenses",
+    "status": "implemented",
+    "removal_route": "POST /expenses/{movement_id}/remove",
+    "ui_file": "frontend/src/components/projects/PreLaunchTab.tsx",
+    "notes": "Existing retained draft removal; confirmed expenses use reversal."
+  },
+  {
+    "handler": "pricing.activate_escalation",
+    "create_route": "POST /{project_id}/pricing/escalation-rules/{rule_id}/activate",
+    "status": "retained",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Escalation activation has an explicit reversal; retain pricing event evidence."
+  },
+  {
+    "handler": "pricing.create_area_rule",
+    "create_route": "POST /{project_id}/pricing/configurations/{configuration_id}/area-rules",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.create_benchmark",
+    "create_route": "POST /{project_id}/pricing/market-benchmarks",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.create_configuration",
+    "create_route": "POST /{project_id}/pricing/configurations",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.create_escalation_rule",
+    "create_route": "POST /{project_id}/pricing/configurations/{configuration_id}/escalation-rules",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.create_premium_rule",
+    "create_route": "POST /{project_id}/pricing/configurations/{configuration_id}/premium-rules",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.create_price_version",
+    "create_route": "POST /{project_id}/pricing/units/{unit_id}/price-versions",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Configuration/rule/benchmark/price-version Delete is missing; approved price evidence must be retained."
+  },
+  {
+    "handler": "pricing.generate_price_versions",
+    "create_route": "POST /{project_id}/pricing/price-versions/generate",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Bulk-created price versions need the same draft Delete as individually created versions; missing."
+  },
+  {
+    "handler": "projects.create_document",
+    "create_route": "POST /{project_id}/documents",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+  },
+  {
+    "handler": "projects.create_parcel",
+    "create_route": "POST /{project_id}/parcels",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+  },
+  {
+    "handler": "projects.create_permit",
+    "create_route": "POST /{project_id}/permits",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+  },
+  {
+    "handler": "projects.create_permit_type",
+    "create_route": "POST /{project_id}/permit-types",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+  },
+  {
+    "handler": "projects.create_project",
+    "create_route": "POST ",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Delete is missing on current main. Permit retained deletion is in separate PR #300, not yet present in this audit base."
+  },
+  {
+    "handler": "projects.transition_permit",
+    "create_route": "POST /{project_id}/permits/{permit_id}/transitions",
+    "status": "retained",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Immutable permit status history; correct the current status through a permitted transition."
+  },
+  {
+    "handler": "sales.create_adjustment",
+    "create_route": "POST /{project_id}/sales/reservations/{reservation_id}/adjustments",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.create_client",
+    "create_route": "POST /{project_id}/sales/clients",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
+    "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
+    "notes": "Unused buyer only; administrator; contracts and payments protected."
+  },
+  {
+    "handler": "sales.create_handover",
+    "create_route": "POST /{project_id}/sales/contracts/{sale_id}/handover",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.create_party",
+    "create_route": "POST /{project_id}/sales/clients/{client_id}/parties",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.create_reservation",
+    "create_route": "POST /{project_id}/sales/reservations",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.create_sale",
+    "create_route": "POST /{project_id}/sales/contracts",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.record_legal_event",
+    "create_route": "POST /{project_id}/sales/contracts/{sale_id}/legal-events",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "sales.register_buyer",
+    "create_route": "POST /{project_id}/sales/buyer-registrations",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Single-save buyer registration also creates a contract. Buyer deletion alone does not remove this combined draft; contract removal coverage is missing."
+  },
+  {
+    "handler": "sales.start_cancellation",
+    "create_route": "POST /{project_id}/sales/contracts/{sale_id}/cancellation",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Review retention and source-record removal."
+  },
+  {
+    "handler": "settings.create_country_pack",
+    "create_route": "POST /country-packs",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+  },
+  {
+    "handler": "settings.create_currency",
+    "create_route": "POST /currencies",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+  },
+  {
+    "handler": "settings.create_reference_value",
+    "create_route": "POST /reference-values",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+  },
+  {
+    "handler": "settings.create_tax_rule",
+    "create_route": "POST /country-packs/{country_pack_id}/tax-rules",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+  },
+  {
+    "handler": "unit_economics.add_pool",
+    "create_route": "POST /allocation-versions/{version_id}/pools",
+    "status": "implemented",
+    "removal_route": "DELETE /allocation-versions/{version_id}/pools/{pool_id}",
+    "ui_file": "frontend/src/components/projects/UnitEconomicsTab.tsx",
+    "notes": "Existing editable-version pool removal."
+  },
+  {
+    "handler": "unit_economics.clone_version",
+    "create_route": "POST /allocation-versions/{version_id}/clone",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Unit costs reverse; editable allocation-version Delete is missing."
+  },
+  {
+    "handler": "unit_economics.create_version",
+    "create_route": "POST /allocation-versions",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Unit costs reverse; editable allocation-version Delete is missing."
+  },
+  {
+    "handler": "unit_economics.record_unit_cost",
+    "create_route": "POST /units/{unit_id}/costs",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": null,
+    "notes": "Unit costs reverse; editable allocation-version Delete is missing."
+  }
+]

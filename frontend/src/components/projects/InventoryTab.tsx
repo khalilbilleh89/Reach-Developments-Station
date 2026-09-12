@@ -29,6 +29,7 @@ import {
   TabPanel,
   ToolbarFilter,
 } from "@/components/ui";
+import { UnassignedAssets } from "./inventory/UnassignedAssets";
 import { InventoryConfiguration } from "./inventory/InventoryConfiguration";
 import { StockSummary, StockTable } from "./inventory/StockView";
 import { AreaTypesPanel } from "@/components/projects/inventory/AreaTypesPanel";
@@ -265,7 +266,7 @@ export function InventoryTab({
             description="How this project measures its units, and how much of each area it sells."
             actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
           >
-            <AreaTypesPanel projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
+            <AreaTypesPanel canDelete={roles.has("system_admin") || roles.has("master_admin")} projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
           </Card>
         ) : null}
         {open === "import" ? (
@@ -372,7 +373,7 @@ export function InventoryTab({
           </section>
         ) : null}
 
-        {view === "configuration" ? <InventoryConfiguration key={projectId} projectId={projectId} canConfigure={canConfigure} /> : null}
+        {view === "configuration" ? <div className="stack"><InventoryConfiguration key={projectId} projectId={projectId} canConfigure={canConfigure} />{roles.has("system_admin") || roles.has("master_admin") ? <UnassignedAssets key={`assets-${projectId}`} projectId={projectId} /> : null}</div> : null}
         {view === "stock" && register ? <StockSummary register={register} prices={launchValues} /> : null}
         {view === "stock" && priceError ? <Notice tone="error">{priceError}</Notice> : null}
         {view === "units" || view === "stock" ? (
