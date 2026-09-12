@@ -1052,6 +1052,16 @@ create, widen into, or certify.
 withdrawn — each with a reason on the record. There is no DELETE route anywhere
 in the module.
 
+### Installment VAT
+
+Payment Plans supports explicit per-installment tax rates in addition to legacy
+allocation of the sale's frozen tax. Each row stores its fractional rate; the
+server and database enforce tax = rounded principal times rate. Reconciliation
+uses the calculated row-rate tax basis while preserving the original contract
+snapshots. Principal and buyer fees still reconcile to the contract. Existing
+revision, approval and Collections restructure boundaries govern changes.
+See [PAYMENT_INSTALLMENT_VAT.md](PAYMENT_INSTALLMENT_VAT.md).
+
 ### Cashflow and management reporting
 
 **Cashflow consolidates cash it does not own.** Payment plans owns what a buyer
