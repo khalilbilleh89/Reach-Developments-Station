@@ -191,7 +191,6 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0026_common_areas.py": (
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
-
     ),
     "0024_merge_permits_inventory.py": (
         "projects",
