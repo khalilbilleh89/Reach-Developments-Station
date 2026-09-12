@@ -1,7 +1,7 @@
 """Itemized land acquisition inputs and annual market assumptions.
 
-Revision ID: 0021_land_analytics
-Revises: 0020_management_reporting
+Revision ID: 0022_land_analytics
+Revises: 0021_sales_negotiated_price
 """
 
 from collections.abc import Sequence
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0021_land_analytics"
-down_revision: str | Sequence[str] | None = "0020_management_reporting"
+revision: str = "0022_land_analytics"
+down_revision: str | Sequence[str] | None = "0021_sales_negotiated_price"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

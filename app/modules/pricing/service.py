@@ -3537,6 +3537,7 @@ def quote_preview(
     project: Project,
     unit: Unit,
     inputs: dict[str, Any],
+    frozen_version_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Model a commercial offer against a unit's live price, writing nothing.
 
@@ -3550,7 +3551,13 @@ def quote_preview(
     produces a contract price nobody agreed to and a commission base that is
     wrong, so they are separate lines here and separate subtotals in the result.
     """
-    active = active_price(session, unit_id=unit.id)
+    active = (
+        get_price_version(session, project_id=project.id, version_id=frozen_version_id)
+        if frozen_version_id
+        else active_price(session, unit_id=unit.id)
+    )
+    if active is not None and active.unit_id != unit.id:
+        raise ConflictError("The quote price belongs to another unit.")
     if active is None:
         raise ConflictError("This unit has no active price to quote from.")
     # A live price whose unit has since changed stays readable — it is what the
@@ -3562,10 +3569,11 @@ def quote_preview(
     # Two checks rather than one. ``pricing_approved`` is the flag inventory
     # maintains and the register displays; the basis comparison is the same
     # arithmetic every transition runs, and catches a drift the flag missed.
-    if not unit.pricing_approved:
+    if frozen_version_id is None and not unit.pricing_approved:
         raise ConflictError("This unit requires repricing before a quote can be prepared.")
     try:
-        _require_current_basis(session, version=active)
+        if frozen_version_id is None:
+            _require_current_basis(session, version=active)
     except ConflictError as exc:
         raise ConflictError("This unit requires repricing before a quote can be prepared.") from exc
     configuration = configuration_for_price(session, project_id=project.id, version=active)
@@ -3594,7 +3602,24 @@ def quote_preview(
     cash_discount = percentage_discount + fixed_discount
     seller_credit = amount("seller_credit")
 
+    # Negotiation balances the existing quote AFTER its percentage inputs.
+    # Adding a premium to the percentage basis would change the existing discount
+    # and miss the user's exact target. Keep the named adjustment explicit.
+    unnegotiated = gross - cash_discount - seller_credit
+    target = inputs.get("sales_price_ex_tax")
+    negotiated_discount = ZERO
+    negotiated_premium = ZERO
+    if target is not None:
+        target = money(Decimal(str(target)))
+        if target < ZERO:
+            raise ValidationError("The agreed sales price cannot be negative.")
+        negotiated_discount = max(unnegotiated - target, ZERO)
+        negotiated_premium = max(target - unnegotiated, ZERO)
+    gross += negotiated_premium
+    cash_discount += negotiated_discount
     net_contract = gross - cash_discount - seller_credit
+    if target is not None and net_contract != target:
+        raise ConflictError("The quote does not match the agreed sales price.")
     if net_contract < ZERO:
         raise ValidationError("The concessions on this quote exceed the price.")
 
@@ -3636,6 +3661,8 @@ def quote_preview(
         "version_number": active.version_number,
         "currency_id": active.currency_id,
         "approved_reference_price_ex_tax": reference,
+        "negotiated_price_discount": negotiated_discount,
+        "negotiated_price_premium": negotiated_premium,
         "paid_upgrade_price": paid_upgrade,
         "payment_plan_price_adjustment": plan_adjustment,
         "payment_plan_adjustment_fraction": plan_fraction,

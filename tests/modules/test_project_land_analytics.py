@@ -150,7 +150,7 @@ def test_migration_round_trip_preserves_original_land_amounts(
     db.rollback()
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     try:
-        command.downgrade(config, "0020_management_reporting")
+        command.downgrade(config, "0021_sales_negotiated_price")
         with get_engine().connect() as connection:
             saved = connection.execute(
                 text("SELECT purchase_price, acquisition_fees FROM land_parcels WHERE id=:id"),

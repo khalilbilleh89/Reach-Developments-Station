@@ -788,6 +788,39 @@ figure in the system divides by whatever that rule points at.
 
 ### Sales and legal
 
+**Inventory owns the unit and governed list price; Sales owns the transaction.**
+Sales' main workspace reads a paginated transaction union, not the inventory
+catalogue. A Sale replaces its source Reservation in the current view; distinct
+preparation drafts remain separate. History retains both records without summing
+them. Its legal/collection columns explicitly describe the unit's current state.
+The existing dashboard register remains a separate compatible read contract.
+
+New Reservation selects through Sales' bounded, phase-scoped unit-options read.
+Release eligibility and current price basis reuse their owning services. Creation
+checks eligibility and expected price version again under project/unit locks.
+Inventory inspection links are secondary; commercial creation lives in Sales.
+
+An explicit `agreed_price_target_ex_tax` is nullable commercial intent, including
+an at-list decision. Pricing computes the balancing negotiated discount/premium
+after existing percentage inputs, then applies existing tax and approval rules.
+Sales persists both server-managed adjustment types (including zero); generic
+adjustment writes cannot change them. Net contract price equals the target.
+The existing cash-discount aggregate includes negotiated reductions; premiums
+enter gross contract price under their own name, never as fabricated upgrades.
+Seller costs retain their separate economics. No Inventory list price is changed.
+
+Ordinary preparation edits use the frozen reference version. Explicit requote
+alone advances that version and preserves agreed intent while withdrawing stale
+approval. Sale conversion copies the resulting snapshot. Read models derive
+signed variance from frozen net minus frozen reference using Decimal MONEY/RATE
+rounding; a zero reference returns no percentage. No browser arithmetic or FX
+is involved. Historical null targets are not inferred or backfilled.
+
+Reservation creation's optional project-scoped request key is serialized under
+the project lock. Only the original actor and identical payload can recover the
+record; mismatches are refused. This does not prohibit distinct competing drafts.
+Migration 0021 refuses downgrade once negotiated decisions exist.
+
 A **client** is a buyer, scoped to the project they are buying in. There is no
 portfolio-wide customer master: deduplication, merge, consent scope and
 cross-project visibility are real problems that deserve a PR about them, and
@@ -805,8 +838,8 @@ A **reservation** is the first persistent commercial commitment. It freezes the
 quote pricing produced from the unit's live approved price — typed columns for
 the figures somebody will be asked about, and the whole calculation beside them
 in `quote_snapshot_json` so the waterfall is still explainable line by line in
-two years. Nothing recalculates it after activation; that is what freezing
-means. Recording or revising a commercial input re-runs the quote and withdraws
+two years. Ordinary edits cannot recalculate it after activation; the explicit
+requote operation below is the sole exception. Revising a preparing commercial input re-runs the quote and withdraws
 any approval that was standing, because an exception sanctioned against a
 twelve per cent discount says nothing about a twenty per cent one.
 

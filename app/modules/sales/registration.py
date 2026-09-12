@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,8 @@ def register_buyer(
     project: Project,
     actor: ActorContext,
     unit_id: uuid.UUID,
+    sales_price_ex_tax: Decimal | None = None,
+    expected_price_version_id: uuid.UUID | None = None,
     client_id: uuid.UUID | None,
     buyer: dict[str, Any] | None,
     reason: str,
@@ -74,6 +77,15 @@ def register_buyer(
                 "This unit is reserved for another buyer. "
                 "Resolve that reservation before changing the buyer."
             )
+        if (
+            reservation is not None
+            and sales_price_ex_tax is not None
+            and sales_price_ex_tax != reservation.net_contract_price_ex_tax
+        ):
+            raise ConflictError(
+                "The existing reservation price is frozen. "
+                "Use its governed lifecycle to change terms."
+            )
         if buyer is not None:
             client = service.create_client(
                 session, project=project, actor=actor, commit=False, **buyer
@@ -99,6 +111,8 @@ def register_buyer(
                 project=project,
                 actor=actor,
                 unit_id=unit.id,
+                sales_price_ex_tax=sales_price_ex_tax,
+                expected_price_version_id=expected_price_version_id,
                 client_id=client_id,
                 reservation_date=effective,
                 expires_on=today,

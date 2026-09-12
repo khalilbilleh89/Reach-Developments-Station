@@ -26,6 +26,14 @@ const plan = "44444444-4444-4444-8444-444444444444";
 const query = href => new URLSearchParams(href.split("?")[1]);
 const origin = `/projects/?project=${project}&section=sales&search=Rana&commercial_status=contracted&offset=200`;
 
+test("created Sales transaction returns to the register without reopening preparation", () => {
+  const { createdSalesHref } = load(resolve(sourceRoot, "components/projects/sales/salesRoutes.ts"));
+  for (const kind of ["sale", "reservation"]) {
+    const href = createdSalesHref(query(`${origin}&sales_view=new`), project, kind, sale);
+    assert.equal(back(query(href), project, kind).href, origin);
+  }
+});
+
 test("Sales → Unit → Back keeps cross-module origin, filters, search and page", () => {
   const href = open(query(origin), project, "unit", unit);
   assert.equal(back(query(href), project, "unit").href, origin);

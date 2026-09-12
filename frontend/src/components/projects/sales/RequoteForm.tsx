@@ -16,7 +16,7 @@ export function RequoteForm({ busy, onSubmit }: {
 
   return (
     <form onSubmit={event => { event.preventDefault(); void onSubmit(reason, lockDate || undefined); }}>
-      <p className="subtle">Use the current selling price. Existing exception approval will be withdrawn.</p>
+      <p className="subtle">Refresh the list-price reference. An explicitly agreed sales price is retained; existing exception approval is withdrawn.</p>
       <FieldRow columns={2}>
         <Field label="Reason for re-quote">
           <input className="input" required maxLength={500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} />

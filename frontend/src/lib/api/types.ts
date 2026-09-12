@@ -969,7 +969,8 @@ export interface ReservationStatusEvent {
   created_at: string;
 }
 
-export interface Reservation {
+export interface Reservation extends SalesPriceFacts {
+  unit_reference: string;
   id: string;
   project_id: string;
   reservation_number: string;
@@ -1020,6 +1021,7 @@ export interface Reservation {
 }
 
 export interface ReservationDetail {
+  sales_price_edit_blocker: string | null;
   reservation: Reservation;
   adjustments: ReservationAdjustment[];
   events: ReservationStatusEvent[];
@@ -1057,7 +1059,8 @@ export interface SaleTaxLine {
   valid_on: string;
 }
 
-export interface SaleContract {
+export interface SaleContract extends SalesPriceFacts {
+  unit_reference: string;
   price_per_gross_area: string | null;
   gross_area_unit: string | null;
   id: string;
@@ -2927,4 +2930,31 @@ export interface SalesHistoryRow {
   unit_reference: string;
   client_display_name: string;
   spa_number: string | null;
+}
+
+export interface SalesPriceFacts {
+  reference_price_ex_tax: string;
+  sales_price_ex_tax: string;
+  price_variance_amount: string;
+  price_variance_fraction: string | null;
+  price_variance_percentage: string | null;
+  currency_id: string;
+}
+export interface SalesPricePreview extends SalesPriceFacts {
+  unit_price_version_id: string;
+  exception_approval_required: boolean;
+  exception_reason: string | null;
+  tax_total: string;
+  total_buyer_payable: string;
+}
+export interface SalesUnitOption {
+  unit_id: string; unit_reference: string; phase_name: string; building_name: string;
+  floor_name: string; unit_type: string | null; unit_price_version_id: string;
+  commercial_availability: string; gross_area: string | null; area_unit: string | null;
+  reference_price_ex_tax: string; currency_id: string;
+}
+export interface SalesTransaction extends SalesPriceFacts {
+  id: string; kind: "reservation" | "sale"; reference: string; status: string;
+  created_at: string; unit_id: string; unit_reference: string; client_display_name: string;
+  legal_status: string; collection_status: string; spa_number: string | null;
 }

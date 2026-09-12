@@ -28,6 +28,27 @@ Financial visibility and write permissions follow the existing project roles and
 
 ## Migration and rollback
 
-Migration `0021_land_analytics` adds nullable/default-zero financial columns and one annual-assumptions table. Existing purchase prices and acquisition fees are unchanged. Existing custom fields are not migrated into these inputs; new custom definitions cannot use the native column names.
+Migration `0022_land_analytics` adds nullable/default-zero financial columns and one annual-assumptions table. Existing purchase prices and acquisition fees are unchanged. Existing custom fields are not migrated into these inputs; new custom definitions cannot use the native column names.
 
-Deploy the migration before the application that reads these fields. Before rollback, back up the database and export new fee/GDV inputs and annual assumptions. Downgrading to `0020_management_reporting` drops these new columns and the annual table, but preserves original purchase prices and acquisition fees. Do not downgrade a live database merely to test rollback. The migration round-trip test runs only on the disposable test database.
+This unmerged revision was renumbered from 0021 and now follows merged
+`0021_sales_negotiated_price`, preserving one migration head. Existing main
+databases upgrade through that predecessor. A disposable preview database made
+with the former Land-only branch must be rebuilt or explicitly migrated after
+exporting its test inputs; do not stamp a database past migrations it never ran.
+
+Deploy the migration before the application that reads these fields. Before rollback, back up the database and export new fee/GDV inputs and annual assumptions. Downgrading to `0021_sales_negotiated_price` drops these new columns and the annual table, but preserves original purchase prices and acquisition fees. Do not downgrade a live database merely to test rollback. The migration round-trip test runs only on the disposable test database.
+
+## CI repair evidence
+
+Run 34636570172 exposed obsolete migration-head expectations and an Actions
+migration test comparing head's added Land table against revision 0018. Its
+failed assertion left later tests with a downgraded schema, causing cascading
+missing-table errors. The round-trip now tests 0018/0019 specifically and restores
+head in a finally block. Merged main supplies the Phase contract corrections,
+shared migration-head assertions and reporting snapshot read-lock release before
+Alembic DDL. The Backend aggregate failure reflects its failed/cancelled shards.
+
+Local validation: 42 migration/retention/Land tests passed, 59 frontend tests
+passed and the production build passed. Ruff check/format and compilation passed.
+The corrected exact-head Full CI run is still required; no checks were skipped
+or timeouts increased to obtain these results.

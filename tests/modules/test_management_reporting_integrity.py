@@ -18,6 +18,7 @@ from tests.conftest import alembic_config
 from tests.modules.test_commissions_review import snapshot as source_rows
 from tests.modules.test_management_reporting import ROOT, capture
 from tests.modules.test_portfolio_scale import copy_project
+from tests.test_migrations import HEAD_REVISION
 
 TABLES = ("management_report_snapshots", "management_report_snapshot_projects")
 
@@ -47,9 +48,12 @@ def test_snapshot_db_immutability_scope_integrity_retained_downgrade(
         db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     db.rollback()
     retained_rows = source_rows(db)
+    # Release snapshot read locks before Alembic uses a separate connection.
+    # Newer revisions may alter these source tables before reaching the guard.
+    db.rollback()
     with pytest.raises(SQLAlchemyError, match="Retained management snapshots"):
         command.downgrade(alembic_config(), "0019_management_actions")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0020_management_reporting"
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
     assert source_rows(db) == retained_rows
     assert admin_client.get(f"{ROOT}/snapshots/{report['id']}").json() == report
     # Test cleanup uses the suite's administrative TRUNCATE, not a product API.
