@@ -18,7 +18,6 @@ import {
   Icon,
   IdentityCell,
   Loading,
-  Meter,
   Notice,
   PageHeader,
   PlaceCell,
@@ -39,40 +38,14 @@ import {
   UnitForm,
 } from "@/components/projects/inventory/StructureViews";
 import { RecordLink } from "@/components/ui";
-import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { money } from "@/lib/format";
+import { useCurrencyCode } from "@/lib/currency";
+import { LIST_PRICE_READERS, hasAnyRole } from "@/lib/roles";
+import type { LaunchRegister } from "@/lib/api";
 
 const PAGE = "200";
 
-/**
- * The inventory workspace, inside the project workspace.
- *
- * A development is Phase → Building → Floor → Unit, and until now this screen
- * showed that as one unit register with three narrowing selects. It read as
- * four levels and behaved as one: choosing "Phase" produced units filtered by
- * phase, so an operator clicking into a hierarchy concept always arrived back
- * at the same table and could never see what a phase or a building *was*.
- *
- * Four object views now, one workspace. Phases shows phases. Buildings shows
- * buildings. Floors shows floors. Units shows units, unchanged — it is the
- * record the business runs on and it stays the default.
- *
- * Drill-down is a filter carried between views, not a navigation stack: "View
- * buildings" from a phase moves to the buildings register with that phase
- * selected, the selection is stated above the register in words, and one
- * action clears it. There is no tree component and no recursive hierarchy
- * engine; this domain has exactly four levels and knows all four of their
- * names.
- *
- * The register is built to be scanned down: the unit's identity pinned on the
- * left, where it sits and how big it is in the middle, and its four status
- * dimensions on the right — commercial carrying the weight, the other three as
- * a dot and a word, because the column heading already says they are statuses.
- *
- * Every column here is one somebody filters or sorts a development by. Parking
- * and storage, the sub-assets, the custom fields and the release blockers are
- * all real and all live in Unit 360: a register wide enough to hold them is a
- * register that scrolls sideways before it answers anything.
- */
+/** The physical hierarchy and launch list, scoped and totalled by the server. */
 export function InventoryTab({
   roles,
   projectId,
@@ -91,6 +64,10 @@ export function InventoryTab({
   const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
   const setOffset = (value: number) => setPageFields({offset: String(value)});
   const [pageTotal, setPageTotal] = useState(0);
+  const codeOf = useCurrencyCode();
+  const seesPrice = hasAnyRole(roles, LIST_PRICE_READERS);
+  const [launchValues, setLaunchValues] = useState<LaunchRegister | null>(null);
+  const [priceError,setPriceError] = useState<string | null>(null);
   const [register, setRegister] = useState<UnitRegister | null>(null);
   useRegisterRestore(register !== null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -101,7 +78,7 @@ export function InventoryTab({
     phase_id: "",
     building_id: "",
     floor_id: "",
-    commercial_status: "",
+    asset_class: "",
     is_active: "",
     search: "",
   });
@@ -128,15 +105,20 @@ export function InventoryTab({
     const ticket = latestRequest.current + 1;
     latestRequest.current = ticket;
     setRegister(null);
+    setLaunchValues(null);setPriceError(null);
     setError(null);
     try {
       const query: Record<string, string> = { limit: PAGE, offset: String(offset) };
       for (const [key, value] of Object.entries(filters)) {
         if (value) query[key] = value;
       }
-      const result = await inventory.units(projectId, query);
+      const [result, prices] = await Promise.all([
+        inventory.units(projectId, query),
+        seesPrice ? inventory.launchValues(projectId, query).then(data => ({data,error:null})).catch(() => ({data:null,error:"Launch prices could not be loaded."})) : Promise.resolve({data:null,error:null}),
+      ]);
       if (ticket !== latestRequest.current) return;
       setRegister(result);
+      setLaunchValues(prices.data);setPriceError(prices.error);
       setPageTotal(result.total);
       setError(null);
     } catch (caught) {
@@ -144,7 +126,7 @@ export function InventoryTab({
       setRegister(null);
       setError(caught instanceof ApiError ? caught.message : "Could not load the inventory.");
     }
-  }, [projectId, filters, offset]);
+  }, [projectId, filters, offset, seesPrice]);
 
   const loadHierarchy = useCallback(async () => {
     try {
@@ -369,14 +351,13 @@ export function InventoryTab({
 
         {view === "units" && register ? (
           <section className="asset-position" aria-label="Inventory position">
-            <div className="asset-position-identity"><Icon name="inventory" /><span>Property inventory<span className="cell-secondary">Physical assets · commercial readiness</span></span></div>
+            <div className="asset-position-identity"><Icon name="inventory" /><span>Property inventory<span className="cell-secondary">Unit features · launch prices</span></span></div>
             <Position compact>
               <PositionFigure lead label="Units" value={register.total} />
-              <PositionFigure label="Available" value={register.available_count} />
-              <PositionFigure label="Reserved" value={register.reserved_count} />
-              <PositionFigure label="Sold" value={register.sold_count} />
-              <PositionFigure label="Unreleased" value={register.unreleased_count} />
+              {launchValues ? <><PositionFigure label="Priced units" value={launchValues.priced_count} /><PositionFigure label="Needs price" value={launchValues.unpriced_count} /><PositionFigure label="Needs repricing" value={launchValues.repricing_count} />{launchValues.totals.map(total=><PositionFigure key={total.currency_id} label="Launch list value · ex tax" value={money(total.amount,codeOf(total.currency_id))} />)}</> : null}
             </Position>
+            {priceError ? <Notice tone="error">{priceError}</Notice> : null}
+            <p className="footnote">Totals cover all matching inventory, including previously released units. Only current approved list prices contribute; unpriced units and prices requiring review are excluded.</p>
             {areaTypes.length === 0 ? <p className="footnote">No area types configured — no unit can be measured or released.</p> : null}
           </section>
         ) : null}
@@ -389,7 +370,7 @@ export function InventoryTab({
             phases.find((phase) => phase.id === filters.phase_id)?.name,
             buildings.find((building) => building.id === filters.building_id)?.name,
             floors.find((floor) => floor.id === filters.floor_id)?.label,
-            filters.commercial_status ? statusLabel(filters.commercial_status) : null,
+            filters.asset_class || null,
             filters.search ? `“${filters.search}”` : null,
           ].filter(Boolean).join(" · ")}
           search={{
@@ -408,7 +389,7 @@ export function InventoryTab({
           }
           onReset={
             filtered
-              ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", commercial_status: "", is_active: "", search: "" })
+              ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", asset_class: "", is_active: "", search: "" })
               : undefined
           }
         >
@@ -457,22 +438,7 @@ export function InventoryTab({
             </select>
           </ToolbarFilter>
           <ToolbarFilter label="Activity" active={filters.is_active !== ""}><select className="input" value={filters.is_active} onChange={e => setFilters({...filters, is_active: e.target.value})}><option value="">Active and inactive</option><option value="true">Active only</option><option value="false">Inactive only</option></select></ToolbarFilter>
-          <ToolbarFilter label="Commercial status" active={filters.commercial_status !== ""}>
-            <select
-              className="input"
-              value={filters.commercial_status}
-              onChange={(event) => setFilters({ ...filters, commercial_status: event.target.value })}
-            >
-              <option value="">Any status</option>
-              {["available", "reserved_stock", "sold", "unreleased", "held", "reserved", "contract_pending", "contracted", "returned"].map(
-                (status) => (
-                  <option key={status} value={status}>
-                    {status === "reserved" ? "Reserved · active reservation" : status === "contracted" ? "Sold · contracted" : statusLabel(status)}
-                  </option>
-                ),
-              )}
-            </select>
-          </ToolbarFilter>
+          <ToolbarFilter label="Property class" active={filters.asset_class !== ""}><select className="input" value={filters.asset_class} onChange={event=>setFilters({...filters,asset_class:event.target.value})}><option value="">All classes</option>{["apartment","villa","townhouse","commercial","other"].map(value=><option key={value} value={value}>{value}</option>)}</select></ToolbarFilter>
         </DataToolbar>
 
         <Card flush>
@@ -499,11 +465,8 @@ export function InventoryTab({
                     <th scope="col" className="num">
                       Area
                     </th>
-                    <th scope="col">Commercial</th>
-                    <th scope="col">Legal</th>
-                    <th scope="col">Collection</th>
-                    <th scope="col">Delivery</th>
-                    <th scope="col">Readiness</th>
+                    {seesPrice ? <th scope="col">Launch price · ex tax</th> : null}
+                    <th scope="col">Release preparation</th>
                     <th scope="col">
                       <span className="visually-hidden">Open</span>
                     </th>
@@ -547,31 +510,8 @@ export function InventoryTab({
                           </span>
                         ) : null}
                       </td>
-                      <td>
-                        <Badge tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</Badge>
-                      </td>
-                      <td>
-                        <StatusDot tone={statusTone(unit.legal_status)}>{statusLabel(unit.legal_status)}</StatusDot>
-                      </td>
-                      <td>
-                        <StatusDot tone={statusTone(unit.collection_status)}>
-                          {statusLabel(unit.collection_status)}
-                        </StatusDot>
-                      </td>
-                      <td>
-                        <StatusDot tone={statusTone(unit.delivery_status)}>{statusLabel(unit.delivery_status)}</StatusDot>
-                      </td>
-                      <td>
-                        {unit.release_eligible ? (
-                          <StatusDot tone="success">Releasable</StatusDot>
-                        ) : (
-                          <Meter
-                            percent={unit.completeness_percent}
-                            label={`Data completeness ${unit.completeness_percent} per cent`}
-                            note={unit.is_complete ? "Not releasable" : "Incomplete"}
-                          />
-                        )}
-                      </td>
+                      {seesPrice ? <td className="num">{priceError ? "Unavailable" : (()=>{const price=launchValues?.rows.find(row=>row.unit_id===unit.id);return price?.repricing_required ? "Review price" : price?.price ? money(price.price,codeOf(price.currency_id)) : "Not priced";})()}</td> : null}
+                      <td><StatusDot tone={unit.release_eligible ? "success" : "neutral"}>{unit.release_eligible ? "Ready" : "Review release"}</StatusDot></td>
                       <td className="row-go" aria-hidden="true">
                         <Icon name="chevron" />
                       </td>

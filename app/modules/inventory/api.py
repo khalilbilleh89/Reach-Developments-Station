@@ -59,6 +59,7 @@ from app.modules.inventory.schemas import (
     FloorRead,
     FloorUpdateRequest,
     ImportReport,
+    LaunchRegister,
     PhaseAccessRead,
     PhaseAccessRequest,
     PhaseCreateRequest,
@@ -81,6 +82,8 @@ from app.modules.inventory.schemas import (
     UnitUpdateRequest,
     WorkbookReport,
 )
+from app.modules.pricing import launch
+from app.modules.pricing.permissions import require_quote_reader, sees_internal_prices
 from app.modules.projects.models import LandParcel, Project
 from app.modules.projects.permissions import AccessibleProject
 
@@ -1558,4 +1561,38 @@ def retire_unit_document(
     unit = require_unit(session, project=project, unit_id=unit_id, actor=actor)
     return UnitDocumentRead.model_validate(
         physical.retire_document(session, unit=unit, actor=actor, document_id=document_id)
+    )
+
+
+@router.get("/{project_id}/inventory/launch-values", response_model=LaunchRegister)
+def read_launch_values(
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+    phase_id: Annotated[uuid.UUID | None, Query()] = None,
+    building_id: Annotated[uuid.UUID | None, Query()] = None,
+    floor_id: Annotated[uuid.UUID | None, Query()] = None,
+    asset_class: Annotated[str | None, Query(max_length=32)] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    is_active: Annotated[bool | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> LaunchRegister:
+    if not sees_internal_prices(actor):
+        require_quote_reader(actor)
+    selection = service.unit_selection(
+        session,
+        project=project,
+        actor=actor,
+        phase_id=phase_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        asset_class=asset_class,
+        search=search,
+        is_active=is_active,
+        commercial_status=None,
+        unit_type_code=None,
+    )
+    return LaunchRegister.model_validate(
+        launch.launch_register(session, selection=selection, limit=limit, offset=offset)
     )

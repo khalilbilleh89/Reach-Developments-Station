@@ -806,3 +806,24 @@ class UnitDocumentRead(BaseModel):
     url: str
     revision: str | None
     is_active: bool
+
+
+class LaunchPriceRow(BaseModel):
+    unit_id: uuid.UUID
+    currency_id: uuid.UUID | None
+    price: DecimalStr | None
+    repricing_required: bool
+
+
+class LaunchCurrencyTotal(BaseModel):
+    currency_id: uuid.UUID
+    amount: DecimalStr
+
+
+class LaunchRegister(BaseModel):
+    total: int
+    priced_count: int
+    repricing_count: int
+    unpriced_count: int
+    totals: list[LaunchCurrencyTotal]
+    rows: list[LaunchPriceRow]

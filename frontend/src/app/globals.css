@@ -4761,7 +4761,6 @@ input[type="file"].input {
 
 a:not([class]) { color: var(--accent); text-underline-offset: 0.18em; }
 a:not([class]):hover { color: var(--accent-hover); }
-.unit-account { grid-column: 1 / -1; }
 
 /* Experience 4.1: domain identity and evidence, within the canonical surfaces. */
 .nav-portfolio {
@@ -4862,7 +4861,6 @@ a:not([class]):hover { color: var(--accent-hover); }
 .workspace-content .record-overview { gap: 1.5rem 2rem; }
 .workspace-content .record-section { border-radius: 0; background: transparent; box-shadow: none; padding: 0 0 1.5rem; border-bottom: 1px solid var(--line-default); }
 .workspace-content .record-standing { grid-column: auto; }
-.workspace-content .unit-account { grid-column: auto; }
 .workspace-content .card { box-shadow: none; }
 .workspace-content > [role=tabpanel] > .card { background: transparent; border-radius: 0; }
 .sale-overview { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 2rem; }

@@ -2634,6 +2634,18 @@ def _unit_filters(
     return clauses
 
 
+def unit_selection(
+    session: Session, *, project: Project, actor: ActorContext, **filters: object
+) -> Select:
+    """Public SQL scope for inventory consumers; filters can only narrow access."""
+    return visible_units(
+        select(Unit.id).where(*_unit_filters(project_id=project.id, **filters)),
+        session,
+        project_id=project.id,
+        actor=actor,
+    )
+
+
 def list_units(
     session: Session,
     *,

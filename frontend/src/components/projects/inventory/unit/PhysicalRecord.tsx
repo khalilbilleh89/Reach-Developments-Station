@@ -92,12 +92,6 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </form> : null}
     </section>
     <section>
-      <SectionHeader level={2} title="Record completeness" />
-      <KeyValueGrid columns={2}><KeyValue label="Inventory requirements" value={`${unit.completeness_percent}%`} /><KeyValue label="Release" value={unit.release_eligible ? "Eligible" : "Requirements outstanding"} /></KeyValueGrid>
-      {unit.missing_requirements.length ? <ul>{unit.missing_requirements.map(item => <li key={item}>{item}</li>)}</ul> : <p>Inventory requirements are complete.</p>}
-      <p className="subtle">Document links and descriptive features do not replace drawing, legal or pricing approvals. Gross measurement completeness is shown separately above.</p>
-    </section>
-    <section>
       <SectionHeader level={2} title="Unit features" />
       <p className="subtle">Descriptive features can be added freely. Priced attributes remain in the governed unit fields.</p>
       {!loaded ? <p>{error ? "Features unavailable." : "Loading features…"}</p> : features.length === 0 ? <p className="subtle">No additional features recorded.</p> : <ul className="chip-list">{features.map(f => <li key={f.id} className="chip"><span>{f.label}{f.is_active ? "" : " · retired"}</span>{canWrite && f.is_active ? <Button small disabled={busy} onClick={() => void save(() => inventory.retireUnitFeature(projectId, unit.id, f.id))}>Retire</Button> : null}</li>)}</ul>}
