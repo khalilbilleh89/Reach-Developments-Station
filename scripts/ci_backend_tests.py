@@ -336,7 +336,10 @@ def domain_of_migration(path: str) -> str | None:
             return domain
     if stem.endswith("_sales_legal"):
         return "sales"
-    if stem.endswith("_project_land_permits") or stem == "0022_land_analytics":
+    if stem.endswith("_project_land_permits") or stem in {
+        "0022_land_analytics",
+        "0023_permit_removal",
+    }:
         return "projects"
     if stem.endswith("_governance_access"):
         return "access"
