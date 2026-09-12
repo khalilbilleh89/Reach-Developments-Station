@@ -5357,10 +5357,14 @@ a:not([class]):hover { color: var(--accent-hover); }
 }
 
 /* Sales-owned inventory choice: full-row native buttons, compact on phones. */
-.sales-unit-picker { min-width: 0; }
-.sales-unit-picker-results { max-height: 28rem; overflow-y: auto; padding: var(--space-1); }
-.sales-unit-picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-.sales-unit-picker-option { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); text-align: left; padding: var(--space-3); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.sales-unit-picker { min-width: 0; display: grid; gap: var(--space-2); }
+.sales-unit-picker-trigger { width: 100%; min-height: 2.75rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.sales-unit-picker-trigger:hover { background: var(--surface-hover); }
+.sales-unit-picker-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sales-unit-picker-panel { min-width: 0; display: grid; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
+.sales-unit-picker-results { max-height: min(24rem, 50dvh); overflow-y: auto; padding: var(--space-1); }
+.sales-unit-picker-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sales-unit-picker-option { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); text-align: left; padding: var(--space-3); border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: var(--surface); color: var(--text-primary); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .sales-unit-picker-option:hover { background: var(--surface-hover); border-color: var(--line-strong); }
 .sales-unit-picker-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sales-unit-picker-details { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 15rem; }

@@ -7,9 +7,10 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function mount(file, component, dependencies, props) {
-  const slots = []; let cursor = 0; let effects = []; const timers = new Map(); let timerId = 0;
+  const slots = []; let cursor = 0; let effects = []; const timers = new Map(); let timerId = 0; let focused = null;
   const react = {
     useState(initial) {const i = cursor++; if (!slots[i]) { slots[i] = {value: typeof initial === "function" ? initial() : initial}; slots[i].set = v => {slots[i].value = typeof v === "function" ? v(slots[i].value) : v;}; } return [slots[i].value, slots[i].set];},
+    useId() { return react.useState(() => `test-${cursor}`)[0]; },
     useRef(initial) {const [slot] = react.useState({current:initial}); return slot;},
     useEffect(fn, deps) {const i = cursor++; if (!slots[i] || deps.some((v,n) => v !== slots[i].deps[n])) effects.push(() => {slots[i]?.cleanup?.(); slots[i]={deps,cleanup:fn()};});},
   };
@@ -29,7 +30,7 @@ function mount(file, component, dependencies, props) {
     if (key.startsWith("./") || key.startsWith("@/components/projects/sales")) return new Proxy({}, {get:(_,name)=>name});
     return require(key);
   },exports);
-  return {render(){cursor=0;effects=[];const tree=exports[component](props);effects.forEach(fn=>fn());return tree;}, flush(){const list=[...timers.values()];timers.clear();list.forEach(fn=>fn());}};
+  return {render(){cursor=0;effects=[];const tree=exports[component](props);nodes(tree).forEach(node=>{if(node.props?.ref) node.props.ref.current={focus(){focused=node;}};});effects.forEach(fn=>fn());return tree;}, focused(){return focused;}, flush(){const list=[...timers.values()];timers.clear();list.forEach(fn=>fn());}};
 }
 function nodes(tree) {if (!tree || typeof tree !== "object") return [];if (Array.isArray(tree)) return tree.flatMap(nodes);return [tree,...nodes(tree.props?.children)];}
 class ApiError extends Error {constructor(message,status=422){super(message);this.status=status;this.fieldErrors=[];}}
@@ -96,12 +97,13 @@ const textOf = tree => {
   return textOf(tree.props?.children);
 };
 const button = (view, label) => nodes(view.render()).find(node => ["Button", "button"].includes(node.type) && textOf(node).includes(label));
-function picker() {
+function picker(open = true) {
   const pending = []; const selected = []; let cancelled = false;
   const view = mount("SalesUnitPicker", "SalesUnitPicker", {
     "@/lib/api": {ApiError, sales:{unitOptions:(project, query) => new Promise((resolve,reject)=>pending.push({project,query,resolve,reject}))}},
     "@/lib/format": formatExports,
   }, {projectId:"project", onSelect:value=>selected.push(value), onCancel:()=>{cancelled=true;}});
+  if (open) {button(view,"Select available unit").props.onClick(); view.render();}
   const search = value => {nodes(view.render()).find(node=>node.type==="input").props.onChange({target:{value}}); view.render(); view.flush();};
   return {view,pending,selected,search,cancelled:()=>cancelled};
 }
@@ -114,6 +116,8 @@ test("browse-first options display governed details and select the exact unit", 
   for(const value of ["2BR","Building A","Floor 3","Phase 1","118.00 m²","JOD 150,000.00","ex tax"]) assert.ok(textOf(option).includes(value));
   assert.equal(option.type,"button"); assert.equal(option.props.type,"button");
   option.props.onClick(); assert.equal(f.selected[0],inventoryUnit);
+  assert.equal(button(f.view,"Select available unit").props["aria-expanded"],false);
+  assert.equal(nodes(f.view.render()).find(node=>node.type==="input"),undefined);
   assert.equal(button(f.view,"Load more units"),undefined);
   button(f.view,"Cancel").props.onClick(); assert.ok(f.cancelled());
 });
@@ -127,10 +131,10 @@ test("load more appends, deduplicates and retains units through a recoverable fa
   assert.ok(button(f.view,"A-301"));
   f.pending[1].reject(new ApiError("Temporary failure")); await settle();
   assert.ok(button(f.view,"A-301")); assert.doesNotMatch(textOf(f.view.render()),/No units|No matching/);
-  button(f.view,"Retry available units").props.onClick(); f.view.render(); f.view.flush();
+  button(f.view,"Retry").props.onClick(); f.view.render(); f.view.flush();
   assert.equal(f.pending[2].query.offset,"30");
   f.pending[2].resolve({items:[inventoryUnit,{...inventoryUnit,unit_id:"second",unit_reference:"A-302",unit_type:null,gross_area:null}],next_offset:null}); await settle();
-  assert.equal(nodes(f.view.render()).filter(node=>node.type==="button").length,2);
+  assert.equal(nodes(f.view.render()).filter(node=>node.props?.className==="sales-unit-picker-option").length,2);
   assert.doesNotMatch(textOf(button(f.view,"A-302")),/2BR|118|0 m²/);
   assert.ok(button(f.view,"A-301")); assert.equal(button(f.view,"Load more units"),undefined);
 });
@@ -160,7 +164,7 @@ test("initial failure preserves search and retry can discover units after sparse
   const f=picker(); f.search("Building A"); f.pending[0].reject(new ApiError("Unavailable")); await settle();
   assert.doesNotMatch(textOf(f.view.render()),/No units|No matching/);
   assert.equal(nodes(f.view.render()).find(node=>node.type==="input").props.value,"Building A");
-  button(f.view,"Retry available units").props.onClick(); f.view.render(); f.view.flush();
+  button(f.view,"Retry").props.onClick(); f.view.render(); f.view.flush();
   assert.equal(f.pending[1].query.search,"Building A");
   f.pending[1].resolve({items:[],next_offset:30}); await settle();
   f.pending[2].resolve({items:[inventoryUnit],next_offset:null}); await settle();
@@ -177,9 +181,73 @@ test("New Reservation forwards the selected option to both flows and Change unit
   assert.equal(nodes(view.render()).find(node=>node.type==="RegisterBuyerSaleForm").props.unitOption,inventoryUnit);
   button(view,"Prepare standard reservation").props.onClick();
   nodes(view.render()).find(node=>node.type==="ReservationForm").props.onChangeUnit();
-  assert.ok(nodes(view.render()).find(node=>node.type==="SalesUnitPicker"));
+  assert.equal(nodes(view.render()).find(node=>node.type==="SalesUnitPicker").props.initiallyOpen,true);
   assert.equal(nodes(view.render()).find(node=>node.type==="ReservationForm"),undefined);
   const refreshed=picker(); refreshed.view.render(); refreshed.view.flush();
   refreshed.pending[0].resolve({items:[],next_offset:null}); await settle();
   assert.equal(button(refreshed.view,"A-301"),undefined);
+});
+
+
+test("closed selector stays visible without exposing loaded options or search",async()=>{
+  const f=picker(false); f.view.render(); f.view.flush();
+  const trigger=button(f.view,"Select available unit");
+  assert.equal(trigger.type,"button"); assert.equal(trigger.props.type,"button");
+  assert.equal(trigger.props["aria-expanded"],false);
+  assert.ok(textOf(f.view.render()).includes("Unit"));
+  f.pending[0].resolve({items:[inventoryUnit],next_offset:null}); await settle();
+  assert.equal(button(f.view,"A-301"),undefined);
+  assert.equal(nodes(f.view.render()).find(node=>node.type==="input"),undefined);
+  trigger.props.onClick();
+  const panel=nodes(f.view.render()).find(node=>node.props?.id===trigger.props["aria-controls"]);
+  assert.ok(panel); assert.ok(button(f.view,"A-301"));
+  assert.equal(f.view.focused().type,"input");
+});
+
+test("global empty inventory keeps a labelled trigger and guidance even while closed",async()=>{
+  const f=picker(false); f.view.render(); f.view.flush();
+  f.pending[0].resolve({items:[],next_offset:null}); await settle();
+  assert.equal(button(f.view,"No available units").props["aria-expanded"],false);
+  assert.match(textOf(f.view.render()),/No units are currently available for reservation/);
+  assert.match(textOf(f.view.render()),/released for sale and have a current approved price/);
+  button(f.view,"No available units").props.onClick();
+  assert.ok(nodes(f.view.render()).find(node=>node.type==="input"));
+});
+
+test("Escape closes only the open panel, restores trigger focus and retains query on reopening",async()=>{
+  const f=picker(); f.search("A-301");
+  f.pending[0].resolve({items:[inventoryUnit],next_offset:null}); await settle();
+  let prevented=false,stopped=false;
+  f.view.render().props.onKeyDown({key:"Escape",preventDefault(){prevented=true;},stopPropagation(){stopped=true;}});
+  assert.ok(prevented && stopped);
+  assert.equal(f.view.focused().props.className,"sales-unit-picker-trigger");
+  assert.equal(button(f.view,"Select available unit").props["aria-expanded"],false);
+  button(f.view,"Select available unit").props.onClick();
+  assert.equal(nodes(f.view.render()).find(node=>node.type==="input").props.value,"A-301");
+  button(f.view,"Select available unit").props.onClick();
+  assert.equal(nodes(f.view.render()).find(node=>node.type==="input"),undefined);
+});
+
+test("closed request failure preserves the selector and Retry is not an empty state",async()=>{
+  const f=picker(false); f.view.render(); f.view.flush();
+  f.pending[0].reject(new ApiError("Connection unavailable")); await settle();
+  assert.ok(button(f.view,"Select available unit"));
+  assert.equal(button(f.view,"No available units"),undefined);
+  assert.match(textOf(f.view.render()),/Could not load available units/);
+  button(f.view,"Retry").props.onClick(); f.view.render(); f.view.flush();
+  f.pending[1].resolve({items:[inventoryUnit],next_offset:null}); await settle();
+  button(f.view,"Select available unit").props.onClick();
+  assert.ok(button(f.view,"A-301"));
+});
+
+test("selected trigger preserves governed details and routes changes through the draft guard",()=>{
+  const view=mount("NewReservation","NewReservation",{"@/lib/format":formatExports},{projectId:"project",allowOwner:true,onCreated(){},onSaleCreated(){},onCancel(){}});
+  nodes(view.render()).find(node=>node.type==="SalesUnitPicker").props.onSelect(inventoryUnit);
+  const trigger=button(view,"A-301");
+  assert.ok(trigger.props["data-leaves-editor"]);
+  assert.match(textOf(trigger),/2BR · Floor 3/);
+  assert.match(textOf(trigger),/JOD 150,000.00/);
+  trigger.props.onClick();
+  assert.equal(nodes(view.render()).find(node=>node.type==="SalesUnitPicker").props.initiallyOpen,true);
+  assert.equal(nodes(view.render()).find(node=>node.type==="ReservationForm"),undefined);
 });
