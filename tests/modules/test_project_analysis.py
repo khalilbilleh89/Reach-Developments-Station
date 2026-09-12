@@ -365,15 +365,20 @@ def test_deployed_main_upgrade_retains_source_data(
     before = snapshot(db, excluded)
     db.rollback()
     config = alembic_config()
-    # Current deployed main includes M3-02; reporting adds no source-domain tables.
-    # Older history round-trips are covered by tests/test_migrations.py.
+    # Capture the source schema at the historical upgrade boundary. Tables added
+    # later (including project inventory choices) do not exist at that boundary;
+    # their migration/backfill contracts have dedicated migration tests.
     command.downgrade(config, "0019_management_actions")
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
+    source_tables = snapshot(db, excluded).keys()
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
-    assert snapshot(db, excluded) == before
+    after = snapshot(db, excluded)
+    assert {table: after[table] for table in source_tables} == {
+        table: before[table] for table in source_tables
+    }
 
 
 def test_financial_confirmation_reversal_and_business_date(
