@@ -8,6 +8,10 @@ Every record-creating feature must implement its deletion flow in the same chang
 The mandatory checklist and retained-history rules are in [DELETION_POLICY.md](DELETION_POLICY.md).
 This applies to configuration choices and child rows as well as primary records.
 
+Record workflows must use full pages. Side drawers and side inspectors are prohibited,
+including on mobile. Small centered confirmations and short forms remain allowed.
+See [UX_PAGE_AUDIT.md](UX_PAGE_AUDIT.md) for the audited flows and acceptance checks.
+
 ---
 
 ## 1. Anti-overengineering constitution

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { DialogPortal } from "./DialogPortal";
 import { Button } from "./Button";
 import { Notice } from "./Feedback";
 import { useOverlay } from "./overlay";
@@ -19,7 +20,7 @@ import { requestFormLeave, UnsavedChangesGuard } from "./UnsavedChangesGuard";
  * clearance into a button that appears to do nothing.
  *
  * Modal behaviour comes from `useOverlay`: focus lands in the input, stays
- * inside while open, Escape closes this dialog only — never the drawer under
+ * inside while open, Escape closes this dialog only — never the page under
  * it — and focus returns to the action that opened it.
  */
 export function PromptDialog({
@@ -53,7 +54,7 @@ export function PromptDialog({
   function close() { requestFormLeave(dialog.current, onCancel); }
 
   return (
-    <div
+    <DialogPortal><div
       className="dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
@@ -96,6 +97,6 @@ export function PromptDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </div></DialogPortal>
   );
 }

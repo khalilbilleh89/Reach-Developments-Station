@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   Badge,
-  Drawer,
+  RecordPage,
   EmptyState,
   DataToolbar,
   Loading,
@@ -56,7 +56,7 @@ export function CashflowDrilldown({
   query: DrilldownQuery;
   onClose: () => void;
 }) {
-  // Seeded from the figure that was opened, then owned by this drawer. The
+  // Seeded from the figure that was opened, then owned by this record-page. The
   // parent remounts it (see its `key`) when a different figure is opened, which
   // is what re-seeds these rather than an effect copying a prop into state.
   const [filters, setFilters] = useState<DrilldownQuery>(query);
@@ -89,7 +89,7 @@ export function CashflowDrilldown({
     answer.status === "ready" ? answer.data.basis.currency_code : null;
 
   return (
-    <Drawer
+    <RecordPage
       eyebrow="Cashflow" icon="economics"
       title={
         filters.periodMonth
@@ -226,6 +226,6 @@ export function CashflowDrilldown({
           </TableScroll>
         )
       ) : null}
-    </Drawer>
+    </RecordPage>
   );
 }

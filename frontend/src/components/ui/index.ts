@@ -17,9 +17,10 @@ export type { Tone } from "./Badge";
 export { Button, ButtonRow } from "./Button";
 export { Card, SubPanel } from "./Card";
 export type { CardTone } from "./Card";
+export { DialogPortal } from "./DialogPortal";
 export { ConfirmDialog } from "./ConfirmDialog";
-export { Drawer } from "./Drawer";
-export type { DrawerFact, DrawerHeadline } from "./Drawer";
+export { RecordPage } from "./RecordPage";
+export type { RecordPageFact, RecordPageHeadline } from "./RecordPage";
 export {
   Breakdown,
   BreakdownRow,

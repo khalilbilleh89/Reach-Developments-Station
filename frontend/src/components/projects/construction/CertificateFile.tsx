@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
   Button,
-  Drawer,
+  RecordPage,
   EmptyState,
   KeyValue,
   KeyValueGrid,
@@ -81,22 +81,22 @@ export function CertificateFile({
 
   if (error) {
     return (
-      <Drawer title="Certificate" onClose={onClose}>
+      <RecordPage title="Certificate" onClose={onClose}>
         <Notice tone="error">{error}</Notice>
-      </Drawer>
+      </RecordPage>
     );
   }
 
   if (!certificate) {
     return (
-      <Drawer title="Certificate" onClose={onClose}>
+      <RecordPage title="Certificate" onClose={onClose}>
         <Loading label="Loading this certificate" />
-      </Drawer>
+      </RecordPage>
     );
   }
 
   return (
-    <Drawer
+    <RecordPage
       eyebrow="Certificate" icon="permits"
       title={certificate.certificate_number}
       subtitle={
@@ -268,6 +268,6 @@ export function CertificateFile({
           />
         </KeyValueGrid>
       </div>
-    </Drawer>
+    </RecordPage>
   );
 }

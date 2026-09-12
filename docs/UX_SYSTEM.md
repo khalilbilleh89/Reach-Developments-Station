@@ -71,13 +71,13 @@ The context bar carries breadcrumbs, project status and base currency. On phones
 
 Sales gives the current sale or reservation the primary first-column link, with the buyer alongside it. View unit is secondary; available units without a current transaction expose Reserve in the same visible column. Record navigation retains both the same-project register origin and the immediate parent, including its tab. Back follows the parent, and an origin link returns directly to the register. Use the shared contextual URL builder for post-create redirects as well as links. See the [September follow-up roadmap](UX_ROADMAP_2026_09_10.md) for the bounded trail and acceptance evidence.
 
-Keep the existing `auto`, `expanded` and `collapsed` rail preference and `reach.rail` persistence. Below 75rem the automatic rail collapses; below 64rem navigation opens as a modal drawer. The same catalogue supplies labels, route keys and visibility. `projectHref` and `settingsHref` remain the route builders. A project switch preserves the selected section where possible.
+Keep the existing `auto`, `expanded` and `collapsed` rail preference and `reach.rail` persistence. Below 75rem the automatic rail collapses; below 64rem navigation opens as a full-width page. The same catalogue supplies labels, route keys and visibility. `projectHref` and `settingsHref` remain the route builders. A project switch preserves the selected section where possible.
 
 Visibility mirrors the backend's role sets. Gate requests before fetching; hiding a rendered field is not permission enforcement. Preserve all setup, password-change and project-access gates.
 
 ## 5. Canonical primitives
 
-Import from `@/components/ui`. Extend the canonical component where it already owns a responsibility. Do not add `CardV4`, `NewDrawer`, aliases, duplicate component libraries or a second stylesheet layer.
+Import from `@/components/ui`. Extend the canonical component where it already owns a responsibility. Do not add `CardV4`, `NewRecordPage`, aliases, duplicate component libraries or a second stylesheet layer.
 
 | Primitive | Responsibility |
 | --- | --- |
@@ -92,7 +92,7 @@ Import from `@/components/ui`. Extend the canonical component where it already o
 | `AttentionList` | Reported severity or count, reason, context, optional source evidence, and an action to the owning workflow |
 | `DataToolbar`, `ToolbarFilter` | Search, filters, result count, reset and register actions |
 | `TableScroll`, `IdentityCell`, `PlaceCell` | Accessible registers, asset identity and physical context |
-| `Drawer` | A record opened over its source register, including identity, facts, actions and section tabs |
+| `RecordPage` | Full-width record content replacing its source register, including identity, facts, actions and section tabs |
 | `Tabs`, `TabPanel` | Workspace, record and analysis navigation with shared keyboard semantics |
 | `Disclosure` | Native details/summary semantics, a consistent target and chevron, optional context and focus refs |
 | `Field`, `FieldRow`, `FormSection` | Labelled fields and coherent groups with a dedicated field body |
@@ -118,7 +118,7 @@ Inventory keeps Phases, Buildings, Floors and Units as first-class views. Each s
 
 ## 7. Record files and forms
 
-Desktop drawers float with a small inset, rounded corners and a warm body beneath a white identity header. The header prioritises the reference, physical location, current state and one important figure. Supporting facts must add information rather than repeat the whole body.
+Records use full pages at every viewport. Side drawers and side inspectors are prohibited; only small centered confirmations and short forms remain dialogs. See [UX_PAGE_AUDIT.md](UX_PAGE_AUDIT.md). The header prioritises the reference, physical location, current state and one important figure. Supporting facts must add information rather than repeat the whole body.
 
 Land separates tenure and acquisition. Its area is the recorded physical measure; acquisition is explicitly a cost basis, not a valuation. Planning, utilities and documents remain separate sections. Unknown values remain unknown. Land classifications remain free text with optional suggestions; Settings vocabularies must not reject valid typed classifications.
 
@@ -126,7 +126,7 @@ Unit 360 keeps four independent status dimensions in its header through `UnitSta
 
 Workspace tabs use a contained rail, record tabs use a section underline, and Analysis tabs use a compact segmented treatment. All share roving focus, arrow keys, Home/End, stable ids and labelled panels. Revealing a selected tab scrolls only its own horizontal rail; mounting a tab group must never move the page.
 
-On phones the record becomes full-screen and its whole content can scroll, so a tall header cannot trap the body in a clipped remainder. Closing returns focus to the source control. Desktop forms in a wide drawer can place the group description beside the fields; mobile forms stack.
+At every width the record uses the main page and its whole content can scroll, so a tall header cannot trap the body in a clipped remainder. Closing returns focus to the source control. Desktop forms in a record page can place the group description beside the fields; mobile forms stack.
 
 Forms retain field labels, optional markers, validation, busy state, exact input strings and save/cancel behavior. Permit types are created through the project-scoped flow; a retired value remains readable but is not offered for a new selection. Do not add global vocabulary administration to a domain form.
 
@@ -169,7 +169,7 @@ Validate at 1600, 1440, 1280, 1024, 768 and 390 pixels, with real loaded local f
 - One page `h1`, named sections, labelled forms and buttons.
 - Native disclosure keyboard behavior and visibly distinct expanded state.
 - Tabs move selection and focus together, with no page jump.
-- Shared overlay handling for drawers, navigation, switcher and dialogs: initial focus, containment, Escape on the topmost layer, background isolation and focus restoration.
+- Shared overlay handling for the switcher and small dialogs: initial focus, containment, Escape on the topmost layer, background isolation and focus restoration.
 - Tables remain keyboard-scrollable; fixed identities do not cover adjacent data.
 - Mobile filters stay operable and applied state stays visible.
 - Nested dialogs remain usable over a record. Long forms and long amounts do not clip.
@@ -184,11 +184,11 @@ The source guards in `tests/test_product_experience.py` enforce architecture, pe
 Outlook starts with the server-selected horizon and cash/funding source, then
 offers contractual dues, commercial run-rate, EAC, permit/design dates and
 management commitments in that order. Use a dense source register and one
-focused source drawer; do not repeat executive cards for every project.
+focused source page; do not repeat executive cards for every project.
 Forecast, scheduled contractual due and actual cash remain distinct labels.
 Incomplete and undated coverage stays visible below the register.
 
-Actions use server filters, including My Actions, and a versioned record drawer
+Actions use server filters, including My Actions, and a versioned record page
 with Action, Source and chronological History sections. Source risk severity
 and action lateness are separate sections in Exceptions. Project Overview has
 compact open/overdue/next-due counts and a filtered register link. Management
@@ -205,8 +205,8 @@ Run lint, TypeScript, the production build, Product Experience guards and the re
 
 Use `DraftBoundary` for state-owned inline editors, comparing against the saved
 record and resetting only after persistence or confirmed discard. Shared form
-and reason dialogs guard their own inputs; Drawer asks contained drafts before
-closing. Mark inline close/version-change controls with `data-leaves-editor`.
+and reason dialogs guard their own inputs; RecordPage asks contained drafts before
+returning. Mark inline close/version-change controls with `data-leaves-editor`.
 Use `requestFormLeave` for non-link project selection that replaces an editor.
 Keep inputs in memory; never persist customer or transaction drafts in storage.
 

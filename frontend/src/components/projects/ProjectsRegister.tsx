@@ -11,7 +11,7 @@ import {
   Button,
   Card,
   DataToolbar,
-  Drawer,
+  RecordPage,
   EmptyState,
   Field,
   FieldRow,
@@ -372,8 +372,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
       </div>
 
       {creating ? (
-        <Drawer
-          narrow
+        <RecordPage
           eyebrow="New record"
           title="New project"
           subtitle="The code is issued once and never changes. Everything else can be edited later."
@@ -563,7 +562,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 </Button>
               </FormActions>
             </form>
-        </Drawer>
+        </RecordPage>
       ) : null}
 
       {addingCurrency ? <FormDialog title="Add currency" description="Creates the normalized currency and selects it in this project. No exchange rate is created." confirmLabel="Add currency" busy={busy} disabled={!currencyForm.code || !currencyForm.name} onCancel={() => setAddingCurrency(false)} onSubmit={() => void createCurrency()}><FieldRow><Field label="ISO code"><input className="input input-short" required maxLength={3} value={currencyForm.code} onChange={(event) => setCurrencyForm({ ...currencyForm, code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={currencyForm.name} onChange={(event) => setCurrencyForm({ ...currencyForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Symbol" optional><input className="input input-short" value={currencyForm.symbol} onChange={(event) => setCurrencyForm({ ...currencyForm, symbol: event.target.value })} /></Field><Field label="Minor units"><input className="input input-short" type="number" min={0} max={6} value={currencyForm.minor_units} onChange={(event) => setCurrencyForm({ ...currencyForm, minor_units: event.target.value })} /></Field></FieldRow></FormDialog> : null}

@@ -6,7 +6,7 @@ import {
   Badge,
   Button,
   ButtonRow,
-  Drawer,
+  RecordPage,
   EmptyState,
   Field,
   Form,
@@ -22,7 +22,7 @@ import {
   SubPanel,
   TableScroll,
 } from "@/components/ui";
-import type { DrawerFact } from "@/components/ui";
+import type { RecordPageFact } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type {
   CollectionAction,
@@ -84,7 +84,7 @@ const TABS = [
  * the API already decided.
  *
  * `asOf` is the reporting date the register that opened this was read at. It is
- * threaded through rather than defaulted, because a drawer opened from a March
+ * threaded through rather than defaulted, because a record-page opened from a March
  * row and showing today's balance contradicts the row that was clicked, and
  * nothing on the screen would say which of the two figures was which.
  */
@@ -117,7 +117,7 @@ export function CollectionAccount({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // A past date is a report, not a desk. Every action in this drawer records
+  // A past date is a report, not a desk. Every action in this record-page records
   // something happening now, so a historical reading offers none of them —
   // suppressed once, here, because every button below is already behind one of
   // these three.
@@ -127,7 +127,7 @@ export function CollectionAccount({
   const canDecideWaiver = !historical && roles.has("approver_cfo");
   // Escrow is a Cashflow act recorded against a Collections receipt, so it is
   // gated on the set that governs Cashflow recording rather than on being able
-  // to read this drawer. Naming the set rather than the role keeps the two from
+  // to read this record-page. Naming the set rather than the role keeps the two from
   // drifting apart if the recorder set ever widens.
   const canRestrictCash = !historical && hasAnyRole(roles, CASHFLOW_RECORDERS);
 
@@ -170,7 +170,7 @@ export function CollectionAccount({
   // The four figures anybody opens this account for, kept in the header while
   // the tabs beneath change. All four are the server's summary; the badges
   // beside the title are the same summary read as states.
-  const facts: DrawerFact[] | undefined = summary
+  const facts: RecordPageFact[] | undefined = summary
     ? [
         {
           label: "Outstanding",
@@ -194,7 +194,7 @@ export function CollectionAccount({
     : undefined;
 
   return (
-    <Drawer
+    <RecordPage
       eyebrow="Collections account" icon="collections"
       title={clientName}
       subtitle={`Unit ${unitNumber} · ${saleNumber}`}
@@ -311,7 +311,7 @@ export function CollectionAccount({
           ) : null}
         </>
       )}
-    </Drawer>
+    </RecordPage>
   );
 }
 

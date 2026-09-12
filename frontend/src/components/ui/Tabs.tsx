@@ -17,7 +17,7 @@ function slug(label: string): string {
  *
  * Ids are derived from the group's label rather than from the tab keys alone,
  * because two tab groups can be on screen at once — the project's sections
- * behind a record drawer's — and two elements sharing an id makes both of them
+ * behind a record record-page's — and two elements sharing an id makes both of them
  * unreachable by name.
  */
 export function Tabs({

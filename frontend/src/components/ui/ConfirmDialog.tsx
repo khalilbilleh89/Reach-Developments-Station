@@ -1,5 +1,6 @@
 "use client";
 
+import { DialogPortal } from "./DialogPortal";
 import { Button } from "./Button";
 import { useOverlay } from "./overlay";
 
@@ -36,7 +37,7 @@ export function ConfirmDialog({
   const dialog = useOverlay<HTMLDivElement>(onCancel);
 
   return (
-    <div
+    <DialogPortal><div
       className="dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
@@ -58,6 +59,6 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div></DialogPortal>
   );
 }

@@ -1,25 +1,12 @@
 "use client";
 
 /**
- * The one modal behaviour, shared by Drawer, ConfirmDialog and PromptDialog.
- *
- * Overlays stack — a reason dialog opens inside the deal file's drawer — and
- * only the TOPMOST one owns the keyboard:
- *
- * - Escape closes the top overlay only. The first press closes the dialog, the
- *   second closes the drawer; one press never closes both.
- * - Tab and Shift+Tab stay inside the top overlay. The register behind a
- *   drawer, and the drawer behind a dialog, are not reachable by keyboard
- *   while something is open over them.
- * - Focus moves into an overlay when it opens and returns to the control that
- *   opened it when it closes, so an operator working down a register is put
- *   back exactly where they were.
- *
- * Hand-written on purpose: it exists to implement this concrete behaviour and
- * nothing else, and a dependency would bring the rest of a modal library with
- * it.
+ * Keyboard behavior for small dialogs and the project switcher.
+ * Only the topmost dialog handles Escape and Tab. Focus returns to the opening
+ * control when it closes. Record pages do not use this modal behavior.
  */
 
+import { useDialogHost } from "./DialogPortal";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 
@@ -47,7 +34,7 @@ function focusables(container: HTMLElement): HTMLElement[] {
  * Make the referenced element a modal overlay for as long as it is mounted.
  *
  * `initialFocus` picks what receives focus on open: a selector (the reason
- * dialog focuses its input), `"container"` for the overlay itself (a drawer,
+ * dialog focuses its input), `"container"` for the overlay itself (the project switcher,
  * so its accessible name is announced), or nothing for the first focusable
  * control (a confirm dialog, whose first button is the safe one).
  */
@@ -55,6 +42,7 @@ export function useOverlay<T extends HTMLElement>(
   onClose: (element: T) => void,
   initialFocus?: "container" | string,
 ): RefObject<T | null> {
+  const host = useDialogHost();
   const container = useRef<T>(null);
   const close = useRef(onClose);
 
@@ -123,7 +111,7 @@ export function useOverlay<T extends HTMLElement>(
         openOverlays[openOverlays.length - 1]?.focus();
       }
     };
-  }, [initialFocus]);
+  }, [initialFocus, host]);
 
   return container;
 }

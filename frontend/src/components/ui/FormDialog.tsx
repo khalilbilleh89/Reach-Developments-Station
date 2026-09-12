@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { DialogPortal } from "./DialogPortal";
 import { Button } from "./Button";
 import { useOverlay } from "./overlay";
 import { requestFormLeave, UnsavedChangesGuard } from "./UnsavedChangesGuard";
@@ -20,7 +21,7 @@ import { useFormDirty } from "./useFormDirty";
  * The fields are the caller's, so each dialog asks for exactly what it needs
  * and owns its own validation. Modal behaviour is the same as every other
  * overlay: focus lands inside, stays inside, Escape closes this and not the
- * drawer beneath it, and focus returns to whatever opened it.
+ * page beneath it, and focus returns to whatever opened it.
  */
 export function FormDialog({
   title,
@@ -46,7 +47,7 @@ export function FormDialog({
   const dirty = useFormDirty(dialog);
 
   return (
-    <div
+    <DialogPortal><div
       className="dialog-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
@@ -77,6 +78,6 @@ export function FormDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </div></DialogPortal>
   );
 }

@@ -574,12 +574,11 @@ class TestOnlyEntitledReadersAsk:
 
 
 class TestTheShellKeepsItsStructure:
-    def test_the_rail_collapses_and_becomes_a_drawer_by_width(self) -> None:
+    def test_the_rail_collapses_and_mobile_navigation_uses_a_page(self) -> None:
         css = stylesheet_without_comments()
         narrow = css.split("@media (width < 64rem)")[1].split("@media")[0]
         assert re.search(r"\.sidebar\s*\{\s*display:\s*none;", narrow)
         assert re.search(r"\.menu-button\s*\{\s*display:\s*inline-grid;", narrow)
-        assert re.search(r"\.drawer,\s*\.drawer-narrow\s*\{\s*width:\s*100%;", narrow)
         collapsed = css.split("@media (width < 75rem)")[1].split("@media")[0]
         assert "--sidebar-collapsed-width" in collapsed
 
@@ -588,12 +587,13 @@ class TestTheShellKeepsItsStructure:
         assert re.search(r"\.table-scroll\s*\{\s*overflow-x:\s*auto;", css)
         assert "min-width: 0" in css.split(".app-main {")[1].split("}")[0]
 
-    def test_the_mobile_navigation_is_a_modal_dialog_on_the_shared_overlay(self) -> None:
+    def test_the_mobile_navigation_is_a_full_page(self) -> None:
         sidebar = read(SIDEBAR)
-        assert 'role="dialog"' in sidebar
-        assert 'aria-modal="true"' in sidebar
-        assert "useOverlay<HTMLElement>(onClose" in sidebar
-        assert 'aria-label="Navigation"' in sidebar
+        assert "<nav" in sidebar
+        assert 'className="nav-page"' in sidebar
+        assert 'aria-modal="true"' not in sidebar
+        assert "nav-scrim" not in sidebar
+        assert "hidden={navOpen}" in read(APP_SHELL)
 
     def test_the_shell_reflects_both_the_preference_and_the_viewport(self) -> None:
         shell = read(APP_SHELL)
@@ -625,30 +625,48 @@ class TestTheShellKeepsItsStructure:
 
 
 class TestRecordsAndDialogsKeepTheirSemantics:
-    def test_the_drawer_is_a_modal_dialog_named_after_its_record(self) -> None:
-        drawer = read(UI / "Drawer.tsx")
-        assert 'role="dialog"' in drawer
-        assert 'aria-modal="true"' in drawer
-        assert "aria-label={title}" in drawer
+    def test_record_pages_replace_the_register_without_modal_behavior(self) -> None:
+        page = read(UI / "RecordPage.tsx")
+        assert 'role="region"' in page
+        assert "<h1" in page
+        assert "aria-modal" not in page
+        assert "useOverlay" not in page
+        assert "requestFormLeave(panel.current, onClose)" in page
+        assert "onClick={close}" in page
+        assert "createPortal" in page
+        assert "RecordPageHost.Provider" in read(APP_SHELL)
         assert (
-            'useOverlay<HTMLDivElement>(element => requestFormLeave(element, onClose), "container")'
-            in drawer
+            ".app-content:has(.record-pages > .record-page) > .workspace-register"
+            in stylesheet_without_comments()
         )
-        assert "requestFormLeave(panel.current, onClose)" in drawer
-        assert "onClick={close}" in drawer
-        assert 'document.body.style.overflow = "hidden"' in drawer
 
-    def test_the_drawer_header_carries_identity_headline_actions_facts_and_sections(self) -> None:
-        drawer = read(UI / "Drawer.tsx")
+    def test_no_side_drawer_primitive_or_layout_can_return(self) -> None:
+        for path in FRONTEND.rglob("*"):
+            if path.suffix not in {".tsx", ".ts", ".css"}:
+                continue
+            source = read(path)
+            assert not re.search(
+                r"\bDrawer(?:Fact|Headline)?\b|drawer-scrim|nav-drawer|drawer-in", source
+            ), path
+        assert not (UI / "Drawer.tsx").exists()
+        css = stylesheet_without_comments()
+        layout = css.split(".record-page {")[1].split("}")[0]
+        assert "width: 100%" in layout
+        assert not re.search(r"position:\s*(fixed|absolute)|transform:|animation:", layout)
+
+    def test_the_record_page_header_carries_identity_headline_actions_facts_and_sections(
+        self,
+    ) -> None:
+        drawer = read(UI / "RecordPage.tsx")
         for slot in (
-            "drawer-eyebrow",
-            "drawer-title",
-            "drawer-subtitle",
-            "drawer-meta",
-            "drawer-headline",
-            "drawer-head-actions",
-            "drawer-facts",
-            "drawer-sections",
+            "record-page-eyebrow",
+            "record-page-title",
+            "record-page-subtitle",
+            "record-page-meta",
+            "record-page-headline",
+            "record-page-head-actions",
+            "record-page-facts",
+            "record-page-sections",
         ):
             assert f'className="{slot}' in drawer or f"`{slot}" in drawer, (
                 f"the record header lost its {slot}"
@@ -876,11 +894,11 @@ class TestLandAndPermitsKeepTheirShape:
         assert "types?.filter(type => type.is_active)" in read(PERMIT_CREATE)
         assert "type.is_active || type.code === permit.permit_type_code" in source
 
-    def test_land_uses_the_drawer_and_permits_use_full_page_records(self) -> None:
-        """Parcels retain the shared drawer; permit entry and detail use full pages."""
+    def test_land_and_permits_use_full_page_records(self) -> None:
+        """Parcels and permits use full pages."""
         land = read(LAND_TAB)
-        assert "<Drawer" in land
-        assert "Drawer," in land
+        assert "<RecordPage" in land
+        assert "RecordPage," in land
         permits = read(PERMITS_TAB)
         assert "<PermitCreatePage" in permits
         assert "<PermitFile" in permits

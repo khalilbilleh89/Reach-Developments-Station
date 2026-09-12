@@ -127,3 +127,9 @@ Post-merge checks:
 ## Follow-up
 
 <!-- Only genuine deferred scope. No speculative "future engine" follow-ups. -->
+
+## Page layout
+
+- [ ] Record creation, editing, details and drilldowns use full pages; no side drawers.
+- [ ] Back preserves register context; unsaved changes and deletion controls still work.
+- [ ] Desktop and mobile layouts checked; only small centered dialogs remain.

@@ -137,7 +137,7 @@ export function PaymentPlanWorkspace({
     change_reason: "",
     effective_date: "",
   });
-  // Which version the drawer is showing. Null means the one being prepared;
+  // Which version the record-page is showing. Null means the one being prepared;
   // any other id selects a version to read. Selecting one changes nothing on
   // the server — it is a choice of which immutable record to look at.
   const showing = params.get("version");

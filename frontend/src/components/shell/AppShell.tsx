@@ -9,6 +9,7 @@ import { useSession } from "@/lib/api/session";
 import { roleSet } from "@/lib/roles";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { Loading, Notice } from "@/components/ui";
+import { RecordPageHost } from "@/components/ui/RecordPage";
 import { AppSidebar, MobileNavigation } from "./AppSidebar";
 import { ContextBar } from "./ContextBar";
 import type { Crumb } from "./ContextBar";
@@ -40,7 +41,7 @@ const NARROW_RAIL = "(width < 75rem)";
  *
  * On a wide screen the rail can be collapsed to icons and the choice is kept
  * in the browser; under 1200px it starts collapsed; under 1024px it leaves the
- * page and becomes a drawer behind a menu button. `data-rail` carries the
+ * page and opens as a full navigation page from a menu button. `data-rail` carries the
  * person's preference and `app-narrow` the viewport's verdict, so the
  * stylesheet can draw the collapsed rail from one set of rules.
  */
@@ -65,6 +66,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const content = useRef<HTMLElement>(null);
+  const [pageHost, setPageHost] = useState<HTMLDivElement | null>(null);
   const router = useRouter();
   const { signOut } = useSession();
   const [rail, setRail] = useState<RailState>("auto");
@@ -100,8 +102,9 @@ export function AppShell({
     const main = content.current;
     if (!main) return;
     const updateTitle = () => {
-      const title = main.querySelector("h1")?.textContent?.trim() || "Reach workspace";
-      const tab = main.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim();
+      const visiblePage = main.querySelector(".record-pages > .record-page:last-child") ?? main;
+      const title = visiblePage.querySelector("h1")?.textContent?.trim() || "Reach workspace";
+      const tab = visiblePage.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim();
       document.title = [title, tab && tab !== title ? tab : undefined, title === project?.name ? undefined : project?.name, "Reach"].filter(Boolean).join(" · ");
     };
     updateTitle();
@@ -143,25 +146,28 @@ export function AppShell({
   };
 
   return (
-    <div className={narrow ? "app app-narrow" : "app"} data-rail={rail}>
-      <a className="skip-link" href="#main" onClick={() => content.current?.focus()}>Skip to main content</a>
-      <AppSidebar {...sidebarProps} />
-      {navOpen ? (
-        <MobileNavigation {...sidebarProps} onClose={() => setNavOpen(false)} />
-      ) : null}
-      <div className="app-main">
-        <ContextBar
-          crumbs={crumbs}
-          utilities={utilities}
-          collapsed={collapsed}
-          onToggleRail={toggleRail}
-          onOpenNav={() => setNavOpen(true)}
-        />
-        <main ref={content} id="main" tabIndex={-1} className="app-content">
-          {children}
-        </main>
+    <RecordPageHost.Provider value={pageHost}>
+      <div className={narrow ? "app app-narrow" : "app"} data-rail={rail}>
+        <a className="skip-link" href={navOpen ? "#mobile-navigation" : "#main"} onClick={() => { if (!navOpen) content.current?.focus(); }}>Skip to main content</a>
+        <AppSidebar {...sidebarProps} />
+        {navOpen ? (
+          <MobileNavigation {...sidebarProps} onClose={() => setNavOpen(false)} />
+        ) : null}
+        <div className="app-main" hidden={navOpen}>
+          <ContextBar
+            crumbs={crumbs}
+            utilities={utilities}
+            collapsed={collapsed}
+            onToggleRail={toggleRail}
+            onOpenNav={() => setNavOpen(true)}
+          />
+          <main ref={content} id="main" tabIndex={-1} className="app-content">
+            <div className="workspace-register">{children}</div>
+            <div className="record-pages" ref={setPageHost} />
+          </main>
+        </div>
       </div>
-    </div>
+    </RecordPageHost.Provider>
   );
 }
 
