@@ -20,14 +20,18 @@ Governed by [Engineering Rules](ENGINEERING_RULES.md),
 5. **PR-COM-SALES-01:** Sales-owned unit selection, transaction register and
    negotiated price variance. Explicit owner priority ahead of UX-13; see the
    [implementation plan](COM_SALES_01_PLAN.md). Preserve quote/exception
-   governance and frozen historic prices. Implemented as a draft; see
+   governance and frozen historic prices. Merged as #291 (`d144303`); see
    [handoff and acceptance](COM_SALES_01_ACCEPTANCE.md). Browser/operator
-   acceptance and independent review remain pending.
+   acceptance remains separate from the merge. Do not treat skipped CI as a pass.
+   Browse-first unit picker #293 and Land analytics #292 are also merged; the
+   correction audit is refreshed against main `97e08d3`.
 6. **Record correction and removal — focused UX audit, then fixes:** owner-added
    priority immediately after Sales completion. Investigate every operator-created
    record type for missing edit/delete actions, beginning with Pre-Launch expenses.
    Publish the findings and bounded implementation plan before applying fixes;
-   see the scope below. This work is queued, not started or accepted.
+   see the [source audit and proposed PRs](RECORD_CORRECTION_AUDIT.md).
+   Audit findings are documented; next implementation is PR-REC-01, Pre-Launch
+   expense correction and removal. Fixes and operator acceptance remain pending.
 7. **Narrow UX-13:** Portfolio Projects search; Exceptions project/severity/type
    filters; Portfolio return-to-page; Cashflow tab/date/forecast restoration.
 8. **Operator UAT, then MVP freeze:** Sales, Finance/Collections and Project
