@@ -3,6 +3,7 @@
 import { LegalSummary } from "@/components/projects/sales/LegalSummary";
 import { SpaDetailsForm } from "@/components/projects/sales/SpaDetailsForm";
 import { RequoteForm } from "@/components/projects/sales/RequoteForm";
+import { SaleAgent } from "./SaleAgent";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, sales } from "@/lib/api";
@@ -666,6 +667,7 @@ export function SaleWorkspace({
     { key: "overview", label: "Overview" },
     ...(terms ? [{ key: "commercial", label: "Reservation" }] : []),
     { key: "buyers", label: "Buyers" },
+    { key: "agent", label: "Agent" },
     ...(sale ? [{ key: "contract", label: "Contract" }] : []),
     ...(sale ? [{ key: "legal", label: "Legal" }] : []),
     ...(sale ? [{ key: "plan", label: "Payment plan" }] : []),
@@ -712,7 +714,15 @@ export function SaleWorkspace({
           : (terms?.reservation_number ?? "Deal")
       }
       subtitle={<>{unitLabel || "Property transaction"}{client?.display_name ? ` · ${client.display_name}` : ""}</>}
-      actions={<Button disabled={busy} onClick={() => void load()}>Refresh transaction</Button>}
+      actions={<>
+        <Button disabled={busy} onClick={() => void load()}>Refresh transaction</Button>
+        {!sale && terms && roles.has("master_admin") && ["draft", "deposit_pending", "active", "extended"].includes(terms.status) ? <Button variant="danger" disabled={busy} onClick={() => askThen({title: `Delete reservation ${terms.reservation_number}?`, label: "Reason for removal", confirmLabel: "Delete reservation", hint: "Removes this reservation from current Sales. Buyer details and transaction history are retained."}, reason => sales.cancelReservation(projectId, terms.id, reason), "Reservation removed from current Sales.")}>Delete reservation</Button> : null}
+        {sale && sale.sale.status !== "cancelled" && roles.has("master_admin") ? <Button variant="danger" disabled={busy} onClick={() => askThen({
+          title: `Delete sale ${sale.sale.sale_number}?`, label: "Reason for removal", confirmLabel: "Delete sale",
+          hint: "Removes an unsigned sale from current Sales and releases its unit where eligible. Buyer details and all history are retained. Sales with legal or collection activity use Cancellation.",
+        }, reason => sales.removeSale(projectId, sale.sale.id, reason), "Sale removed from current Sales.")}>Delete sale</Button> : null}
+        {sale && canCancel && !sale.cancellation && ["signature_pending", "active"].includes(sale.sale.status) ? <Button disabled={busy} onClick={() => {setSection("contract"); setCancelling(true);}}>Start cancellation</Button> : null}
+      </>}
       headline={sale ? { value: money(sale.sale.total_contract_price, saleCode), label: "Contract value · buyer payable" } : terms ? { value: money(terms.total_buyer_payable, quoteCode), label: "Reservation · buyer payable" } : undefined}
       meta={
         <>
@@ -741,6 +751,7 @@ export function SaleWorkspace({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
+      {activeSection === "agent" && (sale?.sale ?? terms) ? <SaleAgent key={sale?.sale.id ?? terms!.id} projectId={projectId} record={(sale?.sale ?? terms)!} isSale={!!sale} canWrite={roles.has("master_admin") || roles.has("sales_operations") || roles.has("sales_advisor")} onChanged={load} /> : null}
       {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} onChanged={load} priceReadError={error} /> : null}
       {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader level={2} title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
 

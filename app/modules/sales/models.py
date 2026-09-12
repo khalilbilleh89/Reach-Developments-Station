@@ -407,6 +407,10 @@ class Client(Base):
     #: Human-readable reference. Never identity: see ENGINEERING_RULES §6.
     client_number: Mapped[str] = mapped_column(String(32), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    agent_country: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -582,6 +586,10 @@ class Reservation(Base):
 
     sales_channel_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sales_branch_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_country: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     advisor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
@@ -931,6 +939,10 @@ class SaleContract(Base):
 
     sales_channel_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sales_branch_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_country: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     advisor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )

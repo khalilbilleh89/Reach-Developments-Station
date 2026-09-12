@@ -530,7 +530,7 @@ class TestOnlyEntitledReadersAsk:
         # Groups sit at one indent, their items at two; the indent is the structure.
         groups = re.findall(r'\n    key: "([a-z]+)",\n    label: ', block)
         assert groups == ["home", "development", "commercial", "delivery", "finance", "governance"]
-        items = re.findall(r'\n        key: "([a-z]+)",', block)
+        items = re.findall(r'\n        key: "([a-z-]+)",', block)
         assert items == [
             "overview",
             "land",
@@ -538,6 +538,7 @@ class TestOnlyEntitledReadersAsk:
             "prelaunch",
             "consultant",
             "inventory",
+            "agent-buyer",
             "sales",
             "payments",
             "collections",

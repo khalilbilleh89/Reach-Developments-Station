@@ -9,7 +9,6 @@ import { money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
 import { reservationLabel, saleLabel } from "./sales/labels";
 import { CommercialUnits } from "./sales/CommercialUnits";
-import { ClientsPanel } from "./sales/ClientsPanel";
 import { NewReservation } from "./sales/NewReservation";
 import { SalesGates } from "./sales/SalesGates";
 import { createdSalesHref } from "./sales/salesRoutes";
@@ -23,7 +22,7 @@ export function SalesTab({projectId, projectStatus, roles}: {
   const offset = Number.isSafeInteger(offsetNumber) && offsetNumber >= 0 ? offsetNumber : 0;
   const history = state.sales_view === "history";
   const preparing = state.sales_view === "new";
-  const [open, setOpen] = useState<"buyers" | "gates" | "stock" | null>(null);
+  const [open, setOpen] = useState<"gates" | "stock" | null>(null);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{key: string; items: SalesTransaction[]; total: number} | null>(null);
   const [failure, setFailure] = useState<{key: string; message: string} | null>(null);
@@ -44,16 +43,14 @@ export function SalesTab({projectId, projectStatus, roles}: {
   useRegisterRestore(rows !== null && !preparing);
   const refresh = async () => {setRetry(value => value + 1);};
   return <div className="stack">
-    <PageHeader icon="sales" title="Sales" subtitle="Buyers, reservations and sale contracts" compact actions={<>
+    <PageHeader icon="sales" title="Sales" subtitle="The sales workflow for each unit" compact actions={<>
       {canPrepare && projectStatus !== "setup" ? <Button variant="primary" data-leaves-editor onClick={() => {setOpen(null); const next = new URLSearchParams(params); next.set("sales_view", "new"); router.push(`/projects/?${next}`);}}>New Reservation</Button> : null}
       <Button data-leaves-editor onClick={() => {setOpen(null); setState({sales_view: history ? "" : "history", offset:"", transaction_status:""});}}>{history ? "Current transactions" : "Transaction history"}</Button>
       <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "stock" ? null : "stock");}}>Commercial stock</Button>
-      <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "buyers" ? null : "buyers");}}>Buyers</Button>
       {canAdmin || roles.has("project_manager") ? <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "gates" ? null : "gates");}}>Sales gates</Button> : null}
     </>} />
     {projectStatus === "setup" ? <Notice tone="info">Sales becomes available when project setup is complete.</Notice> : preparing ? <NewReservation projectId={projectId} allowOwner={roles.has("master_admin")} onSaleCreated={id => {router.replace(createdSalesHref(params,projectId,"sale",id));}} onCancel={() => setState({sales_view:""})} onCreated={id => {router.replace(createdSalesHref(params,projectId,"reservation",id));}} /> : <>
       {open === "stock" ? <CommercialUnits projectId={projectId} roles={roles} onClose={() => setOpen(null)} /> : null}
-      {open === "buyers" ? <ClientsPanel projectId={projectId} canWrite={canPrepare} canAdmin={canAdmin} onChanged={refresh} onClose={() => setOpen(null)} /> : null}
       {open === "gates" ? <SalesGates projectId={projectId} onClose={() => setOpen(null)} /> : null}
       <Field label="Find transaction"><input className="input" type="search" placeholder="Buyer, unit, reservation or SPA" value={state.search} onChange={e => setState({search:e.target.value,offset:""})} /></Field>
       <Field label="Transaction status"><select className="input" value={state.transaction_status} onChange={e => setState({transaction_status:e.target.value,offset:""})}><option value="">Any status</option>{["draft","deposit_pending","active","extended","signature_pending","termination_pending",...(history ? ["converted","expired","cancelled"] : [])].map(status => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></Field>

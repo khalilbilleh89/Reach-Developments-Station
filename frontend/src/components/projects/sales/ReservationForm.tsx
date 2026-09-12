@@ -11,7 +11,8 @@ import { SalesPriceInput } from "./SalesPriceInput";
 import { todayISO } from "@/lib/format";
 
 /** Sales preparation retains buyer/terms when price preview or save fails. */
-export function ReservationForm({ projectId, unitId, currencyId, unitOption, onChangeUnit, onCreated, onCancel }: {
+export function ReservationForm({ clientId, projectId, unitId, currencyId, unitOption, onChangeUnit, onCreated, onCancel }: {
+  clientId?: string;
   projectId: string; unitId: string; currencyId: string | null;
   unitOption: SalesUnitOption; onChangeUnit: () => void;
   onCreated: (reservationId: string) => void; onCancel: () => void;
@@ -40,7 +41,7 @@ export function ReservationForm({ projectId, unitId, currencyId, unitOption, onC
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | ApiError | null>(null);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ client_id: "", expires_on: "", price_locked_until: "", deposit_required_amount: "", sales_channel_code: "", sales_branch_code: "" });
+  const [form, setForm] = useState({ client_id: clientId ?? "", expires_on: "", price_locked_until: "", deposit_required_amount: "", sales_channel_code: "", sales_branch_code: "" });
   const currencyCodeOf = useCurrencyCode();
   useEffect(() => {
     let active = true;
