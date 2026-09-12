@@ -169,6 +169,52 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
+
+test("active consultant agreement edits the same record and keeps a refused save open", async () => {
+  const row = { id: "agreement", consultant_name: "Original", agreement_reference: "CE-1", status: "active", updated_at: "version-1" };
+  const calls = []; let fail = true;
+  class ApiError extends Error {}
+  const render = mount("projects/ConsultantEngineerTab", "ConsultantEngineerTab", {
+    "@/lib/api": { ApiError, consultantEngineering: {
+      workspace: async () => ({ active_engagement: row, engagements: [row], disciplines: [], stages: [], deliverables: [] }),
+      updateEngagement: async (...args) => { calls.push(args); if (fail) throw new ApiError("Agreement changed. Reload before saving."); },
+    } },
+    "@/lib/roles": { hasAnyRole: () => true },
+    "@/lib/format": { businessDate: value => value ?? "—" },
+  }, { projectId: "project", roles: new Set(["master_admin"]) });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Edit agreement").props.onClick();
+  let dialog = nodes(render()).find(n => n.props?.editor);
+  assert.equal(dialog.props.editor.row.id, "agreement");
+  await dialog.props.onSubmit({ consultant_name: "Corrected", agreement_reference: "CE-2" }); await settle();
+  assert.equal(calls[0][0], "project"); assert.equal(calls[0][1], "agreement");
+  assert.equal(calls[0][2].expected_updated_at, "version-1");
+  dialog = nodes(render()).find(n => n.props?.editor);
+  assert.ok(dialog.props.error.includes("Reload"));
+  fail = false; await dialog.props.onSubmit({ consultant_name: "Corrected", agreement_reference: "CE-2" }); await settle();
+  assert.ok(!nodes(render()).some(n => n.props?.editor));
+});
+
+test("Pre-Launch renders server category amounts above the register and honors confirmation eligibility", async () => {
+  const calls = [];
+  const row = { id: "expense", category: "design", amount: "1.01", movement_date: "2026-09-12", status: "recorded", can_confirm: true };
+  const render = mount("projects/PreLaunchTab", "PreLaunchTab", {
+    "@/lib/api": { ApiError: Error, prelaunch: {
+      register: async () => ({ expenses: [row], recorded_amount: "1.01", confirmed_paid_amount: "2.02", categories: [{ category: "design", recorded_amount: "1.01", confirmed_paid_amount: "2.02", total_amount: "3.03", confirmed_share_percent: "100.00" }] }),
+      confirm: async (...args) => { calls.push(args); row.can_confirm = false; row.status = "confirmed"; },
+    } },
+    "@/lib/roles": { hasAnyRole: () => true }, "@/lib/format": landFormat,
+  }, { projectId: "project", roles: new Set(["master_admin"]), currencyCode: "USD" });
+  render(); await settle();
+  const tree = nodes(render());
+  assert.ok(tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Expenses by category") < tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Pre-Launch expense register"));
+  assert.ok(tree.some(n => n.type === "td" && n.props.children === landFormat.money("3.03", "USD")));
+  const confirm = tree.find(n => n.type === "Button" && n.props.children === "Confirm");
+  assert.equal(confirm.props.disabled, false);
+  await confirm.props.onClick(); await settle();
+  assert.equal(calls[0][1], "expense"); assert.equal(calls[0][2].amount, "1.01");
+  assert.ok(!nodes(render()).some(n => n.type === "Button" && n.props.children === "Confirm"));
+});
 function apiFixture() {
   let failed = true; const calls = [];
   class ApiError extends Error {}
@@ -183,7 +229,7 @@ test("Pre-Launch keeps a failed removal open, refreshes eligibility and blocks d
   const calls = []; let reject; let reads = 0;
   class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
   const prelaunch = {
-    register: async () => { reads++; return { expenses: [row], recorded_amount: "1250.25", confirmed_paid_amount: "0" }; },
+    register: async () => { reads++; return { expenses: [row], categories: [], recorded_amount: "1250.25", confirmed_paid_amount: "0" }; },
     remove: (...args) => { calls.push(args); return new Promise((_, no) => { reject = no; }); },
   };
   const render = mount("projects/PreLaunchTab", "PreLaunchTab", {
@@ -240,7 +286,7 @@ for (const component of ["ContractsSection", "VariationsSection", "CertificatesS
 
 for (const [component, dependency, readyData, label] of [
   ["DocumentsTab", "projects", [], "Retry documents"],
-  ["PreLaunchTab", "prelaunch", { expenses: [], recorded_amount: "0", confirmed_paid_amount: "0" }, "Retry Pre-Launch expenses"],
+  ["PreLaunchTab", "prelaunch", { expenses: [], categories: [], recorded_amount: "0", confirmed_paid_amount: "0" }, "Retry Pre-Launch expenses"],
   ["ConsultantEngineerTab", "consultantEngineering", { engagements: [], disciplines: [], stages: [], deliverables: [] }, "Retry Consultant Engineer"],
 ]) {
   test(`${component}: retry clears the read error without calling a write`, async () => {

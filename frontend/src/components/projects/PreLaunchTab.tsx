@@ -131,8 +131,21 @@ export function PreLaunchTab({
         <Card tone="command" title="Expense position"><Position compact>
           <PositionFigure label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
           <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
-        </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment.</p></Card>
+        </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
+      {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded.">
+        <TableScroll label="Expenses by category">
+          <thead><tr><th scope="col">Category</th><th scope="col" className="num">Recorded</th><th scope="col" className="num">Confirmed paid</th><th scope="col" className="num">Total expenses</th><th scope="col" className="num">Share of confirmed paid</th></tr></thead>
+          <tbody>{register.categories.map((category) => <tr key={category.category}>
+            <th scope="row">{categoryLabel(category.category)}</th>
+            <td className="num">{money(category.recorded_amount, currencyCode)}</td>
+            <td className="num">{money(category.confirmed_paid_amount, currencyCode)}</td>
+            <td className="num">{money(category.total_amount, currencyCode)}</td>
+            <td className="num">{category.confirmed_share_percent}%</td>
+          </tr>)}</tbody>
+        </TableScroll>
+        <p className="footnote">Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
+      </Card> : null}
       <Card flush>
         {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
@@ -181,7 +194,7 @@ function ExpenseDialog({ initial, currencyId, currencyCode, busy, error, onCance
   const [counterparty, setCounterparty] = useState(initial?.counterparty_reference ?? "");
   const [reference, setReference] = useState(initial?.invoice_reference ?? "");
   const [evidence, setEvidence] = useState(initial?.evidence_reference ?? "");
-  return <FormDialog title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} description="This records an entry. It is not cash until another authorised user confirms it." confirmLabel={initial ? "Save changes" : "Record expense"} busy={busy} disabled={!description.trim() || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
+  return <FormDialog title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} description="This records an entry. It becomes cash after confirmation. Master Administrator / Boss may self-confirm; other users need a different authorised confirmer." confirmLabel={initial ? "Save changes" : "Record expense"} busy={busy} disabled={!description.trim() || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
     {error ? <Notice tone="error">{error}</Notice> : null}
     <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>

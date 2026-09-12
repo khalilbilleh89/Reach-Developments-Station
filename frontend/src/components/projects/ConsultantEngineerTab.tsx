@@ -109,7 +109,8 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         {selected.notes ? <p className="footnote">{selected.notes}</p> : null}
         {!editable ? <p className="footnote">Read-only agreement. Its programme and delivery records are retained below.</p> : null}
         <ButtonRow>
-          {canEdit && selected.status === "draft" ? <><Button disabled={busy} onClick={() => setEditor({ kind: "engagement", row: selected })}>Edit agreement</Button>{!data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
+          {editable ? <Button disabled={busy} onClick={() => { setError(null); setEditor({ kind: "engagement", row: selected }); }}>Edit agreement</Button> : null}
+          {canEdit && selected.status === "draft" ? <>{!data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
           {canEdit && selected.status === "active" ? <><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "complete"))}>Complete agreement</Button><Button variant="danger" disabled={busy} onClick={() => setTerminating(selected)}>Terminate agreement</Button></> : null}
         </ButtonRow>
       <Register nested title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", labels(x.status), x.notes ?? "—", editable ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} />
