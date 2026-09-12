@@ -372,6 +372,7 @@ def _unit_summary(
         **labels.get(unit.id, {}),
         "internal_area": internal_area,
         **physical.gross_measurement(lines),
+        "physical_components": physical.component_measurements(lines),
         "weighted_saleable_area": service.weighted_saleable_area(lines),
         "weighted_saleable_area_unit": service.weighted_area_unit(session, project_id=project.id),
         "parking_count": counts.get(unit.id, {}).get("parking", 0),

@@ -5367,3 +5367,27 @@ a:not([class]):hover { color: var(--accent-hover); }
 .sales-unit-picker-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sales-unit-picker-details { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 15rem; }
 .sales-unit-picker-price { display: grid; align-content: center; gap: var(--space-1); font-weight: 600; }
+.nav-item.nav-stock { padding-left: 2.6rem; font-size: .85rem; }
+.stock-summary { display: grid; grid-template-columns: 1fr 1fr 1fr 1.65fr; gap: 1px; overflow: hidden; border: 1px solid var(--line-default); border-radius: 16px; background: var(--line-default); margin: 1rem 0; }
+.stock-summary > div { display: flex; flex-direction: column; gap: .45rem; padding: 1.35rem; background: var(--surface); min-width: 0; }
+.stock-summary > .stock-summary-lead { background: var(--command-bg); color: var(--command-text); }
+.stock-eyebrow { font-size: .65rem; font-weight: 650; text-transform: uppercase; letter-spacing: .09em; }
+.stock-summary strong { font-size: 2rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1.2; }
+.stock-summary .stock-summary-value strong { font-size: clamp(1.1rem, 1.5vw, 1.65rem); overflow-wrap: anywhere; }
+.stock-summary > div > span:last-child { font-size: .72rem; opacity: .76; }
+.stock-register-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.3rem 1.4rem; }
+.stock-register-heading h2 { font-size: 1.05rem; margin: 0 0 .3rem; }
+.stock-register-heading p { margin: 0; font-size: .8rem; color: var(--text-secondary); }
+.stock-register table { min-width: 850px; }
+.stock-register tbody td, .stock-register tbody th { padding: 1rem .9rem; font-size: .8rem; }
+.stock-register thead th { white-space: nowrap; font-size: .64rem; letter-spacing: .045em; }
+.stock-register tbody tr:nth-child(even) { background: var(--surface-secondary); }
+.stock-register tbody tr:hover { background: var(--surface-hover); }
+.stock-register .stock-location { display: block; font-size: .68rem; font-weight: 400; color: var(--text-muted); margin-top: .4rem; white-space: nowrap; }
+.stock-unit-mix { white-space: nowrap; font-weight: 550; }
+.stock-unit-mix > span { color: var(--text-muted); padding: 0 .2rem; }
+.stock-register .stock-gross { background: var(--surface-command); font-weight: 650; }
+.stock-register .stock-price { font-weight: 600; white-space: nowrap; }
+.stock-note { color: var(--text-muted); font-size: .71rem; line-height: 1.6; margin: .8rem 1.4rem; }
+@media (max-width: 1050px) { .stock-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 520px) { .stock-summary > div { padding: 1rem; } .stock-summary strong { font-size: 1.6rem; } .stock-register-heading { align-items: flex-start; padding: 1rem; } }

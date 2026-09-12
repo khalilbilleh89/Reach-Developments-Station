@@ -218,3 +218,15 @@ def retire_document(
     session.commit()
     session.refresh(row)
     return row
+
+
+def component_measurements(lines: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Physical stock columns; missing or ambiguous components stay unknown."""
+    result: dict[str, dict[str, Any]] = {}
+    for component in COMPONENTS:
+        matches = [line for line in lines if line.get("physical_component") == component]
+        result[component] = {
+            "area": matches[0]["raw_area"] if len(matches) == 1 else None,
+            "unit": matches[0]["unit_of_measure"] if len(matches) == 1 else None,
+        }
+    return result

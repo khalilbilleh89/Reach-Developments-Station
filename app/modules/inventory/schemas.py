@@ -283,6 +283,11 @@ class AreaLine(BaseModel):
     weighted_area: DecimalStr
 
 
+class PhysicalComponentRead(BaseModel):
+    area: DecimalStr | None
+    unit: str | None
+
+
 class UnitSummary(BaseModel):
     """A row of the unit register: what a manager scans, and nothing more."""
 
@@ -311,6 +316,10 @@ class UnitSummary(BaseModel):
     #: The unit that figure is in. A weighted area without its unit is a
     #: number two people can read two different ways.
     weighted_saleable_area_unit: str | None = None
+    bathrooms: int | None = None
+    orientation_code: str | None = None
+    view_class_code: str | None = None
+    physical_components: dict[str, PhysicalComponentRead] = Field(default_factory=dict)
     parking_count: int = 0
     storage_count: int = 0
     commercial_status: str
