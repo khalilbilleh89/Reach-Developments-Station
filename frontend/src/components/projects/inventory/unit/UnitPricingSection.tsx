@@ -58,7 +58,6 @@ export function UnitPricingSection({
   canSeeInternal,
   busy,
   onMove,
-  onQuote,
 }: {
   answer: Answer<UnitPricing>;
   canPrice: boolean;
@@ -66,7 +65,6 @@ export function UnitPricingSection({
   canSeeInternal: boolean;
   busy: boolean;
   onMove: (action: "submit" | "approve" | "activate", versionId: string) => void;
-  onQuote: () => void;
 }) {
   const currencyCodeOf = useCurrencyCode();
 
@@ -155,13 +153,6 @@ export function UnitPricingSection({
       <section>
         <SectionHeader level={2}
           title="Live list price"
-          actions={
-            active ? (
-              <Button small onClick={onQuote}>
-                Quote preview
-              </Button>
-            ) : undefined
-          }
         />
         {active === null ? (
           <EmptyState
@@ -238,7 +229,6 @@ export function UnitPricingSection({
                   <td className="num">
                     {money(version.reference_price_ex_tax, currencyCodeOf(version.currency_id))}
                   </td>
-                  <td className="cell-prose">{version.change_reason ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

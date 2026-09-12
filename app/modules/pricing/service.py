@@ -2665,9 +2665,7 @@ def _build_direct_version(
     change_reason: str | None,
 ) -> UnitPriceVersion:
     """A human-entered amount, using the same immutable approval lifecycle."""
-    reason = _require_reason(
-        change_reason, detail="A directly entered selling price needs a reason."
-    )
+    reason = (change_reason.strip() or None) if change_reason else None
     if selling_price <= ZERO:
         raise ValidationError("The selling price must be greater than zero.")
     schedule = inventory.approved_schedule(session, unit_id=unit.id)

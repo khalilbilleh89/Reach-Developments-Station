@@ -121,6 +121,7 @@ import type {
   UnitFeature, UnitDocument,
   UnitPricing,
   UnitRegister,
+  LaunchRegister,
   UnitStatusEvent,
   AllocationVersion,
   AllocationVersionDetail,
@@ -370,6 +371,7 @@ export const projects = {
  * server, and every path here is scoped to the project that owns the records.
  */
 export const inventory = {
+  launchValues: (projectId: string, query: Record<string,string> = {}) => get<LaunchRegister>(`/projects/${projectId}/inventory/launch-values?${new URLSearchParams(query)}`),
   deleteRecord: (projectId: string, kind: "units" | "floors" | "buildings" | "phases", id: string, reason: string) =>
     remove(`/projects/${projectId}/inventory/${kind}/${id}?${new URLSearchParams({reason})}`),
   phases: (projectId: string) =>

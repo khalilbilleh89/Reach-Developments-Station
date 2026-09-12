@@ -1,51 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef } from "react";
-import { UnitStages } from "@/components/projects/construction/StageWorkspace";
 
-import { ApiError, collections, inventory, pricing, sales } from "@/lib/api";
+import { ApiError, inventory, pricing } from "@/lib/api";
 import type {
   AreaSchedule,
   AreaType,
-  CollectionSaleSummary,
   CustomValue,
-  SaleContract,
   SubAsset,
   Unit,
   UnitPricing,
-  UnitStatusEvent,
 } from "@/lib/api";
 import { toAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
 import {
-  COLLECTION_READERS,
   INTERNAL_PRICE_READERS,
   LIST_PRICE_READERS,
   PRICING_APPROVERS,
   PRICING_WRITERS,
-  SALES_READERS,
   hasAnyRole,
 } from "@/lib/roles";
-import { Button, Card, FormDialog, Field, Badge, PromptDialog, RecordWorkspace, RecordLink, Loading, Notice, useRecordTab } from "@/components/ui";
+import { Button, Card, Badge, PromptDialog, RecordWorkspace, Loading, Notice, useRecordTab } from "@/components/ui";
 import type { WorkspaceFact, WorkspaceHeadline } from "@/components/ui";
-import { QuotePreviewPanel } from "@/components/projects/pricing/QuotePreviewPanel";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import { UnitCollections } from "@/components/projects/collections/UnitCollections";
-import { UnitStanding } from "./unit/UnitStanding";
 import { SellingPriceForm } from "@/components/projects/inventory/unit/SellingPriceForm";
 import { PhysicalRecord } from "@/components/projects/inventory/unit/PhysicalRecord";
 import { UnitAreas } from "@/components/projects/inventory/unit/UnitAreas";
 import { useRouter } from "next/navigation";
-import { useRecordHref } from "@/components/ui";
-import { PlanSummary } from "@/components/projects/payments/PlanSummary";
 
 
-import { UnitCommitment } from "@/components/projects/inventory/unit/UnitCommitment";
-import type { Commitment } from "@/components/projects/inventory/unit/UnitCommitment";
-import { UnitHistory } from "@/components/projects/inventory/unit/UnitHistory";
 import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPricingSection";
 import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
 import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
@@ -75,24 +61,7 @@ const UNIT_FIELDS: EditField[] = [
 ];
 
 
-/**
- * Unit 360: the file for one property.
- *
- * It opens over the register rather than under it, because the register is a
- * thousand rows long and a person comparing units should not lose their place
- * to look at one. The header is the unit's identity and the three or four
- * figures somebody opened it for; the sections beneath are the departments —
- * a design engineer arrives for the areas, Finance for the price, Legal for
- * the contract, Collections for the cash — and none of them should have to
- * read the other three to find their own.
- *
- * Every figure here came back from the API on this request, and every module
- * is asked only on behalf of a role the server would answer: a Sales Advisor's
- * Unit 360 never requests the unit's cost or margin, so there is nothing to
- * hide. The browser lays out what it was given and offers the actions the
- * server would accept, and the server refuses regardless of which button was
- * on screen.
- */
+/** Inventory facts, launch pricing and release for one unit. */
 export function UnitWorkspace({
   projectId,
   roles,
@@ -109,24 +78,7 @@ export function UnitWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const router = useRouter();
-  const recordHref = useRecordHref(projectId);
   const [supportBusy, setSupportBusy] = useState(false);
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [moving, setMoving] = useState(false);
-  const [moveFloor, setMoveFloor] = useState("");
-  const [destinations, setDestinations] = useState<{value: string; label: string}[]>([]);
-  const [moveError, setMoveError] = useState<string | null>(null);
-  const loadDestinations = async () => {
-    setMoveError(null); setDestinations([]);
-    try {
-      const [floors, buildings, phases] = await Promise.all([inventory.floors(projectId), inventory.buildings(projectId), inventory.phases(projectId)]);
-      setDestinations(floors.filter(f => f.is_active && buildings.some(b => b.id === f.building_id && b.is_active && phases.some(p => p.id === b.phase_id && p.is_active))).map(f => {
-        const b = buildings.find(b => b.id === f.building_id)!;
-        const p = phases.find(p => p.id === b.phase_id)!;
-        return {value: f.id, label: `${p.code} / ${b.code} / ${f.code} — ${f.label}`};
-      }));
-    } catch (caught) { setMoveError(caught instanceof ApiError ? caught.message : "Could not load destination floors."); }
-  };
   const [detailRevision, setDetailRevision] = useState(-1);
   const [supportRevision, setSupportRevision] = useState(0);
   const supportLoaded = useRef<Record<string, number>>({});
@@ -137,16 +89,12 @@ export function UnitWorkspace({
   const [areaTypes, setAreaTypes] = useState<AreaType[]>([]);
   const [assets, setAssets] = useState<SubAsset[]>([]);
   const [values, setValues] = useState<CustomValue[]>([]);
-  const [history, setHistory] = useState<UnitStatusEvent[]>([]);
   // One answer per module, made once here and shared by the header facts and
   // the sections. Each is asked for only on behalf of a role the server
   // answers; a refusal it still returns is "denied" and a fault is "failed",
   // and neither is ever drawn as a unit with no price or no commitment.
   const [pricingAnswer, setPricingAnswer] = useState<Answer<UnitPricing>>({ status: "off" });
-  const [commitmentAnswer, setCommitmentAnswer] = useState<Answer<Commitment>>({ status: "off" });
-  const [collection, setCollection] = useState<Answer<CollectionSaleSummary>>({ status: "off" });
   const [section, setSection] = useRecordTab();
-  const [quoting, setQuoting] = useState(false);
   const [pricingBusy, setPricingBusy] = useState(false);
   const [approvingPrice, setApprovingPrice] = useState<string | null>(null);
   const [editing, setEditing] = useState<"none" | "unit" | "fields">("none");
@@ -155,8 +103,6 @@ export function UnitWorkspace({
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
 
-  const seesSales = hasAnyRole(roles, SALES_READERS);
-  const seesCollections = hasAnyRole(roles, COLLECTION_READERS);
   const seesInternalPrices = hasAnyRole(roles, INTERNAL_PRICE_READERS);
   const seesListPrice = hasAnyRole(roles, LIST_PRICE_READERS);
   const canPrice = hasAnyRole(roles, PRICING_WRITERS);
@@ -190,52 +136,8 @@ export function UnitWorkspace({
       }
     };
 
-    // The commercial commitment, and behind it the collections position,
-    // which needs the sale's identifier and so waits for a successful read.
-    const loadCommercial = async () => {
-      if (!seesSales) {
-        setCommitmentAnswer({ status: "off" });
-        setCollection({ status: "off" });
-        return;
-      }
-      setCommitmentAnswer({ status: "loading" });
-      let sale: { sale: SaleContract } | null = null;
-      try {
-        const reservations = await sales.reservations(projectId, { unit_id: unitId });
-        const contracts: SaleContract[] = await sales.contracts(projectId, { unit_id: unitId });
-        const live = contracts.find((entry) =>
-          ["signature_pending", "active", "termination_pending"].includes(entry.status),
-        ) ?? contracts.find((entry) => entry.status === "draft");
-        sale = live ? { sale: live } : null;
-        setCommitmentAnswer({
-          status: "ready",
-          data: {
-            reservation:
-              reservations.find((entry) => entry.id === sale?.sale.reservation_id) ??
-              reservations.find((entry) => ["active", "extended"].includes(entry.status)) ??
-              reservations.find((entry) => ["draft", "deposit_pending"].includes(entry.status)) ?? null,
-            sale,
-          },
-        });
-      } catch (caught) {
-        setCommitmentAnswer(toAnswer(caught));
-        setCollection({ status: "off" });
-        return;
-      }
-      if (seesCollections && sale && sale.sale.status !== "draft") {
-        setCollection({ status: "loading" });
-        try {
-          setCollection({ status: "ready", data: await collections.account(projectId, sale.sale.id) });
-        } catch (caught) {
-          setCollection(toAnswer(caught));
-        }
-      } else {
-        setCollection({ status: "off" });
-      }
-    };
-
-    await Promise.all([loadPricing(), loadCommercial()]);
-  }, [projectId, unitId, seesSales, seesCollections, seesListPrice]);
+    await loadPricing();
+  }, [projectId, unitId, seesListPrice]);
 
   useEffect(() => {
     void (async () => {
@@ -243,23 +145,19 @@ export function UnitWorkspace({
     })();
   }, [load]);
 
-  // Identity and commercial summaries load once; physical detail and history follow intent.
+  // Physical detail loads when the Property tab is opened.
   useEffect(() => {
-    if (!unit || !["detail", "history"].includes(section) || supportLoaded.current[section] === supportRevision) return;
+    if (!unit || section !== "detail" || supportLoaded.current[section] === supportRevision) return;
     let cancelled = false;
     void (async () => {
       setSupportBusy(true);
       try {
-        if (section === "history") {
-          const events = await inventory.unitHistory(projectId, unitId);
-          if (!cancelled) setHistory(events);
-        } else {
+
           const [scheduleList, typeList, assetList, valueList] = await Promise.all([
             inventory.areaSchedules(projectId, unitId), inventory.areaTypes(projectId),
             inventory.subAssets(projectId, { unit_id: unitId }), inventory.unitValues(projectId, unitId),
           ]);
           if (!cancelled) { setSchedules(scheduleList); setAreaTypes(typeList); setAssets(assetList); setValues(valueList); setDetailRevision(supportRevision); }
-        }
         if (!cancelled) supportLoaded.current[section] = supportRevision;
       } catch (caught) { if (!cancelled) setError(caught instanceof ApiError ? caught.message : "Could not load this section."); }
       finally { if (!cancelled) setSupportBusy(false); }
@@ -276,7 +174,7 @@ export function UnitWorkspace({
         effective_date: move.effective_date,
         ...(move.reason ? { reason: move.reason } : {}),
       });
-      setNotice("Status recorded.");
+      setNotice("Unit released for sales.");
       await load();
       await onChanged();
     } catch (caught) {
@@ -349,38 +247,16 @@ export function UnitWorkspace({
   const unitPricing = pricingAnswer.status === "ready" ? pricingAnswer.data : null;
   const price = unitPricing?.active_price ?? null;
   const priceCode = currencyCodeOf(price?.currency_id);
-  const hasSale = commitmentAnswer.status === "ready" && commitmentAnswer.data.sale !== null && commitmentAnswer.data.sale.sale.status !== "draft";
-  const liveSale = commitmentAnswer.status === "ready" ? commitmentAnswer.data.sale?.sale : null;
 
   const sections = [
     { key: "overview", label: "Overview" },
     { key: "detail", label: "Property" },
     ...(seesListPrice ? [{ key: "pricing", label: "Pricing" }] : []),
-    ...(seesSales ? [{ key: "commercial", label: "Sale" }] : []),
-    ...(seesCollections && hasSale ? [{ key: "collections", label: "Payment & collections" }] : []),
-    { key: "construction", label: "Delivery" },
     { key: "release", label: "Release" },
-    { key: "history", label: "History" },
   ];
   const activeSection = sections.some((entry) => entry.key === section) ? section : "overview";
 
-  // Each fact follows its module's answer: shown when the module answered,
-  // shown as unavailable when the request failed, and absent while loading,
-  // when refused, or when never asked. A failure is never drawn as "not
-  // priced", "no margin" or a cleared balance.
-  // The one value the file is about, set beside the identity. The list price
-  // is requested only for a role the server answers, so for Legal and
-  // Collections there is no headline and nothing to hide; a failed request is
-  // said as a failure, never drawn as "not priced".
-  const soldContract = liveSale && ["signature_pending", "active", "termination_pending"].includes(liveSale.status) ? liveSale : null;
-  const committedUnit = ["contract_pending", "contracted"].includes(unit.commercial_status);
-  const headline: WorkspaceHeadline | undefined = soldContract
-    ? { value: money(soldContract.net_contract_price_ex_tax, currencyCodeOf(soldContract.currency_id)), label: `${soldContract.sale_number} · Sold${soldContract.status === "signature_pending" ? " · SPA pending" : ""} · ex tax` }
-    : committedUnit
-      ? commitmentAnswer.status === "failed"
-        ? { value: "Unavailable", label: "Contract could not be loaded", tone: "muted" }
-        : undefined
-      : unitPricing
+  const headline: WorkspaceHeadline | undefined = unitPricing
     ? {
         value: price ? money(price.reference_price_ex_tax, priceCode) : "Not priced",
         label: price
@@ -414,16 +290,14 @@ export function UnitWorkspace({
       tone: unit.gross_area === null ? ("muted" as const) : undefined,
     },
     ...(seesListPrice ? [{
-      label: `Price per ${soldContract?.gross_area_unit ?? unitPricing?.gross_area_unit ?? "sqm"} · Unit price ÷ gross area`,
-      value: soldContract
-        ? soldContract.price_per_gross_area == null ? "Unavailable" : money(soldContract.price_per_gross_area, currencyCodeOf(soldContract.currency_id))
-        : committedUnit || unitPricing?.price_per_gross_area == null ? "Unavailable" : money(unitPricing.price_per_gross_area, priceCode),
+      label: `Price per ${unitPricing?.gross_area_unit ?? "sqm"} · Launch price ÷ gross area`,
+      value: unitPricing?.price_per_gross_area == null ? "Unavailable" : money(unitPricing.price_per_gross_area, priceCode),
     }] : []),
   ];
 
   return (
     <RecordWorkspace projectId={projectId} kind="unit"
-      eyebrow="Unit 360"
+      eyebrow="Inventory unit"
       icon="inventory"
       title={unit.unit_reference}
       subtitle={[
@@ -443,7 +317,6 @@ export function UnitWorkspace({
       actions={
         <>
         {roles.has("system_admin") || roles.has("master_admin") ? <DeleteRecordButton label="unit" onDelete={reason => inventory.deleteRecord(projectId, "units", unitId, reason)} onDeleted={async () => { await onChanged(); router.push(`/projects/?project=${projectId}&section=inventory`); }} /> : null}
-        {liveSale ? <RecordLink projectId={projectId} kind="sale" id={liveSale.id} className="button button-primary">Open Sale</RecordLink> : commitmentAnswer.status === "ready" && commitmentAnswer.data.reservation ? <RecordLink projectId={projectId} kind="reservation" id={commitmentAnswer.data.reservation.id} className="button button-primary">Open reservation</RecordLink> : seesSales ? <Button onClick={() => setSection("commercial")}>Sale options</Button> : null}
         {canWriteStructure ? (
           <Button
             data-leaves-editor
@@ -455,15 +328,9 @@ export function UnitWorkspace({
             Edit unit
           </Button>
         ) : null}
-        {canWriteStructure ? <>
-          {unit.is_active && unit.commercial_status !== "unreleased" ? <p className="field-hint" id="deactivate-eligibility">Only unreleased units can be deactivated.</p> : null}
-          <Button aria-describedby="deactivate-eligibility" disabled={busy || (unit.is_active && unit.commercial_status !== "unreleased")} onClick={() => { setActivityOpen(true); setError(null); }}>{unit.is_active ? "Deactivate unit" : "Reactivate unit"}</Button>
-          {unit.commercial_status === "unreleased" || roles.has("master_admin") ? <Button onClick={() => { setMoveFloor(unit.floor_id); setMoving(true); void loadDestinations(); }}>Move unit</Button> : null}
-        </> : null}
         </>
       }
       meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}
-      status={<UnitStanding unit={unit} />}
       facts={facts}
       tabs={sections}
       activeTab={activeSection}
@@ -479,33 +346,15 @@ export function UnitWorkspace({
         </Notice>
       ) : null}
 
-      {activeSection === "construction" ? <UnitStages projectId={projectId} unitId={unitId} roles={roles} /> : null}
       {activeSection === "overview" ? (
         <UnitSummary
           unit={unit}
           pricing={pricingAnswer}
-          commitment={commitmentAnswer}
-          collection={collection}
           onOpenTab={setSection}
         />
       ) : null}
 
       {approvingPrice ? <PromptDialog title={`Approve price for ${unit.unit_reference}`} label="Approval rationale" description="Record what you checked and why this price is approved. Activation remains a separate step." confirmLabel="Approve price" error={error} busy={pricingBusy} onCancel={() => { if (!pricingBusy) setApprovingPrice(null); }} onSubmit={reason => void movePrice("approve", approvingPrice, reason)} /> : null}
-      {activityOpen ? <PromptDialog title={`${unit.is_active ? "Deactivate" : "Reactivate"} ${unit.unit_reference}`} label="Reason" description={unit.is_active ? "Only unreleased units can be deactivated. The unit leaves active sales and eligible reporting populations; existing records and historical reports remain. Use Hold for a temporary sales pause." : "The unit returns to active inventory. Its hierarchy must be active and pricing must be reviewed before release."} busy={busy} error={error} confirmLabel={unit.is_active ? "Deactivate unit" : "Reactivate unit"} onCancel={() => { if (!busy) setActivityOpen(false); }} onSubmit={async reason => {
-        setBusy(true); setError(null);
-        try { await inventory.updateUnit(projectId, unitId, {is_active: !unit.is_active, activity_reason: reason}); setActivityOpen(false); await load(); await onChanged(); }
-        catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not change unit activity."); }
-        finally { setBusy(false); }
-      }} /> : null}
-      {moving ? <FormDialog title={`Move ${unit.unit_reference}`} description="Master Administrator can correct a unit's floor at any commercial stage. Its building, phase and phase-based access follow the destination floor; the price requires review again. Existing sale terms are preserved." confirmLabel="Move unit" busy={busy} disabled={!moveFloor || moveFloor === unit.floor_id || !!moveError} onCancel={() => { if (!busy) setMoving(false); }} onSubmit={async () => {
-        setBusy(true); setMoveError(null);
-        try { await inventory.updateUnit(projectId, unitId, {floor_id: moveFloor}); setMoving(false); await load(); await onChanged(); }
-        catch (caught) { setMoveError(caught instanceof ApiError ? caught.message : "Could not move the unit."); }
-        finally { setBusy(false); }
-      }}>
-        {moveError ? <><Notice tone="error">{moveError}</Notice><Button onClick={() => void loadDestinations()}>Retry floors</Button></> : null}
-        <Field label="Destination floor"><select className="input" value={moveFloor} onChange={e => setMoveFloor(e.target.value)}><option value="">Choose a floor</option>{destinations.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}</select></Field>
-      </FormDialog> : null}
       {activeSection === "detail" && supportBusy ? <Loading label="Loading property" /> : null}
       {activeSection === "detail" && !supportBusy ? (
         <>
@@ -607,36 +456,10 @@ export function UnitWorkspace({
             canSeeInternal={seesInternalPrices}
             busy={pricingBusy}
             onMove={(action, versionId) => void movePrice(action, versionId)}
-            onQuote={() => setQuoting((open) => !open)}
           />
-          {quoting && unitPricing?.active_price ? (
-            <QuotePreviewPanel
-              projectId={projectId}
-              unitId={unitId}
-              currencyCode={currencyCodeOf(unitPricing.active_price.currency_id)}
-              onClose={() => setQuoting(false)}
-            />
-          ) : null}
         </>
       ) : null}
 
-      {activeSection === "commercial" ? <>
-        {commitmentAnswer.status === "ready" && (commitmentAnswer.data.reservation || commitmentAnswer.data.sale) ? <RecordLink projectId={projectId} kind={liveSale ? "sale" : "reservation"} id={liveSale?.id ?? commitmentAnswer.data.reservation!.id}>{liveSale ? "Open Sale" : "Open Reservation"}</RecordLink> : <p className="subtle">New reservations and buyer registration are prepared in Sales.</p>}
-        <UnitCommitment projectId={projectId} commercialStatus={unit.commercial_status} answer={commitmentAnswer} roles={roles} />
-      </> : null}
-
-      {activeSection === "collections" && liveSale ? <div className="stack"><RecordLink projectId={projectId} kind="sale" id={liveSale.id} tab="collections">Open Sale collections</RecordLink><PlanSummary projectId={projectId} saleId={liveSale.id} roles={roles} saleStatus={liveSale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /><UnitCollections answer={collection} /></div> : null}
-
-
-      {activeSection === "history" ? supportBusy ? <Loading label="Loading history" /> : <UnitHistory history={history} /> : null}
-
-      {activeSection === "overview" ? (
-        <p className="footnote">
-          <Button small variant="quiet" onClick={() => setSection("history")}>
-            Status history
-          </Button>
-        </p>
-      ) : null}
     </RecordWorkspace>
   );
 }

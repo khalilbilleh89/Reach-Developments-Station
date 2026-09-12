@@ -2964,3 +2964,10 @@ export interface SalesTransaction extends SalesPriceFacts {
   created_at: string; unit_id: string; unit_reference: string; client_display_name: string;
   legal_status: string; collection_status: string; spa_number: string | null;
 }
+
+
+export type LaunchRegister = {
+  total: number; priced_count: number; unpriced_count: number; repricing_count: number;
+  totals: {currency_id:string; amount:string}[];
+  rows: {unit_id:string;currency_id:string|null;price:string|null;repricing_required:boolean}[];
+};
