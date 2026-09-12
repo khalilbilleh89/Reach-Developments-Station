@@ -1,5 +1,47 @@
 # MVP finish plan — round-2 UX closure
 
+## Current reconciliation — 2026-09-12
+
+Verified against main `a638294` and GitHub merge records. Candidate sections
+below retain their historical evidence and are superseded for sequencing by
+this status:
+
+- MVP3: all three implementation milestones merged (#273, #275, #279).
+- UX-11 #285 and UX-12 #286 merged.
+- Construction Budget #287 and Contract #288 merged; owner controls #289 merged.
+- Sales selection and negotiated prices #291 merged.
+- REC-01 Pre-Launch correction/removal #295 merged. Subsequent Inventory,
+  Permits and full-page workflow changes through #306 also exist on main.
+- **In progress: REC-02A**, Cashflow recorded development/financing removal.
+  Expose the existing audited reversal as Delete for recorded entries, retain
+  confirmed Reverse, identify the selected record and keep failed reason prompts
+  open. No API, permission, financial formula or database change.
+  [Candidate behavior and validation](REC02A_ACCEPTANCE_2026_09_12.md).
+
+Remaining sequence, each bounded implementation slice handed off for independent
+review before the next:
+
+1. Finish REC-02A validation and Draft review. Collections recorded receipt/refund
+   voiding remains a separate domain slice. Also harden direct API whitespace-only
+   reversal reasons, a pre-existing gap found during REC-02A checks.
+   Construction payment voiding requires
+   the accepted Construction scope to be reconciled first.
+2. REC-03: draft commission grant discard and consultant agreement abandonment,
+   then individually triage versioned draft headers and remaining retirement
+   discoverability against current main. The audit's old Inspect rows are not a
+   claim that every mapped model needs a new screen.
+3. Narrow UX-13: Portfolio Projects search, Exceptions project/severity/type
+   filters, Portfolio return-to-page and Cashflow tab/date/forecast restoration.
+4. Real operator UAT, outstanding browser acceptance (including the existing
+   shared active-tab contrast issue observed during REC-02A), Construction scope
+   reconciliation, release checks and freeze.
+
+Merged implementation does not turn historical Partial/Pending acceptance into
+a pass. Production deployment and operator UAT have not been verified by this
+reconciliation. Render continues to deploy main; this work does not alter its
+branch or settings. Review/required CI and human merge remain separate gates.
+
+
 Owner-directed sequence after merged UX-07 through UX-10 (#281–#284).
 Governed by [Engineering Rules](ENGINEERING_RULES.md),
 [Architecture](ARCHITECTURE.md), and [UX System](UX_SYSTEM.md).

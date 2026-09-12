@@ -18,18 +18,18 @@
   {
     "handler": "cashflow.record_development_movement",
     "create_route": "POST /development-movements",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+    "status": "implemented",
+    "removal_route": "POST /development-movements/{movement_id}/reverse",
+    "ui_file": "frontend/src/components/projects/cashflow/CashflowMovements.tsx",
+    "notes": "Recorded movements expose Delete through the existing audited reversal; confirmed movements expose Reverse. Both retain the record and reason, require the existing confirmer permission, and preserve the confirmation on failure. No hard deletion of cash evidence."
   },
   {
     "handler": "cashflow.record_financing_movement",
     "create_route": "POST /financing-movements",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Forecast discard / posted movement reversals exist; record-specific draft Delete coverage is missing."
+    "status": "implemented",
+    "removal_route": "POST /financing-movements/{movement_id}/reverse",
+    "ui_file": "frontend/src/components/projects/cashflow/CashflowMovements.tsx",
+    "notes": "Recorded movements expose Delete through the existing audited reversal; confirmed movements expose Reverse. Both retain the record and reason, require the existing confirmer permission, and preserve the confirmation on failure. No hard deletion of cash evidence."
   },
   {
     "handler": "cashflow.record_release",

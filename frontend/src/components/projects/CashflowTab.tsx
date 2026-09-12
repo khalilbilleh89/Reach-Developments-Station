@@ -179,10 +179,12 @@ export function CashflowTab({
     try {
       await action();
       setRevision((current) => current + 1);
+      return true;
     } catch (caught) {
       setActionError(
         caught instanceof ApiError ? caught.message : "That could not be completed.",
       );
+      return false;
     } finally {
       setBusy(false);
     }
@@ -223,7 +225,7 @@ export function CashflowTab({
         }
       />
 
-      {actionError ? <Notice tone="error">{actionError}</Notice> : null}
+      {actionError && section !== "movements" ? <Notice tone="error">{actionError}</Notice> : null}
 
       <Tabs
         label="Cashflow sections"
@@ -295,7 +297,7 @@ export function CashflowTab({
           canRecord={canRecord}
           canConfirm={canConfirm}
           busy={busy}
-          error={null}
+          error={actionError}
           onRecordDevelopment={(body) =>
             void run(() => cashflow.recordDevelopmentMovement(projectId, body))
           }
@@ -303,7 +305,7 @@ export function CashflowTab({
             void run(() => cashflow.confirmDevelopmentMovement(projectId, id))
           }
           onReverseDevelopment={(id, reason) =>
-            void run(() => cashflow.reverseDevelopmentMovement(projectId, id, reason))
+            run(() => cashflow.reverseDevelopmentMovement(projectId, id, reason))
           }
           onRecordFinancing={(body) =>
             void run(() => cashflow.recordFinancingMovement(projectId, body))
@@ -312,7 +314,7 @@ export function CashflowTab({
             void run(() => cashflow.confirmFinancingMovement(projectId, id))
           }
           onReverseFinancing={(id, reason) =>
-            void run(() => cashflow.reverseFinancingMovement(projectId, id, reason))
+            run(() => cashflow.reverseFinancingMovement(projectId, id, reason))
           }
         />
       ) : null}
