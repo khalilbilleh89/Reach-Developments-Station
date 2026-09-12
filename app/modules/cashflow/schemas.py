@@ -25,7 +25,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.modules.cashflow.models import (
     DEVELOPMENT_CATEGORIES,
@@ -62,6 +62,13 @@ class Response(BaseModel):
 
 class ReasonRequest(StrictRequest):
     reason: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def require_reason_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Reason must include non-whitespace text.")
+        return value
 
 
 # --------------------------------------------------------------------------- #
