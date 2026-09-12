@@ -362,23 +362,32 @@ def test_deployed_main_upgrade_retains_source_data(
         "management_report_snapshots",
         "management_report_snapshot_projects",
     )
+
+    def choice_values(rows: list[dict]) -> list[dict]:
+        # 0023 creates this table from reference_values. A deliberate downgrade
+        # drops it, so upgrading generates new UUIDs; all business values must
+        # still match. Original source-table identities remain exact below.
+        return sorted(
+            ({key: value for key, value in row.items() if key != "id"} for row in rows),
+            key=lambda row: (row["project_id"], row["category"], row["code"]),
+        )
+
     before = snapshot(db, excluded)
+    choices_before = choice_values(before.pop("inventory_options"))
+    assert choices_before, "The upgrade must exercise populated inventory choices"
     db.rollback()
     config = alembic_config()
-    # Capture the source schema at the historical upgrade boundary. Tables added
-    # later (including project inventory choices) do not exist at that boundary;
-    # their migration/backfill contracts have dedicated migration tests.
+    # Start from the reporting baseline; later migrations also add project choices.
+    # Older history round-trips are covered by tests/test_migrations.py.
     command.downgrade(config, "0019_management_actions")
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0019_management_actions"
-    source_tables = snapshot(db, excluded).keys()
     db.rollback()
     command.upgrade(config, "head")
     command.check(config)
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
     after = snapshot(db, excluded)
-    assert {table: after[table] for table in source_tables} == {
-        table: before[table] for table in source_tables
-    }
+    assert choice_values(after.pop("inventory_options")) == choices_before
+    assert after == before
 
 
 def test_financial_confirmation_reversal_and_business_date(

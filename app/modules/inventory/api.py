@@ -104,6 +104,20 @@ router = APIRouter(prefix="/projects", tags=["inventory"])
 _MAX_PAGE = 200
 
 
+@router.delete("/{project_id}/inventory/configuration/{option_id}", status_code=204)
+def delete_inventory_option(
+    option_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: AccessibleProject,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    configuration.delete_option(
+        session, project_id=project.id, option_id=option_id, actor=actor, reason=reason
+    )
+    return Response(status_code=204)
+
+
 @router.delete("/{project_id}/inventory/{kind}/{identifier}", status_code=204)
 def delete_inventory_record(
     kind: str,

@@ -174,11 +174,6 @@ def test_the_same_reference_may_recur_in_another_project(
     ).json()["id"]
     # A second project needs its own basis finalised before it holds inventory.
     admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
-    choice = admin_client.post(
-        f"{inventory_url(other)}/configuration",
-        json={"category": "unit_type", "code": "2BR", "label": "Two bedroom"},
-    )
-    assert choice.status_code == 201, choice.text
     phase = admin_client.post(
         f"{inventory_url(other)}/phases", json={"code": "P1", "name": "One"}
     ).json()["id"]
@@ -191,9 +186,23 @@ def test_the_same_reference_may_recur_in_another_project(
         json={"building_id": building, "code": "01", "label": "First"},
     ).json()["id"]
 
+    # Choices are project-owned: configuring the first project must not make
+    # its unit type available in this second project.
+    response = admin_client.post(f"{inventory_url(other)}/units", json=unit_payload(floor))
+    assert response.status_code == 422, response.text
+    assert "No configured unit_type choice '2BR'" in response.json()["detail"]
+    choice = admin_client.post(
+        f"{inventory_url(other)}/configuration",
+        json={"category": "unit_type", "code": "2BR", "label": "Two bedroom"},
+    )
+    assert choice.status_code == 201, choice.text
+
     response = admin_client.post(f"{inventory_url(other)}/units", json=unit_payload(floor))
 
     assert response.status_code == 201, response.text
+    original = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}").json()
+    assert response.json()["unit_reference"] == original["unit_reference"]
+    assert response.json()["id"] != unit_id
 
 
 def test_correcting_a_unit_reference_never_changes_identity(

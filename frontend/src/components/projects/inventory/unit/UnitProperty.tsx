@@ -48,9 +48,9 @@ export function configuredField(field:EditField,options:InventoryOption[],curren
 }
 
 /** Each section edits exactly the fields displayed within that section. */
-export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,canWrite,canApprove,onChanged}: {
+export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,canWrite,canApprove,canDelete=false,onChanged}: {
   projectId:string;unit:Unit;areaTypes:AreaType[];schedules:AreaSchedule[];assets:SubAsset[];
-  values:CustomValue[];canWrite:boolean;canApprove:boolean;onChanged:()=>Promise<void>;
+  values:CustomValue[];canDelete?:boolean; canWrite:boolean;canApprove:boolean;onChanged:()=>Promise<void>;
 }) {
   const [editing,setEditing]=useState<string | null>(null);
   const [configuration,setConfiguration]=useState<{projectId:string;options:InventoryOption[]} | null>(null);
@@ -71,7 +71,7 @@ export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,c
         </KeyValueGrid>}
       </section>;
     })}
-    <PhysicalRecord projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} options={options ?? []} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
+    <PhysicalRecord canDelete={canDelete} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} options={options ?? []} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
     {values.length ? <section>
       <SectionHeader level={2} title="Additional fields" actions={additional.length ? <Button small data-leaves-editor onClick={()=>setEditing(editing==="additional" ? null : "additional")}>{editing==="additional" ? "Close editor" : "Edit additional fields"}</Button> : undefined} />
       {editing==="additional" ? <EditForm fields={additional.map(value=>({name:value.field_key,label:value.display_label,hint:value.help_text ?? undefined,affix:value.unit_of_measure ?? undefined,

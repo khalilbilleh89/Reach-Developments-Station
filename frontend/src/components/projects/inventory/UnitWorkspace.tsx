@@ -312,7 +312,7 @@ export function UnitWorkspace({
       {activeSection === "detail" && supportError ? <Notice tone="error">{supportError}<Button onClick={()=>setSupportRevision(value=>value+1)}>Retry property</Button></Notice> : null}
       {activeSection === "detail" && supportBusy ? <Loading label="Loading property" /> : null}
       {activeSection === "detail" && !supportBusy && detailRevision === supportRevision ? (
-        <UnitProperty key={unitId} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} values={values}
+        <UnitProperty canDelete={roles.has("system_admin") || roles.has("master_admin")} key={unitId} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} values={values}
           canWrite={canWriteStructure} canApprove={canConfigure} onChanged={async()=>{await load();await onChanged();}} />
       ) : null}
 

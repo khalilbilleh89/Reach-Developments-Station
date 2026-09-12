@@ -374,11 +374,13 @@ export const projects = {
  * server, and every path here is scoped to the project that owns the records.
  */
 export const inventory = {
+  deleteOption: (projectId: string, id: string, reason: string) =>
+    remove(`/projects/${projectId}/inventory/configuration/${id}?${new URLSearchParams({reason})}`),
   configuration: (projectId:string) => get<InventoryOption[]>(`/projects/${projectId}/inventory/configuration`),
   createOption: (projectId:string,input:Record<string,unknown>) => post<InventoryOption>(`/projects/${projectId}/inventory/configuration`,input),
   updateOption: (projectId:string,id:string,input:Record<string,unknown>) => patch<InventoryOption>(`/projects/${projectId}/inventory/configuration/${id}`,input),
   launchValues: (projectId: string, query: Record<string,string> = {}) => get<LaunchRegister>(`/projects/${projectId}/inventory/launch-values?${new URLSearchParams(query)}`),
-  deleteRecord: (projectId: string, kind: "units" | "floors" | "buildings" | "phases", id: string, reason: string) =>
+  deleteRecord: (projectId: string, kind: "units" | "floors" | "buildings" | "phases" | "area-types" | "sub-assets" | "area-schedules", id: string, reason: string) =>
     remove(`/projects/${projectId}/inventory/${kind}/${id}?${new URLSearchParams({reason})}`),
   phases: (projectId: string) =>
     get<Phase[]>(`/projects/${projectId}/inventory/phases`),

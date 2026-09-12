@@ -94,7 +94,18 @@ Financial-data exposure impact:
 Audit impact:
 ```
 
-## Validation
+## Deletion coverage (required for every record-creating feature)
+
+- [ ] Every new or changed user-created record has a visible Delete action, including child rows and configuration choices.
+- [ ] Unused/draft deletion works through the UI and API; confirmation names the record and explains consequences.
+- [ ] Server permissions, project/phase isolation, linked-record protection and retained audit evidence are tested.
+- [ ] Posted/approved records explain their supported cancellation/reversal/retirement path.
+- [ ] Lists, selections and affected totals refresh correctly after removal.
+- [ ] `docs/deletion_contracts.json` is updated; no new removal gaps are introduced.
+
+Deletion UI location, endpoint, allowed states and test evidence:
+
+## Validation results
 
 ```text
 Backend tests:
