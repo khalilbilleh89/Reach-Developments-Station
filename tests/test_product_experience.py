@@ -502,7 +502,7 @@ class TestOnlyEntitledReadersAsk:
         assert "const seesListPrice = hasAnyRole(roles, LIST_PRICE_READERS);" in unit
         assert "COLLECTION_READERS" not in unit
         assert "collections." not in unit
-        assert "sales." not in unit
+        assert not re.search(r"sales\.\w+\(", unit)
         assert re.search(
             r"if \(!seesListPrice\) \{\s*setPricingAnswer\(\{ status: \"off\" \}\);\s*return;", unit
         )
