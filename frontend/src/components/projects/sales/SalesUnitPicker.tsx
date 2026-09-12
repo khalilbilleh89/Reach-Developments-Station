@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesUnitOption } from "@/lib/api";
 import { Button, Field, Loading, Notice } from "@/components/ui";
@@ -9,9 +9,15 @@ import { useCurrencyCode } from "@/lib/currency";
 
 type Result = { key: string; items: SalesUnitOption[]; next_offset: number | null };
 
-export function SalesUnitPicker({ projectId, onSelect, onCancel }: {
-  projectId: string; onSelect: (unit: SalesUnitOption) => void; onCancel: () => void;
+export function SalesUnitPicker({ projectId, onSelect, onCancel, initiallyOpen = false }: {
+  initiallyOpen?: boolean; projectId: string; onSelect: (unit: SalesUnitOption) => void; onCancel: () => void;
 }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const close = () => { setOpen(false); trigger.current?.focus(); };
+  useEffect(() => { if (open) searchInput.current?.focus(); }, [open]);
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [retry, setRetry] = useState(0);
@@ -60,16 +66,24 @@ export function SalesUnitPicker({ projectId, onSelect, onCancel }: {
     return () => { active = false; clearTimeout(timer); };
   }, [projectId, search, offset, retry, queryKey, requestKey]);
 
-  return <div className="stack sales-unit-picker">
-    <div><h3>Choose available unit</h3><p className="subtle">Browse available inventory or search by unit, building or phase.</p></div>
-    <Field label="Search unit, building or phase" optional><input className="input" type="search" value={search} placeholder="Search unit, building or phase" onChange={event => {
+  const globalEmpty = !loading && !error && !search.trim() && rows?.items.length === 0;
+  return <div className="sales-unit-picker" onKeyDown={event => {
+    if (open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+  }}>
+    <span className="field-label" id={`${id}-label`}>Unit</span>
+    <button type="button" ref={trigger} className="sales-unit-picker-trigger" aria-labelledby={`${id}-label ${id}-value`}
+      aria-expanded={open} aria-controls={`${id}-panel`} onClick={() => open ? close() : setOpen(true)}>
+      <span id={`${id}-value`}>{globalEmpty ? "No available units" : "Select available unit"}</span><span aria-hidden="true">▾</span>
+    </button>
+    {open ? <div id={`${id}-panel`} className="sales-unit-picker-panel" role="region" aria-label="Choose available unit">
+    <Field label="Search unit, building or phase" optional><input ref={searchInput} className="input" type="search" value={search} placeholder="Search unit, building or phase" onChange={event => {
       if (event.target.value === search) return;
       generation.current += 1;
       setSearch(event.target.value); setOffset(0); setResult(null); setCompleted(null); setFailure(null);
     }} /></Field>
     {rows?.items.length ? <div className="sales-unit-picker-results" role="region" aria-label="Available units" aria-busy={loading}>
       <ul className="sales-unit-picker-list">{rows.items.map(unit => <li key={unit.unit_id}>
-        <button type="button" className="sales-unit-picker-option" onClick={() => onSelect(unit)}>
+        <button type="button" className="sales-unit-picker-option" onClick={() => { close(); onSelect(unit); }}>
           <span className="sales-unit-picker-details"><strong>{unit.unit_reference}</strong>
             <span>{[unit.unit_type, unit.building_name, unit.floor_name].filter(Boolean).join(" · ")}</span>
             <span className="subtle">{unit.phase_name}{unit.gross_area !== null ? ` · ${unit.gross_area} ${unit.area_unit ?? ""}` : ""}</span>
@@ -79,12 +93,18 @@ export function SalesUnitPicker({ projectId, onSelect, onCancel }: {
       </li>)}</ul>
     </div> : null}
     {loading ? <Loading label={rows?.items.length ? "Loading more units…" : "Loading available units…"} /> : null}
-    {error ? <Notice tone="error">{error} <Button onClick={() => setRetry(value => value + 1)}>Retry available units</Button></Notice> : null}
-    {!loading && !error && rows?.items.length === 0 ? <Notice tone="info">
-      <strong>{search.trim() ? "No matching available units" : "No units are currently available for reservation"}</strong>
-      <p>{search.trim() ? "Try another unit reference, building or phase." : "Units must be released for sale and have a current approved price before they can be reserved."}</p>
+    {!loading && !error && !!search.trim() && rows?.items.length === 0 ? <Notice tone="info">
+      <strong>No matching available units</strong>
+      <p>Try another unit reference, building or phase.</p>
     </Notice> : null}
     {rows && rows.next_offset !== null && !error ? <Button disabled={loading} onClick={() => setOffset(rows.next_offset!)}>Load more units</Button> : null}
-    <Button onClick={onCancel}>Cancel</Button>
+    </div> : null}
+    {globalEmpty ? <Notice tone="info"><strong>No units are currently available for reservation</strong>
+      <p>Units must be released for sale and have a current approved price before they can be reserved.</p>
+    </Notice> : null}
+    {error ? <Notice tone="error"><strong>Could not load available units</strong>{error !== "Could not load available units." ? <p>{error}</p> : null}
+      <Button onClick={() => setRetry(value => value + 1)}>Retry</Button>
+    </Notice> : null}
+    <div className="button-row"><Button onClick={onCancel}>Cancel</Button></div>
   </div>;
 }

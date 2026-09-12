@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { SalesUnitOption } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 import { money } from "@/lib/format";
@@ -13,16 +13,27 @@ export function NewReservation({projectId, onCreated, onSaleCreated, allowOwner,
   allowOwner: boolean; onSaleCreated: (id: string) => void;
   projectId: string; onCreated: (id: string) => void; onCancel: () => void;
 }) {
+  const id = useId();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [owner, setOwner] = useState(false);
   const [selected, setSelected] = useState<SalesUnitOption | null>(null);
+  const changeUnit = () => { setSelected(null); setPickerOpen(true); };
   const codeOf = useCurrencyCode();
   return <Card title="New Reservation" description="Choose an available unit, agree the price and prepare the buyer’s reservation.">
-    {!selected ? <SalesUnitPicker projectId={projectId} onSelect={setSelected} onCancel={onCancel} /> : <>
-      <p><strong>{selected.unit_reference}</strong> · {selected.building_name} · {selected.floor_name}</p>
-      <p className="subtle">{selected.unit_type ?? "Unit type not recorded"} · {selected.gross_area === null ? "Gross area not confirmed" : `${selected.gross_area} ${selected.area_unit ?? ""}`}</p>
-      <p className="subtle">Inventory list price: {money(selected.reference_price_ex_tax, codeOf(selected.currency_id))} excluding tax</p>
+    {!selected ? <SalesUnitPicker key={projectId} initiallyOpen={pickerOpen} projectId={projectId} onSelect={setSelected} onCancel={onCancel} /> : <>
+      <div className="sales-unit-picker">
+        <span className="field-label" id={`${id}-label`}>Unit</span>
+        <button type="button" className="sales-unit-picker-trigger" data-leaves-editor autoFocus
+          aria-labelledby={`${id}-label ${id}-value`} aria-expanded={false} onClick={changeUnit}>
+          <span className="sales-unit-picker-details" id={`${id}-value`}>
+            <strong>{[selected.unit_reference, selected.unit_type, selected.floor_name].filter(Boolean).join(" · ")}</strong>
+            <span className="subtle">Inventory list price: {money(selected.reference_price_ex_tax, codeOf(selected.currency_id))} excluding tax</span>
+          </span><span aria-hidden="true">▾</span>
+        </button>
+        <p className="subtle">{[selected.phase_name, selected.building_name, selected.gross_area === null ? null : `${selected.gross_area} ${selected.area_unit ?? ""}`].filter(Boolean).join(" · ")}</p>
+      </div>
       {allowOwner ? <Button data-leaves-editor onClick={() => setOwner(!owner)}>{owner ? "Prepare standard reservation" : "Owner: register buyer & mark sold"}</Button> : null}
-      {owner ? <RegisterBuyerSaleForm projectId={projectId} unitId={selected.unit_id} unitOption={selected} onSaved={onSaleCreated} onCancel={() => setOwner(false)} /> : <ReservationForm projectId={projectId} unitId={selected.unit_id} currencyId={selected.currency_id} unitOption={selected} onCreated={onCreated} onCancel={onCancel} onChangeUnit={() => {setSelected(null);}} />}
+      {owner ? <RegisterBuyerSaleForm projectId={projectId} unitId={selected.unit_id} unitOption={selected} onSaved={onSaleCreated} onCancel={() => setOwner(false)} /> : <ReservationForm projectId={projectId} unitId={selected.unit_id} currencyId={selected.currency_id} unitOption={selected} onCreated={onCreated} onCancel={onCancel} onChangeUnit={changeUnit} />}
     </>}
   </Card>;
 }
