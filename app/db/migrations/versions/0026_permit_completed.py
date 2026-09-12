@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0025_permit_completed"
-down_revision = "0024_merge_permits_inventory"
+revision = "0026_permit_completed"
+down_revision = "0025_prelaunch_master"
 branch_labels = None
 depends_on = None
 

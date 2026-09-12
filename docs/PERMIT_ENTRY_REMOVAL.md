@@ -9,7 +9,7 @@ a permit does not change its issue/expiry dates or establish new authority appro
 The status effective date records when completion took effect. Reasons are optional
 for all permit transitions; actor, date and status history remain mandatory.
 
-Migration 0025 extends the permit and event status checks. Downgrade is refused
+Migration 0026 extends the permit and event status checks. Downgrade is refused
 while any completed row or event exists, including retained/deleted permits, so
 history is not silently rewritten. Back up before deployment; roll forward if
 completion history has already been recorded.

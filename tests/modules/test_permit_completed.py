@@ -68,11 +68,11 @@ def test_completion_migration_round_trip_and_history_guard(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0024_merge_permits_inventory")
+    command.downgrade(config, "0025_prelaunch_master")
     command.upgrade(config, "head")
     command.check(config)
     add(admin_client, project_id, initial_status="completed")
     db.rollback()
     with pytest.raises(RuntimeError, match="completed permit"):
-        command.downgrade(config, "0024_merge_permits_inventory")
+        command.downgrade(config, "0025_prelaunch_master")
     command.upgrade(config, "head")
