@@ -174,6 +174,11 @@ def test_the_same_reference_may_recur_in_another_project(
     ).json()["id"]
     # A second project needs its own basis finalised before it holds inventory.
     admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
+    choice = admin_client.post(
+        f"{inventory_url(other)}/configuration",
+        json={"category": "unit_type", "code": "2BR", "label": "Two bedroom"},
+    )
+    assert choice.status_code == 201, choice.text
     phase = admin_client.post(
         f"{inventory_url(other)}/phases", json={"code": "P1", "name": "One"}
     ).json()["id"]
