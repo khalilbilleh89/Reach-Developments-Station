@@ -27,3 +27,19 @@ The population includes previously released inventory and is labelled as such;
 these are potential list values, not contracted revenue or remaining-stock value.
 
 No production data changes, migrations or new dependencies are required.
+
+## Property editing
+
+Identity, Features and Additional fields each own a local Edit/Save/Cancel form.
+Each form exposes only its section's fields, sends changed fields through the
+existing PATCH contract, and retains inputs on validation failure. Navigation
+uses the existing unsaved-change guard. The broad top-level Edit unit action is
+replaced by the local section actions.
+
+Physical measurements appear once; editing starts or resumes a draft revision,
+and approval is available beside that revision. Approved history and computed
+Net/Gross values remain read-only. Additional features, plans/specifications,
+and parking/storage each have their own editor; their creation forms are hidden
+until Edit is pressed. Read-only users can inspect attachments without receiving
+write controls. A failed Property read has a retry instead of rendering stale
+editable fields.
