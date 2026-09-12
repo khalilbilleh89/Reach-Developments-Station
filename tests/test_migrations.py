@@ -28,7 +28,37 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0023_inventory_options"
+HEAD_REVISION = "0024_merge_permits_inventory"
+
+
+@pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
+def test_parallel_permit_and_inventory_histories_converge(
+    postgres: None, starting_revision: str
+) -> None:
+    """A database on either released branch reaches one head with both features."""
+    config = _alembic_config()
+    try:
+        command.downgrade(config, "0022_land_analytics")
+        command.upgrade(config, starting_revision)
+        assert _current_revision() == starting_revision
+        command.upgrade(config, "head")
+        assert _current_revision() == HEAD_REVISION
+        assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
+        with get_engine().connect() as connection:
+            assert connection.scalar(text("SELECT to_regclass('public.inventory_options')"))
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_schema='public' AND table_name='permits' "
+                        "AND column_name='deleted_at'"
+                    )
+                )
+                == 1
+            )
+        command.check(config)
+    finally:
+        command.upgrade(config, "head")
 
 
 def test_prelaunch_utilities_widens_only_the_development_category_check(postgres: None) -> None:

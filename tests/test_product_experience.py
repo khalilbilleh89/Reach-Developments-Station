@@ -40,6 +40,7 @@ PROJECTS = FRONTEND / "components" / "projects"
 UNIT_360 = PROJECTS / "inventory" / "UnitWorkspace.tsx"
 LAND_TAB = PROJECTS / "LandTab.tsx"
 PERMITS_TAB = PROJECTS / "PermitsTab.tsx"
+PERMIT_CREATE = PROJECTS / "PermitCreatePage.tsx"
 SETTINGS_SCREENS = FRONTEND / "components" / "settings"
 BACKEND_MODULES = ROOT / "app" / "modules"
 
@@ -827,16 +828,20 @@ class TestLandAndPermitsKeepTheirShape:
     def test_a_permit_type_is_added_through_the_project_not_through_settings(self) -> None:
         """Given the permit workspace, then it uses the project-scoped route.
 
-        The narrow endpoint exists precisely so this button is not the generic
-        reference-value write with its permission relaxed. If the frontend
-        called ``settings.createReferenceValue`` the server would refuse the
-        Design / Engineering user anyway — and the fix somebody would reach for
-        is widening the Settings permission, which is the outcome this guards.
+        The single-save form sends a new type with the permit to the project
+        endpoint. It must not create reference data separately or widen Settings
+        permissions to let a Design / Engineering user save the form.
         """
         source = read(PERMITS_TAB)
-        assert "projects.createPermitType(" in source
         assert "projects.permitTypes(" in source
-        assert "settings." not in source, "the permit workspace reaches into Settings"
+        create = read(PERMIT_CREATE)
+        assert (
+            "payload.new_permit_type = { code: typeCode.trim(), label: typeName.trim() }" in create
+        )
+        assert "projects.createPermit(projectId, payload)" in create
+        for workspace in (source, create):
+            assert "projects.createPermitType(" not in workspace
+            assert "settings." not in workspace, "the permit workspace reaches into Settings"
 
     def test_only_the_settings_screens_write_reference_data(self) -> None:
         """Given any screen outside Settings, then it creates no reference value."""
@@ -868,18 +873,22 @@ class TestLandAndPermitsKeepTheirShape:
         unanswerable; offering them answers the second by corrupting the first.
         """
         source = read(PERMITS_TAB)
-        assert "types.filter((type) => type.is_active)" in source
+        assert "types?.filter(type => type.is_active)" in read(PERMIT_CREATE)
         assert "type.is_active || type.code === permit.permit_type_code" in source
 
-    def test_both_records_open_in_the_canonical_drawer(self) -> None:
-        """Given a parcel or a permit, then it opens as a record file.
-
-        Not a bespoke panel that drifts from the system a release later.
-        """
-        for path in (LAND_TAB, PERMITS_TAB):
-            source = read(path)
-            assert "<Drawer" in source, f"{path.name} does not open a record file"
-            assert "Drawer," in source, f"{path.name} does not import the shared Drawer"
+    def test_land_uses_the_drawer_and_permits_use_full_page_records(self) -> None:
+        """Parcels retain the shared drawer; permit entry and detail use full pages."""
+        land = read(LAND_TAB)
+        assert "<Drawer" in land
+        assert "Drawer," in land
+        permits = read(PERMITS_TAB)
+        assert "<PermitCreatePage" in permits
+        assert "<PermitFile" in permits
+        for source in (permits, read(PERMIT_CREATE)):
+            assert '<article className="record-workspace">' in source
+            assert "<PageHeader" in source
+            assert "Back to permits</Button>" in source
+            assert "<Drawer" not in source
 
     def test_neither_screen_asks_for_cost_it_may_not_read(self) -> None:
         """Given a reader without the finance roles, then no cost is requested.

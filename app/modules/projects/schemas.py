@@ -512,6 +512,8 @@ class PermitRead(_PermitFacts):
 
 
 class PermitCreateRequest(_PermitFacts):
+    initial_status: PermitStatus = "not_started"
+    new_permit_type: PermitTypeCreateRequest | None = None
     permit_code: str = Field(min_length=1, max_length=64)
     permit_type_code: str = Field(min_length=1, max_length=64)
     authority: str = Field(min_length=1, max_length=200)

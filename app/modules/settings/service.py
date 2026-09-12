@@ -676,6 +676,7 @@ def create_reference_value(
     sort_order: int,
     valid_from: date | None,
     valid_to: date | None,
+    commit: bool = True,
 ) -> ReferenceValue:
     if country_pack_id is not None:
         get_country_pack(session, country_pack_id)
@@ -718,8 +719,10 @@ def create_reference_value(
         actor_user_id=actor_user_id,
         after=_snapshot(value, _REFERENCE_FIELDS),
     )
-    session.commit()
-    session.refresh(value)
+    # A composing domain may stage this row and audit in its own atomic transaction.
+    if commit:
+        session.commit()
+        session.refresh(value)
     return value
 
 

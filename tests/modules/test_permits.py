@@ -361,11 +361,12 @@ def test_an_unknown_permit_is_not_found(admin_client: TestClient, permits_url: s
     assert admin_client.get(f"{permits_url}/{uuid.uuid4()}").status_code == 404
 
 
-def test_permits_have_no_delete_endpoint(admin_client: TestClient, permits_url: str) -> None:
-    """Given a permit, then it is withdrawn through a transition, never removed."""
+def test_administrator_can_remove_a_permit(admin_client: TestClient, permits_url: str) -> None:
+    """Removal is distinct from recording an authority withdrawal."""
     created = admin_client.post(permits_url, json=permit_payload()).json()
 
-    assert admin_client.delete(f"{permits_url}/{created['id']}").status_code == 404
+    assert admin_client.delete(f"{permits_url}/{created['id']}").status_code == 204
+    assert admin_client.get(f"{permits_url}/{created['id']}").status_code == 404
 
 
 def test_design_engineering_maintains_permits(

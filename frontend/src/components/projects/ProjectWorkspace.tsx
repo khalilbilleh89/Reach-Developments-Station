@@ -283,7 +283,7 @@ export function ProjectWorkspace({
             canSeeCost={hasAnyRole(roles, PROJECT_FINANCIAL_READERS)}
           />
         ) : null}
-        {section === "permits" ? <PermitsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "permits" ? <PermitsTab projectId={projectId} canWrite={canWriteTechnical} canDelete={hasAnyRole(roles, new Set([ROLE_SYSTEM_ADMIN]))} canSeeCost={hasAnyRole(roles, PROJECT_FINANCIAL_READERS)} currencyCode={project.base_currency_code} /> : null}
         {section === "prelaunch" ? (
           <PreLaunchTab
             projectId={projectId}

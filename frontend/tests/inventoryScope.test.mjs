@@ -64,4 +64,3 @@ test("Inventory release offers only Available and preserves server eligibility",
   assert.equal(release(),undefined);
   assert.ok(!nodes(render()).some(node=>node.type==="select"));
 });
-
